@@ -77,7 +77,7 @@ export class CustomerEditComponent {
 
       this.customerForm.patchValue(this.customerData);
       this.customerForm.get('department')?.patchValue(department._id);
-      this.customerForm.get('customerType')?.patchValue(this.customerData.customerType.customerTypeName)
+      this.customerForm.get('customerType')?.patchValue(this.customerData.customerType._id)
 
       contactDetails.forEach((contactDetail, index) => {
         this.contactDetails.at(index).patchValue({ department: contactDetail.department._id });
