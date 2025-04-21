@@ -7,7 +7,7 @@ import { AppComponent } from './app.component';
 import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
 import { SideBarComponent } from './shared/components/side-bar/side-bar.component';
 import { ToastrModule } from 'ngx-toastr';
-import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { MatDialogModule } from '@angular/material/dialog';
 import { IconsModule } from './lib/icons/icons.module';
 import { componentModule } from './shared/components/component.module';
@@ -23,37 +23,31 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { NotificationComponent } from './shared/components/notification/notification.component';
 const config:SocketIoConfig = { url: environment.api, options: {} };
 
-@NgModule({
-  declarations: [
-    AppComponent,
-  ],
-  imports: [
-    BrowserModule,
-    AppRoutingModule,
-    HttpClientModule,
-    BrowserAnimationsModule,
-    NavBarComponent,
-    SideBarComponent,
-    ToastrModule.forRoot({
-      timeOut: 3000,
-      positionClass: 'toast-top-right',
-      preventDuplicates: true,
-    }),
-    IconsModule,
-    MatDialogModule,
-    componentModule,
-    ResizableModule,
-    LoadingBarModule,
-    LoadingBarRouterModule,
-    LoadingBarHttpClientModule,
-    SocketIoModule.forRoot(config),
-    MatSidenavModule,
-    NotificationComponent
-  ],
-  providers: [
-    { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
-    { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
-  ],
-  bootstrap: [AppComponent]
-})
+@NgModule({ declarations: [
+        AppComponent,
+    ],
+    bootstrap: [AppComponent], imports: [BrowserModule,
+        AppRoutingModule,
+        BrowserAnimationsModule,
+        NavBarComponent,
+        SideBarComponent,
+        ToastrModule.forRoot({
+            timeOut: 3000,
+            positionClass: 'toast-top-right',
+            preventDuplicates: true,
+        }),
+        IconsModule,
+        MatDialogModule,
+        componentModule,
+        ResizableModule,
+        LoadingBarModule,
+        LoadingBarRouterModule,
+        LoadingBarHttpClientModule,
+        SocketIoModule.forRoot(config),
+        MatSidenavModule,
+        NotificationComponent], providers: [
+        { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
+        { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
+        provideHttpClient(withInterceptorsFromDi()),
+    ] })
 export class AppModule { }
