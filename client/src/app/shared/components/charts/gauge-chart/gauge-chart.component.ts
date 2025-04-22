@@ -1,15 +1,43 @@
-import { AfterViewChecked, AfterViewInit, Component, ElementRef, HostListener, Input, OnInit, ViewChild } from '@angular/core';
-import * as echarts from 'echarts';
+import {
+  Component,
+  ElementRef,
+  ViewChild,
+  OnInit,
+  AfterViewInit,
+  HostListener
+} from '@angular/core';
+import * as echarts from 'echarts/core';
+
+import {
+  GaugeChart
+} from 'echarts/charts';
+import {
+  TooltipComponent,
+  TitleComponent
+} from 'echarts/components';
+import {
+  CanvasRenderer
+} from 'echarts/renderers';
+
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
 import { NumberShortenerPipe } from 'src/app/shared/pipes/numberShortener.pipe';
+
+// Register ECharts components
+echarts.use([
+  GaugeChart,
+  TooltipComponent,
+  TitleComponent,
+  CanvasRenderer
+]);
 
 @Component({
     selector: 'app-gauge-chart',
     templateUrl: './gauge-chart.component.html',
     styleUrls: ['./gauge-chart.component.css'],
-    imports: [HomeRoutingModule, NumberShortenerPipe],
-    providers: [NumberShortenerPipe]
+    imports: [HomeRoutingModule],
+    providers: [NumberShortenerPipe],
+    standalone: true
 })
 export class GaugeChartComponent implements OnInit, AfterViewInit {
 
@@ -26,8 +54,8 @@ export class GaugeChartComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
-    const myChart = echarts.init(this.gaugeChart.nativeElement);
-    new ResizeObserver(() => myChart.resize()).observe(this.gaugeChart.nativeElement);
+    this.chartInstance = echarts.init(this.gaugeChart.nativeElement);
+    new ResizeObserver(() => this.chartInstance.resize()).observe(this.gaugeChart.nativeElement);
 
     this._dashboardService.guageChart$.subscribe((report) => {
       let criticalRange = (report.criticalRange / report.targetValue);
@@ -123,7 +151,7 @@ export class GaugeChartComponent implements OnInit, AfterViewInit {
         ]
       };
 
-      myChart.setOption(option);
+      this.chartInstance.setOption(option);
     });
   }
 

@@ -12,7 +12,8 @@ import { RelativeTimePipe } from '../../pipes/relative-time.pipe';
     selector: 'app-notification',
     templateUrl: './notification.component.html',
     styleUrls: ['./notification.component.css'],
-    imports: [CommonModule, IconsModule, RelativeTimePipe]
+    imports: [CommonModule, IconsModule, RelativeTimePipe],
+    standalone:true
 })
 export class NotificationComponent {
   @Output() closeSidenav = new EventEmitter<void>();

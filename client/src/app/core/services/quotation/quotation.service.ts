@@ -4,8 +4,7 @@ import { Observable } from 'rxjs';
 import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
-import * as pdfMake from 'pdfmake/build/pdfmake';
-
+import pdfMake from 'pdfmake/build/pdfmake';
 
 @Injectable({
   providedIn: 'root'
@@ -112,7 +111,9 @@ export class QuotationService {
   }
 
   async generatePDF(quoteData: getQuotatation, includeStamp: boolean) {
-    (pdfMake as any).fonts = {
+    const pdfMakeInstance = { ...pdfMake };
+    
+    (pdfMakeInstance as any).fonts = {
       EBGaramond: {
         normal: `${window.location.origin}/assets/font/EBGaramond-Regular.ttf`,
         bold: `${window.location.origin}/assets/font/EBGaramond-Bold.ttf`,
@@ -507,8 +508,8 @@ export class QuotationService {
     }
 
 
-    const pdfDoc = pdfMake.createPdf(documentDefinition);
-    return pdfDoc
+    const pdfDoc = pdfMakeInstance.createPdf(documentDefinition);
+    return pdfDoc;
   }
 
   formatNumber(value: any, minimumFractionDigits: number = 2, maximumFractionDigits: number = 2): string {

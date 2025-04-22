@@ -21,12 +21,17 @@ import { environment } from 'src/environments/environment';
 import { LoadingBarHttpClientModule } from '@ngx-loading-bar/http-client';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { NotificationComponent } from './shared/components/notification/notification.component';
-const config:SocketIoConfig = { url: environment.api, options: {} };
+import { NgxEchartsModule } from 'ngx-echarts';
 
-@NgModule({ declarations: [
+const config: SocketIoConfig = { url: environment.api, options: {} };
+
+@NgModule({
+    declarations: [
         AppComponent,
     ],
-    bootstrap: [AppComponent], imports: [BrowserModule,
+    bootstrap: [AppComponent],
+    imports: [
+        BrowserModule,
         AppRoutingModule,
         BrowserAnimationsModule,
         NavBarComponent,
@@ -45,9 +50,16 @@ const config:SocketIoConfig = { url: environment.api, options: {} };
         LoadingBarHttpClientModule,
         SocketIoModule.forRoot(config),
         MatSidenavModule,
-        NotificationComponent], providers: [
+        NotificationComponent,
+        NgxEchartsModule.forRoot({
+            echarts: () => import('echarts/core')
+        })
+    ], providers: [
         { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
         { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
         provideHttpClient(withInterceptorsFromDi()),
-    ] })
+
+    ],
+
+})
 export class AppModule { }
