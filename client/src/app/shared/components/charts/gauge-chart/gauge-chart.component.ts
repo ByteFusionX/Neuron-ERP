@@ -5,12 +5,11 @@ import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
 import { NumberShortenerPipe } from 'src/app/shared/pipes/numberShortener.pipe';
 
 @Component({
-  selector: 'app-gauge-chart',
-  templateUrl: './gauge-chart.component.html',
-  styleUrls: ['./gauge-chart.component.css'],
-  standalone: true,
-  imports: [HomeRoutingModule, NumberShortenerPipe],
-  providers: [NumberShortenerPipe]
+    selector: 'app-gauge-chart',
+    templateUrl: './gauge-chart.component.html',
+    styleUrls: ['./gauge-chart.component.css'],
+    imports: [HomeRoutingModule, NumberShortenerPipe],
+    providers: [NumberShortenerPipe]
 })
 export class GaugeChartComponent implements OnInit, AfterViewInit {
 

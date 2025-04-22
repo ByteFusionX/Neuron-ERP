@@ -8,7 +8,6 @@ import { directiveSharedModule } from 'src/app/shared/directives/directives.modu
 
 @Component({
     selector: 'app-note-form',
-    standalone: true,
     imports: [
         CommonModule,
         NgIconsModule,
@@ -17,7 +16,7 @@ import { directiveSharedModule } from 'src/app/shared/directives/directives.modu
     ],
     templateUrl: './note-form.component.html',
     styleUrls: ['./note-form.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NoteFormComponent {
     isSaving: boolean = false;

@@ -14,17 +14,16 @@ import { CommonModule } from '@angular/common';
 import { directiveSharedModule } from 'src/app/shared/directives/directives.module';
 
 @Component({
-  selector: 'app-create-employee',
-  templateUrl: './create-employee.component.html',
-  styleUrls: ['./create-employee.component.css'],
-  standalone:true,
-  imports:[
-    NgSelectModule,
-    NgIconComponent,
-    CommonModule,
-    ReactiveFormsModule,
-    directiveSharedModule
-  ]
+    selector: 'app-create-employee',
+    templateUrl: './create-employee.component.html',
+    styleUrls: ['./create-employee.component.css'],
+    imports: [
+        NgSelectModule,
+        NgIconComponent,
+        CommonModule,
+        ReactiveFormsModule,
+        directiveSharedModule
+    ]
 })
 export class CreateEmployeeDialog implements OnInit {
   category$: BehaviorSubject<GetCategory[]> = new BehaviorSubject<GetCategory[]>([]);

@@ -5,9 +5,10 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 
 @Component({
-  selector: 'app-share-transfer-customer',
-  templateUrl: './share-transfer-customer.component.html',
-  styleUrls: ['./share-transfer-customer.component.css']
+    selector: 'app-share-transfer-customer',
+    templateUrl: './share-transfer-customer.component.html',
+    styleUrls: ['./share-transfer-customer.component.css'],
+    standalone: false
 })
 export class ShareTransferCustomerComponent {
   employees$!: Observable<getEmployee[]>

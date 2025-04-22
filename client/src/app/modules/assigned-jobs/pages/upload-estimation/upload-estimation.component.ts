@@ -8,9 +8,10 @@ import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
 import { QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
 
 @Component({
-  selector: 'app-upload-estimation',
-  templateUrl: './upload-estimation.component.html',
-  styleUrls: ['./upload-estimation.component.css']
+    selector: 'app-upload-estimation',
+    templateUrl: './upload-estimation.component.html',
+    styleUrls: ['./upload-estimation.component.css'],
+    standalone: false
 })
 export class UploadEstimationComponent {
   submit: boolean = false;

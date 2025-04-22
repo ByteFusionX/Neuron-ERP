@@ -7,9 +7,10 @@ import { RecycleService, Trash } from 'src/app/core/services/recycle/recycle.ser
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
-  selector: 'app-recycle',
-  templateUrl: './recycle.component.html',
-  styleUrls: ['./recycle.component.css']
+    selector: 'app-recycle',
+    templateUrl: './recycle.component.html',
+    styleUrls: ['./recycle.component.css'],
+    standalone: false
 })
 export class RecycleComponent implements OnInit, OnDestroy {
 

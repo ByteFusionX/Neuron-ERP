@@ -16,12 +16,13 @@ import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 
 @Component({
-  selector: 'app-create-enquiry',
-  templateUrl: './create-enquiry.component.html',
-  styleUrls: ['./create-enquiry.component.css'],
-  animations: [fileEnterState],
-  encapsulation: ViewEncapsulation.None,
-  changeDetection: ChangeDetectionStrategy.OnPush
+    selector: 'app-create-enquiry',
+    templateUrl: './create-enquiry.component.html',
+    styleUrls: ['./create-enquiry.component.css'],
+    animations: [fileEnterState],
+    encapsulation: ViewEncapsulation.None,
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class CreateEnquiryDialog implements OnInit, OnDestroy {
 

@@ -5,9 +5,10 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 
 @Component({
-  selector: 'app-view-rejects',
-  templateUrl: './view-rejects.component.html',
-  styleUrls: ['./view-rejects.component.css']
+    selector: 'app-view-rejects',
+    templateUrl: './view-rejects.component.html',
+    styleUrls: ['./view-rejects.component.css'],
+    standalone: false
 })
 export class ViewRejectsComponent {
   constructor(

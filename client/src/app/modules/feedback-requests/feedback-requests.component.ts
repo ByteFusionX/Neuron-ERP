@@ -17,9 +17,10 @@ import { QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
 
 
 @Component({
-  selector: 'app-feedback-requests',
-  templateUrl: './feedback-requests.component.html',
-  styleUrls: ['./feedback-requests.component.css']
+    selector: 'app-feedback-requests',
+    templateUrl: './feedback-requests.component.html',
+    styleUrls: ['./feedback-requests.component.css'],
+    standalone: false
 })
 export class FeedbackRequestsComponent {
   @ViewChildren('feebackItem') feebackItems!: QueryList<ElementRef>;

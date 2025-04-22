@@ -9,10 +9,11 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 
 @Component({
-  selector: 'app-create-department',
-  templateUrl: './create-department.component.html',
-  styleUrls: ['./create-department.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+    selector: 'app-create-department',
+    templateUrl: './create-department.component.html',
+    styleUrls: ['./create-department.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class CreateDepartmentDialog implements OnInit, OnDestroy {
 

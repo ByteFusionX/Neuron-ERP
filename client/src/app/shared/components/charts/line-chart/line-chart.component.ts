@@ -5,12 +5,11 @@ import { DashboardService } from 'src/app/core/services/dashboard.service';
 import { NumberShortenerPipe } from 'src/app/shared/pipes/numberShortener.pipe';
 
 @Component({
-  selector: 'app-line-chart',
-  standalone: true,
-  imports: [HomeRoutingModule, NumberShortenerPipe],
-  providers: [NumberShortenerPipe],
-  templateUrl: './line-chart.component.html',
-  styleUrls: ['./line-chart.component.css']
+    selector: 'app-line-chart',
+    imports: [HomeRoutingModule, NumberShortenerPipe],
+    providers: [NumberShortenerPipe],
+    templateUrl: './line-chart.component.html',
+    styleUrls: ['./line-chart.component.css']
 })
 export class LineChartComponent implements OnInit, AfterViewInit {
 

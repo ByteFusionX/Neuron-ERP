@@ -9,11 +9,10 @@ import { Observable, of } from 'rxjs';
 import { RelativeTimePipe } from '../../pipes/relative-time.pipe';
 
 @Component({
-  selector: 'app-notification',
-  templateUrl: './notification.component.html',
-  styleUrls: ['./notification.component.css'],
-  standalone: true,
-  imports: [CommonModule, IconsModule, RelativeTimePipe]
+    selector: 'app-notification',
+    templateUrl: './notification.component.html',
+    styleUrls: ['./notification.component.css'],
+    imports: [CommonModule, IconsModule, RelativeTimePipe]
 })
 export class NotificationComponent {
   @Output() closeSidenav = new EventEmitter<void>();

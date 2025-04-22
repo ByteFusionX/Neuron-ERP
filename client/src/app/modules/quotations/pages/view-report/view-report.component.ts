@@ -4,9 +4,10 @@ import { QuotationService } from 'src/app/core/services/quotation/quotation.serv
 import { FilterQuote, PieChartOptions, QuoteStatus, QuoteStatusColors, ReportDetails } from 'src/app/shared/interfaces/quotation.interface';
 
 @Component({
-  selector: 'app-view-report',
-  templateUrl: './view-report.component.html',
-  styleUrls: ['./view-report.component.css']
+    selector: 'app-view-report',
+    templateUrl: './view-report.component.html',
+    styleUrls: ['./view-report.component.css'],
+    standalone: false
 })
 export class ViewReportComponent {
   reportData!: ReportDetails;

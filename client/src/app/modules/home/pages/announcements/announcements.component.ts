@@ -11,9 +11,10 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
-  selector: 'app-announcements',
-  templateUrl: './announcements.component.html',
-  styleUrls: ['./announcements.component.css']
+    selector: 'app-announcements',
+    templateUrl: './announcements.component.html',
+    styleUrls: ['./announcements.component.css'],
+    standalone: false
 })
 export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit {
   createAnnouncement: boolean | undefined = false;

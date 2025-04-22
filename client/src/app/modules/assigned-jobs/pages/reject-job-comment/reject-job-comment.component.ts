@@ -4,9 +4,10 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { FormGroup } from '@angular/forms';
 
 @Component({
-  selector: 'app-reject-job-comment',
-  templateUrl: './reject-job-comment.component.html',
-  styleUrls: ['./reject-job-comment.component.css']
+    selector: 'app-reject-job-comment',
+    templateUrl: './reject-job-comment.component.html',
+    styleUrls: ['./reject-job-comment.component.css'],
+    standalone: false
 })
 export class RejectJobCommentComponent {
   rejectForm!: FormGroup;

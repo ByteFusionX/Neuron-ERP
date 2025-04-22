@@ -17,10 +17,11 @@ import { HttpClient } from '@angular/common/http';
 import { Style, Workbook } from 'exceljs';
 import * as fs from 'file-saver';
 @Component({
-  selector: 'app-dashboard',
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css'],
-  animations: [opacityState]
+    selector: 'app-dashboard',
+    templateUrl: './dashboard.component.html',
+    styleUrls: ['./dashboard.component.css'],
+    animations: [opacityState],
+    standalone: false
 })
 
 export class DashboardComponent implements OnInit, OnDestroy {

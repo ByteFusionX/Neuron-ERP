@@ -4,11 +4,10 @@ import * as echarts from 'echarts';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 
 @Component({
-  selector: 'app-half-doughnut-chart',
-  standalone: true,
-  imports: [HomeRoutingModule],
-  templateUrl: './half-doughnut-chart.component.html',
-  styleUrls: ['./half-doughnut-chart.component.css']
+    selector: 'app-half-doughnut-chart',
+    imports: [HomeRoutingModule],
+    templateUrl: './half-doughnut-chart.component.html',
+    styleUrls: ['./half-doughnut-chart.component.css']
 })
 export class HalfDoughnutChartComponent implements AfterViewInit {
 

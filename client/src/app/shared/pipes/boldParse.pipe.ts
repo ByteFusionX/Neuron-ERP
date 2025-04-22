@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'parseBoldText'
+    name: 'parseBoldText',
+    standalone: false
 })
 export class ParseBoldTextPipe implements PipeTransform {
   transform(value: string): string {

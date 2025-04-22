@@ -10,12 +10,13 @@ import { LoadingBarService } from '@ngx-loading-bar/core';
 import { DealFormComponent } from '../deal-form/deal-form.component';
 
 @Component({
-  selector: 'app-upload-lpo',
-  templateUrl: './upload-lpo.component.html',
-  styleUrls: ['./upload-lpo.component.css'],
-  animations: [fileEnterState],
-  encapsulation: ViewEncapsulation.None,
-  changeDetection: ChangeDetectionStrategy.OnPush
+    selector: 'app-upload-lpo',
+    templateUrl: './upload-lpo.component.html',
+    styleUrls: ['./upload-lpo.component.css'],
+    animations: [fileEnterState],
+    encapsulation: ViewEncapsulation.None,
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class UploadLpoComponent {
   selectedFiles: File[] = []

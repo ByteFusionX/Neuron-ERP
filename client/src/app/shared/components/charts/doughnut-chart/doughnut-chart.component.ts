@@ -4,11 +4,10 @@ import * as echarts from 'echarts';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 
 @Component({
-  selector: 'app-doughnut-chart',
-  templateUrl: './doughnut-chart.component.html',
-  styleUrls: ['./doughnut-chart.component.css'],
-  standalone: true,
-  imports: [HomeRoutingModule],
+    selector: 'app-doughnut-chart',
+    templateUrl: './doughnut-chart.component.html',
+    styleUrls: ['./doughnut-chart.component.css'],
+    imports: [HomeRoutingModule]
 })
 export class DoughnutChartComponent implements OnInit, AfterViewInit {
 

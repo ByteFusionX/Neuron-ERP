@@ -8,9 +8,10 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
-  selector: 'app-customer-view',
-  templateUrl: './customer-view.component.html',
-  styleUrls: ['./customer-view.component.css']
+    selector: 'app-customer-view',
+    templateUrl: './customer-view.component.html',
+    styleUrls: ['./customer-view.component.css'],
+    standalone: false
 })
 export class CustomerViewComponent {
   customerData!: getCustomer;
