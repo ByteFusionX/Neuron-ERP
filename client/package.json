@@ -24,7 +24,7 @@
     "@angular/router": "^19.2.7",
     "@ng-icons/core": "^26.3.0",
     "@ng-icons/heroicons": "^26.3.0",
-    "@ng-select/ng-select": "^11.2.0",
+    "@ng-select/ng-select": "^14.7.0",
     "@ngrx/effects": "^18.0.2",
     "@ngrx/entity": "^18.0.2",
     "@ngrx/store": "^18.0.2",
