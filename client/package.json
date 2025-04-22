@@ -42,7 +42,7 @@
     "ng-apexcharts": "^1.8.0",
     "ng-process-env": "^16.0.6",
     "ngx-date-fns": "^11.0.0",
-    "ngx-extended-pdf-viewer": "^18.1.14",
+    "ngx-extended-pdf-viewer": "^23.1.1",
     "ngx-socket-io": "^4.7.0",
     "ngx-toastr": "^18.0.0",
     "pdfmake": "^0.2.10",
