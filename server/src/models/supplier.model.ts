@@ -1,48 +1,89 @@
-import { Schema } from "mongoose";
+
+import { Schema, Types } from "mongoose";
 
 interface supplierSchemaInterface {
-    supplierId : string;
-    supplierName : string;
-    address : string;
-    supplierType : string;
-    category : string;
-    contactDetails : contactDetailsInterface[];
-    documents ?: [];
-    status : string;
-    paymentTerms : string[];
-    products : string[];
-    creditDays : string;
-    creditValue : number;
-    createdDate : Date;
-    updatedDate : Date;
-    createdBy : string;
+    supplierId: string;
+    supplierName: string;
+    address: AddressInterface;
+    supplierType: supplierType;
+    category: string;
+    contactDetails: contactDetailsInterface[];
+    documents?: any[];
+    status: string;
+    paymentTerms: string[];
+    products: string[];
+    creditDays: string;
+    creditValue: number;
+    createdDate: Date;
+    updatedDate: Date;
+    createdBy: Types.ObjectId;
+    approvedDate: Date;
+    approvedBy: string | null;
+}
+
+enum supplierType {
+    OEM = "OEM",
+    Distributor = "Distributor",
+    superStockiest = "Super Stockiest",
+    Reseller = "Reseller",
 }
 
 interface contactDetailsInterface {
-    contactName : string;
-    contactDesignation : string;
-    contactNumber : string
+    contactName: string;
+    contactDesignation: string;
+    contactNumber: string
+}
+interface AddressInterface {
+    StreetNo: string;
+    buildingNo: string;
+    zoneNo: string;
+    poBox: string;
+    location: string;
+    city: string;
 }
 
 const contactDetailsSchema = new Schema<contactDetailsInterface>({
-
-})
-
-const supplierSchema = new Schema<supplierSchemaInterface>({
-    supplierId : {
+    contactName: {
         type: String,
         required: true,
     },
-    supplierName : {
+    contactDesignation: {
+        type: String,
+        required: true,
+    },
+    contactNumber: {
+        type: String,
+        required: true,
+    },
+})
+
+const Address = new Schema<AddressInterface>({
+    StreetNo: String,
+    buildingNo: String,
+    zoneNo: String,
+    poBox: String,
+    location: String,
+    city: String,
+})
+
+
+const supplierSchema = new Schema<supplierSchemaInterface>({
+    supplierId: {
+        type: String,
+        required: true,
+        unique: true,
+    },
+    supplierName: {
         type: String,
         required: true,
     },
     address: {
-        type: String,
+        type: Address,
         required: true,
     },
     supplierType: {
         type: String,
+        enum: Object.values(supplierType),
         required: true,
     },
     category: {
@@ -50,8 +91,53 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         required: true,
     },
     contactDetails: {
-        type: [],
+        type: [contactDetailsSchema],
         required: true,
+    },
+    documents: {
+        type: [],
+        default: [],
+    },
+    status: {
+        type: String,
+        required: true,
+    },
+    paymentTerms: {
+        type: [String],
+        required: true,
+    },
+    products: {
+        type: [String],
+        required: true,
+    },
+    creditDays: {
+        type: String,
+        required: true,
+    },
+    creditValue: {
+        type: Number,
+        required: true,
+    },
+    createdDate: {
+        type: Date,
+        default: Date.now,
+    },
+    updatedDate: {
+        type: Date,
+        default: Date.now,
+    },
+    createdBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+        required: true,
+    },
+    approvedDate: {
+        type: Date,
+        default: Date.now,
+    },
+    approvedBy: {
+        type: String,
+        default: null,
     },
 
 })
