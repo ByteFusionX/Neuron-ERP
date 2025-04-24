@@ -8,6 +8,7 @@ interface Job extends Document {
     createdDate: Date;
     updatedDate: Date;
     isDeleted: boolean;
+    purchaseOrderId: Types.ObjectId
 }
 
 export enum jobStatus {
@@ -50,6 +51,10 @@ const jobSchema = new Schema<Job>({
     isDeleted: {
         type: Boolean,
         default: false
+    },
+    purchaseOrderId: {
+        type: Schema.Types.ObjectId,
+        ref: 'PurchaseOrder'
     }
 });
 
