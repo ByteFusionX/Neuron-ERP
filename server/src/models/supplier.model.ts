@@ -9,7 +9,7 @@ interface supplierSchemaInterface {
     category: string;
     contactDetails: contactDetailsInterface[];
     documents?: any[];
-    status: string;
+    status: supplierStatus;
     paymentTerms: string[];
     products: string[];
     creditDays: string;
@@ -18,7 +18,13 @@ interface supplierSchemaInterface {
     updatedDate: Date;
     createdBy: Types.ObjectId;
     approvedDate: Date;
-    approvedBy: string | null;
+    approvedBy: Types.ObjectId;
+}
+
+enum supplierStatus {
+    pending = "Pending",
+    approved = "Approved",
+    rejected = "Rejected",
 }
 
 enum supplierType {
@@ -100,6 +106,8 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
     status: {
         type: String,
+        enom: Object.values(supplierStatus),
+        default: supplierStatus.pending,
         required: true,
     },
     paymentTerms: {
@@ -136,8 +144,9 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         default: Date.now,
     },
     approvedBy: {
-        type: String,
-        default: null,
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+        required: true,
     },
 
 })
