@@ -1,6 +1,6 @@
 import { Schema, Document, model, Types } from "mongoose";
 
-interface SupplierComparison extends Document {
+export interface SupplierComparison extends Document {
     supplierId: Types.ObjectId;
     quantity: Number;
     unitPrice: Number;
@@ -11,7 +11,7 @@ interface SupplierComparison extends Document {
     createdAt : Date
 }
 
-const supplierComparisonSchema = new Schema<SupplierComparison>({
+export const supplierComparisonSchema = new Schema<SupplierComparison>({
     supplierId: {
         type: Schema.Types.ObjectId,
         ref: 'Supplier',
