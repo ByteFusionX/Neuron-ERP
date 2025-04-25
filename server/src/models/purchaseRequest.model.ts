@@ -6,7 +6,7 @@ interface PurchaseRequest extends Document {
     purchaseNo : String;
     items : []; // need to revisit
     discounts : [];
-    status : Enumerator; 
+    status : PurchaseRequestStatus; 
     rejectedReason : [];
     comparisonSummary : [];
     revokedHistory : [];
@@ -18,3 +18,10 @@ interface PurchaseRequest extends Document {
 }
 
 
+export enum PurchaseRequestStatus {
+    Drafted = 'Drafted',
+    Pending = 'Pending',
+    ReadyToProcessLPO = 'ReadyToProcessLPO',
+    Rejected = 'Rejected',
+    OnHoldCancelled = 'OnHoldCancelled',
+}
