@@ -17,6 +17,7 @@ const routes: Routes = [
   { path: 'feedback-requests', canActivate: [AuthGuard], loadChildren: () => import('./modules/feedback-requests/feedback-requests.module').then((m) => m.FeedbackRequestsModule) },
   { path: 'login', canActivate: [LoginGuard], loadChildren: () => import('./modules/login/login.module').then((m) => m.LoginModule) },
   { path: 'recycle', canActivate: [AuthGuard], loadChildren: () => import('./modules/recycle/recycle.module').then((m) => m.RecycleModule) },
+  { path: 'suppliers/pendings', loadComponent: () => import('./shared/components/table/table.component').then((m) => m.TableComponent) },
   { path: '**', redirectTo: '', pathMatch: 'full' }
 ];
 

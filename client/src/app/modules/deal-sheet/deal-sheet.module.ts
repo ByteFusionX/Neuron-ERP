@@ -22,7 +22,6 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 @NgModule({
   declarations: [
     DealSheetComponent,
-    ApproveDealComponent,
     RejectDealComponent,
     UpdatedealsheetComponent,
     ApprovedDealsComponent,
@@ -42,7 +41,8 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
     FormsModule,
     MatProgressBarModule,
     ReactiveFormsModule,
-    FormsModule
+    FormsModule,
+    ApproveDealComponent
 ]
 })
 export class DealSheetModule { }
