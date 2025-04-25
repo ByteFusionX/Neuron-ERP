@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild } from '@angular/core';
-import { AbstractControlOptions, FormArray, FormBuilder, FormControl, FormGroup, Validators, AbstractControl, ValidationErrors, ValidatorFn, Form } from '@angular/forms';
+import { AbstractControlOptions, FormArray, FormBuilder, FormControl, FormGroup, Validators, AbstractControl, ValidationErrors, ValidatorFn, Form, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
-import { Router } from '@angular/router';
-import { NgSelectComponent, NgSelectConfig } from '@ng-select/ng-select';
+import { Router, RouterLink } from '@angular/router';
+import { NgSelectComponent, NgSelectConfig, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 import { ToastrService } from 'ngx-toastr';
 import { Observable, Subject, Subscription, first } from 'rxjs';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
@@ -20,12 +20,20 @@ import { Note, Notes } from 'src/app/shared/interfaces/notes.interface';
 import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { NgIf, NgFor, AsyncPipe, DecimalPipe } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
+import { OptionalItemsComponent } from '../../../../shared/components/optional-items/optional-items.component';
+import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
+import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-create-quotatation',
     templateUrl: './create-quotatation.component.html',
     styleUrls: ['./create-quotatation.component.css'],
-    standalone: false
+    imports: [NgIf, NgIcon, FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, ResizableComponent, OptionalItemsComponent, AsyncPipe, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe]
 })
 export class CreateQuotatationComponent {
   customers$!: Observable<getCustomer[]>;

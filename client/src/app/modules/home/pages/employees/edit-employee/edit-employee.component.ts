@@ -1,5 +1,5 @@
 import { Component, Inject } from '@angular/core';
-import { FormBuilder, Validators } from '@angular/forms';
+import { FormBuilder, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -10,12 +10,17 @@ import { CreateCategoryComponent } from '../create-category/create-category.comp
 import { ToastrService } from 'ngx-toastr';
 import { CreateEmployeeDialog } from '../create-employee/create-employee.component';
 import { Router } from '@angular/router';
+import { NgIcon } from '@ng-icons/core';
+import { appNoLeadingSpace } from '../../../../../shared/directives/trim-validator.directive';
+import { NgIf, NgFor, AsyncPipe, TitleCasePipe } from '@angular/common';
+import { NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
+import { dateFutureDirective } from '../../../../../shared/directives/date-future.directive';
 
 @Component({
     selector: 'app-edit-employee',
     templateUrl: './edit-employee.component.html',
     styleUrls: ['./edit-employee.component.css'],
-    standalone: false
+    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, NgFor, NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective, dateFutureDirective, AsyncPipe, TitleCasePipe]
 })
 export class EditEmployeeComponent {
 

@@ -1,14 +1,17 @@
 import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
-import { AbstractControl, FormArray, FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormBuilder } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
+import { NgFor, NgIf } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { NgSelectComponent } from '@ng-select/ng-select';
 
 @Component({
     selector: 'optional-items',
     templateUrl: './optional-items.component.html',
     styleUrls: ['./optional-items.component.css'],
-    standalone: false
+    imports: [FormsModule, ReactiveFormsModule, NgFor, NgIf, NgIcon, NgSelectComponent]
 })
 export class OptionalItemsComponent implements OnInit {
 

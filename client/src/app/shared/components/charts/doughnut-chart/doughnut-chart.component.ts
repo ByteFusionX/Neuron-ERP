@@ -1,5 +1,4 @@
 import { Component, ElementRef, ViewChild, OnInit, AfterViewInit } from '@angular/core';
-import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 
 import * as echarts from 'echarts/core';
@@ -27,7 +26,7 @@ echarts.use([
   selector: 'app-doughnut-chart',
   templateUrl: './doughnut-chart.component.html',
   styleUrls: ['./doughnut-chart.component.css'],
-  imports: [HomeRoutingModule],
+  imports: [],
   standalone: true
 })
 export class DoughnutChartComponent implements OnInit, AfterViewInit {

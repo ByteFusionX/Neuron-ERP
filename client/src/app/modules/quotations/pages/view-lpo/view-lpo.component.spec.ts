@@ -8,8 +8,8 @@ describe('ViewLpoComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ViewLpoComponent]
-    });
+    imports: [ViewLpoComponent]
+});
     fixture = TestBed.createComponent(ViewLpoComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

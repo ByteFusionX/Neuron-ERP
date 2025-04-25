@@ -1,8 +1,8 @@
 import { ChangeDetectorRef, Component, ViewChild } from '@angular/core';
-import { FormBuilder, FormControl } from '@angular/forms';
+import { FormBuilder, FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
-import { NavigationExtras, Router, ActivatedRoute } from '@angular/router';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
+import { NavigationExtras, Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
@@ -14,7 +14,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { MatMenuTrigger } from '@angular/material/menu';
+import { MatMenuTrigger, MatMenu, MatMenuItem } from '@angular/material/menu';
 import { LoadingBarService } from '@ngx-loading-bar/core';
 import { DealFormComponent } from '../deal-form/deal-form.component';
 import { ViewLpoComponent } from '../view-lpo/view-lpo.component';
@@ -22,17 +22,24 @@ import { ViewReportComponent } from '../view-report/view-report.component';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import * as ExcelJS from 'exceljs';
 import * as FileSaver from 'file-saver';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgIf, NgFor, NgSwitch, NgSwitchCase, NgSwitchDefault, AsyncPipe, TitleCasePipe } from '@angular/common';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { ToastrService } from 'ngx-toastr';
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
+import { NgIcon } from '@ng-icons/core';
+import { dateFutureDirective } from '../../../../shared/directives/date-future.directive';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
+import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-quotation-list',
     templateUrl: './quotation-list.component.html',
     styleUrls: ['./quotation-list.component.css'],
-    providers: [NumberFormatterPipe],
-    standalone: false
+    providers: [NumberFormatterPipe,DatePipe],
+    imports: [MatMenuTrigger, NgIcon, MatMenu, MatMenuItem, FormsModule, ReactiveFormsModule, dateFutureDirective, NgIf, NgSelectComponent, NgFor, NgOptionComponent, RouterLink, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgSwitch, NgSwitchCase, NgSwitchDefault, MatTooltip, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, TitleCasePipe, DatePipe, NumberFormatterPipe_1]
 })
 export class QuotationListComponent {
   customers$!: Observable<getCustomer[]>;

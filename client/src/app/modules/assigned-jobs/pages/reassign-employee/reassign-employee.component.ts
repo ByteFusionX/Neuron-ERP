@@ -4,12 +4,16 @@ import { Observable, Subscription } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
+import { NgIcon } from '@ng-icons/core';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { FormsModule } from '@angular/forms';
+import { NgFor, AsyncPipe } from '@angular/common';
 
 @Component({
     selector: 'app-reassign-employee',
     templateUrl: './reassign-employee.component.html',
     styleUrls: ['./reassign-employee.component.css'],
-    standalone: false
+    imports: [NgIcon, NgSelectComponent, FormsModule, NgFor, NgOptionComponent, AsyncPipe]
 })
 export class ReassignEmployeeComponent implements OnInit, OnDestroy {
 

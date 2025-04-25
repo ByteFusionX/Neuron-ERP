@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 
 import { IfStmt } from '@angular/compiler';
 import { ChangeDetectionStrategy, Inject, OnDestroy, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -11,13 +11,16 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { getCustomerType } from 'src/app/shared/interfaces/customerType.interface';
 import { ToastrService } from 'ngx-toastr';
+import { NgIcon } from '@ng-icons/core';
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { NgIf } from '@angular/common';
 
 
 @Component({
     selector: 'app-create-customer-type',
     templateUrl: './create-customer-type.component.html',
     styleUrls: ['./create-customer-type.component.css'],
-    standalone: false
+    imports: [NgIcon, FormsModule, appNoLeadingSpace, ReactiveFormsModule, NgIf]
 })
 
 export class CreateCustomerTypeDialog implements OnInit, OnDestroy {

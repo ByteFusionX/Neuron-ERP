@@ -8,8 +8,8 @@ describe('ViewCommentComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ViewCommentComponent]
-    });
+    imports: [ViewCommentComponent]
+});
     fixture = TestBed.createComponent(ViewCommentComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

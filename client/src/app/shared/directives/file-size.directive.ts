@@ -1,10 +1,7 @@
 import { Directive, ElementRef, HostListener, Input } from '@angular/core';
 import { ToastrService } from 'ngx-toastr';
 
-@Directive({
-    selector: '[appFileSizeValidator]',
-    standalone: false
-})
+@Directive({ selector: '[appFileSizeValidator]' })
 export class appFileSizeValidator {
 
   @Input() maxSize: number = 5;

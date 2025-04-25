@@ -8,8 +8,8 @@ describe('ConfettiComponentComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ConfettiComponentComponent]
-    });
+    imports: [ConfettiComponentComponent]
+});
     fixture = TestBed.createComponent(ConfettiComponentComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

@@ -1,7 +1,7 @@
 
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, QueryList, ViewChildren, AfterViewInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Subject, Subscription, takeUntil } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { Estimations, feedback, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
@@ -18,14 +18,19 @@ import { NavigationExtras, Router } from '@angular/router';
 import { ViewEstimationComponent } from '../view-estimation/view-estimation.component';
 import { RejectJobCommentComponent } from '../reject-job-comment/reject-job-comment.component';
 import { ReassignEmployeeComponent } from '../reassign-employee/reassign-employee.component';
-import { ViewRejectsComponent } from 'src/app/modules/enquirys/view-rejects/view-rejects.component';
+import { ViewRejectsComponent } from 'src/app/modules/enquirys/pages/view-rejects/view-rejects.component';
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
+import { NgIf, NgClass, NgSwitch, NgSwitchCase, NgSwitchDefault, NgFor } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { NgIcon } from '@ng-icons/core';
+import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-assigned-jobs-list',
     templateUrl: './assigned-jobs-list.component.html',
     styleUrls: ['./assigned-jobs-list.component.css'],
-    standalone: false
+    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgSwitch, NgSwitchCase, NgSwitchDefault, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
 })
 export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChildren('jobItem') jobItems!: QueryList<ElementRef>;

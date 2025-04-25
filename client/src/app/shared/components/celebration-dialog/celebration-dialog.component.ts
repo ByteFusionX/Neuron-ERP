@@ -2,12 +2,14 @@ import { Component, Inject, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { announcementGetData } from '../../interfaces/announcement.interface';
 import { interval, Subscription } from 'rxjs';
+import { NgIcon } from '@ng-icons/core';
+import { ConfettiComponentComponent } from '../confetti-component/confetti-component.component';
 
 @Component({
     selector: 'app-celebration-dialog',
     templateUrl: './celebration-dialog.component.html',
     styleUrls: ['./celebration-dialog.component.css'],
-    standalone: false
+    imports: [NgIcon, ConfettiComponentComponent]
 })
 export class CelebrationDialogComponent implements OnInit {
   celebData!: announcementGetData;

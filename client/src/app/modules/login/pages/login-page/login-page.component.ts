@@ -1,17 +1,19 @@
 import { Component } from '@angular/core';
-import { FormBuilder, Validators } from '@angular/forms';
+import { FormBuilder, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { CreateEmployeeDialog } from 'src/app/modules/home/pages/employees/create-employee/create-employee.component';
 import { login } from 'src/app/shared/interfaces/login';
+import { NgIf } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
 
 @Component({
     selector: 'app-login-page',
     templateUrl: './login-page.component.html',
     styleUrls: ['./login-page.component.css'],
-    standalone: false
+    imports: [NgIf, FormsModule, ReactiveFormsModule, NgIcon]
 })
 export class LoginPageComponent {
 

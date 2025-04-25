@@ -8,8 +8,8 @@ describe('CreateCustomerDialog', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [CreateCustomerDialog]
-    });
+    imports: [CreateCustomerDialog]
+});
     fixture = TestBed.createComponent(CreateCustomerDialog);
     component = fixture.componentInstance;
     fixture.detectChanges();

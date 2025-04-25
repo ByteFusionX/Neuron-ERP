@@ -8,8 +8,8 @@ describe('ReassignEmployeeComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ReassignEmployeeComponent]
-    });
+    imports: [ReassignEmployeeComponent]
+});
     fixture = TestBed.createComponent(ReassignEmployeeComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

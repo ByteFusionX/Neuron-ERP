@@ -1,6 +1,6 @@
 import { Component, ElementRef, QueryList, ViewChildren } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
@@ -14,13 +14,18 @@ import { ViewFeedbackComponent } from '../assigned-jobs/pages/view-feedback/view
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { ViewEstimationComponent } from '../assigned-jobs/pages/view-estimation/view-estimation.component';
 import { QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
+import { NgIf, NgClass, NgFor } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { NgIcon } from '@ng-icons/core';
+import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
 
 
 @Component({
     selector: 'app-feedback-requests',
     templateUrl: './feedback-requests.component.html',
     styleUrls: ['./feedback-requests.component.css'],
-    standalone: false
+    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
 })
 export class FeedbackRequestsComponent {
   @ViewChildren('feebackItem') feebackItems!: QueryList<ElementRef>;

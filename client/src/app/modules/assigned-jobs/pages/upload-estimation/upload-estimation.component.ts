@@ -1,17 +1,22 @@
 import { Component } from '@angular/core';
-import { FormArray, FormBuilder, FormControl, FormGroup, Validators, AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
-import { Router } from '@angular/router';
+import { FormArray, FormBuilder, FormControl, FormGroup, Validators, AbstractControl, ValidationErrors, ValidatorFn, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { Router, RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { Subject } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
 import { QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { OptionalItemsComponent } from '../../../../shared/components/optional-items/optional-items.component';
+import { NgIf } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-upload-estimation',
     templateUrl: './upload-estimation.component.html',
     styleUrls: ['./upload-estimation.component.css'],
-    standalone: false
+    imports: [FormsModule, ReactiveFormsModule, NgSelectComponent, NgOptionComponent, OptionalItemsComponent, RouterLink, NgIf, NgIcon, NumberFormatterPipe]
 })
 export class UploadEstimationComponent {
   submit: boolean = false;

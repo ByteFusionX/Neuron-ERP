@@ -8,8 +8,8 @@ describe('RecycleComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [RecycleComponent]
-    });
+    imports: [RecycleComponent]
+});
     fixture = TestBed.createComponent(RecycleComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

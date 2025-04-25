@@ -1,9 +1,8 @@
 import { AfterViewInit, Component, ElementRef, HostListener, Input, OnDestroy, OnInit } from '@angular/core';
 import { buttonSlideState, dropDownMenuSate, sideBarState } from './side-bar.animation';
-import { NavigationEnd, NavigationError, NavigationStart, Router } from '@angular/router';
+import { NavigationEnd, NavigationError, NavigationStart, Router, RouterModule } from '@angular/router';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
-import { AppRoutingModule } from 'src/app/app-routing.module';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Privileges } from '../../interfaces/employee.interface';
@@ -40,7 +39,7 @@ interface SubMenuItem {
   templateUrl: './side-bar.component.html',
   styleUrls: ['./side-bar.component.css'],
   animations: [sideBarState, dropDownMenuSate, buttonSlideState],
-  imports: [CommonModule, IconsModule, AppRoutingModule, MatTooltipModule],
+  imports: [CommonModule, IconsModule,MatTooltipModule, RouterModule],
   standalone: true
 })
 export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -164,7 +163,8 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Job Sheet',
       icon: 'heroBriefcase',
       privilegeKey: 'jobSheet',
-      privilegeValue: 'none'
+      privilegeValue: 'none',
+      route: '/job-sheet',
     },
     {
       id: 'suppliers',

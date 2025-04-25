@@ -1,9 +1,6 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-@Pipe({
-    name: 'numberFormatter',
-    standalone: false
-})
+@Pipe({ name: 'numberFormatter' })
 export class NumberFormatterPipe implements PipeTransform {
     transform(value: number, ...args: unknown[]): string {
         if (isNaN(value)) {

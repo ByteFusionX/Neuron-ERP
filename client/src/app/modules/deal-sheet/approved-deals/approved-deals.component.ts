@@ -1,6 +1,6 @@
 import { Component, ElementRef, QueryList, ViewChildren } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { Router } from '@angular/router';
 import { LoadingBarService } from '@ngx-loading-bar/core';
 import { BehaviorSubject, Subject, Subscription, takeUntil } from 'rxjs';
@@ -11,19 +11,25 @@ import { ApproveDealComponent } from '../approve-deal/approve-deal.component';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { RejectDealComponent } from '../reject-deal/reject-deal.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { FormControl } from '@angular/forms';
+import { FormControl, FormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { HttpEventType } from '@angular/common/http';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ToastrService } from 'ngx-toastr';
 import saveAs from 'file-saver';
 import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { NgIcon } from '@ng-icons/core';
+import { NgIf, NgClass, NgFor } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { MatProgressBar } from '@angular/material/progress-bar';
+import { PaginationComponent } from '../../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-approved-deals',
     templateUrl: './approved-deals.component.html',
     styleUrls: ['./approved-deals.component.css'],
-    standalone: false
+    imports: [FormsModule, NgIcon, NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgFor, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
 })
 export class ApprovedDealsComponent {
   @ViewChildren('quoteItem') quoteItems!: QueryList<ElementRef>;

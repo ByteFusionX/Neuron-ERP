@@ -15,12 +15,19 @@ import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { Quotatation, getQuotatation, quotatationForm } from 'src/app/shared/interfaces/quotation.interface';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { NgIcon } from '@ng-icons/core';
+import { NgIf, NgFor, DecimalPipe, DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
+import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
+import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-quotation-view',
     templateUrl: './quotation-view.component.html',
     styleUrls: ['./quotation-view.component.css'],
-    standalone: false
+    imports: [NgIcon, NgIf, NgFor, FormsModule, ResizableComponent, DecimalPipe, DatePipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe]
 })
 export class QuotationViewComponent {
   quoteData!: getQuotatation;

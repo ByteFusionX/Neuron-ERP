@@ -10,18 +10,28 @@ import { Router } from '@angular/router';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 import { Metric } from 'src/app/shared/interfaces/dasbhoard.interface';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
-import { FormBuilder, FormControl, FormGroup } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { ToastrService } from 'ngx-toastr';
 import { HttpClient } from '@angular/common/http';
 import { Style, Workbook } from 'exceljs';
 import * as fs from 'file-saver';
+import { MatDrawerContainer, MatDrawer } from '@angular/material/sidenav';
+import { NgIcon } from '@ng-icons/core';
+import { dateFutureDirective } from '../../../../shared/directives/date-future.directive';
+import { NgSelectComponent, NgOptionComponent, NgLoadingSpinnerTemplateDirective } from '@ng-select/ng-select';
+import { NgFor, NgIf, NgClass, AsyncPipe } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { GaugeChartComponent } from '../../../../shared/components/charts/gauge-chart/gauge-chart.component';
+import { DoughnutChartComponent } from '../../../../shared/components/charts/doughnut-chart/doughnut-chart.component';
+import { LineChartComponent } from '../../../../shared/components/charts/line-chart/line-chart.component';
+import { HalfDoughnutChartComponent } from '../../../../shared/components/charts/half-doughnut-chart/half-doughnut-chart.component';
 @Component({
     selector: 'app-dashboard',
     templateUrl: './dashboard.component.html',
     styleUrls: ['./dashboard.component.css'],
     animations: [opacityState],
-    standalone: false
+    imports: [MatDrawerContainer, MatDrawer, FormsModule, ReactiveFormsModule, NgIcon, dateFutureDirective, NgSelectComponent, NgFor, NgOptionComponent, NgIf, NgLoadingSpinnerTemplateDirective, NgClass, SkeltonLoadingComponent, GaugeChartComponent, DoughnutChartComponent, LineChartComponent, HalfDoughnutChartComponent, AsyncPipe]
 })
 
 export class DashboardComponent implements OnInit, OnDestroy {

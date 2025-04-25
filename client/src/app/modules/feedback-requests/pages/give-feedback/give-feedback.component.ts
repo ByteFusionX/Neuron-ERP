@@ -1,11 +1,14 @@
 import { Component } from '@angular/core';
 import {  MatDialogRef } from '@angular/material/dialog';
+import { NgIcon } from '@ng-icons/core';
+import { FormsModule } from '@angular/forms';
+import { NgClass, NgIf } from '@angular/common';
 
 @Component({
     selector: 'app-give-feedback',
     templateUrl: './give-feedback.component.html',
     styleUrls: ['./give-feedback.component.css'],
-    standalone: false
+    imports: [NgIcon, FormsModule, NgClass, NgIf]
 })
 export class GiveFeedbackComponent {
   feedback!:string;

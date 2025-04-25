@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { Estimations, feedback, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
@@ -14,12 +14,17 @@ import { SelectEmployeeComponent } from '../select-employee/select-employee.comp
 import { ViewFeedbackComponent } from '../view-feedback/view-feedback.component';
 import { QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
 import { ViewEstimationComponent } from '../view-estimation/view-estimation.component';
+import { NgIf, NgFor } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { NgIcon } from '@ng-icons/core';
+import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-completed-jobs-list',
     templateUrl: './completed-jobs-list.component.html',
     styleUrls: ['./completed-jobs-list.component.css'],
-    standalone: false
+    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
 })
 export class CompletedJobsListComponent implements OnInit, OnDestroy {
 

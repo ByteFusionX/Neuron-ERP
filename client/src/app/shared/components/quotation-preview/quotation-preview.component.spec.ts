@@ -8,8 +8,8 @@ describe('QuotationPreviewComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [QuotationPreviewComponent]
-    });
+    imports: [QuotationPreviewComponent]
+});
     fixture = TestBed.createComponent(QuotationPreviewComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

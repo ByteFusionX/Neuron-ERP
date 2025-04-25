@@ -7,12 +7,15 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
 import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
+import { NgIcon } from '@ng-icons/core';
+import { NgFor, NgIf } from '@angular/common';
+import { MatTooltip } from '@angular/material/tooltip';
 
 @Component({
     selector: 'app-view-lpo',
     templateUrl: './view-lpo.component.html',
     styleUrls: ['./view-lpo.component.css'],
-    standalone: false
+    imports: [NgIcon, NgFor, MatTooltip, NgIf]
 })
 export class ViewLpoComponent {
 

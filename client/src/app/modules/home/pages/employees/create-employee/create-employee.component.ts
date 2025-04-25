@@ -11,19 +11,22 @@ import { ToastrService } from 'ngx-toastr';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { NgIconComponent } from '@ng-icons/core';
 import { CommonModule } from '@angular/common';
-import { directiveSharedModule } from 'src/app/shared/directives/directives.module';
+
+import { appNoLeadingSpace } from '../../../../../shared/directives/trim-validator.directive';
+import { dateFutureDirective } from '../../../../../shared/directives/date-future.directive';
 
 @Component({
     selector: 'app-create-employee',
     templateUrl: './create-employee.component.html',
     styleUrls: ['./create-employee.component.css'],
     imports: [
-        NgSelectModule,
-        NgIconComponent,
-        CommonModule,
-        ReactiveFormsModule,
-        directiveSharedModule
-    ]
+    NgSelectModule,
+    NgIconComponent,
+    CommonModule,
+    ReactiveFormsModule,
+    appNoLeadingSpace,
+    dateFutureDirective
+]
 })
 export class CreateEmployeeDialog implements OnInit {
   category$: BehaviorSubject<GetCategory[]> = new BehaviorSubject<GetCategory[]>([]);

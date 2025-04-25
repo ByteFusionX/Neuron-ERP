@@ -7,12 +7,14 @@ import { CustomerService } from 'src/app/core/services/customer/customer.service
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { NgIcon } from '@ng-icons/core';
+import { NgIf, NgFor } from '@angular/common';
 
 @Component({
     selector: 'app-shared-with-list',
     templateUrl: './shared-with-list.component.html',
     styleUrls: ['./shared-with-list.component.css'],
-    standalone: false
+    imports: [NgIcon, NgIf, NgFor]
 })
 export class SharedWithListComponent {
 

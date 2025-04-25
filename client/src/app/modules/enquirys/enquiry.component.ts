@@ -1,30 +1,39 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { CreateEnquiryDialog } from './create-enquiry/create-enquiry.component';
-import { FormBuilder, FormControl } from '@angular/forms';
+import { CreateEnquiryDialog } from './pages/create-enquiry/create-enquiry.component';
+import { FormBuilder, FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { EnquiryTable, getEnquiry, Presale } from 'src/app/shared/interfaces/enquiry.interface';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { AssignPresaleComponent } from './assign-presale/assign-presale.component';
-import { ViewPresaleComponent } from './view-presale/view-presale.component';
+import { AssignPresaleComponent } from './pages/assign-presale/assign-presale.component';
+import { ViewPresaleComponent } from './pages/view-presale/view-presale.component';
 import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { ViewRejectsComponent } from './view-rejects/view-rejects.component';
+import { ViewRejectsComponent } from './pages/view-rejects/view-rejects.component';
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
+import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
+import { NgIcon } from '@ng-icons/core';
+import { dateFutureDirective } from '../../shared/directives/date-future.directive';
+import { NgIf, NgFor, NgSwitch, NgSwitchCase, NgSwitchDefault, AsyncPipe } from '@angular/common';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { appNoLeadingSpace } from '../../shared/directives/trim-validator.directive';
+import { SkeltonLoadingComponent } from '../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-enquiry',
     templateUrl: './enquiry.component.html',
     styleUrls: ['./enquiry.component.css'],
-    standalone: false
+    imports: [MatMenuTrigger, NgIcon, MatMenu, FormsModule, ReactiveFormsModule, dateFutureDirective, NgIf, NgSelectComponent, appNoLeadingSpace, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, NgSwitch, NgSwitchCase, NgSwitchDefault, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe]
 })
 export class EnquiryComponent implements OnInit, OnDestroy {
 

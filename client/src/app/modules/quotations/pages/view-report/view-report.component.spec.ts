@@ -8,8 +8,8 @@ describe('ViewReportComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ViewReportComponent]
-    });
+    imports: [ViewReportComponent]
+});
     fixture = TestBed.createComponent(ViewReportComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

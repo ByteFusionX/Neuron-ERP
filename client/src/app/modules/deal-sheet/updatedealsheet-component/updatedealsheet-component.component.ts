@@ -1,9 +1,14 @@
 import { Component, ElementRef, Inject, OnInit, ViewChild } from '@angular/core';
-import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, ValidatorFn, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { priceDetails, Quotatation, QuoteItem, QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
 import { fileEnterState } from '../../enquirys/enquiry-animations';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { NgIcon } from '@ng-icons/core';
+import { NgIf, NgFor, NgClass, DecimalPipe } from '@angular/common';
+import { MatTooltip } from '@angular/material/tooltip';
+import { ParseBoldTextPipe } from '../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../shared/pipes/highlightParse.pipe';
 
 
 @Component({
@@ -11,7 +16,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     templateUrl: './updatedealsheet-component.component.html',
     styleUrls: ['./updatedealsheet-component.component.css'],
     animations: [fileEnterState],
-    standalone: false
+    imports: [NgIcon, FormsModule, ReactiveFormsModule, NgIf, NgFor, NgClass, MatTooltip, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe]
 })
 export class UpdatedealsheetComponent implements OnInit {
   @ViewChild('fileInput') fileInput!: ElementRef;

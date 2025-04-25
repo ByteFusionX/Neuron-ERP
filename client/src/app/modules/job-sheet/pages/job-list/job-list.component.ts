@@ -1,6 +1,6 @@
 import { HttpEventType } from '@angular/common/http';
 import { Component } from '@angular/core';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Observable, Subscription, catchError, tap, throwError } from 'rxjs';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { JobStatus, JobTable, getJob } from 'src/app/shared/interfaces/job.interface';
@@ -8,7 +8,7 @@ import { saveAs } from 'file-saver'
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { FormBuilder, FormControl } from '@angular/forms';
+import { FormBuilder, FormControl, FormsModule } from '@angular/forms';
 import { GeneratePdfReport } from 'src/app/core/services/generateReport.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
@@ -21,13 +21,23 @@ import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import * as pdfMake from 'pdfmake/build/pdfmake';
 import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
 import { ActivatedRoute, Router } from '@angular/router';
+import { NgIf, NgFor, AsyncPipe } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
+import { GenerateReportComponent } from '../../../../shared/components/generate-report/generate-report.component';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { MatProgressBar } from '@angular/material/progress-bar';
+import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
+import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-job-list',
     templateUrl: './job-list.component.html',
     styleUrls: ['./job-list.component.css'],
     providers: [NumberFormatterPipe],
-    standalone: false
+    imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, NumberFormatterPipe_1]
 })
 export class JobListComponent {
 

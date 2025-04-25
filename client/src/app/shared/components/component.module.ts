@@ -22,10 +22,10 @@ import { NotificationComponent } from './notification/notification.component';
         ReactiveFormsModule,
         MatSnackBarModule,
         FormsModule,
-        NotificationComponent
+        NotificationComponent,
+        CelebrationDialogComponent, OptionalItemsComponent
     ],
     exports: [OptionalItemsComponent],
-    declarations: [CelebrationDialogComponent, OptionalItemsComponent],
     providers: [],
 })
 export class componentModule { }

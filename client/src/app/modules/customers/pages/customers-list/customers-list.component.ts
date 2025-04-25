@@ -1,21 +1,29 @@
 import { Component } from '@angular/core';
 import { CreateCustomerDialog } from '../create-customer/create-customer.component';
 import { getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
-import { NavigationExtras, Router, ActivatedRoute } from '@angular/router';
+import { NavigationExtras, Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { BehaviorSubject, Observable, share, Subscription } from 'rxjs';
 import { getCreators, getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { MatDialog } from '@angular/material/dialog';
 import { ShareTransferCustomerComponent } from '../share-transfer-customer/share-transfer-customer.component';
 import { SharedWithListComponent } from '../shared-with-list/shared-with-list.component';
+import { FormsModule } from '@angular/forms';
+import { NgIcon } from '@ng-icons/core';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { NgFor, NgIf, AsyncPipe } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { MatTooltip } from '@angular/material/tooltip';
+import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-customers-list',
     templateUrl: './customers-list.component.html',
     styleUrls: ['./customers-list.component.css'],
-    standalone: false
+    imports: [FormsModule, NgIcon, NgSelectComponent, appNoLeadingSpace, NgFor, NgOptionComponent, NgIf, RouterLink, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe]
 })
 export class CustomersListComponent {
 

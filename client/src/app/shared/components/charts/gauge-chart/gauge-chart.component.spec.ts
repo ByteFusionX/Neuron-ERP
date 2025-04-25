@@ -8,8 +8,8 @@ describe('GaugeChartComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [GaugeChartComponent]
-    });
+    imports: [GaugeChartComponent]
+});
     fixture = TestBed.createComponent(GaugeChartComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

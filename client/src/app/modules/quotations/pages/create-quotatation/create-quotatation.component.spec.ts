@@ -8,8 +8,8 @@ describe('CreateQuotatationComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [CreateQuotatationComponent]
-    });
+    imports: [CreateQuotatationComponent]
+});
     fixture = TestBed.createComponent(CreateQuotatationComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
