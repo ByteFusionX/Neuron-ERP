@@ -6,12 +6,15 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { NgIcon } from '@ng-icons/core';
+import { NgFor } from '@angular/common';
+import { FormatStringPipe } from '../../../../shared/pipes/formatString.pipe';
 
 @Component({
     selector: 'app-customer-view',
     templateUrl: './customer-view.component.html',
     styleUrls: ['./customer-view.component.css'],
-    standalone: false
+    imports: [NgIcon, NgFor, FormatStringPipe]
 })
 export class CustomerViewComponent {
   customerData!: getCustomer;

@@ -1,15 +1,18 @@
 
 import { Component } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialogRef } from '@angular/material/dialog';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
+import { NgIcon } from '@ng-icons/core';
+import { appNoLeadingSpace } from '../../../../../shared/directives/trim-validator.directive';
+import { NgIf } from '@angular/common';
 
 @Component({
     selector: 'app-create-category',
     templateUrl: './create-category.component.html',
     styleUrls: ['./create-category.component.css'],
-    standalone: false
+    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf]
 })
 
 export class CreateCategoryComponent {

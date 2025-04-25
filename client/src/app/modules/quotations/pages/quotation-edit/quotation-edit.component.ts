@@ -1,9 +1,9 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgFor, NgIf, AsyncPipe } from '@angular/common';
 import { Component, ElementRef, ViewChild } from '@angular/core';
-import { AbstractControlOptions, FormArray, FormBuilder, FormControl, FormGroup, Validators, AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
+import { AbstractControlOptions, FormArray, FormBuilder, FormControl, FormGroup, Validators, AbstractControl, ValidationErrors, ValidatorFn, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
-import { Router } from '@angular/router';
-import { NgSelectConfig } from '@ng-select/ng-select';
+import { Router, RouterLink } from '@angular/router';
+import { NgSelectConfig, NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 import { ToastrService } from 'ngx-toastr';
 import { Observable, Subject, first } from 'rxjs';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
@@ -19,6 +19,10 @@ import { fadeInOut } from 'src/app/shared/animations/animations';
 import { Note, Notes } from 'src/app/shared/interfaces/notes.interface';
 import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { OptionalItemsComponent } from '../../../../shared/components/optional-items/optional-items.component';
+import { NgIcon } from '@ng-icons/core';
+import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
 
 @Component({
@@ -26,7 +30,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
     templateUrl: './quotation-edit.component.html',
     styleUrls: ['./quotation-edit.component.css'],
     animations: [fadeInOut],
-    standalone: false
+    providers:[DatePipe],
+    imports: [FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, OptionalItemsComponent, NgIf, NgIcon, AsyncPipe, NumberFormatterPipe]
 })
 export class QuotationEditComponent {
   customers$!: Observable<getCustomer[]>;

@@ -8,8 +8,8 @@ describe('FeedbackRequestsComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [FeedbackRequestsComponent]
-    });
+    imports: [FeedbackRequestsComponent]
+});
     fixture = TestBed.createComponent(FeedbackRequestsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

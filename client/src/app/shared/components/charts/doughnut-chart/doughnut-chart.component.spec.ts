@@ -8,8 +8,8 @@ describe('DoughnutChartComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [DoughnutChartComponent]
-    });
+    imports: [DoughnutChartComponent]
+});
     fixture = TestBed.createComponent(DoughnutChartComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

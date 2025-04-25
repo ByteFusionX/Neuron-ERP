@@ -1,14 +1,17 @@
 import { Component } from '@angular/core';
-import { FormBuilder, Validators } from '@angular/forms';
+import { FormBuilder, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getCompanyDetails } from 'src/app/shared/interfaces/company.interface';
+import { NgIcon } from '@ng-icons/core';
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { NgIf } from '@angular/common';
 
 @Component({
     selector: 'app-edit-company-details',
     templateUrl: './edit-company-details.component.html',
     styleUrls: ['./edit-company-details.component.css'],
-    standalone: false
+    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf]
 })
 export class EditCompanyDetailsComponent {
   isSaving:boolean=false

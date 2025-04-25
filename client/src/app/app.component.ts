@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { celebCheckService } from './core/services/celebrationCheck/celebCheck.service';
 import { announcementGetData } from './shared/interfaces/announcement.interface';
 import { concatMap, from, interval, take, switchMap, takeUntil, Subscription, Observable } from 'rxjs';
@@ -8,13 +8,18 @@ import { CelebrationDialogComponent } from './shared/components/celebration-dial
 import { Subject } from 'rxjs';
 import { NotificationService } from './core/services/notification.service';
 import { EmployeeService } from './core/services/employee/employee.service';
-import { MatDrawer } from '@angular/material/sidenav';
+import { MatDrawer, MatDrawerContainer, MatDrawerContent } from '@angular/material/sidenav';
+import { LoadingBarModule } from '@ngx-loading-bar/core';
+import { NgIf } from '@angular/common';
+import { SideBarComponent } from './shared/components/side-bar/side-bar.component';
+import { NotificationComponent } from './shared/components/notification/notification.component';
+import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
 
 @Component({
     selector: 'app-root',
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.css'],
-    standalone: false
+    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, MatDrawerContent, NavBarComponent]
 })
 export class AppComponent implements OnDestroy, OnInit {
   showFiller = false;

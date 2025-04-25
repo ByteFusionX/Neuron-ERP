@@ -1,18 +1,18 @@
 import { CommonModule } from '@angular/common';
 import { Component, Output, EventEmitter } from '@angular/core';
-import { AppRoutingModule } from 'src/app/app-routing.module';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { TextNotification } from '../../interfaces/notification.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Observable, of } from 'rxjs';
 import { RelativeTimePipe } from '../../pipes/relative-time.pipe';
+import { RouterModule } from '@angular/router';
 
 @Component({
     selector: 'app-notification',
     templateUrl: './notification.component.html',
     styleUrls: ['./notification.component.css'],
-    imports: [CommonModule, IconsModule, RelativeTimePipe],
+    imports: [CommonModule, IconsModule, RelativeTimePipe, RouterModule],
     standalone:true
 })
 export class NotificationComponent {

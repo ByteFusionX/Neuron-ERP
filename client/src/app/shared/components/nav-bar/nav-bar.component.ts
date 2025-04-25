@@ -3,11 +3,10 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
-import { AppRoutingModule } from 'src/app/app-routing.module';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Observable } from 'rxjs';
 import { getEmployee } from '../../interfaces/employee.interface';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { NotificationCounts, TextNotification } from '../../interfaces/notification.interface';
 import { NotificationService } from 'src/app/core/services/notification.service';
 
@@ -15,7 +14,7 @@ import { NotificationService } from 'src/app/core/services/notification.service'
     selector: 'app-nav-bar',
     templateUrl: './nav-bar.component.html',
     styleUrls: ['./nav-bar.component.css'],
-    imports: [CommonModule, AppRoutingModule, IconsModule, MatMenuModule, MatButtonModule]
+    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule]
 })
 export class NavBarComponent {
   notificationCounts$!: Observable<NotificationCounts>;

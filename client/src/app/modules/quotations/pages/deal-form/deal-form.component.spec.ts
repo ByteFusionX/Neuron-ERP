@@ -8,8 +8,8 @@ describe('DealFormComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [DealFormComponent]
-    });
+    imports: [DealFormComponent]
+});
     fixture = TestBed.createComponent(DealFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

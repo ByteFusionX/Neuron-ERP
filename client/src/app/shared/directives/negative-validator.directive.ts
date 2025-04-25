@@ -1,9 +1,6 @@
 import { Directive, HostListener, ElementRef } from '@angular/core';
 
-@Directive({
-    selector: '[appNegativeNumber]',
-    standalone: false
-})
+@Directive({ selector: '[appNegativeNumber]' })
 export class NegativeNumberDirective {
 
   constructor(private el: ElementRef) {}

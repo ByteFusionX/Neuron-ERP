@@ -4,12 +4,18 @@ import { NavigationExtras, Router } from '@angular/router';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
 import { QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
+import { NgIf, NgFor, DecimalPipe } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { FormsModule } from '@angular/forms';
+import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
+import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-view-estimation',
     templateUrl: './view-estimation.component.html',
     styleUrls: ['./view-estimation.component.css'],
-    standalone: false
+    imports: [NgIf, NgIcon, FormsModule, NgFor, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe]
 })
 export class ViewEstimationComponent {
   selectedOption: number = 0;

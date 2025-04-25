@@ -8,8 +8,8 @@ describe('DealSheetComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [DealSheetComponent]
-    });
+    imports: [DealSheetComponent]
+});
     fixture = TestBed.createComponent(DealSheetComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

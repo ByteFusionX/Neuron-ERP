@@ -13,9 +13,12 @@ import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
 import { RejectDealComponent } from '../reject-deal/reject-deal.component';
 import { CommonModule, DatePipe, NgFor, NgIf, NgSwitch, NgSwitchDefault } from '@angular/common';
-import { pipeModule } from 'src/app/shared/pipes/pipe.module';
+
 import { NgIconsModule } from '@ng-icons/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { ParseBoldTextPipe } from '../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../shared/pipes/highlightParse.pipe';
+import { NumberFormatterPipe } from '../../../shared/pipes/numFormatter.pipe';
 
 
 @Component({
@@ -23,7 +26,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
   templateUrl: './approve-deal.component.html',
   styleUrls: ['./approve-deal.component.css'],
   standalone: true,
-  imports: [DatePipe,pipeModule,NgIconsModule,MatTooltipModule,CommonModule]
+  imports: [DatePipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe, NgIconsModule, MatTooltipModule, CommonModule]
 })
 export class ApproveDealComponent implements OnInit {
   isApproving: boolean = false;

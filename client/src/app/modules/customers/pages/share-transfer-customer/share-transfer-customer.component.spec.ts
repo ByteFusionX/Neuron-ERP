@@ -8,8 +8,8 @@ describe('ShareTransferCustomerComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ShareTransferCustomerComponent]
-    });
+    imports: [ShareTransferCustomerComponent]
+});
     fixture = TestBed.createComponent(ShareTransferCustomerComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

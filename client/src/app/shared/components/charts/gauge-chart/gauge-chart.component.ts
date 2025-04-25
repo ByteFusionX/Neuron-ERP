@@ -20,7 +20,6 @@ import {
 } from 'echarts/renderers';
 
 import { DashboardService } from 'src/app/core/services/dashboard.service';
-import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
 import { NumberShortenerPipe } from 'src/app/shared/pipes/numberShortener.pipe';
 
 // Register ECharts components
@@ -35,7 +34,7 @@ echarts.use([
     selector: 'app-gauge-chart',
     templateUrl: './gauge-chart.component.html',
     styleUrls: ['./gauge-chart.component.css'],
-    imports: [HomeRoutingModule],
+    imports: [],
     providers: [NumberShortenerPipe],
     standalone: true
 })

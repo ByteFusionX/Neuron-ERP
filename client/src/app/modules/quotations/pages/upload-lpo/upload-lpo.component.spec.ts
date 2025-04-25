@@ -8,8 +8,8 @@ describe('UploadLpoComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [UploadLpoComponent]
-    });
+    imports: [UploadLpoComponent]
+});
     fixture = TestBed.createComponent(UploadLpoComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

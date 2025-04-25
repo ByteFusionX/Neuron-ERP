@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -11,12 +11,15 @@ import { CreateDepartmentDialog } from 'src/app/modules/settings/pages/create-de
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getCustomerType } from 'src/app/shared/interfaces/customerType.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
+import { NgIf, NgFor, NgClass } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 
 @Component({
     selector: 'app-create-customer',
     templateUrl: './create-customer.component.html',
     styleUrls: ['./create-customer.component.css'],
-    standalone: false
+    imports: [FormsModule, ReactiveFormsModule, NgIf, NgFor, NgIcon, NgClass, NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective, RouterLink]
 })
 export class CreateCustomerDialog {
   departments: getDepartment[] = [];

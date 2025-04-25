@@ -1,12 +1,13 @@
 import { Component, Inject } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { NgIf } from '@angular/common';
 
 @Component({
     selector: 'app-reject-deal',
     templateUrl: './reject-deal.component.html',
     styleUrls: ['./reject-deal.component.css'],
-    standalone: false
+    imports: [NgIf, FormsModule, ReactiveFormsModule]
 })
 export class RejectDealComponent {
   rejectForm!: FormGroup;

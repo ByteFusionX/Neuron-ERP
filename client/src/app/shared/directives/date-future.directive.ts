@@ -3,8 +3,7 @@ import { AbstractControl, NG_VALIDATORS, Validator, ValidatorFn, ValidationError
 
 @Directive({
     selector: '[dateFutureDirective]',
-    providers: [{ provide: NG_VALIDATORS, useExisting: dateFutureDirective, multi: true }],
-    standalone: false
+    providers: [{ provide: NG_VALIDATORS, useExisting: dateFutureDirective, multi: true }]
 })
 export class dateFutureDirective implements Validator {
 

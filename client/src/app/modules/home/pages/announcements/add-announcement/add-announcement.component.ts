@@ -10,17 +10,19 @@ import { AnnouncementService } from 'src/app/core/services/announcement/announce
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CreateCustomerDialog } from 'src/app/modules/customers/pages/create-customer/create-customer.component';
-import { directiveSharedModule } from 'src/app/shared/directives/directives.module';
+
 import { announcementGetData, announcementPostData } from 'src/app/shared/interfaces/announcement.interface';
 import { GetCategory } from 'src/app/shared/interfaces/employee.interface';
 import { NgSelectModule } from '@ng-select/ng-select';
+import { appNoLeadingSpace } from '../../../../../shared/directives/trim-validator.directive';
+import { datePastDirective } from '../../../../../shared/directives/date-validator.directive';
 
 
 @Component({
     selector: 'app-add-announcement',
     templateUrl: './add-announcement.component.html',
     styleUrls: ['./add-announcement.component.css'],
-    imports: [CommonModule, IconsModule, directiveSharedModule, ReactiveFormsModule, FormsModule, NgSelectModule]
+    imports: [CommonModule, IconsModule, appNoLeadingSpace, datePastDirective, ReactiveFormsModule, FormsModule, NgSelectModule]
 })
 export class AddAnnouncementComponent implements OnDestroy, OnInit {
   submit: boolean = false;

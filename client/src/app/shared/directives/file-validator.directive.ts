@@ -1,10 +1,7 @@
 import { Directive, ElementRef, HostListener, Input } from '@angular/core';
 import { ToastrService } from 'ngx-toastr';
 
-@Directive({
-    selector: '[appFileValidator]',
-    standalone: false
-})
+@Directive({ selector: '[appFileValidator]' })
 export class appFileValidator {
 
   @Input() allowedExtensions: string[] = ['.jpg','.jpeg','.png','.pdf','.doc','.docx','.xlsx','.msg','.dwg'];

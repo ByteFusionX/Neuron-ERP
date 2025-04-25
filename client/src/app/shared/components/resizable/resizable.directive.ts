@@ -3,10 +3,7 @@ import { Directive, ElementRef, Inject, Output } from '@angular/core';
 import {distinctUntilChanged, map, switchMap, takeUntil, tap,} from 'rxjs/operators';
 import { fromEvent } from 'rxjs';
 
-@Directive({
-    selector: '[resizable]',
-    standalone: false
-})
+@Directive({ selector: '[resizable]' })
 export class ResizableDirective {
   @Output()
   readonly resizable = fromEvent<MouseEvent>(

@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { FormArray, FormBuilder, FormGroup, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { Router, RouterLink } from '@angular/router';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
@@ -11,12 +11,15 @@ import { MatDialog } from '@angular/material/dialog';
 import { CreateDepartmentDialog } from 'src/app/modules/settings/pages/create-department/create-department.component';
 import { getCustomerType } from 'src/app/shared/interfaces/customerType.interface';
 import { CreateCustomerTypeDialog } from 'src/app/modules/settings/pages/create-customer-type/create-customer-type.component';
+import { NgFor, NgIf, NgClass } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 
 @Component({
     selector: 'app-customer-edit',
     templateUrl: './customer-edit.component.html',
     styleUrls: ['./customer-edit.component.css'],
-    standalone: false
+    imports: [FormsModule, ReactiveFormsModule, NgFor, NgIf, NgIcon, NgClass, NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective, RouterLink]
 })
 export class CustomerEditComponent {
   departments: getDepartment[] = [];

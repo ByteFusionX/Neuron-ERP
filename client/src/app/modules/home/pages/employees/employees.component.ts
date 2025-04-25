@@ -2,18 +2,23 @@ import { Component } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { CreateEmployeeDialog } from './create-employee/create-employee.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
 import { BehaviorSubject, Subscription, filter } from 'rxjs';
 import { NavigationExtras, Router } from '@angular/router';
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
+import { FormsModule } from '@angular/forms';
+import { NgIcon } from '@ng-icons/core';
+import { NgIf } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-employees',
     templateUrl: './employees.component.html',
     styleUrls: ['./employees.component.css'],
-    standalone: false
+    imports: [FormsModule, NgIcon, NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
 })
 export class EmployeesComponent {
 

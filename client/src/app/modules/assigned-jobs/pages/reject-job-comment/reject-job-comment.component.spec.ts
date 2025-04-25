@@ -8,8 +8,8 @@ describe('RejectJobCommentComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [RejectJobCommentComponent]
-    });
+    imports: [RejectJobCommentComponent]
+});
     fixture = TestBed.createComponent(RejectJobCommentComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

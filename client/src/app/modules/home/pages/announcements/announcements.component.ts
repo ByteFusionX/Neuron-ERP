@@ -9,12 +9,17 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { takeUntil } from 'rxjs/operators';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { NgIf, NgClass, NgFor, DatePipe } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
+import { ConfettiComponentComponent } from '../../../../shared/components/confetti-component/confetti-component.component';
+import { NgIcon } from '@ng-icons/core';
+import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-announcements',
     templateUrl: './announcements.component.html',
     styleUrls: ['./announcements.component.css'],
-    standalone: false
+    imports: [NgIf, SkeltonLoadingComponent, NgClass, ConfettiComponentComponent, NgIcon, NgFor, PaginationComponent, DatePipe]
 })
 export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit {
   createAnnouncement: boolean | undefined = false;

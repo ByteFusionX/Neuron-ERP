@@ -8,8 +8,8 @@ describe('SharedWithListComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [SharedWithListComponent]
-    });
+    imports: [SharedWithListComponent]
+});
     fixture = TestBed.createComponent(SharedWithListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

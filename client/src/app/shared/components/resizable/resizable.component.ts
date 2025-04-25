@@ -1,10 +1,11 @@
 import { Component, HostBinding, Input } from '@angular/core';
+import { ResizableDirective } from './resizable.directive';
 
 @Component({
     selector: 'th[resizable]',
     templateUrl: './resizable.component.html',
     styleUrls: ['./resizable.component.css'],
-    standalone: false
+    imports: [ResizableDirective]
 })
 export class ResizableComponent {
   @HostBinding('style.width.px')

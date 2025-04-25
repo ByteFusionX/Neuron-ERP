@@ -8,8 +8,8 @@ describe('PendingDealsComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [PendingDealsComponent]
-    });
+    imports: [PendingDealsComponent]
+});
     fixture = TestBed.createComponent(PendingDealsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

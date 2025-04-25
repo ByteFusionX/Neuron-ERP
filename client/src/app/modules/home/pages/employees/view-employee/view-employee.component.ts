@@ -6,14 +6,18 @@ import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
-import { MatTableDataSource } from '@angular/material/table';
+import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { NgIcon } from '@ng-icons/core';
+import { NgIf, TitleCasePipe, DatePipe } from '@angular/common';
+import { SkeltonLoadingComponent } from '../../../../../shared/components/skelton-loading/skelton-loading.component';
+import { NumberFormatterPipe } from '../../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-view-employee',
     templateUrl: './view-employee.component.html',
     styleUrls: ['./view-employee.component.css'],
-    standalone: false
+    imports: [NgIcon, NgIf, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, SkeltonLoadingComponent, TitleCasePipe, DatePipe, NumberFormatterPipe]
 })
 export class ViewEmployeeComponent {
 

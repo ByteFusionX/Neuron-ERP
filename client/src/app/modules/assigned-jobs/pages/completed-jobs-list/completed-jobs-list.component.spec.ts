@@ -8,8 +8,8 @@ describe('CompletedJobsListComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [CompletedJobsListComponent]
-    });
+    imports: [CompletedJobsListComponent]
+});
     fixture = TestBed.createComponent(CompletedJobsListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

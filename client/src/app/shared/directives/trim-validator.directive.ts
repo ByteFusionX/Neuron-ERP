@@ -1,9 +1,6 @@
 import { Directive, HostListener, ElementRef } from '@angular/core';
 
-@Directive({
-    selector: '[appNoLeadingSpace]',
-    standalone: false
-})
+@Directive({ selector: '[appNoLeadingSpace]' })
 export class appNoLeadingSpace {
 
   constructor(private el: ElementRef) {}

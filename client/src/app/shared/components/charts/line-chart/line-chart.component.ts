@@ -1,5 +1,4 @@
 import { AfterViewChecked, AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
-import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
 import * as echarts from 'echarts/core';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 import { NumberShortenerPipe } from 'src/app/shared/pipes/numberShortener.pipe';
@@ -18,7 +17,7 @@ echarts.use([
 
 @Component({
     selector: 'app-line-chart',
-    imports: [HomeRoutingModule],
+    imports: [],
     providers: [NumberShortenerPipe],
     templateUrl: './line-chart.component.html',
     styleUrls: ['./line-chart.component.css'],

@@ -8,8 +8,8 @@ describe('GiveFeedbackComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [GiveFeedbackComponent]
-    });
+    imports: [GiveFeedbackComponent]
+});
     fixture = TestBed.createComponent(GiveFeedbackComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

@@ -1,17 +1,21 @@
 import { Component, Inject, OnDestroy, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
+import { NgIf, NgFor, AsyncPipe } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
 
 @Component({
     selector: 'app-internal-department',
     templateUrl: './internal-department.component.html',
     styleUrls: ['./internal-department.component.css'],
-    standalone: false
+    imports: [NgIf, NgIcon, FormsModule, appNoLeadingSpace, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, AsyncPipe]
 })
 export class InternalDepartmentComponent implements OnInit, OnDestroy {
 

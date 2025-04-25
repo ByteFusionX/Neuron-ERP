@@ -4,16 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { NgIconsModule } from '@ng-icons/core';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
-import { directiveSharedModule } from 'src/app/shared/directives/directives.module';
+
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 
 @Component({
     selector: 'app-note-form',
     imports: [
-        CommonModule,
-        NgIconsModule,
-        FormsModule,
-        directiveSharedModule
-    ],
+    CommonModule,
+    NgIconsModule,
+    FormsModule,
+    appNoLeadingSpace
+],
     templateUrl: './note-form.component.html',
     styleUrls: ['./note-form.component.css'],
     changeDetection: ChangeDetectionStrategy.OnPush

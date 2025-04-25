@@ -8,8 +8,8 @@ describe('ResizableComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ResizableComponent]
-    });
+    imports: [ResizableComponent]
+});
     fixture = TestBed.createComponent(ResizableComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();

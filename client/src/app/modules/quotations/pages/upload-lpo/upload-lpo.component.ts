@@ -8,6 +8,10 @@ import { QuotationService } from 'src/app/core/services/quotation/quotation.serv
 import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 import { LoadingBarService } from '@ngx-loading-bar/core';
 import { DealFormComponent } from '../deal-form/deal-form.component';
+import { NgIcon } from '@ng-icons/core';
+import { FormsModule } from '@angular/forms';
+import { UploadFileComponent } from '../../../../shared/components/upload-file/upload-file.component';
+import { NgIf } from '@angular/common';
 
 @Component({
     selector: 'app-upload-lpo',
@@ -16,7 +20,7 @@ import { DealFormComponent } from '../deal-form/deal-form.component';
     animations: [fileEnterState],
     encapsulation: ViewEncapsulation.None,
     changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+    imports: [NgIcon, FormsModule, UploadFileComponent, NgIf]
 })
 export class UploadLpoComponent {
   selectedFiles: File[] = []

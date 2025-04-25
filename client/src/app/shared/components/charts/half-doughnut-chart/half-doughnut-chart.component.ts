@@ -5,7 +5,6 @@ import {
   Input,
   AfterViewInit
 } from '@angular/core';
-import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 
 import * as echarts from 'echarts/core';
@@ -29,7 +28,7 @@ echarts.use([
 
 @Component({
     selector: 'app-half-doughnut-chart',
-    imports: [HomeRoutingModule],
+    imports: [],
     templateUrl: './half-doughnut-chart.component.html',
     styleUrls: ['./half-doughnut-chart.component.css'],
     standalone: true

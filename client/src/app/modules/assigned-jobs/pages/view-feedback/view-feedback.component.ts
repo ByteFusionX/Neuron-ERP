@@ -3,12 +3,14 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { feedback } from 'src/app/shared/interfaces/enquiry.interface';
+import { NgIcon } from '@ng-icons/core';
+import { NgFor, NgClass, NgIf } from '@angular/common';
 
 @Component({
     selector: 'app-view-feedback',
     templateUrl: './view-feedback.component.html',
     styleUrls: ['./view-feedback.component.css'],
-    standalone: false
+    imports: [NgIcon, NgFor, NgClass, NgIf]
 })
 export class ViewFeedbackComponent {
 

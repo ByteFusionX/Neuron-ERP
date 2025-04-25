@@ -8,8 +8,8 @@ describe('ApproveDealComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [ApproveDealComponent]
-    });
+    imports: [ApproveDealComponent]
+});
     fixture = TestBed.createComponent(ApproveDealComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
