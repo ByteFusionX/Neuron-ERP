@@ -1,286 +1,118 @@
 <div class="h-screen bg-white">
     <div class="flex flex-col">
-        <div class="py-2 px-4">
-            <div class="w-60 overflow-hidden" [@sideBarTrigger]="showFullBar? 'default':'reduce'">
-                <div class="w-60 h-14 overflow-hidden">
-                    <div class="w-full h-full flex justify-start items-center">
-                        <img src="assets/images/logo.webp" alt="" class="me-3 w-9  transition-all"
-                            [ngClass]="{'ml-6':showFullBar}">
-                        <img src="assets/images/company.jpg" alt="" class="me-2 w-28">
-                    </div>
-                </div>
-                <div *ngIf="!showTabs" class="mt-2 animate-pulse">
-                    <div class=" w-full h-9 rounded-md active mb-2"></div>
-                    <div class=" w-full h-9 rounded-md active mb-2"></div>
-                    <div class=" w-full h-9 rounded-md active mb-2"></div>
-                    <div class=" w-full h-9 rounded-md active mb-2"></div>
-                    <div class=" w-full h-9 rounded-md active mb-2"></div>
-                    <div class=" w-full h-9 rounded-md active mb-2"></div>
-                </div>
-                <div *ngIf="showTabs" class="font-medium">
-                    <div class="cursor-pointer mt-2" (click)="onHomeClick()">
-                        <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center">
-                            <ng-icon name="heroHome" class="text-xl text-gray-600" [matTooltip]="showFullBar?'':'Home'"
-                                matTooltipPosition="right" matTooltipClass="mat-tooltip"
-                                matTooltipClass="text-sm"></ng-icon>
-                            <div class="relative w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
-                                <p class="mt-0.5">Home</p>
-
-                                <ng-icon name="heroChevronUp" class="text-gray-600"
-                                    *ngIf="homeDropDown else homeDropDownMenu"></ng-icon>
-                                <ng-template #homeDropDownMenu>
-                                    <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
-                                </ng-template>
-
-                                <ng-container *ngIf="(notificationCounts$ | async) as notifications">
-                                    <span
-                                        *ngIf="notifications.announcementCount > 0 && privileges?.announcement?.viewReport !== 'none'"
-                                        class="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-orange-500 text-white text-xs font-bold h-2 w-2 flex items-center justify-center rounded-full"></span>
-                                </ng-container>
-                            </div>
-
-                        </div>
-                    </div>
-                    <div class="overflow-hidden" *ngIf="homeDropDown" [ngClass]="{dropDown: !showFullBar }">
-                        <div class="" @dropDownTrigger>
-                            <ul class="">
-                                <li class="p-2 hover:text-violet-800 rounded-md cursor-pointer" routerLink="/home"
-                                    routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">
-                                    <button class="mx-6">Dashboard</button>
-                                </li>
-                                <li class="p-2 hover:text-violet-800 rounded-md cursor-pointer"
-                                    routerLink="/home/employees" routerLinkActive="active"
-                                    *ngIf="privileges?.employee?.viewReport != 'none'  && showTabs">
-                                    <button class="mx-6">Employees</button>
-                                </li>
-                                <li class="p-2 flex justify-between hover:text-violet-800 rounded-md cursor-pointer"
-                                    routerLink="/home/announcements" routerLinkActive="active"
-                                    *ngIf="privileges?.announcement?.viewReport !== 'none' && showTabs">
-                                    <button class=" mx-6 relative">
-                                        Announcements
-                                    </button>
-                                    <div *ngIf="(notificationCounts$ | async) as notifications">
-                                        <div *ngIf="notifications.announcementCount">
-                                            <div
-                                                class="bg-orange-500  my-auto  text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                                                <p>{{notifications.announcementCount}}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="my-3 cursor-pointer"
-                        [@slideTrigger]="homeDropDown && showFullBar ?'slideDown':'slideUp'" routerLink="/customers"
-                        routerLinkActive="active" *ngIf="privileges?.customer?.viewReport != 'none'  && showTabs">
-                        <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center">
-                            <ng-icon name="heroUserGroup" class="text-xl text-gray-600"
-                                [matTooltip]="showFullBar?'':'Customers'" matTooltipPosition="right"
-                                matTooltipClass="mat-tooltip" matTooltipClass="text-sm"></ng-icon>
-                            <div class="w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
-                                <p class="mt-0.5">Customers</p>
-                                <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="my-3 cursor-pointer"
-                        [@slideTrigger]="homeDropDown && showFullBar ?'slideDown':'slideUp'" routerLink="/enquiry"
-                        routerLinkActive="active" *ngIf="privileges?.enquiry?.viewReport != 'none'  && showTabs">
-                        <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center">
-                            <ng-icon name="heroQuestionMarkCircle" class="text-xl text-gray-600"
-                                [matTooltip]="showFullBar?'':'Enquiry'" matTooltipPosition="right"
-                                matTooltipClass="mat-tooltip" matTooltipClass="text-sm"></ng-icon>
-                            <div class="w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
-                                <p class="mt-0.5">Enquiry</p>
-                                <div class="flex items-center justify-center gap-1">
-                                    <div *ngIf="(notificationCounts$ | async) as notifications">
-                                        <div *ngIf="notifications.enquiryCount"
-                                            class="flex justify-center items-center">
-                                            <div
-                                                class="bg-orange-500  my-auto  text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                                                <p>{{notifications.enquiryCount}}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="cursor-pointer mt-2" (click)="onJobClick()"
-                        *ngIf="privileges?.assignedJob?.viewReport != 'none'">
-                        <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center">
-                            <ng-icon name="heroBriefcase" class="text-xl text-gray-600"
-                                [matTooltip]="showFullBar?'':'Jobs'" matTooltipPosition="right"
-                                matTooltipClass="mat-tooltip" matTooltipClass="text-sm"></ng-icon>
-                            <div class="relative w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
-                                <p class="mt-0.5">Jobs</p>
-
-                                <ng-icon name="heroChevronUp" class="text-gray-600"
-                                    *ngIf="jobDropDown else jobDropDownMenu"></ng-icon>
-                                <ng-template #jobDropDownMenu>
-                                    <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
-                                </ng-template>
-
-                                <ng-container *ngIf="(notificationCounts$ | async) as notifications">
-                                    <span *ngIf="notifications.assignedJobCount > 0 || notifications.reAssignedJobCount > 0"
-                                        class="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-orange-500 text-white text-xs font-bold h-2 w-2 flex items-center justify-center rounded-full"></span>
-                                </ng-container>
-                            </div>
-
-                        </div>
-                    </div>
-                    <div class="overflow-hidden z-[150]" *ngIf="jobDropDown" [ngClass]="{dropDown: !showFullBar }">
-                        <div class="" @dropDownTrigger>
-                            <ul class="">
-
-                                <li class="p-2 flex justify-between hover:text-violet-800 rounded-md cursor-pointer"
-                                    routerLink="/assigned-jobs" [class.active]="activeLink === '/assigned-jobs'"
-                                    *ngIf="privileges?.assignedJob?.viewReport == 'all' ">
-                                    <button class=" mx-6 relative">
-                                        Assigned Jobs
-                                    </button>
-                                    <div *ngIf="(notificationCounts$ | async) as notifications">
-                                        <div *ngIf="notifications.assignedJobCount"
-                                            class="flex justify-center items-center">
-                                            <div
-                                                class="bg-orange-500  my-auto  text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                                                <p>{{notifications.assignedJobCount}}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </li>
-                                <li class="p-2 flex justify-between hover:text-violet-800 rounded-md cursor-pointer"
-                                    routerLink="/assigned-jobs/reassigned"
-                                    [class.active]="activeLink === '/assigned-jobs/reassigned'"
-                                    *ngIf="privileges?.assignedJob?.viewReport !== 'none' && showTabs">
-                                    <button class=" mx-6 relative">
-                                        
-                                        <ng-container *ngIf="privileges?.assignedJob?.viewReport == 'all'; else showShortText">
-                                            Reassigned Jobs
-                                        </ng-container>
-                                        <ng-template #showShortText>
-                                            Assigned Jobs
-                                        </ng-template>
-                                    </button>
-                                    <div *ngIf="(notificationCounts$ | async) as notifications">
-                                        <div *ngIf="notifications.reAssignedJobCount"
-                                            class="flex justify-center items-center">
-                                            <div
-                                                class="bg-orange-500  my-auto  text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                                                <p>{{notifications.reAssignedJobCount}}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </li>
-                                <li class="p-2 hover:text-violet-800 rounded-md cursor-pointer"
-                                    routerLink="/assigned-jobs/completed" routerLinkActive="active"
-                                    [class.active]="activeLink === '/assigned-jobs/completed'">
-                                    <button class="mx-6">Completed Jobs</button>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div class="my-3 cursor-pointer"
-                        [@slideTrigger]="homeDropDown && showFullBar ?'slideDown':'slideUp'" routerLink="/quotations"
-                        routerLinkActive="active" *ngIf="privileges?.quotation?.viewReport != 'none'  && showTabs">
-                        <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center relative">
-                            <div *ngIf="(notificationCounts$ | async) as notifications">
-                                <div *ngIf="notifications.quotationCount && !showFullBar">
-                                    <span class="w-2 h-2 rounded-full bg-orange-500 absolute left-6 top-2"></span>
-                                </div>
-                            </div>
-                            <ng-icon name="heroNewspaper" class="text-xl text-gray-600"
-                                [matTooltip]="showFullBar?'':'Quotations'" matTooltipPosition="right"
-                                matTooltipClass="mat-tooltip" matTooltipClass="text-sm"></ng-icon>
-                            <div class="w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
-                                <p class="mt-0.5">Quotations</p>
-                                <div class="flex items-center justify-center gap-1">
-                                    <div *ngIf="(notificationCounts$ | async) as notifications">
-                                        <div *ngIf="notifications.quotationCount"
-                                            class="flex justify-center items-center">
-                                            <div
-                                                class="bg-orange-500  my-auto  text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                                                <p>{{notifications.quotationCount}}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="cursor-pointer mt-2" (click)="onDealClick()" *ngIf="privileges?.dealSheet">
-                        <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center">
-                            <ng-icon name="heroClipboardDocumentCheck" class="text-xl text-gray-600"
-                                [matTooltip]="showFullBar?'':'Deal Sheet'" matTooltipPosition="right"
-                                matTooltipClass="mat-tooltip" matTooltipClass="text-sm"></ng-icon>
-                            <div class="relative w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
-                                <p class="mt-0.5">Deal Sheet</p>
-
-                                <ng-icon name="heroChevronUp" class="text-gray-600"
-                                    *ngIf="dealDropDown else dealDropDownMenu"></ng-icon>
-                                <ng-template #dealDropDownMenu>
-                                    <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
-                                </ng-template>
-
-                                <ng-container *ngIf="(notificationCounts$ | async) as notifications">
-                                    <span *ngIf="notifications.dealSheetCount > 0"
-                                        class="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-orange-500 text-white text-xs font-bold h-2 w-2 flex items-center justify-center rounded-full"></span>
-                                </ng-container>
-                            </div>
-
-                        </div>
-                    </div>
-                    <div class="overflow-hidden z-[150]" *ngIf="dealDropDown" [ngClass]="{dropDown: !showFullBar }">
-                        <div class="" @dropDownTrigger>
-                            <ul class="">
-
-                                <li class="p-2 flex justify-between hover:text-violet-800 rounded-md cursor-pointer"
-                                    routerLink="/deal-sheet/pendings"
-                                    [class.active]="activeLink === '/deal-sheet/pendings'"
-                                    *ngIf="privileges?.dealSheet && showTabs">
-                                    <button class=" mx-6 relative">
-                                        Pending
-                                    </button>
-                                    <div *ngIf="(notificationCounts$ | async) as notifications">
-                                        <div *ngIf="notifications.dealSheetCount"
-                                            class="flex justify-center items-center">
-                                            <div
-                                                class="bg-orange-500  my-auto  text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                                                <p>{{notifications.dealSheetCount}}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </li>
-                                <li class="p-2 hover:text-violet-800 rounded-md cursor-pointer"
-                                    routerLink="/deal-sheet/approved" routerLinkActive="active"
-                                    [class.active]="activeLink === '/deal-sheet/approved'">
-                                    <button class="mx-6">Approved</button>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="my-3 cursor-pointer"
-                        [@slideTrigger]="homeDropDown && showFullBar ?'slideDown':'slideUp'" routerLink="/job-sheet"
-                        routerLinkActive="active" *ngIf="privileges?.jobSheet?.viewReport != 'none'  && showTabs">
-                        <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center">
-                            <ng-icon name="heroBriefcase" class="text-xl text-gray-600"
-                                [matTooltip]="showFullBar?'':'Job Sheet'" matTooltipPosition="right"
-                                matTooltipClass="mat-tooltip" matTooltipClass="text-sm"></ng-icon>
-                            <div class="w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
-                                <p class="mt-0.5">Job Sheet</p>
-                                <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+      <div class="py-2 px-4">
+        <div class="w-60 overflow-hidden" [@sideBarTrigger]="showFullBar? 'default':'reduce'">
+          <!-- Logo Section -->
+          <div class="w-60 h-14 overflow-hidden">
+            <div class="w-full h-full flex justify-start items-center">
+              <img src="assets/images/logo.webp" alt="" class="me-3 w-9 transition-all" [ngClass]="{'ml-6':showFullBar}">
+              <img src="assets/images/company.jpg" alt="" class="me-2 w-28">
             </div>
+          </div>
+          
+          <!-- Loading Skeleton -->
+          <div *ngIf="!showTabs" class="mt-2 animate-pulse">
+            <div *ngFor="let i of [1,2,3,4,5,6]" class="w-full h-9 rounded-md active mb-2"></div>
+          </div>
+          
+          <!-- Menu Items -->
+          <div *ngIf="showTabs" class="font-medium">
+            <!-- Loop through all menu items -->
+            <ng-container *ngFor="let item of menuItems">
+              <!-- Only show menu items that user has access to -->
+              <ng-container *ngIf="hasAccess(item)">
+                <!-- Top-level menu item -->
+                <div class="cursor-pointer mt-2" *ngIf="item.hasDropdown; else singleItem" (click)="toggleMenu(item.id)">
+                  <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center">
+                    <ng-icon [name]="item.icon" class="text-xl text-gray-600" 
+                      [matTooltip]="showFullBar ? '' : item.label" 
+                      matTooltipPosition="right" 
+                      matTooltipClass="text-sm">
+                    </ng-icon>
+                    <div class="relative w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
+                      <p class="mt-0.5">{{item.label}}</p>
+                      
+                      <!-- Chevron Up/Down for dropdown items -->
+                      <ng-container *ngIf="expandedMenus[item.id]; else collapsedChevron">
+                        <ng-icon name="heroChevronUp" class="text-gray-600"></ng-icon>
+                      </ng-container>
+                      <ng-template #collapsedChevron>
+                        <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
+                      </ng-template>
+                      
+                      <!-- Notification indicator dot -->
+                      <ng-container *ngIf="hasAnyNotification(item)">
+                        <span class="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-orange-500 text-white text-xs font-bold h-2 w-2 flex items-center justify-center rounded-full"></span>
+                      </ng-container>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Template for non-dropdown menu items -->
+                <ng-template #singleItem>
+                  <div class="my-3 cursor-pointer" 
+                       [@slideTrigger]="expandedMenus['home'] && showFullBar ? 'slideDown' : 'slideUp'" 
+                       [routerLink]="item.route" 
+                       routerLinkActive="active">
+                    <div class="w-full p-2 rounded-md hover:text-violet-800 flex items-center relative">
+                      <!-- Notification dot for mobile view -->
+                      <div *ngIf="item.notificationKey && getNotificationCount(item.notificationKey) && !showFullBar">
+                        <span class="w-2 h-2 rounded-full bg-orange-500 absolute left-6 top-2"></span>
+                      </div>
+                      
+                      <ng-icon [name]="item.icon" class="text-xl text-gray-600" 
+                        [matTooltip]="showFullBar ? '' : item.label" 
+                        matTooltipPosition="right" 
+                        matTooltipClass="text-sm">
+                      </ng-icon>
+                      
+                      <div class="w-48 flex justify-between ml-3" [class.hidden]="!showFullBar">
+                        <p class="mt-0.5">{{item.label}}</p>
+                        
+                        <div class="flex items-center justify-center gap-1">
+                          <!-- Notification count badge -->
+                          <div *ngIf="item.notificationKey && getNotificationCount(item.notificationKey)">
+                            <div class="bg-orange-500 my-auto text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
+                              <p>{{getNotificationCount(item.notificationKey)}}</p>
+                            </div>
+                          </div>
+                          
+                          <ng-icon name="heroChevronRight" class="text-gray-600"></ng-icon>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </ng-template>
+                
+                <!-- Dropdown submenu items -->
+                <div class="overflow-hidden z-[150]" *ngIf="item.hasDropdown && expandedMenus[item.id]" [ngClass]="{dropDown: !showFullBar}">
+                  <div @dropDownTrigger>
+                    <ul>
+                      <ng-container *ngFor="let subItem of item.children">
+                        <!-- Only show submenu items user has access to -->
+                        <li *ngIf="!subItem.privilegeKey || hasAccess(subItem)" 
+                            class="p-2 flex justify-between hover:text-violet-800 rounded-md cursor-pointer"
+                            [routerLink]="subItem.route" 
+                            [class.active]="activeLink === subItem.route">
+                          <button class="mx-6 relative">
+                            {{getSubMenuLabel(subItem)}}
+                          </button>
+                          
+                          <!-- Notification count for submenu items -->
+                          <div *ngIf="subItem.notificationKey && getNotificationCount(subItem.notificationKey)">
+                            <div class="bg-orange-500 my-auto text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
+                              <p>{{getNotificationCount(subItem.notificationKey)}}</p>
+                            </div>
+                          </div>
+                        </li>
+                      </ng-container>
+                    </ul>
+                  </div>
+                </div>
+              </ng-container>
+            </ng-container>
+          </div>
         </div>
+      </div>
     </div>
-</div>
+  </div>

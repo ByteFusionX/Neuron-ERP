@@ -12,12 +12,18 @@ import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
 import { RejectDealComponent } from '../reject-deal/reject-deal.component';
+import { CommonModule, DatePipe, NgFor, NgIf, NgSwitch, NgSwitchDefault } from '@angular/common';
+import { pipeModule } from 'src/app/shared/pipes/pipe.module';
+import { NgIconsModule } from '@ng-icons/core';
+import { MatTooltipModule } from '@angular/material/tooltip';
+
 
 @Component({
-    selector: 'app-approve-deal',
-    templateUrl: './approve-deal.component.html',
-    styleUrls: ['./approve-deal.component.css'],
-    standalone: false
+  selector: 'app-approve-deal',
+  templateUrl: './approve-deal.component.html',
+  styleUrls: ['./approve-deal.component.css'],
+  standalone: true,
+  imports: [DatePipe,pipeModule,NgIconsModule,MatTooltipModule,CommonModule]
 })
 export class ApproveDealComponent implements OnInit {
   isApproving: boolean = false;
@@ -100,10 +106,10 @@ export class ApproveDealComponent implements OnInit {
 
   onApprove() {
     const rejectModal = this._dialog.open(RejectDealComponent, {
-      data:{reject:false},
+      data: { reject: false },
       width: '500px'
     })
-    rejectModal.afterClosed().subscribe(({submit, comment}) => {
+    rejectModal.afterClosed().subscribe(({ submit, comment }) => {
       if (submit) {
         this.isApproving = true;
         this.dialogRef.close({ approve: true, updating: false, comment })
@@ -115,37 +121,37 @@ export class ApproveDealComponent implements OnInit {
     return item?.itemDetails?.some((detail: any) => detail.dealSelected)
   }
 
-  
+
   onViewPDF(file: any) {
     // Check if the file is a PDF
     if (file.fileName && file.fileName.toLowerCase().endsWith('.pdf')) {
 
-        this._enquiryService.downloadFile(file.fileName)
-          .subscribe({
-            next: (event) => {
-              if (event.type === HttpEventType.Response) {
-                const fileContent: Blob = new Blob([event['body']], { type: 'application/pdf' });
-  
-                // Create an object URL for the PDF blob
-                const fileURL = URL.createObjectURL(fileContent);
-  
-                // Open the PDF in a new tab
-                window.open(fileURL, '_blank');
-  
-                // Optionally revoke the object URL after some time
-                setTimeout(() => {
-                  URL.revokeObjectURL(fileURL);
-                }, 10000);
-              }
-            },
-            error: (error) => {
-              if (error.status === 404) {
-                this.toast.warning('Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.');
-              } else {
-                this.toast.error('An error occurred while trying to view the PDF. Please try again later.');
-              }
+      this._enquiryService.downloadFile(file.fileName)
+        .subscribe({
+          next: (event) => {
+            if (event.type === HttpEventType.Response) {
+              const fileContent: Blob = new Blob([event['body']], { type: 'application/pdf' });
+
+              // Create an object URL for the PDF blob
+              const fileURL = URL.createObjectURL(fileContent);
+
+              // Open the PDF in a new tab
+              window.open(fileURL, '_blank');
+
+              // Optionally revoke the object URL after some time
+              setTimeout(() => {
+                URL.revokeObjectURL(fileURL);
+              }, 10000);
             }
-          })
+          },
+          error: (error) => {
+            if (error.status === 404) {
+              this.toast.warning('Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.');
+            } else {
+              this.toast.error('An error occurred while trying to view the PDF. Please try again later.');
+            }
+          }
+        })
     } else {
       // If the file is not a PDF, show a toaster notification
       this.toast.warning('This file type is not supported for viewing. Please download and view the file.');
