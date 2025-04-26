@@ -1,14 +1,14 @@
 import { Schema, Document, model, Types } from "mongoose";
 import supplierComparisonModel, { SupplierComparison, supplierComparisonSchema } from "./supplierComparison.model";
 
-interface Item extends Document {
+export interface Item extends Document {
     itemName: String;
     quantity: Number;
     unitPrice: Number;
     comparisonSheet: SupplierComparison[];
 }
 
-const itemSchema = new Schema<Item>({
+export const itemSchema = new Schema<Item>({
     itemName:{
         type: String,
         required: true
@@ -21,7 +21,10 @@ const itemSchema = new Schema<Item>({
         type: String,
         required: true
     },
-    comparisonSheet: [ {type: supplierComparisonSchema, required: true}],
+    comparisonSheet: {
+        type: [supplierComparisonSchema],
+        required: true
+      }
     
 })
 
