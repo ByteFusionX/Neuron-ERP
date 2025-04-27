@@ -19,7 +19,7 @@ interface supplierSchemaInterface {
     approvedBy: Types.ObjectId;
 }
 
-enum supplierStatus {
+export enum supplierStatus {
     pending = "Pending",
     approved = "Approved",
     rejected = "Rejected",
@@ -35,8 +35,8 @@ interface AddressInterface {
     buildingNo: string;
     zoneNo: string;
     poBox: string;
-    location: string;
     city: string;
+    country: string;
 }
 
 interface ProductsInterface {
@@ -91,7 +91,7 @@ const Address = new Schema<AddressInterface>({
     buildingNo: String,
     zoneNo: String,
     poBox: String,
-    location: String,
+    country: String,
     city: String,
 })
 
