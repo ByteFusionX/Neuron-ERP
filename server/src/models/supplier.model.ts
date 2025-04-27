@@ -17,6 +17,7 @@ interface supplierSchemaInterface {
     createdBy: Types.ObjectId;
     approvedDate: Date;
     approvedBy: Types.ObjectId;
+    isDeleted: boolean;
 }
 
 export enum supplierStatus {
@@ -164,7 +165,10 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         type: Schema.Types.ObjectId,
         ref: 'Employee',
     },
-
+    isDeleted: {
+        type: Boolean, 
+        default: false,
+    },
 })
 
 
