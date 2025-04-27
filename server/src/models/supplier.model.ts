@@ -1,18 +1,16 @@
-
-import { Schema, Types } from "mongoose";
+import { model, Schema, Types } from "mongoose";
 
 interface supplierSchemaInterface {
     supplierId: string;
     supplierName: string;
     address: AddressInterface;
-    supplierType: supplierType;
+    supplierType: String;
     category: string;
     contactDetails: contactDetailsInterface[];
     documents?: any[];
     status: supplierStatus;
-    paymentTerms: string[];
-    products: string[];
-    creditDays: string;
+    products: ProductsInterface[];
+    creditDays: number;
     creditValue: number;
     createdDate: Date;
     updatedDate: Date;
@@ -25,13 +23,6 @@ enum supplierStatus {
     pending = "Pending",
     approved = "Approved",
     rejected = "Rejected",
-}
-
-enum supplierType {
-    OEM = "OEM",
-    Distributor = "Distributor",
-    superStockiest = "Super Stockiest",
-    Reseller = "Reseller",
 }
 
 interface contactDetailsInterface {
@@ -48,6 +39,14 @@ interface AddressInterface {
     city: string;
 }
 
+interface ProductsInterface {
+    products: string;
+    name: string;
+    email: string;
+    phone: string;
+    paymentTerms: string;
+}
+
 const contactDetailsSchema = new Schema<contactDetailsInterface>({
     contactName: {
         type: String,
@@ -62,6 +61,30 @@ const contactDetailsSchema = new Schema<contactDetailsInterface>({
         required: true,
     },
 })
+
+const Products = new Schema<ProductsInterface>({
+    products: {
+        type: String,
+        required: true,
+    },
+    name: {
+        type: String,
+        required: true,
+    },
+    email: {
+        type: String,
+        required: true,
+    },
+    phone: {
+        type: String,
+        required: true,
+    },
+    paymentTerms: {
+        type: String,
+        required: true,
+    },
+})
+
 
 const Address = new Schema<AddressInterface>({
     StreetNo: String,
@@ -89,7 +112,6 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
     supplierType: {
         type: String,
-        enum: Object.values(supplierType),
         required: true,
     },
     category: {
@@ -106,20 +128,16 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
     status: {
         type: String,
-        enom: Object.values(supplierStatus),
+        enum: Object.values(supplierStatus),
         default: supplierStatus.pending,
         required: true,
     },
-    paymentTerms: {
-        type: [String],
-        required: true,
-    },
     products: {
-        type: [String],
+        type: [Products],
         required: true,
     },
     creditDays: {
-        type: String,
+        type: Number,
         required: true,
     },
     creditValue: {
@@ -150,3 +168,6 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
 
 })
+
+
+export default model<supplierSchemaInterface>('Supplier', supplierSchema);
