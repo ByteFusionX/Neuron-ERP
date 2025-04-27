@@ -99,7 +99,6 @@ const Address = new Schema<AddressInterface>({
 const supplierSchema = new Schema<supplierSchemaInterface>({
     supplierId: {
         type: String,
-        required: true,
         unique: true,
     },
     supplierName: {
@@ -164,7 +163,6 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     approvedBy: {
         type: Schema.Types.ObjectId,
         ref: 'Employee',
-        required: true,
     },
 
 })
