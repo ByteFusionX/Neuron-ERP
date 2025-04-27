@@ -19,9 +19,10 @@ import { RejectJobCommentComponent } from '../reject-job-comment/reject-job-comm
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
 
 @Component({
-  selector: 'app-reassigned-jobs',
-  templateUrl: './reassigned-jobs.component.html',
-  styleUrls: ['./reassigned-jobs.component.css']
+    selector: 'app-reassigned-jobs',
+    templateUrl: './reassigned-jobs.component.html',
+    styleUrls: ['./reassigned-jobs.component.css'],
+    standalone: false
 })
 export class ReassignedJobsComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChildren('jobItem') jobItems!: QueryList<ElementRef>;

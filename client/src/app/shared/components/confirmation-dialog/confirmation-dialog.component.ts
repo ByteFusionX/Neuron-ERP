@@ -4,11 +4,10 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { NgIconsModule } from '@ng-icons/core';
 
 @Component({
-  selector: 'app-confirmation-dialog',
-  templateUrl: './confirmation-dialog.component.html',
-  styleUrls: ['./confirmation-dialog.component.css'],
-  standalone: true,
-  imports: [CommonModule, NgIconsModule]
+    selector: 'app-confirmation-dialog',
+    templateUrl: './confirmation-dialog.component.html',
+    styleUrls: ['./confirmation-dialog.component.css'],
+    imports: [CommonModule, NgIconsModule]
 })
 export class ConfirmationDialogComponent implements OnInit {
   constructor(

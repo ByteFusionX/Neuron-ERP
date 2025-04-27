@@ -14,9 +14,10 @@ import { ToastrService } from 'ngx-toastr';
 
 
 @Component({
-  selector: 'app-create-customer-type',
-  templateUrl: './create-customer-type.component.html',
-  styleUrls: ['./create-customer-type.component.css']
+    selector: 'app-create-customer-type',
+    templateUrl: './create-customer-type.component.html',
+    styleUrls: ['./create-customer-type.component.css'],
+    standalone: false
 })
 
 export class CreateCustomerTypeDialog implements OnInit, OnDestroy {

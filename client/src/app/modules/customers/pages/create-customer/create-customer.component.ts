@@ -13,9 +13,10 @@ import { getCustomerType } from 'src/app/shared/interfaces/customerType.interfac
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 
 @Component({
-  selector: 'app-create-customer',
-  templateUrl: './create-customer.component.html',
-  styleUrls: ['./create-customer.component.css']
+    selector: 'app-create-customer',
+    templateUrl: './create-customer.component.html',
+    styleUrls: ['./create-customer.component.css'],
+    standalone: false
 })
 export class CreateCustomerDialog {
   departments: getDepartment[] = [];

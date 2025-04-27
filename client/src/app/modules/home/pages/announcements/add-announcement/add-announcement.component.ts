@@ -17,11 +17,10 @@ import { NgSelectModule } from '@ng-select/ng-select';
 
 
 @Component({
-  selector: 'app-add-announcement',
-  templateUrl: './add-announcement.component.html',
-  styleUrls: ['./add-announcement.component.css'],
-  standalone: true,
-  imports: [CommonModule, IconsModule, directiveSharedModule, ReactiveFormsModule, FormsModule , NgSelectModule],
+    selector: 'app-add-announcement',
+    templateUrl: './add-announcement.component.html',
+    styleUrls: ['./add-announcement.component.css'],
+    imports: [CommonModule, IconsModule, directiveSharedModule, ReactiveFormsModule, FormsModule, NgSelectModule]
 })
 export class AddAnnouncementComponent implements OnDestroy, OnInit {
   submit: boolean = false;

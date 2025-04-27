@@ -9,9 +9,10 @@ import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
-  selector: 'app-shared-with-list',
-  templateUrl: './shared-with-list.component.html',
-  styleUrls: ['./shared-with-list.component.css']
+    selector: 'app-shared-with-list',
+    templateUrl: './shared-with-list.component.html',
+    styleUrls: ['./shared-with-list.component.css'],
+    standalone: false
 })
 export class SharedWithListComponent {
 

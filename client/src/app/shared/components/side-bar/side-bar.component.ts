@@ -12,12 +12,11 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { NotificationCounts } from '../../interfaces/notification.interface';
 
 @Component({
-  selector: 'app-side-bar',
-  templateUrl: './side-bar.component.html',
-  styleUrls: ['./side-bar.component.css'],
-  animations: [sideBarState, dropDownMenuSate, buttonSlideState],
-  standalone: true,
-  imports: [CommonModule, IconsModule, AppRoutingModule, MatTooltipModule]
+    selector: 'app-side-bar',
+    templateUrl: './side-bar.component.html',
+    styleUrls: ['./side-bar.component.css'],
+    animations: [sideBarState, dropDownMenuSate, buttonSlideState],
+    imports: [CommonModule, IconsModule, AppRoutingModule, MatTooltipModule]
 })
 export class SideBarComponent implements AfterViewInit, OnDestroy {
   notificationCounts$!: Observable<NotificationCounts>;

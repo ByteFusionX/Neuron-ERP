@@ -11,9 +11,10 @@ import { EditCompanyDetailsComponent } from '../edit-company-details/edit-compan
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
 
 @Component({
-  selector: 'app-profile-info',
-  templateUrl: './profile-info.component.html',
-  styleUrls: ['./profile-info.component.css'],
+    selector: 'app-profile-info',
+    templateUrl: './profile-info.component.html',
+    styleUrls: ['./profile-info.component.css'],
+    standalone: false
 })
 export class ProfileInfoComponent {
 

@@ -2,8 +2,9 @@ import { Directive } from '@angular/core';
 import { AbstractControl, NG_VALIDATORS, Validator, ValidatorFn, ValidationErrors } from '@angular/forms';
 
 @Directive({
-  selector: '[datePastDirective]',
-  providers: [{ provide: NG_VALIDATORS, useExisting: datePastDirective, multi: true }]
+    selector: '[datePastDirective]',
+    providers: [{ provide: NG_VALIDATORS, useExisting: datePastDirective, multi: true }],
+    standalone: false
 })
 export class datePastDirective implements Validator {
 

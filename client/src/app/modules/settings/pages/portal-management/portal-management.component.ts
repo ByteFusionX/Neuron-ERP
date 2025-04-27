@@ -16,9 +16,10 @@ import { InternalDepartmentComponent } from '../internal-department/internal-dep
 import { CreateCustomerTypeDialog } from '../create-customer-type/create-customer-type.component';
 
 @Component({
-  selector: 'app-portal-management',
-  templateUrl: './portal-management.component.html',
-  styleUrls: ['./portal-management.component.css']
+    selector: 'app-portal-management',
+    templateUrl: './portal-management.component.html',
+    styleUrls: ['./portal-management.component.css'],
+    standalone: false
 })
 export class PortalManagementComponent {
   privileges!: Privileges | undefined;

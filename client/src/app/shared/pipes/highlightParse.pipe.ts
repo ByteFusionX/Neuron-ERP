@@ -2,7 +2,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 
 @Pipe({
-  name: 'parseBracketsText'
+    name: 'parseBracketsText',
+    standalone: false
 })
 export class ParseBracketsTextPipe implements PipeTransform {
   constructor(private sanitizer: DomSanitizer) {}

@@ -11,11 +11,10 @@ import { UploadFileComponent } from '../upload-file/upload-file.component';
 import { EventsService } from 'src/app/core/services/events/events.service';
 
 @Component({
-  selector: 'app-events',
-  standalone: true,
-  imports: [CommonModule, IconsModule, MatDialogModule, NgSelectModule, ReactiveFormsModule, FormsModule, UploadFileComponent],
-  templateUrl: './events.component.html',
-  styleUrls: ['./events.component.css'],
+    selector: 'app-events',
+    imports: [CommonModule, IconsModule, MatDialogModule, NgSelectModule, ReactiveFormsModule, FormsModule, UploadFileComponent],
+    templateUrl: './events.component.html',
+    styleUrls: ['./events.component.css']
 })
 export class EventsComponent implements OnInit, OnDestroy {
 

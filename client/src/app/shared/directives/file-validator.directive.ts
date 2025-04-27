@@ -2,7 +2,8 @@ import { Directive, ElementRef, HostListener, Input } from '@angular/core';
 import { ToastrService } from 'ngx-toastr';
 
 @Directive({
-  selector: '[appFileValidator]'
+    selector: '[appFileValidator]',
+    standalone: false
 })
 export class appFileValidator {
 

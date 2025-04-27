@@ -7,11 +7,10 @@ import { QuotationService } from 'src/app/core/services/quotation/quotation.serv
 import { CommonModule } from '@angular/common';
 
 @Component({
-  selector: 'app-quotation-preview',
-  templateUrl: './quotation-preview.component.html',
-  styleUrls: ['./quotation-preview.component.css'],
-  standalone: true,
-  imports: [CommonModule,NgxExtendedPdfViewerModule,FormsModule]
+    selector: 'app-quotation-preview',
+    templateUrl: './quotation-preview.component.html',
+    styleUrls: ['./quotation-preview.component.css'],
+    imports: [CommonModule, NgxExtendedPdfViewerModule, FormsModule]
 })
 export class QuotationPreviewComponent {
   @ViewChild(NgxExtendedPdfViewerComponent, { static: false })

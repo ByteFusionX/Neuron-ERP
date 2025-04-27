@@ -5,10 +5,11 @@ import { fileEnterState } from 'src/app/modules/enquirys/enquiry-animations';
 import { Quotatation, QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
 
 @Component({
-  selector: 'app-deal-form',
-  templateUrl: './deal-form.component.html',
-  styleUrls: ['./deal-form.component.css'],
-  animations: [fileEnterState],
+    selector: 'app-deal-form',
+    templateUrl: './deal-form.component.html',
+    styleUrls: ['./deal-form.component.css'],
+    animations: [fileEnterState],
+    standalone: false
 })
 export class DealFormComponent {
   @ViewChild('fileInput') fileInput!: ElementRef;

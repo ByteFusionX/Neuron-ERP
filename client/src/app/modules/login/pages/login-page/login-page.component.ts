@@ -8,9 +8,10 @@ import { CreateEmployeeDialog } from 'src/app/modules/home/pages/employees/creat
 import { login } from 'src/app/shared/interfaces/login';
 
 @Component({
-  selector: 'app-login-page',
-  templateUrl: './login-page.component.html',
-  styleUrls: ['./login-page.component.css']
+    selector: 'app-login-page',
+    templateUrl: './login-page.component.html',
+    styleUrls: ['./login-page.component.css'],
+    standalone: false
 })
 export class LoginPageComponent {
 

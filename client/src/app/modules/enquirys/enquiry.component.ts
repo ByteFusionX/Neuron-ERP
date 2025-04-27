@@ -21,9 +21,10 @@ import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 
 @Component({
-  selector: 'app-enquiry',
-  templateUrl: './enquiry.component.html',
-  styleUrls: ['./enquiry.component.css'],
+    selector: 'app-enquiry',
+    templateUrl: './enquiry.component.html',
+    styleUrls: ['./enquiry.component.css'],
+    standalone: false
 })
 export class EnquiryComponent implements OnInit, OnDestroy {
 

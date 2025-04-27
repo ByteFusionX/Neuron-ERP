@@ -8,9 +8,10 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 
 @Component({
-  selector: 'app-internal-department',
-  templateUrl: './internal-department.component.html',
-  styleUrls: ['./internal-department.component.css']
+    selector: 'app-internal-department',
+    templateUrl: './internal-department.component.html',
+    styleUrls: ['./internal-department.component.css'],
+    standalone: false
 })
 export class InternalDepartmentComponent implements OnInit, OnDestroy {
 

@@ -22,10 +22,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 
 
 @Component({
-  selector: 'app-quotation-edit',
-  templateUrl: './quotation-edit.component.html',
-  styleUrls: ['./quotation-edit.component.css'],
-  animations: [fadeInOut]
+    selector: 'app-quotation-edit',
+    templateUrl: './quotation-edit.component.html',
+    styleUrls: ['./quotation-edit.component.css'],
+    animations: [fadeInOut],
+    standalone: false
 })
 export class QuotationEditComponent {
   customers$!: Observable<getCustomer[]>;

@@ -6,9 +6,10 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 
 @Component({
-  selector: 'app-reassign-employee',
-  templateUrl: './reassign-employee.component.html',
-  styleUrls: ['./reassign-employee.component.css']
+    selector: 'app-reassign-employee',
+    templateUrl: './reassign-employee.component.html',
+    styleUrls: ['./reassign-employee.component.css'],
+    standalone: false
 })
 export class ReassignEmployeeComponent implements OnInit, OnDestroy {
 

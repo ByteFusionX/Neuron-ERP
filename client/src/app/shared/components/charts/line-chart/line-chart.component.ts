@@ -1,16 +1,28 @@
 import { AfterViewChecked, AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
 import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
-import * as echarts from 'echarts';
+import * as echarts from 'echarts/core';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 import { NumberShortenerPipe } from 'src/app/shared/pipes/numberShortener.pipe';
 
+import { LineChart } from 'echarts/charts';
+import { TooltipComponent, GridComponent, MarkAreaComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+
+echarts.use([
+  LineChart,
+  TooltipComponent,
+  GridComponent,
+  MarkAreaComponent,
+  CanvasRenderer
+]);
+
 @Component({
-  selector: 'app-line-chart',
-  standalone: true,
-  imports: [HomeRoutingModule, NumberShortenerPipe],
-  providers: [NumberShortenerPipe],
-  templateUrl: './line-chart.component.html',
-  styleUrls: ['./line-chart.component.css']
+    selector: 'app-line-chart',
+    imports: [HomeRoutingModule],
+    providers: [NumberShortenerPipe],
+    templateUrl: './line-chart.component.html',
+    styleUrls: ['./line-chart.component.css'],
+    standalone: true
 })
 export class LineChartComponent implements OnInit, AfterViewInit {
 

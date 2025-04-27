@@ -12,9 +12,10 @@ import { CreateEmployeeDialog } from '../create-employee/create-employee.compone
 import { Router } from '@angular/router';
 
 @Component({
-  selector: 'app-edit-employee',
-  templateUrl: './edit-employee.component.html',
-  styleUrls: ['./edit-employee.component.css']
+    selector: 'app-edit-employee',
+    templateUrl: './edit-employee.component.html',
+    styleUrls: ['./edit-employee.component.css'],
+    standalone: false
 })
 export class EditEmployeeComponent {
 

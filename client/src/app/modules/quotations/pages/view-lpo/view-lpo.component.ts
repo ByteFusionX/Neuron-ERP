@@ -9,9 +9,10 @@ import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-c
 import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 
 @Component({
-  selector: 'app-view-lpo',
-  templateUrl: './view-lpo.component.html',
-  styleUrls: ['./view-lpo.component.css']
+    selector: 'app-view-lpo',
+    templateUrl: './view-lpo.component.html',
+    styleUrls: ['./view-lpo.component.css'],
+    standalone: false
 })
 export class ViewLpoComponent {
 

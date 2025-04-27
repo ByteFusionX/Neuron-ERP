@@ -10,9 +10,10 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 
 @Component({
-  selector: 'app-view-presale',
-  templateUrl: './view-presale.component.html',
-  styleUrls: ['./view-presale.component.css']
+    selector: 'app-view-presale',
+    templateUrl: './view-presale.component.html',
+    styleUrls: ['./view-presale.component.css'],
+    standalone: false
 })
 export class ViewPresaleComponent {
   showRevision: boolean = false;
