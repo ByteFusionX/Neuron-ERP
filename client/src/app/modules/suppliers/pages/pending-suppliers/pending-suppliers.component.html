@@ -1,0 +1,18 @@
+
+
+<data-table
+    [title]="'Pending Suppliers'"
+    [data]="tableData"
+    [columns]="tableColumns"
+    [isLoading]="isLoading"
+    [defaultColumns]="defaultColumns"
+    (rowClick)="onRowClick($event)"
+    [isEmpty]="false"
+    [totalItems]="totalItems"
+>
+<ng-template #sideColumn>
+    <data-search [placeholder]="`Search by query`" (searchSubmitted)="onSearch($event)"></data-search>
+
+    <app-btn theme="primary" routerLink="/suppliers/create">+ Create Supplier</app-btn>
+</ng-template>
+</data-table>

@@ -1,0 +1,23 @@
+<div class="flex flex-wrap -mx-3 mb-6">
+    <div class="w-full px-3 mb-6 md:mb-0">
+      <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2" [for]="id">
+        {{ label }}
+      </label>
+      <select
+        [id]="id"
+        [class.border-red-500]="!value && isSubmitted"
+        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+        [multiple]="multiple"
+        (change)="onSelectionChange($event)"
+      >
+        <option value="" disabled [selected]="!value">{{ placeholder }}</option>
+        <option *ngFor="let option of options" [value]="getOptionValue(option)" 
+          [selected]="isSelected(option)">
+          {{ getOptionLabel(option) }}
+        </option>
+      </select>
+      <div class="mb-2 text-red-700 text-sm" *ngIf="!value && isSubmitted">
+        Please select an option.
+      </div>
+    </div>
+  </div>

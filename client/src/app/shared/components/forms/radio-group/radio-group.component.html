@@ -1,0 +1,49 @@
+<div class="flex flex-wrap -mx-3 mb-6">
+  <div class="w-full px-3 mb-6 md:mb-0">
+    <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
+      {{ label }}
+    </label>
+    <div class="md:flex w-full flex-wrap">
+      <div class="md:w-1/6 mb-2" *ngFor="let option of options">
+        <input 
+          type="radio" 
+          [value]="option.id" 
+          [id]="option.id" 
+          name="radio-options"
+          [checked]="value === option.id"
+          [disabled]="disabled"
+          (change)="onSelectionChange(option.id)">
+        <label [for]="option.id" class="pl-2">{{ option.name }}</label>
+      </div>
+
+      <div class="md:w-1/6 mb-2" *ngIf="showOtherOption">
+        <input 
+          type="radio" 
+          value="other" 
+          id="other" 
+          name="radio-options"
+          [checked]="value === 'other'"
+          [disabled]="disabled"
+          (change)="onSelectionChange('other')">
+        <label for="other" class="pl-2">Other</label>
+      </div>
+    </div>
+
+    <div class="mt-2" *ngIf="value === 'other' && showOtherOption">
+      <input 
+        type="text"
+        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+        placeholder="Please specify"
+        [disabled]="disabled"
+        [value]="otherValue"
+        (input)="onOtherValueChange($event)">
+    </div>
+
+    <div class="mb-2 text-red-700 text-sm" *ngIf="!value && isSubmitted">
+      Select an option.
+    </div>
+    <div class="mb-2 text-red-700 text-sm" *ngIf="value === 'other' && !otherValue && isSubmitted">
+      Please specify the other option.
+    </div>
+  </div>
+</div>

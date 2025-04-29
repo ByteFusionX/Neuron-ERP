@@ -1,0 +1,49 @@
+
+<div class="mb-6">
+  <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2" [for]="id">
+    {{ label }}
+  </label>
+  
+
+  
+  <div class="flex">
+    <input
+      [id]="id"
+      type="text"
+      [placeholder]="placeholder"
+      [value]="inputValue"
+      (input)="onInputChange($event)"
+      (keydown)="onKeyDown($event)"
+      class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+      [class.border-red-500]="!tags.length && isSubmitted"
+    />
+    <button 
+      type="button"
+      class="ml-2 px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 flex-shrink-0"
+      (click)="addCurrentTag()">
+      Add
+    </button>
+  </div>
+  <div class="text-red-700 text-sm mt-1" *ngIf="!tags.length && isSubmitted">
+    Please add at least one product
+  </div>
+  
+  <div class="text-gray-600 text-xs mt-1">
+    Enter product names and press Enter or click Add to add them
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 mt-2">
+    <div *ngFor="let tag of tags; let i = index" 
+        class="bg-violet-100 text-violet-800 px-2 py-1 rounded-md flex items-center">
+      <span>{{ tag }}</span>
+      <button 
+        type="button" 
+        class="ml-1 text-violet-600 hover:text-violet-800"
+        (click)="removeTag(i)">
+        ×
+      </button>
+    </div>
+  </div>
+  
+ 
+</div>

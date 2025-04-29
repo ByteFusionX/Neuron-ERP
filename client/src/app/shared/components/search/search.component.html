@@ -1,0 +1,12 @@
+<div
+class="h-10 inline-flex items-center justify-between text-body dark:text-white/60 bg-white border border-gray/60 rounded-[6px] pl-[20px] pr-[8px]">
+<input type="text" [(ngModel)]="searchQuery" (ngModelChange)="ngModelChange()"
+    [placeholder]="placeholder" (keyup.enter)="onSearch()"
+    class="bg-transparent border-none text-[15px] shadow-none text-black flex items-center focus:outline-none">
+<div class="bg-violet-100 hover:bg-violet-200 flex justify-center items-center rounded-full  cursor-pointer"
+    (click)="onSearch()">
+
+    <ng-icon name="heroMagnifyingGlass" class="text-sm text-gray-600  hover:text-violet-700 m-1.5">
+    </ng-icon>
+</div>
+</div>

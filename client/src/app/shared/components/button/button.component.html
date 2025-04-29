@@ -1,0 +1,12 @@
+<button
+      [type]="type"
+      [disabled]="disabled || loading"
+      [routerLink]="routerLink"
+      [ngClass]="getButtonClasses()"
+      (click)="onClick($event)"
+      class="font-medium rounded flex justify-center items-center gap-2"
+      [ngStyle]="{'width': fullWidth ? '100%' : 'auto'}"
+    >
+      <ng-icon *ngIf="loading" class="spin" name="heroArrowPath"></ng-icon>
+      <ng-content></ng-content>
+</button>

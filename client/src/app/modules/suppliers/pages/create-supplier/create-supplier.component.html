@@ -1,0 +1,186 @@
+<div class="bg-white m-6">
+  <div class="border-b p-3 px-9 flex justify-between pt-5">
+    <h3 class="text-lg font-medium text-gray-800">Create Supplier</h3>
+  </div>
+  <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+    <div class="w-full">
+      <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
+        <div class="flex flex-col mx-auto text-gray-900 bg-white">
+          
+          <!-- Supplier Name -->
+          <app-form-field 
+            label="Supplier Name" 
+            [control]="f['supplierName']" 
+            [isSubmitted]="isSubmitted()"
+            placeholder="Enter supplier name">
+          </app-form-field>
+          
+          <div class="text-red-700 text-sm mt-1" *ngIf="supplierExists()">
+            Supplier already exists
+          </div>
+          
+          <!-- Address Fields -->
+          <div class="mb-6">
+            <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
+              Supplier Address
+            </label>
+            <app-address-form
+              formControlName="address"
+              (addressChange)="onAddressFormChange($event)">
+            </app-address-form>
+          </div>
+          
+          <!-- Supplier Type -->
+          <app-radio-group
+            label="Supplier Type"
+            [options]="supplierTypes"
+            formControlName="supplierType"
+            [isSubmitted]="isSubmitted()"
+            [showOtherOption]="true">
+          </app-radio-group>
+          
+          <!-- Category (Department) -->
+          <app-select-dropdown
+            label="Category"
+            optionLabel="departmentName"
+            optionValue="_id"
+            formControlName="category"
+            placeholder="Select Category"
+            [isSubmitted]="isSubmitted()">
+          </app-select-dropdown>
+
+          <!-- Primary Contact -->
+          <div class="mb-6">
+            <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
+              Primary Contact
+            </label>
+            <app-contact-details-form
+              formGroupName="primaryContact"
+              (contactChange)="onPrimaryContactChange($event)"
+              [isSubmitted]="isSubmitted()">
+            </app-contact-details-form>
+          </div>
+          
+          <!-- Products Array -->
+          <div class="mb-6">
+            <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
+              Products
+            </label>
+            <div formArrayName="products">
+              <div class="border rounded-md p-4 mb-4" *ngFor="let productControl of productsFormArray.controls; let i = index">
+                <div class="flex justify-between items-center mb-3">
+                  <h4 class="text-sm font-semibold">Product #{{i + 1}}</h4>
+                  <button 
+                    *ngIf="productsFormArray.length > 1"
+                    type="button" 
+                    class="text-red-600" 
+                    (click)="removeProductFormGroup(i)">
+                    Remove
+                  </button>
+                </div>
+                
+                <div [formGroupName]="i">
+                  <!-- Product Name -->
+                  <app-form-field 
+                    label="Product Name" 
+                    formControlName="productName"
+                    [isSubmitted]="isSubmitted()"
+                    placeholder="Enter product name">
+                  </app-form-field>
+                  
+                  <!-- Payment Terms -->
+                  <app-form-field 
+                    label="Payment Terms" 
+                    formControlName="paymentTerm"
+                    [isSubmitted]="isSubmitted()"
+                    placeholder="Enter payment terms">
+                  </app-form-field>
+                  
+                  <!-- Product Contact Info -->
+                  <div class="border-t mt-3 pt-3">
+                    <p class="text-sm font-medium text-gray-700 mb-2">Product Contact (Optional)</p>
+                    
+                    <div class="grid grid-cols-3 gap-4">
+                      <app-form-field 
+                        label="Contact Name" 
+                        formControlName="contactName"
+                        [isSubmitted]="isSubmitted()"
+                        placeholder="Enter contact name">
+                      </app-form-field>
+                      
+                      <app-form-field 
+                        label="Contact Email" 
+                        formControlName="contactEmail"
+                        [isSubmitted]="isSubmitted()"
+                        placeholder="Enter contact email">
+                      </app-form-field>
+                      
+                      <app-form-field 
+                        label="Contact Number" 
+                        formControlName="contactNo"
+                        [isSubmitted]="isSubmitted()"
+                        placeholder="Enter contact number">
+                      </app-form-field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="mb-2 text-red-700 text-sm" *ngIf="hasProductsErrors()">
+                Please fill all product details correctly
+              </div>
+              
+              <app-btn 
+                buttonType="button"
+                variant="secondary"
+                (click)="addProductFormGroup()">
+                + Add Product
+              </app-btn>
+            </div>
+          </div>
+          
+          <!-- Credit Information -->
+          <div class="flex flex-wrap -mx-3 mb-6">
+            <div class="w-1/2 px-3">
+              <app-form-field 
+                label="Credit Days" 
+                [control]="f['creditDays']" 
+                [isSubmitted]="isSubmitted()"
+                type="number"
+                placeholder="Enter credit days">
+              </app-form-field>
+            </div>
+            <div class="w-1/2 px-3">
+              <app-form-field 
+                label="Credit Value" 
+                [control]="f['creditValue']" 
+                [isSubmitted]="isSubmitted()"
+                type="number"
+                placeholder="Enter credit value">
+              </app-form-field>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="border-t p-3 flex justify-end mt-6">
+          <app-btn 
+            theme="cancel"
+            buttonType="button"
+            variant="outline"
+            routerLink="/suppliers/pendings"
+            class="mr-3">
+            Cancel
+          </app-btn>
+          
+          <app-btn 
+            type="submit"
+            [loading]="isSaving()"
+            [disabled]="isSaving()">
+            Create
+          </app-btn>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

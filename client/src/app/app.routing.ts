@@ -24,13 +24,15 @@ import { ApprovedDealsComponent } from './modules/deal-sheet/approved-deals/appr
 import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.component';
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
 import { EditCompanyDetailsComponent } from './modules/profile/pages/edit-company-details/edit-company-details.component';
+import { PendingSuppliersComponent } from './modules/suppliers/pages/pending-suppliers/pending-suppliers.component';
+import { CreateSupplierComponent } from './modules/suppliers/pages/create-supplier/create-supplier.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
   {
     path: 'home',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/home/home.component').then((m) => m.HomeComponent),
+    loadComponent: () => import('./modules/home/home.component').then((c) => c.HomeComponent),
     children: [
       { path: '', component: DashboardComponent },
       { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
@@ -41,7 +43,7 @@ export const routes: Routes = [
   {
     path: 'customers',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/customers/customers.component').then((m) => m.CustomersComponent),
+    loadComponent: () => import('./modules/customers/customers.component').then((c) => c.CustomersComponent),
     children: [
       { path: '', canActivate: [RoleGuard], component: CustomersListComponent },
       { path: 'create', canActivate: [RoleGuard], component: CreateCustomerDialog },
@@ -52,12 +54,12 @@ export const routes: Routes = [
   {
     path: 'enquiry',
     canActivate: [AuthGuard, RoleGuard],
-    loadComponent: () => import('./modules/enquirys/enquiry.component').then((m) => m.EnquiryComponent)
+    loadComponent: () => import('./modules/enquirys/enquiry.component').then((c) => c.EnquiryComponent)
   },
   {
     path: 'assigned-jobs',
     canActivate: [AuthGuard, RoleGuard],
-    loadComponent: () => import('./modules/assigned-jobs/assigned-jobs.component').then((m) => m.AssignedJobsComponent),
+    loadComponent: () => import('./modules/assigned-jobs/assigned-jobs.component').then((c) => c.AssignedJobsComponent),
     children: [
       { path: '', component: AssignedJobsListComponent },
       { path: 'upload-estimations', component: UploadEstimationComponent },
@@ -69,7 +71,7 @@ export const routes: Routes = [
   {
     path: 'quotations',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/quotations/quotations.component').then((m) => m.QuotationsComponent),
+    loadComponent: () => import('./modules/quotations/quotations.component').then((c) => c.QuotationsComponent),
     children: [
       { path: '', canActivate: [RoleGuard], component: QuotationListComponent },
       { path: 'report', canActivate: [RoleGuard], component: QuotationListComponent },
@@ -81,7 +83,7 @@ export const routes: Routes = [
   {
     path: 'deal-sheet',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/deal-sheet/deal-sheet.component').then((m) => m.DealSheetComponent),
+    loadComponent: () => import('./modules/deal-sheet/deal-sheet.component').then((c) => c.DealSheetComponent),
     children: [
       { path: '', redirectTo: 'pendings', pathMatch: 'full' },
       { path: 'pendings', canActivate: [RoleGuard], component: PendingDealsComponent },
@@ -91,7 +93,7 @@ export const routes: Routes = [
   {
     path: 'job-sheet',
     canActivate: [AuthGuard, RoleGuard],
-    loadComponent: () => import('./modules/job-sheet/job-sheet.component').then((m) => m.JobSheetComponent),
+    loadComponent: () => import('./modules/job-sheet/job-sheet.component').then((c) => c.JobSheetComponent),
     children: [
       { path: '', canActivate: [RoleGuard], component: JobListComponent },
     ]
@@ -99,7 +101,7 @@ export const routes: Routes = [
   {
     path: 'profile',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/profile/profile.component').then((m) => m.ProfileComponent),
+    loadComponent: () => import('./modules/profile/profile.component').then((c) => c.ProfileComponent),
     children: [
       { path: '', component: ProfileInfoComponent }
     ]
@@ -107,26 +109,30 @@ export const routes: Routes = [
   {
     path: 'settings',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/settings/settings.component').then((m) => m.SettingsComponnet)
+    loadComponent: () => import('./modules/settings/settings.component').then((c) => c.SettingsComponnet)
   },
   {
     path: 'feedback-requests',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/feedback-requests/feedback-requests.component').then((m) => m.FeedbackRequestsComponent)
+    loadComponent: () => import('./modules/feedback-requests/feedback-requests.component').then((c) => c.FeedbackRequestsComponent)
   },
   {
     path: 'login',
     canActivate: [LoginGuard],
-    loadComponent: () => import('./modules/login/login.component').then((m) => m.LoginComponent)
+    loadComponent: () => import('./modules/login/login.component').then((c) => c.LoginComponent)
   },
   {
     path: 'recycle',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/recycle/recycle.component').then((m) => m.RecycleComponent)
+    loadComponent: () => import('./modules/recycle/recycle.component').then((c) => c.RecycleComponent)
   },
   {
-    path: 'suppliers/pendings',
-    loadComponent: () => import('./shared/components/table/table.component').then((m) => m.TableComponent)
+    path: 'suppliers',
+    loadComponent: () => import('./modules/suppliers/suppliers.component').then((c) => c.SuppliersComponent),
+    children: [
+      { path: 'pendings', component: PendingSuppliersComponent },
+      { path: 'create', component: CreateSupplierComponent }
+    ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }
 ];

@@ -1,0 +1,41 @@
+<div [formGroup]="contactForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-700">Name</label>
+      <input 
+        formControlName="name"
+        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+        [class.border-red-500]="contactForm.get('name')?.invalid && (contactForm.get('name')?.touched || isSubmitted)"
+        type="text" 
+        placeholder="Contact Name">
+      <div class="text-red-600 text-xs mt-1" *ngIf="contactForm.get('name')?.invalid && (contactForm.get('name')?.touched || isSubmitted)">
+        Name is required
+      </div>
+    </div>
+    
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-700">Email</label>
+      <input 
+        formControlName="email"
+        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+        [class.border-red-500]="contactForm.get('email')?.invalid && (contactForm.get('email')?.touched || isSubmitted)"
+        type="email" 
+        placeholder="Email Address">
+      <div class="text-red-600 text-xs mt-1" *ngIf="contactForm.get('email')?.invalid && (contactForm.get('email')?.touched || isSubmitted)">
+        <span *ngIf="contactForm.get('email')?.errors?.['required']">Email is required</span>
+        <span *ngIf="contactForm.get('email')?.errors?.['email']">Invalid email format</span>
+      </div>
+    </div>
+    
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-700">Phone Number</label>
+      <input 
+        formControlName="phoneNumber"
+        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+        [class.border-red-500]="contactForm.get('phoneNumber')?.invalid && (contactForm.get('phoneNumber')?.touched || isSubmitted)"
+        type="tel" 
+        placeholder="Phone Number">
+      <div class="text-red-600 text-xs mt-1" *ngIf="contactForm.get('phoneNumber')?.invalid && (contactForm.get('phoneNumber')?.touched || isSubmitted)">
+        Phone number is required
+      </div>
+    </div>
+  </div>

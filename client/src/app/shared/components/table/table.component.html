@@ -1,29 +1,130 @@
-<div class="bg-white m-6">
-    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
-        <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-            <h3 class="font-semibold">Recycle Bin</h3>
-        </div>
-    </div>
-    <!-- <app-skelton-loading *ngIf="isLoading" [lineLength]="4"></app-skelton-loading> -->
+<div class="bg-white mx-5 mt-5 rounded-2x max-h-[calc(100vh-70px)]">
+  <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
+    <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
+      <h3 class="font-semibold">{{title}}</h3>
 
-    <div class="m-8  overflow-y-auto">
-        <div  class="w-full flex justify-center items-center pb-8">
-            <div class="p-3">
-                <img src="assets/images/empty.png" alt="">
-                <p class="m-2 text-center text-gray-500">No Data</p>
+      <div class="flex justify-end gap-4 items-center">
+        <ng-container [ngTemplateOutlet]="sideColumns"></ng-container>
+
+        <div *ngIf="enableColumnCustomization"
+          class="flex items-center cursor-pointer border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors"
+          [matMenuTriggerFor]="columnMenu">
+          <ng-icon name="heroAdjustmentsHorizontal" class="text-gray-600"></ng-icon>
+          <span class="mx-2 text-sm">Columns</span>
+          <ng-icon name="heroChevronDown" class="text-gray-600"></ng-icon>
+        </div>
+
+        <mat-menu #columnMenu="matMenu" class="column-menu">
+          <div class="p-3 min-w-[200px]">
+            <div *ngFor="let column of availableColumns" class="flex items-center gap-2 py-1.5">
+              <input type="checkbox" [id]="'col-' + column.key" [checked]="isColumnVisible(column)"
+                (change)="toggleColumnVisibility(column)"
+                class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded">
+              <label [for]="'col-' + column.key" class="text-sm text-gray-700 cursor-pointer select-none">
+                {{ column.label }}
+              </label>
             </div>
-        </div>
-
-        <section class="mat-elevation-z8 h-fit max-h-[57vh] overflow-auto" tabindex="0">
-            <!----- Main table component for this -->
-            
-           
-
-        </section>
-        <!-- <div class="w-full bg-white" *ngIf="!isEmpty">
-            <app-pagination [page]="page" [row]="row" [total]="total"
-                (changeData)="onPageNumberClick($event)"></app-pagination>
-        </div> -->
+          </div>
+        </mat-menu>
+      </div>
     </div>
-    <div>
+  </div>
+
+  <app-skelton-loading *ngIf="isLoading" [lineLength]="4"></app-skelton-loading>
+
+  <div class="m-8 overflow-hidden">
+    <div *ngIf="isEmpty && !isLoading" class="w-full flex justify-center items-center pb-8">
+      <div class="p-3">
+        <img src="assets/images/empty.png" alt="">
+        <p class="m-2 text-center text-gray-500">No Data</p>
+      </div>
     </div>
+
+    <!-- Table with fixed header -->
+    <section class="mat-elevation-z8 h-fit max-h-[calc(100vh-40vh)] shadow-sm relative" *ngIf="!isLoading && !isEmpty">
+      <!-- Fixed table container with consistent width -->
+      <div class="w-full overflow-y-auto max-h-[calc(100vh-40vh)]">
+        <table class="w-full border-collapse">
+          <!-- Fixed Header -->
+          <thead class="sticky top-0 z-10 bg-gray-50">
+            <tr>
+              <th *ngFor="let column of columns" 
+                class="bg-gray-100 px-4 py-4 text-start text-dark text-[15px] font-medium border-b border-gray-300 min-w-[116px] sticky top-0 z-10" [ngClass]="column.headerClass"
+                [class.hidden]="!displayedColumns.includes(column.key)">
+                {{ column.label }}
+              </th>
+            </tr>
+          </thead>
+          
+          <!-- Table Body -->
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr *ngFor="let item of filteredData; let i = index" (click)="onRowClick(item)"
+              class="cursor-pointer hover:bg-gray-50 transition-colors">
+
+              <td *ngFor="let column of columns" [ngClass]="column.cellClass"
+                class="px-4 py-3 whitespace-nowrap text-sm text-gray-800 border-b border-gray-300"
+                [class.hidden]="!displayedColumns.includes(column.key)">
+
+                <!-- Text, Number, Boolean -->
+                <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
+                  {{ getCellValue(item, column) }}
+                </ng-container>
+
+                <!-- Date -->
+                <ng-container *ngIf="column.type === 'date'">
+                  {{ getCellValue(item, column) | date:(column.pipeParams || 'dd/MM/yyyy') }}
+                </ng-container>
+
+                <!-- Currency -->
+                <ng-container *ngIf="column.type === 'currency'">
+                  {{ getCellValue(item, column) | currency:(column.pipeParams?.currency ||
+                  'USD'):(column.pipeParams?.format ||
+                  '1.2-2') }}
+                </ng-container>
+
+                <!-- Status Badge -->
+                <ng-container *ngIf="column.type === 'status'">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" [ngClass]="{
+                            'bg-green-100 text-green-800': getCellValue(item, column) === 'Won' || getCellValue(item, column) === 'approved',
+                            'bg-red-100 text-red-800': getCellValue(item, column) === 'Lost' || getCellValue(item, column) === 'rejected',
+                            'bg-yellow-100 text-yellow-800': getCellValue(item, column) === 'pending',
+                            'bg-blue-100 text-blue-800': !['Won', 'Lost', 'approved', 'rejected', 'pending'].includes(getCellValue(item, column))
+                          }">
+                    {{ getCellValue(item, column) }}
+                  </span>
+                </ng-container>
+
+                <!-- Action Buttons -->
+                <ng-container *ngIf="column.type === 'action'">
+                  <div class="flex items-center justify-center gap-2" (click)="preventClick($event)">
+                    <ng-container *ngFor="let action of column.actions">
+                      <button *ngIf="!action.condition || action.condition(item)"
+                        [ngClass]="action.buttonClass || 'w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'"
+                        [matTooltip]="action.tooltip || ''" matTooltipPosition="above"
+                        (click)="onActionClick(action.action, item, $event)">
+                        <ng-icon [name]="action.icon" [color]="action.color || 'currentColor'"></ng-icon>
+                      </button>
+                    </ng-container>
+                  </div>
+                </ng-container>
+              </td>
+            </tr>
+
+            <!-- Empty state -->
+            <tr *ngIf="filteredData.length === 0">
+              <td [attr.colspan]="displayedColumns.length" class="px-4 py-8 text-center text-gray-500">
+                No data available
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="w-full bg-white mt-4" *ngIf="!isEmpty">
+      <app-pagination [page]="paginationService.paginationState().page" [row]="paginationService.paginationState().row"
+        [total]="paginationService.paginationState().total">
+      </app-pagination>
+    </div>
+  </div>
+</div>
