@@ -5,7 +5,7 @@ interface supplierSchemaInterface {
     supplierName: string;
     address: AddressInterface;
     supplierType: String;
-    category: string;
+    category: Types.ObjectId;
     contactDetails: contactDetailsInterface[];
     documents?: any[];
     status: supplierStatus;
@@ -18,6 +18,11 @@ interface supplierSchemaInterface {
     approvedDate: Date;
     approvedBy: Types.ObjectId;
     isDeleted: boolean;
+    rejectHistory: {
+        date: Date;
+        reason: string;
+        rejectedBy: Types.ObjectId;
+    }[];
 }
 
 export enum supplierStatus {
@@ -100,7 +105,6 @@ const Address = new Schema<AddressInterface>({
 const supplierSchema = new Schema<supplierSchemaInterface>({
     supplierId: {
         type: String,
-        unique: true,
     },
     supplierName: {
         type: String,
@@ -115,7 +119,8 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         required: true,
     },
     category: {
-        type: String,
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
         required: true,
     },
     contactDetails: {
@@ -154,7 +159,7 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
     createdBy: {
         type: Schema.Types.ObjectId,
-        ref: 'Employee',
+        ref: 'Department',
         required: true,
     },
     approvedDate: {
@@ -165,8 +170,16 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         type: Schema.Types.ObjectId,
         ref: 'Employee',
     },
+    rejectHistory: {
+        type: [{
+            date: { type: Date, default: Date.now },
+            reason: { type: String },
+            rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' }
+        }],
+        default: [],
+    },
     isDeleted: {
-        type: Boolean, 
+        type: Boolean,
         default: false,
     },
 })

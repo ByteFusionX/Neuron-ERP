@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { createSupplier, deleteSupplier, getSupplierById, updateSupplier, updateSupplierStatus } from "../controllers/supplier.controller";
+import { createSupplier, deleteSupplier, getSupplierById, getSuppliers, updateSupplier, updateSupplierStatus } from "../controllers/supplier.controller";
 const upload = require("../common/multer.storage")
 
 const supplierRouter = Router()
 
-// supplierRouter.get('/', getSuppliers)
+supplierRouter.post('/', getSuppliers)
 supplierRouter.get('/:id', getSupplierById)
 supplierRouter.post('/create', upload.fields([{ name: 'documents' }]), createSupplier)
 supplierRouter.patch('/update/:id',upload.fields([{ name: 'documents' }]), updateSupplier)
