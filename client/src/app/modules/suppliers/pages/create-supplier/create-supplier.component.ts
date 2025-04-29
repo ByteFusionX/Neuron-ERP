@@ -11,6 +11,10 @@ import { RadioGroupComponent } from 'src/app/shared/components/forms/radio-group
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { TagInputComponent } from 'src/app/shared/components/forms/tag-input/tag-input.component';
+import { SupplierService } from 'src/app/core/services/supplier.service';
+import { ToastrService } from 'ngx-toastr';
+import { ProfileService } from 'src/app/core/services/profile/profile.service';
+import { Department, getDepartment } from 'src/app/shared/interfaces/department.interface';
 
 @Component({
   selector: 'app-create-supplier',
@@ -31,12 +35,12 @@ import { TagInputComponent } from 'src/app/shared/components/forms/tag-input/tag
 export class CreateSupplierComponent implements OnInit {
   private fb = inject(FormBuilder);
   private router = inject(Router);
-  // private supplierService = inject(SupplierService);
-  // private departmentService = inject(DepartmentService);
-  // private notificationService = inject(NotificationService);
+  private supplierService = inject(SupplierService);
+  private departmentService = inject(ProfileService);
+  private notificationService = inject(ToastrService);
 
   // Signals
-  // departments = signal<Department[]>([]);
+  departments = signal<getDepartment[]>([]);
   isSaving = signal<boolean>(false);
   isSubmitted = signal<boolean>(false);
   supplierExists = signal<boolean>(false);
@@ -79,16 +83,15 @@ export class CreateSupplierComponent implements OnInit {
   }
 
   private loadDepartments(): void {
-    // this.departmentService.getDepartments().subscribe({
-    //   next: (data) => {
-    //     this.departments.set(data);
-    //     this.categories.set(data);
-    //   },
-    //   error: (error) => {
-    //     this.notificationService.showError('Failed to load departments');
-    //     console.error('Error loading departments:', error);
-    //   }
-    // });
+    this.departmentService.getDepartments().subscribe({
+      next: (data) => {
+        this.departments.set(data);
+      },
+      error: (error) => {
+        this.notificationService.error('Failed to load departments');
+        console.error('Error loading departments:', error);
+      }
+    });
   }
 
   createProductFormGroup(): FormGroup {
@@ -141,27 +144,27 @@ export class CreateSupplierComponent implements OnInit {
     
     console.log(this.supplierForm.value);
     if (this.supplierForm.invalid) {
-      // this.notificationService.showError('Please fill all required fields correctly');
+      this.notificationService.error('Please fill all required fields correctly');
       return;
     }
     
     this.isSaving.set(true);
     
-    // this.supplierService.createSupplier(this.supplierForm.value).subscribe({
-    //   next: () => {
-    //     this.notificationService.showSuccess('Supplier created successfully');
-    //     this.router.navigate(['/suppliers']);
-    //   },
-    //   error: (error) => {
-    //     this.isSaving.set(false);
-    //     if (error?.error?.message === 'Supplier already exists') {
-    //       this.supplierExists.set(true);
-    //     } else {
-    //       this.notificationService.showError('Failed to create supplier');
-    //     }
-    //     console.error('Error creating supplier:', error);
-    //   }
-    // });
+    this.supplierService.createSupplier(this.supplierForm.value).subscribe({
+      next: () => {
+        this.notificationService.success('Supplier created successfully');
+        this.router.navigate(['/suppliers']);
+      },
+      error: (error) => {
+        this.isSaving.set(false);
+        if (error?.error?.message === 'Supplier already exists') {
+          this.supplierExists.set(true);
+        } else {
+          this.notificationService.error('Failed to create supplier');
+        }
+        console.error('Error creating supplier:', error);
+      }
+    });
   }
 
   // Helper for template form access
