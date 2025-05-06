@@ -12,31 +12,69 @@ import { appFileValidator } from '../../directives/file-validator.directive';
     providers: [appFileValidator]
 })
 export class UploadFileComponent {
+    @Input() label: string = '';
+    @Output() fileUpload = new EventEmitter<File[]>();
+    @ViewChild('fileInput') fileInput!: ElementRef;
+    fileError: boolean = false;
+    isDragging: boolean = false;
 
-  @Output() fileUpload = new EventEmitter<File[]>()
-  @ViewChild('fileInput') fileInput!: ElementRef;
+    @Input() selectedFiles: any[] = [];
 
-  @Input() selectedFiles: any[] = []
-
-  onFileSelected(event: any) {
-    let files = event.target.files
-    for (let i = 0; i < files.length; i++) {
-      const newFile = files[i]
-      const exist = this.selectedFiles.some(file => file.name === newFile.name)
-      if (!exist) {
-        this.selectedFiles.push(files[i])
-      }
+    onFileSelected(event: any) {
+        let files = event.target.files;
+        this.handleFiles(files);
     }
-    this.onUpload()
-  }
 
-  onUpload() {
-    this.fileUpload.emit(this.selectedFiles)
-  }
+    handleFiles(files: FileList) {
+        for (let i = 0; i < files.length; i++) {
+            const newFile = files[i];
+            const exist = this.selectedFiles.some(file => file.name === newFile.name);
+            if (!exist) {
+                this.selectedFiles.push(files[i]);
+            }
+        }
+        this.onUpload();
+    }
 
-  onFileRemoved(index: number) {
-    this.selectedFiles.splice(index, 1)
-    this.fileInput.nativeElement.value = '';
-    this.onUpload()
-  }
+    onUpload() {
+        this.fileUpload.emit(this.selectedFiles);
+    }
+
+    validateFile() {
+        this.fileError = this.selectedFiles.length === 0;
+    }
+
+    onFileRemoved(index: number) {
+        this.selectedFiles.splice(index, 1);
+        this.fileInput.nativeElement.value = '';
+        this.onUpload();
+    }
+
+    // Drag and drop handlers
+    onDragOver(event: DragEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.isDragging = true;
+    }
+
+    onDragLeave(event: DragEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.isDragging = false;
+    }
+
+    onDrop(event: DragEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.isDragging = false;
+
+        if (event.dataTransfer?.files) {
+            this.handleFiles(event.dataTransfer.files);
+        }
+    }
+
+    // Helper method to trigger file input click
+    triggerFileInput() {
+        this.fileInput.nativeElement.click();
+    }
 }

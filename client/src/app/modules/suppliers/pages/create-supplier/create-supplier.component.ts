@@ -15,6 +15,7 @@ import { SupplierService } from 'src/app/core/services/supplier.service';
 import { ToastrService } from 'ngx-toastr';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { Department, getDepartment } from 'src/app/shared/interfaces/department.interface';
+import { UploadFileComponent } from 'src/app/shared/components/upload-file/upload-file.component';
 
 @Component({
   selector: 'app-create-supplier',
@@ -27,7 +28,8 @@ import { Department, getDepartment } from 'src/app/shared/interfaces/department.
     FormFieldComponent,
     RadioGroupComponent,
     ButtonComponent,
-    SelectDropdownComponent
+    SelectDropdownComponent,
+    UploadFileComponent
   ],
   templateUrl: './create-supplier.component.html',
   styleUrl: './create-supplier.component.css',
@@ -38,6 +40,7 @@ export class CreateSupplierComponent implements OnInit {
   private supplierService = inject(SupplierService);
   private departmentService = inject(ProfileService);
   private notificationService = inject(ToastrService);
+  selectedFiles: File[] = []
 
   // Signals
   departments = signal<getDepartment[]>([]);
@@ -71,9 +74,7 @@ export class CreateSupplierComponent implements OnInit {
       email: ['', [Validators.required, Validators.email]],
       phoneNumber: ['', [Validators.required]]
     }),
-    products: this.fb.array([
-      this.createProductFormGroup()
-    ]),
+    products: this.fb.array([]),
     creditDays: [30, [Validators.required, Validators.min(0)]],
     creditValue: [0, [Validators.required, Validators.min(0)]]
   });
@@ -113,9 +114,7 @@ export class CreateSupplierComponent implements OnInit {
   }
 
   removeProductFormGroup(index: number): void {
-    if (this.productsFormArray.length > 1) {
       this.productsFormArray.removeAt(index);
-    }
   }
 
   hasProductsErrors(): boolean {
@@ -139,21 +138,29 @@ export class CreateSupplierComponent implements OnInit {
     this.supplierForm.patchValue({ primaryContact: contactData });
   }
 
+  onFileUpload(event: File[]) {
+    this.selectedFiles = event
+  }
+
   onSubmit(): void {
     this.isSubmitted.set(true);
     
-    console.log(this.supplierForm.value);
     if (this.supplierForm.invalid) {
       this.notificationService.error('Please fill all required fields correctly');
+      return;
+    }
+
+    if (this.selectedFiles.length === 0) {
+      this.notificationService.error('Please attach at least one document');
       return;
     }
     
     this.isSaving.set(true);
     
-    this.supplierService.createSupplier(this.supplierForm.value).subscribe({
+    this.supplierService.createSupplierWithFiles(this.supplierForm.value, this.selectedFiles).subscribe({
       next: () => {
         this.notificationService.success('Supplier created successfully');
-        this.router.navigate(['/suppliers']);
+        this.router.navigate(['/suppliers/pendings']);
       },
       error: (error) => {
         this.isSaving.set(false);

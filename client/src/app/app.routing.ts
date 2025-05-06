@@ -26,6 +26,7 @@ import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profi
 import { EditCompanyDetailsComponent } from './modules/profile/pages/edit-company-details/edit-company-details.component';
 import { PendingSuppliersComponent } from './modules/suppliers/pages/pending-suppliers/pending-suppliers.component';
 import { CreateSupplierComponent } from './modules/suppliers/pages/create-supplier/create-supplier.component';
+import { SupplierViewComponent } from './modules/suppliers/pages/supplier-view/supplier-view.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -119,7 +120,7 @@ export const routes: Routes = [
   {
     path: 'login',
     canActivate: [LoginGuard],
-    loadComponent: () => import('./modules/login/login.component').then((c) => c.LoginComponent)
+    loadComponent: () => import('./modules/login/pages/login-page/login-page.component').then((c) => c.LoginPageComponent)
   },
   {
     path: 'recycle',
@@ -131,7 +132,8 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/suppliers/suppliers.component').then((c) => c.SuppliersComponent),
     children: [
       { path: 'pendings', component: PendingSuppliersComponent },
-      { path: 'create', component: CreateSupplierComponent }
+      { path: 'create', component: CreateSupplierComponent },
+      { path: ':id', component: SupplierViewComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

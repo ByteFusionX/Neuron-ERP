@@ -1,17 +1,16 @@
 import { CommonModule } from '@angular/common';
-import { Component , Input} from '@angular/core';
-import { AbstractControl, ReactiveFormsModule } from '@angular/forms';
+import { Component, Input } from '@angular/core';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-form-field',
-  imports: [CommonModule,ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './form-field.component.html',
   styleUrl: './form-field.component.css',
 })
 export class FormFieldComponent {
   @Input() label = '';
-  @Input() control: AbstractControl | null = null;
-  @Input() formControlName: string = '';
+  @Input() control!: any;
   @Input() isSubmitted = false;
   @Input() type = 'text';
   @Input() placeholder = '';

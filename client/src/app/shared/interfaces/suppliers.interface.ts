@@ -54,36 +54,62 @@ export interface Address {
   // Main Supplier interface
   export interface Supplier {
     _id: string;
-    supplierId?: string;
+    id: string;
     supplierName: string;
-    address: Address;
+    address: {
+        streetNo: string;
+        zoneNo: string;
+        buildingNo: string;
+        poBox: string;
+        location: string;
+    };
     supplierType: string;
     category: string;
-    contactDetails: ContactDetail[];
-    documents?: Document[];
-    status: SupplierStatus;
-    products: Product[];
+    primaryContact: {
+        name: string;
+        email: string;
+        phoneNumber: string;
+    };
+    products: Array<{
+        productName: string;
+        paymentTerm: string;
+        contactName?: string;
+        contactEmail?: string;
+        contactNo?: string;
+    }>;
     creditDays: number;
     creditValue: number;
-    createdDate: Date;
-    updatedDate: Date;
-    createdBy: string | Employee;
-    approvedDate?: Date;
-    approvedBy?: string | Employee;
-    isDeleted: boolean;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
   }
   
   // Request interface for creating or updating a supplier
   export interface SupplierCreateRequest {
     supplierName: string;
-    address: Address;
+    address: {
+        streetNo: string;
+        zoneNo: string;
+        buildingNo: string;
+        poBox: string;
+        location: string;
+    };
     supplierType: string;
     category: string;
-    contactDetails: ContactDetail[];
-    products: Product[];
+    primaryContact: {
+        name: string;
+        email: string;
+        phoneNumber: string;
+    };
+    products: Array<{
+        productName: string;
+        paymentTerm: string;
+        contactName?: string;
+        contactEmail?: string;
+        contactNo?: string;
+    }>;
     creditDays: number;
     creditValue: number;
-    createdBy: string; // User ID
   }
   
   // Request interface for updating a supplier status
@@ -107,21 +133,35 @@ export interface Address {
   // Response interface for a single supplier
   export interface SupplierResponse {
     success: boolean;
-    message?: string;
+    message: string;
     data: Supplier;
-    error?: string;
   }
   
   // Response interface for a list of suppliers with pagination
   export interface SupplierListResponse {
     success: boolean;
-    message?: string;
+    message: string;
     data: {
-      suppliers: Supplier[];
-      totalCount: number;
-      page: number;
-      limit: number;
-      totalPages: number;
+        suppliers: Supplier[];
+        pagination: {
+            total: number;
+            page: number;
+            pages: number;
+            limit: number;
+        };
     };
-    error?: string;
   }
+
+export interface CreateSupplierDto extends SupplierCreateRequest {
+    files?: File[];
+}
+
+export interface PendingSupplier extends Supplier {
+    documents: Array<{
+        id: string;
+        name: string;
+        url: string;
+        type: string;
+        size: number;
+    }>;
+}

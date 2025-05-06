@@ -10,7 +10,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
   styleUrl: './button.component.css',
 })
 export class ButtonComponent { 
-  @Input() theme: 'primary' | 'secondary' | 'danger' | 'warning' | 'filter' | 'cancel' = 'primary';
+  @Input() theme: 'primary' | 'secondary' | 'danger' | 'warning' | 'filter' | 'cancel' | 'success' = 'primary';
   @Input() type: 'button' | 'submit' | 'reset' = 'button';
   @Input() size: 'sm' | 'md' | 'lg' = 'md';
   @Input() disabled = false;
@@ -39,7 +39,8 @@ export class ButtonComponent {
       'danger': 'bg-red-600 hover:bg-red-700 text-white',
       'warning': 'bg-orange-500 hover:bg-orange-700 text-white',
       'filter': 'bg-orange-500 hover:bg-orange-700 text-white text-xs',
-      'cancel': 'border border-gray-300 hover:bg-gray-100 text-black'
+      'cancel': 'border border-gray-300 hover:bg-gray-100 text-black',
+      'success': 'bg-green-600 hover:bg-green-700 text-white'
     };
     
     const baseClass = {};
