@@ -147,15 +147,17 @@ export const createSupplier = async (req: Request, res: Response) => {
          address,
          supplierType,
          category,
-         contactDetails,
+         primaryContact,
          products,
          creditDays,
          creditValue,
          createdBy,
-      } = req.body;
+      } = JSON.parse(req.body.supplier);
+
+      console.log(req.body);
 
       // Validate required fields
-      if (!supplierName || !supplierType || !category || !contactDetails || !products) {
+      if (!supplierName || !supplierType || !category || !primaryContact || !products) {
          return res.status(400).json({
             success: false,
             message: 'Please provide all required fields',
@@ -163,7 +165,8 @@ export const createSupplier = async (req: Request, res: Response) => {
       }
 
       // Handle file uploads
-      const files = (req as any).files || []
+      const files = (req as any).files.documents || []
+      console.log(files);
 
       let documents: { fileName: string; originalname: string }[] = [];
       if (files && Array.isArray(files)) {
@@ -182,12 +185,12 @@ export const createSupplier = async (req: Request, res: Response) => {
       // Create new supplier object
       const newSupplier = new Supplier({
          supplierName,
-         address: JSON.parse(address),
+         address: address,
          supplierType,
          category,
-         contactDetails: JSON.parse(contactDetails),
+         contactDetails: primaryContact,
          documents: documents,
-         products: JSON.parse(products),
+         products: products,
          creditDays,
          creditValue,
          createdBy: new Types.ObjectId(createdBy),
@@ -264,8 +267,8 @@ export const updateSupplierStatus = async (req: Request, res: Response) => {
             });
          }
          
-         const { country } = supplier.address;
-         const newSupplierId = await generateSupplierId(country);
+         const { location } = supplier.address;
+         const newSupplierId = await generateSupplierId(location);
          
          supplier.supplierId = newSupplierId;
          supplier.status = supplierStatus.approved;

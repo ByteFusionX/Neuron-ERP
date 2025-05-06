@@ -6,7 +6,7 @@ interface supplierSchemaInterface {
     address: AddressInterface;
     supplierType: String;
     category: Types.ObjectId;
-    contactDetails: contactDetailsInterface[];
+    contactDetails: contactDetailsInterface;
     documents?: any[];
     status: supplierStatus;
     products: ProductsInterface[];
@@ -32,47 +32,28 @@ export enum supplierStatus {
 }
 
 interface contactDetailsInterface {
-    contactName: string;
-    contactDesignation: string;
-    contactNumber: string
+    name: string;
+    email: string;
+    phoneNumber: string
 }
 interface AddressInterface {
-    StreetNo: string;
+    streetNo: string;
     buildingNo: string;
     zoneNo: string;
     poBox: string;
     city: string;
-    country: string;
+    location: string;
 }
 
 interface ProductsInterface {
-    products: string;
-    name: string;
-    email: string;
-    phone: string;
-    paymentTerms: string;
+    productName: string;
+    contactName: string;
+    contactEmail: string;
+    contactNo: string;
+    paymentTerm: string;
 }
 
 const contactDetailsSchema = new Schema<contactDetailsInterface>({
-    contactName: {
-        type: String,
-        required: true,
-    },
-    contactDesignation: {
-        type: String,
-        required: true,
-    },
-    contactNumber: {
-        type: String,
-        required: true,
-    },
-})
-
-const Products = new Schema<ProductsInterface>({
-    products: {
-        type: String,
-        required: true,
-    },
     name: {
         type: String,
         required: true,
@@ -81,11 +62,26 @@ const Products = new Schema<ProductsInterface>({
         type: String,
         required: true,
     },
-    phone: {
+    phoneNumber: {
         type: String,
         required: true,
     },
-    paymentTerms: {
+})
+
+const Products = new Schema<ProductsInterface>({
+    productName: {
+        type: String,
+    },
+    contactName: {
+        type: String,
+    },
+    contactEmail: {
+        type: String,
+    },
+    contactNo: {
+        type: String,
+    },
+    paymentTerm: {
         type: String,
         required: true,
     },
@@ -93,11 +89,11 @@ const Products = new Schema<ProductsInterface>({
 
 
 const Address = new Schema<AddressInterface>({
-    StreetNo: String,
+    streetNo: String,
     buildingNo: String,
     zoneNo: String,
     poBox: String,
-    country: String,
+    location: String,
     city: String,
 })
 
@@ -124,7 +120,7 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         required: true,
     },
     contactDetails: {
-        type: [contactDetailsSchema],
+        type: contactDetailsSchema,
         required: true,
     },
     documents: {
@@ -139,7 +135,6 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
     products: {
         type: [Products],
-        required: true,
     },
     creditDays: {
         type: Number,
