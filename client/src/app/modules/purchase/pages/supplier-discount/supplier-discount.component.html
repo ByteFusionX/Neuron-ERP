@@ -1,0 +1,71 @@
+<div class="m-6 bg-white rounded-lg">
+    <div class="px-5 py-3 border-b">
+        <h3 class="text-md font-medium">Supplier Discount</h3>
+    </div>
+    <form class="">
+        <div class="m-10">
+            <div class="flex">
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="jobId">
+                        Job ID
+                    </label>
+                    <input appNoLeadingSpace formControlName="jobId"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="jobId" type="text" placeholder="Job ID" readonly>
+                </div>
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="prno">
+                        PR NO
+                    </label>
+                    <input appNoLeadingSpace formControlName="prno"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="prno" type="text" placeholder="PR NO" readonly>
+                </div>
+            </div>
+            <div class="w-full flex justify-end">
+                <button class="px-5 py-2 bg-violet-600 text-sm text-white hover:bg-violet-400 rounded my-2">+ Add
+                    Field</button>
+            </div>
+            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border">
+                <thead class="text-xs text-gray-700 uppercase bg-violet-50">
+                    <tr>
+                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
+                            <div class="px-2 py-3">SL.NO</div>
+                        </th>
+                        <th scope="col" resizable key="supplierName" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Supplier Name</div>
+                        </th>
+                        <th scope="col" resizable key="discountValue" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Discount Value</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <ng-container>
+                        <tr class="bg-white border-b text-gray-800">
+                            <td class="px-2  border text-center">
+                            </td>
+                            <td class="px-2 py-2 border text-center">
+                            </td>
+                            <td class=" py-2  text-center ">
+                            </td>
+                        </tr>
+                    </ng-container>
+                </tbody>
+            </table>
+            <div class="bg-gray-100 p-2 w-full md:flex justify-end border mb-8">
+                <div class="w-1/3 flex gap-3 items-center">
+                    <span>Total Discount received:</span>
+                    <input type="text" class="px-3 py-1.5 outline-none rounded" readonly>
+                </div>
+            </div>
+        </div>
+        <div class="w-full md:flex justify-end gap-3 mb-3 px-8 py-3 border-t">
+            <button
+                class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3">Discard</button>
+            <button
+                class="w-fit px-3 py-2 text-sm border bg-violet-600 hover:bg-violet-500 text-white rounded mb-3">Save
+                & Exit</button>
+        </div>
+    </form>
+</div>
