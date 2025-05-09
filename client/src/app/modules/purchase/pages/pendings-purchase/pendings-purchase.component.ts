@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
 import { Router } from '@angular/router';
@@ -29,7 +29,7 @@ import { TableColumn } from 'src/app/shared/components/table/table.model';
   styleUrl: './pendings-purchase.component.css',
   providers: [PaginationService]
 })
-export class PendingPurchaseComponent {
+export class PendingPurchaseComponent implements OnInit {
   private router = inject(Router);
   private paginationService = inject(PaginationService);
   private supplierService = inject(PurchaseService);
@@ -39,13 +39,70 @@ export class PendingPurchaseComponent {
   tableColumns: TableColumn[] = [];
   defaultColumns: string[] = [];
 
-  isLoading = signal<boolean>(true);
+  isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
 
   selectedLocation = signal<string>('');
   selectedCategory = signal<string>('');
   selectedStatus = signal<string>('Pending');
+
+  ngOnInit(): void {
+    this.setupTableColumns()
+  }
+
+  setupTableColumns(): void {
+    this.tableColumns = [
+      {
+        key: 'createdDate',
+        label: 'Created Date',
+        type: 'date',
+        pipeParams: 'dd/MM/yyyy',
+        sortable: true,
+      },
+      {
+        key: 'purchaseNo',
+        label: 'PR NO',
+        type: 'text',
+      },
+      {
+        key: 'jobId',
+        label: 'Job ID',
+        type: 'text',
+      },
+      {
+        key: 'customer',
+        label: 'Customer',
+        type: 'text',
+      },
+      {
+        key: 'salesManager',
+        label: 'Sales Manager',
+        type: 'text',
+      },
+      {
+        key: 'lpoValue',
+        label: 'LPO Value',
+        type: 'text',
+      },
+      {
+        key: 'mrRequest',
+        label: 'MR Request',
+        type: 'text',
+      },
+      {
+        key: 'actions',
+        label: 'Action',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: []
+      }
+    ]
+
+    this.defaultColumns = [
+      'createdDate','purchaseNo', 'jobId', 'customer', 'salesManager', 'lpoValue', 'mrRequest','actions'
+    ];
+  }
 
   viewPurchaseDetails(purchase: any): void {
     // console.log(purchase);

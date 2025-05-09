@@ -32,6 +32,7 @@ import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { MrRequestComponent } from 'src/app/modules/purchase/pages/mr-request/mr-request.component';
 
 @Component({
   selector: 'app-job-list',
@@ -564,9 +565,15 @@ export class JobListComponent {
 
   purchaseRequest(jobId: string) {
     const jobData = this.dataSource.data.find((data) => data._id == jobId)
-    if(jobData){
+    if (jobData) {
       this.purchaseService.setPurchaseJob(jobData)
       this.router.navigate(['/purchase/create'])
     }
+  }
+
+  onMrRequestClicks() {
+    this._dialog.open(MrRequestComponent, {
+      width: '550px'
+    })
   }
 }
