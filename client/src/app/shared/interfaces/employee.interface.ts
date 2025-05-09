@@ -36,7 +36,7 @@ export interface getEmployeeDetails {
 
 
 export interface Target {
-  _id?:string;
+  _id?: string;
   year: string;
   salesRevenue: RangeTarget;
   grossProfit: RangeTarget;
@@ -131,6 +131,9 @@ export interface Privileges {
     viewReport: string;
   };
   dealSheet: boolean;
+  purchase: {
+    viewReport: string;
+  };
   portalManagement: {
     department: boolean;
     notesAndTerms: boolean;

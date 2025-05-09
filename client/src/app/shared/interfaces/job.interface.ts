@@ -13,9 +13,11 @@ export interface getJob {
     _id: string;
     jobId:string;
     quoteId:string;
-    quotation:Quotatation[];
+    quotation:Quotatation;
     status:string;
-    createdDate:string
+    createdDate:string;
+    clientDetails?:any;
+    salesPersonDetails?:any;
 }
 
 export interface Files {

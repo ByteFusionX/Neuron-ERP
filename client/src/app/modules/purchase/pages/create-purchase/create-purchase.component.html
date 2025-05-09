@@ -1,0 +1,134 @@
+<div class="bg-white m-6 rounded-lg">
+    <div class="border-b p-3 px-9 flex justify-between items-center">
+        <h3 class="text-md font-medium">Create Purchase</h3>
+    </div>
+    <form>
+        <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+            <div class="flex flex-col md:flex-row mb-3">
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="customer">
+                        Customer
+                    </label>
+                    <input appNoLeadingSpace formControlName="customer"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="customer" type="text" placeholder="Customer Name" [value]="purchaseJobData.customer" readonly>
+                </div>
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="prno">
+                        PR NO
+                    </label>
+                    <input appNoLeadingSpace formControlName="prno"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="prno" type="text" placeholder="PR NO" [value]="generatedPRId" readonly>
+                </div>
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="date">
+                        Date
+                    </label>
+                    <input appNoLeadingSpace formControlName="purchaseDate"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="pruchaseDate" type="date" placeholder="Date">
+                </div>
+            </div>
+            <div class="flex flex-col md:flex-row md:mb-5">
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="employee">
+                        Sales Manager
+                    </label>
+                    <input appNoLeadingSpace formControlName="employee"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="employee" type="text" placeholder="Sales Account Manager Name" 
+                        [value]="purchaseJobData.salesManager" readonly>
+                </div>
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="jobId">
+                        Job ID
+                    </label>
+                    <input appNoLeadingSpace formControlName="jobId"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="jobId" type="text" placeholder="Job ID" [value]="purchaseJobData?.jobId" readonly>
+                </div>
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="deelSheetId">
+                        Deel Sheet ID
+                    </label>
+                    <input appNoLeadingSpace formControlName="deelSheetId"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="deelSheetId" type="text" placeholder="Deel Sheet ID" [value]="purchaseJobData.deelSheetId" readonly>
+                </div>
+            </div>
+            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border">
+                <thead class="text-xs text-gray-700 uppercase bg-violet-50">
+                    <tr>
+                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
+                            <div class="px-2 py-3">SL.NO</div>
+                        </th>
+                        <th scope="col" resizable key="itemDetails" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Item Details</div>
+                        </th>
+                        <th scope="col" resizable key="qty" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">QTY</div>
+                        </th>
+                        <th scope="col" resizable key="unitPrice" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Unit Selling Price</div>
+                        </th>
+                        <th scope="col" resizable key="totalPrice" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Total Selling Price</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <ng-container>
+                        <tr class="bg-white border-b text-gray-800">
+                            <td class="px-2  border text-center">
+                            </td>
+                            <td class="px-2 py-2 border text-center">
+                            </td>
+                            <td class=" py-2  text-center ">
+                            </td>
+                            <td class="px-2 py-2 border text-center">
+                            </td>
+                            <td class="px-2 py-2 border text-center">
+                            </td>
+                        </tr>
+                    </ng-container>
+                </tbody>
+            </table>
+            <div class="bg-gray-100 p-2 w-full md:flex justify-between border mb-8">
+                <button class="bg-violet-600 text-white text-sm px-3 py-1.5 rounded hover:bg-violet-500">+ Additional Column</button>
+                <div class="w-1/3 flex gap-3 items-center">
+                    <span>Total LPO Value:</span>
+                    <input type="text" class="px-3 py-1.5 outline-none rounded" readonly>
+                </div>
+            </div>
+            <div class="w-full flex md:justify-between">
+                <div class="md:w-1/3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+                        for="grid-last-name">
+                        Items
+                    </label>
+                    <ng-select class="form border" placeholder="Get Items Tab" appendTo="body"
+                        formControlName="department">
+                        <ng-option [value]=""></ng-option>
+                    </ng-select>
+                </div>
+                <div class="md:w-1/3 flex flex-col md:items-end mt-6">
+                    <button class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400" (click)="onMrRequestClicks()">MR Request</button>
+                    <button class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400" (click)="onSupplierClicks()">Supplier
+                        Discount</button>
+                </div>
+            </div>
+            <div class="w-full flex md:justify-between">
+                <button class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">Final Dashboard</button>
+                <button class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">Comparison Summary</button>
+            </div>
+        </div>
+        <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
+            <div class="md:flex gap-3">
+                <button class="w-fit px-3 py-2 text-sm border border-orange-500 hover:ring-1 hover:ring-orange-400 rounded mb-3">Save & Exit</button>
+                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3">Discard</button>
+            </div>
+            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3">Submit for Approval</button>
+        </div>
+    </form>
+</div>

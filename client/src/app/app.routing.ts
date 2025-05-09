@@ -27,6 +27,10 @@ import { EditCompanyDetailsComponent } from './modules/profile/pages/edit-compan
 import { PendingSuppliersComponent } from './modules/suppliers/pages/pending-suppliers/pending-suppliers.component';
 import { CreateSupplierComponent } from './modules/suppliers/pages/create-supplier/create-supplier.component';
 import { SupplierViewComponent } from './modules/suppliers/pages/supplier-view/supplier-view.component';
+import { PendingPurchaseComponent } from './modules/purchase/pages/pendings-purchase/pendings-purchase.component';
+import { ApprovedPurchaseComponent } from './modules/purchase/pages/approved-purchase/approved.component';
+import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
+import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -134,6 +138,16 @@ export const routes: Routes = [
       { path: 'pendings', component: PendingSuppliersComponent },
       { path: 'create', component: CreateSupplierComponent },
       { path: ':id', component: SupplierViewComponent }
+    ]
+  },
+  {
+    path: 'purchase',
+    loadComponent: () => import('./modules/purchase/purchase.component').then((c) => c.PurchaseComponent),
+    children: [
+      { path: 'pendings', component: PendingPurchaseComponent },
+      { path: 'approves', component: ApprovedPurchaseComponent },
+      { path: 'create', component: CreatePurchaseComponent },
+      { path: 'supplier-discount', component: SupplierDiscountComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

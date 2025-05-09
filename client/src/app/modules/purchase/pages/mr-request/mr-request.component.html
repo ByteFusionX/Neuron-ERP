@@ -1,0 +1,50 @@
+<div class="">
+    <div class="px-5 py-3 border-b w-full flex justify-between">
+        <h3 class="text-md font-medium">MR Request</h3>
+        <button class="bg-gray-200 rounded flex items-center justify-center p-1" (click)="onCloseClicks()"><ng-icon name="heroXMark" class="text-md"></ng-icon></button>
+    </div>
+    <form class="">
+        <div class="m-5">
+            <div class="flex">
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="jobId">
+                        Job ID
+                    </label>
+                    <input appNoLeadingSpace formControlName="jobId"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="jobId" type="text" placeholder="Job ID" readonly>
+                </div>
+                <div class="w-full pe-3 mb-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="customer">
+                        Customer
+                    </label>
+                    <input appNoLeadingSpace formControlName="customer"
+                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        id="customer" type="text" placeholder="Customer Name" readonly>
+                </div>
+            </div>
+            <div class="w-full pe-3 mb-3">
+                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="employee">
+                    Engineer
+                </label>
+                <input appNoLeadingSpace formControlName="engineer"
+                    class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    id="engineer" type="text" placeholder="Assigned Engineer Name">
+            </div>
+            <div class="w-full pe-3 mb-3">
+                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="message">
+                    Message
+                </label>
+                <textarea appNoLeadingSpace formControlName="message"
+                    class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    id="message" type="text" placeholder="Sales Account Manager Name" rows="3"></textarea>
+            </div>
+        </div>
+        <div class="border-t">
+            <div class="mx-5 my-3 flex justify-end items-center gap-3">
+                <button class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white rounded">Discard</button>
+                <button class="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded">Submit</button>
+            </div>
+        </div>
+    </form>
+</div>

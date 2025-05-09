@@ -33,6 +33,7 @@ import supplierRouter from './routes/supplier.router';
 
 const app = express();
 const server = http.createServer(app);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 export const io = new Server(server, {
   cors: {
     origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
@@ -44,17 +45,14 @@ global.io = io;
 app.set('io', io);
 
 app.use(morgan("dev"));
-app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 startCronJob();
 socketConnection(io)
 
-
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
 app.use(cors({
-  origin: process.env.ORIGIN1,
+  origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));

@@ -73,7 +73,6 @@
                             Department
                         </label>
                         <ng-container *ngIf="!isEdit ;else departemntBlock">
-
                             <ng-container *ngIf="enquiryData$ | async as enquiryData ;else departemntBlock">
                                 <p class="border py-[11px] px-2">
                                     {{enquiryData.department.departmentName}}</p>
@@ -397,8 +396,6 @@
                 </div>
 
             </div>
-
-            
         </div>
 
 

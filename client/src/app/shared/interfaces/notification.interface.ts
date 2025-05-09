@@ -1,15 +1,16 @@
 export interface NotificationCounts {
-    assignedJobCount : number,
-    reAssignedJobCount : number,
-    announcementCount : number
-    dealSheetCount : number
-    feedbackCount : number
-    quotationCount : number
-    enquiryCount : number
+    assignedJobCount: number,
+    reAssignedJobCount: number,
+    announcementCount: number,
+    dealSheetCount: number,
+    feedbackCount: number,
+    quotationCount: number,
+    enquiryCount: number,
+    purchaseCount: number,
 }
 
 export interface TextNotification {
-    _id?:string;
+    _id?: string;
     type: string; // The type of notification (e.g., 'Info', 'Warning', 'Alert')
     title: string; // Brief title for the notification
     message: string; // Detailed message content
