@@ -1,11 +1,8 @@
-<div class="p-6">
-  <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold">Supplier Details</h1>
+<div class="bg-white m-6">
+  <div class="border-b p-3 px-9 flex justify-between items-center">
+    <h3 class="text-md font-medium">Supplier - <span class="uppercase">{{supplier?.supplierName}}</span></h3>
+
     <div class="flex gap-2">
-      <app-btn theme="secondary" (click)="onBack()">
-        <ng-icon name="heroArrowLeft" class="mr-2"></ng-icon>
-        Back
-      </app-btn>
       <app-btn theme="primary" (click)="onEdit()">
         <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
         Edit
@@ -17,46 +14,166 @@
     <ng-icon name="heroArrowPath" class="animate-spin text-4xl"></ng-icon>
   </div>
 
-  <div *ngIf="!isLoading && supplier" class="bg-white rounded-lg shadow p-6">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="space-y-4">
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Supplier Name</h3>
-          <p class="mt-1">{{ supplier.supplierName }}</p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Type</h3>
-          <p class="mt-1">{{ supplier.supplierType }}</p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Location</h3>
-          <p class="mt-1">{{ supplier.address?.location }}</p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Contact Person</h3>
-          <p class="mt-1">{{ supplier.primaryContact.name }}</p>
-        </div>
-      </div>
-      <div class="space-y-4">
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Email</h3>
-          <p class="mt-1">{{ supplier.primaryContact.email }}</p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Phone</h3>
-          <p class="mt-1">{{ supplier.primaryContact.phoneNumber }}</p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Credit Days</h3>
-          <p class="mt-1">{{ supplier.creditDays }}</p>
-        </div>
-        <div>
-          <h3 class="text-sm font-medium text-gray-500">Credit Value</h3>
-          <p class="mt-1">{{ supplier.creditValue | currency:'USD':'symbol':'1.2-2' }}</p>
-        </div>
+  <div *ngIf="!isLoading && supplier" class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+    <!-- Basic Information Table -->
+    <div class="w-full mb-8">
+      <h4 class="text-lg font-semibold mb-4">Basic Information</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left rtl:text-right text-black border">
+          <tbody>
+            <tr class="border-b">
+              @if(supplier.supplierId){
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Supplier ID</td>
+              <td class="px-2 py-2 border text-start">{{supplier.supplierId}}</td>
+              }
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Supplier Name</td>
+              <td class="px-2 py-2 border text-start">{{supplier.supplierName}}</td>
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Category</td>
+              <td class="px-2 py-2 border text-start">{{supplier.category.departmentName}}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Supplier Type</td>
+              <td class="px-2 py-2 border text-start">{{supplier.supplierType}}</td>
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Status</td>
+              <td class="px-2 py-2 border text-start">
+                @if(supplier.status === 'Pending'){
+                <span class="bg-yellow-500 text-white px-2 py-1 rounded-md">Pending</span>
+                }@else if(supplier.status === 'Approved'){
+                <span class="bg-green-500 text-white px-2 py-1 rounded-md">Approved</span>
+                }@else if(supplier.status === 'Rejected'){
+                <span class="bg-red-500 text-white px-2 py-1 rounded-md">Rejected</span>
+                }
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
+    <!-- Address Information Table -->
+    <div class="w-full mb-8">
+      <h4 class="text-lg font-semibold mb-4">Address Information</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left rtl:text-right text-black border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Street No</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address.streetNo}}</td>
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Building No</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address.buildingNo}}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Zone No</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address.zoneNo}}</td>
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">PO Box</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address.poBox}}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">City</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address.city}}</td>
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Location</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address.location}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Contact Details Table -->
+    <div class="w-full mb-8">
+      <h4 class="text-lg font-semibold mb-4">Contact Details</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left rtl:text-right text-black border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Name</td>
+              <td class="px-2 py-2 border text-start">{{supplier.contactDetails.name}}</td>
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Email</td>
+              <td class="px-2 py-2 border text-start">{{supplier.contactDetails.email}}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Phone Number</td>
+              <td class="px-2 py-2 border text-start" colspan="3">{{supplier.contactDetails.phoneNumber}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Products Table -->
+    @if(supplier.products && supplier.products.length > 0){
+    <div class="w-full mb-8">
+      <h4 class="text-lg font-semibold mb-4">Products</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left rtl:text-right text-black border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 border">Product Name</th>
+              <th class="px-6 py-3 border">Payment Term</th>
+              <th class="px-6 py-3 border">Contact Name</th>
+              <th class="px-6 py-3 border">Contact Email</th>
+              <th class="px-6 py-3 border">Contact No</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b" *ngFor="let product of supplier.products">
+              <td class="px-6 py-3 border">{{product.productName}}</td>
+              <td class="px-6 py-3 border">{{product.paymentTerm}}</td>
+              <td class="px-6 py-3 border">{{product.contactName || '-'}}</td>
+              <td class="px-6 py-3 border">{{product.contactEmail || '-'}}</td>
+              <td class="px-6 py-3 border">{{product.contactNo || '-'}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    }
+
+    <!-- Credit Information -->
+    <div class="w-full mb-8">
+      <h4 class="text-lg font-semibold mb-4">Credit Information</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left rtl:text-right text-black border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Credit Days</td>
+              <td class="px-2 py-2 border text-start">{{supplier.creditDays}}</td>
+              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Credit Value</td>
+              <td class="px-2 py-2 border text-start">{{supplier.creditValue}} QAR</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Documents Section -->
+    <div class="w-full mb-8" *ngIf="supplier.documents && supplier.documents.length > 0">
+      <h4 class="text-lg font-semibold mb-4">Documents</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left rtl:text-right text-black border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 border">Document Name</th>
+              <th class="px-6 py-3 border">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b" *ngFor="let doc of supplier.documents">
+              <td class="px-6 py-3 border">{{doc.fileName}}</td>
+              <td class="px-6 py-3 border">
+                <a class="text-blue-600 hover:text-blue-800 flex items-center" (click)="onDownloadFile(doc)" [class.cursor-not-allowed]="isDownloading">
+                  <ng-icon name="heroArrowDownTray" class="mr-2"></ng-icon>
+                  {{ isDownloading && downloadProgress !== 100 ? 'Downloading... ' + downloadProgress + '%' : 'Download' }}
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    @if(supplier.status === 'Pending'){
     <div class="mt-8 pt-6 border-t">
       <div class="flex justify-end gap-4">
         <app-btn theme="danger" (click)="onReject()" [loading]="isRejecting">
@@ -69,5 +186,6 @@
         </app-btn>
       </div>
     </div>
+    }
   </div>
-</div> 
+</div>

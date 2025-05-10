@@ -8,17 +8,17 @@ import { PipelineStage } from 'mongoose';
 export const getSuppliers = async (req: Request, res: Response) => {
    try {
       let { page = 1, row = 10, toDate, fromDate, status, category, supplierType } = req.body;
-      
+
       // Convert string page and row to numbers
       page = parseInt(page.toString());
       row = parseInt(row.toString());
-      
+
       // Calculate skip value for pagination
       const skip = (page - 1) * row;
-      
+
       // Build filter object
       const filter: Record<string, any> = { isDeleted: false };
-      
+
       // Add date range filter if provided
       if (fromDate || toDate) {
          filter.createdDate = {};
@@ -32,22 +32,23 @@ export const getSuppliers = async (req: Request, res: Response) => {
             filter.createdDate.$lte = endDate;
          }
       }
-      
+
       // Add status filter if provided
       if (status) {
-         filter.status = status;
+         // Handle both single status and array of statuses
+         filter.status = Array.isArray(status) ? { $in: status } : status;
       }
-      
+
       // Add category filter if provided (now it's an ObjectId)
       if (category) {
          filter.category = category; // Assuming category is already an ObjectId string
       }
-      
+
       // Add supplierType filter if provided
       if (supplierType) {
          filter.supplierType = supplierType;
       }
-      
+
       // Use aggregation pipeline for advanced querying with lookups
       const aggregationPipeline: PipelineStage[] = [
          { $match: filter },
@@ -71,7 +72,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
          {
             $lookup: {
                from: 'employees',
-               localField: 'approvedBy',
+               localField: 'approvedData.approvedBy',
                foreignField: '_id',
                as: 'approvedByEmployee'
             }
@@ -99,24 +100,24 @@ export const getSuppliers = async (req: Request, res: Response) => {
                createdDate: 1,
                updatedDate: 1,
                createdBy: "$createdByInfo", // Use the looked-up department info
-               approvedBy: "$approvedByInfo", // Use the looked-up employee info
-               approvedDate: 1
+               approvedData: 1,
+               rejectHistory: 1
             }
          },
          { $sort: { createdDate: -1 } }, // Sort by createdDate in descending order
          { $skip: skip },
          { $limit: row }
       ];
-      
+
       // Count total documents for pagination
       const totalDocs = await Supplier.countDocuments(filter);
-      
+
       // Execute aggregation pipeline with proper typing
       const suppliersData = await Supplier.aggregate(aggregationPipeline).exec();
-      
+
       // Calculate pagination metadata
       const totalPages = Math.ceil(totalDocs / row);
-      
+
       return res.status(200).json({
          success: true,
          message: 'Suppliers fetched successfully',
@@ -147,17 +148,15 @@ export const createSupplier = async (req: Request, res: Response) => {
          address,
          supplierType,
          category,
-         primaryContact,
+         contactDetails,
          products,
          creditDays,
          creditValue,
          createdBy,
       } = JSON.parse(req.body.supplier);
 
-      console.log(req.body);
-
       // Validate required fields
-      if (!supplierName || !supplierType || !category || !primaryContact || !products) {
+      if (!supplierName || !supplierType || !category || !contactDetails || !products) {
          return res.status(400).json({
             success: false,
             message: 'Please provide all required fields',
@@ -188,7 +187,7 @@ export const createSupplier = async (req: Request, res: Response) => {
          address: address,
          supplierType,
          category,
-         contactDetails: primaryContact,
+         contactDetails: contactDetails,
          documents: documents,
          products: products,
          creditDays,
@@ -228,98 +227,105 @@ export const createSupplier = async (req: Request, res: Response) => {
    }
 };
 
-export const updateSupplierStatus = async (req: Request, res: Response) => {
+export const updateSupplierStatus = async (req: any, res: Response) => {
    try {
-      const { id } = req.params;
-      const { status, approvedBy, rejectedBy, rejectReason } = req.body;
-      
+      const { id: supplierId } = req.params;
+      const { status, comment } = req.body;
+      const { id: userId } = req.auth.credentials;
+
       // Validate required fields
-      if (!id || !status) {
+      if (!supplierId || !status) {
          return res.status(400).json({
             success: false,
             message: 'id (params) and status are required',
          });
       }
+
+      // Validate status
+      const validStatuses = Object.values(supplierStatus);
+      const statusToUpdate = Array.isArray(status) ? status[0] : status;
       
+      if (!validStatuses.includes(statusToUpdate)) {
+         return res.status(400).json({
+            success: false,
+            message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+         });
+      }
+
       // Find the supplier
-      const supplier = await Supplier.findById(id);
+      const supplier = await Supplier.findById(supplierId);
       if (!supplier) {
          return res.status(404).json({
             success: false,
             message: 'Supplier not found',
          });
       }
-      
+
       // Handle different status updates
-      if (status === supplierStatus.approved) {
+      if (statusToUpdate === supplierStatus.approved) {
          // Approval logic
-         if (!approvedBy) {
+         if (!userId) {
             return res.status(400).json({
                success: false,
                message: 'approvedBy is required for approval',
             });
          }
-         
+
          if (supplier.status === supplierStatus.approved) {
             return res.status(400).json({
                success: false,
                message: 'Supplier is already approved',
             });
          }
-         
+
          const { location } = supplier.address;
          const newSupplierId = await generateSupplierId(location);
-         
+
          supplier.supplierId = newSupplierId;
          supplier.status = supplierStatus.approved;
-         supplier.approvedDate = new Date();
-         supplier.approvedBy = new Types.ObjectId(approvedBy);
+         supplier.approvedData = {
+            date: new Date(),
+            reason: comment,
+            approvedBy: new Types.ObjectId(userId)
+         };
          supplier.updatedDate = new Date();
-         
-      } else if (status === supplierStatus.rejected) {
+
+      } else if (statusToUpdate === supplierStatus.rejected) {
          // Rejection logic
-         if (!rejectedBy) {
+         if (!userId) {
             return res.status(400).json({
                success: false,
                message: 'rejectedBy is required for rejection',
             });
          }
-         
-         if (!rejectReason) {
-            return res.status(400).json({
-               success: false,
-               message: 'Reason for rejection is required',
-            });
-         }
-         
+
          // Add rejection to history
          supplier.rejectHistory.push({
             date: new Date(),
-            reason: rejectReason,
-            rejectedBy: new Types.ObjectId(rejectedBy)
+            reason: comment,
+            rejectedBy: new Types.ObjectId(userId)
          });
-         
+
          supplier.status = supplierStatus.rejected;
          supplier.updatedDate = new Date();
-         
-      } else {
-         return res.status(400).json({
-            success: false,
-            message: 'Invalid status. Must be either "Approved" or "Rejected"',
-         });
+
+      } else if (statusToUpdate === supplierStatus.pending) {
+         // Handle pending status
+         supplier.status = supplierStatus.pending;
+         supplier.updatedDate = new Date();
       }
-      
+
       // Save the updated supplier
       const updatedSupplier = await supplier.save();
-      
+
       // Populate both createdBy, approvedBy, and rejection history fields before returning
       const populatedSupplier = await Supplier.findById(updatedSupplier._id)
          .populate({
             path: 'createdBy',
-            select: 'departmentName', // Since createdBy now references Department directly
+            select: 'departmentName',
          })
          .populate({
-            path: 'approvedBy',
+            path: 'approvedData.approvedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',
@@ -336,14 +342,16 @@ export const updateSupplierStatus = async (req: Request, res: Response) => {
          })
          .populate({
             path: 'category',
-            select: 'firstName lastName', // Assuming category references an Employee
+            select: 'firstName lastName',
          });
-      
+
       // Determine success message based on status
-      const successMessage = status === supplierStatus.approved
+      const successMessage = statusToUpdate === supplierStatus.approved
          ? 'Supplier approved successfully'
-         : 'Supplier rejected successfully';
-      
+         : statusToUpdate === supplierStatus.rejected
+         ? 'Supplier rejected successfully'
+         : 'Supplier status updated successfully';
+
       return res.status(200).json({
          success: true,
          message: successMessage,
@@ -386,7 +394,7 @@ export const deleteSupplier = async (req: Request, res: Response) => {
             },
          })
          .populate({
-            path: 'approvedBy',
+            path: 'approvedData.approvedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',
@@ -421,120 +429,121 @@ export const deleteSupplier = async (req: Request, res: Response) => {
 
 export const updateSupplier = async (req: Request, res: Response) => {
    try {
-     const { id } = req.params;
-     const {
-       supplierName,
-       address,
-       supplierType,
-       category,
-       contactDetails,
-       products,
-       creditDays,
-       creditValue,
-       updatedBy,
-     } = req.body;
- 
-     // Validate required fields
-     if (!id || !supplierName || !supplierType || !category || !contactDetails || !products) {
-       return res.status(400).json({
-         success: false,
-         message: 'Please provide all required fields',
-       });
-     }
- 
-     // Find the existing supplier to get current documents and status
-     const existingSupplier = await Supplier.findById(id);
-     if (!existingSupplier) {
-       return res.status(404).json({
-         success: false,
-         message: 'Supplier not found',
-       });
-     }
- 
-     // Determine the new status: if existing is 'rejected', change to 'pending'
-     let newStatus = existingSupplier.status;
-     if (existingSupplier.status === supplierStatus.rejected) {
-       newStatus = supplierStatus.pending;
-     }
- 
-     const files = (req as any).files?.documents || [];
- 
-     let documents: { fileName: string; originalname: string }[] = [];
-     if (files && files.length > 0) {
-       // Delete old documents from AWS if new documents are being uploaded
-       if (existingSupplier.documents && existingSupplier.documents.length > 0) {
-         for (const doc of existingSupplier.documents) {
-           await deleteFileFromAws(doc.fileName);
-           console.log(`Deleted old document: ${doc.fileName}`);
-         }
-       }
- 
-       // Upload new documents
-       documents = await Promise.all(
-         files.map(async (file: any) => {
-           await uploadFileToAws(file.filename, file.path);
-           return {
-             fileName: file.filename,
-             originalname: file.originalname,
-           };
-         })
-       );
-     } else {
-       // Keep existing documents if no new ones are provided
-       documents = existingSupplier.documents || [];
-       console.log("No new files found, keeping existing documents");
-     }
- 
-     // Find the supplier by ID and update it
-     const updatedSupplier = await Supplier.findByIdAndUpdate(
-       id,
-       {
+      const { id } = req.params;
+      const {
          supplierName,
-         address: JSON.parse(address),
+         address,
          supplierType,
          category,
-         contactDetails: JSON.parse(contactDetails),
-         documents, // Always update documents (either new ones or existing ones)
-         products: JSON.parse(products),
+         contactDetails,
+         products,
          creditDays,
          creditValue,
-         updatedBy: new Types.ObjectId(updatedBy),
-         updatedDate: new Date(),
-         status: newStatus, // Update status accordingly
-       },
-       { new: true }
-     )
-       .populate({
-         path: 'createdBy',
-         select: 'firstName lastName designation department',
-         populate: {
-           path: 'department',
-           select: 'departmentName',
+         updatedBy,
+      } = JSON.parse(req.body.supplier);
+
+      // Validate required fields
+      console.log(req.body);
+      if (!id || !supplierName || !supplierType || !category || !contactDetails || !products) {
+         return res.status(400).json({
+            success: false,
+            message: 'Please provide all required fields',
+         });
+      }
+
+      // Find the existing supplier to get current documents and status
+      const existingSupplier = await Supplier.findById(id);
+      if (!existingSupplier) {
+         return res.status(404).json({
+            success: false,
+            message: 'Supplier not found',
+         });
+      }
+
+      // Determine the new status: if existing is 'rejected', change to 'pending'
+      let newStatus = existingSupplier.status;
+      if (existingSupplier.status === supplierStatus.rejected) {
+         newStatus = supplierStatus.pending;
+      }
+
+      const files = (req as any).files?.documents || [];
+
+      let documents: { fileName: string; originalname: string }[] = [];
+      if (files && files.length > 0) {
+         // Delete old documents from AWS if new documents are being uploaded
+         if (existingSupplier.documents && existingSupplier.documents.length > 0) {
+            for (const doc of existingSupplier.documents) {
+               await deleteFileFromAws(doc.fileName);
+               console.log(`Deleted old document: ${doc.fileName}`);
+            }
+         }
+
+         // Upload new documents
+         documents = await Promise.all(
+            files.map(async (file: any) => {
+               await uploadFileToAws(file.filename, file.path);
+               return {
+                  fileName: file.filename,
+                  originalname: file.originalname,
+               };
+            })
+         );
+      } else {
+         // Keep existing documents if no new ones are provided
+         documents = existingSupplier.documents || [];
+         console.log("No new files found, keeping existing documents");
+      }
+
+      // Find the supplier by ID and update it
+      const updatedSupplier = await Supplier.findByIdAndUpdate(
+         id,
+         {
+            supplierName,
+            address: address,
+            supplierType,
+            category,
+            contactDetails: contactDetails,
+            documents, // Always update documents (either new ones or existing ones)
+            products: products,
+            creditDays,
+            creditValue,
+            updatedBy: new Types.ObjectId(updatedBy),
+            updatedDate: new Date(),
+            status: newStatus, // Update status accordingly
          },
-       })
-       .populate({
-         path: 'approvedBy',
-         select: 'firstName lastName designation department',
-         populate: {
-           path: 'department',
-           select: 'departmentName',
-         },
-       });
- 
-     return res.status(200).json({
-       success: true,
-       message: 'Supplier updated successfully',
-       data: updatedSupplier,
-     });
+         { new: true }
+      )
+         .populate({
+            path: 'createdBy',
+            select: 'firstName lastName designation department',
+            populate: {
+               path: 'department',
+               select: 'departmentName',
+            },
+         })
+         .populate({
+            path: 'approvedData.approvedBy',
+            select: 'firstName lastName designation department',
+            populate: {
+               path: 'department',
+               select: 'departmentName',
+            },
+         });
+
+      return res.status(200).json({
+         success: true,
+         message: 'Supplier updated successfully',
+         data: updatedSupplier,
+      });
    } catch (error) {
-     console.error('Error updating supplier:', error);
-     return res.status(500).json({
-       success: false,
-       message: 'Error updating supplier',
-       error: error instanceof Error ? error.message : 'Unknown error',
-     });
+      console.error('Error updating supplier:', error);
+      return res.status(500).json({
+         success: false,
+         message: 'Error updating supplier',
+         error: error instanceof Error ? error.message : 'Unknown error',
+      });
    }
- };
+};
 
 
 
@@ -560,13 +569,17 @@ export const getSupplierById = async (req: Request, res: Response) => {
             },
          })
          .populate({
-            path: 'approvedBy',
+            path: 'approvedData.approvedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',
                select: 'departmentName',
             },
          })
+         .populate({
+            path: 'category',
+            select: 'departmentName _id',
+         });
 
       if (!supplier) {
          return res.status(404).json({

@@ -19,7 +19,7 @@ export class SupplierService {
     getSuppliers(params: {
         page?: number;
         row?: number;
-        status?: string;
+        status?: Array<string> | string;
         category?: string;
         supplierType?: string;
         fromDate?: string;
@@ -33,12 +33,10 @@ export class SupplierService {
         return this.http.get<SupplierResponse>(`${this.api}/supplier/${id}`);
     }
 
-    updateSupplierStatus(id: string, status: string, approvedBy?: string, rejectedBy?: string, rejectReason?: string): Observable<SupplierResponse> {
+    updateSupplierStatus(id: string, status: string, comment?: string): Observable<SupplierResponse> {
         return this.http.patch<SupplierResponse>(`${this.api}/supplier/status/${id}`, {
             status,
-            approvedBy,
-            rejectedBy,
-            rejectReason
+            comment
         });
     }
 
@@ -54,6 +52,20 @@ export class SupplierService {
         });
 
         return this.http.post(`${this.api}/supplier/create`, formData);
+    }
+
+    updateSupplierWithFiles(id: string, supplierData: any, files: File[]): Observable<any> {
+        const formData = new FormData();
+        
+        // Append supplier data as JSON string
+        formData.append('supplier', JSON.stringify(supplierData));
+        
+        // Append each file
+        files.forEach((file, index) => {
+            formData.append('documents', file);
+        });
+
+        return this.http.patch(`${this.api}/supplier/update/${id}`, formData);
     }
 
 }

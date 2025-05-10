@@ -132,7 +132,9 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/suppliers/suppliers.component').then((c) => c.SuppliersComponent),
     children: [
       { path: 'pendings', component: PendingSuppliersComponent },
+      { path: 'approved', component: PendingSuppliersComponent },
       { path: 'create', component: CreateSupplierComponent },
+      { path: 'edit/:id', component: CreateSupplierComponent },
       { path: ':id', component: SupplierViewComponent }
     ]
   },

@@ -10,7 +10,7 @@ import { TableComponent } from 'src/app/shared/components/table/table.component'
 import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { ToastrService } from 'ngx-toastr';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { Supplier } from 'src/app/shared/interfaces/suppliers.interface';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 
@@ -35,6 +35,7 @@ export class PendingSuppliersComponent implements OnInit {
   private supplierService = inject(SupplierService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private paginationService = inject(PaginationService);
 
   tableData = signal<Supplier[]>([]);
@@ -44,6 +45,7 @@ export class PendingSuppliersComponent implements OnInit {
   isLoading = signal<boolean>(true);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
+  isPendingView = signal<boolean>(true);
 
   locationOptions: string[] = ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman', 'RAK'];
   categoryOptions: string[] = ['ICT', 'ELV', 'AV', 'CCTV', 'Oil & Gas', 'Others'];
@@ -51,11 +53,18 @@ export class PendingSuppliersComponent implements OnInit {
   
   selectedLocation = signal<string>('');
   selectedCategory = signal<string>('');
-  selectedStatus = signal<string>('Pending');
+  selectedStatus = signal<Array<string>>(['Pending', 'Rejected']);
 
   ngOnInit(): void {
     this.setupTableColumns();
+    this.checkCurrentRoute();
     this.loadData();
+  }
+
+  checkCurrentRoute(): void {
+    const currentPath = this.router.url;
+    this.isPendingView.set(currentPath.includes('/pendings'));
+    this.selectedStatus.set(this.isPendingView() ? ['Pending', 'Rejected'] : ['Approved']);
   }
 
   setupTableColumns(): void {
@@ -225,12 +234,11 @@ export class PendingSuppliersComponent implements OnInit {
   }
 
   viewSupplierDetails(supplier: Supplier): void {
-    console.log(supplier);
     this.router.navigate(['/suppliers', supplier._id]);
   }
 
   editSupplier(supplier: Supplier): void {
-    this.router.navigate(['/suppliers', supplier.id, 'edit']);
+    this.router.navigate(['/suppliers', 'edit', supplier._id]);
   }
 
   viewDocuments(supplier: Supplier): void {
