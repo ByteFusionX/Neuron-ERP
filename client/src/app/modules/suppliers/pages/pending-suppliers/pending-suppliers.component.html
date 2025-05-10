@@ -7,7 +7,7 @@
 [totalItems]="totalItems()"
 (rowClick)="onRowClick($event)"
 (actionClick)="onActionClick($event)"
-[title]="'Pending Suppliers'"
+[title]="isPendingView() ? 'Pending Suppliers' : 'Approved Suppliers'"
 >
 <ng-template #sideColumn>
     <!-- <div class="flex flex-col md:flex-row gap-4 mb-4">
@@ -43,6 +43,8 @@
     </div> -->
     <data-search [placeholder]="`Search by query`" (searchSubmitted)="onSearch($event)"></data-search>
 
-    <app-btn theme="primary" routerLink="/suppliers/create">+ Create Supplier</app-btn>
+    @if(isPendingView()) {
+        <app-btn  theme="primary" routerLink="/suppliers/create">+ Create Supplier</app-btn>
+    }
 </ng-template>
 </data-table>

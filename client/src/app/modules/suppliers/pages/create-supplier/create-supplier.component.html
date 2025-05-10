@@ -1,6 +1,6 @@
 <div class="bg-white m-6">
   <div class="border-b p-3 px-9 flex justify-between pt-5">
-    <h3 class="text-lg font-medium text-gray-800">Create Supplier</h3>
+    <h3 class="text-lg font-medium text-gray-800">{{isEditMode() ? 'Edit' : 'Create'}} Supplier</h3>
   </div>
   <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
     <div class="w-full">
@@ -21,8 +21,43 @@
             <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
               Supplier Address
             </label>
-            <app-address-form formControlName="address" (addressChange)="onAddressFormChange($event)">
-            </app-address-form>
+            <div formGroupName="address" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <app-form-field
+                label="Street No"
+                [control]="f['address'].get('streetNo')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter street number">
+              </app-form-field>
+
+              <app-form-field
+                label="Zone No"
+                [control]="f['address'].get('zoneNo')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter zone number">
+              </app-form-field>
+
+              <app-form-field
+                label="Building No"
+                [control]="f['address'].get('buildingNo')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter building number">
+              </app-form-field>
+
+              <app-form-field
+                label="PO Box"
+                [control]="f['address'].get('poBox')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter PO Box (Optional)">
+              </app-form-field>
+
+              <app-form-field
+                label="Location"
+                [control]="f['address'].get('location')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter location"
+                class="md:col-span-2">
+              </app-form-field>
+            </div>
           </div>
 
           <!-- Supplier Type -->
@@ -40,9 +75,28 @@
             <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
               Primary Contact
             </label>
-            <app-contact-details-form formGroupName="primaryContact" (contactChange)="onPrimaryContactChange($event)"
-              [isSubmitted]="isSubmitted()">
-            </app-contact-details-form>
+            <div formGroupName="contactDetails" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <app-form-field
+                label="Contact Name"
+                [control]="f['contactDetails'].get('name')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter contact name">
+              </app-form-field>
+
+              <app-form-field
+                label="Email"
+                [control]="f['contactDetails'].get('email')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter email address">
+              </app-form-field>
+
+              <app-form-field
+                label="Phone Number"
+                [control]="f['contactDetails'].get('phoneNumber')"
+                [isSubmitted]="isSubmitted()"
+                placeholder="Enter phone number">
+              </app-form-field>
+            </div>
           </div>
 
           <!-- Products Array -->
@@ -134,7 +188,7 @@
           </app-btn>
 
           <app-btn type="submit" [loading]="isSaving()" [disabled]="isSaving()">
-            Create
+            {{isEditMode() ? 'Update' : 'Create'}}
           </app-btn>
         </div>
       </form>
