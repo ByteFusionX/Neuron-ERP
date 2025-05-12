@@ -12,7 +12,7 @@ export interface filterJob {
 export interface getJob {
     _id: string;
     jobId:string;
-    quoteId:string;
+    quoteId:any;
     quotation:Quotatation;
     status:string;
     createdDate:string;

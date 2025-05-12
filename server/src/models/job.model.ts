@@ -18,6 +18,7 @@ export enum jobStatus {
     Cancelled = 'Cancelled',
     OnHold = 'On Hold',
     Inovoiced = 'Inovoiced',
+    purchaseRequested = 'Purchase Requested'
 }
 
 const jobSchema = new Schema<Job>({

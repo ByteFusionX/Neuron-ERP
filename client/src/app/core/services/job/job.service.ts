@@ -38,4 +38,8 @@ export class JobService {
   deleteJob(data: { dataId: string, employeeId: string }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/job/delete`, data);
   }
+
+  getJobids(): Observable<getJob[]> {
+    return this.http.get<getJob[]>(`${this.apiUrl}/job/noFilter`)
+  }
 }

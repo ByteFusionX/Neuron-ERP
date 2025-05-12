@@ -168,7 +168,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
     },
     {
       id: 'purchase',
-      label: 'Purchase',
+      label: 'Purchase Requisition',
       icon: 'heroShoppingCart',
       hasDropdown: true,
       // privilegeKey: 'purchase',
@@ -176,13 +176,13 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       children: [
         {
           id: 'pendingPurchase',
-          label: 'Pending',
+          label: 'Pending PR',
           route: '/purchase/pendings',
           notificationKey: 'purchaseCount'
         },
         {
           id: 'approvedPurchase',
-          label: 'Approved',
+          label: 'Approved PR',
           route: '/purchase/approves',
           notificationKey: 'purchaseCount'
         },
