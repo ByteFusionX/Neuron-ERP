@@ -1,13 +1,14 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { Supplier } from 'src/app/shared/interfaces/suppliers.interface';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { Supplier, SupplierStatus } from 'src/app/shared/interfaces/suppliers.interface';
+import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { FileService } from 'src/app/core/services/file.service';
 
 @Component({
   selector: 'app-supplier-view',
@@ -15,20 +16,26 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
   imports: [CommonModule, IconsModule, ButtonComponent],
   templateUrl: './supplier-view.component.html',
 })
-export class SupplierViewComponent {
+export class SupplierViewComponent implements OnInit {
   private supplierService = inject(SupplierService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
+  private fileService = inject(FileService);
 
   supplier: Supplier | null = null;
   isLoading = true;
   isApproving = false;
   isRejecting = false;
+  downloadProgress: number = 0;
+  isDownloading: boolean = false;
 
   constructor() {
     this.loadSupplier();
+  }
+
+  ngOnInit(): void {
   }
 
   loadSupplier() {
@@ -56,67 +63,104 @@ export class SupplierViewComponent {
   onApprove() {
     if (!this.supplier) return;
 
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+    const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
       data: {
         title: 'Approve Supplier',
-        description: 'Are you sure you want to approve this supplier?',
+        description: 'Are you sure you want to approve this supplier? Please provide a comment explaining your decision.',
         icon: 'heroCheckCircle',
-        IconColor: 'green'
+        iconColor: 'green',
+        confirmButtonText: 'Approve',
+        requireComment: false,
+        commentLabel: 'Approval Comment',
+        commentPlaceholder: 'Enter your approval comment here...'
       }
     });
 
-    // dialogRef.afterClosed().subscribe((confirmed: boolean) => {
-    //   if (confirmed) {
-    //     this.isApproving = true;
-    //     this.supplierService.updateSupplierStatus(this.supplier.id).subscribe({
-    //       next: () => {
-    //         this.notificationService.success('Supplier approved successfully');
-    //         this.router.navigate(['/suppliers']);
-    //       },
-    //       error: (error) => {
-    //         this.notificationService.error(error.error.message || 'Failed to approve supplier');
-    //         this.isApproving = false;
-    //       }
-    //     });
-    //   }
-    // });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.isConfirmed) {
+        this.isApproving = true;
+        if (this.supplier?._id) {
+          this.supplierService.updateSupplierStatus(
+            this.supplier?._id,
+            SupplierStatus.APPROVED,
+            result.comment
+          ).subscribe({
+            next: () => {
+              this.notificationService.success('Supplier approved successfully');
+              this.router.navigate(['/suppliers/pendings']);
+            },
+            error: (error) => {
+              this.notificationService.error(error.error.message || 'Failed to approve supplier');
+              this.isApproving = false;
+            }
+          });
+        }
+      }
+    });
   }
 
   onReject() {
-    if (!this.supplier) return;
+    if (!this.supplier?._id) return;
 
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+    const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
       data: {
         title: 'Reject Supplier',
-        description: 'Are you sure you want to reject this supplier?',
+        description: 'Are you sure you want to reject this supplier? Please provide a reason for rejection.',
         icon: 'heroXCircle',
-        IconColor: 'red'
+        iconColor: 'red',
+        confirmButtonText: 'Reject',
+        requireComment: false,
+        commentLabel: 'Rejection Reason',
+        commentPlaceholder: 'Enter your rejection reason here...'
       }
     });
 
-    // dialogRef.afterClosed().subscribe((confirmed: boolean) => {
-    //   if (confirmed) {
-    //     this.isRejecting = true;
-    //     this.supplierService.rejectSupplier(this.supplier.id).subscribe({
-    //       next: () => {
-    //         this.notificationService.success('Supplier rejected successfully');
-    //         this.router.navigate(['/suppliers']);
-    //       },
-    //       error: (error) => {
-    //         this.notificationService.error(error.error.message || 'Failed to reject supplier');
-    //         this.isRejecting = false;
-    //       }
-    //     });
-    //   }
-    // });
+    dialogRef.afterClosed().subscribe((result) => {
+      console.log(result);
+      if (result?.isConfirmed && this.supplier?._id) {
+        this.isRejecting = true;
+        this.supplierService.updateSupplierStatus(
+          this.supplier?._id,
+          SupplierStatus.REJECTED,
+          result.comment
+        ).subscribe({
+          next: () => {
+            this.notificationService.success('Supplier rejected successfully');
+          },
+          error: (error: any) => {
+            this.notificationService.error(error.error?.message || 'Failed to reject supplier');
+            this.isRejecting = false;
+          }
+        });
+      }
+    });
   }
 
   onEdit() {
     if (!this.supplier) return;
-    this.router.navigate(['/suppliers', this.supplier.id, 'edit']);
+    this.router.navigate(['/suppliers', 'edit', this.supplier._id]);
   }
 
-  onBack() {
-    this.router.navigate(['/suppliers']);
+  onDownloadFile(file: any) {
+    if (this.isDownloading) return;
+    
+    this.isDownloading = true;
+    this.downloadProgress = 0;
+
+    this.fileService.downloadFileWithProgress(
+      file.fileName,
+      file.originalname,
+      (progress) => {
+        this.downloadProgress = progress;
+      },
+      (error) => {
+        this.isDownloading = false;
+        if (error.status === 404) {
+          this.notificationService.warning('Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.');
+        } else {
+          this.notificationService.error('An error occurred while downloading the file. Please try again.');
+        }
+      }
+    );
   }
 } 

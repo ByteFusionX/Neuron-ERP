@@ -68,7 +68,9 @@ import {
   heroTruck,
   heroShoppingCart,
   heroFolder,
-  heroShoppingBag
+  heroShoppingBag,
+  heroArrowLeft,
+  heroArrowDownTray
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -145,6 +147,8 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroShoppingCart,
       heroFolder,
       heroShoppingBag,
+      heroArrowLeft,
+      heroArrowDownTray
     }),
   ],
   exports: [NgIconsModule]

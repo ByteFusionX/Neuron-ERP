@@ -38,6 +38,8 @@
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "jwt-decode": "^4.0.0",
+    "lodash": "^4.17.21",
+    "lodash.clonedeep": "^4.5.0",
     "moment": "^2.18.1",
     "ng-apexcharts": "^1.8.0",
     "ng-process-env": "^16.0.6",

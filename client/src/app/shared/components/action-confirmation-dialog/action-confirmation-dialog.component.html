@@ -1,0 +1,46 @@
+<div class="bg-opacity-50 flex items-center justify-center w-full">
+    <div class="bg-white rounded-lg p-6">
+        <div class="mb-4">
+            <h2 class="text-lg font-bold" [ngClass]="{'text-red-600': data.iconColor === 'red', 'text-green-600': data.iconColor === 'green'}">
+                {{ data.title }}
+            </h2>
+            <p class="text-sm text-gray-600">{{ data.description }}</p>
+        </div>
+        <form [formGroup]="form" (ngSubmit)="onConfirm()">
+            <div class="mb-4">
+                <label for="comment" class="block text-sm font-medium text-gray-700">{{ data.commentLabel }}</label>
+                <textarea 
+                    id="comment"
+                    formControlName="comment"
+                    rows="4"
+                    class="mt-1 block p-2 border w-full rounded-md border-gray-300 shadow-sm outline-none sm:text-sm"
+                    [placeholder]="data.commentPlaceholder || 'Enter your comment...'">
+                </textarea>
+                <div 
+                    *ngIf="form.get('comment')?.invalid && (form.get('comment')?.dirty || form.get('comment')?.touched)" 
+                    class="text-red-600 text-sm mt-1">
+                    Comment is required.
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button 
+                    type="button" 
+                    class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md" 
+                    (click)="onCancel()">
+                    {{ data.cancelButtonText }}
+                </button>
+                <button 
+                    type="submit" 
+                    class="px-4 py-2 text-white rounded-md"
+                    [ngClass]="{
+                        'bg-red-600': data.iconColor === 'red',
+                        'bg-green-600': data.iconColor === 'green',
+                        'bg-violet-600': !data.iconColor
+                    }"
+                    [disabled]="form.invalid">
+                    {{ data.confirmButtonText }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div> 

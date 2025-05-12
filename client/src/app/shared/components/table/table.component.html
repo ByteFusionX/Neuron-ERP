@@ -85,12 +85,12 @@
                 <!-- Status Badge -->
                 <ng-container *ngIf="column.type === 'status'">
                   <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" [ngClass]="{
-                            'bg-green-100 text-green-800': getCellValue(item, column) === 'Won' || getCellValue(item, column) === 'approved',
-                            'bg-red-100 text-red-800': getCellValue(item, column) === 'Lost' || getCellValue(item, column) === 'rejected',
-                            'bg-yellow-100 text-yellow-800': getCellValue(item, column) === 'pending',
-                            'bg-blue-100 text-blue-800': !['Won', 'Lost', 'approved', 'rejected', 'pending'].includes(getCellValue(item, column))
+                            'bg-green-100 text-green-800': getCellValue(item, column) === 'Won' || getCellValue(item, column) === 'Approved',
+                            'bg-red-100 text-red-800': getCellValue(item, column) === 'Lost' || getCellValue(item, column) === 'Rejected',
+                            'bg-yellow-100 text-yellow-800': getCellValue(item, column) === 'Pending',
+                            'bg-blue-100 text-blue-800': !['Won', 'Lost', 'Approved', 'Rejected', 'Pending'].includes(getCellValue(item, column))
                           }">
-                    {{ getCellValue(item, column) }}
+                    {{ getCellValue(item, column) | titlecase }}
                   </span>
                 </ng-container>
 

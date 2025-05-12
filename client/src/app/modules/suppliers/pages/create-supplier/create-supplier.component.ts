@@ -1,12 +1,10 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { AddressFormComponent } from 'src/app/shared/components/forms/address-form/address-form.component';
-import { ContactDetailsFormComponent } from 'src/app/shared/components/forms/contact-details-form/contact-details-form.component';
 import { RadioGroupComponent } from 'src/app/shared/components/forms/radio-group/radio-group.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
@@ -23,8 +21,6 @@ import { UploadFileComponent } from 'src/app/shared/components/upload-file/uploa
     CommonModule, 
     ReactiveFormsModule, 
     RouterLink,
-    AddressFormComponent,
-    ContactDetailsFormComponent,
     FormFieldComponent,
     RadioGroupComponent,
     ButtonComponent,
@@ -37,6 +33,7 @@ import { UploadFileComponent } from 'src/app/shared/components/upload-file/uploa
 export class CreateSupplierComponent implements OnInit {
   private fb = inject(FormBuilder);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private supplierService = inject(SupplierService);
   private departmentService = inject(ProfileService);
   private notificationService = inject(ToastrService);
@@ -47,6 +44,7 @@ export class CreateSupplierComponent implements OnInit {
   isSaving = signal<boolean>(false);
   isSubmitted = signal<boolean>(false);
   supplierExists = signal<boolean>(false);
+  isEditMode = signal<boolean>(false);
   
   // Form Data
   supplierTypes = [
@@ -69,7 +67,7 @@ export class CreateSupplierComponent implements OnInit {
     }),
     supplierType: ['', [Validators.required]],
     category: ['', [Validators.required]],
-    primaryContact: this.fb.group({
+    contactDetails: this.fb.group({
       name: ['', [Validators.required]],
       email: ['', [Validators.required, Validators.email]],
       phoneNumber: ['', [Validators.required]]
@@ -81,6 +79,7 @@ export class CreateSupplierComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadDepartments();
+    this.checkEditMode();
   }
 
   private loadDepartments(): void {
@@ -93,6 +92,90 @@ export class CreateSupplierComponent implements OnInit {
         console.error('Error loading departments:', error);
       }
     });
+  }
+
+  private checkEditMode(): void {
+    const supplierId = this.route.snapshot.paramMap.get('id');
+    if (supplierId) {
+      this.isEditMode.set(true);
+      this.loadSupplierData(supplierId);
+    }
+  }
+
+  private loadSupplierData(supplierId: string): void {
+    this.supplierService.getSupplierById(supplierId).subscribe({
+      next: (response) => {
+        const supplier = response.data;
+        console.log(supplier);
+        this.populateForm(supplier);
+      },
+      error: (error) => {
+        this.notificationService.error('Failed to load supplier data');
+        console.error('Error loading supplier:', error);
+        this.router.navigate(['/suppliers/pendings']);
+      }
+    });
+  }
+
+  private populateForm(supplier: any): void {
+    // First clear any existing products
+    const productsArray = this.supplierForm.get('products') as FormArray;
+    productsArray.clear();
+
+    // Patch the main form values
+    this.supplierForm.patchValue({
+      supplierName: supplier.supplierName || '',
+      supplierType: supplier.supplierType || '',
+      category: supplier.category || '',
+      creditDays: supplier.creditDays || 30,
+      creditValue: supplier.creditValue || 0
+    });
+
+    // Patch address form group
+    if (supplier.address) {
+      const addressGroup = this.supplierForm.get('address') as FormGroup;
+      addressGroup.patchValue({
+        streetNo: supplier.address.streetNo || '',
+        zoneNo: supplier.address.zoneNo || '',
+        buildingNo: supplier.address.buildingNo || '',
+        poBox: supplier.address.poBox || '',
+        location: supplier.address.location || '',
+        city: supplier.address.city || ''
+      });
+    }
+
+    // Patch primary contact form group
+    console.log(supplier.contactDetails);
+    if (supplier.contactDetails) {
+      console.log(supplier.contactDetails);
+      const contactGroup = this.supplierForm.get('contactDetails') as FormGroup;
+      contactGroup.patchValue({
+        name: supplier.contactDetails.name || '',
+        email: supplier.contactDetails.email || '',
+        phoneNumber: supplier.contactDetails.phoneNumber || ''
+      });
+      console.log(contactGroup);
+    }
+
+    // Add products to the form array
+    if (supplier.products && Array.isArray(supplier.products)) {
+      supplier.products.forEach((product: any) => {
+        const productGroup = this.fb.group({
+          productName: [product.productName || '', [Validators.required]],
+          paymentTerm: [product.paymentTerm || '', [Validators.required]],
+          contactName: [product.contactName || ''],
+          contactEmail: [product.contactEmail || '', [Validators.email]],
+          contactNo: [product.contactNo || '']
+        });
+        productsArray.push(productGroup);
+      });
+    }
+
+    this.selectedFiles.push(...supplier.documents);
+
+    // Mark the form as pristine and untouched after population
+    this.supplierForm.markAsPristine();
+    this.supplierForm.markAsUntouched();
   }
 
   createProductFormGroup(): FormGroup {
@@ -134,8 +217,8 @@ export class CreateSupplierComponent implements OnInit {
     this.supplierForm.patchValue({ address: addressData });
   }
 
-  onPrimaryContactChange(contactData: any): void {
-    this.supplierForm.patchValue({ primaryContact: contactData });
+  oncontactDetailsChange(contactData: any): void {
+    this.supplierForm.patchValue({ contactDetails: contactData });
   }
 
   onFileUpload(event: File[]) {
@@ -150,28 +233,48 @@ export class CreateSupplierComponent implements OnInit {
       return;
     }
 
-    if (this.selectedFiles.length === 0) {
+    if (!this.isEditMode() && this.selectedFiles.length === 0) {
       this.notificationService.error('Please attach at least one document');
       return;
     }
     
     this.isSaving.set(true);
     
-    this.supplierService.createSupplierWithFiles(this.supplierForm.value, this.selectedFiles).subscribe({
-      next: () => {
-        this.notificationService.success('Supplier created successfully');
-        this.router.navigate(['/suppliers/pendings']);
-      },
-      error: (error) => {
-        this.isSaving.set(false);
-        if (error?.error?.message === 'Supplier already exists') {
-          this.supplierExists.set(true);
-        } else {
-          this.notificationService.error('Failed to create supplier');
-        }
-        console.error('Error creating supplier:', error);
+    if (this.isEditMode()) {
+      const supplierId = this.route.snapshot.paramMap.get('id');
+      if (!supplierId) {
+        this.notificationService.error('Invalid supplier ID');
+        return;
       }
-    });
+
+      this.supplierService.updateSupplierWithFiles(supplierId, this.supplierForm.value, this.selectedFiles).subscribe({
+        next: () => {
+          this.notificationService.success('Supplier updated successfully');
+          this.router.navigate(['/suppliers/pendings']);
+        },
+        error: (error: Error) => {
+          this.isSaving.set(false);
+          this.notificationService.error('Failed to update supplier');
+          console.error('Error updating supplier:', error);
+        }
+      });
+    } else {
+      this.supplierService.createSupplierWithFiles(this.supplierForm.value, this.selectedFiles).subscribe({
+        next: () => {
+          this.notificationService.success('Supplier created successfully');
+          this.router.navigate(['/suppliers/pendings']);
+        },
+        error: (error) => {
+          this.isSaving.set(false);
+          if (error?.error?.message === 'Supplier already exists') {
+            this.supplierExists.set(true);
+          } else {
+            this.notificationService.error('Failed to create supplier');
+          }
+          console.error('Error creating supplier:', error);
+        }
+      });
+    }
   }
 
   // Helper for template form access
