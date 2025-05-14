@@ -193,6 +193,10 @@ export class CreatePurchaseComponent implements OnInit {
     this.patchValues(job);
   }
 
+  onComparisonClicks(){
+    this.router.navigate(['/purchase/comparison-sheet'])
+  }
+
   onSubmit(): void {
 
   }
