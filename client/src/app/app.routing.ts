@@ -31,6 +31,7 @@ import { PendingPurchaseComponent } from './modules/purchase/pages/pendings-purc
 import { ApprovedPurchaseComponent } from './modules/purchase/pages/approved-purchase/approved.component';
 import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
 import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
+import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sheet/comparison-sheet.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -149,7 +150,8 @@ export const routes: Routes = [
       { path: 'pendings', component: PendingPurchaseComponent },
       { path: 'approves', component: ApprovedPurchaseComponent },
       { path: 'create', component: CreatePurchaseComponent },
-      { path: 'supplier-discount', component: SupplierDiscountComponent }
+      { path: 'supplier-discount', component: SupplierDiscountComponent },
+      { path: 'comparison-sheet', component: ComparisonSheetComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

@@ -18,6 +18,7 @@ export interface getJob {
     createdDate:string;
     clientDetails?:any;
     salesPersonDetails?:any;
+    prNo?:any;
 }
 
 export interface Files {

@@ -15,8 +15,22 @@ export class PurchaseService {
   private purchaseJob = new BehaviorSubject<getJob | null>(null);
   selectedJob$ = this.purchaseJob.asObservable();
 
+  private supplierDiscount = new BehaviorSubject<any>(null);
+  supplierDiscount$ = this.supplierDiscount.asObservable()
+
+  private purchaseFormData = new BehaviorSubject<any>(null)
+  purchaseFormData$ = this.purchaseFormData.asObservable()
+
   setPurchaseJob(jobData: getJob) {
     this.purchaseJob.next(jobData)
+  }
+
+  setSupplierDiscount(discounts: any) {
+    this.supplierDiscount.next(discounts)
+  }
+
+  setPurchaseFormData(formData: any) {
+    this.purchaseFormData.next(formData)
   }
 
   getPurchases(params: {

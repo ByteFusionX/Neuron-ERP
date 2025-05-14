@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
 import { Router } from '@angular/router';
@@ -41,8 +41,8 @@ export class CreatePurchaseComponent implements OnInit {
   prSequence: string = '0001'
 
   purchaseJobData!: any;
-  itemsList: any;
 
+  itemsList = signal<any[]>([])
   isSubmitted = signal<boolean>(false);
   jobSheets = signal<getJob[]>([]);
   selectedJobSheet!: getJob;
@@ -51,19 +51,37 @@ export class CreatePurchaseComponent implements OnInit {
   purchaseForm: FormGroup = this.fb.group({
     customer: ['', [Validators.required]],
     salesManager: ['', [Validators.required]],
-    prno: ['', [Validators.required]],
+    prNo: ['', [Validators.required]],
     jobId: ['', [Validators.required]],
     dealSheetId: ['', [Validators.required]],
-    items: this.fb.array([this.createQuoteItemGroup()])
+    items: this.fb.array([this.createQuoteItemGroup()]),
+    totalLpo: ['', [Validators.required]]
   })
 
 
   ngOnInit(): void {
+    this.purchaseForm.reset()
     this.generatedPRId = this.generateId()
     this.purchaseService.selectedJob$.subscribe((job) => {
       if (job) {
+        this.selectedJobSheet = job
         this.requestedJobId.set(job._id)
         this.patchValues(job)
+      }
+    })
+
+    this.purchaseService.purchaseFormData$.subscribe((data) => {
+      if (data) {
+        this.itemsList.set(data.items)
+        this.purchaseForm.patchValue({
+          customer: data.customer,
+          salesManager: data.salesManager,
+          prNo: data.prNo,
+          jobId: data.jobId,
+          dealSheetId: data.dealSheetId,
+          items: data.items,
+          totalLpo: data.totalLpo,
+        })
       }
     })
     this.deelSheets()
@@ -94,15 +112,48 @@ export class CreatePurchaseComponent implements OnInit {
 
   patchValues(job: getJob) {
     this.selectedJobSheet = job
-    console.log(this.selectedJobSheet)
     this.purchaseForm.patchValue({
-      customer: job?.clientDetails.companyName,
-      salesManager: job?.salesPersonDetails[0].firstName + ' ' + job?.salesPersonDetails[0].lastName,
-      prno: this.generateId(),
+      customer: job?.clientDetails?.companyName,
+      salesManager: `${job?.salesPersonDetails?.[0]?.firstName || ''} ${job?.salesPersonDetails?.[0]?.lastName || ''}`.trim(),
+      prNo: this.generateId(),
       dealSheetId: job?.quotation?.dealData?.dealId,
-      items: job.quotation?.dealData?.updatedItems,
+      jobId: job.jobId
     })
-    console.log(this.purchaseForm.value)
+
+    this.itemsList.set(job.quotation?.dealData?.updatedItems)
+    const itemsFormArray = this.purchaseForm.get('items') as FormArray;
+    itemsFormArray.clear();
+    const updatedItems = job?.quotation?.dealData?.updatedItems || [];
+    updatedItems.forEach(item => {
+      itemsFormArray.push(this.createItemGroup(item));
+    });
+  }
+
+  createItemGroup(item: any): FormGroup {
+    return this.fb.group({
+      itemName: [item?.itemName || '', Validators.required],
+      itemDetails: this.fb.array(
+        (item?.itemDetails || []).map((detail: any) => this.createItemDetailsGroup(detail))
+      )
+    });
+  }
+
+  createItemDetailsGroup(item: any): FormGroup {
+    return this.fb.group({
+      detail: [item.detail || '', Validators.required],
+      quantity: [item.quantity || 0, Validators.required],
+      unitCost: [item.unitCost || 0, Validators.required],
+      profit: [item.profit || 0, Validators.required],
+      availability: [item.availability || '', Validators.required],
+      supplierName: [item.supplierName || ''],
+      email: [item.email || ''],
+      phoneNo: [item.phoneNo || ''],
+      dealSelected: [item.dealSelected || false],
+    });
+  }
+
+  purchaseItems(items: any) {
+    return items.map((item: any) => item)
   }
 
   generateId(): string {
@@ -113,12 +164,16 @@ export class CreatePurchaseComponent implements OnInit {
   }
 
   onSupplierClicks() {
-    this.router.navigate(['/purchase/supplier-discount'])
+    if (this.selectedJobSheet) {
+      this.purchaseService.setPurchaseJob(this.purchaseForm.value)
+      this.router.navigate(['/purchase/supplier-discount'])
+    }
   }
 
   onMrRequestClicks() {
     this._dialog.open(MrRequestComponent, {
-      width: '550px'
+      width: '550px',
+      data: { job: this.selectedJobSheet || this.jobSheets() }
     })
   }
 
