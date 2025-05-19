@@ -12,6 +12,7 @@ import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-
 import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
+import { ToastrService } from 'ngx-toastr';
 
 @Component({
   selector: 'app-create-purchase',
@@ -33,7 +34,7 @@ export class CreatePurchaseComponent implements OnInit {
   private fb = inject(FormBuilder);
   private _dialog = inject(MatDialog)
   private router = inject(Router)
-
+  private toaster = inject(ToastrService)
   private purchaseService = inject(PurchaseService)
   private jobService = inject(JobService)
 
@@ -64,7 +65,6 @@ export class CreatePurchaseComponent implements OnInit {
     this.generatedPRId = this.generateId()
     this.purchaseService.selectedJob$.subscribe((job) => {
       if (job) {
-        this.selectedJobSheet = job
         this.requestedJobId.set(job._id)
         this.patchValues(job)
       }
@@ -165,16 +165,23 @@ export class CreatePurchaseComponent implements OnInit {
 
   onSupplierClicks() {
     if (this.selectedJobSheet) {
+      console.log(this.purchaseForm.value)
       this.purchaseService.setPurchaseJob(this.purchaseForm.value)
       this.router.navigate(['/purchase/supplier-discount'])
+    } else {
+      this.warningMessage()
     }
   }
 
   onMrRequestClicks() {
-    this._dialog.open(MrRequestComponent, {
-      width: '550px',
-      data: { job: this.selectedJobSheet || this.jobSheets() }
-    })
+    if (this.selectedJobSheet) {
+      this._dialog.open(MrRequestComponent, {
+        width: '550px',
+        data: { job: this.selectedJobSheet || this.jobSheets() }
+      })
+    } else {
+      this.warningMessage()
+    }
   }
 
   deelSheets() {
@@ -193,12 +200,21 @@ export class CreatePurchaseComponent implements OnInit {
     this.patchValues(job);
   }
 
-  onComparisonClicks(){
-    this.router.navigate(['/purchase/comparison-sheet'])
+  onComparisonClicks() {
+    if (this.selectedJobSheet) {
+      this.purchaseService.setPurchaseJob(this.purchaseForm.value)
+      this.router.navigate(['/purchase/comparison-sheet'])
+    } else {
+      this.warningMessage()
+    }
   }
 
   onSubmit(): void {
 
+  }
+
+  warningMessage() {
+    this.toaster.warning('Please select any job from given list.');
   }
 
   get f() {

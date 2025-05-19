@@ -1,7 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
-import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { Component, inject, OnInit, signal } from '@angular/core';
+import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
+import { getJob } from 'src/app/shared/interfaces/job.interface';
 
 @Component({
   selector: 'app-comparison-sheet',
@@ -14,14 +17,33 @@ import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/f
   templateUrl: './comparison-sheet.component.html',
   styleUrl: './comparison-sheet.component.css'
 })
-export class ComparisonSheetComponent {
+export class ComparisonSheetComponent implements OnInit {
   private fb = inject(FormBuilder);
+  private purchaseService = inject(PurchaseService)
 
   isSubmitted = signal<boolean>(false);
+  selectedJob = signal<getJob | null>(null)
 
   comparisonForm: FormGroup = this.fb.group({
-
+    prNo: ['', [Validators.required]],
+    jobId: ['', [Validators.required]],
+    product: ['', [Validators.required]],
+    inventoryList: [[], [Validators.required]],
   })
+
+  ngOnInit(): void {
+    this.purchaseService.selectedJob$.subscribe((job) => {
+      if (job) {
+        this.selectedJob.set(job)
+        this.comparisonForm.patchValue({
+          prNo: job.prNo,
+          jobId: job.jobId
+        })
+      }
+    })
+  }
+
+  onSubmit() { }
 
   get f() {
     return this.comparisonForm.controls;

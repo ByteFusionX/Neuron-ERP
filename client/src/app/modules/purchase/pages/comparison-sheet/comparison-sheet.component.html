@@ -2,7 +2,7 @@
     <div class="border-b p-3 px-9 flex justify-between items-center">
         <h3 class="text-md font-medium">Comparison Sheet</h3>
     </div>
-    <form>
+    <form [formGroup]="comparisonForm" (ngSubmit)="onSubmit()">
         <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
             <div class="flex flex-col md:flex-row md:mb-3 gap-3">
                 <app-form-field label="PR No" [control]="f['prNo']" [isSubmitted]="isSubmitted()"
