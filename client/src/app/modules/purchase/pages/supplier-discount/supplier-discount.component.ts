@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
-import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { AddSupplierDiscountComponent } from '../add-supplier-discount/add-supplier-discount.component';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
@@ -8,6 +8,7 @@ import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { NgIcon } from '@ng-icons/core';
 import { Router } from '@angular/router';
+import { ToastrService } from 'ngx-toastr';
 
 @Component({
   selector: 'app-supplier-discount',
@@ -26,6 +27,7 @@ export class SupplierDiscountComponent {
   private fb = inject(FormBuilder)
   private purchaseService = inject(PurchaseService)
   private router = inject(Router)
+  private toaster = inject(ToastrService)
 
   selectedJob!: getJob;
   isSubmitted = signal<boolean>(false);
@@ -35,7 +37,7 @@ export class SupplierDiscountComponent {
     jobId: ['', [Validators.required]],
     prNo: ['', [Validators.required]],
     suppliers: this.fb.array([this.supplierDiscounts()]),
-    totalDiscount: ['', [Validators.required]]
+    totalDiscount: [''],
   })
 
   ngOnInit(): void {
@@ -45,19 +47,18 @@ export class SupplierDiscountComponent {
         this.supplierForm.patchValue({
           jobId: job.jobId,
           prNo: job.prNo,
-          suppliers: this.suppliers(),
-          totalDiscount: ''
         })
-      }else{
+      } else {
         this.router.navigate(['/purchase/create'])
       }
     })
   }
 
-  supplierDiscounts(): FormGroup {
+  supplierDiscounts(data?: any): FormGroup {
     return this.fb.group({
-      supplier: ['', Validators.required],
-      discount: ['', Validators.required],
+      supplier: [data?.supplier || '', Validators.required],
+      discount: [data?.discount || '', Validators.required],
+      discountType: [data?.discountType || '', Validators.required]
     });
   }
 
@@ -66,20 +67,30 @@ export class SupplierDiscountComponent {
       width: '500px'
     })
 
-    dialogRef.afterClosed().subscribe((res) => {
-      if (res.supplier) {
+    dialogRef.afterClosed().subscribe((data) => {
+      if (data) {
         const suppliers = this.suppliers()
-        suppliers.push(res.supplier)
+        suppliers.push(data)
         this.suppliers.set(suppliers)
+        this.patchSupplierData()
       }
     })
   }
 
+  patchSupplierData() {
+    const supplierArray = this.fb.array(
+      this.suppliers().map(s => this.supplierDiscounts(s))
+    );
+    this.supplierForm.setControl('suppliers', supplierArray);
+  }
+
   onSubmit() {
-    if (this.supplierForm.valid) {
+    if (this.supplierForm.valid && this.suppliers().length > 0) {
       this.purchaseService.setSupplierDiscount(this.supplierForm.value)
       this.purchaseService.setPurchaseFormData(this.selectedJob)
       this.router.navigate(['/purchase/create'])
+    } else {
+      this.toaster.warning("Please add supplier and discount value")
     }
   }
 
@@ -88,8 +99,13 @@ export class SupplierDiscountComponent {
     this.router.navigate(['/purchase/create'])
   }
 
-  onDeleteSuppler(index: number) {
+  get supplierDiscount(): FormArray {
+    return this.supplierForm.get('suppliers') as FormArray;
+  }
+
+  onDeleteSupplier(index: number) {
     this.suppliers().splice(index, 1)
+    this.supplierDiscount.removeAt(index);
   }
 
   get f() {

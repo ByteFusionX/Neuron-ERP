@@ -1,24 +1,25 @@
 import { Quotatation } from "./quotation.interface";
 
 export interface filterJob {
-    search:string;
+    search: string;
     page: number;
     row: number;
     status: number;
-    selectedMonth?:number;
-    selectedYear?:number;
+    selectedMonth?: number;
+    selectedYear?: number;
 }
 
 export interface getJob {
     _id: string;
-    jobId:string;
-    quoteId:any;
-    quotation:Quotatation;
-    status:string;
-    createdDate:string;
-    clientDetails?:any;
-    salesPersonDetails?:any;
-    prNo?:any;
+    jobId: string;
+    quoteId: any;
+    quotation: Quotatation;
+    status: string;
+    createdDate: string;
+    clientDetails?: any;
+    salesPersonDetails?: any;
+    prNo?: any;
+    mr?: any
 }
 
 export interface Files {

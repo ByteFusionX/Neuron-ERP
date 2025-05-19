@@ -6,16 +6,9 @@
     </div>
     <form [formGroup]="mrForm" (ngSubmit)="onSubmit()">
         <div class="m-5">
-            <ng-container *ngIf="data.job.jobId; else elseJobSheets">
-                <app-form-field label="jobId" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
-                    placeholder="Enter Job Id" class="w-full" [readonly]="true">
-                </app-form-field>
-            </ng-container>
-            <ng-template #elseJobSheets>
-                <app-select-dropdown [options]="jobSheets()" label="Job Id" optionLabel="jobId" optionValue="_id"
-                    formControlName="jobId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()" class="w-full">
-                </app-select-dropdown>
-            </ng-template>
+            <app-form-field label="jobId" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
+                placeholder="Enter Job Id" class="w-full" [readonly]="true">
+            </app-form-field>
             <app-form-field label="engineer" [control]="f['engineer']" [isSubmitted]="isSubmitted()"
                 placeholder="Enter Engineer Name" class="w-full">
             </app-form-field>
@@ -30,7 +23,8 @@
         </div>
         <div class="border-t">
             <div class="mx-5 my-3 flex justify-end items-center gap-3">
-                <button class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded" (click)="onCloseClicks()">Discard</button>
+                <button type="button" class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded"
+                    (click)="onCloseClicks()">Discard</button>
                 <button class="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded">Submit</button>
             </div>
         </div>

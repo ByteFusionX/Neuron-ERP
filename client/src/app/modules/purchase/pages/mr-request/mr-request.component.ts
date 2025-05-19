@@ -4,8 +4,7 @@ import { NgIcon } from '@ng-icons/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { getJob } from 'src/app/shared/interfaces/job.interface';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
+import { ToastrService } from 'ngx-toastr';
 
 @Component({
   selector: 'app-mr-request',
@@ -15,7 +14,6 @@ import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-
     FormsModule,
     ReactiveFormsModule,
     FormFieldComponent,
-    SelectDropdownComponent
   ],
   templateUrl: './mr-request.component.html',
   styleUrl: './mr-request.component.css'
@@ -23,9 +21,9 @@ import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-
 export class MrRequestComponent implements OnInit {
 
   private fb = inject(FormBuilder);
+  private toaster = inject(ToastrService)
   isSubmitted = signal<boolean>(false);
 
-  jobSheets = signal<getJob[]>([]);
   mrForm: FormGroup = this.fb.group({
     jobId: ['', [Validators.required]],
     engineer: ['', [Validators.required]],
@@ -39,16 +37,21 @@ export class MrRequestComponent implements OnInit {
       this.mrForm.patchValue({
         jobId: this.data.job.jobId
       })
-    } else {
-      this.jobSheets.set(this.data.job)
     }
   }
 
   onCloseClicks() {
+    this.mrForm.reset()
     this.dialogRef.close()
   }
 
-  onSubmit() { }
+  onSubmit() {
+    if(this.mrForm.invalid){
+      this.toaster.warning("Please fill all required fields correctly")
+    }else{
+      this.dialogRef.close(this.mrForm.value)
+    }
+  }
 
   get f() {
     return this.mrForm.controls;

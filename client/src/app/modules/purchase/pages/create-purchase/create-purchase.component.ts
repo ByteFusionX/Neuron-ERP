@@ -56,11 +56,13 @@ export class CreatePurchaseComponent implements OnInit {
     jobId: ['', [Validators.required]],
     dealSheetId: ['', [Validators.required]],
     items: this.fb.array([this.createQuoteItemGroup()]),
-    totalLpo: ['', [Validators.required]]
+    totalLpo: ['', [Validators.required]],
+    status: ['']
   })
 
 
   ngOnInit(): void {
+    this.deelSheets()
     this.purchaseForm.reset()
     this.generatedPRId = this.generateId()
     this.purchaseService.selectedJob$.subscribe((job) => {
@@ -84,7 +86,42 @@ export class CreatePurchaseComponent implements OnInit {
         })
       }
     })
-    this.deelSheets()
+
+    this.purchaseService.supplierDiscount$.subscribe((data) => {
+      if (data) {
+        if (!this.purchaseForm.get('supplierDiscounts')) {
+          this.purchaseForm.addControl('supplierDiscounts', this.createSupplierGroup());
+        }
+
+        const supplierForm = this.purchaseForm.get('supplierDiscounts') as FormGroup;
+        const supplierArray = supplierForm.get('suppliers') as FormArray;
+        data.suppliers.forEach((supplier: any) => {
+          supplierArray.push(this.fb.group({
+            supplier: [supplier.supplier],
+            discount: [supplier.discount],
+            discountType: [supplier.discountType]
+          }));
+        });
+
+        supplierForm.patchValue({
+          totalDiscount: data.totalDiscount
+        });
+      }
+    })
+  }
+
+  createSupplierGroup(): FormGroup {
+    return this.fb.group({
+      suppliers: this.fb.array([]),
+      totalDiscount: ['']
+    });
+  }
+
+  createMrGroup(): FormGroup {
+    return this.fb.group({
+      engineer: ['', Validators.required],
+      message: ['', Validators.required]
+    });
   }
 
   createQuoteItemDetailGroup(): FormGroup {
@@ -165,7 +202,6 @@ export class CreatePurchaseComponent implements OnInit {
 
   onSupplierClicks() {
     if (this.selectedJobSheet) {
-      console.log(this.purchaseForm.value)
       this.purchaseService.setPurchaseJob(this.purchaseForm.value)
       this.router.navigate(['/purchase/supplier-discount'])
     } else {
@@ -175,9 +211,19 @@ export class CreatePurchaseComponent implements OnInit {
 
   onMrRequestClicks() {
     if (this.selectedJobSheet) {
-      this._dialog.open(MrRequestComponent, {
+      const dialogRef = this._dialog.open(MrRequestComponent, {
         width: '550px',
         data: { job: this.selectedJobSheet || this.jobSheets() }
+      })
+
+      dialogRef.afterClosed().subscribe((data) => {
+        if (data) {
+          if (!this.purchaseForm.get('mr')) {
+            this.purchaseForm.addControl('mr', this.createMrGroup());
+          }
+
+          (this.purchaseForm.get('mr') as FormGroup).patchValue(data);
+        }
       })
     } else {
       this.warningMessage()
