@@ -3,44 +3,53 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { promisify } from 'util';
 
 // Load environment variables from .env file
 dotenv.config();
 
-// Initialize the S3 client
+const unlinkAsync = promisify(fs.unlink);
+
 const s3Client = new S3Client({ 
     region: process.env.AWS_REGION,
     credentials: {
-        accessKeyId: process.env.AWS_ACCESSKEYID,
-        secretAccessKey: process.env.AWS_SECRETACCESSKEY
+        accessKeyId: process.env.AWS_ACCESSKEYID!,
+        secretAccessKey: process.env.AWS_SECRETACCESSKEY!
     },
     endpoint: process.env.AWS_ENDPOINT
 });
 
 export const uploadFileToAws = async (fileName: string, filePath: string): Promise<string | void> => {
-    try {
-        // Configure the parameters for the S3 upload
-        const uploadParams = {
-            Bucket: process.env.AWS_BUCKET_NAME,
-            Key: fileName,
-            Body: fs.createReadStream(filePath),
-        };
+    const fileStream = fs.createReadStream(filePath);
 
-        // Upload the file to S3
-        await s3Client.send(new PutObjectCommand(uploadParams));
-        if (fs.existsSync(filePath)) {
-            fs.unlink(filePath, (err) => {
-                if (err) {
-                    console.error('Error deleting file:', err);
-                } else {
-                    console.log('File deleted successfully.👍');
+    return new Promise((resolve, reject) => {
+        fileStream.on('error', (streamErr) => {
+            console.error('Stream error:', streamErr);
+            reject('error');
+        });
+
+        s3Client.send(new PutObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME!,
+            Key: fileName,
+            Body: fileStream,
+        }))
+        .then(async () => {
+            fileStream.close(); // ensures fd is closed even if upload completes
+            if (fs.existsSync(filePath)) {
+                try {
+                    await unlinkAsync(filePath);
+                    console.log('File deleted successfully. 👍');
+                } catch (delErr) {
+                    console.error('Error deleting file:', delErr);
                 }
-            });
-        }
-    } catch (err) {
-        console.error('Error ', err);
-        return 'error';
-    }
+            }
+            resolve('success');
+        })
+        .catch((err) => {
+            console.error('Upload error:', err);
+            reject('error');
+        });
+    });
 };
 
 // Export function to get a signed URL for downloading a file from AWS S3
