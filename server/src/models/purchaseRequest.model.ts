@@ -89,11 +89,11 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     },
     items : {
         type:[itemSchema],
-        required: true
+        // required: true
     },
     discounts :{
         type: [discountsSchema],
-        required: true,
+        // required: true,
     },
     status : {
         type: String,
@@ -118,10 +118,17 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         ref:'Employee',
         required: true
     },
-    updatedAt : { type: Date },
+    updatedAt : { type: Date ,
+        default: new Date()
+    },
     isDeleted: {
         type: Boolean,
         default: false
       }
 })
+
+
+
+
+export default model<PurchaseRequest>("PurchaseRequest", purchaseRequestSchema);
 

@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 
 
-import { PurchaseRequest, PurchaseRequestStatus } from "../models/purchaseRequest.model";
+import { PurchaseRequestStatus } from "../models/purchaseRequest.model";
+import PurchaseRequest from "../models/purchaseRequest.model"
 import mongoose from "mongoose";
 
 // Create a new Purchase Request
@@ -19,13 +20,13 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
         } = req.body;
 
         // Validate required fields
-        if (!jobId || !purchaseNo || !items || !items.length) {
-            return res.status(400).json({
-                success: false,
-                message: "Missing required fields",
-                status: 400
-            });
-        }
+        // if (!jobId || !purchaseNo || !items || !items.length) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: "Missing required fields",
+        //         status: 400
+        //     });
+        // }
 
         // Create new purchase request
         const newPurchaseRequest = new PurchaseRequest({
@@ -35,7 +36,7 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             discounts: discounts || [],
             status: status || PurchaseRequestStatus.Drafted,
             createdBy: createdBy, 
-            createdAt: createdAt ,
+            createdAt: new Date() ,
             updatedBy: createdBy ,
             updatedAt: new Date(),
             isDeleted: isDeleted || false
@@ -141,7 +142,7 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
         }
         
         // Format the new purchase number
-        const newPurchaseNumber = `PR-${year}${month}-${nextNumber.toString().padStart(4, '0')}`;
+        const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber.toString().padStart(4, '0')}`;
         
         return res.status(200).json({
             success: true,
@@ -157,8 +158,9 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
 // Change status of a PR
 export const updatePurchaseRequestStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        console.log("reached")
         const { id } = req.params;
-        const { status, rejectedReason } = req.body;
+        const { status, rejectedReason, userId } = req.body;
         
         // Validate status
         if (!Object.values(PurchaseRequestStatus).includes(status)) {
@@ -191,7 +193,7 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             
             // Add rejected reason to the array
             purchaseRequest.rejectedReason.push({
-                rejectedBy: req.user?._id || rejectedReason.rejectedBy,
+                rejectedBy: userId || rejectedReason.rejectedBy,
                 comment: rejectedReason.comment,
                 rejectedAt: new Date()
             });
@@ -199,7 +201,7 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
         
         // Update status and other fields
         purchaseRequest.status = status;
-        purchaseRequest.updatedBy = req.user?._id;
+        purchaseRequest.updatedBy = userId;
         purchaseRequest.updatedAt = new Date();
         
         const updatedPurchaseRequest = await purchaseRequest.save();
@@ -229,7 +231,7 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         delete updateData.isDeleted;
         
         // Add updated metadata
-        updateData.updatedBy = req.user?._id;
+        updateData.updatedBy = req.body?.userId;
         updateData.updatedAt = new Date();
         
         const updatedPurchaseRequest = await PurchaseRequest.findOneAndUpdate(
@@ -261,12 +263,13 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
 export const deletePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
+        const {userId} = req.body
         
         const purchaseRequest = await PurchaseRequest.findOneAndUpdate(
             { _id: id, isDeleted: false },
             { 
                 isDeleted: true,
-                updatedBy: req.user?._id,
+                updatedBy: userId,
                 updatedAt: new Date()
             },
             { new: true }
@@ -290,11 +293,11 @@ export const deletePurchaseRequest = async (req: Request, res: Response, next: N
     }
 };
 
-// Update comparison summary
+// Update comparison summary - to revisit
 export const updateComparisonSummary = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { comparisonSummary } = req.body;
+        const { comparisonSummary, userId } = req.body;
         
         if (!comparisonSummary) {
             return res.status(400).json({
@@ -308,7 +311,7 @@ export const updateComparisonSummary = async (req: Request, res: Response, next:
             { _id: id, isDeleted: false },
             { 
                 // comparisonSummary,
-                updatedBy: req.user?._id,
+                updatedBy: userId,
                 updatedAt: new Date()
             },
             { new: true }
@@ -337,7 +340,7 @@ export const updateComparisonSummary = async (req: Request, res: Response, next:
 export const updateSupplierDiscount = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { discounts } = req.body;
+        const { discounts, userId } = req.body;
         
         if (!discounts || !Array.isArray(discounts)) {
             return res.status(400).json({
@@ -351,7 +354,7 @@ export const updateSupplierDiscount = async (req: Request, res: Response, next: 
             { _id: id, isDeleted: false },
             { 
                 discounts,
-                updatedBy: req.user?._id,
+                updatedBy: userId,
                 updatedAt: new Date()
             },
             { new: true }

@@ -29,6 +29,7 @@ import eventRouter from './routes/event.router';
 import { connectToDatabase } from './db/connect';
 import notificationRouter from './routes/notification.router';
 import customerTypeRouter from './routes/customerType.router';
+import purchaseRequestRouter from './routes/purchaseRequest.router';
 
 const app = express();
 const server = http.createServer(app);
@@ -77,6 +78,7 @@ app.use('/trash', trashRouter)
 app.use('/events', eventRouter)
 app.use('/notification', notificationRouter)
 app.use('/customerType', customerTypeRouter)
+app.use('/purchaseRequest',purchaseRequestRouter)
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');
