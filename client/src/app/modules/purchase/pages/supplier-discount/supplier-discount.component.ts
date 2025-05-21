@@ -52,13 +52,21 @@ export class SupplierDiscountComponent {
         this.router.navigate(['/purchase/create'])
       }
     })
+
+    const suppliersArray = this.supplierForm.get('suppliers') as FormArray;
+
+    suppliersArray.valueChanges.subscribe(() => {
+      const total = this.calculateTotalDiscount();
+      this.supplierForm.get('totalDiscount')?.setValue(total, { emitEvent: false });
+    });
+
   }
 
   supplierDiscounts(data?: any): FormGroup {
     return this.fb.group({
       supplier: [data?.supplier || '', Validators.required],
       discount: [data?.discount || '', Validators.required],
-      discountType: [data?.discountType || '', Validators.required]
+      // discountType: [data?.discountType || '', Validators.required]
     });
   }
 
@@ -73,6 +81,8 @@ export class SupplierDiscountComponent {
         suppliers.push(data)
         this.suppliers.set(suppliers)
         this.patchSupplierData()
+        const total = this.calculateTotalDiscount();
+        this.supplierForm.get('totalDiscount')?.setValue(total);
       }
     })
   }
@@ -106,6 +116,17 @@ export class SupplierDiscountComponent {
   onDeleteSupplier(index: number) {
     this.suppliers().splice(index, 1)
     this.supplierDiscount.removeAt(index);
+    const total = this.calculateTotalDiscount();
+    this.supplierForm.get('totalDiscount')?.setValue(total);
+  }
+
+  calculateTotalDiscount(): number {
+    const suppliers = this.supplierForm.get('suppliers') as FormArray;
+    const total = suppliers.controls.reduce((sum, ctrl) => {
+      const discount = ctrl.get('discount')?.value || 0;
+      return sum + parseFloat(discount);
+    }, 0);
+    return total;
   }
 
   get f() {

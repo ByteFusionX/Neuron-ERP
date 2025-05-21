@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
 import { Router } from '@angular/router';
@@ -40,7 +40,6 @@ export class CreatePurchaseComponent implements OnInit {
 
   generatedPRId: string = '';
   prSequence: string = '0001'
-
   purchaseJobData!: any;
 
   itemsList = signal<any[]>([])
@@ -74,16 +73,12 @@ export class CreatePurchaseComponent implements OnInit {
 
     this.purchaseService.purchaseFormData$.subscribe((data) => {
       if (data) {
-        this.itemsList.set(data.items)
-        this.purchaseForm.patchValue({
-          customer: data.customer,
-          salesManager: data.salesManager,
-          prNo: data.prNo,
-          jobId: data.jobId,
-          dealSheetId: data.dealSheetId,
-          items: data.items,
-          totalLpo: data.totalLpo,
-        })
+        this.purchaseForm.patchValue(data)
+        if (data.items) {
+          this.itemsList.set(data.items)
+          this.patchItemsValues(data.items)
+        }
+        if (data.mr) this.patchMrValues(data.mr)
       }
     })
 
@@ -92,7 +87,6 @@ export class CreatePurchaseComponent implements OnInit {
         if (!this.purchaseForm.get('supplierDiscounts')) {
           this.purchaseForm.addControl('supplierDiscounts', this.createSupplierGroup());
         }
-
         const supplierForm = this.purchaseForm.get('supplierDiscounts') as FormGroup;
         const supplierArray = supplierForm.get('suppliers') as FormArray;
         data.suppliers.forEach((supplier: any) => {
@@ -102,12 +96,19 @@ export class CreatePurchaseComponent implements OnInit {
             discountType: [supplier.discountType]
           }));
         });
-
         supplierForm.patchValue({
           totalDiscount: data.totalDiscount
         });
       }
-    })
+    });
+
+    (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
+      this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+    });
+  }
+
+  onSubmit(): void {
+
   }
 
   createSupplierGroup(): FormGroup {
@@ -158,13 +159,25 @@ export class CreatePurchaseComponent implements OnInit {
     })
 
     this.itemsList.set(job.quotation?.dealData?.updatedItems)
+    this.patchItemsValues(this.itemsList())
+  }
+
+  patchItemsValues(items: any[]) {
     const itemsFormArray = this.purchaseForm.get('items') as FormArray;
     itemsFormArray.clear();
-    const updatedItems = job?.quotation?.dealData?.updatedItems || [];
+    const updatedItems = items || [];
     updatedItems.forEach(item => {
       itemsFormArray.push(this.createItemGroup(item));
     });
   }
+
+  patchMrValues(data: any) {
+    if (!this.purchaseForm.get('mr')) {
+      this.purchaseForm.addControl('mr', this.createMrGroup());
+    }
+    (this.purchaseForm.get('mr') as FormGroup).patchValue(data);
+  }
+
 
   createItemGroup(item: any): FormGroup {
     return this.fb.group({
@@ -218,11 +231,7 @@ export class CreatePurchaseComponent implements OnInit {
 
       dialogRef.afterClosed().subscribe((data) => {
         if (data) {
-          if (!this.purchaseForm.get('mr')) {
-            this.purchaseForm.addControl('mr', this.createMrGroup());
-          }
-
-          (this.purchaseForm.get('mr') as FormGroup).patchValue(data);
+          this.patchMrValues(data)
         }
       })
     } else {
@@ -244,6 +253,9 @@ export class CreatePurchaseComponent implements OnInit {
     this.purchaseForm.reset()
     const job = <getJob>this.jobSheets().find(job => job._id === selected);
     this.patchValues(job);
+    (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
+      this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+    });
   }
 
   onComparisonClicks() {
@@ -255,12 +267,28 @@ export class CreatePurchaseComponent implements OnInit {
     }
   }
 
-  onSubmit(): void {
-
-  }
-
   warningMessage() {
     this.toaster.warning('Please select any job from given list.');
+  }
+
+  calculateTotalLpo(): number {
+    const items = this.purchaseForm.get('items') as FormArray;
+    let total = 0;
+
+    items.controls.forEach((itemGroup: AbstractControl) => {
+      const itemDetailsArray = itemGroup.get('itemDetails') as FormArray;
+      itemDetailsArray.controls.forEach((detailGroup: AbstractControl) => {
+        const quantity = detailGroup.get('quantity')?.value || 0;
+        const unitCost = detailGroup.get('unitCost')?.value || 0;
+        total += quantity * unitCost;
+      });
+    });
+
+    return total;
+  }
+
+  updateTotalLpo() {
+    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
   }
 
   get f() {

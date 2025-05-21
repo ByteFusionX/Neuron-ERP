@@ -29,7 +29,7 @@ export class AddSupplierDiscountComponent {
   supplierForm: FormGroup = this.fb.group({
     supplier: ['', [Validators.required]],
     discount: ['', [Validators.required]],
-    discountType: ['', [Validators.required]]
+    // discountType: ['', [Validators.required]]
   })
 
   discountTypes = [
