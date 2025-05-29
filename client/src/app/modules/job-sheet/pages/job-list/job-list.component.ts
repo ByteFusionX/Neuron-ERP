@@ -33,11 +33,11 @@ import { PaginationComponent } from '../../../../shared/components/pagination/pa
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
-    selector: 'app-job-list',
-    templateUrl: './job-list.component.html',
-    styleUrls: ['./job-list.component.css'],
-    providers: [NumberFormatterPipe],
-    imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, NumberFormatterPipe_1]
+  selector: 'app-job-list',
+  templateUrl: './job-list.component.html',
+  styleUrls: ['./job-list.component.css'],
+  providers: [NumberFormatterPipe],
+  imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, NumberFormatterPipe_1]
 })
 export class JobListComponent {
 
@@ -102,7 +102,7 @@ export class JobListComponent {
       this.searchQuery = params['search'] || '';
       this.selectedEmployee = params['employee'] || null;
       this.selectedStatus = params['status'] ? params['status'] : null;
-      
+
       // Update subject with the values from URL
       this.subject.next({ page: this.page, row: this.row });
 
@@ -118,7 +118,7 @@ export class JobListComponent {
         this.row = data.row;
         // Update URL parameters for pagination
         this.updateUrlParams();
-        this.getAllJobs(currentMonthIndex+1, currentYear);
+        this.getAllJobs(currentMonthIndex + 1, currentYear);
       })
     );
 
@@ -151,7 +151,7 @@ export class JobListComponent {
   // Update URL parameters with current filter and pagination state
   updateUrlParams() {
     const queryParams: any = {};
-    
+
     if (this.page !== 1) queryParams.page = this.page;
     if (this.row !== 10) queryParams.row = this.row;
     queryParams.search = this.searchQuery ? this.searchQuery : null;
@@ -168,12 +168,14 @@ export class JobListComponent {
   }
 
   onfilterApplied() {
+    this.page = 1
     this.updateUrlParams();
     this.getAllJobs();
   }
 
   ngModelChange() {
     if (this.searchQuery == '' && this.isEnter) {
+      this.page = 1;
       this.onSearch();
       this.isEnter = !this.isEnter;
     }
@@ -182,11 +184,12 @@ export class JobListComponent {
   onSearch() {
     this.isEnter = true;
     this.isLoading = true;
+    this.page = 1
     this.updateUrlParams();
     this.getAllJobs();
   }
 
-  displayedColumns: string[] = ['jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet','comment', 'lpo', 'lpoValue', 'status', 'action'];
+  displayedColumns: string[] = ['jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'lpo', 'lpoValue', 'status', 'action'];
 
   getAllJobs(selectedMonth?: number, selectedYear?: string) {
     this.isLoading = true;
@@ -197,7 +200,7 @@ export class JobListComponent {
       access = employee?.category.privileges.jobSheet.viewReport;
       userId = employee?._id;
     });
-    
+
     let filterData = {
       search: this.searchQuery,
       page: this.page,
@@ -429,7 +432,7 @@ export class JobListComponent {
       access = employee?.category.privileges.jobSheet.viewReport;
       userId = employee?._id;
     });
-    
+
     let filterData = {
       search: this.searchQuery,
       page: this.page,
@@ -513,19 +516,19 @@ export class JobListComponent {
     this.searchQuery = ''; // Clear the search query
     this.selectedEmployee = null; // Reset selected employee
     this.selectedStatus = null; // Reset selected status
-    
+
     // Reset pagination
     this.page = 1;
     this.row = 10;
     this.subject.next({ page: this.page, row: this.row });
-    
+
     // Update URL to clear parameters
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {},
       replaceUrl: true
     });
-    
+
     // Apply filters (which will now be the default values)
     this.onfilterApplied();
   }

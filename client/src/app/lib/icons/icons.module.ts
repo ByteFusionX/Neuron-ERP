@@ -67,7 +67,8 @@ import {
   heroEllipsisHorizontalCircle,
   heroTruck,
   heroArrowLeft,
-  heroArrowDownTray
+  heroArrowDownTray,
+  heroScale 
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -142,7 +143,8 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroEllipsisHorizontalCircle,
       heroTruck,
       heroArrowLeft,
-      heroArrowDownTray
+      heroArrowDownTray,
+      heroScale
     }),
   ],
   exports: [NgIconsModule]
