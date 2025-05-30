@@ -49,7 +49,7 @@
                                 </td>
                                 <td class="px-2 py-2 text-center">
                                     <button class="text-red-600 hover:text-red-800" (click)="onDeleteSupplier(i)"
-                                        matTooltip="Delete Job" matTooltipPosition="above">
+                                        matTooltip="Delete Discount" matTooltipPosition="above">
                                         <ng-icon name="heroTrash"></ng-icon>
                                     </button>
                                 </td>
@@ -61,7 +61,8 @@
                                     <div class="w-1/3 flex gap-3 items-center">
                                         <span>Total Discount received:</span>
                                         <input type="text" class="px-3 py-1.5 outline-none rounded"
-                                            formControlName="totalDiscount" readonly [value]="supplierForm.get('totalDiscount')?.value | number:'1.2-2'">
+                                            formControlName="totalDiscount" readonly
+                                            [value]="supplierForm.get('totalDiscount')?.value | number:'1.2-2'">
                                     </div>
                                 </div>
                             </td>
@@ -75,12 +76,19 @@
                 </tbody>
             </table>
         </div>
-        <div class="w-full md:flex justify-end gap-3 mb-3 px-8 py-3 border-t">
-            <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
-                type="button" (click)="onClose()">Discard</button>
-            <button
-                class="w-fit px-3 py-2 text-sm border bg-violet-600 hover:bg-violet-500 text-white rounded mb-3">Save
-                & Exit</button>
+        <div class="w-full md:flex justify-between gap-3 mb-3 px-8 py-3 border-t">
+            <div>
+                <button *ngIf="isExist"
+                    class="w-fit px-5 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 disabled:border-gray-500 disabled:ring-0"
+                    type="button" (click)="onClearClicks()">Clear</button>
+            </div>
+            <div class="flex gap-3">
+                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
+                    type="button" (click)="onClose()">Discard</button>
+                <button
+                    class="w-fit px-3 py-2 text-sm border bg-violet-600 hover:bg-violet-500 text-white rounded mb-3">Save
+                    & Exit</button>
+            </div>
         </div>
     </form>
 </div>

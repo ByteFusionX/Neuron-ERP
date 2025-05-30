@@ -157,8 +157,6 @@ export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewIn
     this._notificationService.decrementNotificationCount('assignedJob', 1)
   }
   
-
-
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();

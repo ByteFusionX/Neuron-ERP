@@ -30,6 +30,7 @@ import { connectToDatabase } from './db/connect';
 import notificationRouter from './routes/notification.router';
 import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
+import purchaseRequestRouter from './routes/purchaseRequest.router';
 
 const app = express();
 const server = http.createServer(app);
@@ -77,6 +78,7 @@ app.use('/events', eventRouter)
 app.use('/notification', notificationRouter)
 app.use('/customerType', customerTypeRouter)
 app.use('/supplier', supplierRouter)
+app.use('/purchase', purchaseRequestRouter)
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');

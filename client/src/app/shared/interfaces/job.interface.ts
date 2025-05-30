@@ -20,6 +20,7 @@ export interface getJob {
     salesPersonDetails?: any;
     prNo?: any;
     mr?: any
+    supplierDiscounts?:any;
 }
 
 export interface Files {

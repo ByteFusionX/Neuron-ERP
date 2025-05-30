@@ -1,5 +1,4 @@
 import { Schema, Document, model, Types } from "mongoose";
-import FilesSchema from "./files.model";
 
 interface QuoteItemDetail {
     detail: string;

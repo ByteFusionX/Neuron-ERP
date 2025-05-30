@@ -35,7 +35,9 @@ export class MrRequestComponent implements OnInit {
   ngOnInit(): void {
     if (this.data.job.jobId) {
       this.mrForm.patchValue({
-        jobId: this.data.job.jobId
+        jobId: this.data.job.jobId,
+        engineer: this.data.job?.mr?.engineer || '',
+        message: this.data.job?.mr?.message || '',
       })
     }
   }
@@ -46,11 +48,17 @@ export class MrRequestComponent implements OnInit {
   }
 
   onSubmit() {
-    if(this.mrForm.invalid){
+    if (this.mrForm.invalid) {
       this.toaster.warning("Please fill all required fields correctly")
-    }else{
+    } else {
       this.dialogRef.close(this.mrForm.value)
     }
+  }
+
+  onClearClicks(){
+    this.mrForm.get('engineer')?.reset()
+    this.mrForm.get('message')?.reset()
+    this.dialogRef.close(this.mrForm.value)
   }
 
   get f() {

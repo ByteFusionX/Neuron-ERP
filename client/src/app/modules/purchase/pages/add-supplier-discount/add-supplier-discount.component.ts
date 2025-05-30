@@ -5,7 +5,6 @@ import { MatDialogRef } from '@angular/material/dialog';
 import { NgIcon } from '@ng-icons/core';
 import { ToastrService } from 'ngx-toastr';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { RadioGroupComponent } from 'src/app/shared/components/forms/radio-group/radio-group.component';
 
 @Component({
   selector: 'app-add-supplier-discount',
@@ -15,7 +14,6 @@ import { RadioGroupComponent } from 'src/app/shared/components/forms/radio-group
     FormsModule,
     ReactiveFormsModule,
     FormFieldComponent,
-    RadioGroupComponent
   ],
   templateUrl: './add-supplier-discount.component.html',
   styleUrl: './add-supplier-discount.component.css'

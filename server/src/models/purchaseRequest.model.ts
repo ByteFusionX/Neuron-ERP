@@ -1,4 +1,4 @@
-import { Schema, Document, model, Types,  } from "mongoose";
+import { Schema, Document, model, Types, } from "mongoose";
 import { Item, itemSchema } from "./item.model";
 
 interface discounts {
@@ -62,66 +62,67 @@ export enum PurchaseRequestStatus {
 }
 
 interface PurchaseRequest extends Document {
-    jobId : Types.ObjectId;
-    purchaseNo : String;
-    items : Item[];
-    discounts : discounts[]; // need reverification
-    status : PurchaseRequestStatus; 
-    rejectedReason : rejectedReason[]; // need reverification
+    jobId: Types.ObjectId;
+    purchaseNo: String;
+    items: Item[];
+    discounts: discounts[]; // need reverification
+    status: PurchaseRequestStatus;
+    rejectedReason: rejectedReason[]; // need reverification
     // comparisonSummary : [];
-    revokedHistory : revokedHistory[]; // need reverification
-    createdBy : Types.ObjectId;
-    createdAt : Date;
-    updatedBy : Types.ObjectId;
-    updatedAt : Date;
-    isDeleted : Boolean;
+    revokedHistory: revokedHistory[]; // need reverification
+    createdBy: Types.ObjectId;
+    createdAt: Date;
+    updatedBy: Types.ObjectId;
+    updatedAt: Date;
+    isDeleted: Boolean;
 }
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
-    jobId : {
+    jobId: {
         type: Schema.Types.ObjectId,
-        ref:'Job',
+        ref: 'Job',
         required: true
     },
-    purchaseNo :{
+    purchaseNo: {
         type: String,
         required: true
     },
-    items : {
-        type:[itemSchema],
+    items: {
+        type: [itemSchema],
         required: true
     },
-    discounts :{
+    discounts: {
         type: [discountsSchema],
         required: true,
     },
-    status : {
+    status: {
         type: String,
         enum: Object.values(PurchaseRequestStatus),
         required: true,
     },
-    rejectedReason : {
+    rejectedReason: {
         type: [rejectedReasonSchema],
     },
     // comparisonSummary : [];
-    revokedHistory : {
+    revokedHistory: {
         type: [revokedHistory],
     },
-    createdBy : {
+    createdBy: {
         type: Schema.Types.ObjectId,
-        ref:'Employee',
+        ref: 'Employee',
         required: true
     },
-    createdAt : { type: Date },
-    updatedBy : {
+    createdAt: { type: Date },
+    updatedBy: {
         type: Schema.Types.ObjectId,
-        ref:'Employee',
+        ref: 'Employee',
         required: true
     },
-    updatedAt : { type: Date },
+    updatedAt: { type: Date },
     isDeleted: {
         type: Boolean,
         default: false
-      }
+    }
 })
 
+export default model<PurchaseRequest>('PurchaseRequest', purchaseRequestSchema)

@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
+import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 import { environment } from 'src/environments/environment';
 
 @Injectable({
@@ -44,6 +45,10 @@ export class PurchaseService {
     search?: string;
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase`, params);
+  }
+
+  createPurchase(purchaseData: PurchaseData): Observable<any> {
+    return this.http.post<any>(`${this.api}/purhcase/createPurchaseRequest`, purchaseData)
   }
 
 }

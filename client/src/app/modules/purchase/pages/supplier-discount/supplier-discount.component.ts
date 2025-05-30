@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { AddSupplierDiscountComponent } from '../add-supplier-discount/add-supplier-discount.component';
@@ -9,6 +9,7 @@ import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/f
 import { NgIcon } from '@ng-icons/core';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-supplier-discount',
@@ -22,16 +23,18 @@ import { ToastrService } from 'ngx-toastr';
   templateUrl: './supplier-discount.component.html',
   styleUrl: './supplier-discount.component.css'
 })
-export class SupplierDiscountComponent {
+export class SupplierDiscountComponent implements OnInit, OnDestroy {
   private _dialog = inject(MatDialog)
   private fb = inject(FormBuilder)
   private purchaseService = inject(PurchaseService)
   private router = inject(Router)
   private toaster = inject(ToastrService)
+  private subscriptions = new Subscription()
 
   selectedJob!: getJob;
   isSubmitted = signal<boolean>(false);
   suppliers = signal<{ supplier: string, discount: string }[]>([])
+  isExist: boolean = false;
 
   supplierForm: FormGroup = this.fb.group({
     jobId: ['', [Validators.required]],
@@ -41,20 +44,27 @@ export class SupplierDiscountComponent {
   })
 
   ngOnInit(): void {
-    this.purchaseService.selectedJob$.subscribe((job) => {
-      if (job) {
-        this.selectedJob = job
-        this.supplierForm.patchValue({
-          jobId: job.jobId,
-          prNo: job.prNo,
-        })
-      } else {
-        this.router.navigate(['/purchase/create'])
-      }
-    })
+    this.subscriptions.add(
+      this.purchaseService.selectedJob$.subscribe((job) => {
+        if (job) {
+          this.selectedJob = job
+          this.supplierForm.patchValue({
+            jobId: job.jobId,
+            prNo: job.prNo,
+          })
+
+          if (job.supplierDiscounts) {
+            this.isExist = true
+            this.suppliers.set(job.supplierDiscounts.suppliers)
+          }
+        } else {
+          this.router.navigate(['/purchase/create'])
+        }
+      })
+    )
+
 
     const suppliersArray = this.supplierForm.get('suppliers') as FormArray;
-
     suppliersArray.valueChanges.subscribe(() => {
       const total = this.calculateTotalDiscount();
       this.supplierForm.get('totalDiscount')?.setValue(total, { emitEvent: false });
@@ -129,7 +139,20 @@ export class SupplierDiscountComponent {
     return total;
   }
 
+  onClearClicks() {
+    this.isExist = false
+    this.suppliers.set([])
+    this.supplierForm.removeControl('suppliers')
+    this.purchaseService.setSupplierDiscount(this.supplierForm.value)
+    this.purchaseService.setPurchaseFormData(this.selectedJob)
+    this.router.navigate(['/purchase/create'])
+  }
+
   get f() {
     return this.supplierForm.controls;
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe()
   }
 }

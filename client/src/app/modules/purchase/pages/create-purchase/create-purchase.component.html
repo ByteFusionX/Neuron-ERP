@@ -2,7 +2,7 @@
     <div class="border-b p-3 px-9 flex justify-between items-center">
         <h3 class="text-md font-medium">Create Purchase Requisition</h3>
     </div>
-    <form [formGroup]="purchaseForm" (ngSubmit)="onSubmit()">
+    <form [formGroup]="purchaseForm">
         <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
             <div class="flex flex-col md:flex-row md:mb-5 gap-3">
                 <app-select-dropdown [options]="jobSheets()" label="Job Id" optionLabel="jobId" optionValue="_id"
@@ -24,7 +24,7 @@
                     placeholder="Enter Sales Manager name" class="w-full" [readonly]="true">
                 </app-form-field>
             </div>
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-5">
+            <table class="w-full text-sm text-left rtl:text-right text-gray-500 mb-5">
                 <thead class="text-xs text-gray-700 uppercase bg-violet-50">
                     <tr>
                         <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
@@ -46,50 +46,86 @@
                 </thead>
                 <tbody>
                     <ng-container *ngIf="itemsList(); else elseList">
-                        <ng-container *ngFor="let items of itemsList();">
+                        <ng-container *ngFor="let items of itemsList()">
                             <tr>
-                                <td colspan="9" class="border px-6 py-2 bg-gray-50 ">
+                                <td colspan="9" class="border px-6 py-2 bg-gray-50">
                                     <div class="flex justify-center items-center text-base text-black font-medium">
-                                        Item Name: {{items.itemName}}
+                                        Item Name: {{ items.itemName }}
                                     </div>
                                 </td>
                             </tr>
                             <ng-container *ngFor="let item of items.itemDetails; let i = index">
                                 <tr class="bg-white border-b text-gray-800 py-2">
-                                    <td class="px-2  border text-center">
-                                        {{i+1}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center text-sm">
-                                        {{item.detail}}
-                                    </td>
-                                    <td class=" py-2  text-center ">
-                                        {{item.quantity | numberFormatter}}
+                                    <td class="px-2 border text-center">{{ i + 1 }}</td>
+                                    <td class="px-2 py-2 border text-center text-sm">{{ item.detail }}</td>
+                                    <td class="py-2 text-center">{{ item.quantity | numberFormatter }}</td>
+                                    <td class="px-2 py-2 border text-center">{{ item.unitCost | numberFormatter }}
                                     </td>
                                     <td class="px-2 py-2 border text-center">
-                                        {{item.unitCost | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{item.unitCost * item.quantity | numberFormatter}}
+                                        {{ item.unitCost * item.quantity | numberFormatter }}
                                     </td>
                                 </tr>
                             </ng-container>
                         </ng-container>
+
+                        <ng-container *ngIf="isAddingItem" [formGroup]="getNewItemGroup()">
+                            <tr>
+                                <td colspan="9" class="border px-6 py-2 bg-gray-50">
+                                    <div class="flex justify-center items-center gap-3 text-base">
+                                        <span>Item Name:</span>
+                                        <input type="text" class="px-3 py-1 border rounded w-1/2 outline-none text-sm"
+                                            formControlName="itemName" placeholder="Enter Item Name" />
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <tr [formGroup]="getNewItemDetailGroup()">
+                                <td class="px-2 text-center border"></td>
+                                <td class="px-2 py-2 text-center border">
+                                    <textarea class="px-2 py-1 rounded w-full outline-none" rows="2"
+                                        placeholder="Item Details" formControlName="detail"></textarea>
+                                </td>
+                                <td class="px-2 py-2 text-center border">
+                                    <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
+                                        formControlName="quantity" placeholder="0" />
+                                </td>
+                                <td class="px-2 py-2 text-center border">
+                                    <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
+                                        formControlName="unitCost" placeholder="0" />
+                                </td>
+                                <td class="px-2 py-2 text-center border">
+                                    {{ getNewItemDetailGroup().value.quantity *
+                                    getNewItemDetailGroup().value.unitCost | number:'1.2-2' }}
+                                </td>
+                                <td class="px-2 py-2 border text-center border">
+                                    <button class="text-red-600 hover:text-red-800" (click)="onDiscardNewItem()">
+                                        <ng-icon name="heroXMark" class="text-md"></ng-icon>
+                                    </button>
+                                </td>
+                            </tr>
+                        </ng-container>
+
                         <tr>
                             <td colspan="12">
                                 <div class="bg-gray-100 p-2 w-full md:flex justify-between border mb-8">
-                                    <button
-                                        class="bg-violet-600 text-white text-sm px-3 py-1.5 rounded hover:bg-violet-500">+
-                                        Additional
-                                        Column</button>
+                                    <button *ngIf="!isAddingItem && selectedJobSheet"
+                                        class="bg-violet-600 text-white text-sm px-3 py-1.5 rounded hover:bg-violet-500"
+                                        (click)="onAddColumnClicks()">
+                                        + Additional Item
+                                    </button>
+                                    <button class="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-sm text-white rounded"
+                                        *ngIf="isAddingItem" (click)="onSaveNewItem()">Save</button>
                                     <div class="w-1/3 flex gap-3 items-center">
                                         <span>Total LPO Value:</span>
                                         <input type="text" class="px-3 py-1.5 outline-none rounded"
-                                            formControlName="totalLpo" readonly [value]="purchaseForm.get('totalLpo')?.value | number:'1.2-2'">
+                                            formControlName="totalLpo" readonly
+                                            [value]="purchaseForm.get('totalLpo')?.value | number: '1.2-2'" />
                                     </div>
                                 </div>
                             </td>
                         </tr>
                     </ng-container>
+
                     <ng-template #elseList>
                         <tr>
                             <td colspan="12">
@@ -110,34 +146,47 @@
                     </ng-select>
                 </div>
                 <div class="md:w-1/3 flex flex-col md:items-end mt-6">
-                    <button
-                        class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
-                        (click)="onMrRequestClicks()">MR Request</button>
-                    <button
-                        class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
-                        (click)="onSupplierClicks()">Supplier
-                        Discount</button>
+                    <div class="flex items-center gap-2">
+                        <ng-icon *ngIf="!checkMRExists()" name="heroInformationCircle" class="text-md text-orange-500"
+                            matTooltip="Not Uploaded" matTooltipPosition="above"
+                            matTooltipClass="mat-tooltip"></ng-icon>
+                        <button
+                            class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
+                            type="button" (click)="onMrRequestClicks()">MR Request</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <ng-icon *ngIf="!checkSupplierExists()" name="heroInformationCircle"
+                            class="text-md text-orange-500" matTooltip="Not Uploaded" matTooltipPosition="above"
+                            matTooltipClass="mat-tooltip"></ng-icon>
+                        <button
+                            class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
+                            type="button" (click)="onSupplierClicks()">Supplier
+                            Discount</button>
+                    </div>
                 </div>
             </div>
             <div class="w-full flex md:justify-between">
                 <button
-                    class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">Final
+                    class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
+                    type="button">Final
                     Dashboard</button>
                 <button
-                    class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400" (click)="onComparisonClicks()">Comparison
+                    class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
+                    type="button" (click)="onComparisonClicks()">Comparison
                     Summary</button>
             </div>
         </div>
         <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
                 <button
-                    class="w-fit px-3 py-2 text-sm border border-orange-500 hover:ring-1 hover:ring-orange-400 rounded mb-3">Save
+                    class="w-fit px-3 py-2 text-sm border border-orange-500 hover:ring-1 hover:ring-orange-400 rounded mb-3"
+                    type="button" (click)="onDraftClicks()">Save
                     & Exit</button>
-                <button
-                    class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3">Discard</button>
+                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
+                    type="button" (click)="onDiscardClicks()">Discard</button>
             </div>
-            <button
-                class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3">Submit
+            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3"
+                type="button" (click)="onSubmit()">Submit
                 for Approval</button>
         </div>
     </form>
