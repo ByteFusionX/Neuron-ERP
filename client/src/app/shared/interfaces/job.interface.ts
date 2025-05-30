@@ -18,7 +18,7 @@ export interface getJob {
     createdDate: string;
     clientDetails?: any;
     salesPersonDetails?: any;
-    prNo?: any;
+    purchaseNo?: any;
     mr?: any
     supplierDiscounts?:any;
 }

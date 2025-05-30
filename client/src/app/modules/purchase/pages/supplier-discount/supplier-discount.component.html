@@ -8,7 +8,7 @@
                 <app-form-field label="jobId" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
                     placeholder="Enter Job Id" class="w-full" [readonly]="true">
                 </app-form-field>
-                <app-form-field label="PR No" [control]="f['prNo']" [isSubmitted]="isSubmitted()"
+                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()"
                     placeholder="Enter PR No" class="w-full" [readonly]="true">
                 </app-form-field>
             </div>
@@ -42,7 +42,7 @@
                                     {{i+1}}
                                 </td>
                                 <td class="px-2 py-2 border text-center">
-                                    {{supplier.supplier}}
+                                    {{supplier.supplierId}}
                                 </td>
                                 <td class="px-2 py-2 border text-center ">
                                     {{supplier.discount}}

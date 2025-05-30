@@ -25,7 +25,7 @@ export class AddSupplierDiscountComponent {
   isSubmitted = signal<boolean>(false);
 
   supplierForm: FormGroup = this.fb.group({
-    supplier: ['', [Validators.required]],
+    supplierId: ['', [Validators.required]],
     discount: ['', [Validators.required]],
     // discountType: ['', [Validators.required]]
   })

@@ -30,7 +30,7 @@ export interface PurchaseData {
     _id?: string,
     customer: string;
     salesManager: string;
-    prNo: string;
+    purchaseNo: string;
     jobId: string;
     dealSheetId: string;
     items: QuoteItem[];
@@ -41,4 +41,6 @@ export interface PurchaseData {
         suppliers: SupplierDiscount[];
         totalDiscount: string;
     };
+    createdBy: any,
+    createdAt: Date,
 }

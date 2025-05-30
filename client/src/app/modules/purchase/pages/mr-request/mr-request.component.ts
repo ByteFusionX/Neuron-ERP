@@ -35,9 +35,9 @@ export class MrRequestComponent implements OnInit {
   ngOnInit(): void {
     if (this.data.job.jobId) {
       this.mrForm.patchValue({
-        jobId: this.data.job.jobId,
-        engineer: this.data.job?.mr?.engineer || '',
-        message: this.data.job?.mr?.message || '',
+        jobId: this.data.job.job,
+        engineer: this.data.job?.mrRequest?.engineer || '',
+        message: this.data.job?.mrRequest?.message || '',
       })
     }
   }

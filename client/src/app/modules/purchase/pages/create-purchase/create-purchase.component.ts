@@ -17,6 +17,7 @@ import { Subscription } from 'rxjs';
 import { NgIcon } from '@ng-icons/core';
 import { MatTooltip } from '@angular/material/tooltip';
 import { MrDetails, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
   selector: 'app-create-purchase',
@@ -43,6 +44,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   private toaster = inject(ToastrService)
   private purchaseService = inject(PurchaseService)
   private jobService = inject(JobService)
+  private employeeService = inject(EmployeeService)
   private subscriptions = new Subscription()
 
   generatedPRId: string = '';
@@ -55,19 +57,23 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   jobSheets = signal<getJob[]>([]);
   selectedJobSheet!: getJob;
   requestedJobId = signal<string>('')
+  tokenData!: { id: string, employeeId: string };
 
   purchaseForm: FormGroup = this.fb.group({
     customer: ['', [Validators.required]],
     salesManager: ['', [Validators.required]],
-    prNo: ['', [Validators.required]],
+    purchaseNo: ['', [Validators.required]],
     jobId: ['', [Validators.required]],
+    job: [''],
     dealSheetId: ['', [Validators.required]],
     items: this.fb.array([this.createQuoteItemGroup()]),
     totalLpo: [null, [Validators.required]],
-    status: ['']
+    status: [''],
+    createdBy: [''],
   })
 
   ngOnInit(): void {
+    this.tokenData = this.employeeService.employeeToken();
     this.deelSheets()
     this.purchaseForm.reset()
     this.generatedPRId = this.generateId()
@@ -88,7 +94,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
             this.itemsList.set(data.items)
             this.patchItemsValues(data.items)
           }
-          if (data.mr) this.patchMrValues(data.mr)
+          if (data.mrRequest) this.patchMrValues(data.mrRequest)
         }
       })
     )
@@ -103,7 +109,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
           const supplierArray = supplierForm.get('suppliers') as FormArray;
           data.suppliers.forEach((supplier: any) => {
             supplierArray.push(this.fb.group({
-              supplier: [supplier.supplier],
+              supplierId: [supplier.supplierId],
               discount: [supplier.discount],
               // discountType: [supplier.discountType]
             }));
@@ -117,12 +123,26 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onSubmit(): void {
-    console.log(this.purchaseForm.value)
+    this.purchaseForm.get('status')?.setValue('Pending')
+    this.sendToService()
   }
 
   onDraftClicks() {
     this.purchaseForm.get('status')?.setValue('Drafted')
-    console.log(this.purchaseForm.value)
+    this.sendToService()
+  }
+
+  sendToService() {
+    this.purchaseForm.removeControl('job')
+    this.purchaseForm.get('createdBy')?.setValue(this.tokenData.id)
+    this.purchaseService.createPurchase(this.purchaseForm.value).subscribe({
+      next: (res) => {
+        console.log(res)
+      },
+      error: (error) => {
+        console.log(error)
+      }
+    })
   }
 
   onDiscardClicks() {
@@ -139,7 +159,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   createMrGroup(): FormGroup {
     return this.fb.group({
       engineer: ['', Validators.required],
-      message: ['', Validators.required]
+      message: ['', Validators.required],
+      createdDate: [new Date()]
     });
   }
 
@@ -171,9 +192,10 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.purchaseForm.patchValue({
       customer: job?.clientDetails?.companyName,
       salesManager: `${job?.salesPersonDetails?.[0]?.firstName || ''} ${job?.salesPersonDetails?.[0]?.lastName || ''}`.trim(),
-      prNo: this.generateId(),
+      purchaseNo: this.generateId(),
       dealSheetId: job?.quotation?.dealData?.dealId,
-      jobId: job.jobId
+      jobId: job._id,
+      job: job.jobId
     })
 
     this.itemsList.set(job.quotation?.dealData?.updatedItems)
@@ -190,10 +212,10 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   patchMrValues(data: MrDetails) {
-    if (!this.purchaseForm.get('mr')) {
-      this.purchaseForm.addControl('mr', this.createMrGroup());
+    if (!this.purchaseForm.get('mrRequest')) {
+      this.purchaseForm.addControl('mrRequest', this.createMrGroup());
     }
-    (this.purchaseForm.get('mr') as FormGroup).patchValue(data);
+    (this.purchaseForm.get('mrRequest') as FormGroup).patchValue(data);
   }
 
 
@@ -254,7 +276,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       dialogRef.afterClosed().subscribe((data) => {
         if (data) {
           !data.engineer ?
-            this.purchaseForm.removeControl('mr') : this.patchMrValues(data)
+            this.purchaseForm.removeControl('mrRequest') : this.patchMrValues(data)
         }
       })
     } else {
@@ -329,7 +351,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     itemsArray.push(this.createQuoteItemGroup());
     this.isAddingItem = true;
   }
-  
+
   onDiscardNewItem() {
     const itemsArray = this.purchaseForm.get('items') as FormArray;
     if (itemsArray.length > 0) {
@@ -350,16 +372,17 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       itemValue.itemDetails?.[0]?.quantity > 0;
     if (!hasRequiredValues) {
       this.toaster.warning('Please fill all required fields!');
+    }else{
+      this.itemsList.update((current) => [...current, lastItem.value]);
+      this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+      this.isAddingItem = false;
     }
 
-    this.itemsList.update((current) => [...current, lastItem.value]);
-    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
-    this.isAddingItem = false;
   }
 
 
   checkMRExists(): boolean {
-    return this.purchaseForm.contains('mr');
+    return this.purchaseForm.contains('mrRequest');
   }
 
   checkSupplierExists(): boolean {

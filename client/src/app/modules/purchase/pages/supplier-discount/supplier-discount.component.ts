@@ -33,24 +33,24 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
 
   selectedJob!: getJob;
   isSubmitted = signal<boolean>(false);
-  suppliers = signal<{ supplier: string, discount: string }[]>([])
+  suppliers = signal<{ supplierId: string, discount: string }[]>([])
   isExist: boolean = false;
 
   supplierForm: FormGroup = this.fb.group({
     jobId: ['', [Validators.required]],
-    prNo: ['', [Validators.required]],
+    purchaseNo: ['', [Validators.required]],
     suppliers: this.fb.array([this.supplierDiscounts()]),
     totalDiscount: [''],
   })
 
   ngOnInit(): void {
     this.subscriptions.add(
-      this.purchaseService.selectedJob$.subscribe((job) => {
+      this.purchaseService.selectedJob$.subscribe((job: any) => {
         if (job) {
           this.selectedJob = job
           this.supplierForm.patchValue({
-            jobId: job.jobId,
-            prNo: job.prNo,
+            jobId: job.job,
+            purchaseNo: job.purchaseNo,
           })
 
           if (job.supplierDiscounts) {
@@ -72,9 +72,10 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
 
   }
 
+  
   supplierDiscounts(data?: any): FormGroup {
     return this.fb.group({
-      supplier: [data?.supplier || '', Validators.required],
+      supplierId: [data?.supplierId || '', Validators.required],
       discount: [data?.discount || '', Validators.required],
       // discountType: [data?.discountType || '', Validators.required]
     });

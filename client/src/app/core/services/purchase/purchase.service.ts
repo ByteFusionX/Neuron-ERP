@@ -48,7 +48,7 @@ export class PurchaseService {
   }
 
   createPurchase(purchaseData: PurchaseData): Observable<any> {
-    return this.http.post<any>(`${this.api}/purhcase/createPurchaseRequest`, purchaseData)
+    return this.http.post<any>(`${this.api}/purchase/purchase-request`, purchaseData)
   }
 
 }

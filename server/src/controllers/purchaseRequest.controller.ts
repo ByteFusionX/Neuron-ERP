@@ -8,16 +8,12 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
         const {
             jobId,
             purchaseNo,
-            items,
-            discounts,
+            dealSheetId,
             status,
-            createdBy,
-            createdAt,
-            isDeleted
         } = req.body;
-
-        // Validate required fields
-        if (!jobId || !purchaseNo || !items || !items.length) {
+        console.log(req.body);
+        
+        if (!jobId || !purchaseNo || !dealSheetId || !status) {
             return res.status(400).json({
                 success: false,
                 message: "Missing required fields",
@@ -25,27 +21,12 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
-        // Create new purchase request
-        const newPurchaseRequest = new PurchaseRequest({
-            jobId,
-            purchaseNo,
-            items,
-            discounts: discounts || [],
-            status: status || PurchaseRequestStatus.Drafted,
-            createdBy: createdBy,
-            createdAt: createdAt,
-            updatedBy: createdBy,
-            updatedAt: new Date(),
-            isDeleted: isDeleted || false
-        });
-
+        const newPurchaseRequest = new PurchaseRequest(req.body);
         const savedPurchaseRequest = await newPurchaseRequest.save();
 
         return res.status(201).json({
             success: true,
-            message: "Purchase request created successfully!",
             data: savedPurchaseRequest,
-            status: 201
         });
     } catch (error) {
         next(error);

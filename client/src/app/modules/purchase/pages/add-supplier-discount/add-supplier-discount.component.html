@@ -6,7 +6,7 @@
     </div>
     <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
         <div class="m-5">
-            <app-form-field label="Supplier" [control]="f['supplier']" [isSubmitted]="isSubmitted()"
+            <app-form-field label="Supplier" [control]="f['supplierId']" [isSubmitted]="isSubmitted()"
                 placeholder="Enter Supplier name" class="w-full">
             </app-form-field>
             <!-- <app-radio-group label="Discount Type" [options]="discountTypes" formControlName="discountType"

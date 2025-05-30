@@ -25,7 +25,7 @@ export class ComparisonSheetComponent implements OnInit {
   selectedJob = signal<getJob | null>(null)
 
   comparisonForm: FormGroup = this.fb.group({
-    prNo: ['', [Validators.required]],
+    purchaseNo: ['', [Validators.required]],
     jobId: ['', [Validators.required]],
     product: ['', [Validators.required]],
     inventoryList: [[], [Validators.required]],
@@ -36,7 +36,7 @@ export class ComparisonSheetComponent implements OnInit {
       if (job) {
         this.selectedJob.set(job)
         this.comparisonForm.patchValue({
-          prNo: job.prNo,
+          purchaseNo: job.purchaseNo,
           jobId: job.jobId
         })
       }

@@ -9,7 +9,7 @@
                     formControlName="jobId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()"
                     class="w-full -m-1" (onSelected)="onJobSelected($event)" [selected]="requestedJobId()">
                 </app-select-dropdown>
-                <app-form-field label="PR No" [control]="f['prNo']" [isSubmitted]="isSubmitted()"
+                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()"
                     placeholder="Enter PR No" class="w-full" [readonly]="true">
                 </app-form-field>
                 <app-form-field label="Deal Sheet Id" [control]="f['dealSheetId']" [isSubmitted]="isSubmitted()"
@@ -108,13 +108,16 @@
                         <tr>
                             <td colspan="12">
                                 <div class="bg-gray-100 p-2 w-full md:flex justify-between border mb-8">
-                                    <button *ngIf="!isAddingItem && selectedJobSheet"
-                                        class="bg-violet-600 text-white text-sm px-3 py-1.5 rounded hover:bg-violet-500"
-                                        (click)="onAddColumnClicks()">
-                                        + Additional Item
-                                    </button>
-                                    <button class="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-sm text-white rounded"
-                                        *ngIf="isAddingItem" (click)="onSaveNewItem()">Save</button>
+                                    <div>
+                                        <button *ngIf="!isAddingItem && selectedJobSheet"
+                                            class="bg-violet-600 text-white text-sm px-3 py-1.5 rounded hover:bg-violet-500"
+                                            (click)="onAddColumnClicks()">
+                                            + Additional Item
+                                        </button>
+                                        <button
+                                            class="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-sm text-white rounded"
+                                            *ngIf="isAddingItem" (click)="onSaveNewItem()">Save Item</button>
+                                    </div>
                                     <div class="w-1/3 flex gap-3 items-center">
                                         <span>Total LPO Value:</span>
                                         <input type="text" class="px-3 py-1.5 outline-none rounded"

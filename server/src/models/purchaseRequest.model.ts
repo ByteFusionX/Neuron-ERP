@@ -2,11 +2,14 @@ import { Schema, Document, model, Types, } from "mongoose";
 import { Item, itemSchema } from "./item.model";
 
 interface discounts {
-    supplierId: Types.ObjectId,
-    discount: Number
+    suppliers: [{
+        supplierId: Types.ObjectId,
+        discount: Number
+    }],
+    totalDiscount: Number
 }
 
-const discountsSchema = new Schema<discounts>({
+const discountsSchema = new Schema({
     supplierId: {
         type: Schema.Types.ObjectId,
         required: true
@@ -65,16 +68,21 @@ interface PurchaseRequest extends Document {
     jobId: Types.ObjectId;
     purchaseNo: String;
     items: Item[];
-    discounts: discounts[]; // need reverification
+    supplierDiscounts: discounts[];
     status: PurchaseRequestStatus;
-    rejectedReason: rejectedReason[]; // need reverification
+    rejectedReason: rejectedReason[];
     // comparisonSummary : [];
-    revokedHistory: revokedHistory[]; // need reverification
+    revokedHistory: revokedHistory[];
     createdBy: Types.ObjectId;
     createdAt: Date;
     updatedBy: Types.ObjectId;
     updatedAt: Date;
     isDeleted: Boolean;
+    mrRequest: {
+        engineer: Types.ObjectId;
+        message: string;
+        createdDate: Date;
+    };
 }
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
@@ -91,9 +99,13 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         type: [itemSchema],
         required: true
     },
-    discounts: {
-        type: [discountsSchema],
-        required: true,
+    supplierDiscounts: {
+        suppliers: {
+            type: [discountsSchema],
+        },
+        totalDiscount: {
+            type: Number,
+        }
     },
     status: {
         type: String,
@@ -103,7 +115,7 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     rejectedReason: {
         type: [rejectedReasonSchema],
     },
-    // comparisonSummary : [];
+    // comparisonSummary : [],
     revokedHistory: {
         type: [revokedHistory],
     },
@@ -112,16 +124,29 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         ref: 'Employee',
         required: true
     },
-    createdAt: { type: Date },
+    createdAt: {
+        type: Date,
+        default: new Date()
+    },
     updatedBy: {
         type: Schema.Types.ObjectId,
         ref: 'Employee',
-        required: true
     },
     updatedAt: { type: Date },
     isDeleted: {
         type: Boolean,
         default: false
+    },
+    mrRequest: {
+        engineer: {
+            type: Schema.Types.ObjectId,
+        },
+        message: {
+            type: String,
+        },
+        createdDate: {
+            type: Date,
+        }
     }
 })
 
