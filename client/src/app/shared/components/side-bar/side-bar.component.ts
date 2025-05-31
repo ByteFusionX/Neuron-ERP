@@ -39,7 +39,7 @@ interface SubMenuItem {
   templateUrl: './side-bar.component.html',
   styleUrls: ['./side-bar.component.css'],
   animations: [sideBarState, dropDownMenuSate, buttonSlideState],
-  imports: [CommonModule, IconsModule,MatTooltipModule, RouterModule],
+  imports: [CommonModule, IconsModule, MatTooltipModule, RouterModule],
   standalone: true
 })
 export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -60,18 +60,18 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       notificationKey: 'announcementCount',
       children: [
         { id: 'dashboard', label: 'Dashboard', route: '/home' },
-        { 
-          id: 'employees', 
-          label: 'Employees', 
-          route: '/home/employees', 
-          privilegeKey: 'employee', 
-          privilegeValue: 'none' 
+        {
+          id: 'employees',
+          label: 'Employees',
+          route: '/home/employees',
+          privilegeKey: 'employee',
+          privilegeValue: 'none'
         },
-        { 
-          id: 'announcements', 
-          label: 'Announcements', 
-          route: '/home/announcements', 
-          privilegeKey: 'announcement', 
+        {
+          id: 'announcements',
+          label: 'Announcements',
+          route: '/home/announcements',
+          privilegeKey: 'announcement',
           privilegeValue: 'none',
           notificationKey: 'announcementCount'
         }
@@ -107,7 +107,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'assignedJobs',
           label: 'Assigned Jobs',
           route: '/assigned-jobs',
-          privilegeKey: 'assignedJob', 
+          privilegeKey: 'assignedJob',
           privilegeValue: 'all',
           notificationKey: 'assignedJobCount'
         },
@@ -115,7 +115,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'reassignedJobs',
           label: 'Reassigned Jobs',
           route: '/assigned-jobs/reassigned',
-          privilegeKey: 'assignedJob', 
+          privilegeKey: 'assignedJob',
           privilegeValue: 'none',
           notificationKey: 'reAssignedJobCount',
           alternateLabel: 'Assigned Jobs',
@@ -163,8 +163,34 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Job Sheet',
       icon: 'heroBriefcase',
       privilegeKey: 'jobSheet',
+      hasDropdown: true,
       privilegeValue: 'none',
-      route: '/job-sheet',
+      children: [
+        {
+          id: 'pendingJobSheet',
+          label: 'Pending',
+          route: '/job-sheet',
+
+        },
+        {
+          id: 'openToWorkJobSheet',
+          label: 'Open to work',
+          route: '/job-sheet/openToWork',
+
+        },
+        {
+          id: 'inProgressJobSheet',
+          label: 'In progress',
+          route: '/job-sheet/inProgress',
+
+        },
+        {
+          id: 'completedJobSheet',
+          label: 'Completed',
+          route: '/job-sheet/completed',
+
+        }
+      ]
     },
     {
       id: 'suppliers',
@@ -206,14 +232,14 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit() {
     this.checkPermission();
     this.notificationCounts$ = this._notificationService.notificationCounts$;
-    
+
     // Initialize expandedMenus with all menus collapsed
     this.menuItems.forEach(item => {
       if (item.hasDropdown) {
         this.expandedMenus[item.id] = false;
       }
     });
-    
+
     setTimeout(() => {
       this.showTabs = true;
     }, 2000);
@@ -237,7 +263,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
         if (event.url.includes('home')) {
           this.expandedMenus['home'] = true;
         }
-        
+
         // Auto expand relevant dropdowns based on URL
         this.menuItems.forEach(item => {
           if (item.hasDropdown && item.children) {
@@ -275,23 +301,23 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
 
   hasAccess(item: MenuItem | SubMenuItem): boolean {
     if (!this.privileges || !item.privilegeKey) return true;
-    
+
     const privilegeObj = this.privileges[item.privilegeKey as keyof Privileges];
     if (!privilegeObj) return false;
-    
+
     // Handle when privilegeObj is just a boolean
     if (typeof privilegeObj === 'boolean') {
       return privilegeObj; // If it's true, access is granted
     }
-    
+
     // Handle when privilegeObj is an object with viewReport property
     if (typeof privilegeObj === 'object' && 'viewReport' in privilegeObj) {
       // If privilegeValue is 'none', it means user should NOT have 'none' permission
-      return item.privilegeValue === 'none' 
+      return item.privilegeValue === 'none'
         ? privilegeObj.viewReport !== 'none'
         : privilegeObj.viewReport === item.privilegeValue;
     }
-    
+
     // Default fallback if structure doesn't match expected patterns
     return false;
   }
@@ -307,22 +333,22 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
 
   hasAnyNotification(item: MenuItem): boolean {
     if (!item.notificationKey && !item.children) return false;
-    
+
     let hasNotification = false;
     if (item.notificationKey) {
       this.notificationCounts$.subscribe(counts => {
         hasNotification = !!counts[item.notificationKey as keyof NotificationCounts];
       });
     }
-    
+
     if (!hasNotification && item.children) {
       this.notificationCounts$.subscribe(counts => {
-        hasNotification = item.children?.some(child => 
+        hasNotification = item.children?.some(child =>
           child.notificationKey && counts[child.notificationKey as keyof NotificationCounts]
         ) || false;
       });
     }
-    
+
     return hasNotification;
   }
 
