@@ -31,6 +31,7 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
+import { allocateType, AllocateTypeModalComponent } from '../allocate-type-modal/allocate-type-modal.component';
 
 @Component({
   selector: 'app-job-list',
@@ -535,6 +536,39 @@ export class JobListComponent {
 
   onPageNumberClick(event: { page: number, row: number }) {
     this.subject.next(event);
+  }
+
+  openAllocateTypeSelecter(data: getJob) {
+    const dialogRef = this._dialog.open(AllocateTypeModalComponent, {
+      data: data,
+      width: '500px',
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.handleAllocationTypeSelection(result.id, result.jobId, result.allocationType);
+      } else {
+        // User cancelled or closed dialog without selection
+        console.log('Dialog was cancelled');
+      }
+    });
+  }
+
+  // Optional: Create a separate method to handle the selection
+  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType) {
+    const data = {
+      id,
+      jobId,
+      allocationType 
+    }
+
+    this._jobService.updateAllocateType(data as any ).subscribe({
+      next: (res) => console.log(res),
+      error: (err) => console.error('Update failed:', err),
+    });
+
+
   }
 
   onDeleteJob(jobId: string) {

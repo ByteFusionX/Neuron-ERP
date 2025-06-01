@@ -4,10 +4,12 @@ interface Job extends Document {
     quoteId: Types.ObjectId;
     jobId: string;
     status: string;
-    comment:string;
+    comment: string;
     createdDate: Date;
     updatedDate: Date;
     isDeleted: boolean;
+    allocateStatus: string;
+    allocateType : string
 }
 
 export enum jobStatus {
@@ -18,6 +20,21 @@ export enum jobStatus {
     Cancelled = 'Cancelled',
     OnHold = 'On Hold',
     Inovoiced = 'Inovoiced',
+}
+
+
+export enum allocateStatus {
+    Pending = 'Pending',
+    WorkInProgress = 'Work In Progress',
+    OpenToWork = 'OpenToWork',
+    Completed = 'Completed'
+}
+
+export enum allocateType {
+    SupplyOnly = 'Supply Only',
+    ProjectWithSupply = 'Project With Supply',
+    ProjectsWithOutSupply = 'Projects With Out Supply',
+    AMC = 'AMC'
 }
 
 const jobSchema = new Schema<Job>({
@@ -50,6 +67,15 @@ const jobSchema = new Schema<Job>({
     isDeleted: {
         type: Boolean,
         default: false
+    },
+    allocateStatus: {
+        type: String,
+        enum: Object.values(allocateStatus),
+        default: allocateStatus.Pending
+    },
+    allocateType : {
+        type : String,
+        enum : Object.values(allocateType)
     }
 });
 

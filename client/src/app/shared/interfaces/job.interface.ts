@@ -1,21 +1,23 @@
 import { Quotatation } from "./quotation.interface";
 
 export interface filterJob {
-    search:string;
+    search: string;
     page: number;
     row: number;
     status: number;
-    selectedMonth?:number;
-    selectedYear?:number;
+    selectedMonth?: number;
+    selectedYear?: number;
 }
 
 export interface getJob {
     _id: string;
-    jobId:string;
-    quoteId:string;
-    quotation:Quotatation[];
-    status:string;
-    createdDate:string
+    jobId: string;
+    quoteId: string;
+    quotation: Quotatation[];
+    status: string;
+    createdDate: string
+    allocateStatus: allocateStatus
+    allocateType: allocateType
 }
 
 export interface Files {
@@ -37,4 +39,18 @@ export enum JobStatus {
     cancelled = 'Cancelled',
     onHold = 'On Hold',
     invoiced = 'Invoiced'
+}
+
+export enum allocateType {
+    SupplyOnly = 'Supply Only',
+    ProjectWithSupply = 'Project With Supply',
+    ProjectsWithOutSupply = 'Projects With Out Supply ',
+    AMC = 'AMC '
+}
+
+export enum allocateStatus {
+    Pending = 'Pending',
+    WorkInProgress = 'Work In Progress',
+    OpenToWork = 'OpenToWork',
+    Completed = 'Completed'
 }

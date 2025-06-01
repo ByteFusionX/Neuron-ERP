@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express"
-import jobModel from "../models/job.model"
+import jobModel, { allocateStatus, allocateType } from "../models/job.model"
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller';
 import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated } from "../common/util";
@@ -383,3 +383,56 @@ export const deleteJob = async (req: Request, res: Response, next: NextFunction)
         next(error);
     }
 }
+
+
+export const updateAllocateType = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        console.log(req.body)
+        const { id, jobId, allocationType } = req.body;
+        
+        // Validate required fields
+        if (!id || !allocationType) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'ID and allocation type are required' 
+            });
+        }
+
+        // Validate if allocationType is a valid enum value
+        if (!Object.values(allocateType).includes(allocationType)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Invalid allocation type' 
+            });
+        }
+
+        // Update the job with new allocationType and set allocateStatus to OpenToWork
+        const updateJob = await jobModel.findByIdAndUpdate(
+            { _id: id },
+            { 
+                allocateType: allocationType,
+                allocateStatus: allocateStatus.OpenToWork,
+                updatedDate: new Date()
+            },
+            { 
+                new: true, // Return the updated document
+            }
+        );
+
+        if (!updateJob) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Job not found' 
+            });
+        }
+
+        res.status(200).json({ 
+            success: true, 
+            message: 'Allocation type updated successfully',
+            data: updateJob 
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
