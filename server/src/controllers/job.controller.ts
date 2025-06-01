@@ -10,7 +10,6 @@ const { ObjectId } = require('mongodb')
 export const jobList = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId, allocateStatus } = req.body;
-        console.log(req.body)
         let isStatus = status == null ? true : false;
         let isSalesPerson = salesPerson == null ? true : false;
         let skipNum: number = (page - 1) * row;
