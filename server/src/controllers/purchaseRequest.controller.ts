@@ -21,10 +21,10 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
-        
+
         const newPurchaseRequest = new PurchaseRequest(req.body);
         const savedPurchaseRequest = await newPurchaseRequest.save();
-        // await jobModel.updateOne({ _id: jobId }, { status: { $set: 'Purchase Requested' } })
+        await jobModel.updateOne({ _id: jobId }, { $set: { status: 'Purchase Requested' } })
 
         return res.status(201).json({
             success: true,

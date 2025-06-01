@@ -72,17 +72,17 @@ export class PendingPurchaseComponent implements OnInit {
         type: 'text',
       },
       {
-        key: 'customer',
+        key: 'customerId.companyName',
         label: 'Customer',
         type: 'text',
       },
       {
-        key: 'salesManager',
-        label: 'Sales Manager',
+        key: 'createdBy.firstName',
+        label: 'Created By',
         type: 'text',
       },
       {
-        key: 'lpoValue',
+        key: 'totalLpo',
         label: 'LPO Value',
         type: 'text',
       },
@@ -90,6 +90,14 @@ export class PendingPurchaseComponent implements OnInit {
         key: 'mrRequest',
         label: 'MR Request',
         type: 'text',
+        actions: [
+          {
+            icon: 'heroEye',
+            tooltip: 'View Details',
+            action: '',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
+          }
+        ]
       },
       {
         key: 'actions',
@@ -101,7 +109,7 @@ export class PendingPurchaseComponent implements OnInit {
     ]
 
     this.defaultColumns = [
-      'createdAt', 'purchaseNo', 'jobId.jobId', 'customer', 'salesManager', 'lpoValue', 'mrRequest', 'actions'
+      'createdAt', 'purchaseNo', 'jobId.jobId', 'customerId.companyName', `createdBy.firstName`, 'totalLpo', 'mrRequest', 'actions'
     ];
   }
 
@@ -126,8 +134,7 @@ export class PendingPurchaseComponent implements OnInit {
   }
 
   viewPurchaseDetails(purchase: any): void {
-    // console.log(purchase);
-    this.router.navigate(['/purchase', purchase._id]);
+    this.router.navigate(['/purchase/view-details', purchase._id]);
   }
 
   onRowClick(row: any): void {

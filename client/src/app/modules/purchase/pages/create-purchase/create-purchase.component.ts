@@ -138,10 +138,11 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.purchaseForm.get('createdBy')?.setValue(this.tokenData.id)
     this.purchaseService.createPurchase(this.purchaseForm.value).subscribe({
       next: (res) => {
-        if(res.success){
+        if (res.success) {
           this.toaster.success('Purchase Uploaded SuccessFully')
           this.purchaseForm.reset()
           this.itemsList.set([])
+          this.deelSheets()
         }
       },
       error: (error) => {
@@ -294,7 +295,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.jobService.getJobids().subscribe({
         next: (res: any) => {
-          this.jobSheets.set(res.jobs)
+          const filteredJobs = res.jobs.filter((job: any) => job.status !== 'Purchase Requested');
+          this.jobSheets.set(filteredJobs);
         }, error: (err) => {
           console.error(err)
         }
