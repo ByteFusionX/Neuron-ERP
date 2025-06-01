@@ -83,6 +83,8 @@ interface PurchaseRequest extends Document {
         message: string;
         createdDate: Date;
     };
+    customerId: Types.ObjectId;
+    totalLpo: Number | String;
 }
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
@@ -147,7 +149,14 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         createdDate: {
             type: Date,
         }
+    },
+    customerId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Customer'
+    },
+    totalLpo: {
+        type: Number
     }
 })
 
-export default model<PurchaseRequest>('PurchaseRequest', purchaseRequestSchema)
+export default model<PurchaseRequest>('Purchase', purchaseRequestSchema)

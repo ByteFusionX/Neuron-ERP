@@ -32,7 +32,7 @@ import { TableColumn } from 'src/app/shared/components/table/table.model';
 export class PendingPurchaseComponent implements OnInit {
   private router = inject(Router);
   private paginationService = inject(PaginationService);
-  private supplierService = inject(PurchaseService);
+  private purchaseService = inject(PurchaseService);
   private notificationService = inject(ToastrService);
 
   tableData = signal<any[]>([]);
@@ -49,12 +49,13 @@ export class PendingPurchaseComponent implements OnInit {
 
   ngOnInit(): void {
     this.setupTableColumns()
+    this.getPurchases()
   }
 
   setupTableColumns(): void {
     this.tableColumns = [
       {
-        key: 'createdDate',
+        key: 'createdAt',
         label: 'Created Date',
         type: 'date',
         pipeParams: 'dd/MM/yyyy',
@@ -66,7 +67,7 @@ export class PendingPurchaseComponent implements OnInit {
         type: 'text',
       },
       {
-        key: 'jobId',
+        key: 'jobId.jobId',
         label: 'Job ID',
         type: 'text',
       },
@@ -100,8 +101,28 @@ export class PendingPurchaseComponent implements OnInit {
     ]
 
     this.defaultColumns = [
-      'createdDate','purchaseNo', 'jobId', 'customer', 'salesManager', 'lpoValue', 'mrRequest','actions'
+      'createdAt', 'purchaseNo', 'jobId.jobId', 'customer', 'salesManager', 'lpoValue', 'mrRequest', 'actions'
     ];
+  }
+
+  getPurchases() {
+    // this.isLoading.set(true);
+    const currentState = this.paginationService.paginationState();
+    this.purchaseService.getPurchases({
+      page: 1,
+      row: currentState.row,
+      status: this.selectedStatus(),
+    }).subscribe({
+      next: (response) => {
+        console.log(response);
+        this.tableData.set(response.purchase.data);
+        this.totalItems.set(response.purchase.total);
+        this.isEmpty.set(this.tableData().length === 0);
+        this.isLoading.set(false);
+      }, error: (error) => {
+        console.log(error);
+      }
+    })
   }
 
   viewPurchaseDetails(purchase: any): void {
@@ -145,12 +166,10 @@ export class PendingPurchaseComponent implements OnInit {
       row: currentState.row,
       total: currentState.total
     });
-    this.supplierService.getPurchases({
+    this.purchaseService.getPurchases({
       page: 1,
       row: currentState.row,
       status: this.selectedStatus(),
-      category: this.selectedCategory(),
-      supplierType: this.selectedLocation(),
       search: searchInput
     }).subscribe({
       next: (response) => {

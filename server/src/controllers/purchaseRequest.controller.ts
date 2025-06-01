@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { PurchaseRequestStatus } from "../models/purchaseRequest.model";
 import PurchaseRequest from '../models/purchaseRequest.model'
+import jobModel from "../models/job.model";
 
 // Create a new Purchase Request
 export const createPurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
@@ -11,8 +12,7 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             dealSheetId,
             status,
         } = req.body;
-        console.log(req.body);
-        
+
         if (!jobId || !purchaseNo || !dealSheetId || !status) {
             return res.status(400).json({
                 success: false,
@@ -21,8 +21,10 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
+        
         const newPurchaseRequest = new PurchaseRequest(req.body);
         const savedPurchaseRequest = await newPurchaseRequest.save();
+        // await jobModel.updateOne({ _id: jobId }, { status: { $set: 'Purchase Requested' } })
 
         return res.status(201).json({
             success: true,
@@ -33,166 +35,279 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
     }
 };
 
-// // Get list of PRs by status
-// export const getPurchaseRequestsByStatus = async (req: Request, res: Response, next: NextFunction) => {
-//     try {
-//         const { status } = req.params;
+export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        let { page, row, status, fromDate, toDate, search } = req.body;
+        const pageNumber = Number(page) || 1;
+        const pageSize = Number(row) || 10;
 
-//         // Validate status
-//         if (!Object.values(PurchaseRequestStatus).includes(status as PurchaseRequestStatus)) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "Invalid status",
-//                 status: 400
-//             });
-//         }
+        const matchStage: any = {
+            isDeleted: false
+        };
 
-//         const purchaseRequests = await PurchaseRequest.find({
-//             status,
-//             isDeleted: false
-//         }).populate('jobId').populate('createdBy', 'name email');
+        if (status) {
+            matchStage.status = status;
+        }
 
-//         return res.status(200).json({
-//             success: true,
-//             message: `Purchase requests with status ${status} fetched successfully`,
-//             data: purchaseRequests,
-//             status: 200
-//         });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
+        if (fromDate && toDate) {
+            matchStage.createdAt = {
+                $gte: new Date(fromDate),
+                $lte: new Date(toDate)
+            };
+        }
 
-// // Get PR details by ID
-// export const getPurchaseRequestById = async (req: Request, res: Response, next: NextFunction) => {
-//     try {
-//         const { id } = req.params;
+        if (search) {
+            matchStage.$or = [
+                { purchaseNo: { $regex: search, $options: 'i' } },
+                // Add other searchable fields if needed
+            ];
+        }
 
-//         const purchaseRequest = await PurchaseRequest.findOne({
-//             _id: id,
-//             isDeleted: false
-//         }).populate('jobId')
-//             .populate('createdBy', 'name email')
-//             .populate('updatedBy', 'name email');
+        const purchases = await PurchaseRequest.aggregate([
+            { $match: matchStage },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customerId',
+                    foreignField: '_id',
+                    as: 'customerId'
+                }
+            },
+            { $unwind: { path: '$customerId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobId'
+                }
+            },
+            { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'createdBy',
+                    foreignField: '_id',
+                    as: 'createdBy'
+                }
+            },
+            { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    hasMr: { $cond: [{ $ifNull: ["$mrRequest.engineer", false] }, true, false] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'mrRequest.engineer',
+                    foreignField: '_id',
+                    as: 'mrEngineer'
+                }
+            },
+            {
+                $addFields: {
+                    mrRequest: {
+                        $cond: [
+                            "$hasMr",
+                            {
+                                engineer: { $arrayElemAt: ["$mrEngineer", 0] },
+                                message: "$mrRequest.message",
+                                createdDate: "$mrRequest.createdDate"
+                            },
+                            "$$REMOVE" // This removes the mrRequest field entirely
+                        ]
+                    }
+                }
+            },
+            {
+                $project: {
+                    mrEngineer: 0,
+                    hasMr: 0
+                }
+            },
+            { $unwind: { path: '$mrEngineer', preserveNullAndEmptyArrays: true } },
+            { $sort: { createdAt: -1 } },
+            {
+                $facet: {
+                    metadata: [{ $count: 'total' }],
+                    data: [
+                        { $skip: (pageNumber - 1) * pageSize },
+                        { $limit: pageSize }
+                    ]
+                }
+            },
+            {
+                $project: {
+                    data: 1,
+                    total: { $arrayElemAt: ['$metadata.total', 0] }
+                }
+            }
+        ]);
 
-//         if (!purchaseRequest) {
-//             return res.status(404).json({
-//                 success: false,
-//                 message: "Purchase request not found",
-//                 status: 404
-//             });
-//         }
+        return res.status(200).json({
+            success: true,
+            purchase: purchases[0],
+            status: 200
+        });
+    } catch (error) {
+        next(error)
+    }
+}
 
-//         return res.status(200).json({
-//             success: true,
-//             message: "Purchase request fetched successfully",
-//             data: purchaseRequest,
-//             status: 200
-//         });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
+// Get list of PRs by status
+export const getPurchaseRequestsByStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { status } = req.params;
 
-// // Generate a new purchase number
-// export const generatePurchaseNumber = async (req: Request, res: Response, next: NextFunction) => {
-//     try {
-//         // Get current year and month
-//         const now = new Date();
-//         const year = now.getFullYear().toString().slice(-2); // Last two digits of year
-//         const month = (now.getMonth() + 1).toString().padStart(2, '0'); // Month padded with 0
+        // Validate status
+        if (!Object.values(PurchaseRequestStatus).includes(status as PurchaseRequestStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid status",
+                status: 400
+            });
+        }
 
-//         // Find the latest purchase request to determine the next number
-//         const latestPR = await PurchaseRequest.findOne({
-//             purchaseNo: { $regex: `^PR-${year}${month}-` }
-//         })
-//             .sort({ purchaseNo: -1 })
-//             .limit(1);
+        const purchaseRequests = await PurchaseRequest.find({
+            status,
+            isDeleted: false
+        }).populate('jobId').populate('createdBy', 'name email');
 
-//         let nextNumber = 1;
+        return res.status(200).json({
+            success: true,
+            message: `Purchase requests with status ${status} fetched successfully`,
+            data: purchaseRequests,
+            status: 200
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
-//         if (latestPR) {
-//             // Extract the sequence number from the latest PR number
-//             const parts = latestPR.purchaseNo.split('-');
-//             if (parts.length === 3) {
-//                 nextNumber = parseInt(parts[2]) + 1;
-//             }
-//         }
+// Get PR details by ID
+export const getPurchaseRequestById = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
 
-//         // Format the new purchase number
-//         const newPurchaseNumber = `PR-${year}${month}-${nextNumber.toString().padStart(4, '0')}`;
+        const purchaseRequest = await PurchaseRequest.findOne({
+            _id: id,
+            isDeleted: false
+        }).populate('jobId')
+            .populate('createdBy', 'name email')
+            .populate('updatedBy', 'name email');
 
-//         return res.status(200).json({
-//             success: true,
-//             message: "Purchase number generated successfully",
-//             data: { purchaseNo: newPurchaseNumber },
-//             status: 200
-//         });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
+        if (!purchaseRequest) {
+            return res.status(404).json({
+                success: false,
+                message: "Purchase request not found",
+                status: 404
+            });
+        }
 
-// // Change status of a PR
-// export const updatePurchaseRequestStatus = async (req: Request, res: Response, next: NextFunction) => {
-//     try {
-//         const { id } = req.params;
-//         const { status, rejectedReason } = req.body;
+        return res.status(200).json({
+            success: true,
+            message: "Purchase request fetched successfully",
+            data: purchaseRequest,
+            status: 200
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
-//         // Validate status
-//         if (!Object.values(PurchaseRequestStatus).includes(status)) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "Invalid status",
-//                 status: 400
-//             });
-//         }
+// Generate a new purchase number
+export const generatePurchaseNumber = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const now = new Date();
+        const year = now.getFullYear().toString().slice(-2);
+        const month = (now.getMonth() + 1).toString().padStart(2, '0');
 
-//         const purchaseRequest = await PurchaseRequest.findById(id);
+        const latestPR = await PurchaseRequest.findOne({
+            purchaseNo: { $regex: `^PR-${year}${month}-` }
+        })
+            .sort({ purchaseNo: -1 })
+            .limit(1);
 
-//         if (!purchaseRequest || purchaseRequest.isDeleted) {
-//             return res.status(404).json({
-//                 success: false,
-//                 message: "Purchase request not found",
-//                 status: 404
-//             });
-//         }
+        let nextNumber = 1;
+        if (latestPR) {
+            const parts = latestPR.purchaseNo.split('-');
+            if (parts.length === 3) {
+                nextNumber = parseInt(parts[2]) + 1;
+            }
+        }
 
-//         // If status is changing to Rejected, require rejected reason
-//         if (status === PurchaseRequestStatus.Rejected) {
-//             if (!rejectedReason || !rejectedReason.comment) {
-//                 return res.status(400).json({
-//                     success: false,
-//                     message: "Rejection reason is required",
-//                     status: 400
-//                 });
-//             }
+        const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber.toString().padStart(4, '0')}`;
+        return res.status(200).json({
+            success: true,
+            message: "Purchase number generated successfully",
+            data: { purchaseNo: newPurchaseNumber }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
-//             // Add rejected reason to the array
-//             purchaseRequest.rejectedReason.push({
-//                 rejectedBy: req.user?._id || rejectedReason.rejectedBy,
-//                 comment: rejectedReason.comment,
-//                 rejectedAt: new Date()
-//             });
-//         }
+// Change status of a PR
+export const updatePurchaseRequestStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { status, rejectedReason } = req.body;
 
-//         // Update status and other fields
-//         purchaseRequest.status = status;
-//         purchaseRequest.updatedBy = req.user?._id;
-//         purchaseRequest.updatedAt = new Date();
+        // Validate status
+        if (!Object.values(PurchaseRequestStatus).includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid status",
+                status: 400
+            });
+        }
 
-//         const updatedPurchaseRequest = await purchaseRequest.save();
+        const purchaseRequest = await PurchaseRequest.findById(id);
 
-//         return res.status(200).json({
-//             success: true,
-//             message: "Purchase request status updated successfully",
-//             data: updatedPurchaseRequest,
-//             status: 200
-//         });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
+        if (!purchaseRequest || purchaseRequest.isDeleted) {
+            return res.status(404).json({
+                success: false,
+                message: "Purchase request not found",
+                status: 404
+            });
+        }
+
+        // // If status is changing to Rejected, require rejected reason
+        // if (status === PurchaseRequestStatus.Rejected) {
+        //     if (!rejectedReason || !rejectedReason.comment) {
+        //         return res.status(400).json({
+        //             success: false,
+        //             message: "Rejection reason is required",
+        //             status: 400
+        //         });
+        //     }
+
+        //     // Add rejected reason to the array
+        //     purchaseRequest.rejectedReason.push({
+        //         rejectedBy: req.user?._id || rejectedReason.rejectedBy,
+        //         comment: rejectedReason.comment,
+        //         rejectedAt: new Date()
+        //     });
+        // }
+
+        // // Update status and other fields
+        // purchaseRequest.status = status;
+        // purchaseRequest.updatedBy = req.user?._id;
+        // purchaseRequest.updatedAt = new Date();
+
+        // const updatedPurchaseRequest = await purchaseRequest.save();
+
+        // return res.status(200).json({
+        //     success: true,
+        //     message: "Purchase request status updated successfully",
+        //     data: updatedPurchaseRequest,
+        //     status: 200
+        // });
+    } catch (error) {
+        next(error);
+    }
+};
 
 // // Edit a PR
 // export const updatePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {

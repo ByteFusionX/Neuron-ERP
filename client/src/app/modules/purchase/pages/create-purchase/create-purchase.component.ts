@@ -60,16 +60,17 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   tokenData!: { id: string, employeeId: string };
 
   purchaseForm: FormGroup = this.fb.group({
-    customer: ['', [Validators.required]],
+    customerId: ['', [Validators.required]],
     salesManager: ['', [Validators.required]],
     purchaseNo: ['', [Validators.required]],
     jobId: ['', [Validators.required]],
-    job: [''],
     dealSheetId: ['', [Validators.required]],
     items: this.fb.array([this.createQuoteItemGroup()]),
     totalLpo: [null, [Validators.required]],
     status: [''],
     createdBy: [''],
+    job: [''],
+    customer: [''],
   })
 
   ngOnInit(): void {
@@ -137,7 +138,11 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.purchaseForm.get('createdBy')?.setValue(this.tokenData.id)
     this.purchaseService.createPurchase(this.purchaseForm.value).subscribe({
       next: (res) => {
-        console.log(res)
+        if(res.success){
+          this.toaster.success('Purchase Uploaded SuccessFully')
+          this.purchaseForm.reset()
+          this.itemsList.set([])
+        }
       },
       error: (error) => {
         console.log(error)
@@ -189,10 +194,11 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   patchValues(job: getJob) {
     this.selectedJobSheet = job
+    this.getPurchaseNo()
     this.purchaseForm.patchValue({
       customer: job?.clientDetails?.companyName,
+      customerId: job?.clientDetails?._id,
       salesManager: `${job?.salesPersonDetails?.[0]?.firstName || ''} ${job?.salesPersonDetails?.[0]?.lastName || ''}`.trim(),
-      purchaseNo: this.generateId(),
       dealSheetId: job?.quotation?.dealData?.dealId,
       jobId: job._id,
       job: job.jobId
@@ -311,6 +317,18 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }
   }
 
+  getPurchaseNo() {
+    this.purchaseService.getPurchaseNo().subscribe({
+      next: (res: any) => {
+        if (res.data) {
+          this.purchaseForm.get('purchaseNo')?.setValue(res.data.purchaseNo)
+        }
+      }, error: (error: Error) => {
+        console.log(error)
+      }
+    })
+  }
+
   warningMessage() {
     this.toaster.warning('Please select any job from given list.');
   }
@@ -372,7 +390,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       itemValue.itemDetails?.[0]?.quantity > 0;
     if (!hasRequiredValues) {
       this.toaster.warning('Please fill all required fields!');
-    }else{
+    } else {
       this.itemsList.update((current) => [...current, lastItem.value]);
       this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
       this.isAddingItem = false;

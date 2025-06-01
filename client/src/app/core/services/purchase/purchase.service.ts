@@ -34,17 +34,19 @@ export class PurchaseService {
     this.purchaseFormData.next(formData)
   }
 
+  getPurchaseNo(): any {
+    return this.http.get<any>(`${this.api}/purchase/purchase-request/generate-purchase-no`)
+  }
+
   getPurchases(params: {
     page?: number;
     row?: number;
     status?: string;
-    category?: string;
-    supplierType?: string;
     fromDate?: string;
     toDate?: string;
     search?: string;
   }): Observable<any> {
-    return this.http.post<any>(`${this.api}/purchase`, params);
+    return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params);
   }
 
   createPurchase(purchaseData: PurchaseData): Observable<any> {

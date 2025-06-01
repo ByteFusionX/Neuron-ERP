@@ -45,7 +45,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <ng-container *ngIf="itemsList(); else elseList">
+                    <ng-container *ngIf="itemsList()">
                         <ng-container *ngFor="let items of itemsList()">
                             <tr>
                                 <td colspan="9" class="border px-6 py-2 bg-gray-50">
@@ -105,11 +105,11 @@
                             </tr>
                         </ng-container>
 
-                        <tr>
+                        <tr *ngIf="selectedJobSheet">
                             <td colspan="12">
                                 <div class="bg-gray-100 p-2 w-full md:flex justify-between border mb-8">
                                     <div>
-                                        <button *ngIf="!isAddingItem && selectedJobSheet"
+                                        <button *ngIf="!isAddingItem"
                                             class="bg-violet-600 text-white text-sm px-3 py-1.5 rounded hover:bg-violet-500"
                                             (click)="onAddColumnClicks()">
                                             + Additional Item
@@ -129,13 +129,13 @@
                         </tr>
                     </ng-container>
 
-                    <ng-template #elseList>
+                    <ng-container *ngIf="!itemsList() || !selectedJobSheet">
                         <tr>
-                            <td colspan="12">
+                            <td colspan="12" class="bg-gray-100 border">
                                 <p class="text-center text-base p-2">Items empty</p>
                             </td>
                         </tr>
-                    </ng-template>
+                    </ng-container>
                 </tbody>
             </table>
             <div class="w-full flex md:justify-between">
