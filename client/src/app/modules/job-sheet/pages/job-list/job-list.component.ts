@@ -3,7 +3,7 @@ import { Component } from '@angular/core';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Observable, Subscription, catchError, tap, throwError } from 'rxjs';
 import { JobService } from 'src/app/core/services/job/job.service';
-import { JobStatus, JobTable, getJob } from 'src/app/shared/interfaces/job.interface';
+import { JobStatus, JobTable, allocateStatus, getJob } from 'src/app/shared/interfaces/job.interface';
 import { saveAs } from 'file-saver'
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
@@ -211,7 +211,8 @@ export class JobListComponent {
       selectedMonth: selectedMonth,
       selectedYear: selectedYear as unknown as number,
       access: access,
-      userId: userId
+      userId: userId,
+      allocateStatus : allocateStatus.Pending
     };
 
     this.subscriptions.add(

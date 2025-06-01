@@ -169,19 +169,19 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
         {
           id: 'pendingJobSheet',
           label: 'Pending',
-          route: '/job-sheet',
+          route: '/job-sheet/pending',
 
         },
         {
           id: 'openToWorkJobSheet',
           label: 'Open to work',
-          route: '/job-sheet/openToWork',
+          route: '/job-sheet/open-to-work',
 
         },
         {
           id: 'inProgressJobSheet',
           label: 'In progress',
-          route: '/job-sheet/inProgress',
+          route: '/job-sheet/in-progress',
 
         },
         {
