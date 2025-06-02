@@ -23,7 +23,6 @@ import { PendingDealsComponent } from './modules/deal-sheet/pending-deals/pendin
 import { ApprovedDealsComponent } from './modules/deal-sheet/approved-deals/approved-deals.component';
 import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.component';
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
-import { EditCompanyDetailsComponent } from './modules/profile/pages/edit-company-details/edit-company-details.component';
 import { PendingSuppliersComponent } from './modules/suppliers/pages/pending-suppliers/pending-suppliers.component';
 import { CreateSupplierComponent } from './modules/suppliers/pages/create-supplier/create-supplier.component';
 import { SupplierViewComponent } from './modules/suppliers/pages/supplier-view/supplier-view.component';
@@ -32,6 +31,7 @@ import { ApprovedPurchaseComponent } from './modules/purchase/pages/approved-pur
 import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
 import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
 import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sheet/comparison-sheet.component';
+import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -151,7 +151,8 @@ export const routes: Routes = [
       { path: 'approves', component: ApprovedPurchaseComponent },
       { path: 'create', component: CreatePurchaseComponent },
       { path: 'supplier-discount', component: SupplierDiscountComponent },
-      { path: 'comparison-sheet', component: ComparisonSheetComponent }
+      { path: 'comparison-sheet', component: ComparisonSheetComponent },
+      { path: 'view-purchase/:id', component: ViewPurchaseComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

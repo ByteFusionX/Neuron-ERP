@@ -2,6 +2,8 @@ import { NextFunction, Request, Response } from "express";
 import { PurchaseRequestStatus } from "../models/purchaseRequest.model";
 import PurchaseRequest from '../models/purchaseRequest.model'
 import jobModel from "../models/job.model";
+const mongoose = require('mongoose');
+const { ObjectId } = mongoose.Types;
 
 // Create a new Purchase Request
 export const createPurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
@@ -20,7 +22,6 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
                 status: 400
             });
         }
-
 
         const newPurchaseRequest = new PurchaseRequest(req.body);
         const savedPurchaseRequest = await newPurchaseRequest.save();
@@ -169,16 +170,78 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
             });
         }
 
-        const purchaseRequests = await PurchaseRequest.find({
-            status,
-            isDeleted: false
-        }).populate('jobId').populate('createdBy', 'name email');
+        const purchaseRequests = await PurchaseRequest.aggregate([
+            {
+                $match: { status: status }
+            },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customerId',
+                    foreignField: '_id',
+                    as: 'customerId'
+                }
+            },
+            { $unwind: { path: '$customerId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobId'
+                }
+            },
+            { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'createdBy',
+                    foreignField: '_id',
+                    as: 'createdBy'
+                }
+            },
+            { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    hasMr: { $cond: [{ $ifNull: ["$mrRequest.engineer", false] }, true, false] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'mrRequest.engineer',
+                    foreignField: '_id',
+                    as: 'mrEngineer'
+                }
+            },
+            {
+                $addFields: {
+                    mrRequest: {
+                        $cond: [
+                            "$hasMr",
+                            {
+                                engineer: { $arrayElemAt: ["$mrEngineer", 0] },
+                                message: "$mrRequest.message",
+                                createdDate: "$mrRequest.createdDate"
+                            },
+                            "$$REMOVE"
+                        ]
+                    }
+                }
+            },
+            {
+                $project: {
+                    mrEngineer: 0,
+                    hasMr: 0
+                }
+            },
+            { $unwind: { path: '$mrEngineer', preserveNullAndEmptyArrays: true } },
+            { $sort: { createdAt: -1 } }
+        ]);
 
         return res.status(200).json({
             success: true,
-            message: `Purchase requests with status ${status} fetched successfully`,
             data: purchaseRequests,
-            status: 200
         });
     } catch (error) {
         next(error);
@@ -190,26 +253,88 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
     try {
         const { id } = req.params;
 
-        const purchaseRequest = await PurchaseRequest.findOne({
-            _id: id,
-            isDeleted: false
-        }).populate('jobId')
-            .populate('createdBy', 'name email')
-            .populate('updatedBy', 'name email');
+        const purchaseRequest = await PurchaseRequest.aggregate([
+            {
+                $match: {
+                    _id: new ObjectId(id)
+                }
+            },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customerId',
+                    foreignField: '_id',
+                    as: 'customerId'
+                }
+            },
+            { $unwind: { path: '$customerId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobId'
+                }
+            },
+            { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'createdBy',
+                    foreignField: '_id',
+                    as: 'createdBy'
+                }
+            },
+            { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    hasMr: { $cond: [{ $ifNull: ["$mrRequest.engineer", false] }, true, false] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'mrRequest.engineer',
+                    foreignField: '_id',
+                    as: 'mrEngineer'
+                }
+            },
+            {
+                $addFields: {
+                    mrRequest: {
+                        $cond: [
+                            "$hasMr",
+                            {
+                                engineer: { $arrayElemAt: ["$mrEngineer", 0] },
+                                message: "$mrRequest.message",
+                                createdDate: "$mrRequest.createdDate"
+                            },
+                            "$$REMOVE"
+                        ]
+                    }
+                }
+            },
+            {
+                $project: {
+                    mrEngineer: 0,
+                    hasMr: 0
+                }
+            },
+            { $unwind: { path: '$mrEngineer', preserveNullAndEmptyArrays: true } },
+            { $sort: { createdAt: -1 } }
+        ]);
 
         if (!purchaseRequest) {
             return res.status(404).json({
                 success: false,
                 message: "Purchase request not found",
-                status: 404
             });
         }
 
         return res.status(200).json({
             success: true,
             message: "Purchase request fetched successfully",
-            data: purchaseRequest,
-            status: 200
+            data: purchaseRequest[0],
         });
     } catch (error) {
         next(error);

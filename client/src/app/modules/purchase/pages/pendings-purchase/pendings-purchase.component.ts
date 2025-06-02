@@ -114,7 +114,7 @@ export class PendingPurchaseComponent implements OnInit {
   }
 
   getPurchases() {
-    // this.isLoading.set(true);
+    this.isLoading.set(true);
     const currentState = this.paginationService.paginationState();
     this.purchaseService.getPurchases({
       page: 1,
@@ -122,7 +122,6 @@ export class PendingPurchaseComponent implements OnInit {
       status: this.selectedStatus(),
     }).subscribe({
       next: (response) => {
-        console.log(response);
         this.tableData.set(response.purchase.data);
         this.totalItems.set(response.purchase.total);
         this.isEmpty.set(this.tableData().length === 0);
@@ -134,7 +133,7 @@ export class PendingPurchaseComponent implements OnInit {
   }
 
   viewPurchaseDetails(purchase: any): void {
-    this.router.navigate(['/purchase/view-details', purchase._id]);
+    this.router.navigate(['/purchase/view-purchase', purchase._id]);
   }
 
   onRowClick(row: any): void {
@@ -161,7 +160,6 @@ export class PendingPurchaseComponent implements OnInit {
   }
 
   viewDocuments(purchase: any): void {
-    // Implement document viewing logic
     console.log('Viewing documents for purchase:', purchase);
   }
 
