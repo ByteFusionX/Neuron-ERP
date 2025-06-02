@@ -2,15 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
-import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
+import { PurchaseData, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
 import { environment } from 'src/environments/environment';
-
-export enum PurchaseStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED'
-}
-
 
 @Injectable({
   providedIn: 'root'
@@ -64,11 +57,7 @@ export class PurchaseService {
     return this.http.get(`${this.api}/purchase/purchase-request/${purchaseId}`)
   }
 
-  updatePurchaseStatus(
-    purchaseId: string,
-    status: PurchaseStatus,
-    comment?: string
-  ): Observable<any> {
-    return this.http.patch<any>(`${this.api}/${purchaseId}/status`, { status, comment });
+  updatePurchaseStatus(purchaseId: string, status: PurchaseStatus, userId: string, comment?: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, userId, comment });
   }
 }

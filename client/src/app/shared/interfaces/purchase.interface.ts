@@ -46,3 +46,9 @@ export interface PurchaseData {
     createdAt: Date,
     updatedAt?: Date,
 }
+
+export enum PurchaseStatus {
+  PENDING = 'Pending',
+  APPROVED = 'Approved',
+  REJECTED = 'Rejected'
+}

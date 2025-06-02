@@ -161,7 +161,6 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
     try {
         const { status } = req.params;
 
-        // Validate status
         if (!Object.values(PurchaseRequestStatus).includes(status as PurchaseRequestStatus)) {
             return res.status(400).json({
                 success: false,
@@ -377,8 +376,9 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
 export const updatePurchaseRequestStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { status, rejectedReason } = req.body;
+        const { status, userId, comment } = req.body;
 
+        const rejectedReason = comment
         // Validate status
         if (!Object.values(PurchaseRequestStatus).includes(status)) {
             return res.status(400).json({
@@ -398,37 +398,37 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             });
         }
 
-        // // If status is changing to Rejected, require rejected reason
-        // if (status === PurchaseRequestStatus.Rejected) {
-        //     if (!rejectedReason || !rejectedReason.comment) {
-        //         return res.status(400).json({
-        //             success: false,
-        //             message: "Rejection reason is required",
-        //             status: 400
-        //         });
-        //     }
+        // If status is changing to Rejected, require rejected reason
+        if (status === PurchaseRequestStatus.Rejected) {
+            if (!rejectedReason) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Rejection reason is required",
+                    status: 400
+                });
+            }
 
-        //     // Add rejected reason to the array
-        //     purchaseRequest.rejectedReason.push({
-        //         rejectedBy: req.user?._id || rejectedReason.rejectedBy,
-        //         comment: rejectedReason.comment,
-        //         rejectedAt: new Date()
-        //     });
-        // }
+            // Add rejected reason to the array
+            purchaseRequest.rejectedReason.push({
+                rejectedBy: userId,
+                comment: comment,
+                rejectedAt: new Date()
+            });
+        }
 
-        // // Update status and other fields
-        // purchaseRequest.status = status;
-        // purchaseRequest.updatedBy = req.user?._id;
-        // purchaseRequest.updatedAt = new Date();
+        // Update status and other fields
+        purchaseRequest.status = status;
+        purchaseRequest.updatedBy = userId;
+        purchaseRequest.updatedAt = new Date();
 
-        // const updatedPurchaseRequest = await purchaseRequest.save();
+        const updatedPurchaseRequest = await purchaseRequest.save();
 
-        // return res.status(200).json({
-        //     success: true,
-        //     message: "Purchase request status updated successfully",
-        //     data: updatedPurchaseRequest,
-        //     status: 200
-        // });
+        return res.status(200).json({
+            success: true,
+            message: "Purchase request status updated successfully",
+            data: updatedPurchaseRequest,
+            status: 200
+        });
     } catch (error) {
         next(error);
     }

@@ -87,6 +87,12 @@ export class PendingPurchaseComponent implements OnInit {
         type: 'text',
       },
       {
+        key: 'status',
+        label: 'Status',
+        type: 'status',
+        headerClass: 'text-center'
+      },
+      {
         key: 'mrRequest',
         label: 'MR Request',
         type: 'text',
@@ -109,7 +115,7 @@ export class PendingPurchaseComponent implements OnInit {
     ]
 
     this.defaultColumns = [
-      'createdAt', 'purchaseNo', 'jobId.jobId', 'customerId.companyName', `createdBy.firstName`, 'totalLpo', 'mrRequest', 'actions'
+      'createdAt', 'purchaseNo', 'jobId.jobId', 'customerId.companyName', `createdBy.firstName`, 'totalLpo', 'status', 'mrRequest', 'actions'
     ];
   }
 

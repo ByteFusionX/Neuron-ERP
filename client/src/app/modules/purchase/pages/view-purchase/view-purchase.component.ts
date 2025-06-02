@@ -1,14 +1,15 @@
 import { Component, inject } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, TitleStrategy } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { FileService } from 'src/app/core/services/file.service';
-import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
+import { PurchaseData, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
   selector: 'app-view-purchase',
@@ -23,6 +24,7 @@ export class ViewPurchaseComponent {
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private fileService = inject(FileService);
+  private employeeService = inject(EmployeeService)
 
   purchase: PurchaseData | null = null;
   isLoading = true;
@@ -30,20 +32,23 @@ export class ViewPurchaseComponent {
   isRejecting = false;
   downloadProgress = 0;
   isDownloading = false;
+  purchaseId!: string;
+  tokenData!: { id: string, employeeId: string };
 
   ngOnInit(): void {
     this.loadPurchase();
+    this.tokenData = this.employeeService.employeeToken();
   }
 
   loadPurchase() {
-    const purchaseId = this.route.snapshot.paramMap.get('id');
-    if (!purchaseId) {
+    this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
+    if (!this.purchaseId) {
       this.notificationService.error('Invalid Purchase ID');
       this.router.navigate(['/purchase/pendings']);
       return;
     }
 
-    this.purchaseService.getPurchaseById(purchaseId).subscribe({
+    this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
         console.log(response)
         this.purchase = response.data;
@@ -77,20 +82,21 @@ export class ViewPurchaseComponent {
     dialogRef.afterClosed().subscribe((result) => {
       if (result?.isConfirmed) {
         this.isApproving = true;
-        // this.purchaseService.updatePurchaseStatus(
-        //   this.purchase._id,
-        //   PurchaseStatus.APPROVED,
-        //   result.comment
-        // ).subscribe({
-        //   next: () => {
-        //     this.notificationService.success('Purchase approved successfully');
-        //     this.router.navigate(['/purchases/pendings']);
-        //   },
-        //   error: (error) => {
-        //     this.notificationService.error(error.error?.message || 'Failed to approve purchase');
-        //     this.isApproving = false;
-        //   }
-        // });
+        this.purchaseService.updatePurchaseStatus(
+          this.purchaseId,
+          PurchaseStatus.APPROVED,
+          this.tokenData.id,
+          result.comment,
+        ).subscribe({
+          next: () => {
+            this.notificationService.success('Purchase approved successfully');
+            this.router.navigate(['/purchase/approves']);
+          },
+          error: (error) => {
+            this.notificationService.error(error.error?.message || 'Failed to approve purchase');
+            this.isApproving = false;
+          }
+        });
       }
     });
   }
@@ -114,20 +120,21 @@ export class ViewPurchaseComponent {
     dialogRef.afterClosed().subscribe((result) => {
       if (result?.isConfirmed) {
         this.isRejecting = true;
-        // this.purchaseService.updatePurchaseStatus(
-        //   this.purchase._id,
-        //   PurchaseStatus.REJECTED,
-        //   result.comment
-        // ).subscribe({
-        //   next: () => {
-        //     this.notificationService.success('Purchase rejected successfully');
-        //     this.router.navigate(['/purchases/pendings']);
-        //   },
-        //   error: (error) => {
-        //     this.notificationService.error(error.error?.message || 'Failed to reject purchase');
-        //     this.isRejecting = false;
-        //   }
-        // });
+        this.purchaseService.updatePurchaseStatus(
+          this.purchaseId,
+          PurchaseStatus.REJECTED,
+          this.tokenData.id,
+          result.comment,
+        ).subscribe({
+          next: () => {
+            this.notificationService.success('Purchase rejected successfully');
+            this.router.navigate(['/purchase/pendings']);
+          },
+          error: (error) => {
+            this.notificationService.error(error.error?.message || 'Failed to reject purchase');
+            this.isRejecting = false;
+          }
+        });
       }
     });
   }

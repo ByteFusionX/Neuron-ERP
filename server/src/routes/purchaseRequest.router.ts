@@ -3,17 +3,19 @@ import {
     createPurchaseRequest,
     generatePurchaseNumber,
     getPurchaseRequestById,
-    getPurchaseRequests
+    getPurchaseRequests,
+    getPurchaseRequestsByStatus,
+    updatePurchaseRequestStatus
 } from '../controllers/purchaseRequest.controller'
 
 const purchaseRequestRouter = Router()
 
 purchaseRequestRouter.post('/purchase-request', createPurchaseRequest)
 purchaseRequestRouter.post('/purchase-requests', getPurchaseRequests)
-purchaseRequestRouter.get('/purchase-request/:status')
+purchaseRequestRouter.get('/purchase-request/status/:id', getPurchaseRequestsByStatus)
 purchaseRequestRouter.get('/purchase-request/:id', getPurchaseRequestById)
 purchaseRequestRouter.get('/purchase-request/generate-purchase-no', generatePurchaseNumber)
-purchaseRequestRouter.patch('/purchase-request/status/:id')
+purchaseRequestRouter.patch('/purchase-request/status/:id', updatePurchaseRequestStatus)
 purchaseRequestRouter.patch('/purchase-request/:id')
 purchaseRequestRouter.delete('/purchase-request/:id')
 purchaseRequestRouter.patch('/purchase-request/comparison/:id')

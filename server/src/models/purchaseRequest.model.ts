@@ -62,6 +62,7 @@ export enum PurchaseRequestStatus {
     ReadyToProcessLPO = 'ReadyToProcessLPO',
     Rejected = 'Rejected',
     OnHoldCancelled = 'OnHoldCancelled',
+    Approved = 'Approved'
 }
 
 interface PurchaseRequest extends Document {
