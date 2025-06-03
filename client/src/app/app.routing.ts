@@ -32,6 +32,8 @@ import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchas
 import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
 import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sheet/comparison-sheet.component';
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
+import { OpenToWorckComponent } from './modules/job-sheet/pages/open-to-work/open-to-work.component';
+
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -101,7 +103,11 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/job-sheet/job-sheet.component').then((c) => c.JobSheetComponent),
     children: [
-      { path: '', canActivate: [RoleGuard], component: JobListComponent },
+      { path: '', redirectTo: 'pendings', pathMatch: 'full' },
+      { path: 'pending', canActivate: [RoleGuard], component: JobListComponent },
+      { path: 'open-to-work', canActivate: [RoleGuard], component: OpenToWorckComponent },
+      { path: 'in-progress', canActivate: [RoleGuard], component: OpenToWorckComponent },
+      { path: 'completed', canActivate: [RoleGuard], component: JobListComponent },
     ]
   },
   {

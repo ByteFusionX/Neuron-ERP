@@ -3,7 +3,7 @@ import { Component } from '@angular/core';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Observable, Subscription, catchError, tap, throwError } from 'rxjs';
 import { JobService } from 'src/app/core/services/job/job.service';
-import { JobStatus, JobTable, getJob } from 'src/app/shared/interfaces/job.interface';
+import { JobStatus, JobTable, allocateStatus, getJob } from 'src/app/shared/interfaces/job.interface';
 import { saveAs } from 'file-saver'
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
@@ -31,8 +31,6 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
-import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { MrRequestComponent } from 'src/app/modules/purchase/pages/mr-request/mr-request.component';
 
 @Component({
   selector: 'app-job-list',
@@ -171,12 +169,14 @@ export class JobListComponent {
   }
 
   onfilterApplied() {
+    this.page = 1
     this.updateUrlParams();
     this.getAllJobs();
   }
 
   ngModelChange() {
     if (this.searchQuery == '' && this.isEnter) {
+      this.page = 1;
       this.onSearch();
       this.isEnter = !this.isEnter;
     }
@@ -185,6 +185,7 @@ export class JobListComponent {
   onSearch() {
     this.isEnter = true;
     this.isLoading = true;
+    this.page = 1
     this.updateUrlParams();
     this.getAllJobs();
   }
@@ -210,7 +211,8 @@ export class JobListComponent {
       selectedMonth: selectedMonth,
       selectedYear: selectedYear as unknown as number,
       access: access,
-      userId: userId
+      userId: userId,
+      allocateStatus: allocateStatus.Pending
     };
 
     this.subscriptions.add(
@@ -536,6 +538,47 @@ export class JobListComponent {
   onPageNumberClick(event: { page: number, row: number }) {
     this.subject.next(event);
   }
+
+  openAllocateTypeSelecter(data: getJob) {
+    const dialogRef = this._dialog.open(AllocateTypeModalComponent, {
+      data: data,
+      width: '500px',
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.handleAllocationTypeSelection(result.id, result.jobId, result.allocationType);
+      } else {
+        // User cancelled or closed dialog without selection
+        console.log('Dialog was cancelled');
+      }
+    });
+  }
+
+  // Optional: Create a separate method to handle the selection
+  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType): void {
+    const data = {
+      id,
+      jobId,
+      allocationType
+    };
+
+    this._jobService.updateAllocateType(data as any).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.toast.success('Job Allocated successfully');
+          this.getAllJobs()
+
+        }
+      },
+      error: (err) => {
+        console.error('Update failed:', err);
+        // Optionally show error toast/message
+      },
+    });
+  }
+
 
   onDeleteJob(jobId: string) {
     const employee = this._employeeService.employeeToken();

@@ -163,8 +163,34 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Job Sheet',
       icon: 'heroBriefcase',
       privilegeKey: 'jobSheet',
+      hasDropdown: true,
       privilegeValue: 'none',
-      route: '/job-sheet',
+      children: [
+        {
+          id: 'pendingJobSheet',
+          label: 'Pending',
+          route: '/job-sheet/pending',
+
+        },
+        {
+          id: 'openToWorkJobSheet',
+          label: 'Open to work',
+          route: '/job-sheet/open-to-work',
+
+        },
+        {
+          id: 'inProgressJobSheet',
+          label: 'In progress',
+          route: '/job-sheet/in-progress',
+
+        },
+        {
+          id: 'completedJobSheet',
+          label: 'Completed',
+          route: '/job-sheet/completed',
+
+        }
+      ]
     },
     {
       id: 'purchase',

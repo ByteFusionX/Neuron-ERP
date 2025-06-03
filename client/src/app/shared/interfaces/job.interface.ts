@@ -21,6 +21,8 @@ export interface getJob {
     purchaseNo?: any;
     mr?: any
     supplierDiscounts?:any;
+    allocateStatus: allocateStatus
+    allocateType: allocateType
 }
 
 export interface Files {
@@ -42,4 +44,18 @@ export enum JobStatus {
     cancelled = 'Cancelled',
     onHold = 'On Hold',
     invoiced = 'Invoiced'
+}
+
+export enum allocateType {
+    SupplyOnly = 'Supply Only',
+    ProjectWithSupply = 'Project With Supply',
+    ProjectsWithOutSupply = 'Projects With Out Supply ',
+    AMC = 'AMC '
+}
+
+export enum allocateStatus {
+    Pending = 'Pending',
+    WorkInProgress = 'Work In Progress',
+    OpenToWork = 'OpenToWork',
+    Completed = 'Completed'
 }

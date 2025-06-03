@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, filter } from 'rxjs';
 import { getCreators } from 'src/app/shared/interfaces/employee.interface';
-import { JobStatus, JobTable, filterJob, getJob } from 'src/app/shared/interfaces/job.interface';
+import { JobStatus, JobTable, allocateType, filterJob, getJob } from 'src/app/shared/interfaces/job.interface';
 import { QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
@@ -41,5 +41,9 @@ export class JobService {
 
   getJobids(): Observable<getJob[]> {
     return this.http.get<getJob[]>(`${this.apiUrl}/job/noFilter`)
+  }
+  
+  updateAllocateType(data: { id: string, jobId: string, allocationType: allocateType }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/job/updateAllocateType`, data)
   }
 }

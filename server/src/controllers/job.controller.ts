@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express"
-import jobModel from "../models/job.model"
+import jobModel, { allocateStatus, allocateType } from "../models/job.model"
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller';
 import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated } from "../common/util";
@@ -9,13 +9,14 @@ const { ObjectId } = require('mongodb')
 
 export const jobList = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId } = req.body;
+        let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId, allocateStatus } = req.body;
         let isStatus = status == null ? true : false;
         let isSalesPerson = salesPerson == null ? true : false;
         let skipNum: number = (page - 1) * row;
 
         let matchFilters: any = {
             isDeleted: { $ne: true },
+            allocateStatus,
             $and: [
                 {
                     $or: [
@@ -229,7 +230,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
 export const totalJob = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { access, userId } = req.query;
+        let { access, userId, allocateStatus } = req.query;
 
         let accessFilter = {};
 
@@ -253,7 +254,7 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
 
         const jobTotal: { total: number }[] = await jobModel.aggregate([
             {
-                $match: { isDeleted: { $ne: true } }
+                $match: { isDeleted: { $ne: true }, allocateStatus }
             },
             {
                 $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
@@ -310,7 +311,7 @@ export const getJobSalesPerson = async (req: Request, res: Response, next: NextF
 
         const customers = await jobModel.aggregate([
             {
-                $match: { isDeleted: { $ne: true } }
+                $match: { isDeleted: { $ne: true }, allocateStatus }
             },
             {
                 $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotaion' }
@@ -465,3 +466,54 @@ export const jobSheets = async (req: Request, res: Response, next: NextFunction)
         next(error)
     }
 }
+
+export const updateAllocateType = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id, allocationType } = req.body;
+
+        // Validate required fields
+        if (!id || !allocationType) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID and allocation type are required'
+            });
+        }
+
+        // Validate if allocationType is a valid enum value
+        if (!Object.values(allocateType).includes(allocationType)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid allocation type'
+            });
+        }
+
+        // Update the job with new allocationType and set allocateStatus to OpenToWork
+        const updateJob = await jobModel.findByIdAndUpdate(
+            { _id: id },
+            {
+                allocateType: allocationType,
+                allocateStatus: allocateStatus.OpenToWork,
+                updatedDate: new Date()
+            },
+            {
+                new: true, // Return the updated document
+            }
+        );
+
+        if (!updateJob) {
+            return res.status(404).json({
+                success: false,
+                message: 'Job not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Allocation type updated successfully',
+            data: updateJob
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
