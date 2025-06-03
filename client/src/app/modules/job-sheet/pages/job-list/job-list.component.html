@@ -3,7 +3,7 @@
 
         <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
             <div class="flex gap-2">
-                <h3>Job Sheet</h3>
+                <h3>Pending Job Sheet </h3>
                 <p *ngIf="reportDate"
                     class="text-sm font-normal bg-purple-200 px-4 gap-2 flex justify-center items-center">{{reportDate}}
                     <ng-icon (click)="onRemoveReport()" class="hover:text-red-500 cursor-pointer"
@@ -11,9 +11,9 @@
                 </p>
             </div>
             <div class="flex justify-end items-center gap-4">
-               
+
                 <div *ngIf="!isLoading && !isEmpty" class="flex justify-end items-center  h-full">
-                    <p class="text-lg font-medium">Total LPO Value: {{formatNumber(totalLpoValue.toFixed(2)) }}  QAR</p>
+                    <p class="text-lg font-medium">Total LPO Value: {{formatNumber(totalLpoValue.toFixed(2)) }} QAR</p>
                 </div>
                 <div class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[20px]"
                     [matMenuTriggerFor]="beforeMenu" mat-button>
@@ -33,17 +33,17 @@
 
                 </mat-menu>
                 <div
-                class="h-10 inline-flex items-center justify-between text-body dark:text-white/60 bg-white border border-gray/60 rounded-[6px] pl-[20px] pr-[8px]">
-                <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="ngModelChange()"
-                    placeholder="Search by JobId/customer" (keyup.enter)="onSearch()"
-                    class="bg-transparent border-none text-[15px] shadow-none text-black flex items-center focus:outline-none">
-                <div class="bg-violet-100 hover:bg-violet-200 flex justify-center items-center rounded-full  cursor-pointer"
-                    (click)="onSearch()">
+                    class="h-10 inline-flex items-center justify-between text-body dark:text-white/60 bg-white border border-gray/60 rounded-[6px] pl-[20px] pr-[8px]">
+                    <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="ngModelChange()"
+                        placeholder="Search by JobId/customer" (keyup.enter)="onSearch()"
+                        class="bg-transparent border-none text-[15px] shadow-none text-black flex items-center focus:outline-none">
+                    <div class="bg-violet-100 hover:bg-violet-200 flex justify-center items-center rounded-full  cursor-pointer"
+                        (click)="onSearch()">
 
-                    <ng-icon name="heroMagnifyingGlass" class="text-sm text-gray-600  hover:text-violet-700 m-1.5">
-                    </ng-icon>
+                        <ng-icon name="heroMagnifyingGlass" class="text-sm text-gray-600  hover:text-violet-700 m-1.5">
+                        </ng-icon>
+                    </div>
                 </div>
-            </div>
                 <div class="min-w-80 flex gap-2" (click)="handleNotClose($event)">
 
                     <div class="w-full">
@@ -53,14 +53,14 @@
                                 [value]="employee._id">{{employee.fullName}}</ng-option>
                         </ng-select>
                     </div>
-                    <div  class="w-full">
+                    <div class="w-full">
                         <ng-select [(ngModel)]="selectedStatus" class=" filter " placeholder="Status" appendTo="body"
                             (change)="onfilterApplied()">
                             <ng-option *ngFor="let status of status" [value]="status.value">{{status.value}}</ng-option>
                         </ng-select>
                     </div>
-                    <div  class="w-full" *ngIf="searchQuery || selectedEmployee || selectedStatus">
-                        <button 
+                    <div class="w-full" *ngIf="searchQuery || selectedEmployee || selectedStatus">
+                        <button
                             class="w-full bg-orange-500 hover:bg-orange-00 text-white font-medium py-2.5 px-4 rounded text-xs whitespace-nowrap"
                             (click)="clearFilter()">
                             x Clear All Filter
@@ -150,15 +150,15 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden ">
                         Comment </th>
-                        <td mat-cell *matCellDef="let element">
-                            <div class="flex justify-center items-center gap-3" *ngIf="element.comment">
-                                <button (click)="onViewComment(element.comment)"
-                                    class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
-                                    matTooltip="View Comment" matTooltipPosition="above" matTooltipClass="mat-tooltip">
-                                    <ng-icon name="heroEye" class="text-black"></ng-icon>
-                                </button>
-                            </div>
-                        </td>
+                    <td mat-cell *matCellDef="let element">
+                        <div class="flex justify-center items-center gap-3" *ngIf="element.comment">
+                            <button (click)="onViewComment(element.comment)"
+                                class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
+                                matTooltip="View Comment" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                <ng-icon name="heroEye" class="text-black"></ng-icon>
+                            </button>
+                        </div>
+                    </td>
                 </ng-container>
 
                 <ng-container matColumnDef="lpo">
@@ -239,15 +239,21 @@
                         Action
                     </th>
                     <td mat-cell *matCellDef="let element" class="text-center">
-                        <button class="text-red-600 hover:text-red-800"  *ngIf="isDeleteOption"
-                                (click)="onDeleteJob(element._id)"
-                                matTooltip="Delete Job"
-                                matTooltipPosition="above">
-                            <ng-icon name="heroTrash"></ng-icon>
-                        </button>
+                        <div class="inline-flex items-center gap-3 justify-center">
+                            <button class="text-red-600 hover:text-red-800" *ngIf="isDeleteOption"
+                                (click)="onDeleteJob(element._id)" matTooltip="Delete Job" matTooltipPosition="above">
+                                <ng-icon name="heroTrash" size="18"></ng-icon>
+                            </button>
+
+                            <button
+                                class="bg-violet-600 hover:bg-violet-800 w-7 h-7 rounded-full flex items-center justify-center text-white"
+                                matTooltip="Allocate" matTooltipPosition="above"
+                                (click)="openAllocateTypeSelecter(element)">
+                                <ng-icon name="heroScale" size="16"></ng-icon>
+                            </button>
+                        </div>
                     </td>
                 </ng-container>
-
                 <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
                 <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
             </table>

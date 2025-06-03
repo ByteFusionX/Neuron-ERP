@@ -27,6 +27,8 @@ import { EditCompanyDetailsComponent } from './modules/profile/pages/edit-compan
 import { PendingSuppliersComponent } from './modules/suppliers/pages/pending-suppliers/pending-suppliers.component';
 import { CreateSupplierComponent } from './modules/suppliers/pages/create-supplier/create-supplier.component';
 import { SupplierViewComponent } from './modules/suppliers/pages/supplier-view/supplier-view.component';
+import { OpenToWorckComponent } from './modules/job-sheet/pages/open-to-work/open-to-work.component';
+
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -96,7 +98,11 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/job-sheet/job-sheet.component').then((c) => c.JobSheetComponent),
     children: [
-      { path: '', canActivate: [RoleGuard], component: JobListComponent },
+      { path: '', redirectTo: 'pendings', pathMatch: 'full' },
+      { path: 'pending', canActivate: [RoleGuard], component: JobListComponent },
+      { path: 'open-to-work', canActivate: [RoleGuard], component: OpenToWorckComponent },
+      { path: 'in-progress', canActivate: [RoleGuard], component: OpenToWorckComponent },
+      { path: 'completed', canActivate: [RoleGuard], component: JobListComponent },
     ]
   },
   {
