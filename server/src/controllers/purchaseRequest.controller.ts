@@ -368,6 +368,7 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
             data: { purchaseNo: newPurchaseNumber }
         });
     } catch (error) {
+        console.log(error)
         next(error);
     }
 };

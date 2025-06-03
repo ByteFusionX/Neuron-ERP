@@ -6,9 +6,10 @@
     </div>
     <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
         <div class="m-5">
-            <app-form-field label="Supplier" [control]="f['supplierId']" [isSubmitted]="isSubmitted()"
-                placeholder="Enter Supplier name" class="w-full">
-            </app-form-field>
+            <app-select-dropdown [options]="suppliers()" label="Supplier" optionLabel="supplierName" optionValue="_id"
+                formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()"
+                class="w-full -m-1">
+            </app-select-dropdown>
             <!-- <app-radio-group label="Discount Type" [options]="discountTypes" formControlName="discountType"
                 [isSubmitted]="isSubmitted()" [showOtherOption]="true" class="w-full" [showOtherOption]="false">
             </app-radio-group> -->

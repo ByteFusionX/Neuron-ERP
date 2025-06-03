@@ -10,6 +10,7 @@ import { NgIcon } from '@ng-icons/core';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
+import { SupplierService } from 'src/app/core/services/supplier.service';
 
 @Component({
   selector: 'app-supplier-discount',
@@ -30,10 +31,12 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
   private router = inject(Router)
   private toaster = inject(ToastrService)
   private subscriptions = new Subscription()
+  private supplierService = inject(SupplierService)
 
   selectedJob!: getJob;
   isSubmitted = signal<boolean>(false);
   suppliers = signal<{ supplierId: string, discount: string }[]>([])
+  suppliersList = signal<any[]>([])
   isExist: boolean = false;
 
   supplierForm: FormGroup = this.fb.group({
@@ -63,16 +66,27 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
       })
     )
 
+    this.supplierService.supplierList().subscribe({
+      next: (res) => {
+        this.suppliersList.set(res.data)
+      }, error: (error) => {
+        console.log(error);
+      }
+    })
 
     const suppliersArray = this.supplierForm.get('suppliers') as FormArray;
     suppliersArray.valueChanges.subscribe(() => {
       const total = this.calculateTotalDiscount();
       this.supplierForm.get('totalDiscount')?.setValue(total, { emitEvent: false });
     });
-
   }
 
-  
+  getSupplierName(id: string): string {
+    const supplier = this.suppliersList().find((data) => data._id == id)
+    return supplier.supplierName
+  }
+
+
   supplierDiscounts(data?: any): FormGroup {
     return this.fb.group({
       supplierId: [data?.supplierId || '', Validators.required],
