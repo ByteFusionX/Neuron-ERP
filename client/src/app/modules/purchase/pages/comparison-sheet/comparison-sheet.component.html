@@ -1,0 +1,81 @@
+<div class="bg-white m-6 rounded-lg">
+    <div class="border-b p-3 px-9 flex justify-between items-center">
+        <h3 class="text-md font-medium">Comparison Sheet</h3>
+    </div>
+    <form [formGroup]="comparisonForm" (ngSubmit)="onSubmit()">
+        <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+            <div class="flex flex-col md:flex-row md:mb-3 gap-3">
+                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()"
+                    placeholder="Enter PR No" class="w-full" [readonly]="true">
+                </app-form-field>
+                <app-form-field label="Job Id" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
+                    placeholder="Enter Job Id" class="w-full" [readonly]="true">
+                </app-form-field>
+            </div>
+            <div class="flex flex-col md:flex-row gap-3">
+                <app-form-field label="product" [control]="f['product']" [isSubmitted]="isSubmitted()"
+                    placeholder="Product Description" class="w-full" [readonly]="true">
+                </app-form-field>
+                <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
+                    placeholder="Inventory List" class="w-full" [readonly]="true">
+                </app-form-field>
+                <div class="flex gap-3 items-end mb-3">
+                    <button
+                        class="w-36 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+ Add Comparison</button>
+                    <button
+                        class="w-32 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+ Add Supplier</button>
+                </div>
+            </div>
+            <div class="w-full flex justify-end gap-2 py-2">
+                <span>Currency:</span>
+                <div class="flex">
+                    <button class="text-gray-500 hover:text-gray-700">USD</button>/
+                    <button class="text-violet-600 underline">QAR</button>
+                </div>
+            </div>
+            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-5">
+                <thead class="text-xs text-gray-700 uppercase bg-violet-50">
+                    <tr>
+                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
+                            <div class="px-2 py-3">SL.NO</div>
+                        </th>
+                        <th scope="col" resizable key="supplierName" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Supplier Name</div>
+                        </th>
+                        <th scope="col" resizable key="qty" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">QTY</div>
+                        </th>
+                        <th scope="col" resizable key="unitCost" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Unit Selling Cost</div>
+                        </th>
+                        <th scope="col" resizable key="totalCost" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Total Selling Cost</div>
+                        </th>
+                        <th scope="col" resizable key="availability" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Availability</div>
+                        </th>
+                        <th scope="col" resizable key="paymentTerms" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Payment Terms</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="12">
+                            <p class="text-center text-base p-2">Items empty</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
+            <div class="md:flex gap-3">
+                <button
+                    class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3">Discard</button>
+                <button
+                    class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3">Save
+                    & Close</button>
+            </div>
+        </div>
+    </form>
+</div>

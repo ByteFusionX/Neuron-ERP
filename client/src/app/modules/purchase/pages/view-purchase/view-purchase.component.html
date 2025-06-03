@@ -1,0 +1,149 @@
+<div class="bg-white m-6">
+    <div class="border-b p-3 px-9 flex justify-between items-center">
+        <h3 class="text-md font-medium">Purchase Details - <span class="uppercase">{{ purchase?.purchaseNo }}</span>
+        </h3>
+        <div class="flex gap-2">
+            <app-btn theme="primary" (click)="onEdit()">
+                <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
+                Edit
+            </app-btn>
+        </div>
+    </div>
+
+    <div *ngIf="isLoading" class="flex justify-center items-center h-64">
+        <ng-icon name="heroArrowPath" class="animate-spin text-4xl"></ng-icon>
+    </div>
+
+    <div *ngIf="!isLoading && purchase" class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+
+        <!-- Basic Information -->
+        <div class="w-full mb-8">
+            <h4 class="text-lg font-semibold mb-4">Basic Information</h4>
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <tbody>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Purchase ID</td>
+                            <td class="px-2 py-2 border">{{ purchase.purchaseNo }}</td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Customer</td>
+                            <td class="px-2 py-2 border">{{ purchase.customerId?.companyName }}</td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Status</td>
+                            <td class="px-2 py-2 border">
+                                <span [ngClass]="{
+                  'bg-yellow-500 text-white': purchase.status === 'Pending',
+                  'bg-green-500 text-white': purchase.status === 'Approved',
+                  'bg-red-500 text-white': purchase.status === 'Rejected'
+                }" class="px-2 py-1 rounded-md">{{ purchase.status }}</span>
+                            </td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Requested By</td>
+                            <td class="px-2 py-2 border">{{ purchase.createdBy?.firstName }}
+                                {{purchase.createdBy?.lastName}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Purchase Items -->
+        <div class="w-full mb-8">
+            <h4 class="text-lg font-semibold mb-4">Items</h4>
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 border">Item</th>
+                            <th class="px-4 py-2 border">Quantity</th>
+                            <th class="px-4 py-2 border">Unit Cost</th>
+                            <th class="px-4 py-2 border">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <ng-container *ngFor="let items of purchase.items">
+                            <tr class="border text-center">
+                                <td colspan="4" class="px-4 py-2 border">Item Name: <span
+                                        class="text-base font-medium">{{ items.itemName }}</span></td>
+                            </tr>
+                            <tr class="border-b" *ngFor="let item of items.itemDetails">
+                                <td class="px-4 py-2 border">{{ item.detail }}</td>
+                                <td class="px-4 py-2 border">{{ item.quantity }}</td>
+                                <td class="px-4 py-2 border">{{ item.unitCost }}</td>
+                                <td class="px-4 py-2 border">{{ item.quantity * item.unitCost }}</td>
+                            </tr>
+                        </ng-container>
+                        <tr class="border-b bg-gray-50">
+                            <td colspan="3" class=" py-2">
+                                <div class="flex justify-end text-center">
+                                    Total LPO: <span class="text-base font-medium px-2">{{purchase.totalLpo}}</span>
+                                </div>
+                            </td>
+                            <td> </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Additional Details -->
+        <div class="w-full mb-8">
+            <h4 class="text-lg font-semibold mb-4">Additional Details</h4>
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <tbody>
+                        <!-- <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Remarks</td>
+                            <td class="px-2 py-2 border" colspan="3">{{ purchase.remarks || 'N/A' }}</td>
+                        </tr> -->
+                        <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Created At</td>
+                            <td class="px-2 py-2 border">{{ purchase.createdAt | date:'medium' }}</td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Updated At</td>
+                            <td class="px-2 py-2 border">{{ purchase.updatedAt ? purchase.updatedAt: purchase.createdAt
+                                |
+                                date:'medium' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- <div class="mt-8" *ngIf="purchase?.mrRequest">
+            <h3 class="text-lg font-semibold mb-2">Material Request</h3>
+            <div class="p-4 bg-gray-50 rounded border space-y-1">
+                <p><strong>Engineer:</strong> {{ purchase.mrRequest.engineer?.name || 'N/A' }}</p>
+                <p><strong>Message:</strong> {{ purchase.mrRequest.message }}</p>
+                <p><strong>Date:</strong> {{ purchase.mrRequest.createdDate | date:'medium' }}</p>
+            </div>
+        </div>
+
+        <div class="mt-8" *ngIf="purchase?.supplierDiscounts?.suppliers?.length">
+            <h3 class="text-lg font-semibold mb-2">Supplier Discounts</h3>
+            <div class="space-y-2">
+                <div *ngFor="let discount of purchase.supplierDiscounts.suppliers"
+                    class="p-3 bg-gray-50 rounded border">
+                    <p><strong>Supplier:</strong> {{ getSupplierName(discount.supplierId) }}</p>
+                    <p><strong>Discount:</strong> ₹{{ discount.discount | number:'1.2-2' }}</p>
+                </div>
+                <p class="font-semibold">Total Discount: ₹{{ purchase.supplierDiscounts.totalDiscount | number:'1.2-2'
+                    }}</p>
+            </div>
+        </div> -->
+
+        @if(purchase.status === 'Pending'){
+        <div class="mt-8 pt-6 border-t">
+            <div class="flex justify-end gap-4">
+                <app-btn theme="danger" (click)="onReject()" [loading]="isRejecting">
+                    <ng-icon name="heroXCircle" class="mr-2"></ng-icon>
+                    Reject
+                </app-btn>
+                <app-btn theme="success" (click)="onApprove()" [loading]="isApproving">
+                    <ng-icon name="heroCheckCircle" class="mr-2"></ng-icon>
+                    Approve
+                </app-btn>
+            </div>
+        </div>
+        }
+
+    </div>
+</div>

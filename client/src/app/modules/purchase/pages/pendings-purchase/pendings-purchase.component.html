@@ -1,0 +1,17 @@
+<data-table
+[data]="tableData()"
+[columns]="tableColumns"
+[defaultColumns]="defaultColumns"
+[isLoading]="isLoading()"
+[isEmpty]="isEmpty()"
+[totalItems]="totalItems()"
+(rowClick)="onRowClick($event)"
+(actionClick)="onActionClick($event)"
+[title]="'Pending PR'"
+>
+<ng-template #sideColumn>
+    <data-search [placeholder]="`Search by query`" (searchSubmitted)="onSearch($event)"></data-search>
+
+    <app-btn theme="primary" routerLink="/purchase/create">+ Create PR</app-btn>
+</ng-template>
+</data-table>

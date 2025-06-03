@@ -73,7 +73,6 @@
                             Department
                         </label>
                         <ng-container *ngIf="!isEdit ;else departemntBlock">
-
                             <ng-container *ngIf="enquiryData$ | async as enquiryData ;else departemntBlock">
                                 <p class="border py-[11px] px-2">
                                     {{enquiryData.department.departmentName}}</p>
@@ -238,10 +237,6 @@
                                                     <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
                                                 </th>
                 
-                
-                
-                
-                
                                                 <td class="px-2  border text-center">
                                                     {{itemsDetail.quantity}}
                                                 </td>
@@ -397,8 +392,6 @@
                 </div>
 
             </div>
-
-            
         </div>
 
 

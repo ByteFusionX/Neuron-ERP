@@ -1,0 +1,28 @@
+<div class="">
+    <div class="px-5 py-3 border-b w-full flex justify-between">
+        <h3 class="text-md font-medium">New Supplier Discount</h3>
+        <button class="bg-gray-200 rounded flex items-center justify-center p-1" (click)="onCloseClicks()"><ng-icon
+                name="heroXMark" class="text-md"></ng-icon></button>
+    </div>
+    <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
+        <div class="m-5">
+            <app-select-dropdown [options]="suppliers()" label="Supplier" optionLabel="supplierName" optionValue="_id"
+                formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()"
+                class="w-full -m-1">
+            </app-select-dropdown>
+            <!-- <app-radio-group label="Discount Type" [options]="discountTypes" formControlName="discountType"
+                [isSubmitted]="isSubmitted()" [showOtherOption]="true" class="w-full" [showOtherOption]="false">
+            </app-radio-group> -->
+            <app-form-field label="Discount" [control]="f['discount']" [isSubmitted]="isSubmitted()"
+                placeholder="Enter Discount Value" class="w-full" type="number">
+            </app-form-field>
+        </div>
+        <div class="border-t">
+            <div class="mx-5 my-3 flex justify-end items-center gap-3">
+                <button class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded"
+                    (click)="onCloseClicks()" type="button">Discard</button>
+                <button class="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded">Submit</button>
+            </div>
+        </div>
+    </form>
+</div>

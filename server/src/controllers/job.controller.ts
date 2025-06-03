@@ -385,6 +385,87 @@ export const deleteJob = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+export const jobSheets = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const qatarUsdRate = await getUSDRated();
+        const jobData = await jobModel.aggregate([
+            {
+                $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
+            },
+            {
+                $unwind: "$quotation"
+            },
+            {
+                $lookup: { from: 'customers', localField: 'quotation.client', foreignField: '_id', as: 'clientDetails' }
+            },
+            {
+                $unwind: "$clientDetails"
+            },
+            {
+                $sort: { createdDate: -1 }
+            },
+            {
+                $lookup: { from: 'departments', localField: 'quotation.department', foreignField: '_id', as: 'departmentDetails' }
+            },
+            {
+                $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
+            },
+            {
+                $addFields: {
+                    attention: {
+                        $arrayElemAt: [
+                            {
+                                $filter: {
+                                    input: '$clientDetails.contactDetails',
+                                    as: 'contact',
+                                    cond: { $eq: ['$$contact._id', '$quotation.attention'] }
+                                }
+                            },
+                            0
+                        ]
+                    },
+                    lpoValue: {
+                        $let: {
+                            vars: {
+                                baseLpoValue: {
+                                    $sum: {
+                                        $cond: [
+                                            { $eq: ['$quotation.currency', 'USD'] },
+                                            {
+                                                $multiply: [
+                                                    calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
+                                                    qatarUsdRate
+                                                ]
+                                            },
+                                            calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')
+                                        ]
+                                    }
+                                }
+                            },
+                            in: {
+                                $reduce: {
+                                    input: '$quotation.dealData.additionalCosts',
+                                    initialValue: '$$baseLpoValue',
+                                    in: {
+                                        $cond: [
+                                            { $eq: ['$$this.type', 'Customer Discount'] },
+                                            { $subtract: ['$$value', '$$this.value'] },
+                                            '$$value'
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+        ]);
+        return res.status(200).json({ jobs: jobData })
+    } catch (error) {
+        next(error)
+    }
+}
 
 export const updateAllocateType = async (req: Request, res: Response, next: NextFunction) => {
     try {

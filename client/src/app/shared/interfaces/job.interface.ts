@@ -12,10 +12,15 @@ export interface filterJob {
 export interface getJob {
     _id: string;
     jobId: string;
-    quoteId: string;
-    quotation: Quotatation[];
+    quoteId: any;
+    quotation: Quotatation;
     status: string;
-    createdDate: string
+    createdDate: string;
+    clientDetails?: any;
+    salesPersonDetails?: any;
+    purchaseNo?: any;
+    mr?: any
+    supplierDiscounts?:any;
     allocateStatus: allocateStatus
     allocateType: allocateType
 }

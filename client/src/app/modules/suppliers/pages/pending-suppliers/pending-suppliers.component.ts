@@ -234,6 +234,7 @@ export class PendingSuppliersComponent implements OnInit {
   }
 
   viewSupplierDetails(supplier: Supplier): void {
+    // console.log(supplier);
     this.router.navigate(['/suppliers', supplier._id]);
   }
 

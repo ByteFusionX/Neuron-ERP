@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import Supplier, { supplierStatus } from '../models/supplier.model';
 import { Types } from 'mongoose';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
@@ -244,7 +244,7 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
       // Validate status
       const validStatuses = Object.values(supplierStatus);
       const statusToUpdate = Array.isArray(status) ? status[0] : status;
-      
+
       if (!validStatuses.includes(statusToUpdate)) {
          return res.status(400).json({
             success: false,
@@ -349,8 +349,8 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
       const successMessage = statusToUpdate === supplierStatus.approved
          ? 'Supplier approved successfully'
          : statusToUpdate === supplierStatus.rejected
-         ? 'Supplier rejected successfully'
-         : 'Supplier status updated successfully';
+            ? 'Supplier rejected successfully'
+            : 'Supplier status updated successfully';
 
       return res.status(200).json({
          success: true,
@@ -622,3 +622,26 @@ const generateSupplierId = async (countryName: string, code: string = 'YYMM') =>
    const sequenceStr = sequence.toString().padStart(3, '0');
    return `SUP_${locationCode}_${code}_${sequenceStr}`;
 };
+
+export const getSupplierList = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const suppliers = await Supplier.find(
+         {
+            isDeleted: false,
+            status: 'Approved'
+         },
+         {
+            _id: 1,
+            supplierName: 1
+         }
+      );
+
+      return res.status(200).json({
+         success: true,
+         data: suppliers
+      })
+   } catch (error) {
+      console.log(error)
+      next(error)
+   }
+}

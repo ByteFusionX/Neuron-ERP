@@ -1,0 +1,39 @@
+<div class="">
+    <div class="px-5 py-3 border-b w-full flex justify-between">
+        <h3 class="text-md font-medium">MR Request</h3>
+        <button class="bg-gray-200 rounded flex items-center justify-center p-1" (click)="onCloseClicks()"><ng-icon
+                name="heroXMark" class="text-md"></ng-icon></button>
+    </div>
+    <form [formGroup]="mrForm" (ngSubmit)="onSubmit()">
+        <div class="m-5">
+            <app-form-field label="jobId" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
+                placeholder="Enter Job Id" class="w-full" [readonly]="true">
+            </app-form-field>
+            <app-form-field label="engineer" [control]="f['engineer']" [isSubmitted]="isSubmitted()"
+                placeholder="Enter Engineer Name" class="w-full">
+            </app-form-field>
+            <div class="w-full pe-3 mb-3">
+                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="message">
+                    Message
+                </label>
+                <textarea appNoLeadingSpace formControlName="message"
+                    class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    id="message" type="text" placeholder="Sales Account Manager Name" rows="3"></textarea>
+            </div>
+        </div>
+        <div class="border-t">
+            <div class="mx-5 my-3 flex justify-between items-center gap-3">
+                <button
+                    class="w-fit px-5 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 disabled:border-gray-500 disabled:ring-0"
+                    type="button" (click)="onClearClicks()"
+                    [disabled]="!data.job.mr">Clear</button>
+                <div class="flex gap-3">
+                    <button type="button" class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded"
+                        (click)="onCloseClicks()">Discard</button>
+                    <button
+                        class="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded">Submit</button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>

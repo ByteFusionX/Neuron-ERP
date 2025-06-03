@@ -29,6 +29,7 @@ import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
+
 @Component({
     selector: 'app-create-quotatation',
     templateUrl: './create-quotatation.component.html',
@@ -389,7 +390,5 @@ export class CreateQuotatationComponent {
   onEnquiryEdit() {
     this.isEdit = true;
   }
-
-
 
 }

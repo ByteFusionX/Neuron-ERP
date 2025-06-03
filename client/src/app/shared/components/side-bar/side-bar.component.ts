@@ -193,6 +193,28 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       ]
     },
     {
+      id: 'purchase',
+      label: 'Purchase Requisition',
+      icon: 'heroShoppingCart',
+      hasDropdown: true,
+      // privilegeKey: 'purchase',
+      notificationKey: 'purchaseCount',
+      children: [
+        {
+          id: 'pendingPurchase',
+          label: 'Pending PR',
+          route: '/purchase/pendings',
+          notificationKey: 'purchaseCount'
+        },
+        {
+          id: 'approvedPurchase',
+          label: 'Approved PR',
+          route: '/purchase/approves',
+          notificationKey: 'purchaseCount'
+        },
+      ]
+    },
+    {
       id: 'suppliers',
       label: 'Suppliers',
       icon: 'heroTruck',

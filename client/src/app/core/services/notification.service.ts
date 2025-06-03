@@ -10,17 +10,17 @@ import { EmployeeService } from './employee/employee.service';
     providedIn: 'root'
 })
 export class NotificationService {
-    private notificationsSubject = new BehaviorSubject<NotificationCounts>({ announcementCount: 0, assignedJobCount: 0, reAssignedJobCount: 0, dealSheetCount: 0, feedbackCount: 0, quotationCount: 0, enquiryCount: 0 });
+    private notificationsSubject = new BehaviorSubject<NotificationCounts>({ announcementCount: 0, assignedJobCount: 0, reAssignedJobCount: 0, dealSheetCount: 0, feedbackCount: 0, quotationCount: 0, enquiryCount: 0, purchaseCount: 0 });
     notificationCounts$ = this.notificationsSubject.asObservable();
 
-    textNotificationsSubject = new BehaviorSubject<{viewed:TextNotification[],unviewed:TextNotification[]}>({viewed:[],unviewed:[]});
+    textNotificationsSubject = new BehaviorSubject<{ viewed: TextNotification[], unviewed: TextNotification[] }>({ viewed: [], unviewed: [] });
     textNotificationsSubject$ = this.textNotificationsSubject.asObservable();
     api: string = environment.api
 
     constructor(
         private http: HttpClient,
         private socket: Socket,
-        private employeeService:EmployeeService
+        private employeeService: EmployeeService
     ) { }
 
     initializeNotifications() {
@@ -134,7 +134,7 @@ export class NotificationService {
     }
 
     getEmployeeTextNotifications(token: string) {
-        this.http.get<{viewed:TextNotification[],unviewed:TextNotification[]}>(`${this.api}/notification/${token}`).subscribe((data) => {
+        this.http.get<{ viewed: TextNotification[], unviewed: TextNotification[] }>(`${this.api}/notification/${token}`).subscribe((data) => {
             this.textNotificationsSubject.next(data)
         })
     }
@@ -142,7 +142,7 @@ export class NotificationService {
     authSocketIo(token: string) {
         this.socket.emit('auth', token);
     }
-    
+
 
     markAsRead(notificationId?: string): Observable<any> {
         return this.employeeService.employeeData$.pipe(

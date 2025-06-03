@@ -1,0 +1,94 @@
+<div class="m-6 bg-white rounded-lg">
+    <div class="px-5 py-3 border-b">
+        <h3 class="text-md font-medium">Supplier Discount</h3>
+    </div>
+    <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
+        <div class="m-10">
+            <div class="flex gap-3">
+                <app-form-field label="jobId" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
+                    placeholder="Enter Job Id" class="w-full" [readonly]="true">
+                </app-form-field>
+                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()"
+                    placeholder="Enter PR No" class="w-full" [readonly]="true">
+                </app-form-field>
+            </div>
+            <div class="w-full flex justify-end">
+                <button class="px-5 py-2 bg-violet-600 text-sm text-white hover:bg-violet-400 rounded my-2"
+                    (click)="onAddFieldClicks()" type="button">+ Add
+                    Field</button>
+            </div>
+            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border">
+                <thead class="text-xs text-gray-700 uppercase bg-violet-50">
+                    <tr>
+                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
+                            <div class="px-2 py-3">SL.NO</div>
+                        </th>
+                        <th scope="col" resizable key="supplierName" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Supplier Name</div>
+                        </th>
+                        <th scope="col" resizable key="discountValue" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Discount Value</div>
+                        </th>
+                        <th scope="col" resizable key="discountValue" class="border-l border-r border-t text-center">
+                            <div class="px-6 py-3">Actions</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <ng-container *ngIf="suppliers().length > 0; else elseSupplier">
+                        <ng-container *ngFor="let supplier of suppliers(); let i = index">
+                            <tr class="bg-white border-b text-gray-800">
+                                <td class="px-2  border text-center">
+                                    {{i+1}}
+                                </td>
+                                <td class="px-2 py-2 border text-center">
+                                    {{getSupplierName(supplier.supplierId)}}
+                                </td>
+                                <td class="px-2 py-2 border text-center ">
+                                    {{supplier.discount}}
+                                </td>
+                                <td class="px-2 py-2 text-center">
+                                    <button class="text-red-600 hover:text-red-800" (click)="onDeleteSupplier(i)"
+                                        matTooltip="Delete Discount" matTooltipPosition="above">
+                                        <ng-icon name="heroTrash"></ng-icon>
+                                    </button>
+                                </td>
+                            </tr>
+                        </ng-container>
+                        <tr>
+                            <td colspan="12">
+                                <div class="bg-gray-100 p-2 w-full md:flex justify-end border mb-8">
+                                    <div class="w-1/3 flex gap-3 items-center">
+                                        <span>Total Discount received:</span>
+                                        <input type="text" class="px-3 py-1.5 outline-none rounded"
+                                            formControlName="totalDiscount" readonly
+                                            [value]="supplierForm.get('totalDiscount')?.value | number:'1.2-2'">
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </ng-container>
+                    <ng-template #elseSupplier>
+                        <tr>
+                            <td colspan="12" class="text-center p-2 text-md">Suppliers Empty</td>
+                        </tr>
+                    </ng-template>
+                </tbody>
+            </table>
+        </div>
+        <div class="w-full md:flex justify-between gap-3 mb-3 px-8 py-3 border-t">
+            <div>
+                <button *ngIf="isExist"
+                    class="w-fit px-5 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 disabled:border-gray-500 disabled:ring-0"
+                    type="button" (click)="onClearClicks()">Clear</button>
+            </div>
+            <div class="flex gap-3">
+                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
+                    type="button" (click)="onClose()">Discard</button>
+                <button
+                    class="w-fit px-3 py-2 text-sm border bg-violet-600 hover:bg-violet-500 text-white rounded mb-3">Save
+                    & Exit</button>
+            </div>
+        </div>
+    </form>
+</div>

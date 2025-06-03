@@ -12,8 +12,8 @@ export class SupplierService {
     api: string = environment.api
     constructor(private http: HttpClient) { }
 
-    createSupplier(supplierDetails:SupplierCreateRequest): Observable<SupplierResponse> {
-        return this.http.post<SupplierResponse>(`${this.api}/supplier/create`,supplierDetails)
+    createSupplier(supplierDetails: SupplierCreateRequest): Observable<SupplierResponse> {
+        return this.http.post<SupplierResponse>(`${this.api}/supplier/create`, supplierDetails)
     }
 
     getSuppliers(params: {
@@ -42,10 +42,10 @@ export class SupplierService {
 
     createSupplierWithFiles(supplierData: CreateSupplierDto, files: File[]): Observable<any> {
         const formData = new FormData();
-        
+
         // Append supplier data as JSON string
         formData.append('supplier', JSON.stringify(supplierData));
-        
+
         // Append each file
         files.forEach((file, index) => {
             formData.append('documents', file);
@@ -56,10 +56,10 @@ export class SupplierService {
 
     updateSupplierWithFiles(id: string, supplierData: any, files: File[]): Observable<any> {
         const formData = new FormData();
-        
+
         // Append supplier data as JSON string
         formData.append('supplier', JSON.stringify(supplierData));
-        
+
         // Append each file
         files.forEach((file, index) => {
             formData.append('documents', file);
@@ -68,4 +68,7 @@ export class SupplierService {
         return this.http.patch(`${this.api}/supplier/update/${id}`, formData);
     }
 
+    supplierList(): Observable<any> {
+        return this.http.get(`${this.api}/supplier/suppliers-list`)
+    }
 }

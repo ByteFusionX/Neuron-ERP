@@ -1,10 +1,11 @@
 <div class="mb-6">
-    <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2" [for]="id">
+    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" [for]="id">
         {{ label }}
     </label>
     <input [id]="id" [type]="type" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted"
         class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-        [formControl]="control" />
+        [formControl]="control" 
+        [readonly]="readonly"/>
     <div class="text-red-700 text-sm mt-1" *ngIf="control?.invalid && isSubmitted">
         <span *ngIf="control?.errors?.['required']">This field is required.</span>
         <span *ngIf="control?.errors?.['email']">Invalid email format.</span>
