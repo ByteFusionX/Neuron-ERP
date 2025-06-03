@@ -3,7 +3,7 @@ import { Component } from '@angular/core';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Observable, Subscription, catchError, tap, throwError } from 'rxjs';
 import { JobService } from 'src/app/core/services/job/job.service';
-import { JobStatus, JobTable, allocateStatus, getJob } from 'src/app/shared/interfaces/job.interface';
+import { JobStatus, JobTable, allocateStatus, allocateType, getJob } from 'src/app/shared/interfaces/job.interface';
 import { saveAs } from 'file-saver'
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
@@ -31,6 +31,9 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
+import { AllocateTypeModalComponent } from '../allocate-type-modal/allocate-type-modal.component';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { MrRequestComponent } from 'src/app/modules/purchase/pages/mr-request/mr-request.component';
 
 @Component({
   selector: 'app-job-list',
