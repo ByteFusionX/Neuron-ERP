@@ -22,7 +22,6 @@ export enum jobStatus {
     Inovoiced = 'Inovoiced',
 }
 
-
 export enum allocateStatus {
     Pending = 'Pending',
     WorkInProgress = 'Work In Progress',

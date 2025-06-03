@@ -212,7 +212,7 @@ export class JobListComponent {
       selectedYear: selectedYear as unknown as number,
       access: access,
       userId: userId,
-      allocateStatus : allocateStatus.Pending
+      allocateStatus: allocateStatus.Pending
     };
 
     this.subscriptions.add(
@@ -557,20 +557,28 @@ export class JobListComponent {
   }
 
   // Optional: Create a separate method to handle the selection
-  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType) {
+  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType): void {
     const data = {
       id,
       jobId,
-      allocationType 
-    }
+      allocationType
+    };
 
-    this._jobService.updateAllocateType(data as any ).subscribe({
-      next: (res) => console.log(res),
-      error: (err) => console.error('Update failed:', err),
+    this._jobService.updateAllocateType(data as any).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.toast.success('Job Allocated successfully');
+          this.getAllJobs()
+
+        }
+      },
+      error: (err) => {
+        console.error('Update failed:', err);
+        // Optionally show error toast/message
+      },
     });
-
-
   }
+
 
   onDeleteJob(jobId: string) {
     const employee = this._employeeService.employeeToken();
