@@ -879,10 +879,12 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
 
 export const uploadLpo = async (req: any, res: Response, next: NextFunction) => {
     try {
+        console.log('reached here')
         if (!req.files) return res.status(204).json({ err: 'No data' });
 
         const lpoFiles = req.files;
         const newFiles = await Promise.all(lpoFiles.map(async (file: any) => {
+            console.log('reached here -- promise')
             await uploadFileToAws(file.filename, file.path);
             return { fileName: file.filename, originalname: file.originalname };
         }));
