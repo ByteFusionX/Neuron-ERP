@@ -130,7 +130,7 @@ export class QuotationEditComponent {
     if (navigation) {
       this.quoteData = navigation.extras.state as quotatationForm
       this.quoteData.client = (this.quoteData.client as getCustomer)._id
-      this.quoteData.attention = (this.quoteData.attention as ContactDetail)._id
+      this.quoteData.attention = (this.quoteData?.attention as ContactDetail)?._id
       this.quoteData.department = (this.quoteData.department as getDepartment)._id
       this.quoteData.createdBy = (this.quoteData.createdBy as getEmployee)._id
     } else {

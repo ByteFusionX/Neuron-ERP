@@ -30,13 +30,15 @@
                                 Client
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{quoteData.client.companyName}} ({{quoteData.client.clientRef}})
+                                {{(quoteData?.client?.companyName || 'N/A') +
+                                (quoteData?.client?.clientRef ? ' (' + quoteData?.client?.clientRef + ')' : '')}}
                             </td>
                             <td class="px-2 py-2 border text-start font-medium">
                                 Attention
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{quoteData.attention.firstName+' '+quoteData.attention.lastName}}
+                                {{((quoteData?.attention?.firstName || '') + ' ' + (quoteData?.attention?.lastName ||
+                                '')).trim() || 'N/A'}}
                             </td>
                         </tr>
                         <tr class="border-b">
@@ -44,13 +46,13 @@
                                 Date
                             </td>
                             <td class="px-2 py-2 border text-start uppercase">
-                                {{ quoteData.date | date: 'dd/MM/yyyy' }}
+                                {{ quoteData?.date ? (quoteData?.date | date: 'dd/MM/yyyy') : 'N/A' }}
                             </td>
                             <td class="px-2 py-2 border text-start font-medium">
                                 Closing Date
                             </td>
                             <td class="px-2 py-2 border text-start uppercase">
-                                {{ quoteData.closingDate | date: 'dd/MM/yyyy' }}
+                                {{ quoteData?.closingDate ? (quoteData?.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}
                             </td>
                         </tr>
                         <tr class="border-b">
@@ -58,27 +60,28 @@
                                 Subject
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{quoteData.subject}}
+                                {{quoteData?.subject || 'N/A'}}
                             </td>
                             <td class="px-2 py-2 border text-start font-medium">
                                 Sales Person
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{quoteData.createdBy.firstName+' '+quoteData.createdBy.lastName}}
+                                {{((quoteData?.createdBy?.firstName || '') + ' ' + (quoteData?.createdBy?.lastName ||
+                                '')).trim() || 'N/A'}}
                             </td>
                         </tr>
-                        <tr class="border-b" >
-                            <td  *ngIf="quoteData.enqId" class="px-2 py-2 border text-start font-medium">
+                        <tr class="border-b">
+                            <td *ngIf="quoteData?.enqId?.enquiryId" class="px-2 py-2 border text-start font-medium">
                                 Enq Ref Id
                             </td>
-                            <td *ngIf="quoteData.enqId" class="px-2 py-2 border text-start">
-                                {{quoteData.enqId.enquiryId}}
+                            <td *ngIf="quoteData?.enqId?.enquiryId" class="px-2 py-2 border text-start">
+                                {{quoteData?.enqId?.enquiryId}}
                             </td>
-                            <td  class="px-2 py-2 border text-start font-medium">
+                            <td class="px-2 py-2 border text-start font-medium">
                                 Quoting Company
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{quoteData.quoteCompany}}
+                                {{quoteData?.quoteCompany || 'N/A'}}
                             </td>
                         </tr>
                     </tbody>
@@ -131,94 +134,95 @@
                     </option>
                 </select>
             </div>
-                <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-2">
-                    <thead class="text-xs text-gray-700 uppercase bg-violet-50  ">
+            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-2">
+                <thead class="text-xs text-gray-700 uppercase bg-violet-50  ">
+                    <tr>
+                        <th scope="col" resizable class=" w-96 border-l border-r border-t hover:border-r-slate-950"
+                            key="itemDetail">
+                            <div class="px-6 py-3">Item Details</div>
+
+                        </th>
+                        <th scope="col" resizable key="qty"
+                            class=" border-l border-r border-t hover:border-r-slate-950  text-center min-w-[66px]">
+                            <div class="px-2 py-3">QTY</div>
+                        </th>
+                        <th scope="col" resizable key="unitCost"
+                            class="border-l border-r border-t hover:border-r-slate-950  text-center">
+                            <div class="px-6 py-3">Unit Cost ({{quoteData.currency}})</div>
+                        </th>
+                        <th scope="col" resizable key="totalCost"
+                            class="border-l border-r border-t hover:border-r-slate-950  text-center">
+                            <div class="px-6 py-3">Total Cost ({{quoteData.currency}})</div>
+                        </th>
+                        <th scope="col" resizable key="profit"
+                            class="border-l border-r border-t hover:border-r-slate-950  text-center">
+                            <div class="px-6 py-3">Profit</div>
+                        </th>
+                        <th scope="col" resizable key="unitPrice"
+                            class="border-l border-r border-t hover:border-r-slate-950  text-center">
+                            <div class="px-6 py-3">Unit Price ({{quoteData.currency}})</div>
+                        </th>
+                        <th scope="col" resizable key="totalPrice"
+                            class="border-l border-r border-t hover:border-r-slate-950  text-center">
+                            <div class="px-6 py-3">Total Price ({{quoteData.currency}})</div>
+                        </th>
+                        <th scope="col" resizable key="avbl"
+                            class="border-l border-r border-t hover:border-r-slate-950  text-center min-w-[90px]">
+                            <div class="px-2 py-3">AVBL.</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+
+
+                    <ng-container *ngFor="let item of quoteData.optionalItems[selectedOption].items">
                         <tr>
-                            <th scope="col" resizable class=" w-96 border-l border-r border-t hover:border-r-slate-950"
-                                key="itemDetail">
-                                <div class="px-6 py-3">Item Details</div>
-    
-                            </th>
-                            <th scope="col" resizable key="qty"
-                                class=" border-l border-r border-t hover:border-r-slate-950  text-center min-w-[66px]">
-                                <div class="px-2 py-3">QTY</div>
-                            </th>
-                            <th scope="col" resizable key="unitCost"
-                                class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                                <div class="px-6 py-3">Unit Cost ({{quoteData.currency}})</div>
-                            </th>
-                            <th scope="col" resizable key="totalCost"
-                                class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                                <div class="px-6 py-3">Total Cost ({{quoteData.currency}})</div>
-                            </th>
-                            <th scope="col" resizable key="profit"
-                                class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                                <div class="px-6 py-3">Profit</div>
-                            </th>
-                            <th scope="col" resizable key="unitPrice"
-                                class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                                <div class="px-6 py-3">Unit Price ({{quoteData.currency}})</div>
-                            </th>
-                            <th scope="col" resizable key="totalPrice"
-                                class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                                <div class="px-6 py-3">Total Price ({{quoteData.currency}})</div>
-                            </th>
-                            <th scope="col" resizable key="avbl"
-                                class="border-l border-r border-t hover:border-r-slate-950  text-center min-w-[90px]">
-                                <div class="px-2 py-3">AVBL.</div>
-                            </th>
+                            <td colspan="9" class="border px-6 py-2 bg-gray-50 ">
+                                <div class="flex justify-center items-center text-md text-black font-medium uppercase">
+                                    {{item.itemName}}
+                                </div>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-    
-    
-                        <ng-container *ngFor="let item of quoteData.optionalItems[selectedOption].items">
-                            <tr>
-                                <td colspan="9" class="border px-6 py-2 bg-gray-50 ">
-                                    <div class="flex justify-center items-center text-md text-black font-medium uppercase">
-                                        {{item.itemName}}
-                                    </div>
+                        <ng-container *ngFor="let itemsDetail of item.itemDetails">
+                            <tr class="bg-white border-b text-gray-800">
+                                <th scope="row"
+                                    class="px-6 border font-normal py-2 whitespace-normal break-words max-w-[28rem]">
+                                    <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
+                                </th>
+
+
+
+
+
+                                <td class="px-2  border text-center">
+                                    {{itemsDetail.quantity}}
+                                </td>
+                                <td class="px-2 py-2 border text-center">
+                                    {{itemsDetail.unitCost | numberFormatter}}
+                                </td>
+                                <td class=" py-2  text-center ">
+                                    {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
+                                </td>
+                                <td class="px-2 py-2 border text-center">
+                                    {{ itemsDetail.profit | number:'1.2-2' }}%
+                                </td>
+                                <td class="px-2 py-2 border text-center">
+                                    {{(itemsDetail.unitCost / (1 - (itemsDetail.profit/100))) | numberFormatter}}
+                                </td>
+                                <td class="px-2 py-2 border text-center">
+                                    {{((itemsDetail.unitCost / (1 - (itemsDetail.profit/100))) *
+                                    itemsDetail.quantity) | numberFormatter}}
+                                </td>
+                                <td class="px-2 py-2 border text-center">
+                                    {{itemsDetail.availability}}
                                 </td>
                             </tr>
-                            <ng-container *ngFor="let itemsDetail of item.itemDetails">
-                                <tr class="bg-white border-b text-gray-800">
-                                    <th scope="row" class="px-6 border font-normal py-2 whitespace-normal break-words max-w-[28rem]">
-                                        <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
-                                    </th>
-    
-    
-    
-    
-    
-                                    <td class="px-2  border text-center">
-                                        {{itemsDetail.quantity}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{itemsDetail.unitCost | numberFormatter}}
-                                    </td>
-                                    <td class=" py-2  text-center ">
-                                        {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{ itemsDetail.profit | number:'1.2-2' }}%
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{(itemsDetail.unitCost / (1 - (itemsDetail.profit/100))) | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{((itemsDetail.unitCost / (1 - (itemsDetail.profit/100))) *
-                                        itemsDetail.quantity) | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{itemsDetail.availability}}
-                                    </td>
-                                </tr>
-                            </ng-container>
                         </ng-container>
-                    </tbody>
-                </table>
+                    </ng-container>
+                </tbody>
+            </table>
         </div>
-        
+
         <div class="flex flex-wrap mt-6 ">
             <div class="w-full md:w-2/5 px-4 border py-3">
                 <label class="block uppercase tracking-wide text-gray-700 text-md font-bold mb-2 border-b"
