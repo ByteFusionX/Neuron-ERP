@@ -13,17 +13,24 @@
                 </app-form-field>
             </div>
             <div class="flex flex-col md:flex-row gap-3">
-                <app-form-field label="product" [control]="f['product']" [isSubmitted]="isSubmitted()"
+                <!-- <app-form-field label="product" [control]="f['product']" [isSubmitted]="isSubmitted()"
                     placeholder="Product Description" class="w-full" [readonly]="true">
-                </app-form-field>
+                </app-form-field> -->
+                <div class="w-full flex flex-col">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-1">Product Description</label>
+                    <textarea class="p-2 rounded bg-gray-200 outline-none" rows="4"
+                        [value]="getFormattedProducts()" readonly></textarea>
+                </div>
                 <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
                     placeholder="Inventory List" class="w-full" [readonly]="true">
                 </app-form-field>
                 <div class="flex gap-3 items-end mb-3">
                     <button
-                        class="w-36 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+ Add Comparison</button>
+                        class="w-36 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+
+                        Add Comparison</button>
                     <button
-                        class="w-32 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+ Add Supplier</button>
+                        class="w-32 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+
+                        Add Supplier</button>
                 </div>
             </div>
             <div class="w-full flex justify-end gap-2 py-2">
@@ -71,7 +78,7 @@
         <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
                 <button
-                    class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3">Discard</button>
+                    class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3" (click)="onClose()">Discard</button>
                 <button
                     class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3">Save
                     & Close</button>

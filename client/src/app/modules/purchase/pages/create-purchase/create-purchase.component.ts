@@ -3,7 +3,7 @@ import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
-import { Router } from '@angular/router';
+import { Router, TitleStrategy } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MrRequestComponent } from '../mr-request/mr-request.component';
@@ -90,6 +90,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.purchaseService.purchaseFormData$.subscribe((data) => {
         if (data) {
+          this.selectedJobSheet = data;
           this.purchaseForm.patchValue(data)
           if (data.items) {
             this.itemsList.set(data.items)
@@ -225,7 +226,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     (this.purchaseForm.get('mrRequest') as FormGroup).patchValue(data);
   }
 
-
   createItemGroup(item: QuoteItem): FormGroup {
     return this.fb.group({
       itemName: [item?.itemName || '', Validators.required],
@@ -310,9 +310,16 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.patchValues(job);
   }
 
-  onComparisonClicks() {
-    if (this.selectedJobSheet) {
-      this.purchaseService.setPurchaseJob(this.purchaseForm.value)
+  onComparisonClicks(item: QuoteItemDetails) {
+    if (this.purchaseForm.value) {
+      const comparisonData = {
+        jobId: this.purchaseForm.value.job,
+        purchaseNo: this.purchaseForm.value.purchaseNo,
+        item: item,
+        inventory: []
+      }
+      this.purchaseService.setComparisonData(comparisonData)
+      this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
       this.router.navigate(['/purchase/comparison-sheet'])
     } else {
       this.warningMessage()
@@ -399,7 +406,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }
 
   }
-
 
   checkMRExists(): boolean {
     return this.purchaseForm.contains('mrRequest');
