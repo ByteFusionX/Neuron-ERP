@@ -18,6 +18,7 @@ import { NgIcon } from '@ng-icons/core';
 import { MatTooltip } from '@angular/material/tooltip';
 import { MrDetails, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { heroTicketSolid } from '@ng-icons/heroicons/solid';
 
 @Component({
   selector: 'app-create-purchase',
@@ -196,7 +197,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   patchValues(job: getJob) {
     this.selectedJobSheet = job
-    this.getPurchaseNo()
     this.purchaseForm.patchValue({
       customer: job?.clientDetails?.companyName,
       customerId: job?.clientDetails?._id,
@@ -250,6 +250,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       email: [item.email || ''],
       phoneNo: [item.phoneNo || ''],
       dealSelected: [item.dealSelected || false],
+      comparison: [false],
+      comparisons: [item.comparisons || []]
     });
   }
 
@@ -308,14 +310,16 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.purchaseForm.reset()
     const job = <getJob>this.jobSheets().find(job => job._id === selected);
     this.patchValues(job);
+    this.getPurchaseNo()
   }
 
   onComparisonClicks(item: QuoteItemDetails) {
     if (this.purchaseForm.value) {
+      item.comparison = true
       const comparisonData = {
         jobId: this.purchaseForm.value.job,
         purchaseNo: this.purchaseForm.value.purchaseNo,
-        item: item,
+        item: this.itemsList(),
         inventory: []
       }
       this.purchaseService.setComparisonData(comparisonData)

@@ -8,6 +8,8 @@ export interface QuoteItemDetails {
     email?: string;
     phoneNo?: string;
     dealSelected: boolean;
+    comparison: boolean;
+    comparisons: any[];
 }
 
 export interface QuoteItem {
@@ -48,7 +50,7 @@ export interface PurchaseData {
 }
 
 export enum PurchaseStatus {
-  PENDING = 'Pending',
-  APPROVED = 'Approved',
-  REJECTED = 'Rejected'
+    PENDING = 'Pending',
+    APPROVED = 'Approved',
+    REJECTED = 'Rejected'
 }
