@@ -18,7 +18,6 @@ import { NgIcon } from '@ng-icons/core';
 import { MatTooltip } from '@angular/material/tooltip';
 import { MrDetails, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { heroTicketSolid } from '@ng-icons/heroicons/solid';
 
 @Component({
   selector: 'app-create-purchase',
@@ -67,7 +66,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     jobId: ['', [Validators.required]],
     dealSheetId: ['', [Validators.required]],
     items: this.fb.array([this.createQuoteItemGroup()]),
-    totalLpo: [null, [Validators.required]],
+    totalLpo: [0, [Validators.required]],
     status: [''],
     createdBy: [''],
     job: [''],
@@ -401,14 +400,14 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       itemValue.itemDetails?.[0]?.detail &&
       itemValue.itemDetails?.[0]?.unitCost > 0 &&
       itemValue.itemDetails?.[0]?.quantity > 0;
+
     if (!hasRequiredValues) {
       this.toaster.warning('Please fill all required fields!');
-    } else {
-      this.itemsList.update((current) => [...current, lastItem.value]);
-      this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
-      this.isAddingItem = false;
+      return;
     }
-
+    this.itemsList.set([...(this.itemsList() || []), itemValue]);
+    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+    this.isAddingItem = false;
   }
 
   checkMRExists(): boolean {

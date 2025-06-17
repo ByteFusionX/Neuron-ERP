@@ -73,6 +73,7 @@ import {
   heroArrowDownTray,
   heroScale ,
   heroWrench,
+  heroPlus,
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -152,7 +153,8 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroArrowDownTray,
       heroScale,
       heroWrench,
-      heroCog6Tooth
+      heroCog6Tooth,
+      heroPlus
     }),
   ],
   exports: [NgIconsModule]

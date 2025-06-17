@@ -8,6 +8,7 @@ import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/f
 import { PurchaseData, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
 import { ComparisonFormComponent } from '../comparison-form/comparison-form.component';
 import { Subscription } from 'rxjs';
+import { IconsModule } from 'src/app/lib/icons/icons.module';
 
 @Component({
   selector: 'app-comparison-sheet',
@@ -16,6 +17,7 @@ import { Subscription } from 'rxjs';
     FormsModule,
     ReactiveFormsModule,
     FormFieldComponent,
+    IconsModule
   ],
   templateUrl: './comparison-sheet.component.html',
   styleUrl: './comparison-sheet.component.css'
@@ -56,6 +58,11 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
             jobId: data.jobId,
             product: data.item
           })
+
+          const item = this.getItem()
+          if (item[0].comparisons) {
+            this.comparisonList.set(item[0].comparisons)
+          }
         } else {
           this.router.navigate(['/purchase/create'])
         }
@@ -139,6 +146,14 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
       selected: i === index
     }));
     this.comparisonList.set(comparisonList)
+  }
+
+  onAddSupplier() {
+    this.router.navigate(['/suppliers/create']);
+  }
+
+  onDeleteComparison(index: number) {
+    this.comparisonList().splice(index, 1)
   }
 
   ngOnDestroy(): void {
