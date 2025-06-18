@@ -68,7 +68,10 @@ export class ComparisonFormComponent implements OnInit {
 
   onSubmit() {
     if (this.comparisonForm.invalid) return;
-    const data = this.comparisonForm.value;
+    const supplierId = this.comparisonForm.value.supplierId;
+    const supplier = this.suppliers().find((item) => supplierId == item._id)
+    this.comparisonForm.patchValue({ supplierName: supplier.supplierName })
+    const data = this.comparisonForm.value
     this.dialogRef.close(data)
   }
 

@@ -270,7 +270,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       this.purchaseService.setPurchaseJob(this.purchaseForm.value)
       this.router.navigate(['/purchase/supplier-discount'])
     } else {
-      this.warningMessage()
+      this.warningMessage('Please select any job from given list')
     }
   }
 
@@ -288,7 +288,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         }
       })
     } else {
-      this.warningMessage()
+      this.warningMessage('Please select any job from given list')
     }
   }
 
@@ -325,8 +325,30 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
       this.router.navigate(['/purchase/comparison-sheet'])
     } else {
-      this.warningMessage()
+      this.warningMessage('Please select any job from given list')
     }
+  }
+
+  onComparisonSummaryClicks() {
+    if (!this.selectedJobSheet) {
+      return this.warningMessage('Please select any job from given list')
+    }
+
+    const items = this.purchaseForm.value.items;
+    const max = Math.max(
+      ...items.map((item: any) =>
+        item.itemDetails.reduce((sum: any, detail: any) => {
+          return sum + (detail.comparisons?.length || 0);
+        }, 0)
+      )
+    );
+
+    if (max == 0 || items.length == 0) {
+      return this.warningMessage('No comparisons found!')
+    }
+
+    this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
+    this.router.navigate(['/purchase/comparison-summary'])
   }
 
   getPurchaseNo() {
@@ -341,8 +363,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     })
   }
 
-  warningMessage() {
-    this.toaster.warning('Please select any job from given list.');
+  warningMessage(message: string) {
+    this.toaster.warning(message);
   }
 
   calculateTotalLpo(): number {

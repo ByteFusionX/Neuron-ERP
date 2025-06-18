@@ -9,7 +9,18 @@ export interface QuoteItemDetails {
     phoneNo?: string;
     dealSelected: boolean;
     comparison: boolean;
-    comparisons: any[];
+    comparisons: Comparisons[];
+}
+
+export interface Comparisons {
+    supplierName?: string,
+    supplerId?: string,
+    qty: number,
+    unitCost: number,
+    totalCost: number,
+    availability: any,
+    paymentTerms: any,
+    selected:boolean,
 }
 
 export interface QuoteItem {

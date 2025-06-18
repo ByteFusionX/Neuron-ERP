@@ -9,6 +9,7 @@ import { PurchaseData, QuoteItem, QuoteItemDetails } from 'src/app/shared/interf
 import { ComparisonFormComponent } from '../comparison-form/comparison-form.component';
 import { Subscription } from 'rxjs';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
+import { ToastrService } from 'ngx-toastr';
 
 @Component({
   selector: 'app-comparison-sheet',
@@ -28,6 +29,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   private router = inject(Router)
   private _dialog = inject(MatDialog)
   private subscriptions = new Subscription()
+  private toaster = inject(ToastrService)
 
   isSubmitted = signal<boolean>(false);
   selectedJob = signal<PurchaseData | null>(null)
@@ -75,6 +77,13 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
   onSubmit() {
     const data = this.selectedJob()
+    const selected = this.comparisonList().some(item => item.selected);
+
+    if (!selected) {
+      this.toaster.error('Please select one comparison!');
+      return;
+    }
+
     if (data) {
       data.items = this.updateComparisonList();
       this.purchaseService.setPurchaseFormData(data)
