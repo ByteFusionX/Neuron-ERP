@@ -13,17 +13,26 @@
                 </app-form-field>
             </div>
             <div class="flex flex-col md:flex-row gap-3">
-                <app-form-field label="product" [control]="f['product']" [isSubmitted]="isSubmitted()"
+                <!-- <app-form-field label="product" [control]="f['product']" [isSubmitted]="isSubmitted()"
                     placeholder="Product Description" class="w-full" [readonly]="true">
-                </app-form-field>
+                </app-form-field> -->
+                <div class="w-full flex flex-col">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-1">Product
+                        Description</label>
+                    <textarea class="p-2 rounded bg-gray-200 outline-none" rows="4" [value]="getFormattedProducts()"
+                        readonly></textarea>
+                </div>
                 <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
                     placeholder="Inventory List" class="w-full" [readonly]="true">
                 </app-form-field>
                 <div class="flex gap-3 items-end mb-3">
                     <button
-                        class="w-36 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+ Add Comparison</button>
+                        class="w-36 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
+                        type="button" (click)="onComparisonClicks()">+
+                        Add Comparison</button>
                     <button
-                        class="w-32 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400">+ Add Supplier</button>
+                        class="w-32 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
+                        (click)="onAddSupplier()" type="button">+ Add Supplier</button>
                 </div>
             </div>
             <div class="w-full flex justify-end gap-2 py-2">
@@ -36,6 +45,7 @@
             <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-5">
                 <thead class="text-xs text-gray-700 uppercase bg-violet-50">
                     <tr>
+                        <th></th>
                         <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
                             <div class="px-2 py-3">SL.NO</div>
                         </th>
@@ -57,21 +67,43 @@
                         <th scope="col" resizable key="paymentTerms" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Payment Terms</div>
                         </th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td colspan="12">
-                            <p class="text-center text-base p-2">Items empty</p>
-                        </td>
-                    </tr>
+                    <ng-container *ngIf="comparisonList().length > 0; else comparisonElse">
+                        <tr *ngFor="let data of comparisonList(); let i = index" class="text-center">
+                            <td><input type="checkbox" name="selected" id="selected" [checked]="data.selected"
+                                    (change)="onSelectionChange(i)"></td>
+                            <td class="px-4 py-2 border">{{i+1}}</td>
+                            <td class="px-4 py-2 border font-medium bg-gray-50">{{data.supplierName}}</td>
+                            <td class="px-4 py-2 border">{{data.qty}}</td>
+                            <td class="px-4 py-2 border">{{data.unitCost}}</td>
+                            <td class="px-4 py-2 border">{{data.totalCost}}</td>
+                            <td class="px-4 py-2 border"></td>
+                            <td class="px-4 py-2 border"></td>
+                            <td class="px-4 py-2 border">
+                                <button class="text-red-600 hover:text-red-800" (click)="onDeleteComparison(i)"
+                                    matTooltip="Delete comparison" matTooltipPosition="above">
+                                    <ng-icon name="heroTrash"></ng-icon>
+                                </button>
+                            </td>
+                        </tr>
+                    </ng-container>
+                    <ng-template #comparisonElse>
+                        <tr>
+                            <td colspan="12">
+                                <p class="text-center text-base p-2">Items empty</p>
+                            </td>
+                        </tr>
+                    </ng-template>
                 </tbody>
             </table>
         </div>
         <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
-                <button
-                    class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3">Discard</button>
+                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
+                    (click)="onClose()">Discard</button>
                 <button
                     class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3">Save
                     & Close</button>

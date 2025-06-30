@@ -8,6 +8,19 @@ export interface QuoteItemDetails {
     email?: string;
     phoneNo?: string;
     dealSelected: boolean;
+    comparison: boolean;
+    comparisons: Comparisons[];
+}
+
+export interface Comparisons {
+    supplierName?: string,
+    supplerId?: string,
+    qty: number,
+    unitCost: number,
+    totalCost: number,
+    availability: any,
+    paymentTerms: any,
+    selected:boolean,
 }
 
 export interface QuoteItem {
@@ -48,7 +61,7 @@ export interface PurchaseData {
 }
 
 export enum PurchaseStatus {
-  PENDING = 'Pending',
-  APPROVED = 'Approved',
-  REJECTED = 'Rejected'
+    PENDING = 'Pending',
+    APPROVED = 'Approved',
+    REJECTED = 'Rejected'
 }

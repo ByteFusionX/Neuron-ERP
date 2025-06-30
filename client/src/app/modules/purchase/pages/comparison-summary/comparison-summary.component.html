@@ -1,0 +1,50 @@
+<div class="bg-white m-6 rounded-lg">
+    <div class="border-b p-3 px-9 flex justify-between items-center">
+        <h3 class="text-md font-medium">Comparison Summary</h3>
+    </div>
+
+
+    <div class="relative overflow-x-auto shadow-md sm:rounded-lg p-5">
+        <table class="w-full text-sm text-left rtl:text-right text-gray-500 border">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                <tr>
+                    <th scope="col" class="px-6 py-3">Product Name</th>
+                    <th scope="col" class="px-6 py-3 bg-violet-100 border border-violet-500 text-center">
+                        Approved Supplier & Amount
+                    </th>
+                    <th *ngFor="let sup of getMaxSupplierColumns()" scope="col" class="px-6 py-3 text-center">
+                        Supplier {{ sup + 1 }}
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <ng-container *ngFor="let items of itemsList()">
+                    <ng-container *ngFor="let item of items.itemDetails">
+                        <tr class="border-b border-gray-200">
+                            <td class="px-6 py-4 font-medium text-gray-900">
+                                {{ item.detail }}
+                            </td>
+
+                            <td class="px-6 py-4 text-center"
+                                [ngClass]="{'bg-violet-100 border border-violet-500': item.comparisons.length > 0}">
+                                <ng-container *ngIf="getApprovedComparison(item)">
+                                    <span class="font-medium">
+                                        {{ getApprovedComparison(item)?.totalCost | number:'1.2-2' }}
+                                    </span>
+                                </ng-container>
+                            </td>
+
+                            <td *ngFor="let comp of item.comparisons" class="px-6 py-4 text-center border">
+                                <span [ngClass]="{ 'text-orange-600 font-semibold': comp.selected }">
+                                    {{comp.supplierName}} - 
+                                   {{ comp.totalCost | number:'1.2-2' }}
+                                </span>
+                            </td>
+                        </tr>
+                    </ng-container>
+                </ng-container>
+            </tbody>
+        </table>
+    </div>
+
+</div>

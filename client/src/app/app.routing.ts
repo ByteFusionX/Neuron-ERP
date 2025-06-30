@@ -33,6 +33,7 @@ import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-dis
 import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sheet/comparison-sheet.component';
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
 import { OpenToWorckComponent } from './modules/job-sheet/pages/open-to-work/open-to-work.component';
+import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-summary/comparison-summary.component';
 
 
 export const routes: Routes = [
@@ -158,7 +159,8 @@ export const routes: Routes = [
       { path: 'create', component: CreatePurchaseComponent },
       { path: 'supplier-discount', component: SupplierDiscountComponent },
       { path: 'comparison-sheet', component: ComparisonSheetComponent },
-      { path: 'view-purchase/:id', component: ViewPurchaseComponent }
+      { path: 'view-purchase/:id', component: ViewPurchaseComponent },
+      { path: 'comparison-summary', component: ComparisonSummaryComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

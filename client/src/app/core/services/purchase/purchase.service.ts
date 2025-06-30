@@ -22,6 +22,9 @@ export class PurchaseService {
   private purchaseFormData = new BehaviorSubject<any>(null)
   purchaseFormData$ = this.purchaseFormData.asObservable()
 
+  private comparisonData = new BehaviorSubject<any>(null)
+  comparisonFormData$ = this.comparisonData.asObservable()
+
   setPurchaseJob(jobData: getJob) {
     this.purchaseJob.next(jobData)
   }
@@ -32,6 +35,10 @@ export class PurchaseService {
 
   setPurchaseFormData(formData: any) {
     this.purchaseFormData.next(formData)
+  }
+
+  setComparisonData(data: any) {
+    this.comparisonData.next(data)
   }
 
   getPurchaseNo(): any {

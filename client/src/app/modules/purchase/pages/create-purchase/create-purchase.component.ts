@@ -3,7 +3,7 @@ import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
-import { Router } from '@angular/router';
+import { Router, TitleStrategy } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MrRequestComponent } from '../mr-request/mr-request.component';
@@ -66,7 +66,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     jobId: ['', [Validators.required]],
     dealSheetId: ['', [Validators.required]],
     items: this.fb.array([this.createQuoteItemGroup()]),
-    totalLpo: [null, [Validators.required]],
+    totalLpo: [0, [Validators.required]],
     status: [''],
     createdBy: [''],
     job: [''],
@@ -90,6 +90,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.purchaseService.purchaseFormData$.subscribe((data) => {
         if (data) {
+          this.selectedJobSheet = data;
           this.purchaseForm.patchValue(data)
           if (data.items) {
             this.itemsList.set(data.items)
@@ -195,7 +196,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   patchValues(job: getJob) {
     this.selectedJobSheet = job
-    this.getPurchaseNo()
     this.purchaseForm.patchValue({
       customer: job?.clientDetails?.companyName,
       customerId: job?.clientDetails?._id,
@@ -225,7 +225,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     (this.purchaseForm.get('mrRequest') as FormGroup).patchValue(data);
   }
 
-
   createItemGroup(item: QuoteItem): FormGroup {
     return this.fb.group({
       itemName: [item?.itemName || '', Validators.required],
@@ -250,6 +249,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       email: [item.email || ''],
       phoneNo: [item.phoneNo || ''],
       dealSelected: [item.dealSelected || false],
+      comparison: [false],
+      comparisons: [item.comparisons || []]
     });
   }
 
@@ -269,7 +270,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       this.purchaseService.setPurchaseJob(this.purchaseForm.value)
       this.router.navigate(['/purchase/supplier-discount'])
     } else {
-      this.warningMessage()
+      this.warningMessage('Please select any job from given list')
     }
   }
 
@@ -287,7 +288,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         }
       })
     } else {
-      this.warningMessage()
+      this.warningMessage('Please select any job from given list')
     }
   }
 
@@ -308,15 +309,46 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.purchaseForm.reset()
     const job = <getJob>this.jobSheets().find(job => job._id === selected);
     this.patchValues(job);
+    this.getPurchaseNo()
   }
 
-  onComparisonClicks() {
-    if (this.selectedJobSheet) {
-      this.purchaseService.setPurchaseJob(this.purchaseForm.value)
+  onComparisonClicks(item: QuoteItemDetails) {
+    if (this.purchaseForm.value) {
+      item.comparison = true
+      const comparisonData = {
+        jobId: this.purchaseForm.value.job,
+        purchaseNo: this.purchaseForm.value.purchaseNo,
+        item: this.itemsList(),
+        inventory: []
+      }
+      this.purchaseService.setComparisonData(comparisonData)
+      this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
       this.router.navigate(['/purchase/comparison-sheet'])
     } else {
-      this.warningMessage()
+      this.warningMessage('Please select any job from given list')
     }
+  }
+
+  onComparisonSummaryClicks() {
+    if (!this.selectedJobSheet) {
+      return this.warningMessage('Please select any job from given list')
+    }
+
+    const items = this.purchaseForm.value.items;
+    const max = Math.max(
+      ...items.map((item: any) =>
+        item.itemDetails.reduce((sum: any, detail: any) => {
+          return sum + (detail.comparisons?.length || 0);
+        }, 0)
+      )
+    );
+
+    if (max == 0 || items.length == 0) {
+      return this.warningMessage('No comparisons found!')
+    }
+
+    this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
+    this.router.navigate(['/purchase/comparison-summary'])
   }
 
   getPurchaseNo() {
@@ -331,8 +363,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     })
   }
 
-  warningMessage() {
-    this.toaster.warning('Please select any job from given list.');
+  warningMessage(message: string) {
+    this.toaster.warning(message);
   }
 
   calculateTotalLpo(): number {
@@ -390,16 +422,15 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       itemValue.itemDetails?.[0]?.detail &&
       itemValue.itemDetails?.[0]?.unitCost > 0 &&
       itemValue.itemDetails?.[0]?.quantity > 0;
+
     if (!hasRequiredValues) {
       this.toaster.warning('Please fill all required fields!');
-    } else {
-      this.itemsList.update((current) => [...current, lastItem.value]);
-      this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
-      this.isAddingItem = false;
+      return;
     }
-
+    this.itemsList.set([...(this.itemsList() || []), itemValue]);
+    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+    this.isAddingItem = false;
   }
-
 
   checkMRExists(): boolean {
     return this.purchaseForm.contains('mrRequest');

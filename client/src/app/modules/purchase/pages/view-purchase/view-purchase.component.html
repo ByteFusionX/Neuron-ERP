@@ -61,10 +61,10 @@
                     </thead>
                     <tbody>
                         <ng-container *ngFor="let items of purchase.items">
-                            <tr class="border text-center">
+                            <!-- <tr class="border text-center">
                                 <td colspan="4" class="px-4 py-2 border">Item Name: <span
                                         class="text-base font-medium">{{ items.itemName }}</span></td>
-                            </tr>
+                            </tr> -->
                             <tr class="border-b" *ngFor="let item of items.itemDetails">
                                 <td class="px-4 py-2 border">{{ item.detail }}</td>
                                 <td class="px-4 py-2 border">{{ item.quantity }}</td>
@@ -75,7 +75,8 @@
                         <tr class="border-b bg-gray-50">
                             <td colspan="3" class=" py-2">
                                 <div class="flex justify-end text-center">
-                                    Total LPO: <span class="text-base font-medium px-2">{{purchase.totalLpo}}</span>
+                                    Total LPO: <span class="text-base font-medium px-2">{{purchase.totalLpo |
+                                        number:'1.2-2'}}</span>
                                 </div>
                             </td>
                             <td> </td>
