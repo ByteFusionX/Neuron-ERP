@@ -79,7 +79,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     const data = this.selectedJob()
     const selected = this.comparisonList().some(item => item.selected);
 
-    if (!selected) {
+    if (!selected && this.comparisonList().length > 0) {
       this.toaster.error('Please select one comparison!');
       return;
     }
@@ -138,7 +138,10 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
   onComparisonClicks() {
     const dialog = this._dialog.open(ComparisonFormComponent, {
-      width: '500px'
+      width: '500px',
+      disableClose: true,
+      maxHeight: '90vh',
+      autoFocus: false    
     })
 
     dialog.afterClosed().subscribe((res) => {

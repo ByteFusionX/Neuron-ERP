@@ -19,7 +19,7 @@
                 <div class="w-full flex flex-col">
                     <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-1">Product
                         Description</label>
-                    <textarea class="p-2 rounded bg-gray-200 outline-none" rows="4" [value]="getFormattedProducts()"
+                    <textarea class="p-2 rounded bg-gray-200 outline-none" rows="3" [value]="getFormattedProducts()"
                         readonly></textarea>
                 </div>
                 <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
@@ -80,8 +80,8 @@
                             <td class="px-4 py-2 border">{{data.qty}}</td>
                             <td class="px-4 py-2 border">{{data.unitCost}}</td>
                             <td class="px-4 py-2 border">{{data.totalCost}}</td>
-                            <td class="px-4 py-2 border"></td>
-                            <td class="px-4 py-2 border"></td>
+                            <td class="px-4 py-2 border">{{data.etaTerms}}</td>
+                            <td class="px-4 py-2 border">{{data.paymentTerms}}</td>
                             <td class="px-4 py-2 border">
                                 <button class="text-red-600 hover:text-red-800" (click)="onDeleteComparison(i)"
                                     matTooltip="Delete comparison" matTooltipPosition="above">
