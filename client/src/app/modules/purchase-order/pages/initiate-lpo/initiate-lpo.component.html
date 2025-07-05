@@ -1,0 +1,76 @@
+<div class="bg-white m-6">
+    <div class="border-b p-3 px-9 flex justify-between items-center">
+        <h3 class="text-md font-medium">Purchase Details<span class="uppercase"></span>
+        </h3>
+    </div>
+
+    <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+
+        <div class="w-full mb-8">
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <tbody>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Purchase ID</td>
+                            <td class="px-2 py-2 border"></td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Job ID</td>
+                            <td class="px-2 py-2 border"></td>
+                        </tr>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Customer Name</td>
+                            <td class="px-2 py-2 border"></td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50">Sales Person Name</td>
+                            <td class="px-2 py-2 border"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="w-full mb-8">
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 border">SL.NO</th>
+                            <th class="px-4 py-2 border">Description</th>
+                            <th class="px-4 py-2 border">Quantity</th>
+                            <th class="px-4 py-2 border">Unit Cost</th>
+                            <th class="px-4 py-2 border">Total Price</th>
+                            <th class="px-4 py-2 border">Approved Vendor</th>
+                            <th class="px-4 py-2 border">ETA Terms</th>
+                            <th class="px-4 py-2 border">Payment Terms</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <ng-container>
+                            <!-- <tr class="border text-center">
+                                <td colspan="4" class="px-4 py-2 border">Item Name: <span
+                                        class="text-base font-medium">{{ items.itemName }}</span></td>
+                            </tr> -->
+                            <tr class="border-b">
+                                <td class="px-4 py-2 border"></td>
+                                <td class="px-4 py-2 border"></td>
+                                <td class="px-4 py-2 border"></td>
+                                <td class="px-4 py-2 border"></td>
+                            </tr>
+                        </ng-container>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
+            <div class="md:flex gap-3">
+                <button
+                    class="w-fit px-3 py-2 text-sm border border-orange-500 hover:ring-1 hover:ring-orange-400 rounded mb-3"
+                    type="button">Save
+                    & Close</button>
+                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
+                    type="button">Exit</button>
+            </div>
+            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3"
+                type="button">Issue LPO</button>
+        </div>
+    </div>
+</div>

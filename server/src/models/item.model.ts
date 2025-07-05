@@ -19,8 +19,7 @@ export interface Item extends Document {
 }
 
 
-const 
-itemDetailSchema = new Schema({
+const itemDetailSchema = new Schema({
     detail: {
         type: String,
         required: true

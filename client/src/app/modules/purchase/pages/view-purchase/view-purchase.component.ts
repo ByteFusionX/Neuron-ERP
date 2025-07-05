@@ -38,10 +38,22 @@ export class ViewPurchaseComponent {
   ngOnInit(): void {
     this.loadPurchase();
     this.tokenData = this.employeeService.employeeToken();
+
+    this.purchaseService.purchaseFormData$.subscribe({
+      next: (data) => {
+        if (data) {
+          this.purchase = data;
+          this.isLoading = false;
+        }
+      }, error: (error) => {
+        console.error(error)
+      }
+    })
   }
 
   loadPurchase() {
     this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
+    if (this.purchaseId == 'none') return
     if (!this.purchaseId) {
       this.notificationService.error('Invalid Purchase ID');
       this.router.navigate(['/purchase/pendings']);
@@ -50,7 +62,6 @@ export class ViewPurchaseComponent {
 
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
-        console.log(response)
         this.purchase = response.data;
         this.isLoading = false;
       },

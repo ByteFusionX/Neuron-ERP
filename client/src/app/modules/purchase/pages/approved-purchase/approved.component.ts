@@ -62,6 +62,11 @@ export class ApprovedPurchaseComponent {
         sortable: true,
       },
       {
+        key: 'customerId.companyName',
+        label: 'Customer Name',
+        type: 'text',
+      },
+      {
         key: 'purchaseNo',
         label: 'PR NO',
         type: 'text',
@@ -72,8 +77,8 @@ export class ApprovedPurchaseComponent {
         type: 'text',
       },
       {
-        key: 'customerId.companyName',
-        label: 'Customer',
+        key: 'totalLpo',
+        label: 'LPO Value',
         type: 'text',
       },
       {
@@ -82,34 +87,20 @@ export class ApprovedPurchaseComponent {
         type: 'text',
       },
       {
-        key: 'totalLpo',
-        label: 'LPO Value',
-        type: 'text',
+        key: 'status',
+        label: 'Status',
+        type: 'status',
+        headerClass: 'text-center'
       },
       {
-        key: 'mrRequest',
-        label: 'MR Request',
-        type: 'text',
-        actions: [
-          {
-            icon: 'heroEye',
-            tooltip: 'View Details',
-            action: '',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
-          }
-        ]
-      },
-      {
-        key: 'actions',
-        label: 'Action',
+        key: 'initiateLpo',
+        label: 'Initiate LPO',
         type: 'action',
-        headerClass: '!text-center',
-        actions: []
       }
     ]
 
     this.defaultColumns = [
-      'createdAt', 'purchaseNo', 'jobId.jobId', 'customerId.companyName', `createdBy.firstName`, 'totalLpo', 'mrRequest', 'actions'
+      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status', 'initiateLpo'
     ];
   }
 

@@ -97,7 +97,10 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
 
   onAddFieldClicks() {
     const dialogRef = this._dialog.open(AddSupplierDiscountComponent, {
-      width: '500px'
+      width: '500px',
+      disableClose: true,
+      maxHeight: '90vh',
+      autoFocus: false
     })
 
     dialogRef.afterClosed().subscribe((data) => {

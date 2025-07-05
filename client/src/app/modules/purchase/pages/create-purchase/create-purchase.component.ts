@@ -3,7 +3,7 @@ import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
-import { Router, TitleStrategy } from '@angular/router';
+import { Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MrRequestComponent } from '../mr-request/mr-request.component';
@@ -278,6 +278,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     if (this.selectedJobSheet) {
       const dialogRef = this._dialog.open(MrRequestComponent, {
         width: '550px',
+        disableClose: true,
+        maxHeight: '90vh',
+        autoFocus: false,
         data: { job: this.purchaseForm.value }
       })
 
@@ -438,6 +441,11 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   checkSupplierExists(): boolean {
     return this.purchaseForm.contains('supplierDiscounts')
+  }
+
+  onFinalDasdboardClicks() {
+    this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
+    this.router.navigate(['/purchase/view-purchase', 'none']);
   }
 
   ngOnDestroy(): void {
