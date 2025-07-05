@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
 import { Router } from '@angular/router';
@@ -12,10 +12,9 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn } from 'src/app/shared/components/table/table.model';
-import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 
 @Component({
-  selector: 'app-approved',
+  selector: 'app-lpo-list',
   imports: [
     TableComponent,
     CommonModule,
@@ -26,11 +25,11 @@ import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
     ButtonComponent,
     FormsModule
   ],
-  templateUrl: './approved.component.html',
-  styleUrl: './approved.component.css',
+  templateUrl: './lpo-list.component.html',
+  styleUrl: './lpo-list.component.css',
   providers: [PaginationService]
 })
-export class ApprovedPurchaseComponent {
+export class LpoListComponent implements OnInit {
   private router = inject(Router);
   private paginationService = inject(PaginationService);
   private purchaseService = inject(PurchaseService);
@@ -46,7 +45,7 @@ export class ApprovedPurchaseComponent {
 
   selectedLocation = signal<string>('');
   selectedCategory = signal<string>('');
-  selectedStatus = signal<string>('Approved');
+  selectedStatus = signal<string>('Pending');
 
   ngOnInit(): void {
     this.setupTableColumns()
@@ -57,24 +56,19 @@ export class ApprovedPurchaseComponent {
     this.tableColumns = [
       {
         key: 'createdAt',
-        label: 'Created Date',
+        label: 'Date',
         type: 'date',
         pipeParams: 'dd/MM/yyyy',
         sortable: true,
       },
       {
         key: 'customerId.companyName',
-        label: 'Customer Name',
+        label: 'Supplier Name',
         type: 'text',
       },
       {
         key: 'purchaseNo',
-        label: 'PR NO',
-        type: 'text',
-      },
-      {
-        key: 'jobId.jobId',
-        label: 'Job ID',
+        label: 'LPO NO',
         type: 'text',
       },
       {
@@ -83,33 +77,64 @@ export class ApprovedPurchaseComponent {
         type: 'text',
       },
       {
-        key: 'createdBy.firstName',
-        label: 'Created By',
-        type: 'text',
-      },
-      {
         key: 'status',
-        label: 'Status',
+        label: 'LPO Status',
         type: 'status',
         headerClass: 'text-center'
       },
       {
-        key: 'initiateLpo',
-        label: 'Initiate LPO',
+        key: 'actions',
+        label: 'View/Download',
         type: 'action',
+        headerClass: '!text-center',
         actions: [
           {
-            icon: 'heroPaperAirplane',
-            tooltip: 'Initiate LPO',
-            action: 'initiateLpo',
+            icon: 'heroEye',
+            tooltip: 'View LPO',
+            action: 'viewLpo',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
+          },
+          {
+            icon: 'heroArrowDownTray',
+            tooltip: 'Download LPO',
+            action: 'downloadLpo',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
           },
         ]
+      },
+      {
+        key: 'actions',
+        label: 'Re issue',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroPaperAirplane',
+            tooltip: 'Re Issue',
+            action: 'reIssue',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-500 hover:border-orange-700 text-orange-500 text-sm rounded-full font-medium'
+          },
+        ]
+      },
+      {
+        key: 'actions',
+        label: 'View Supplier Invoice',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroEye',
+            tooltip: 'View Invoice',
+            action: 'viewInvoice',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-violet-500 hover:border-violet-700 text-violet-500 text-sm rounded-full font-medium'
+          },
+        ],
+
       }
     ]
 
     this.defaultColumns = [
-      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status', 'initiateLpo'
+      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status', 'actions'
     ];
   }
 
@@ -133,21 +158,18 @@ export class ApprovedPurchaseComponent {
   }
 
   viewPurchaseDetails(purchase: any): void {
-    this.router.navigate(['/purchase/initiate-lpo', purchase._id]);
+    this.router.navigate(['/purchase/view-purchase', purchase._id]);
   }
 
   onRowClick(row: any): void {
-    this.viewPurchaseDetails(row);
+    // this.viewPurchaseDetails(row);
   }
 
-  onActionClick(event: { action: string; item: PurchaseData }): void {
+  onActionClick(event: { action: string; item: any }): void {
     const { action, item } = event;
     switch (action) {
-      case 'initiateLpo':
+      case 'viewPurchase':
         this.viewPurchaseDetails(item);
-        break;
-      case 'editPurchase':
-        this.editPurchase(item);
         break;
       case 'viewDocuments':
         this.viewDocuments(item);
@@ -155,12 +177,7 @@ export class ApprovedPurchaseComponent {
     }
   }
 
-  editPurchase(purchase: any): void {
-    this.router.navigate(['/purchase', purchase.id, 'edit']);
-  }
-
   viewDocuments(purchase: any): void {
-    // Implement document viewing logic
     console.log('Viewing documents for purchase:', purchase);
   }
 

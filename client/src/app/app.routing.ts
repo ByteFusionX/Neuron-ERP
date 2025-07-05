@@ -36,6 +36,7 @@ import { OpenToWorckComponent } from './modules/job-sheet/pages/open-to-work/ope
 import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-summary/comparison-summary.component';
 import { InitiateLpoComponent } from './modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { IssueLpoComponent } from './modules/purchase-order/pages/issue-lpo/issue-lpo.component';
+import { LpoListComponent } from './modules/purchase-order/pages/lpo-list/lpo-list.component';
 
 
 export const routes: Routes = [
@@ -163,8 +164,9 @@ export const routes: Routes = [
       { path: 'comparison-sheet', component: ComparisonSheetComponent },
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
       { path: 'comparison-summary', component: ComparisonSummaryComponent },
-      { path: 'initiate-lpo', component: InitiateLpoComponent },
+      { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
       { path: 'issue-lpo', component: IssueLpoComponent },
+      { path: 'lpo-list', component: LpoListComponent },
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

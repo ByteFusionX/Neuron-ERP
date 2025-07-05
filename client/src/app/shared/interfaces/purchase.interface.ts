@@ -45,7 +45,7 @@ export interface PurchaseData {
     customerId: any;
     salesManager: string;
     purchaseNo: string;
-    jobId: string;
+    jobId: any;
     dealSheetId: string;
     items: QuoteItem[];
     totalLpo: number;

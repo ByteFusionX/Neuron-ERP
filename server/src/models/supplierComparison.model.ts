@@ -6,7 +6,7 @@ export interface SupplierComparison extends Document {
     unitPrice: Number;
     availability: String;
     paymentTerms: String;
-    manuallySelected: Boolean;
+    selected: Boolean;
     createdBy: Types.ObjectId;
     createdAt : Date
 }
@@ -32,7 +32,7 @@ export const supplierComparisonSchema = new Schema<SupplierComparison>({
         type: String,
         required: true
     },
-    manuallySelected: {
+    selected: {
         type: Boolean,
         default: false,
     },

@@ -1,0 +1,15 @@
+<data-table
+[data]="tableData()"
+[columns]="tableColumns"
+[defaultColumns]="defaultColumns"
+[isLoading]="isLoading()"
+[isEmpty]="isEmpty()"
+[totalItems]="totalItems()"
+(rowClick)="onRowClick($event)"
+(actionClick)="onActionClick($event)"
+[title]="'Issued LPO List'"
+>
+<ng-template #sideColumn>
+    <data-search [placeholder]="`Search by query`" (searchSubmitted)="onSearch($event)"></data-search>
+</ng-template>
+</data-table>
