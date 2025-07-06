@@ -54,10 +54,10 @@
                         <th scope="col" resizable key="supplierName" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Supplier Name</div>
                         </th>
-                        <th scope="col" resizable key="qty" class="border-l border-r border-t text-center">
+                        <th scope="col" resizable key="quantity" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">QTY</div>
                         </th>
-                        <th scope="col" resizable key="unitCost" class="border-l border-r border-t text-center">
+                        <th scope="col" resizable key="unitPrice" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Unit Selling Cost</div>
                         </th>
                         <th scope="col" resizable key="totalCost" class="border-l border-r border-t text-center">
@@ -79,8 +79,8 @@
                                     (change)="onSelectionChange(i)"></td>
                             <td class="px-4 py-2 border">{{i+1}}</td>
                             <td class="px-4 py-2 border font-medium bg-gray-50">{{data.supplierName}}</td>
-                            <td class="px-4 py-2 border">{{data.qty}}</td>
-                            <td class="px-4 py-2 border">{{data.unitCost}}</td>
+                            <td class="px-4 py-2 border">{{data.quantity}}</td>
+                            <td class="px-4 py-2 border">{{data.unitPrice}}</td>
                             <td class="px-4 py-2 border">{{data.totalCost}}</td>
                             <td class="px-4 py-2 border">{{data.etaTerms}}</td>
                             <td class="px-4 py-2 border">{{data.paymentTerms}}</td>

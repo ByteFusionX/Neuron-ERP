@@ -14,13 +14,14 @@ export interface QuoteItemDetails {
 
 export interface Comparisons {
     supplierName?: string,
-    supplerId?: string,
-    qty: number,
-    unitCost: number,
+    supplierId?: string,
+    quantity: number,
+    unitPrice: number,
     totalCost: number,
-    availability: any,
+    etaTerms: any,
     paymentTerms: any,
-    selected:boolean,
+    selected: boolean,
+    createdBy?: any,
 }
 
 export interface QuoteItem {

@@ -4,7 +4,7 @@ export interface SupplierComparison extends Document {
     supplierId: Types.ObjectId;
     quantity: Number;
     unitPrice: Number;
-    availability: String;
+    etaTerms: String;
     paymentTerms: String;
     selected: Boolean;
     createdBy: Types.ObjectId;
@@ -25,7 +25,7 @@ export const supplierComparisonSchema = new Schema<SupplierComparison>({
         type: Number,
         required: true
     },
-    availability: {
+    etaTerms: {
         type: String,
     },
     paymentTerms: {
@@ -43,7 +43,7 @@ export const supplierComparisonSchema = new Schema<SupplierComparison>({
     },
     createdAt : {
         type: Date,
-        required: true
+        default: Date.now()
     }
 })
 

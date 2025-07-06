@@ -3,6 +3,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialogRef } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
@@ -27,19 +28,22 @@ export class ComparisonFormComponent implements OnInit {
   private dialogRef = inject(MatDialogRef<ComparisonFormComponent>)
   private supplierService = inject(SupplierService)
   private toaster = inject(ToastrService)
+  private employeeService = inject(EmployeeService)
 
   isSubmitted = signal<boolean>(false);
   suppliers = signal<any[]>([])
+  tokenData!: { id: string, employeeId: string };
 
   comparisonForm: FormGroup = this.fb.group({
     supplierName: [''],
     supplierId: [''],
-    qty: [null, Validators.required],
-    unitCost: [null, Validators.required],
+    quantity: [null, Validators.required],
+    unitPrice: [null, Validators.required],
     etaTerms: ['', Validators.required],
     paymentTerms: ['', Validators.required],
     totalCost: [''],
-    selected: [false]
+    selected: [false],
+    createdBy: ['']
   });
 
   constructor() {
@@ -47,6 +51,8 @@ export class ComparisonFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.tokenData = this.employeeService.employeeToken();
+    this.comparisonForm.get('createdBy')?.setValue(this.tokenData.id)
     this.supplierService.supplierList().subscribe({
       next: (res) => {
         this.suppliers.set(res.data)
@@ -57,14 +63,14 @@ export class ComparisonFormComponent implements OnInit {
   }
 
   setupAutoTotalCostCalculation() {
-    this.comparisonForm.get('qty')?.valueChanges.subscribe(() => this.updateTotalCost());
-    this.comparisonForm.get('unitCost')?.valueChanges.subscribe(() => this.updateTotalCost());
+    this.comparisonForm.get('quantity')?.valueChanges.subscribe(() => this.updateTotalCost());
+    this.comparisonForm.get('unitPrice')?.valueChanges.subscribe(() => this.updateTotalCost());
   }
 
   updateTotalCost() {
-    const qty = this.comparisonForm.get('qty')?.value || 0;
-    const unitCost = this.comparisonForm.get('unitCost')?.value || 0;
-    const total = qty * unitCost;
+    const quantity = this.comparisonForm.get('quantity')?.value || 0;
+    const unitPrice = this.comparisonForm.get('unitPrice')?.value || 0;
+    const total = quantity * unitPrice;
     this.comparisonForm.get('totalCost')?.setValue(total.toFixed(2), { emitEvent: false });
   }
 

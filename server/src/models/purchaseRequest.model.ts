@@ -142,7 +142,8 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     },
     mrRequest: {
         engineer: {
-            type: Schema.Types.ObjectId,
+            // type: Schema.Types.ObjectId,
+            type: String,
         },
         message: {
             type: String,

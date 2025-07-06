@@ -46,7 +46,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             isDeleted: false
         };
 
-        if (status) {
+        if (status === 'approves') {
             matchStage.status = status;
         }
 
@@ -84,6 +84,15 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 }
             },
             { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'jobId.quoteId',
+                    foreignField: '_id',
+                    as: 'jobId.quoteId'
+                }
+            },
+            { $unwind: { path: '$jobId.quoteId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'employees',
@@ -193,6 +202,15 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
             { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
+                    from: 'quotations',
+                    localField: 'jobId.quoteId',
+                    foreignField: '_id',
+                    as: 'jobId.quoteId'
+                }
+            },
+            { $unwind: { path: '$jobId.quoteId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
@@ -278,6 +296,15 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
+                    from: 'quotations',
+                    localField: 'jobId.quoteId',
+                    foreignField: '_id',
+                    as: 'jobId.quoteId'
+                }
+            },
+            { $unwind: { path: '$jobId.quoteId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
@@ -347,18 +374,12 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
         const year = now.getFullYear().toString().slice(-2);
         const month = (now.getMonth() + 1).toString().padStart(2, '0');
 
-        const latestPR = await PurchaseRequest.findOne({
-            purchaseNo: { $regex: `^PR-${year}${month}-` }
-        })
-            .sort({ purchaseNo: -1 })
-            .limit(1);
-
+        const latestPR = await PurchaseRequest.findOne().sort({ createdAt: -1 })
         let nextNumber = 1;
+
         if (latestPR) {
-            const parts = latestPR.purchaseNo.split('-');
-            if (parts.length === 3) {
-                nextNumber = parseInt(parts[2]) + 1;
-            }
+            const parts = latestPR.purchaseNo.split('-').reverse();
+            nextNumber = parseInt(parts[0]) + 1;
         }
 
         const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber.toString().padStart(4, '0')}`;

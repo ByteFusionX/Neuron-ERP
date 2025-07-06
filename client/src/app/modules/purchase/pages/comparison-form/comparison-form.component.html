@@ -11,10 +11,10 @@
         formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()" class="w-full -m-1">
       </app-select-dropdown>
       <div class="flex gap-3">
-        <app-form-field label="QTY" type="number" [control]="f['qty']" [isSubmitted]="isSubmitted()"
+        <app-form-field label="QTY" type="number" [control]="f['quantity']" [isSubmitted]="isSubmitted()"
           placeholder="Enter quantity" class="col-span-1"></app-form-field>
 
-        <app-form-field label="Unit Selling Cost" type="number" [control]="f['unitCost']" [isSubmitted]="isSubmitted()"
+        <app-form-field label="Unit Selling Cost" type="number" [control]="f['unitPrice']" [isSubmitted]="isSubmitted()"
           placeholder="Enter unit cost" class="col-span-1"></app-form-field>
 
         <app-form-field label="Total Selling Cost" type="number" [control]="f['totalCost']"

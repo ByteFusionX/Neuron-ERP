@@ -124,7 +124,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   getFormattedProducts(): string {
     const item = this.getItem()
     if (item) {
-      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitCost}`
+      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitPrice}`
     }
     return '';
   }
@@ -147,7 +147,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     dialog.afterClosed().subscribe((res) => {
       if (res) {
         this.comparisonList().push(res)
-        this.comparisonList().sort((a, b) => a.unitCost - b.unitCost)
+        this.comparisonList().sort((a, b) => a.unitPrice - b.unitPrice)
       }
     })
   }

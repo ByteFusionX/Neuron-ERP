@@ -92,17 +92,10 @@ export class PendingPurchaseComponent implements OnInit {
         type: 'status',
         headerClass: 'text-center'
       },
-      {
-        key: 'actions',
-        label: 'Action',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: []
-      }
     ]
 
     this.defaultColumns = [
-      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status', 'actions'
+      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status'
     ];
   }
 
