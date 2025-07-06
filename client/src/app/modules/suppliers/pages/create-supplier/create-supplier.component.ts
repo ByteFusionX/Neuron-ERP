@@ -145,7 +145,6 @@ export class CreateSupplierComponent implements OnInit {
     }
 
     // Patch primary contact form group
-    console.log(supplier.contactDetails);
     if (supplier.contactDetails) {
       console.log(supplier.contactDetails);
       const contactGroup = this.supplierForm.get('contactDetails') as FormGroup;
@@ -154,7 +153,6 @@ export class CreateSupplierComponent implements OnInit {
         email: supplier.contactDetails.email || '',
         phoneNumber: supplier.contactDetails.phoneNumber || ''
       });
-      console.log(contactGroup);
     }
 
     // Add products to the form array

@@ -22,6 +22,9 @@ import { AppComponent } from './app/app.component';
 import { importProvidersFrom } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { DatePipe } from '@angular/common';
+import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { providePrimeNG } from 'primeng/config';
+import Aura from '@primeng/themes/aura';
 
 const config: SocketIoConfig = { url: environment.api, options: {} };
 
@@ -43,6 +46,15 @@ bootstrapApplication(AppComponent, {
         provideHttpClient(withInterceptorsFromDi()),
         provideAnimations(),
         provideRouter(routes), 
+        provideAnimationsAsync(),
+        providePrimeNG({
+            theme: {
+                preset: Aura,
+                options: {
+                    darkModeSelector: '.my-app-dark'
+                }
+            }
+        })
     ]
 })
   .catch(err => console.error(err));
