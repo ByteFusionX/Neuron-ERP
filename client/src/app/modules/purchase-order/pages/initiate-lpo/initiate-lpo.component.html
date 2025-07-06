@@ -9,7 +9,6 @@
     </div>
 
     <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9" *ngIf="!isLoading && purchase">
-
         <div class="w-full mb-8">
             <div class="relative overflow-x-auto">
                 <table class="w-full text-md text-left border">
@@ -24,7 +23,8 @@
                             <td class="px-2 py-2 border font-medium bg-gray-50">Customer Name</td>
                             <td class="px-2 py-2 border">{{purchase.customerId?.companyName}}</td>
                             <td class="px-2 py-2 border font-medium bg-gray-50">Sales Person Name</td>
-                            <td class="px-2 py-2 border">{{purchase.createdBy?.firstName}} {{purchase.createdBy?.lastName}}</td>
+                            <td class="px-2 py-2 border">{{purchase.createdBy?.firstName}}
+                                {{purchase.createdBy?.lastName}}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -39,7 +39,7 @@
                             <th class="px-4 py-2 border">SL.NO</th>
                             <th class="px-4 py-2 border">Description</th>
                             <th class="px-4 py-2 border">Quantity</th>
-                            <th class="px-4 py-2 border">Unit Cost</th>
+                            <th class="px-4 py-2 border">Unit Price</th>
                             <th class="px-4 py-2 border">Total Price</th>
                             <th class="px-4 py-2 border">Approved Vendor</th>
                             <th class="px-4 py-2 border">ETA Terms</th>
@@ -47,16 +47,16 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <ng-container>
-                            <!-- <tr class="border text-center">
-                                <td colspan="4" class="px-4 py-2 border">Item Name: <span
-                                        class="text-base font-medium">{{ items.itemName }}</span></td>
-                            </tr> -->
+                        <ng-container *ngFor="let item of selectedComparison(purchase.items); let i = index;">
                             <tr class="border-b">
-                                <td class="px-4 py-2 border"></td>
-                                <td class="px-4 py-2 border"></td>
-                                <td class="px-4 py-2 border"></td>
-                                <td class="px-4 py-2 border"></td>
+                                <td class="px-4 py-2 border">{{i+1}}</td>
+                                <td class="px-4 py-2 border">{{item.detail}}</td>
+                                <td class="px-4 py-2 border">{{item.quantity}}</td>
+                                <td class="px-4 py-2 border">{{item.unitPrice}}</td>
+                                <td class="px-4 py-2 border">{{item.totalPrice}}</td>
+                                <td class="px-4 py-2 border">{{item.supplierName}}</td>
+                                <td class="px-4 py-2 border">{{item.etaTerms}}</td>
+                                <td class="px-4 py-2 border">{{item.paymentTerms}}</td>
                             </tr>
                         </ng-container>
                     </tbody>

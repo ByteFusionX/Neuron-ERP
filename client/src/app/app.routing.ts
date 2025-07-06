@@ -166,7 +166,13 @@ export const routes: Routes = [
       { path: 'comparison-summary', component: ComparisonSummaryComponent },
       { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
       { path: 'issue-lpo', component: IssueLpoComponent },
-      { path: 'lpo-list', component: LpoListComponent },
+    ]
+  },
+  {
+    path: 'purchase-order',
+    loadComponent: () => import('./modules/purchase-order/purchase-order.component').then((c) => c.PurchaseOrderComponent),
+    children: [
+      { path: 'lpo-list', component: LpoListComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }
