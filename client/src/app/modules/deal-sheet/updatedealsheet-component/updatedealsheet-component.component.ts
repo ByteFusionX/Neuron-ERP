@@ -280,7 +280,7 @@ export class UpdatedealsheetComponent implements OnInit {
     const itemDetail = this.getItemDetailsControls(i).controls[j] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
     const unitPrice = itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0;
-    itemDetail.get('unitPrice')?.setValue(Number(unitPrice.toFixed(2)));
+    itemDetail.get('unitPrice')?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
   }
 
   calculateProfit(i: number, j: number) {
@@ -341,7 +341,7 @@ export class UpdatedealsheetComponent implements OnInit {
 
   calculateUnitPrice(i: number, j: number) {
     const decimalMargin = this.getItemDetailsControls(i).controls[j].get('profit')?.value / 100;
-    return this.getItemDetailsControls(i).controls[j].get('unitCost')?.value / (1 - decimalMargin)
+    return Math.ceil(this.getItemDetailsControls(i).controls[j].get('unitCost')?.value / (1 - decimalMargin))
   }
 
   calculateTotalPrice(i: number, j: number) {

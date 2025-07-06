@@ -138,7 +138,7 @@ export class ViewPresaleComponent {
 
   calculateUnitPrice(i: number, j: number, k: number) {
     const decimalMargin = this.data.preSale.estimations.optionalItems[i].items[j].itemDetails[k].profit / 100;
-    return this.data.preSale.estimations.optionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin)
+    return Math.ceil(this.data.preSale.estimations.optionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin))
   }
 
   calculateTotalPrice(i: number, j: number, k: number) {
@@ -154,7 +154,7 @@ export class ViewPresaleComponent {
   }
 
   calculateDiscoutPrice(): number {
-    return this.calculateSellingPrice() - this.data.preSale.estimations.totalDiscount
+    return this.calculateSellingPrice() - (this.data.preSale.estimations.totalDiscount || 0)
   }
 
   closeModal() {

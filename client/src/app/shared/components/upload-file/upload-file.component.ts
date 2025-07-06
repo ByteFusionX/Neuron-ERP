@@ -23,8 +23,15 @@ export class UploadFileComponent {
     let files = event.target.files
     for (let i = 0; i < files.length; i++) {
       const newFile = files[i]
-      const exist = this.selectedFiles.some(file => file.name === newFile.name)
-      if (!exist) {
+      if (this.selectedFiles && this.selectedFiles.length > 0) {
+        const exist = this.selectedFiles.some(file => file.name === newFile.name)
+        if (!exist) {
+          this.selectedFiles.push(files[i])
+        }
+      } else if (!this.selectedFiles) {
+        this.selectedFiles = [];
+        this.selectedFiles.push(files[i])
+      } else {
         this.selectedFiles.push(files[i])
       }
     }

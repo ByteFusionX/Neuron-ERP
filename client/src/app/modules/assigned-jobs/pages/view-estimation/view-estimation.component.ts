@@ -75,7 +75,7 @@ export class ViewEstimationComponent {
 
   calculateUnitPrice(i: number, j: number, k: number) {
     const decimalMargin = this.data.estimation.optionalItems[i].items[j].itemDetails[k].profit / 100;
-    return this.data.estimation.optionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin)
+    return Math.ceil(this.data.estimation.optionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin))
   }
 
   calculateTotalPrice(i: number, j: number, k: number) {
@@ -91,7 +91,7 @@ export class ViewEstimationComponent {
   }
 
   calculateDiscoutPrice(): number {
-    return this.calculateSellingPrice() - this.data.estimation.totalDiscount
+    return this.calculateSellingPrice() - (this.data.estimation.totalDiscount || 0)
   }
 
 

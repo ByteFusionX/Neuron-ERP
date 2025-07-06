@@ -95,7 +95,7 @@ export class AssignPresaleComponent implements OnInit {
   }
 
   validateFile() {
-    if (this.selectedFiles.length == 0) {
+    if (this.selectedFiles && this.selectedFiles.length == 0) {
       this.fileError = true
     } else {
       this.fileError = false

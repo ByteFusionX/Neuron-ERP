@@ -543,7 +543,7 @@ export class QuotationListComponent {
 
   calculateUnitPrice(j: number, k: number, quoteData: Quotatation) {
     const decimalMargin = quoteData.optionalItems[0].items[j].itemDetails[k].profit / 100;
-    return quoteData.optionalItems[0].items[j].itemDetails[k].unitCost / (1 - decimalMargin);
+    return Math.ceil(quoteData.optionalItems[0].items[j].itemDetails[k].unitCost / (1 - decimalMargin));
   }
 
   calculateTotalPrice(j: number, k: number, quoteData: Quotatation) {

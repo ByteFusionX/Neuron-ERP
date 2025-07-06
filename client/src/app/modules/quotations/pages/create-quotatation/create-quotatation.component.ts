@@ -336,6 +336,15 @@ export class CreateQuotatationComponent {
     );
   }
 
+  calculateUnitPrice(i: number, j: number, k: number) {
+    const decimalMargin = this.estimatedOptionalItems[i].items[j].itemDetails[k].profit / 100;
+    return Math.ceil(this.estimatedOptionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin))
+  }
+
+  calculateTotalPrice(i: number, j: number, k: number) {
+    return this.calculateUnitPrice(i, j, k) * this.estimatedOptionalItems[i].items[j].itemDetails[k].quantity
+  }
+
   calculateTotalValuesAfterPactch() {
     if (this.estimatedOptionalItems) {
       // Calculate the total values of this.calculatedValues by using data.preSale.estimations.currency
@@ -352,7 +361,7 @@ export class CreateQuotatationComponent {
           totalCost += quantity * unitCost;
 
           // Calculate unit price with profit margin
-          const unitPrice = unitCost / (1 - profitMargin);
+          const unitPrice = Math.ceil(unitCost / (1 - profitMargin));
 
           // Calculate total selling price
           totalSellingPrice += unitPrice * quantity;
