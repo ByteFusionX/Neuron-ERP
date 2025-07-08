@@ -34,6 +34,9 @@ import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sh
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
 import { OpenToWorckComponent } from './modules/job-sheet/pages/open-to-work/open-to-work.component';
 import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-summary/comparison-summary.component';
+import { MrRequestsComponent } from './modules/technical/mr-requests/mr-requests.component';
+import { ProjectsComponent } from './modules/technical/projects/projects.component';
+import { AddProjectComponent } from './modules/technical/projects/add-project/add-project.component';
 
 
 export const routes: Routes = [
@@ -161,6 +164,15 @@ export const routes: Routes = [
       { path: 'comparison-sheet', component: ComparisonSheetComponent },
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
       { path: 'comparison-summary', component: ComparisonSummaryComponent }
+    ]
+  },
+  {
+    path: 'technical',
+    loadComponent: () => import('./modules/technical/technical.component').then((c) => c.TechnicalComponent),
+    children: [
+      { path: 'projects', component: ProjectsComponent },
+      { path: 'projects/add', component: AddProjectComponent },
+      { path: 'mr-requests', component: MrRequestsComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

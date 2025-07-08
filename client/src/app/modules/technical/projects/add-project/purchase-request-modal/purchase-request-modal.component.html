@@ -1,0 +1,60 @@
+<div class="p-6 max-w-4xl mx-auto">
+  <div class="flex justify-between items-center mb-6">
+    <h2 class="text-xl font-semibold text-gray-900">Purchase Requests</h2>
+    <button 
+      (click)="onClose()"
+      class="text-gray-400 hover:text-gray-600">
+      <ng-icon name="heroXMark" class="w-6 h-6"></ng-icon>
+    </button>
+  </div>
+
+  @if(purchaseRequests.length === 0){
+    <div class="text-center py-8">
+      <ng-icon name="heroDocumentText" class="w-12 h-12 text-gray-400 mx-auto mb-4"></ng-icon>
+      <p class="text-gray-500">No purchase requests found for this job.</p>
+    </div>
+  }@else{
+    <div class="space-y-6">
+      @for(purchase of purchaseRequests; track purchase._id){
+        <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h3 class="text-lg font-medium text-gray-900">{{ purchase.purchaseNo }}</h3>
+              <p class="text-sm text-gray-500">
+                Created by {{ purchase.createdBy.firstName }} {{ purchase.createdBy.lastName }} on {{ formatDate(purchase.createdAt) }}
+              </p>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-medium {{ getStatusColor(purchase.status) }}">
+              {{ purchase.status }}
+            </span>
+          </div>
+
+          @if(purchase.mrRequest){
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div class="flex items-start">
+                <ng-icon name="heroWrenchScrewdriver" class="w-5 h-5 text-blue-600 mt-0.5 mr-3"></ng-icon>
+                <div class="flex-1">
+                  <h4 class="text-sm font-medium text-blue-900 mb-1">
+                    Material Request from {{ purchase.mrRequest.engineer.firstName }} {{ purchase.mrRequest.engineer.lastName }}
+                  </h4>
+                  <p class="text-sm text-blue-700 mb-2">{{ purchase.mrRequest.message }}</p>
+                  <p class="text-xs text-blue-600">
+                    Requested on {{ formatDate(purchase.mrRequest.createdDate) }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <div class="mt-6 flex justify-end">
+    <app-btn 
+      theme="primary"
+      (click)="onClose()">
+      Close
+    </app-btn>
+  </div>
+</div> 

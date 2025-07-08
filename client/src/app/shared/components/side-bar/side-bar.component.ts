@@ -215,6 +215,29 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       ]
     },
     {
+      id: 'technical',
+      label: 'Technical',
+      icon: 'heroWrenchScrewdriver',
+      hasDropdown: true,
+      // privilegeKey: 'purchase',
+      notificationKey: 'purchaseCount',
+      children: [
+        
+        {
+          id: 'projects',
+          label: 'Projects',
+          route: '/technical/projects',
+          notificationKey: 'purchaseCount'
+        },
+        {
+          id: 'mrRequests',
+          label: 'MR Requests',
+          route: '/technical/mr-requests',
+          notificationKey: 'purchaseCount'
+        },
+      ]
+    },
+    {
       id: 'suppliers',
       label: 'Suppliers',
       icon: 'heroTruck',

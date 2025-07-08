@@ -517,3 +517,80 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
         next(error);
     }
 };
+
+
+export const getDropdownListForTechnical = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const availableJobs = await jobModel.aggregate([
+            {
+                $match: {
+                    isDeleted: { $ne: true },
+                    allocateType: { $ne: allocateType.SupplyOnly }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'quoteId',
+                    foreignField: '_id',
+                    as: 'quotation'
+                }
+            },
+            {
+                $unwind: "$quotation"
+            },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'quotation.createdBy',
+                    foreignField: '_id',
+                    as: 'salesPerson'
+                }
+            },
+            {
+                $unwind: "$salesPerson"
+            },
+            {
+                $lookup: {
+                    from: 'technicals',
+                    localField: '_id',
+                    foreignField: 'jobId',
+                    as: 'technicalEntry'
+                }
+            },
+            {
+                $match: {
+                    technicalEntry: { $size: 0 }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    jobId: 1,
+                    salesPersonName: {
+                        $concat: ["$salesPerson.firstName", " ", "$salesPerson.lastName"]
+                    }
+                }
+            },
+            {
+                $sort: { jobId: 1 }
+            }
+        ]);
+
+        if (availableJobs.length > 0) {
+            return res.status(200).json({
+                success: true,
+                data: availableJobs
+            });
+        } else {
+            return res.status(204).json({
+                success: true,
+                message: 'No available jobs found for technical project creation',
+                data: []
+            });
+        }
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+}

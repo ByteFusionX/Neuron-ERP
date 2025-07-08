@@ -67,4 +67,8 @@ export class PurchaseService {
   updatePurchaseStatus(purchaseId: string, status: PurchaseStatus, userId: string, comment?: string): Observable<any> {
     return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, userId, comment });
   }
+
+  getPurchaseRequestsByJobId(jobId: string): Observable<any> {
+    return this.http.get<any>(`${this.api}/purchase/purchase-request/job/${jobId}`);
+  }
 }

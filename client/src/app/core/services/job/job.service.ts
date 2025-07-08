@@ -46,4 +46,8 @@ export class JobService {
   updateAllocateType(data: { id: string, jobId: string, allocationType: allocateType }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/job/updateAllocateType`, data)
   }
+
+  getTechnicalDropdownList(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/job/technical`)
+  }
 }

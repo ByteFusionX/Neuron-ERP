@@ -595,3 +595,96 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
 //         next(error);
 //     }
 // };
+
+// Get purchase requests by job ID
+export const getPurchaseRequestsByJobId = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { jobId } = req.params;
+
+        if (!jobId) {
+            return res.status(400).json({
+                success: false,
+                message: "Job ID is required",
+                status: 400
+            });
+        }
+
+        const purchaseRequests = await PurchaseRequest.aggregate([
+            {
+                $match: { 
+                    jobId: new ObjectId(jobId),
+                    isDeleted: false
+                }
+            },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customerId',
+                    foreignField: '_id',
+                    as: 'customerId'
+                }
+            },
+            { $unwind: { path: '$customerId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobId'
+                }
+            },
+            { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'createdBy',
+                    foreignField: '_id',
+                    as: 'createdBy'
+                }
+            },
+            { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    hasMr: { $cond: [{ $ifNull: ["$mrRequest.engineer", false] }, true, false] }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'mrRequest.engineer',
+                    foreignField: '_id',
+                    as: 'mrEngineer'
+                }
+            },
+            {
+                $addFields: {
+                    mrRequest: {
+                        $cond: [
+                            "$hasMr",
+                            {
+                                engineer: { $arrayElemAt: ["$mrEngineer", 0] },
+                                message: "$mrRequest.message",
+                                createdDate: "$mrRequest.createdDate"
+                            },
+                            "$$REMOVE"
+                        ]
+                    }
+                }
+            },
+            {
+                $project: {
+                    mrEngineer: 0,
+                    hasMr: 0
+                }
+            },
+            { $sort: { createdAt: -1 } }
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            data: purchaseRequests,
+        });
+    } catch (error) {
+        next(error);
+    }
+};

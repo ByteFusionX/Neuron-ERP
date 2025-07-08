@@ -74,6 +74,8 @@ import {
   heroScale ,
   heroWrench,
   heroPlus,
+  heroWrenchScrewdriver,
+  heroPencil
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -112,6 +114,7 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroMapPin,
       heroBuildingLibrary,
       heroPencilSquare,
+      heroPencil,
       heroInboxArrowDown,
       heroDocumentArrowUp,
       heroEye,
@@ -154,7 +157,8 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroScale,
       heroWrench,
       heroCog6Tooth,
-      heroPlus
+      heroPlus,
+      heroWrenchScrewdriver
     }),
   ],
   exports: [NgIconsModule]
