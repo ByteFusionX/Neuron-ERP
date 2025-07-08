@@ -168,7 +168,7 @@ export class QuotationService {
 
         item.itemDetails.forEach(detail => {
           const decimalMargin = detail.profit / 100;
-          const unitPrice = detail.unitCost / (1 - decimalMargin);
+          const unitPrice = Math.ceil(detail.unitCost / (1 - decimalMargin));
           const totalPrice = unitPrice * detail.quantity;
           totalCost += totalPrice;
 

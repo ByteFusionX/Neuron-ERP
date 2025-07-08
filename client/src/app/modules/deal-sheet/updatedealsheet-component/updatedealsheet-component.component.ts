@@ -275,6 +275,7 @@ export class UpdatedealsheetComponent implements OnInit {
   trackByIndex(index: number): number {
     return index;
   }
+  
 
   calculateUnitPriceForInput(i: number, j: number) {
     const itemDetail = this.getItemDetailsControls(i).controls[j] as FormControl;

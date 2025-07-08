@@ -189,11 +189,10 @@
                                         {{ detail.quantity }}
                                     </td>
                                     <td class="px-2 py-2 border text-center">
-                                        {{ (detail.unitCost / (1 - (detail.profit / 100))) | numberFormatter }}
+                                        {{ calculateUnitPrice(detail) | numberFormatter }}
                                     </td>
                                     <td class="px-2 py-2 border text-center">
-                                        {{ ((detail.unitCost / (1 - (detail.profit / 100))) * detail.quantity) |
-                                        numberFormatter }}
+                                        {{ (calculateUnitPrice(detail) * detail.quantity) | numberFormatter }}
                                     </td>
                                     <td class="px-2 py-2 border text-center">
                                         {{ detail.unitCost | numberFormatter }}

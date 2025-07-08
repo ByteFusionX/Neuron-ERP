@@ -134,8 +134,7 @@
                   </td>
 
                   <td class="px-2 py-2 border text-center">
-                    {{ ((detail.get('unitCost')?.value / (1 - (detail.get('profit')?.value / 100))) *
-                    detail.get('quantity')?.value).toFixed(2) }}
+                    {{ (calculateUnitPrice(i,j) * detail.get('quantity')?.value).toFixed(2) }}
                   </td>
 
                   <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
