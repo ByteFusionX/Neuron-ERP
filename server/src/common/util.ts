@@ -9,7 +9,7 @@ import employeeModel from "../models/employee.model";
 export const calculateDiscountPrice = (discount: any, items: any): number => {
     const calculateUnitPrice = (i: number, j: number): number => {
         const decimalMargin = items[i].itemDetails[j].profit / 100;
-        return Math.ceil(items[i].itemDetails[j].unitCost / (1 - decimalMargin));
+        return Math.ceil(Number((items[i].itemDetails[j].unitCost / (1 - decimalMargin)).toFixed(2)));
     };
 
     const calculateTotalPrice = (i: number, j: number): number => {

@@ -338,7 +338,7 @@ export class CreateQuotatationComponent {
 
   calculateUnitPrice(i: number, j: number, k: number) {
     const decimalMargin = this.estimatedOptionalItems[i].items[j].itemDetails[k].profit / 100;
-    return Math.ceil(this.estimatedOptionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin))
+    return Math.ceil(Number((this.estimatedOptionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin)).toFixed(2)))
   }
 
   calculateTotalPrice(i: number, j: number, k: number) {
@@ -361,7 +361,7 @@ export class CreateQuotatationComponent {
           totalCost += quantity * unitCost;
 
           // Calculate unit price with profit margin
-          const unitPrice = Math.ceil(unitCost / (1 - profitMargin));
+          const unitPrice = Math.ceil(Number((unitCost / (1 - profitMargin)).toFixed(2)));
 
           // Calculate total selling price
           totalSellingPrice += unitPrice * quantity;

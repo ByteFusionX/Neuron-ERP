@@ -183,7 +183,7 @@ export class QuotationViewComponent {
 
   calculateUnitPrice(i: number, j: number, k: number) {
     const decimalMargin = this.quoteData.optionalItems[i].items[j].itemDetails[k].profit / 100;
-    return Math.ceil(this.quoteData.optionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin))
+    return Math.ceil(Number((this.quoteData.optionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin)).toFixed(2)))
   }
 
   calculateTotalPrice(i: number, j: number, k: number) {

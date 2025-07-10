@@ -283,13 +283,14 @@ export class OptionalItemsComponent implements OnInit {
   calculateUnitPrice(i: number, j: number, k: number) {
     const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[k] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    return Math.ceil(itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0);
+    const unitPrice = Math.ceil(Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0);
+    return unitPrice  
   }
 
   calculateUnitPriceForInput(i: number, j: number, k: number) {
     const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[k] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitPrice = itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0;
+    const unitPrice = Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0;
     itemDetail.get('unitPrice')?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
   }
 

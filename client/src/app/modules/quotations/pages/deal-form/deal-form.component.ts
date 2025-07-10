@@ -224,8 +224,8 @@ export class DealFormComponent {
   calculateUnitPriceForInput(i: number, j: number) {
     const itemDetail = this.getItemDetailsControls(i).controls[j] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitPrice = itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0;
-    itemDetail.get('unitPrice')?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
+    const unitPrice = Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0;
+    itemDetail.get('unitPrice')?.setValue(Math.ceil(unitPrice));
   }
 
   calculateProfit(i: number, j: number) {
