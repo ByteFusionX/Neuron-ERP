@@ -233,7 +233,7 @@ export class DealFormComponent {
     const unitPrice = this.getItemDetailsControls(i).controls[j].get('unitPrice')?.value;
     if (unitCost && unitPrice) {
       const profit = ((unitPrice - unitCost) / unitPrice) * 100;
-      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue(profit.toFixed(4));
+      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue(profit.toFixed(2));
     } else if (unitCost) {
       this.getItemDetailsControls(i).controls[j].get('profit')?.setValue('');
     }

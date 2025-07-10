@@ -299,7 +299,7 @@ export class OptionalItemsComponent implements OnInit {
     const unitPrice = this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitPrice')?.value;
     if (unitCost && unitPrice) {
       const profit = ((unitPrice - unitCost) / unitPrice) * 100;
-      this.getItemDetailsArrayControls(i, j)?.controls[k].get('profit')?.setValue(profit.toFixed(4));
+      this.getItemDetailsArrayControls(i, j)?.controls[k].get('profit')?.setValue(profit.toFixed(2));
     } else if (unitCost) {
       this.getItemDetailsArrayControls(i, j)?.controls[k].get('profit')?.setValue('');
     }
