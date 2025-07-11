@@ -222,10 +222,21 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       // privilegeKey: 'purchase',
       notificationKey: 'purchaseCount',
       children: [
-        
+        {
+          id: 'pendingJobs',
+          label: 'Open To Work',
+          route: '/technical/pending-jobs',
+          notificationKey: 'purchaseCount'
+        },
         {
           id: 'projects',
-          label: 'Projects',
+          label: 'Pending Projects',
+          route: '/technical/projects',
+          notificationKey: 'purchaseCount'
+        },       
+        {
+          id: 'amc',
+          label: 'Pending AMC',
           route: '/technical/projects',
           notificationKey: 'purchaseCount'
         },
