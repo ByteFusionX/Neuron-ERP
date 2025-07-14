@@ -338,7 +338,7 @@ export class QuotationListComponent {
       item.itemDetails.map((itemDetail) => {
         if (itemDetail.dealSelected) {
           itemSelected++;
-          priceDetails.totalSellingPrice += itemDetail.unitCost / (1 - (itemDetail.profit / 100)) * itemDetail.quantity;
+          priceDetails.totalSellingPrice += Math.ceil(Number((itemDetail.unitCost / (1 - (itemDetail.profit / 100))).toFixed(2))) * itemDetail.quantity;
           priceDetails.totalCost += itemDetail.quantity * itemDetail.unitCost;
           return itemDetail;
         }
