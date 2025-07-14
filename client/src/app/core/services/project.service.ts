@@ -35,4 +35,9 @@ export class ProjectService {
   updateProjectStatus(id: string, status: string): Observable<Project> {
     return this.http.patch<Project>(`${this.api}/project/status/${id}`, { status });
   }
+
+  getProjectAndAMCJobs(filterParams: ProjectFilter): Observable<ProjectResponse> {
+    return this.http.post<ProjectResponse>(`${this.api}/project/getProjectAndAMCJobs`, filterParams);
+  }
+
 } 

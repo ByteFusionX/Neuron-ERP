@@ -37,6 +37,7 @@ import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-
 import { MrRequestsComponent } from './modules/technical/mr-requests/mr-requests.component';
 import { ProjectsComponent } from './modules/technical/projects/projects.component';
 import { AddProjectComponent } from './modules/technical/projects/add-project/add-project.component';
+import { OpenToWorkProjectComponent } from './modules/technical/projects/openToWorKProjuct/open-to-work-project.component';
 
 
 export const routes: Routes = [
@@ -172,6 +173,8 @@ export const routes: Routes = [
     children: [
       { path: 'projects', component: ProjectsComponent },
       { path: 'projects/add', component: AddProjectComponent },
+      { path: 'mr-requests', component: MrRequestsComponent },
+      { path: 'open-to-work-project', component: OpenToWorkProjectComponent },
       { path: 'mr-requests', component: MrRequestsComponent }
     ]
   },

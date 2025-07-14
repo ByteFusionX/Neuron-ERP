@@ -225,7 +225,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
         {
           id: 'pendingJobs',
           label: 'Open To Work',
-          route: '/technical/pending-jobs',
+          route: '/technical/open-to-work-project',
           notificationKey: 'purchaseCount'
         },
         {
