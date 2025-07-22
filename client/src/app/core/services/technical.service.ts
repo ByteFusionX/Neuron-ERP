@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
+import { Project } from 'src/app/shared/interfaces/project.interface';
 
 export interface MaterialRequest {
   itemName: string;
@@ -13,9 +14,18 @@ export interface MaterialRequest {
 export interface TechnicalProject {
   jobId: string;
   materialRequest: MaterialRequest[];
-  assignedTo: string;
   status: string;
   projectType: string;
+}
+
+export interface AssignEngineer {
+  jobId: string;
+  engineerId: string;
+  comment: string;
+  assignedBy: string;
+  projectType: string;
+  customerId: string;
+  priority: string;
 }
 
 @Injectable({
@@ -24,6 +34,10 @@ export interface TechnicalProject {
 export class TechnicalService {
   private http = inject(HttpClient);
   private apiUrl = environment.api;
+
+  assignEngineer(projectData: AssignEngineer): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/assignEngineer`, projectData);
+  }
 
   createTechnicalProject(projectData: TechnicalProject): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/technical`, projectData);
@@ -43,5 +57,39 @@ export class TechnicalService {
 
   deleteTechnicalProject(id: string): Observable<any> {
     return this.http.delete<any>(`${this.apiUrl}/technical/${id}`);
+  }
+
+  getEngineers(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/getEngineers`);
+  }
+
+  // Activity Plan CRUD
+  createActivityPlan(activityPlan: Project): Observable<Project> {
+    return this.http.post<Project>(`${this.apiUrl}/technical/activity-plan`, activityPlan);
+  }
+
+  getActivityPlans(): Observable<Project[]> {
+    return this.http.get<Project[]>(`${this.apiUrl}/technical/activity-plan`);
+  }
+
+  updateActivityPlan(id: string, activityPlan: Partial<Project>): Observable<Project> {
+    return this.http.put<Project>(`${this.apiUrl}/technical/activity-plan/${id}`, activityPlan);
+  }
+
+  deleteActivityPlan(id: string): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/technical/activity-plan/${id}`);
+  }
+
+  // Task CRUD
+  getTasks(id: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/tasks/${id}`);
+  }
+
+  createTask(id: string, task: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/tasks/${id}`, task);
+  }
+
+  updateTask(id: string, taskId: string, task: any): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/technical/tasks/${id}/${taskId}`, task);
   }
 } 

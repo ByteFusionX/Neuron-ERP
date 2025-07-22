@@ -10,6 +10,7 @@ interface MaterialRequest {
   quantity: number;
   estimatedCost: number;
   requiredOn: Date;
+  remarks: string;
 }
 
 @Component({
@@ -54,11 +55,18 @@ export class MaterialRequestModalComponent implements OnInit {
   }
 
   addMaterialRequest(item?: MaterialRequest): void {
+    let formattedDate = '';
+    if (item?.requiredOn) {
+      const date = new Date(item.requiredOn);
+      formattedDate = date.toISOString().split('T')[0];
+    }
+
     const materialRequest = this.fb.group({
       itemName: [item?.itemName || '', [Validators.required]],
       quantity: [item?.quantity || 1, [Validators.required, Validators.min(1)]],
       estimatedCost: [item?.estimatedCost || 0, [Validators.required, Validators.min(0)]],
-      requiredOn: [item?.requiredOn || '', [Validators.required]]
+      requiredOn: [formattedDate, [Validators.required]],
+      remarks: [item?.remarks || '']
     });
 
     this.materialRequestsArray.push(materialRequest);
@@ -120,7 +128,8 @@ export class MaterialRequestModalComponent implements OnInit {
       itemName: 'Item Name',
       quantity: 'Quantity',
       estimatedCost: 'Estimated Cost',
-      requiredOn: 'Required On'
+      requiredOn: 'Required On',
+      remarks: 'Remarks'
     };
     return labels[fieldName] || fieldName;
   }

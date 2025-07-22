@@ -116,7 +116,8 @@
 
                 <!-- Text, Number, Boolean -->
                 <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
-                  {{ getCellValue(item, column) }}
+                  <span *ngIf="!column.clickable">{{ getCellValue(item, column) }}</span>
+                  <span *ngIf="column.clickable" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
                 </ng-container>
 
                 <!-- Date -->

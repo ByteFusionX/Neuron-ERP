@@ -13,7 +13,7 @@ export class ProjectService {
   constructor(private http: HttpClient) { }
 
   getProjects(filterParams: ProjectFilter): Observable<ProjectResponse> {
-    return this.http.post<ProjectResponse>(`${this.api}/project/getProjects`, filterParams);
+    return this.http.post<ProjectResponse>(`${this.api}/technical/getProjects`, filterParams);
   }
 
   getProjectById(id: string): Observable<Project> {

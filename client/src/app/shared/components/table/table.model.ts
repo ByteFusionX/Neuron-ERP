@@ -17,6 +17,9 @@ export interface TableColumn {
     headerClass?: string; // CSS class for the header
     tooltip?: boolean;
     list?: ApprovalRejectionList[]; // List data for tooltip modal
+    cellRenderer?: (item: any) => any;
+    clickable?: boolean;
+    clickFunction?: (item: any) => void;
 }
 
 export interface TableAction {

@@ -180,11 +180,12 @@ export class TableComponent implements OnInit, OnChanges {
   }
 
   getCellValue(item: any, column: TableColumn): any {
+    if (typeof column.cellRenderer === 'function') {
+      return column.cellRenderer(item);
+    }
     if (!column.key.includes('.')) {
       return item[column.key];
     }
-
-    // Handle nested properties like 'client.companyName'
     return column.key.split('.').reduce((obj, key) =>
       (obj && obj[key] !== undefined) ? obj[key] : null, item);
   }
@@ -228,5 +229,12 @@ export class TableComponent implements OnInit, OnChanges {
 
   getFilterValue(column: TableColumn): any {
     return this.filterValues[column.key];
+  }
+
+  onCellClick(column: TableColumn, item: any, event: Event): void {
+    if (column.clickFunction) {
+      column.clickFunction(item);
+      event.stopPropagation();
+    }
   }
 }

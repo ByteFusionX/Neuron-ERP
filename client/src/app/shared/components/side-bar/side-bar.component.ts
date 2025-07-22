@@ -231,13 +231,13 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
         {
           id: 'projects',
           label: 'Pending Projects',
-          route: '/technical/projects',
+          route: '/technical/project',
           notificationKey: 'purchaseCount'
         },       
         {
           id: 'amc',
           label: 'Pending AMC',
-          route: '/technical/projects',
+          route: '/technical/amc',
           notificationKey: 'purchaseCount'
         },
         {

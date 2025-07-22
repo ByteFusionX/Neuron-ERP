@@ -3,6 +3,7 @@ import jobModel, { allocateStatus, allocateType } from "../models/job.model"
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller';
 import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated } from "../common/util";
+import technicalModel from '../models/technical.model';
 
 
 const { ObjectId } = require('mongodb')
@@ -311,7 +312,7 @@ export const getJobSalesPerson = async (req: Request, res: Response, next: NextF
 
         const customers = await jobModel.aggregate([
             {
-                $match: { isDeleted: { $ne: true }, allocateStatus }
+                $match: { isDeleted: { $ne: true } }
             },
             {
                 $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotaion' }
@@ -591,6 +592,91 @@ export const getDropdownListForTechnical = async (req: Request, res: Response, n
         }
     } catch (error) {
         console.log(error);
+        next(error);
+    }
+}
+
+export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { jobId, companyName, subject, salesPersonDetails, departmentDetails, quoteId, dealId } = req.body;
+        const allocateTypeFilter = req.body.allocateType
+        let matchFilters: any = {
+            isDeleted: { $ne: true }
+        };
+
+        if (jobId) {
+            matchFilters.jobId = { $regex: jobId, $options: 'i' };
+        }
+
+        if (allocateTypeFilter) {
+            matchFilters.allocateType = allocateTypeFilter;
+        }
+
+        const technicalJobIds = await technicalModel.distinct('jobId');
+        const jobs = await jobModel.aggregate([
+            {
+                $match: {
+                    isDeleted: { $ne: true },
+                   allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.AMC] },
+                    _id: { $nin: technicalJobIds }
+                }
+            },
+            {
+                $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
+            }, 
+            {
+                $unwind: '$quotation'
+            },
+            {
+                $lookup: { from: 'customers', localField: 'quotation.client', foreignField: '_id', as: 'clientDetails' }
+            },
+            {
+                $unwind: '$clientDetails'
+            },
+            {
+                $lookup: { from: 'departments', localField: 'quotation.department', foreignField: '_id', as: 'departmentDetails' }
+            },
+            {
+                $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
+            },
+            {
+                $addFields: {
+                    attention: {
+                        $arrayElemAt: [
+                            {
+                                $filter: {
+                                    input: '$clientDetails.contactDetails',
+                                    as: 'contact',
+                                    cond: { $eq: ['$$contact._id', '$quotation.attention'] }
+                                }
+                            },
+                            0
+                        ]
+                    }
+                }
+            },
+            {
+                $match: {
+                    ...matchFilters,
+                    ...(companyName && { 'clientDetails.companyName': { $regex: companyName, $options: 'i' } }),
+                    ...(subject && { 'quotation.subject': { $regex: subject, $options: 'i' } }),
+                    ...(salesPersonDetails && { 'salesPersonDetails._id': new ObjectId(salesPersonDetails) }),
+                    ...(departmentDetails && { 'departmentDetails._id': new ObjectId(departmentDetails) }),
+                    ...(quoteId && { 'quotation.quoteId': { $regex: quoteId, $options: 'i' } }),
+                    ...(dealId && { 'quotation.dealData.dealId': { $regex: dealId, $options: 'i' } })
+                }
+            },
+            {
+                $sort: { createdDate: -1 }
+            }
+        ]);
+
+        if (jobs.length > 0) {
+            return res.status(200).json({ success: true, data: jobs, total: jobs.length, message: 'Jobs fetched successfully' });
+        } else {
+            return res.status(204).json({ success: true, message: 'No available jobs found', data: [] });
+        }
+    } catch (error) {
         next(error);
     }
 }

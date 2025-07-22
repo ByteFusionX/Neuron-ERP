@@ -20,7 +20,7 @@ interface FilterParams {
   [key: string]: any;
   page: number;
   row: number;
-  projectType?: ProjectType;
+  projectType?: string;
   status?: ProjectStatus[];
   assignedEngineer?: string;
   fromDate?: string;
@@ -51,26 +51,23 @@ export class ProjectsComponent implements OnInit {
   private dialog = inject(MatDialog);
   private paginationService = inject(PaginationService);
 
+
   tableData = signal<Project[]>([]);
   tableColumns: TableColumn[] = [];
   defaultColumns: string[] = [];
+  currentRoute = this.router.url;
+  currentPage =  `Pending ${this.router.url.split('/').pop()?.split('-').map(word => 
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ')}`;
 
   isLoading = signal<boolean>(true);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
 
-  projectTypes = [
-    { id: ProjectType.SupplyOnly, name: 'Supply Only' },
-    { id: ProjectType.ProjectWithSupply, name: 'Project With Supply' },
-    { id: ProjectType.ProjectsWithOutSupply, name: 'Projects With Out Supply' },
-    { id: ProjectType.AMC, name: 'AMC' }
-  ];
-
-  statusOptions: string[] = ['Pending', 'In Progress', 'Completed', 'On Hold', 'Cancelled'];
+  priorityOptions: string[] = ['High', 'Medium', 'Low'];
   
-  selectedProjectType = signal<ProjectType | undefined>(undefined);
+  selectedProjectType = this.router.url.split('/').pop();
   selectedStatus = signal<Array<ProjectStatus>>([]);
-  selectedEngineer = signal<string>('');
 
   ngOnInit(): void {
     this.setupTableColumns();
@@ -80,7 +77,7 @@ export class ProjectsComponent implements OnInit {
   setupTableColumns(): void {
     this.tableColumns = [
       {
-        key: 'projectName',
+        key: 'customer.companyName',
         label: 'Project Name',
         type: 'text',
         sortable: true,
@@ -89,50 +86,50 @@ export class ProjectsComponent implements OnInit {
         filterPlaceholder: 'Search project...'
       },
       {
-        key: 'assignedEngineer',
+        key: 'jobId.jobId',
+        label: 'Job ID',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search job ID...',
+      },
+      {
+        key: 'assignedTo',
         label: 'Assigned Engineer',
         type: 'text',
         sortable: true,
         filterable: true,
         filterType: 'text',
         filterPlaceholder: 'Search engineer...',
-        pipeParams: (item: Project) => `${item.assignedEngineer?.firstName} ${item.assignedEngineer?.lastName}`
+        cellRenderer: (item: any) =>
+          item?.assignedTo
+            ? `${item.assignedTo.firstName} ${item.assignedTo.lastName}`
+            : ''
       },
       {
-        key: 'projectType',
-        label: 'Project Type',
-        type: 'text',
-        filterable: true,
-        filterType: 'select',
-        filterOptions: this.projectTypes.map(type => ({ label: type.name, value: type.id }))
-      },
-      {
-        key: 'jobId',
-        label: 'Job ID',
+        key: 'assignedBy',
+        label: 'Assigned By',
         type: 'text',
         sortable: true,
         filterable: true,
         filterType: 'text',
-        filterPlaceholder: 'Search job ID...'
+        filterPlaceholder: 'Search assigned by...',
+        cellRenderer: (item: any) =>
+          item?.assignedBy
+            ? `${item.assignedBy.firstName} ${item.assignedBy.lastName}`
+            : ''
       },
+      
       {
-        key: 'status',
-        label: 'Status',
+        key: 'priority',
+        label: 'Priority',
         type: 'status',
         headerClass: 'text-center',
         filterable: true,
         filterType: 'select',
-        filterOptions: this.statusOptions.map(status => ({ label: status, value: status })),
+        filterOptions: this.priorityOptions.map(priority => ({ label: priority, value: priority })),
         tooltip: true,
-      },
-      {
-        key: 'allocatedDate',
-        label: 'Allocated Date',
-        type: 'date',
-        pipeParams: 'dd/MM/yyyy',
-        sortable: true,
-        filterable: true,
-        filterType: 'date'
       },
       {
         key: 'actions',
@@ -141,17 +138,10 @@ export class ProjectsComponent implements OnInit {
         headerClass: '!text-center',
         actions: [
           {
-            icon: 'heroEye',
-            tooltip: 'View Details',
-            action: 'viewProject',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
-          },
-          {
             icon: 'heroPencilSquare',
             tooltip: 'Edit Project',
             action: 'editProject',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium',
-            condition: (item) => item.status !== ProjectStatus.Completed
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
           },
           {
             icon: 'heroTrash',
@@ -165,32 +155,32 @@ export class ProjectsComponent implements OnInit {
     ];
 
     this.defaultColumns = [
-      'projectName', 'assignedEngineer', 'projectType', 'jobId', 'status', 'allocatedDate', 'actions'
+      'customer.companyName', 'jobId.jobId', 'assignedTo', 'assignedBy', 'priority', 'actions'
     ];
   }
 
   loadData(filters?: Partial<FilterParams>): void {
     this.isLoading.set(true);
     const paginationState = this.paginationService.paginationState();
-    
-    // Combine existing filters with new filters
+
     const filterParams: FilterParams = {
       page: paginationState.page,
       row: paginationState.row,
-      projectType: this.selectedProjectType(),
-      status: this.selectedStatus(),
-      assignedEngineer: this.selectedEngineer(),
+      projectType: this.selectedProjectType,
+      status: [ProjectStatus.Pending],
       ...filters
     };
 
     this.projectService.getProjects(filterParams).subscribe({
       next: (response) => {
-        this.tableData.set(response.data.projects);
-        this.totalItems.set(response.data.pagination.total);
+        console.log(response);
+        this.tableData.set(response.data);
+        this.totalItems.set(response.data.length);
         this.isEmpty.set(this.tableData().length === 0);
         this.isLoading.set(false);
       },
       error: (error) => {
+
         this.notificationService.error('Failed to load projects');
         console.error('Error loading projects:', error);
         this.isLoading.set(false);
@@ -207,7 +197,6 @@ export class ProjectsComponent implements OnInit {
       total: currentState.total 
     });
 
-    // Convert filters to backend format
     const filterParams: Partial<FilterParams> = filters.reduce((acc, filter) => {
       switch (filter.type) {
         case 'text':
@@ -236,9 +225,6 @@ export class ProjectsComponent implements OnInit {
     const { action, item } = event;
     
     switch (action) {
-      case 'viewProject':
-        this.viewProjectDetails(item);
-        break;
       case 'editProject':
         this.editProject(item);
         break;
@@ -248,12 +234,8 @@ export class ProjectsComponent implements OnInit {
     }
   }
 
-  viewProjectDetails(project: Project): void {
-    this.router.navigate(['/projects', project._id]);
-  }
-
   editProject(project: Project): void {
-    this.router.navigate(['/projects', 'edit', project._id]);
+    this.router.navigate(['/technical/project', 'edit', project._id]);
   }
 
   deleteProject(project: Project): void {
@@ -283,10 +265,6 @@ export class ProjectsComponent implements OnInit {
   }
 
   addProject(): void {
-    this.router.navigate(['/technical/projects', 'add']);
-  }
-
-  onRowClick(row: Project): void {
-    this.viewProjectDetails(row);
+    this.router.navigate(['/technical/project', 'add']);
   }
 }

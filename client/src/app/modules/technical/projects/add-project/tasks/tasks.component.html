@@ -1,0 +1,65 @@
+<div class="h-[calc(100vh-110px)] py-8">
+  <div class="mx-auto px-4 sm:px-6 lg:px-8 h-full">
+    <div class="bg-white shadow-lg border border-white border-b-gray-300 p-3 px-6 flex justify-between items-center rounded-t-xl">
+      <h3 class="text-md font-semibold tracking-tight">Tasks</h3>
+      <button (click)="openCreateTaskModal()" class="bg-violet-600 hover:bg-violet-700 transition text-white px-4 py-2 rounded-md font-medium shadow-sm">+ Add Task</button>
+    </div>
+    <div class="bg-white shadow-lg h-full rounded-b-xl">
+      <div class="p-8 h-full">
+        <div class="flex justify-between gap-6 h-full" cdkDropListGroup>
+          @for (status of statuses(); track status.name) {
+            <div class="w-full">
+              <div class="mb-2 p-3 bg-gray-100 {{status.bgColor}} rounded-md">
+                <h3 class="text-md font-semibold tracking-tight">{{ status.name }}</h3>
+              </div>
+              <ng-container *ngIf="!loading(); else loadingSkeleton">
+                <div class="flex flex-col gap-3 min-h-[60px] example-list"
+                     cdkDropList
+                     [cdkDropListData]="getTasksByStatus(status.name)"
+                     (cdkDropListDropped)="drop($event, status.name)">
+                  @for (task of getTasksByStatus(status.name); track task._id) {
+                    <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm cursor-pointer hover:shadow-md hover:border-violet-400 transition flex flex-col gap-2 example-box"
+                         cdkDrag
+                         >
+                      <div class="flex items-center justify-between gap-2">
+                        <div class="font-semibold text-gray-900 text-base truncate max-w-[70%]">{{ task.taskName }}</div>
+                        <div class="flex items-center gap-2">
+                          <span class="px-2 py-0.5 rounded text-xs font-semibold" [ngClass]="{
+                            'bg-red-100 text-red-700': task.priority === 'High',
+                            'bg-yellow-100 text-yellow-700': task.priority === 'Medium',
+                            'bg-green-100 text-green-700': task.priority === 'Low'
+                          }">{{ task.priority }}</span>
+                          <span class="cursor-pointer px-2 py-0.5 border border-gray-200 rounded-full" (click)="openEditTaskModal(task)">
+                            <ng-icon name="HeroPencilSquare" class="text-sm"></ng-icon>
+                          </span>
+                        </div>
+                      </div>
+                      <div class="text-xs text-gray-600 line-clamp-2 mb-1">{{ task.description }}</div>
+                      <div class="flex items-center gap-2 mt-1">
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                          <div class="bg-violet-600 h-2.5 rounded-full transition-all duration-300" [ngStyle]="{ width: (task.progress || 0) + '%' }"></div>
+                        </div>
+                        <span class="text-xs font-medium text-gray-700 min-w-[32px] text-right">{{ task.progress || 0 }}%</span>
+                      </div>
+                    </div>
+                  }
+                  <div *ngIf="getTasksByStatus(status.name).length === 0" class="text-center text-gray-400 py-4 select-none">
+                    No tasks in this status
+                  </div>
+                  <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm cursor-pointer hover:shadow-md hover:border-violet-400 transition flex flex-col gap-2 example-box" (click)="openCreateTaskModal(status.name)">
+                    <div class="flex items-center justify-center">
+                      <ng-icon name="HeroPlusCircle" class="text-2xl"></ng-icon>
+                    </div>
+                  </div>
+                </div>
+              </ng-container>
+              <ng-template #loadingSkeleton>
+                <app-skelton-loading [lineLength]="4"></app-skelton-loading>
+              </ng-template>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

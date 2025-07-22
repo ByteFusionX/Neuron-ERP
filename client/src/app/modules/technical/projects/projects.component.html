@@ -7,9 +7,8 @@
   [totalItems]="totalItems()"
   [tableId]="'projects-table'"
   (filterChange)="onFilterChange($event)"
-  (rowClick)="onRowClick($event)"
   (actionClick)="onActionClick($event)"
-  [title]="'Projects'"
+  [title]="currentPage"
 >
   <ng-template #sideColumn>
     <app-btn theme="primary" (buttonClick)="addProject()">

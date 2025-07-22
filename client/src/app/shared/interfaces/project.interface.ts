@@ -35,7 +35,7 @@ export interface ProjectFilter {
   search?: string;
   page: number;
   row: number;
-  projectType?: ProjectType;
+  projectType?: string;
   status?: ProjectStatus[];
   assignedEngineer?: string;
   fromDate?: string;
@@ -43,14 +43,7 @@ export interface ProjectFilter {
 }
 
 export interface ProjectResponse {
-  data: {
-    projects: Project[];
-    pagination: {
-      total: number;
-      page: number;
-      row: number;
-    };
-  };
+  data: Project[];
   message: string;
   success: boolean;
 } 
