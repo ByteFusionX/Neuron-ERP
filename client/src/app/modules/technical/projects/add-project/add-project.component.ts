@@ -25,10 +25,7 @@ import { Observable } from 'rxjs';
     ReactiveFormsModule,
     IconsModule,
     ButtonComponent,
-    RouterLink,
-    FormFieldComponent,
     SelectDropdownComponent,
-    ConfirmationDialogComponent,
   ],
   templateUrl: './add-project.component.html',
   styleUrl: './add-project.component.css'

@@ -3,7 +3,6 @@ import { Component, Inject, OnInit, inject } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 
 interface MaterialRequest {
   itemName: string;
@@ -20,7 +19,6 @@ interface MaterialRequest {
     CommonModule,
     ReactiveFormsModule,
     IconsModule,
-    ButtonComponent
   ],
   templateUrl: './material-request-modal.component.html',
   styleUrl: './material-request-modal.component.css'
