@@ -1,0 +1,134 @@
+
+
+<div class="w-full  max-h-[95vh]">
+  <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between  bg-white ">
+    <h3 class="text-md font-medium">{{ issue ? 'Edit Issue' : 'Add Issue' }}</h3>
+    <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onCancel()">
+      <span class="material-icons text-md p-0 m-0">close</span>
+    </button>
+  </div>
+  <form [formGroup]="form" (ngSubmit)="onSave()" class="p-6  overflow-y-scroll max-h-[77vh]">
+    <div class="grid grid-cols-2 gap-4">
+      <app-form-field
+        label="Subject"
+        [control]="subjectControl"
+        [isSubmitted]="isSubmitted"
+        placeholder="Enter subject"
+        id="subject"
+        type="text">
+      </app-form-field>
+
+      <app-select-dropdown
+        label="Customer"
+        [options]="customers"
+        optionLabel="companyName"
+        optionValue="_id"
+        [isSubmitted]="isSubmitted"
+        [id]="'customer'"
+        placeholder="Select customer"
+        [formControl]="customerControl">
+      </app-select-dropdown>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <app-select-dropdown
+        label="Issue Type"
+        [options]="issueTypeOptions"
+        optionLabel="name"
+        optionValue="id"
+        [isSubmitted]="isSubmitted"
+        [id]="'issueType'"
+        placeholder="Select issue type"
+        [formControl]="issueTypeControl">
+      </app-select-dropdown>
+
+      <app-form-field
+        label="Raised By"
+        [control]="raisedByControl"
+        [isSubmitted]="isSubmitted"
+        placeholder="Enter raised by"
+        id="raisedBy"
+        type="text">
+      </app-form-field>
+    </div>
+
+    <div class="mb-4">
+      <app-form-field
+        label="Description"
+        [control]="descriptionControl"
+        [isSubmitted]="isSubmitted"
+        placeholder="Enter description"
+        id="description"
+        type="textarea">
+      </app-form-field>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <app-select-dropdown
+        label="Status"
+        [options]="statusOptions"
+        optionLabel="name"
+        optionValue="id"
+        [isSubmitted]="isSubmitted"
+        [id]="'status'"
+        placeholder="Select status"
+        [formControl]="statusControl">
+      </app-select-dropdown>
+      <app-form-field
+        label="Responded On"
+        [control]="respondedOnControl"
+        [isSubmitted]="isSubmitted"
+        placeholder="Select responded on"
+        id="respondedOn"
+        type="date">
+      </app-form-field>
+    </div>
+
+   @if(statusControl.value == 'Closed') {
+    <div class="grid grid-cols-2 gap-4">
+      <app-form-field
+        label="Closed By"
+        [control]="closedByControl"
+        [isSubmitted]="isSubmitted"
+        placeholder="Enter closed by"
+        id="closedBy"
+        type="text">
+      </app-form-field>
+      <app-form-field
+        label="Closed On"
+        [control]="closedOnControl"
+        [isSubmitted]="isSubmitted"
+        placeholder="Select closed on"
+        id="closedOn"
+        type="date">
+      </app-form-field>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4">
+      <app-form-field
+        label="Comments"
+        [control]="commentsControl"
+        [isSubmitted]="isSubmitted"
+        placeholder="Enter comments"
+        id="comments"
+        type="textarea">
+      </app-form-field>
+    </div>
+   }
+    
+  </form>
+  
+</div> 
+<div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2">
+  <div class="flex gap-2 ">
+    <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onCancel()">
+      Close
+    </button>
+    <button
+      class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm whitespace-nowrap"
+      (click)="onSave()">
+      <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
+      Submit
+    </button>
+  </div>
+</div>

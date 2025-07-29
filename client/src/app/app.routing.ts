@@ -40,6 +40,7 @@ import { AddProjectComponent } from './modules/technical/projects/add-project/ad
 import { OpenToWorkProjectComponent } from './modules/technical/open-to-work/open-to-work-project.component';
 import { ActivityPlanComponent } from './modules/technical/projects/add-project/activity-plan/activity-plan.component';
 import { TasksComponent } from './modules/technical/projects/add-project/tasks/tasks.component';
+import { IssuesListComponent } from './modules/technical/projects/add-project/issues/list/issues-list.component';
 
 
 export const routes: Routes = [
@@ -179,6 +180,7 @@ export const routes: Routes = [
       { path: 'project/edit/:id', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/activity-plan/:id', component: ActivityPlanComponent},
       { path: 'project/tasks/:id', component: TasksComponent},
+      { path: 'project/issues/:id', component: IssuesListComponent},
       { path: 'mr-requests', component: MrRequestsComponent },
       { path: 'open-to-work-project', component: OpenToWorkProjectComponent },
       { path: 'mr-requests', component: MrRequestsComponent }

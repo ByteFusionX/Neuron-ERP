@@ -1,0 +1,18 @@
+<data-table
+  [data]="tableData"
+  [columns]="tableColumns"
+  [isLoading]="isLoading"
+  [isEmpty]="isEmpty"
+  [totalItems]="totalItems"
+  (filterChange)="onFilterChange($event)"
+  (actionClick)="onActionClick($event)"
+  title="Issues"
+  >
+
+  <ng-template #sideColumn>
+    <app-btn theme="primary" (buttonClick)="onAddIssue()">
+      <ng-icon name="heroPlus"></ng-icon>
+      Add Issue
+    </app-btn>
+  </ng-template>
+</data-table> 

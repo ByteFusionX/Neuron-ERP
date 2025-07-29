@@ -53,6 +53,7 @@ import {
   heroTag,
   heroBell,
   heroClipboardDocumentCheck,
+  heroClipboardDocument,
   heroXCircle,
   heroInformationCircle,
   heroArrowTrendingUp,
@@ -138,6 +139,7 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroBellSolid,
       heroBell,
       heroClipboardDocumentCheck,
+      heroClipboardDocument,
       heroXCircle,
       heroInformationCircle,
       heroArrowTrendingUp,
@@ -162,7 +164,7 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroPlus,
       heroWrenchScrewdriver,
       heroListBullet,
-      heroPlusCircle
+      heroPlusCircle,
     }),
   ],
   exports: [NgIconsModule]

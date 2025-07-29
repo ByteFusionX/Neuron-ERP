@@ -2,7 +2,7 @@ import { Component, inject, signal, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TechnicalService } from 'src/app/core/services/technical.service';
 import { MatDialog } from '@angular/material/dialog';
-import { TasksModalComponent } from '../tasks-modal/tasks-modal.component';
+import { TasksModalComponent } from './tasks-modal/tasks-modal.component';
 import { CommonModule } from '@angular/common';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';

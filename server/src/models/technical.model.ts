@@ -5,6 +5,7 @@ interface Technical {
     customer: Types.ObjectId;
     materialRequest: MaterialRequest[];
     tasks: Task[];
+    issues: Issue[];
     assignedTo: Types.ObjectId;
     comment: string;
     status: string;
@@ -14,6 +15,7 @@ interface Technical {
     updatedBy: Types.ObjectId;
     updatedAt: Date;
     priority: string;
+    activityPlan: ActivityPlan[];
 }
 
 interface MaterialRequest {
@@ -38,6 +40,92 @@ interface Task {
     associatedWith: Types.ObjectId[];
     status: string;
 }
+
+interface Issue {
+    subject: string;
+    customer: Types.ObjectId;
+    issueType: string;
+    raisedBy: string;
+    description: string;
+    status: string;
+    respondedOn: Date;
+    closedBy: Types.ObjectId;
+    closedOn: Date;
+    comments: string;
+    updatedBy: Types.ObjectId;
+    updatedAt: Date;
+}
+
+interface ActivityPlan {
+    activityName: string;
+    startDate: Date;
+    endDate: Date;
+    includedEmployees: Types.ObjectId[];
+}
+
+const activityPlanSchema = new Schema<ActivityPlan>({
+    activityName: {
+        type: String,
+        required: true,
+    },
+    startDate: {
+        type: Date,
+        required: true,
+    },
+    endDate: {
+        type: Date,
+        required: true,
+    },
+    includedEmployees: {
+        type: [Schema.Types.ObjectId],
+        ref: 'Employee'
+    },
+})
+
+const issueSchema = new Schema<Issue>({
+    subject: {
+        type: String
+    },
+    customer: {
+        type: Schema.Types.ObjectId,
+        required: true,
+        ref: 'Customer'
+    },
+    issueType: {
+        type: String,
+        enum: ['Hardware', 'Software', 'Network', 'Other']
+    },
+    raisedBy: {
+        type: String
+    },
+    description: {
+        type: String
+    },
+    status: {
+        type: String,
+        enum: ['Pending', 'Resolved', 'Closed']
+    },
+    respondedOn: {
+        type: Date
+    },
+    closedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    closedOn: {
+        type: Date
+    },
+    comments: {
+        type: String
+    },
+    updatedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    updatedAt: {
+        type: Date
+    },
+})
 
 const taskSchema = new Schema<Task>({
     taskName: {
@@ -98,6 +186,11 @@ const technicalSchema = new Schema<Technical>({
         required: true,
         default: [],
     },
+    issues: {
+        type: [issueSchema],
+        required: true,
+        default: [],
+    },
     assignedTo: {
         type: Schema.Types.ObjectId,
         required: true,
@@ -133,6 +226,10 @@ const technicalSchema = new Schema<Technical>({
     },
     updatedAt: {
         type: Date,
+    },
+    activityPlan: {
+        type: [activityPlanSchema],
+        default: [],
     },
 })
 

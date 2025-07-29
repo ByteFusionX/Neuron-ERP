@@ -1,10 +1,11 @@
 import { Component, EventEmitter, Input, Output, forwardRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR, ReactiveFormsModule } from '@angular/forms';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
 
 @Component({
   selector: 'app-select-dropdown',
-  imports: [CommonModule,FormsModule,ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgSelectComponent, NgOptionComponent],
   templateUrl: './select-dropdown.component.html',
   styleUrl: './select-dropdown.component.css',
   providers: [
@@ -46,27 +47,10 @@ export class SelectDropdownComponent {
     return option[this.optionValue];
   }
 
-  isSelected(option: any): boolean {
-    if (this.multiple && Array.isArray(this.value)) {
-      return this.value.includes(this.getOptionValue(option));
-    }
-    return this.value === this.getOptionValue(option);
-  }
-
-  onSelectionChange(event: Event): void {
-    const select = event.target as HTMLSelectElement;
-    if (this.multiple) {
-      const values = Array.from(select.selectedOptions).map(option => option.value);
-      this.value = values;
-      this.onChange(values);
-      this.onSelected.emit(values)
-    } else {
-      const value = select.value;
-      this.value = value;
-      this.onChange(value);
-      this.onSelected.emit(value)
-    }
-
+  onSelectionChange(event: any): void {
+    this.value = event;
+    this.onChange(event);
+    this.onSelected.emit(event);
     this.onTouched();
   }
 

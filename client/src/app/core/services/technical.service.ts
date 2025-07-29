@@ -64,20 +64,20 @@ export class TechnicalService {
   }
 
   // Activity Plan CRUD
-  createActivityPlan(activityPlan: Project): Observable<Project> {
-    return this.http.post<Project>(`${this.apiUrl}/technical/activity-plan`, activityPlan);
+  getActivityPlans(technicalId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/activity-plan/${technicalId}`);
   }
 
-  getActivityPlans(): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.apiUrl}/technical/activity-plan`);
+  createActivityPlan(technicalId: string, activityPlan: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/activity-plan/${technicalId}`, activityPlan);
   }
 
-  updateActivityPlan(id: string, activityPlan: Partial<Project>): Observable<Project> {
-    return this.http.put<Project>(`${this.apiUrl}/technical/activity-plan/${id}`, activityPlan);
+  updateActivityPlan(technicalId: string, activityPlanId: string, activityPlan: any): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/technical/activity-plan/${technicalId}/${activityPlanId}`, activityPlan);
   }
 
-  deleteActivityPlan(id: string): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/technical/activity-plan/${id}`);
+  deleteActivityPlan(technicalId: string, activityPlanId: string): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/technical/activity-plan/${technicalId}/${activityPlanId}`);
   }
 
   // Task CRUD
@@ -91,5 +91,21 @@ export class TechnicalService {
 
   updateTask(id: string, taskId: string, task: any): Observable<any> {
     return this.http.put<any>(`${this.apiUrl}/technical/tasks/${id}/${taskId}`, task);
+  }
+
+  getIssues(id: string, filterParams: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/issues/${id}`, filterParams);
+  }
+
+  createIssue(id: string, issue: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/issues/${id}`, issue);
+  }
+
+  updateIssue(id: string, issueId: string, issue: any): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/technical/issues/${id}/${issueId}`, issue);
+  }
+
+  deleteIssue(id: string, issueId: string): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/technical/issues/${id}/${issueId}`);
   }
 } 

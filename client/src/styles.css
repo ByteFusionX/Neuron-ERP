@@ -56,6 +56,13 @@ th {
   border: none;
 }
 
+.ng-select.form-component .ng-select-container {
+  height: 43px !important;
+  --tw-bg-opacity: 1;
+  background-color: rgb(229 231 235 / var(--tw-bg-opacity));
+  border: none;
+}
+
 .ng-select.filter .ng-select-container {
   height: 40px;
 }
@@ -120,5 +127,31 @@ th {
 
 .cdk-overlay-pane {
   max-width: 90vw !important;
+}
+
+
+
+.gantt .bar {
+  fill: rgb(124 58 237 / var(--tw-bg-opacity, 1)) !important;
+  color: white !important;
+}
+
+.gantt .bar-wrapper.purple .bar {
+  fill: red !important;
+  color: white !important;
+  pointer-events: none;
+}
+
+.gantt .bar-wrapper.purple .bar-label {
+  pointer-events: none;
+}
+
+.gantt .bar-wrapper.purple rect {
+  pointer-events: none;
+}
+
+.gantt .bar-label {
+  fill: white !important;
+  font-weight: 600 !important;
 }
 

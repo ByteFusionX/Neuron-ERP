@@ -2,14 +2,38 @@
     <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" [for]="id">
         {{ label }}
     </label>
-    <input [id]="id" [type]="type" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted"
-        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-        [formControl]="control" 
-        [readonly]="readonly"/>
-    <div class="text-red-700 text-sm mt-1" *ngIf="control?.invalid && isSubmitted">
-        <span *ngIf="control?.errors?.['required']">This field is required.</span>
-        <span *ngIf="control?.errors?.['email']">Invalid email format.</span>
-        <span *ngIf="control?.errors?.['min']">Value must be at least {{control?.errors?.['min']?.min}}.</span>
-        <span *ngIf="control?.errors?.['max']">Value must not exceed {{control?.errors?.['max']?.max}}.</span>
-    </div>
-</div>
+    @if(type == 'textarea') {
+        <textarea [id]="id" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted" 
+            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            [formControl]="control" 
+            [readonly]="readonly"></textarea>
+    }@else if(type == 'date') {
+        <input [id]="id" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted" 
+            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            [formControl]="control" 
+            [readonly]="readonly"
+            type="date"/>
+    }@else {
+        <input [id]="id" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted" 
+            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            [formControl]="control" 
+            [readonly]="readonly"/>
+    }
+
+    @if(control?.invalid && isSubmitted) {
+        <div class="text-red-700 text-sm mt-1">
+            @if(control?.errors?.['required']) {
+                <span>This field is required.</span>
+            }
+            @if(control?.errors?.['email']) {
+                <span>Invalid email format.</span>
+            }
+            @if(control?.errors?.['min']) {
+                <span>Value must be at least {{control?.errors?.['min']?.min}}.</span>
+            }
+            @if(control?.errors?.['max']) {
+                <span>Value must not exceed {{control?.errors?.['max']?.max}}.</span>
+            }
+        </div>
+    }
+</div> 
