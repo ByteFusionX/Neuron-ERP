@@ -142,16 +142,15 @@ export class UpdatedealsheetComponent implements OnInit {
   }
 
   createItemDetailGroup(detail: QuoteItemDetail): FormGroup {
-    const decimalMargin = detail.profit / 100 || 0;
-    const unitPrice = Number((detail.unitCost / (1 - decimalMargin) || 0).toFixed(2));
+    const profit = (((detail.unitSellingPrice - detail.unitCost) / detail.unitSellingPrice) * 100).toFixed(2);
 
     return this.fb.group({
       dealSelected: [detail.dealSelected || false],
       detail: [detail.detail, Validators.required],
       quantity: [detail.quantity, Validators.required],
       unitCost: [detail.unitCost, Validators.required],
-      profit: [detail.profit, Validators.required],
-      unitPrice: [unitPrice, Validators.required],
+      profit: [profit, Validators.required],
+      unitSellingPrice: [detail.unitSellingPrice, Validators.required],
       availability: [detail.availability, Validators.required],
       supplierName: [detail.supplierName, this.supplierNameValidator()],
       phoneNo: [detail.phoneNo, this.supplierNameValidator()],
@@ -284,11 +283,11 @@ export class UpdatedealsheetComponent implements OnInit {
     itemDetail.get('unitPrice')?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
   }
 
-  calculateProfit(i: number, j: number) {
+  calculateProfitForInput(i: number, j: number) {
     const unitCost = this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
-    const unitPrice = this.getItemDetailsControls(i).controls[j].get('unitPrice')?.value;
-    if (unitCost && unitPrice) {
-      const profit = ((unitPrice - unitCost) / unitPrice) * 100;
+    const unitSellingPrice = this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
+    if (unitCost && unitSellingPrice) {
+      const profit = ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
       this.getItemDetailsControls(i).controls[j].get('profit')?.setValue(profit.toFixed(2));
     } else if (unitCost) {
       this.getItemDetailsControls(i).controls[j].get('profit')?.setValue('');
@@ -340,13 +339,18 @@ export class UpdatedealsheetComponent implements OnInit {
     return this.getItemDetailsControls(i).controls[j].get('quantity')?.value * this.getItemDetailsControls(i).controls[j].get('unitCost')?.value
   }
 
-  calculateUnitPrice(i: number, j: number) {
-    const decimalMargin = this.getItemDetailsControls(i).controls[j].get('profit')?.value / 100;
-    return Math.ceil(Number((this.getItemDetailsControls(i).controls[j].get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)))
+  calculateProfit(i: number, j: number) {
+    const unitCost = this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
+    const unitSellingPrice = this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
+    
+    if (unitCost && unitSellingPrice) {
+      return (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(2);
+    }
+    return 0;
   }
 
   calculateTotalPrice(i: number, j: number) {
-    return this.calculateUnitPrice(i, j) * this.getItemDetailsControls(i).controls[j].get('quantity')?.value
+    return this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value * this.getItemDetailsControls(i).controls[j].get('quantity')?.value
   }
 
   onClose() {

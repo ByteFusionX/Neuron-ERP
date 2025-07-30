@@ -252,10 +252,10 @@
                                                     {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
                                                 </td>
                                                 <td class="px-2 py-2 border text-center">
-                                                    {{ itemsDetail.profit | number:'1.2-2' }}%
+                                                    {{calculateProfit(i,j,k) | number:'1.2-2' }}%
                                                 </td>
                                                 <td class="px-2 py-2 border text-center">
-                                                    {{calculateUnitPrice(i,j,k) | numberFormatter}}
+                                                    {{itemsDetail.unitSellingPrice | numberFormatter}}
                                                 </td>
                                                 <td class="px-2 py-2 border text-center">
                                                     {{calculateTotalPrice(i,j,k) | numberFormatter}}

@@ -30,7 +30,7 @@
                         class="border-l border-r border-t hover:border-r-slate-950  text-center">
                         <div class="px-6 py-3">Profit</div>
                     </th>
-                    <th scope="col" resizable key="unitPrice"
+                    <th scope="col" resizable key="unitSellingPrice"
                         class="border-l border-r border-t hover:border-r-slate-950  text-center">
                         <div class="px-6 py-3">Unit Price</div>
                     </th>
@@ -94,14 +94,14 @@
                                     <input appNoLeadingSpace formControlName="quantity"
                                         class="font-normal appearance-none block w-full text-center rounded py-5 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                                         type="number" placeholder="00"
-                                        (input)="calculateUnitPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
+                                        (input)="calculateunitSellingPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
                                 </td>
                                 <td [class.border-red-500]="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('unitCost')?.invalid && submit"
                                     class="border px-6 py-3">
                                     <input appNoLeadingSpace formControlName="unitCost"
                                         class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                                         type="number" placeholder="00.00"
-                                        (input)="calculateUnitPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
+                                        (input)="calculateunitSellingPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
                                 </td>
                                 <td class="px-6 py-3 border-l border-b border-t text-center">
                                     <p>{{ calculateTotalCost(optionIndex, itemIndex,itemDetailIndex).toFixed(2) }}</p>
@@ -112,7 +112,7 @@
                                         <input appNoLeadingSpace formControlName="profit"
                                             class="font-normal appearance-none block w-9 text-right rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                                             type="number" placeholder="00"
-                                            (input)="calculateUnitPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
+                                            (input)="calculateunitSellingPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
                                         <p class="ml-0.5 mb-0.5">%</p>
                                     </div>
                                     <div *ngIf="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('profit')?.hasError('negativeProfit')"
@@ -121,7 +121,7 @@
                                     </div>
                                 </td>
                                 <td class="border px-6 py-3 text-center">
-                                    <input appNoLeadingSpace formControlName="unitPrice"
+                                    <input appNoLeadingSpace formControlName="unitSellingPrice"
                                         class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                                         type="number" placeholder="00.00"
                                         (input)="calculateProfit(optionIndex, itemIndex,itemDetailIndex)">

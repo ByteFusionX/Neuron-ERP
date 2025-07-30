@@ -57,10 +57,12 @@ export class OptionalItemsComponent implements OnInit {
           if (ind > 0) {
             this.addItemDetail(optionIndex, itemIndex);
           }
-          // Calculate unitPrice and add it to itemDetails
-          const decimalMargin = detail.profit / 100 || 0;
-          const unitPrice = detail.unitCost / (1 - decimalMargin) || 0;
-          detail.unitPrice = Number(unitPrice.toFixed(2));
+          const unitCost = detail.unitCost;
+          const unitSellingPrice = detail.unitSellingPrice;
+
+          if (unitCost && unitSellingPrice) {
+            detail.profit = (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(2);
+          }
         });
       });
     });
@@ -114,7 +116,7 @@ export class OptionalItemsComponent implements OnInit {
               quantity: ['', Validators.required],
               unitCost: ['', Validators.required],
               profit: ['', [Validators.required, this.nonNegativeProfitValidator()]],
-              unitPrice: ['', Validators.required],
+              unitSellingPrice: ['', Validators.required],
               availability: ['', Validators.required],
             }),
           ])
@@ -137,7 +139,7 @@ export class OptionalItemsComponent implements OnInit {
             quantity: ['', Validators.required],
             unitCost: ['', Validators.required],
             profit: ['', Validators.required],
-            unitPrice: [''],
+            unitSellingPrice: [''],
             availability: ['', Validators.required],
           })
         ])
@@ -151,7 +153,7 @@ export class OptionalItemsComponent implements OnInit {
       quantity: ['', Validators.required],
       unitCost: ['', Validators.required],
       profit: ['', Validators.required],
-      unitPrice: [''],
+      unitSellingPrice: [''],
       availability: ['', Validators.required]
     });
   }
@@ -197,7 +199,7 @@ export class OptionalItemsComponent implements OnInit {
               quantity: detail.quantity,
               unitCost: detail.unitCost,
               profit: detail.profit,
-              unitPrice: detail.unitPrice,
+              unitSellingPrice: detail.unitSellingPrice,
               availability: detail.availability,
             })
           )
@@ -216,7 +218,7 @@ export class OptionalItemsComponent implements OnInit {
         quantity: item.quantity,
         unitCost: item.unitCost,
         profit: item.profit,
-        unitPrice: item.unitPrice,
+        unitSellingPrice: item.unitSellingPrice,
         availability: item.availability,
       }));
       itemDetailsArray?.updateValueAndValidity();
@@ -224,7 +226,7 @@ export class OptionalItemsComponent implements OnInit {
   }
 
   undoRemoveOptions(): void {
-    if (this.removedOptions.length > 0) {  
+    if (this.removedOptions.length > 0) {
       const { option, i } = this.removedOptions.pop();
       const optionGroup = this._fb.group({
         items: this._fb.array(
@@ -238,7 +240,7 @@ export class OptionalItemsComponent implements OnInit {
                     quantity: [detail.quantity, Validators.required],
                     unitCost: [detail.unitCost, Validators.required],
                     profit: [detail.profit, Validators.required],
-                    unitPrice: [detail.unitPrice, Validators.required],
+                    unitSellingPrice: [detail.unitSellingPrice, Validators.required],
                     availability: [detail.availability, Validators.required],
                   })
                 )
@@ -280,25 +282,25 @@ export class OptionalItemsComponent implements OnInit {
     );
   }
 
-  calculateUnitPrice(i: number, j: number, k: number) {
+  calculateunitSellingPrice(i: number, j: number, k: number) {
     const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[k] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitPrice = Math.ceil(Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0);
-    return unitPrice  
+    const unitSellingPrice = Math.ceil(Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0);
+    return unitSellingPrice
   }
 
-  calculateUnitPriceForInput(i: number, j: number, k: number) {
+  calculateunitSellingPriceForInput(i: number, j: number, k: number) {
     const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[k] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitPrice = Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0;
-    itemDetail.get('unitPrice')?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
+    const unitSellingPrice = Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0;
+    itemDetail.get('unitSellingPrice')?.setValue(Number(Math.ceil(unitSellingPrice)).toFixed(2));
   }
 
   calculateProfit(i: number, j: number, k: number) {
     const unitCost = this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitCost')?.value;
-    const unitPrice = this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitPrice')?.value;
-    if (unitCost && unitPrice) {
-      const profit = ((unitPrice - unitCost) / unitPrice) * 100;
+    const unitSellingPrice = this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitSellingPrice')?.value;
+    if (unitCost && unitSellingPrice) {
+      const profit = ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
       this.getItemDetailsArrayControls(i, j)?.controls[k].get('profit')?.setValue(profit.toFixed(2));
     } else if (unitCost) {
       this.getItemDetailsArrayControls(i, j)?.controls[k].get('profit')?.setValue('');
@@ -307,7 +309,7 @@ export class OptionalItemsComponent implements OnInit {
 
   calculateTotalPrice(i: number, j: number, k: number) {
     return (
-      this.calculateUnitPrice(i, j, k) *
+      this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitSellingPrice')?.value *
       this.getItemDetailsArrayControls(i, j)?.controls[k].get('quantity')?.value || 0
     );
   }
@@ -335,7 +337,7 @@ export class OptionalItemsComponent implements OnInit {
   }
 
   calculateTotalProfit() {
-    const sellingPrice = this.calculateSellingPrice() - this.optionalItems.value[this.selectedOption].totalDiscount ;
+    const sellingPrice = this.calculateSellingPrice() - this.optionalItems.value[this.selectedOption].totalDiscount;
     const totalCost = this.calculateAllTotalCost();
     return sellingPrice > 0
       ? ((sellingPrice - totalCost) / sellingPrice) * 100

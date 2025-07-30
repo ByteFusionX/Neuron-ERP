@@ -336,13 +336,18 @@ export class CreateQuotatationComponent {
     );
   }
 
-  calculateUnitPrice(i: number, j: number, k: number) {
-    const decimalMargin = this.estimatedOptionalItems[i].items[j].itemDetails[k].profit / 100;
-    return Math.ceil(Number((this.estimatedOptionalItems[i].items[j].itemDetails[k].unitCost / (1 - decimalMargin)).toFixed(2)))
+  calculateProfit(i: number, j: number, k: number) {
+    const unitCost = this.estimatedOptionalItems[i].items[j].itemDetails[k].unitCost;
+    const unitSellingPrice = this.estimatedOptionalItems[i].items[j].itemDetails[k].unitSellingPrice;
+    
+    if (unitCost && unitSellingPrice) {
+      return (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(2);
+    }
+    return 0;
   }
 
   calculateTotalPrice(i: number, j: number, k: number) {
-    return this.calculateUnitPrice(i, j, k) * this.estimatedOptionalItems[i].items[j].itemDetails[k].quantity
+    return this.estimatedOptionalItems[i].items[j].itemDetails[k].unitSellingPrice * this.estimatedOptionalItems[i].items[j].itemDetails[k].quantity
   }
 
   calculateTotalValuesAfterPactch() {

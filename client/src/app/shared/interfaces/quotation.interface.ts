@@ -24,6 +24,7 @@ export interface QuoteItemDetail {
     dealSelected: boolean;
     supplierName: string;
     phoneNo: string;
+    unitSellingPrice: number;
     email: string;
 }
 

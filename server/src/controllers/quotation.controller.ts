@@ -1047,8 +1047,7 @@ export const getReportDetails = async (req: Request, res: Response) => {
             
             // Track counts for pie chart
             acc.statusCounts[quote.status] = (acc.statusCounts[quote.status] || 0) + 1;
-            
-            // Add to total values
+
             if (quote.currency == 'USD') {
                 acc.totalUSDValue += discountPrice;
             } else if (quote.currency == 'QAR') {

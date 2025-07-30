@@ -338,7 +338,7 @@ export class QuotationListComponent {
       item.itemDetails.map((itemDetail) => {
         if (itemDetail.dealSelected) {
           itemSelected++;
-          priceDetails.totalSellingPrice += Math.ceil(Number((itemDetail.unitCost / (1 - (itemDetail.profit / 100))).toFixed(2))) * itemDetail.quantity;
+          priceDetails.totalSellingPrice += itemDetail.unitSellingPrice * itemDetail.quantity;
           priceDetails.totalCost += itemDetail.quantity * itemDetail.unitCost;
           return itemDetail;
         }
@@ -541,13 +541,8 @@ export class QuotationListComponent {
     this.subject.next(event);
   }
 
-  calculateUnitPrice(j: number, k: number, quoteData: Quotatation) {
-    const decimalMargin = quoteData.optionalItems[0].items[j].itemDetails[k].profit / 100;
-    return Math.ceil(Number((quoteData.optionalItems[0].items[j].itemDetails[k].unitCost / (1 - decimalMargin)).toFixed(2)));
-  }
-
   calculateTotalPrice(j: number, k: number, quoteData: Quotatation) {
-    return this.calculateUnitPrice(j, k, quoteData) * quoteData.optionalItems[0].items[j].itemDetails[k].quantity;
+    return quoteData.optionalItems[0].items[j].itemDetails[k].unitSellingPrice * quoteData.optionalItems[0].items[j].itemDetails[k].quantity;
   }
 
   calculateSellingPrice(quoteData: Quotatation): number {
