@@ -7,7 +7,7 @@ import { PipelineStage } from 'mongoose';
 
 export const getSuppliers = async (req: Request, res: Response) => {
    try {
-      let { page = 1, row = 10, toDate, fromDate, status, category, supplierType } = req.body;
+      let { page = 1, row = 10, toDate, fromDate, status, category, supplierType, supplierName, location } = req.body;
 
       // Convert string page and row to numbers
       page = parseInt(page.toString());
@@ -49,6 +49,16 @@ export const getSuppliers = async (req: Request, res: Response) => {
          filter.supplierType = supplierType;
       }
 
+      // Add supplierName filter if provided
+      if (supplierName) {
+         filter.supplierName = { $regex: supplierName, $options: 'i' };
+      }
+
+      // Add location filter if provided
+      if (location) {
+         filter['address.location'] = { $regex: location, $options: 'i' };
+      }
+
       // Use aggregation pipeline for advanced querying with lookups
       const aggregationPipeline: PipelineStage[] = [
          { $match: filter },
@@ -72,16 +82,73 @@ export const getSuppliers = async (req: Request, res: Response) => {
          {
             $lookup: {
                from: 'employees',
-               localField: 'approvedData.approvedBy',
+               localField: 'approvedHistory.approvedBy',
                foreignField: '_id',
                as: 'approvedByEmployee'
+            }
+         },
+         {
+            $lookup: {
+               from: 'employees',
+               localField: 'rejectHistory.rejectedBy',
+               foreignField: '_id',
+               as: 'rejectedByEmployee'
             }
          },
          {
             $addFields: {
                categoryInfo: { $arrayElemAt: ["$categoryDetails", 0] },
                createdByInfo: { $arrayElemAt: ["$createdByDepartment", 0] },
-               approvedByInfo: { $arrayElemAt: ["$approvedByEmployee", 0] }
+               approvedHistory: {
+                  $map: {
+                     input: "$approvedHistory",
+                     as: "history",
+                     in: {
+                        $mergeObjects: [
+                           "$$history",
+                           {
+                              approvedBy: {
+                                 $arrayElemAt: [
+                                    {
+                                       $filter: {
+                                          input: "$approvedByEmployee",
+                                          as: "emp",
+                                          cond: { $eq: ["$$emp._id", "$$history.approvedBy"] }
+                                       }
+                                    },
+                                    0
+                                 ]
+                              }
+                           }
+                        ]
+                     }
+                  }
+               },
+               rejectHistory: {
+                  $map: {
+                     input: "$rejectHistory",
+                     as: "history",
+                     in: {
+                        $mergeObjects: [
+                           "$$history",
+                           {
+                              rejectedBy: {
+                                 $arrayElemAt: [
+                                    {
+                                       $filter: {
+                                          input: "$rejectedByEmployee",
+                                          as: "emp",
+                                          cond: { $eq: ["$$emp._id", "$$history.rejectedBy"] }
+                                       }
+                                    },
+                                    0
+                                 ]
+                              }
+                           }
+                        ]
+                     }
+                  }
+               }
             }
          },
          {
@@ -90,7 +157,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
                supplierName: 1,
                address: 1,
                supplierType: 1,
-               category: "$categoryInfo", // Use the looked-up category info
+               category: "$categoryInfo",
                contactDetails: 1,
                documents: 1,
                status: 1,
@@ -99,8 +166,8 @@ export const getSuppliers = async (req: Request, res: Response) => {
                creditValue: 1,
                createdDate: 1,
                updatedDate: 1,
-               createdBy: "$createdByInfo", // Use the looked-up department info
-               approvedData: 1,
+               createdBy: "$createdByInfo",
+               approvedHistory: 1,
                rejectHistory: 1
             }
          },
@@ -283,11 +350,11 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
 
          supplier.supplierId = newSupplierId;
          supplier.status = supplierStatus.approved;
-         supplier.approvedData = {
+         supplier.approvedHistory.push({
             date: new Date(),
             reason: comment,
             approvedBy: new Types.ObjectId(userId)
-         };
+         });
          supplier.updatedDate = new Date();
 
       } else if (statusToUpdate === supplierStatus.rejected) {
@@ -325,7 +392,7 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
             select: 'departmentName',
          })
          .populate({
-            path: 'approvedData.approvedBy',
+            path: 'approvedHistory.approvedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',
@@ -394,7 +461,7 @@ export const deleteSupplier = async (req: Request, res: Response) => {
             },
          })
          .populate({
-            path: 'approvedData.approvedBy',
+            path: 'approvedHistory.approvedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',
@@ -522,7 +589,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
             },
          })
          .populate({
-            path: 'approvedData.approvedBy',
+            path: 'approvedHistory.approvedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',
@@ -569,7 +636,7 @@ export const getSupplierById = async (req: Request, res: Response) => {
             },
          })
          .populate({
-            path: 'approvedData.approvedBy',
+            path: 'approvedHistory.approvedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',

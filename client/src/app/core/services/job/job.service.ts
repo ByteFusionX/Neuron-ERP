@@ -18,6 +18,10 @@ export class JobService {
     return this.http.post<JobTable>(`${this.apiUrl}/job/getJobs`, filterData)
   }
 
+  getUnassignedToTechnical(filterData: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/job/unassignedToTechnical`, filterData)
+  }
+
   downloadFile(fileName: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/file/download?file=${encodeURIComponent(fileName)}`,
       { responseType: 'blob', observe: 'events', reportProgress: true })
@@ -45,5 +49,9 @@ export class JobService {
   
   updateAllocateType(data: { id: string, jobId: string, allocationType: allocateType }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/job/updateAllocateType`, data)
+  }
+
+  getTechnicalDropdownList(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/job/technical`)
   }
 }

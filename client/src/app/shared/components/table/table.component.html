@@ -30,18 +30,10 @@
     </div>
   </div>
 
-  <app-skelton-loading *ngIf="isLoading" [lineLength]="4"></app-skelton-loading>
 
   <div class="m-8 overflow-hidden">
-    <div *ngIf="isEmpty && !isLoading" class="w-full flex justify-center items-center pb-8">
-      <div class="p-3">
-        <img src="assets/images/empty.png" alt="">
-        <p class="m-2 text-center text-gray-500">No Data</p>
-      </div>
-    </div>
-
     <!-- Table with fixed header -->
-    <section class="mat-elevation-z8 h-fit max-h-[calc(100vh-40vh)] shadow-sm relative" *ngIf="!isLoading && !isEmpty">
+    <section class="mat-elevation-z8 h-fit max-h-[calc(100vh-40vh)] shadow-sm " >
       <!-- Fixed table container with consistent width -->
       <div class="w-full overflow-y-auto max-h-[calc(100vh-40vh)]">
         <table class="w-full border-collapse">
@@ -51,15 +43,72 @@
               <th *ngFor="let column of columns" 
                 class="bg-gray-100 px-4 py-4 text-start text-dark text-[15px] font-medium border-b border-gray-300 min-w-[116px] sticky top-0 z-10" [ngClass]="column.headerClass"
                 [class.hidden]="!displayedColumns.includes(column.key)">
-                {{ column.label }}
+                <div class="flex flex-col gap-2 overflow-visible">
+                  <div class="flex items-center justify-between">
+                    <span>{{ column.label }}</span>
+                    <button *ngIf="getFilterValue(column)" 
+                      class="text-gray-500 hover:text-gray-700"
+                      (click)="clearFilter(column); $event.stopPropagation()">
+                      <ng-icon name="heroXMark" class="w-4 h-4"></ng-icon>
+                    </button>
+                  </div>
+                  
+                  <!-- Filter Input -->
+                  <div *ngIf="column.filterable" class="w-full overflow-visible">
+                    <!-- Text Filter -->
+                    <input *ngIf="column.filterType === 'text'"
+                      pInputText
+                      [placeholder]="column.filterPlaceholder || 'Search...'"
+                      [(ngModel)]="filterValues[column.key]"
+                      (ngModelChange)="onFilterChange(column, $event)"
+                      class="w-full"
+                      (click)="$event.stopPropagation()">
+
+                    <!-- Select Filter -->
+                    <p-dropdown *ngIf="column.filterType === 'select'"
+                      [options]="column.filterOptions"
+                      [(ngModel)]="filterValues[column.key]"
+                      (onChange)="onFilterChange(column, $event.value)"
+                      [placeholder]="'Select...'"
+                      [showClear]="true"
+                      class="w-full"
+                      (click)="$event.stopPropagation()"
+                      [appendTo]="'body'"
+                      >
+                    </p-dropdown>
+
+                    <!-- Date Filter -->
+                    <p-datepicker *ngIf="column.filterType === 'date'"
+                      class="w-full"
+                      [style]="{'width':'100%'}"
+                      selectionMode="range"
+                      [readonlyInput]="true"
+                      [(ngModel)]="filterValues[column.key]"
+                      (ngModelChange)="onFilterChange(column, $event)"
+                      appendTo="body">
+                    </p-datepicker>
+
+                    <!-- Number Filter -->
+                    <p-inputNumber *ngIf="column.filterType === 'number'"
+                      [(ngModel)]="filterValues[column.key]"
+                      (onInput)="onFilterChange(column, $event.value)"
+                      [placeholder]="column.filterPlaceholder || 'Enter number...'"
+                      [showButtons]="false"
+                      class="w-full"
+                      (click)="$event.stopPropagation()">
+                    </p-inputNumber>
+                  </div>
+                </div>
               </th>
             </tr>
           </thead>
           
           <!-- Table Body -->
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr *ngFor="let item of filteredData; let i = index" (click)="onRowClick(item)"
-              class="cursor-pointer hover:bg-gray-50 transition-colors">
+            @if(!isLoading) {
+            <tr *ngFor="let item of filteredData; let i = index"
+              class="transition-colors"
+              >
 
               <td *ngFor="let column of columns" [ngClass]="column.cellClass"
                 class="px-4 py-3 whitespace-nowrap text-sm text-gray-800 border-b border-gray-300"
@@ -67,7 +116,8 @@
 
                 <!-- Text, Number, Boolean -->
                 <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
-                  {{ getCellValue(item, column) }}
+                  <span *ngIf="!column.clickable">{{ getCellValue(item, column) }}</span>
+                  <span *ngIf="column.clickable" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
                 </ng-container>
 
                 <!-- Date -->
@@ -91,6 +141,9 @@
                             'bg-blue-100 text-blue-800': !['Won', 'Lost', 'Approved', 'Rejected', 'Pending'].includes(getCellValue(item, column))
                           }">
                     {{ getCellValue(item, column) | titlecase }}
+                    <span class="ml-1 cursor-pointer" *ngIf="column.tooltip && (getCellValue(item, column) === 'Rejected' || getCellValue(item, column) === 'Approved')" (click)="onTooltipClick(item, column)">
+                      <ng-icon name="heroInformationCircle" class="w-4 h-4"></ng-icon>
+                    </span>
                   </span>
                 </ng-container>
 
@@ -109,11 +162,20 @@
                 </ng-container>
               </td>
             </tr>
+            }
 
             <!-- Empty state -->
-            <tr *ngIf="filteredData.length === 0">
+            <tr *ngIf="isLoading">
+              <td [attr.colspan]="displayedColumns.length">
+                <app-skelton-loading [lineLength]="4"></app-skelton-loading>
+              </td>
+            </tr>
+            <tr *ngIf="filteredData.length === 0 && !isLoading">
               <td [attr.colspan]="displayedColumns.length" class="px-4 py-8 text-center text-gray-500">
-                No data available
+                <div class="p-3 flex justify-center items-center flex-col">
+                  <img src="assets/images/empty.png" alt="">
+                  <p class="m-2 text-center text-gray-500">No Data</p>
+                </div>
               </td>
             </tr>
           </tbody>

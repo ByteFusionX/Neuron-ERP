@@ -1,0 +1,178 @@
+<div class="min-h-screen  py-8">
+  <div class="mx-auto px-4 sm:px-6 lg:px-8 ">
+    <!-- Header -->
+    <div class="bg-white shadow-lg border border-white border-b-gray-300 p-3 px-6 flex justify-between">
+      <h3 class="text-md font-medium">
+        @if(isEditMode()){
+          Edit Project
+        }@else{
+          Add New Project
+        }
+      </h3>
+
+    </div>
+
+    <!-- Form Card -->
+    <div class="bg-white shadow-lg">
+      <div class="p-8">
+        <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
+          <div class="flex flex-wrap -mx-3 mb-6">
+            <!-- Job ID -->
+            <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0">
+              @if(isEditMode()){
+                <div class="mb-2">
+                  <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
+                    Job ID
+                  </label>
+                  <p class="px-3 py-3 rounded-md bg-gray-100 text-gray-700 min-h-[38px] flex items-center">
+                    <ng-icon name="heroIdentification" class="w-4 h-4 text-gray-400 mr-2"></ng-icon>
+                    {{ getJobIdDisplayValue() }}
+                  </p>
+                </div>
+              }@else{
+                <app-select-dropdown
+                  label="Job ID"
+                  [optionLabel]="'jobId'"
+                  [optionValue]="'_id'"
+                  [options]="jobIds"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Select job ID"
+                  [selected]="projectForm.get('jobId')?.value"
+                  (onSelected)="onJobSelected($event)"
+                ></app-select-dropdown>
+              }
+            </div>
+
+            <!-- Sales Person Name -->
+            <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0">
+              @if(isEditMode()){
+                <div class="mb-2">
+                  <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
+                    Sales Person Name
+                  </label>
+                  <p class="px-3 py-3 rounded-md bg-gray-100 text-gray-700 min-h-[38px] flex items-center">
+                    <ng-icon name="heroUser" class="w-4 h-4 text-gray-400 mr-2"></ng-icon>
+                    {{ getSalesPersonNameFromJobId() }}
+                  </p>
+                </div>
+              }@else{
+                <div class="mb-2">
+                  <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
+                    Sales Person Name
+                  </label>
+                  <div class="relative">
+                    <div class="flex items-center px-3 py-3 rounded-md bg-gray-200 text-gray-700 min-h-[38px]">
+                      <ng-icon 
+                        *ngIf="getSalesPersonNameFromJobId()" 
+                        name="heroUser" 
+                        class="w-4 h-4 text-gray-400 mr-2">
+                      </ng-icon>
+                      @if(getSalesPersonNameFromJobId()){
+                        <span class="text-md font-medium">
+                          {{ getSalesPersonNameFromJobId() }}
+                        </span>
+                      }@else{
+                        <span class="text-md font-medium text-gray-400">
+                          Select a job to view sales person
+                        </span>
+                      }
+                    </div>
+                    <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+                      <ng-icon 
+                        name="heroInformationCircle" 
+                        class="w-4 h-4 text-gray-600"
+                        title="Sales person assigned to the selected job">
+                      </ng-icon>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="flex flex-wrap -mx-3 mb-6">
+            <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 flex gap-2 text-lg">
+              <app-btn 
+                theme="primary-outline"
+                (click)="openPage('activity-plan')"
+              >
+              <ng-icon name="heroClipboardDocumentCheck" class="text-lg mr-1"></ng-icon>
+                Activity Plan
+              </app-btn>
+            </div>
+          </div>
+
+          <h2 class="text-lg font-medium mb-2">Project Details</h2>
+
+          <div class="flex flex-wrap -mx-3 mb-6">
+            <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 flex gap-2 text-lg">
+              <app-btn 
+                theme="primary-outline"
+                (click)="openPage('tasks')"
+              >
+              <ng-icon name="heroListBullet" class="text-lg mr-1"></ng-icon>
+                Tasks
+              </app-btn>
+            </div>
+          </div>
+          
+          <div class="flex flex-wrap -mx-3 mb-6">
+            <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 flex gap-2">
+              <app-btn 
+                theme="primary-outline"
+                (click)="openMaterialRequestModal()"
+                [disabled]="isSaving()"
+                [loading]="isSaving()"
+              >
+              @if(isEditMode()){
+                <ng-icon name="heroPencil" class="w-4 h-4 mr-1"></ng-icon>
+                Edit Material Request
+              }@else{
+                <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
+                Material Request
+              }
+               
+              </app-btn>
+              <app-btn 
+                theme="secondary-outline"
+                (click)="openPurchaseRequestModal()"
+                [disabled]="isSaving() || !hasPurchaseRequests()"
+                [loading]="isSaving()"
+              >
+                <ng-icon name="heroShoppingCart" class="w-4 h-4 mr-1"></ng-icon>
+                @if(hasPurchaseRequests()){
+                  View Request from Purchase
+                }@else{
+                  No Requests from Purchase
+                }
+              </app-btn>
+            </div>
+          </div>
+
+         
+        </form>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="border border-white border-t-gray-300 p-3 px-6 flex justify-end gap-2">
+        <button 
+          class="bg-orange-600 hover:bg-orange-500 text-white font-medium py-2 px-4 rounded text-sm" 
+          type="button"
+          (click)="onCancel()">
+          Cancel
+        </button>
+        <button 
+          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm disabled:bg-gray-400 disabled:cursor-not-allowed" 
+          [disabled]="isSaving()"
+          (click)="onSubmit()">
+          <ng-icon *ngIf="isSaving()" class="spin" name="heroArrowPath"></ng-icon>
+          @if(isEditMode()){
+            Update Project
+          }@else{
+            Create Project
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+</div> 

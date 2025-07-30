@@ -5,44 +5,13 @@
 [isLoading]="isLoading()"
 [isEmpty]="isEmpty()"
 [totalItems]="totalItems()"
+[tableId]="'pending-suppliers-table'"
+(filterChange)="onFilterChange($event)"
 (rowClick)="onRowClick($event)"
 (actionClick)="onActionClick($event)"
 [title]="isPendingView() ? 'Pending Suppliers' : 'Approved Suppliers'"
 >
 <ng-template #sideColumn>
-    <!-- <div class="flex flex-col md:flex-row gap-4 mb-4">
-        <div class="w-full md:w-1/3">
-            <data-search [placeholder]="'Search suppliers'" (searchSubmitted)="onSearch($event)"></data-search>
-        </div>
-        <div class="flex flex-col md:flex-row gap-4 w-full md:w-2/3">
-            <div class="w-full md:w-1/3">
-                <ng-select
-                    [items]="locationOptions"
-                    [ngModel]="selectedLocation()"
-                    (ngModelChange)="selectedLocation.set($event); onFilterChange()"
-                    placeholder="Select Location">
-                </ng-select>
-            </div>
-            <div class="w-full md:w-1/3">
-                <ng-select
-                    [items]="categoryOptions"
-                    [ngModel]="selectedCategory()"
-                    (ngModelChange)="selectedCategory.set($event); onFilterChange()"
-                    placeholder="Select Category">
-                </ng-select>
-            </div>
-            <div class="w-full md:w-1/3">
-                <ng-select
-                    [items]="statusOptions"
-                    [ngModel]="selectedStatus()"
-                    (ngModelChange)="selectedStatus.set($event); onFilterChange()"
-                    placeholder="Select Status">
-                </ng-select>
-            </div>
-        </div>
-    </div> -->
-    <data-search [placeholder]="`Search by query`" (searchSubmitted)="onSearch($event)"></data-search>
-
     @if(isPendingView()) {
         <app-btn  theme="primary" routerLink="/suppliers/create">+ Create Supplier</app-btn>
     }

@@ -6,36 +6,63 @@ export interface TableColumn {
     pipeParams?: any; // Parameters for the pipe
     sortable?: boolean;
     filterable?: boolean;
+    filterType?: 'text' | 'select' | 'date' | 'number'; // Type of filter to use
+    filterOptions?: { label: string; value: any }[]; // Options for select filter
+    filterPlaceholder?: string; // Placeholder text for filter input
     width?: string;
     visible?: boolean;
     customTemplate?: string; // Template reference name
     actions?: TableAction[]; // For action columns
     cellClass?: string; // CSS class for the cell
     headerClass?: string; // CSS class for the header
-  }
-  
-  export interface TableAction {
+    tooltip?: boolean;
+    list?: ApprovalRejectionList[]; // List data for tooltip modal
+    cellRenderer?: (item: any) => any;
+    clickable?: boolean;
+    clickFunction?: (item: any) => void;
+}
+
+export interface TableAction {
     icon: string; // NgIcon name
     tooltip?: string;
     color?: string;
     condition?: (item: any) => boolean; // Show action only if this returns true
     action: string; // Identifier for the action
     buttonClass?: string;
-  }
-  
-  export interface TableEvent {
+}
+
+export interface TableEvent {
     type: 'row' | 'action';
     action?: string;
     item: any;
-  }
-  
-  export interface TableFilter {
+}
+
+export interface DateRange {
+    from: string;
+    to: string;
+}
+
+export interface TableFilter {
     column: string;
-    value: any;
+    value: any | DateRange;
     operator?: 'eq' | 'neq' | 'gt' | 'lt' | 'contains' | 'startsWith' | 'endsWith';
-  }
-  
-  export interface TablePaginationEvent {
+    type: 'text' | 'select' | 'date' | 'number';
+}
+
+export interface TablePaginationEvent {
     page: number;
     pageSize: number;
-  }
+}
+
+export interface ApprovalRejectionList {
+    date: string;
+    reason: string;
+    rejectedBy?: {
+        firstName: string;
+        lastName: string;
+    };
+    approvedBy?: {
+        firstName: string;
+        lastName: string;
+    };
+}

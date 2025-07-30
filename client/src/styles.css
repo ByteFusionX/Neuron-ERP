@@ -1,9 +1,8 @@
-@import "@ng-select/ng-select/themes/default.theme.css";
-/* You can add global styles to this file, and also import other style files */
+@import "../node_modules/@ng-select/ng-select/themes/default.theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
 
 
 @font-face {
@@ -66,17 +65,6 @@ th {
   font-size: 16px;
 }
 
-/* CSS to hide spin buttons */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-input[type="number"] {
-  -moz-appearance: textfield;
-  /* Firefox */
-}
 
 .mat-tooltip {
   font-size: 12px;
@@ -133,3 +121,4 @@ input[type="number"] {
 .cdk-overlay-pane {
   max-width: 90vw !important;
 }
+

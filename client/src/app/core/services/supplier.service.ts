@@ -33,7 +33,7 @@ export class SupplierService {
         return this.http.get<SupplierResponse>(`${this.api}/supplier/${id}`);
     }
 
-    updateSupplierStatus(id: string, status: string, comment?: string): Observable<SupplierResponse> {
+    updateSupplierStatus(id?: string, status?: string, comment?: string): Observable<SupplierResponse> {
         return this.http.patch<SupplierResponse>(`${this.api}/supplier/status/${id}`, {
             status,
             comment

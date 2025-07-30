@@ -15,11 +15,11 @@ interface supplierSchemaInterface {
     createdDate: Date;
     updatedDate: Date;
     createdBy: Types.ObjectId;
-    approvedData: {
+    approvedHistory: {
         date: Date;
         reason: string;
         approvedBy: Types.ObjectId;
-    };
+    }[];
     isDeleted: boolean;
     rejectHistory: {
         date: Date;
@@ -160,12 +160,13 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         ref: 'Department',
         required: true,
     },
-    approvedData: {
-        type: {
+    approvedHistory: {
+        type: [{
             date: { type: Date, default: Date.now },
             reason: { type: String },
             approvedBy: { type: Schema.Types.ObjectId, ref: 'Employee' }
-        },
+        }],
+        default: [],
     },
     rejectHistory: {
         type: [{

@@ -31,6 +31,7 @@ import notificationRouter from './routes/notification.router';
 import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
+import technicalRouter from './routes/technical.router';
 
 const app = express();
 const server = http.createServer(app);
@@ -79,6 +80,7 @@ app.use('/notification', notificationRouter)
 app.use('/customerType', customerTypeRouter)
 app.use('/supplier', supplierRouter)
 app.use('/purchase', purchaseRequestRouter)
+app.use('/technical', technicalRouter)
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');
