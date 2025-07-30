@@ -80,6 +80,11 @@ export class ApproveDealComponent implements OnInit {
     })
   }
 
+  calculateUnitPrice(item: any) {
+    const decimalMargin = item.profit / 100;
+    return Math.ceil(Number((item.unitCost / (1 - decimalMargin)).toFixed(2)));
+  }
+
   onDownloadClicks(file: any) {
     this._enquiryService.downloadFile(file.fileName)
       .subscribe({

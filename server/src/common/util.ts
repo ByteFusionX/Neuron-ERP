@@ -7,13 +7,8 @@ import employeeModel from "../models/employee.model";
 
 
 export const calculateDiscountPrice = (discount: any, items: any): number => {
-    const calculateUnitPrice = (i: number, j: number): number => {
-        const decimalMargin = items[i].itemDetails[j].profit / 100;
-        return items[i].itemDetails[j].unitCost / (1 - decimalMargin);
-    };
-
     const calculateTotalPrice = (i: number, j: number): number => {
-        return calculateUnitPrice(i, j) * items[i].itemDetails[j].quantity;
+        return items[i].itemDetails[j].unitSellingPrice * items[i].itemDetails[j].quantity;
     };
 
     const calculateSellingPrice = (): number => {
@@ -145,12 +140,7 @@ export const calculateDiscountPricePipe = (input: string, discount: string) => {
                             as: 'itemDetail',
                             in: {
                                 $multiply: [
-                                    {
-                                        $divide: [
-                                            '$$itemDetail.unitCost',
-                                            { $subtract: [1, { $divide: ['$$itemDetail.profit', 100] }] }
-                                        ]
-                                    },
+                                    '$$itemDetail.unitSellingPrice',
                                     '$$itemDetail.quantity'
                                 ]
                             },
@@ -188,24 +178,7 @@ export const calculateQuoteDiscountPricePipe = (input: string) => {
                                                         $round: [
                                                             {
                                                                 $multiply: [
-                                                                    {
-                                                                        $round: [
-                                                                            {
-                                                                                $divide: [
-                                                                                    '$$itemDetail.unitCost',
-                                                                                    {
-                                                                                        $subtract: [
-                                                                                            1,
-                                                                                            {
-                                                                                                $divide: ['$$itemDetail.profit', 100]
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                ]
-                                                                            },
-                                                                            2
-                                                                        ]
-                                                                    },
+                                                                    '$$itemDetail.unitSellingPrice',
                                                                     '$$itemDetail.quantity'
                                                                 ]
                                                             },

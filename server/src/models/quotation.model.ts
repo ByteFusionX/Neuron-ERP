@@ -4,7 +4,7 @@ interface QuoteItemDetail {
     detail: string;
     quantity: number;
     unitCost: number;
-    profit: number;
+    unitSellingPrice: number;
     availability: string;
     supplierName?: string;
     email?: string;
@@ -89,7 +89,7 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
         type: Number,
         required: true,
     },
-    profit: {
+    unitSellingPrice: {
         type: Number,
         required: true,
     },

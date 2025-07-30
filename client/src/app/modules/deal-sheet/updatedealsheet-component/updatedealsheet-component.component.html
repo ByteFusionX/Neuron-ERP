@@ -121,21 +121,20 @@
                       <input appNoLeadingSpace formControlName="profit" *ngIf="detail.get('dealSelected')?.value"
                         class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                         type="number" placeholder="00" (input)="calculateUnitPriceForInput(i, j)">
-                      <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('profit')?.value }}</p>
+                      <p *ngIf="!detail.get('dealSelected')?.value">{{ calculateProfit(i,j) }}</p>
                       <p class="ml-0.5 mb-0.5">%</p>
                     </div>
                   </td>
 
                   <td class="px-6 py-3 border-l border-b border-t text-center">
-                    <input appNoLeadingSpace formControlName="unitPrice" *ngIf="detail.get('dealSelected')?.value"
+                    <input appNoLeadingSpace formControlName="unitSellingPrice" *ngIf="detail.get('dealSelected')?.value"
                       class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      type="number" placeholder="00" (input)="calculateProfit(i,j)">
-                    <p *ngIf="!detail.get('dealSelected')?.value">{{ calculateUnitPrice(i,j).toFixed(2) }}</p>
+                      type="number" placeholder="00" (input)="calculateProfitForInput(i,j)">
+                    <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitSellingPrice')?.value }}</p>
                   </td>
 
                   <td class="px-2 py-2 border text-center">
-                    {{ ((detail.get('unitCost')?.value / (1 - (detail.get('profit')?.value / 100))) *
-                    detail.get('quantity')?.value).toFixed(2) }}
+                    {{ (detail.get('unitSellingPrice')?.value * detail.get('quantity')?.value).toFixed(2) }}
                   </td>
 
                   <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">

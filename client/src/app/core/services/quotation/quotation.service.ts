@@ -4,7 +4,8 @@ import { Observable } from 'rxjs';
 import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
-import pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfMake from 'pdfmake/build/pdfmake';
+
 
 @Injectable({
   providedIn: 'root'
@@ -120,7 +121,7 @@ export class QuotationService {
         italics: `${window.location.origin}/assets/font/EBGaramond-Italic.ttf`,
       }
     };
-
+    
     const optionalItems = quoteData.optionalItems;
 
     if (!quoteData.quoteId) {
@@ -168,8 +169,7 @@ export class QuotationService {
         ]);
 
         item.itemDetails.forEach(detail => {
-          const decimalMargin = detail.profit / 100;
-          const unitPrice = detail.unitCost / (1 - decimalMargin);
+          const unitPrice = detail.unitSellingPrice;
           const totalPrice = unitPrice * detail.quantity;
           totalCost += totalPrice;
 
@@ -508,8 +508,8 @@ export class QuotationService {
     }
 
 
-    const pdfDoc = pdfMakeInstance.createPdf(documentDefinition);
-    return pdfDoc;
+    const pdfDoc = pdfMake.createPdf(documentDefinition);
+    return pdfDoc
   }
 
   formatNumber(value: any, minimumFractionDigits: number = 2, maximumFractionDigits: number = 2): string {

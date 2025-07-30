@@ -128,17 +128,17 @@
                   <div class="flex justify-center items-center">
                     <input appNoLeadingSpace formControlName="profit" *ngIf="detail.get('dealSelected')?.value"
                       class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      type="number" placeholder="00" (input)="calculateUnitPriceForInput(i, j)">
-                    <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('profit')?.value }}</p>
+                      type="number" placeholder="00" (input)="calculateUnitSellingPriceForInput(i, j)">
+                    <p *ngIf="!detail.get('dealSelected')?.value">{{ calculateProfit(i,j) | number:'1.2-2' }}</p>
                     <p class="ml-0.5 mb-0.5">%</p>
                   </div>
                 </td>
 
                 <td class="px-6 py-3 border-l border-b border-t text-center">
-                  <input appNoLeadingSpace formControlName="unitPrice" *ngIf="detail.get('dealSelected')?.value"
+                  <input appNoLeadingSpace formControlName="unitSellingPrice" *ngIf="detail.get('dealSelected')?.value"
                   class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  type="number" placeholder="00" (input)="calculateProfit(i,j)">
-                  <p *ngIf="!detail.get('dealSelected')?.value">{{ calculateUnitPrice(i,j).toFixed(2) }}</p>
+                  type="number" placeholder="00" (input)="calculateProfitForInput(i,j)">
+                  <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitSellingPrice')?.value }}</p>
                 </td>
 
                 <td class="px-6 py-3 border-l border-b border-t text-center">

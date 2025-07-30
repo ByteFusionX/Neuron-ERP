@@ -27,7 +27,7 @@ interface ItemDetail {
     detail: string;
     quantity: number;
     unitCost: number;
-    profit: number;
+    unitSellingPrice: number;
     availability: string;
 }
 

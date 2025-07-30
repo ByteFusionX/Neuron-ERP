@@ -73,7 +73,7 @@
                 <tbody>
 
 
-                    <ng-container *ngFor="let item of data.estimation.optionalItems[selectedOption].items">
+                    <ng-container *ngFor="let item of data.estimation.optionalItems[selectedOption].items; let j = index">
                         <tr>
                             <td colspan="9" class="border px-6 py-2 bg-gray-50 ">
                                 <div class="flex justify-center items-center text-md text-black font-medium uppercase">
@@ -81,7 +81,7 @@
                                 </div>
                             </td>
                         </tr>
-                        <ng-container *ngFor="let itemsDetail of item.itemDetails">
+                        <ng-container *ngFor="let itemsDetail of item.itemDetails; let k = index">
                             <tr class="bg-white border-b text-gray-800">
                                 <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line">
                                     <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
@@ -101,14 +101,13 @@
                                     {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
                                 </td>
                                 <td class="px-2 py-2 border text-center">
-                                    {{ itemsDetail.profit | number:'1.2-2' }}%
+                                    {{calculateProfit(selectedOption,j,k) | number:'1.2-2' }}%
                                 </td>
                                 <td class="px-2 py-2 border text-center">
-                                    {{(itemsDetail.unitCost / (1 - (itemsDetail.profit/100))) | numberFormatter}}
+                                    {{itemsDetail.unitSellingPrice | numberFormatter}}
                                 </td>
                                 <td class="px-2 py-2 border text-center">
-                                    {{((itemsDetail.unitCost / (1 - (itemsDetail.profit/100))) *
-                                    itemsDetail.quantity) | numberFormatter}}
+                                    {{calculateTotalPrice(selectedOption,j,k) | numberFormatter}}
                                 </td>
                                 <td class="px-2 py-2 border text-center">
                                     {{itemsDetail.availability}}

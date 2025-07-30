@@ -67,16 +67,15 @@ export class DealFormComponent {
   }
 
   createItemDetailGroup(detail: QuoteItemDetail): FormGroup {
-    const decimalMargin = detail.profit / 100 || 0;
-    const unitPrice = Number((detail.unitCost / (1 - decimalMargin) || 0).toFixed(2));
+    const profit = (((detail.unitSellingPrice - detail.unitCost) / detail.unitSellingPrice) * 100).toFixed(2);
 
     return this.fb.group({
       dealSelected: [false],
       detail: [detail.detail, Validators.required],
       quantity: [detail.quantity, Validators.required],
       unitCost: [detail.unitCost, Validators.required],
-      profit: [detail.profit, Validators.required],
-      unitPrice: [unitPrice, Validators.required],
+      profit: [profit, Validators.required],
+      unitSellingPrice: [detail.unitSellingPrice, Validators.required],
       availability: [detail.availability, Validators.required],
       supplierName: ['', this.supplierNameValidator()],
       phoneNo: ['', this.supplierNameValidator()],
@@ -133,7 +132,7 @@ export class DealFormComponent {
     if (!event.target.checked) {
       this.getItemDetailsArray(this.items.controls[i])[j].get('quantity')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].quantity)
       this.getItemDetailsArray(this.items.controls[i])[j].get('unitCost')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].unitCost)
-      this.getItemDetailsArray(this.items.controls[i])[j].get('profit')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].profit)
+      this.getItemDetailsArray(this.items.controls[i])[j].get('unitSellingPrice')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].unitSellingPrice)
       this.getItemDetailsArray(this.items.controls[i])[j].get('supplierName')?.setValue('')
       this.getItemDetailsArray(this.items.controls[i])[j].get('phoneNo')?.setValue('')
       this.getItemDetailsArray(this.items.controls[i])[j].get('email')?.setValue('')
@@ -230,19 +229,20 @@ export class DealFormComponent {
     };
   }
 
-  calculateUnitPriceForInput(i: number, j: number) {
+  calculateUnitSellingPriceForInput(i: number, j: number) {
     const itemDetail = this.getItemDetailsControls(i).controls[j] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitPrice = itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0;
-    itemDetail.get('unitPrice')?.setValue(Number(unitPrice.toFixed(2)));
+    const unitSellingPrice = Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0;
+    itemDetail.get('unitSellingPrice')?.setValue(Math.ceil(unitSellingPrice));
   }
 
-  calculateProfit(i: number, j: number) {
+
+  calculateProfitForInput(i: number, j: number) {
     const unitCost = this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
-    const unitPrice = this.getItemDetailsControls(i).controls[j].get('unitPrice')?.value;
-    if (unitCost && unitPrice) {
-      const profit = ((unitPrice - unitCost) / unitPrice) * 100;
-      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue(profit.toFixed(4));
+    const unitSellingPrice = this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
+    if (unitCost && unitSellingPrice) {
+      const profit = ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
+      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue(profit.toFixed(2));
     } else if (unitCost) {
       this.getItemDetailsControls(i).controls[j].get('profit')?.setValue('');
     }
@@ -293,13 +293,18 @@ export class DealFormComponent {
     return this.getItemDetailsControls(i).controls[j].get('quantity')?.value * this.getItemDetailsControls(i).controls[j].get('unitCost')?.value
   }
 
-  calculateUnitPrice(i: number, j: number) {
-    const decimalMargin = this.getItemDetailsControls(i).controls[j].get('profit')?.value / 100;
-    return this.getItemDetailsControls(i).controls[j].get('unitCost')?.value / (1 - decimalMargin)
+  calculateProfit(i: number, j: number) {
+    const unitCost = this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
+    const unitSellingPrice = this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
+    
+    if (unitCost && unitSellingPrice) {
+      return (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(2);
+    }
+    return 0;
   }
 
   calculateTotalPrice(i: number, j: number) {
-    return this.calculateUnitPrice(i, j) * this.getItemDetailsControls(i).controls[j].get('quantity')?.value
+    return this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value * this.getItemDetailsControls(i).controls[j].get('quantity')?.value
   }
 
   onClose() {
