@@ -8,13 +8,12 @@ import { ToastrService } from 'ngx-toastr';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn } from 'src/app/shared/components/table/table.model';
 
 @Component({
-  selector: 'app-pendings',
+  selector: 'app-lpo-list',
   imports: [
     TableComponent,
     CommonModule,
@@ -22,14 +21,13 @@ import { TableColumn } from 'src/app/shared/components/table/table.model';
     MatMenuModule,
     IconsModule,
     SearchComponent,
-    ButtonComponent,
     FormsModule
   ],
-  templateUrl: './pendings-purchase.component.html',
-  styleUrl: './pendings-purchase.component.css',
+  templateUrl: './lpo-list.component.html',
+  styleUrl: './lpo-list.component.css',
   providers: [PaginationService]
 })
-export class PendingPurchaseComponent implements OnInit {
+export class LpoListComponent implements OnInit {
   private router = inject(Router);
   private paginationService = inject(PaginationService);
   private purchaseService = inject(PurchaseService);
@@ -56,24 +54,19 @@ export class PendingPurchaseComponent implements OnInit {
     this.tableColumns = [
       {
         key: 'createdAt',
-        label: 'Created Date',
+        label: 'Date',
         type: 'date',
         pipeParams: 'dd/MM/yyyy',
         sortable: true,
       },
       {
         key: 'customerId.companyName',
-        label: 'Customer Name',
+        label: 'Supplier Name',
         type: 'text',
       },
       {
         key: 'purchaseNo',
-        label: 'PR NO',
-        type: 'text',
-      },
-      {
-        key: 'jobId.jobId',
-        label: 'Job ID',
+        label: 'LPO NO',
         type: 'text',
       },
       {
@@ -82,20 +75,64 @@ export class PendingPurchaseComponent implements OnInit {
         type: 'text',
       },
       {
-        key: 'createdBy.firstName',
-        label: 'Created By',
-        type: 'text',
-      },
-      {
         key: 'status',
-        label: 'Status',
+        label: 'LPO Status',
         type: 'status',
         headerClass: 'text-center'
       },
+      {
+        key: 'actions',
+        label: 'View/Download',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroEye',
+            tooltip: 'View LPO',
+            action: 'viewLpo',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
+          },
+          {
+            icon: 'heroArrowDownTray',
+            tooltip: 'Download LPO',
+            action: 'downloadLpo',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
+          },
+        ]
+      },
+      {
+        key: 'actions',
+        label: 'Re issue',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroPaperAirplane',
+            tooltip: 'Re Issue',
+            action: 'reIssue',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-500 hover:border-orange-700 text-orange-500 text-sm rounded-full font-medium'
+          },
+        ]
+      },
+      {
+        key: 'actions',
+        label: 'View Supplier Invoice',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroEye',
+            tooltip: 'View Invoice',
+            action: 'viewInvoice',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-violet-500 hover:border-violet-700 text-violet-500 text-sm rounded-full font-medium'
+          },
+        ],
+
+      }
     ]
 
     this.defaultColumns = [
-      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status'
+      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status', 'actions'
     ];
   }
 
@@ -123,7 +160,7 @@ export class PendingPurchaseComponent implements OnInit {
   }
 
   onRowClick(row: any): void {
-    this.viewPurchaseDetails(row);
+    // this.viewPurchaseDetails(row);
   }
 
   onActionClick(event: { action: string; item: any }): void {
@@ -132,17 +169,10 @@ export class PendingPurchaseComponent implements OnInit {
       case 'viewPurchase':
         this.viewPurchaseDetails(item);
         break;
-      case 'editPurchase':
-        this.editPurchase(item);
-        break;
       case 'viewDocuments':
         this.viewDocuments(item);
         break;
     }
-  }
-
-  editPurchase(purchase: any): void {
-    this.router.navigate(['/purchase', purchase.id, 'edit']);
   }
 
   viewDocuments(purchase: any): void {

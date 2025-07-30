@@ -12,6 +12,7 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn } from 'src/app/shared/components/table/table.model';
+import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 
 @Component({
   selector: 'app-approved',
@@ -62,6 +63,11 @@ export class ApprovedPurchaseComponent {
         sortable: true,
       },
       {
+        key: 'customerId.companyName',
+        label: 'Customer Name',
+        type: 'text',
+      },
+      {
         key: 'purchaseNo',
         label: 'PR NO',
         type: 'text',
@@ -72,8 +78,8 @@ export class ApprovedPurchaseComponent {
         type: 'text',
       },
       {
-        key: 'customerId.companyName',
-        label: 'Customer',
+        key: 'totalLpo',
+        label: 'LPO Value',
         type: 'text',
       },
       {
@@ -82,34 +88,28 @@ export class ApprovedPurchaseComponent {
         type: 'text',
       },
       {
-        key: 'totalLpo',
-        label: 'LPO Value',
-        type: 'text',
+        key: 'status',
+        label: 'Status',
+        type: 'status',
+        headerClass: 'text-center'
       },
       {
-        key: 'mrRequest',
-        label: 'MR Request',
-        type: 'text',
+        key: 'initiateLpo',
+        label: 'Initiate LPO',
+        type: 'action',
         actions: [
           {
-            icon: 'heroEye',
-            tooltip: 'View Details',
-            action: '',
+            icon: 'heroPaperAirplane',
+            tooltip: 'Initiate LPO',
+            action: 'initiateLpo',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
-          }
+          },
         ]
-      },
-      {
-        key: 'actions',
-        label: 'Action',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: []
       }
     ]
 
     this.defaultColumns = [
-      'createdAt', 'purchaseNo', 'jobId.jobId', 'customerId.companyName', `createdBy.firstName`, 'totalLpo', 'mrRequest', 'actions'
+      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status', 'initiateLpo'
     ];
   }
 
@@ -133,17 +133,17 @@ export class ApprovedPurchaseComponent {
   }
 
   viewPurchaseDetails(purchase: any): void {
-    this.router.navigate(['/purchase/view-purchase', purchase._id]);
+    this.router.navigate(['/purchase/initiate-lpo', purchase._id]);
   }
 
   onRowClick(row: any): void {
     this.viewPurchaseDetails(row);
   }
 
-  onActionClick(event: { action: string; item: any }): void {
+  onActionClick(event: { action: string; item: PurchaseData }): void {
     const { action, item } = event;
     switch (action) {
-      case 'viewPurchase':
+      case 'initiateLpo':
         this.viewPurchaseDetails(item);
         break;
       case 'editPurchase':

@@ -34,6 +34,9 @@ import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sh
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
 import { OpenToWorckComponent } from './modules/job-sheet/pages/open-to-work/open-to-work.component';
 import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-summary/comparison-summary.component';
+import { InitiateLpoComponent } from './modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
+import { IssueLpoComponent } from './modules/purchase-order/pages/issue-lpo/issue-lpo.component';
+import { LpoListComponent } from './modules/purchase-order/pages/lpo-list/lpo-list.component';
 import { MrRequestsComponent } from './modules/technical/mr-requests/mr-requests.component';
 import { ProjectsComponent } from './modules/technical/projects/projects.component';
 import { AddProjectComponent } from './modules/technical/projects/add-project/add-project.component';
@@ -166,7 +169,16 @@ export const routes: Routes = [
       { path: 'supplier-discount', component: SupplierDiscountComponent },
       { path: 'comparison-sheet', component: ComparisonSheetComponent },
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
-      { path: 'comparison-summary', component: ComparisonSummaryComponent }
+      { path: 'comparison-summary', component: ComparisonSummaryComponent },
+      { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
+      { path: 'issue-lpo', component: IssueLpoComponent },
+    ]
+  },
+  {
+    path: 'purchase-order',
+    loadComponent: () => import('./modules/purchase-order/purchase-order.component').then((c) => c.PurchaseOrderComponent),
+    children: [
+      { path: 'lpo-list', component: LpoListComponent }
     ]
   },
   {

@@ -79,7 +79,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     const data = this.selectedJob()
     const selected = this.comparisonList().some(item => item.selected);
 
-    if (!selected) {
+    if (!selected && this.comparisonList().length > 0) {
       this.toaster.error('Please select one comparison!');
       return;
     }
@@ -124,7 +124,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   getFormattedProducts(): string {
     const item = this.getItem()
     if (item) {
-      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitCost}`
+      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitPrice}`
     }
     return '';
   }
@@ -138,13 +138,16 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
   onComparisonClicks() {
     const dialog = this._dialog.open(ComparisonFormComponent, {
-      width: '500px'
+      width: '500px',
+      disableClose: true,
+      maxHeight: '90vh',
+      autoFocus: false    
     })
 
     dialog.afterClosed().subscribe((res) => {
       if (res) {
         this.comparisonList().push(res)
-        this.comparisonList().sort((a, b) => a.unitCost - b.unitCost)
+        this.comparisonList().sort((a, b) => a.unitPrice - b.unitPrice)
       }
     })
   }
