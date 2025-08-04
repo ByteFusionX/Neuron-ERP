@@ -94,6 +94,10 @@ export class EmployeeService {
     }
   }
 
+  blockEmployee(employeeId: string) {
+    return this.http.patch(`${this.api}/employee/block/${employeeId}`, {})
+  }
+
   getEmployee(id: string) {
     return this.http.get<getEmployee>(`${this.api}/employee/get/${id}`)
   }
@@ -120,5 +124,13 @@ export class EmployeeService {
 
   deleteEmployee(data: { dataId: string, employeeId: string }): Observable<any> {
     return this.http.post<any>(`${this.api}/employee/delete`, data);
+  }
+
+  checkCurrentUserBlockedStatus(): Observable<getEmployee> {
+    const token = this.employeeToken();
+    if (token) {
+      return this.getEmployee(token.id);
+    }
+    throw new Error('No user token found');
   }
 }

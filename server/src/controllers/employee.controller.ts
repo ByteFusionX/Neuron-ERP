@@ -819,3 +819,22 @@ export const deleteEmployee = async (req: Request, res: Response, next: NextFunc
 }
 
 
+export const blockEmployee = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { employeeId } = req.params;
+        const employee = await Employee.findOne({ _id: employeeId });
+        console.log(employee)
+        if (employee) {
+            let isBlocked = employee.isBlocked ? false : true;
+            console.log(isBlocked)
+            await Employee.findByIdAndUpdate(employeeId, { isBlocked : isBlocked }, { new: true });
+            return res.status(200).json({ isBlocked });
+        } else {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+    } catch (error) {
+        console.log(error)
+        next(error)
+    }
+}

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createEmployee, getEmployees, login, getEmployee, getFilteredEmployees, editEmployee, getEmployeeByEmployeId, isEmployeePresent, getNotificationCounts, setTarget, updateTarget, getEmployeesForCustomerTransfer, deleteEmployee, getPresaleEngineers, getPresaleManagers } from "../controllers/employee.controller";
+import { createEmployee, getEmployees, login, getEmployee, getFilteredEmployees, editEmployee, getEmployeeByEmployeId, isEmployeePresent, getNotificationCounts, setTarget, updateTarget, getEmployeesForCustomerTransfer, deleteEmployee, getPresaleEngineers, getPresaleManagers, blockEmployee } from "../controllers/employee.controller";
 const empRouter = Router()
 
 empRouter.get('/', getEmployees)
@@ -19,5 +19,6 @@ empRouter.get('/get/:id', getEmployee)
 empRouter.get('/notifications/:token', getNotificationCounts)
 empRouter.post('/delete', deleteEmployee)
 empRouter.get('/no-customer-access/:customerId/:userId', getEmployeesForCustomerTransfer)
+empRouter.patch('/block/:employeeId', blockEmployee)
 
 export default empRouter;

@@ -3,13 +3,14 @@ import { ActivatedRoute, ActivatedRouteSnapshot, CanActivateFn, NavigationStart,
 import { EmployeeService } from '../../services/employee/employee.service';
 import { Observable, filter, map, take } from 'rxjs';
 import { Privileges, getEmployee } from 'src/app/shared/interfaces/employee.interface';
+import { ToastrService } from 'ngx-toastr';
 
 export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
     let privileges: Privileges | undefined;
     let isSuperAdmin: boolean;
 
     const router: Router = inject(Router);
-
+    const toast: ToastrService = inject(ToastrService);
     const employeeService = inject(EmployeeService)
 
     const employee = employeeService.employeeToken()
@@ -19,6 +20,14 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
             employeeService.employeeSubject.next(data);
             isSuperAdmin = data.category.role == 'superAdmin'
             privileges = data?.category.privileges;
+            
+            if (data.isBlocked) {
+                localStorage.removeItem('employeeToken');
+                toast.error('Your account has been blocked. Please contact your administrator.');
+                router.navigate(['/login']);
+                return false;
+            }
+            
             return checkPermission()
         })
     );

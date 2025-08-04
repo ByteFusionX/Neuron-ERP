@@ -14,6 +14,7 @@ export interface getEmployee {
   dateOfJoining: string;
   reportingTo: string | null | undefined;
   targets: Target[];
+  isBlocked?: boolean;
 }
 
 export interface getEmployeeDetails {
