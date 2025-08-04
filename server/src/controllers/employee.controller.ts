@@ -668,7 +668,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         const employee = await Employee.findOne(
             {
                 employeeId: employeeId,
-                isDeleted: { $ne: true }
+                isDeleted: { $ne: true },
+                isBlocked: { $ne: true }
             }
         )
         if (employee) {
