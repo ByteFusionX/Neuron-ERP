@@ -48,7 +48,7 @@ export class PurchaseService {
   getPurchases(params: {
     page?: number;
     row?: number;
-    status?: string;
+    status?: string[];
     fromDate?: string;
     toDate?: string;
     search?: string;

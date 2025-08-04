@@ -3,7 +3,7 @@ import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
-import { Router, TitleStrategy } from '@angular/router';
+import { Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MrRequestComponent } from '../mr-request/mr-request.component';
@@ -50,6 +50,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   generatedPRId: string = '';
   prSequence: string = '0001'
   purchaseJobData!: any;
+  purchaseNo!: string;
   isAddingItem: boolean = false;
 
   itemsList = signal<any[]>([])
@@ -77,6 +78,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.tokenData = this.employeeService.employeeToken();
     this.deelSheets()
     this.purchaseForm.reset()
+    this.getPurchaseNo()
     this.generatedPRId = this.generateId()
     this.subscriptions.add(
       this.purchaseService.selectedJob$.subscribe((job) => {
@@ -176,7 +178,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       detail: ['', Validators.required],
       quantity: [0, [Validators.required, Validators.min(1)]],
       unitCost: [0, [Validators.required, Validators.min(0)]],
-      profit: [0, [Validators.required, Validators.min(0)]],
+      unitSellingPrice: [0, [Validators.required, Validators.min(0)]],
       availability: ['', Validators.required],
       supplierName: [''],
       email: ['', [Validators.email]],
@@ -242,8 +244,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     return this.fb.group({
       detail: [item.detail || '', Validators.required],
       quantity: [item.quantity || 0, Validators.required],
+      unitSellingPrice: [item.unitSellingPrice || 0, Validators.required],
       unitCost: [item.unitCost || 0, Validators.required],
-      profit: [item.profit || 0, Validators.required],
       availability: [item.availability || '', Validators.required],
       supplierName: [item.supplierName || ''],
       email: [item.email || ''],
@@ -278,6 +280,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     if (this.selectedJobSheet) {
       const dialogRef = this._dialog.open(MrRequestComponent, {
         width: '550px',
+        disableClose: true,
+        maxHeight: '90vh',
+        autoFocus: false,
         data: { job: this.purchaseForm.value }
       })
 
@@ -307,9 +312,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   onJobSelected(selected: string | string[]) {
     this.purchaseForm.reset()
+    this.purchaseForm.get('purchaseNo')?.setValue(this.purchaseNo)
     const job = <getJob>this.jobSheets().find(job => job._id === selected);
     this.patchValues(job);
-    this.getPurchaseNo()
   }
 
   onComparisonClicks(item: QuoteItemDetails) {
@@ -356,6 +361,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         if (res.data) {
           this.purchaseForm.get('purchaseNo')?.setValue(res.data.purchaseNo)
+          this.purchaseNo = res.data.purchaseNo
         }
       }, error: (error: Error) => {
         console.log(error)
@@ -374,8 +380,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       const itemDetailsArray = itemGroup.get('itemDetails') as FormArray;
       itemDetailsArray.controls.forEach((detailGroup: AbstractControl) => {
         const quantity = detailGroup.get('quantity')?.value || 0;
-        const unitCost = detailGroup.get('unitCost')?.value || 0;
-        total += quantity * unitCost;
+        const unitSellingPrice = detailGroup.get('unitSellingPrice')?.value || 0;
+        total += quantity * unitSellingPrice;
       });
     });
     return total;
@@ -420,7 +426,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     const hasRequiredValues =
       itemValue.itemName &&
       itemValue.itemDetails?.[0]?.detail &&
-      itemValue.itemDetails?.[0]?.unitCost > 0 &&
+      itemValue.itemDetails?.[0]?.unitSellingPrice > 0 &&
       itemValue.itemDetails?.[0]?.quantity > 0;
 
     if (!hasRequiredValues) {
@@ -438,6 +444,11 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   checkSupplierExists(): boolean {
     return this.purchaseForm.contains('supplierDiscounts')
+  }
+
+  onFinalDasdboardClicks() {
+    this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
+    this.router.navigate(['/purchase/view-purchase', 'none']);
   }
 
   ngOnDestroy(): void {

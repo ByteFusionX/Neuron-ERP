@@ -1,5 +1,5 @@
 import { HttpEventType } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Observable, Subscription, catchError, tap, throwError } from 'rxjs';
 import { JobService } from 'src/app/core/services/job/job.service';
@@ -32,6 +32,7 @@ import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
 import { allocateType, AllocateTypeModalComponent } from '../allocate-type-modal/allocate-type-modal.component';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 
 
 @Component({
@@ -74,6 +75,7 @@ export class OpenToWorckComponent {
   loader = this.loadingBar.useRef();
 
   private subscriptions = new Subscription();
+  private purchaseService = inject(PurchaseService)
 
 
   constructor(private _jobService: JobService,
@@ -379,6 +381,14 @@ export class OpenToWorckComponent {
       });
     });
     this.loader.complete();
+  }
+
+  onConvertToPurchase(jobId: string) {
+    const jobData = this.dataSource.data.find((data) => data._id == jobId)
+    if (jobData) {
+      this.purchaseService.setPurchaseJob(jobData)
+      this.router.navigate(['/purchase/create'])
+    }
   }
 
   onStatus(event: Event, status: JobStatus) {

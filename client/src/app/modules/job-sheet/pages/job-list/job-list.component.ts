@@ -610,11 +610,7 @@ export class JobListComponent {
   }
 
   purchaseRequest(jobId: string) {
-    const jobData = this.dataSource.data.find((data) => data._id == jobId)
-    if (jobData) {
-      this.purchaseService.setPurchaseJob(jobData)
-      this.router.navigate(['/purchase/create'])
-    }
+
   }
 
   onMrRequestClicks() {

@@ -2,7 +2,7 @@ export interface QuoteItemDetails {
     detail: string;
     quantity: number;
     unitCost: number;
-    profit: number;
+    unitSellingPrice: number;
     availability: string;
     supplierName?: string;
     email?: string;
@@ -14,13 +14,14 @@ export interface QuoteItemDetails {
 
 export interface Comparisons {
     supplierName?: string,
-    supplerId?: string,
-    qty: number,
-    unitCost: number,
+    supplierId?: string,
+    quantity: number,
+    unitPrice: number,
     totalCost: number,
-    availability: any,
+    etaTerms: any,
     paymentTerms: any,
-    selected:boolean,
+    selected: boolean,
+    createdBy?: any,
 }
 
 export interface QuoteItem {
@@ -45,7 +46,7 @@ export interface PurchaseData {
     customerId: any;
     salesManager: string;
     purchaseNo: string;
-    jobId: string;
+    jobId: any;
     dealSheetId: string;
     items: QuoteItem[];
     totalLpo: number;

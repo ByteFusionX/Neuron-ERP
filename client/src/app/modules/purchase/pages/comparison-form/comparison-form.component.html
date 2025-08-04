@@ -1,4 +1,4 @@
-<div class="">
+<div class="overflow-y-auto">
   <div class="px-5 py-3 border-b w-full flex justify-between">
     <h3 class="text-md font-medium">Comparison Form</h3>
     <button class="bg-gray-200 rounded flex items-center justify-center p-1" (click)="onCancel()"><ng-icon
@@ -11,10 +11,10 @@
         formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()" class="w-full -m-1">
       </app-select-dropdown>
       <div class="flex gap-3">
-        <app-form-field label="QTY" type="number" [control]="f['qty']" [isSubmitted]="isSubmitted()"
+        <app-form-field label="QTY" type="number" [control]="f['quantity']" [isSubmitted]="isSubmitted()"
           placeholder="Enter quantity" class="col-span-1"></app-form-field>
 
-        <app-form-field label="Unit Selling Cost" type="number" [control]="f['unitCost']" [isSubmitted]="isSubmitted()"
+        <app-form-field label="Unit Selling Cost" type="number" [control]="f['unitPrice']" [isSubmitted]="isSubmitted()"
           placeholder="Enter unit cost" class="col-span-1"></app-form-field>
 
         <app-form-field label="Total Selling Cost" type="number" [control]="f['totalCost']"
@@ -22,11 +22,24 @@
           [readonly]="true"></app-form-field>
       </div>
 
-      <app-form-field label="Availability" [control]="f['availability']" [isSubmitted]="isSubmitted()"
-        placeholder="Enter availability" class="col-span-2"></app-form-field>
 
-      <app-form-field label="Payment Terms" [control]="f['paymentTerms']" [isSubmitted]="isSubmitted()"
-        placeholder="Enter payment terms" class="col-span-2"></app-form-field>
+      <div class="flex flex-col">
+        <label for="etaTerms" class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">ETA
+          Terms</label>
+        <textarea class="p-2 rounded bg-gray-200 outline-none" rows="2" formControlName="etaTerms"
+          placeholder="Enter ETA Terms"></textarea>
+      </div>
+      <div class="flex flex-col">
+        <label for="paymentTerms" class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">Payment
+          Terms</label>
+        <textarea class="p-2 rounded bg-gray-200 outline-none" rows="2" formControlName="paymentTerms"
+          placeholder="Enter ETA Terms"></textarea>
+      </div>
+      <!-- <app-form-field label="ETA Terms" [control]="f['etaTerms']" [isSubmitted]="isSubmitted()"
+        placeholder="Enter ETA Terms" class="col-span-2"></app-form-field> -->
+      <!-- <app-form-field label="Payment Terms" [control]="f['paymentTerms']" [isSubmitted]="isSubmitted()"
+        placeholder="Enter payment terms" class="col-span-2"></app-form-field> -->
+
     </div>
 
     <div class="border-t">

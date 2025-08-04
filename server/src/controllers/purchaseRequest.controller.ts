@@ -38,7 +38,7 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
 
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, status, fromDate, toDate, search } = req.body;
+        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName } = req.body;
         const pageNumber = Number(page) || 1;
         const pageSize = Number(row) || 10;
 
@@ -46,10 +46,20 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             isDeleted: false
         };
 
-        if (status) {
-            matchStage.status = status;
+        if(Array.isArray(status)){
+            matchStage.status = { $in: status }
+        }else{
+            matchStage.status = status
         }
 
+        if (purchaseNo) {
+            matchStage.purchaseNo = { $regex: purchaseNo, $options: 'i' }
+        }
+
+        if (firstName) {
+            matchStage['createdBy.firstName'] = { $regex: firstName, $options: 'i' }
+        }
+        
         if (fromDate && toDate) {
             matchStage.createdAt = {
                 $gte: new Date(fromDate),
@@ -57,15 +67,9 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             };
         }
 
-        if (search) {
-            matchStage.$or = [
-                { purchaseNo: { $regex: search, $options: 'i' } },
-                // Add other searchable fields if needed
-            ];
-        }
+        console.log(matchStage);
 
         const purchases = await PurchaseRequest.aggregate([
-            { $match: matchStage },
             {
                 $lookup: {
                     from: 'customers',
@@ -84,6 +88,15 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 }
             },
             { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'jobId.quoteId',
+                    foreignField: '_id',
+                    as: 'jobId.quoteId'
+                }
+            },
+            { $unwind: { path: '$jobId.quoteId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'employees',
@@ -116,9 +129,17 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                                 message: "$mrRequest.message",
                                 createdDate: "$mrRequest.createdDate"
                             },
-                            "$$REMOVE" // This removes the mrRequest field entirely
+                            "$$REMOVE"
                         ]
                     }
+                }
+            },
+            { $match: matchStage },
+            // Second $match for nested fields
+            {
+                $match: {
+                    ...(companyName && { "customerId.companyName": { $regex: companyName, $options: 'i' } }),
+                    ...(jobId && { "jobId.jobId": { $regex: jobId, $options: 'i' } })
                 }
             },
             {
@@ -191,6 +212,15 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
                 }
             },
             { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'jobId.quoteId',
+                    foreignField: '_id',
+                    as: 'jobId.quoteId'
+                }
+            },
+            { $unwind: { path: '$jobId.quoteId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'employees',
@@ -278,6 +308,15 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             { $unwind: { path: '$jobId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
+                    from: 'quotations',
+                    localField: 'jobId.quoteId',
+                    foreignField: '_id',
+                    as: 'jobId.quoteId'
+                }
+            },
+            { $unwind: { path: '$jobId.quoteId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
@@ -347,18 +386,12 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
         const year = now.getFullYear().toString().slice(-2);
         const month = (now.getMonth() + 1).toString().padStart(2, '0');
 
-        const latestPR = await PurchaseRequest.findOne({
-            purchaseNo: { $regex: `^PR-${year}${month}-` }
-        })
-            .sort({ purchaseNo: -1 })
-            .limit(1);
-
+        const latestPR = await PurchaseRequest.findOne().sort({ createdAt: -1 })
         let nextNumber = 1;
+
         if (latestPR) {
-            const parts = latestPR.purchaseNo.split('-');
-            if (parts.length === 3) {
-                nextNumber = parseInt(parts[2]) + 1;
-            }
+            const parts = latestPR.purchaseNo.split('-').reverse();
+            nextNumber = parseInt(parts[0]) + 1;
         }
 
         const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber.toString().padStart(4, '0')}`;

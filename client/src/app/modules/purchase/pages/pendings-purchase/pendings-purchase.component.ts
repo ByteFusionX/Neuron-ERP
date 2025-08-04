@@ -11,7 +11,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { TableColumn } from 'src/app/shared/components/table/table.model';
+import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 
 @Component({
   selector: 'app-pendings',
@@ -45,7 +45,8 @@ export class PendingPurchaseComponent implements OnInit {
 
   selectedLocation = signal<string>('');
   selectedCategory = signal<string>('');
-  selectedStatus = signal<string>('Pending');
+  selectedStatus = signal<string[]>(['Pending', 'Drafted']);
+  statusOptions: string[] = ['Pending', 'Drafted'];
 
   ngOnInit(): void {
     this.setupTableColumns()
@@ -60,26 +61,32 @@ export class PendingPurchaseComponent implements OnInit {
         type: 'date',
         pipeParams: 'dd/MM/yyyy',
         sortable: true,
+        filterable: true,
+        filterType: 'date'
+      },
+      {
+        key: 'customerId.companyName',
+        label: 'Customer Name',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search customer...'
       },
       {
         key: 'purchaseNo',
         label: 'PR NO',
         type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search PR No...'
       },
       {
         key: 'jobId.jobId',
         label: 'Job ID',
         type: 'text',
-      },
-      {
-        key: 'customerId.companyName',
-        label: 'Customer',
-        type: 'text',
-      },
-      {
-        key: 'createdBy.firstName',
-        label: 'Created By',
-        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search Job ID...'
       },
       {
         key: 'totalLpo',
@@ -87,46 +94,77 @@ export class PendingPurchaseComponent implements OnInit {
         type: 'text',
       },
       {
+        key: 'createdBy.firstName',
+        label: 'Created By',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search created by...'
+      },
+      {
         key: 'status',
         label: 'Status',
         type: 'status',
+        filterable: true,
+        filterType: 'select',
+        filterOptions: this.statusOptions.map(type => ({ label: type, value: type })),
         headerClass: 'text-center'
       },
-      {
-        key: 'mrRequest',
-        label: 'MR Request',
-        type: 'text',
-        actions: [
-          {
-            icon: 'heroEye',
-            tooltip: 'View Details',
-            action: '',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
-          }
-        ]
-      },
-      {
-        key: 'actions',
-        label: 'Action',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: []
-      }
     ]
 
     this.defaultColumns = [
-      'createdAt', 'purchaseNo', 'jobId.jobId', 'customerId.companyName', `createdBy.firstName`, 'totalLpo', 'status', 'mrRequest', 'actions'
+      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status'
     ];
   }
 
-  getPurchases() {
+  onFilterChange(filters: TableFilter[]): void {
     this.isLoading.set(true);
     const currentState = this.paginationService.paginationState();
-    this.purchaseService.getPurchases({
+    this.paginationService.updatePaginationState({
       page: 1,
       row: currentState.row,
+      total: currentState.total
+    });
+
+    // Convert filters to backend format
+    const filterParams: Partial<any> = filters.reduce((acc, filter) => {
+      switch (filter.type) {
+        case 'text':
+          acc[filter.column] = filter.value;
+          break;
+        case 'select':
+          acc[filter.column] = filter.value;
+          break;
+        case 'date':
+          if (filter.column === 'createdDate') {
+            acc['fromDate'] = filter.value[0];
+            acc['toDate'] = filter.value[1];
+          }
+          break;
+        case 'number':
+          acc[filter.column] = filter.value;
+          break;
+      }
+      return acc;
+    }, {} as Partial<any>);
+
+    this.getPurchases(filterParams);
+  }
+
+  getPurchases(filters?: Partial<any>) {
+    this.isLoading.set(true);
+    const currentState = this.paginationService.paginationState();
+
+    const filterParams = {
+      page: currentState.page,
+      row: currentState.row,
       status: this.selectedStatus(),
-    }).subscribe({
+      ...filters
+    }
+
+    console.log(filterParams);
+
+    this.purchaseService.getPurchases(filterParams).subscribe({
       next: (response) => {
         this.tableData.set(response.purchase.data);
         this.totalItems.set(response.purchase.total);

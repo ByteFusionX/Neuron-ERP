@@ -19,7 +19,7 @@
                 <div class="w-full flex flex-col">
                     <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-1">Product
                         Description</label>
-                    <textarea class="p-2 rounded bg-gray-200 outline-none" rows="4" [value]="getFormattedProducts()"
+                    <textarea class="p-2 rounded bg-gray-200 outline-none" rows="3" [value]="getFormattedProducts()"
                         readonly></textarea>
                 </div>
                 <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
@@ -45,17 +45,19 @@
             <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-5">
                 <thead class="text-xs text-gray-700 uppercase bg-violet-50">
                     <tr>
-                        <th></th>
+                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
+                            <div class="px-2 py-3">Select</div>
+                        </th>
                         <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
                             <div class="px-2 py-3">SL.NO</div>
                         </th>
                         <th scope="col" resizable key="supplierName" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Supplier Name</div>
                         </th>
-                        <th scope="col" resizable key="qty" class="border-l border-r border-t text-center">
+                        <th scope="col" resizable key="quantity" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">QTY</div>
                         </th>
-                        <th scope="col" resizable key="unitCost" class="border-l border-r border-t text-center">
+                        <th scope="col" resizable key="unitPrice" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Unit Selling Cost</div>
                         </th>
                         <th scope="col" resizable key="totalCost" class="border-l border-r border-t text-center">
@@ -77,11 +79,11 @@
                                     (change)="onSelectionChange(i)"></td>
                             <td class="px-4 py-2 border">{{i+1}}</td>
                             <td class="px-4 py-2 border font-medium bg-gray-50">{{data.supplierName}}</td>
-                            <td class="px-4 py-2 border">{{data.qty}}</td>
-                            <td class="px-4 py-2 border">{{data.unitCost}}</td>
+                            <td class="px-4 py-2 border">{{data.quantity}}</td>
+                            <td class="px-4 py-2 border">{{data.unitPrice}}</td>
                             <td class="px-4 py-2 border">{{data.totalCost}}</td>
-                            <td class="px-4 py-2 border"></td>
-                            <td class="px-4 py-2 border"></td>
+                            <td class="px-4 py-2 border">{{data.etaTerms}}</td>
+                            <td class="px-4 py-2 border">{{data.paymentTerms}}</td>
                             <td class="px-4 py-2 border">
                                 <button class="text-red-600 hover:text-red-800" (click)="onDeleteComparison(i)"
                                     matTooltip="Delete comparison" matTooltipPosition="above">

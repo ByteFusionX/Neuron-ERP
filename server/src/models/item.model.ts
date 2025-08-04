@@ -58,7 +58,7 @@ const itemDetailSchema = new Schema({
         type: Boolean,
         default: false
     },
-    comparisonSheet: {
+    comparisons: {
         type: [supplierComparisonSchema],
         required: true
     }

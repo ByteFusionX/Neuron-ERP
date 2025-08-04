@@ -1,15 +1,16 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, TitleStrategy } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { FileService } from 'src/app/core/services/file.service';
-import { PurchaseData, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
+import { Comparisons, PurchaseData, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { SupplierService } from 'src/app/core/services/supplier.service';
 
 @Component({
   selector: 'app-view-purchase',
@@ -25,6 +26,7 @@ export class ViewPurchaseComponent {
   private dialog = inject(MatDialog);
   private fileService = inject(FileService);
   private employeeService = inject(EmployeeService)
+  private supplierService = inject(SupplierService)
 
   purchase: PurchaseData | null = null;
   isLoading = true;
@@ -34,14 +36,35 @@ export class ViewPurchaseComponent {
   isDownloading = false;
   purchaseId!: string;
   tokenData!: { id: string, employeeId: string };
+  suppliersList = signal<any[]>([])
 
   ngOnInit(): void {
     this.loadPurchase();
     this.tokenData = this.employeeService.employeeToken();
+    this.purchaseService.purchaseFormData$.subscribe({
+      next: (data) => {
+        if (data) {
+          console.log(data)
+          this.purchase = data;
+          this.isLoading = false;
+        }
+      }, error: (error) => {
+        console.error(error)
+      }
+    })
+
+    this.supplierService.supplierList().subscribe({
+      next: (res) => {
+        this.suppliersList.set(res.data)
+      }, error: (error) => {
+        console.log(error);
+      }
+    })
   }
 
   loadPurchase() {
     this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
+    if (this.purchaseId == 'none') return
     if (!this.purchaseId) {
       this.notificationService.error('Invalid Purchase ID');
       this.router.navigate(['/purchase/pendings']);
@@ -50,7 +73,7 @@ export class ViewPurchaseComponent {
 
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
-        console.log(response)
+        console.log(response.data)
         this.purchase = response.data;
         this.isLoading = false;
       },
@@ -165,5 +188,22 @@ export class ViewPurchaseComponent {
         }
       }
     );
+  }
+
+  approvedSupplier(comparisons: Comparisons[]) {
+    const selected = comparisons.find(c => c.selected);
+    if (!selected) return null;
+
+    const supplier = this.suppliersList().find(s => s._id === selected.supplierId);
+    return {
+      supplierName: supplier?.supplierName || 'Unknown Supplier',
+      unitPrice: selected.unitPrice,
+      quantity: selected.quantity,
+      etaTerms: selected.etaTerms
+    };
+  }
+
+  onExit() {
+    this.router.navigate(['/purchase/pendings'])
   }
 }
