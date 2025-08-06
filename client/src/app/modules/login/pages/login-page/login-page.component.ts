@@ -38,12 +38,6 @@ export class LoginPageComponent {
     password: ['', Validators.required]
   })
 
-  ngOnInit() {
-    this.employeeService.isEmployeePresent().subscribe((res) => {
-      this.isEmployeePresent = res.exists;
-    })
-  }
-
   onCreateSuperAdmin(){
     const dialogRef = this._dialog.open(CreateEmployeeDialog,{
       data:{

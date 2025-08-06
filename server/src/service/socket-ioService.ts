@@ -23,7 +23,7 @@ export const socketConnection = async (socketIo:Server) => {
             })
 
             socket.on('auth',(token)=> {
-                const jwtPayload = jwt.verify(token,process.env.JWT_SECRET)
+                const jwtPayload = jwt.verify(token,process.env.ACCESS_SECRET)
                 const userId = (<any>jwtPayload).id;
                 connectedSockets[userId] = socket.id;
                 socket.join(userId)

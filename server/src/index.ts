@@ -7,6 +7,7 @@ import * as path from 'path';
 import mongoose from 'mongoose';
 import http from 'http';
 import { Server } from 'socket.io';
+import cookieParser from 'cookie-parser';
 import router from './routes/user.router';
 import depRouter from './routes/department.router';
 import empRouter from './routes/employee.router';
@@ -45,6 +46,7 @@ app.set('io', io);
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 startCronJob();
 socketConnection(io)

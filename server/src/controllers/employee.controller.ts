@@ -167,9 +167,9 @@ export const getEmployeesForCustomerTransfer = async (req: Request, res: Respons
             { $project: { password: 0 } },
         ]);
 
-        
-        allEmployees = [...allEmployees,reportedEmployee]   
-        
+
+        allEmployees = [...allEmployees, reportedEmployee]
+
         const employeesWithoutAccess = await Promise.all(
             allEmployees.map(async (employee) => {
                 // Check if the employee is in the sharedWith array
@@ -676,19 +676,42 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
             const passwordMatch = await bcrypt.compare(password, employee.password)
             if (passwordMatch) {
                 const payload = { id: employee._id, employeeId: employee.employeeId }
-                const token = jwt.sign(payload, process.env.JWT_SECRET)
-                res.status(200).json({ token: token, employeeData: employee })
+
+                const token = jwt.sign(payload, process.env.ACCESS_SECRET, { expiresIn: '15m' })
+                const refreshToken = jwt.sign(payload, process.env.REFRESH_SECRET, { expiresIn: '7d' })
+
+                employee.lastActivity = Date.now()
+                await employee.save()
+
+                res.cookie('refreshToken', refreshToken, {
+                    httpOnly: true,
+                    secure: false,
+                    sameSite: 'lax',
+                    maxAge: 7 * 24 * 60 * 60 * 1000
+                });
+
+                return res.status(200).json({ token: token, employeeData: employee })
             } else {
-                res.send({ passwordNotMatchError: true })
+                return res.send({ passwordNotMatchError: true })
             }
         } else {
-            res.send({ employeeNotFoundError: true })
+            return res.send({ employeeNotFoundError: true })
         }
     } catch (error) {
         console.log(error)
-        next(error)
+        return next(error)
     }
+}
 
+export const refreshToken = (req: Request, res: Response, next: NextFunction) => {
+    const refreshToken = req.cookies?.refreshToken;
+    if (!refreshToken) return res.sendStatus(401);
+
+    jwt.verify(refreshToken, process.env.REFRESH_SECRET, (err, payload) => {
+        if (err) return res.sendStatus(403);
+        const newAccessToken = jwt.sign({ id: payload.id, employeeId: payload.employeeId }, process.env.ACCESS_SECRET, { expiresIn: '15m' });
+        res.json({ accessToken: newAccessToken });
+    });
 }
 
 export const getEmployee = async (req: Request, res: Response, next: NextFunction) => {
@@ -713,7 +736,7 @@ export const getEmployee = async (req: Request, res: Response, next: NextFunctio
 export const getNotificationCounts = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const token = req.params.token
-        const jwtPayload = jwt.verify(token, process.env.JWT_SECRET)
+        const jwtPayload = jwt.verify(token, process.env.ACCESS_SECRET)
         const userId = (<any>jwtPayload).id
 
         // Get user's category
@@ -828,7 +851,7 @@ export const blockEmployee = async (req: Request, res: Response, next: NextFunct
         if (employee) {
             let isBlocked = employee.isBlocked ? false : true;
             console.log(isBlocked)
-            await Employee.findByIdAndUpdate(employeeId, { isBlocked : isBlocked }, { new: true });
+            await Employee.findByIdAndUpdate(employeeId, { isBlocked: isBlocked }, { new: true });
             return res.status(200).json({ isBlocked });
         } else {
             return res.status(404).json({ message: 'Employee not found' });

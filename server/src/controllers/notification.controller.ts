@@ -47,7 +47,7 @@ export const createNotification = async (notification: NotificationData) => {
 export const getAllNotifications = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const token = req.params.token
-        const jwtPayload = jwt.verify(token, process.env.JWT_SECRET)
+        const jwtPayload = jwt.verify(token, process.env.ACCESS_SECRET)
         const userId = (<any>jwtPayload).id
         const employee = await Employee.findById(userId);
 

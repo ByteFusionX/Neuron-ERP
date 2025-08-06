@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap } from 'rxjs';
+import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap, tap } from 'rxjs';
 import { CreateEmployee, FilterEmployee, GetCategory, getEmployee, getEmployeeByID, Target } from 'src/app/shared/interfaces/employee.interface';
 import { login } from 'src/app/shared/interfaces/login';
 import { environment } from 'src/environments/environment';
@@ -132,5 +132,14 @@ export class EmployeeService {
       return this.getEmployee(token.id);
     }
     throw new Error('No user token found');
+  }
+
+  refreshToken(): Observable<{ accessToken: string }> {
+    return this.http.post<{ accessToken: string }>(`${this.api}/employee/refresh-token`, {}, { withCredentials: true }).pipe(
+      tap((res) => {
+        localStorage.setItem('employeeToken', res.accessToken);
+      })
+    );
+
   }
 }

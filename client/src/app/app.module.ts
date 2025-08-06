@@ -22,6 +22,7 @@ import { LoadingBarHttpClientModule } from '@ngx-loading-bar/http-client';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { NotificationComponent } from './shared/components/notification/notification.component';
 const config:SocketIoConfig = { url: environment.api, options: {} };
+import { NgIdleModule } from '@ng-idle/core';
 
 @NgModule({
   declarations: [
@@ -48,7 +49,8 @@ const config:SocketIoConfig = { url: environment.api, options: {} };
     LoadingBarHttpClientModule,
     SocketIoModule.forRoot(config),
     MatSidenavModule,
-    NotificationComponent
+    NotificationComponent,
+    NgIdleModule.forRoot(),
   ],
   providers: [
     { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },

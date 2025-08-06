@@ -24,6 +24,7 @@
     "@angular/router": "^16.0.0",
     "@ng-icons/core": "^26.3.0",
     "@ng-icons/heroicons": "^26.3.0",
+    "@ng-idle/core": "^16.0.0",
     "@ng-select/ng-select": "^11.2.0",
     "@ngrx/effects": "^18.0.2",
     "@ngrx/entity": "^18.0.2",

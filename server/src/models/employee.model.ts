@@ -18,6 +18,7 @@ interface Employee extends Document {
     targets: Target[];
     isBlocked: boolean;
     isDeleted: boolean;
+    lastActivity: number;
 }
 
 interface Target {
@@ -137,6 +138,10 @@ const employeeSchema = new Schema<Employee>({
     isBlocked: {
         type: Boolean,
         default: false
+    },
+    lastActivity: {
+        type: Number,
+        required: false
     }
 });
 

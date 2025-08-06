@@ -1,25 +1,33 @@
 import { NextFunction } from "express";
 import { Request, Response } from "express";
 import jwt from 'jsonwebtoken';
+import Employee from "../../models/employee.model";
 
-const TokenLogger = (req: Request, res: Response, next: NextFunction) => {
+const TokenLogger = async (req: any, res: Response, next: NextFunction) => {
+    if (req.originalUrl.includes('login') || req.originalUrl.includes('uploads') || req.originalUrl.includes('employee/check') || req.originalUrl.includes('employee/refresh-token')) {
+        return next();
+    }
+
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.sendStatus(401);
+    
     try {
-        if (req.originalUrl.includes('login') || req.originalUrl.includes('uploads') || req.originalUrl.includes('employee/check') || req.header('Authorization')) {
-            if (req.headers.authorization) {
-                const token = req.header('Authorization')?.replace('Bearer ', '');
-                const jwtVerified = jwt.verify(token, process.env.JWT_SECRET);
-                if (jwtVerified) {
-                    next()
-                }
-            } else {
-                next()
-            }
-        } else {
-            return res.status(401).json({ error: 'Authorization token is missing' })
+        const decoded = <{ id: string, employeeId: string }>jwt.verify(token, process.env.ACCESS_SECRET);
+        const user = await Employee.findById(decoded.id);
+
+        const INACTIVITY_LIMIT = 4 * 60 * 60 * 1000; 
+
+        if (Date.now() - user.lastActivity > INACTIVITY_LIMIT) {
+            return res.status(403).json({ message: 'Session expired due to inactivity' });
         }
-    } catch (error) {
-        console.log(error)
-next(error)
+
+        user.lastActivity = Date.now();
+        await user.save();
+
+        req.user = user;
+        return next();
+    } catch (err) {
+        return res.sendStatus(403);
     }
 }
 
