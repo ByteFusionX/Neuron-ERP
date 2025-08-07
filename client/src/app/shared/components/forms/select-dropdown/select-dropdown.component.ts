@@ -22,12 +22,15 @@ export class SelectDropdownComponent {
   @Input() optionLabel = 'name';
   @Input() optionValue = 'id';
   @Input() placeholder = 'Select...';
+  @Input() class: string = '';
   @Input() isSubmitted = false;
   @Input() multiple = false;
   @Input() id = '';
   @Input() selected: string = '';
+  @Input() clearable = true;
+  @Input() defaultClass = true;
 
-  value: any = '';
+  @Input() value: any = '';
   disabled = false;
   onChange: any = () => { };
   onTouched: any = () => { };

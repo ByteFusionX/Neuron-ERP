@@ -60,7 +60,11 @@ interface ActivityPlan {
     activityName: string;
     startDate: Date;
     endDate: Date;
+    orginalStartDate: Date;
+    orginalEndDate: Date;
     includedEmployees: Types.ObjectId[];
+    status: string;
+    comment: string;
 }
 
 const activityPlanSchema = new Schema<ActivityPlan>({
@@ -76,9 +80,28 @@ const activityPlanSchema = new Schema<ActivityPlan>({
         type: Date,
         required: true,
     },
+    orginalStartDate: {
+        type: Date,
+        required: false,
+    },
+    orginalEndDate: {
+        type: Date,
+        required: false,
+    },
     includedEmployees: {
         type: [Schema.Types.ObjectId],
         ref: 'Employee'
+    },
+    status: {
+        type: String,
+        required: true,
+        default: 'Pending',
+        enum: ['Pending', 'Closed']
+    },
+    comment: {
+        type: String,
+        default: '',
+        required: false,
     },
 })
 

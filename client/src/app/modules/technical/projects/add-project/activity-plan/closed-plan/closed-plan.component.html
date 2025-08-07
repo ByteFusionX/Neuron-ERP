@@ -1,0 +1,55 @@
+
+
+<div class="w-full  max-h-[95vh]">
+    <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between items-center  bg-white ">
+      <h3 class="text-md font-medium">Close Activity Plan</h3>
+      <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onCancel()">
+        <span class="material-icons text-md p-0 m-0">close</span>
+      </button>
+    </div>
+    <form [formGroup]="form" (ngSubmit)="onSave()" class="p-6  overflow-y-scroll max-h-[77vh]">
+      <div class="grid grid-cols-2 gap-4">
+        <app-form-field
+          label="Start Date"
+          [control]="form.get('orginalStartDate')"
+          [isSubmitted]="isSubmitted"
+          placeholder="Select start date"
+          id="orginalStartDate"
+          type="date">
+        </app-form-field>
+        <app-form-field
+          label="End Date"
+          [control]="form.get('orginalEndDate')"
+          [isSubmitted]="isSubmitted"
+          placeholder="Select end date"
+          id="orginalEndDate"
+          type="date">
+        </app-form-field>
+      </div>
+  
+      <app-form-field
+          label="Comment / Reason of change in date"
+          [control]="form.get('comment')"
+          [isSubmitted]="isSubmitted"
+          placeholder="Enter comment / reason of change in date"
+          id="comment"
+          type="textarea">
+      </app-form-field>
+  
+    </form>
+    
+  </div> 
+  <div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2">
+    <div class="flex gap-2 ">
+      <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onCancel()">
+        Close
+      </button>
+      
+      <button
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm whitespace-nowrap"
+        (click)="onSave()">
+        <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
+        Submit
+      </button>
+    </div>
+  </div>

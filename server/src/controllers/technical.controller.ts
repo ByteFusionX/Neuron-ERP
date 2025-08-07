@@ -703,7 +703,7 @@ export const createActivityPlan = async (req: Request, res: Response, next: Next
       const { activityName, startDate, endDate, includedEmployees } = req.body;
       const technical = await technicalModel.findById(id);
       if (technical) {
-         technical.activityPlan.push({ activityName, startDate, endDate, includedEmployees });
+         technical.activityPlan.push({ activityName, startDate, endDate, includedEmployees, status: "Pending", comment: "" } as any);
          await technical.save();
          return res.status(200).json({
             success: true,
@@ -747,6 +747,51 @@ export const updateActivityPlan = async (req: Request, res: Response, next: Next
             return res.status(200).json({
                success: true,
                message: "Activity plan updated successfully",
+               data: activityPlan
+            });
+         } else {
+            return res.status(404).json({
+               success: false,
+               message: "Activity plan not found"
+            });
+         }
+      } else {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to update activity plan",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const closeActivityPlan = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id, activityPlanId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(activityPlanId)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical or activity plan ID"
+         });
+      }
+      const { orginalStartDate, orginalEndDate, comment } = req.body;
+      const technical = await technicalModel.findById(id);
+      if (technical) {
+         const activityPlan = technical.activityPlan.find((ap: any) => ap._id.toString() === activityPlanId);
+         if (activityPlan) {
+            activityPlan.orginalStartDate = orginalStartDate;
+            activityPlan.orginalEndDate = orginalEndDate;
+            activityPlan.comment = comment;
+            activityPlan.status = "Closed";
+            await technical.save();
+            return res.status(200).json({
+               success: true,
+               message: "Activity plan closed successfully",
                data: activityPlan
             });
          } else {

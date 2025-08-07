@@ -76,6 +76,10 @@ export class TechnicalService {
     return this.http.put<any>(`${this.apiUrl}/technical/activity-plan/${technicalId}/${activityPlanId}`, activityPlan);
   }
 
+  closeActivityPlan(technicalId: string, activityPlanId: string, activityPlan: any): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/technical/activity-plan/${technicalId}/${activityPlanId}/close`, activityPlan);
+  }
+
   deleteActivityPlan(technicalId: string, activityPlanId: string): Observable<any> {
     return this.http.delete(`${this.apiUrl}/technical/activity-plan/${technicalId}/${activityPlanId}`);
   }

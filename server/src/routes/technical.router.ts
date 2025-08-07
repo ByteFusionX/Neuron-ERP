@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getProjectAndAMCJobs, getEngineers, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan } from "../controllers/technical.controller";
+import { getProjectAndAMCJobs, getEngineers, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan } from "../controllers/technical.controller";
 
 const technicalRouter = Router()
 
@@ -23,5 +23,6 @@ technicalRouter.get('/activity-plan/:id', getActivityPlans)
 technicalRouter.post('/activity-plan/:id', createActivityPlan)
 technicalRouter.put('/activity-plan/:id/:activityPlanId', updateActivityPlan)
 technicalRouter.delete('/activity-plan/:id/:activityPlanId', deleteActivityPlan)
+technicalRouter.put('/activity-plan/:id/:activityPlanId/close', closeActivityPlan)
 
 export default technicalRouter

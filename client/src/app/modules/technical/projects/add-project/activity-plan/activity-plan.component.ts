@@ -11,21 +11,22 @@ import Gantt from 'frappe-gantt';
 import { MatDialog } from '@angular/material/dialog';
 import { AddPlanComponent } from './add-plan/add-plan.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { ClosedPlanComponent } from './closed-plan/closed-plan.component';
 
 @Component({
   selector: 'app-activity-plan',
   standalone: true,
-  imports: [CommonModule,ReactiveFormsModule,ButtonComponent],
+  imports: [CommonModule, ReactiveFormsModule, ButtonComponent, SelectDropdownComponent],
   templateUrl: './activity-plan.component.html',
   styleUrl: './activity-plan.component.css',
 })
 export class ActivityPlanComponent implements OnInit {
   private technicalService = inject(TechnicalService);
-  private el = inject(ElementRef);  
+  private el = inject(ElementRef);
   private _dialog = inject(MatDialog);
   private route = inject(ActivatedRoute);
   private ngZone = inject(NgZone);
-  
+
   activityPlans: any[] = [];
   technicalId: string = '';
   ganttInstance: any = null;
@@ -35,7 +36,12 @@ export class ActivityPlanComponent implements OnInit {
   viewMode: string = 'Day';
   private dateChangeTimeout: any = null;
   private lastUpdatedTask: any = null;
-  
+  private lastUpdatedClosedTask: any = null;
+  planStatus: any[] = [
+    { name: 'Pending', id: 'Pending' },
+    { name: 'Closed', id: 'Closed' },
+  ];
+
   ngOnInit(): void {
     this.route.params.subscribe(params => {
       this.technicalId = params['id'];
@@ -44,7 +50,7 @@ export class ActivityPlanComponent implements OnInit {
       }
     });
   }
-  
+
   ngAfterViewInit() {
     this.ngZone.runOutsideAngular(() => {
       setTimeout(() => {
@@ -105,22 +111,46 @@ export class ActivityPlanComponent implements OnInit {
   }
 
   onDateChange(task: any, start: string, end: string) {
-    const activityPlanIndex = this.activityPlans.findIndex(plan => plan._id === task.id || plan.activityName === task.name);
+    console.log(task.id.split('-')[1])
+    const activityPlanIndex = this.activityPlans.findIndex(plan => (plan._id === task.id || plan._id === task.id.split('-')[0]) || plan.activityName === task.name );
     if (activityPlanIndex !== -1) {
       const activityPlan = this.activityPlans[activityPlanIndex];
-      
-      this.activityPlans[activityPlanIndex].startDate = new Date(start);
-      this.activityPlans[activityPlanIndex].endDate = new Date(end);
-      
-      this.lastUpdatedTask = { task, start, end, activityPlan };
-      
+
+      if (task.id.includes('closed')) {
+        this.activityPlans[activityPlanIndex].orginalStartDate = new Date(start);
+        this.activityPlans[activityPlanIndex].orginalEndDate = new Date(end);
+        this.lastUpdatedClosedTask = { task, start, end, activityPlan };
+      } else {
+        this.activityPlans[activityPlanIndex].startDate = new Date(start);
+        this.activityPlans[activityPlanIndex].endDate = new Date(end);
+        this.lastUpdatedTask = { task, start, end, activityPlan };
+      }
+
+      console.log('heck')
+
       if (this.dateChangeTimeout) {
         clearTimeout(this.dateChangeTimeout);
       }
-      
+
       this.dateChangeTimeout = setTimeout(() => {
         this.saveDateChange();
       }, 500);
+    }
+  }
+
+  onChangeStatus(event: any, id: string) {
+    const activityPlan = this.activityPlans.find(plan => plan._id === id);
+
+    if (event == 'Closed') {
+      const dialogRef = this._dialog.open(ClosedPlanComponent, {
+        width: '500px',
+        data: { technicalId: this.technicalId, activityPlan: activityPlan }
+      });
+      dialogRef.afterClosed().subscribe((result) => {
+        if (result?.success) {
+          this.loadActivityPlans();
+        }
+      });
     }
   }
 
@@ -131,29 +161,49 @@ export class ActivityPlanComponent implements OnInit {
   }
 
   saveDateChange() {
-    if (this.lastUpdatedTask) {
-      const { task, start, end, activityPlan } = this.lastUpdatedTask;
-      
-      const updatedData = {
-        activityName: activityPlan.activityName,
-        startDate: new Date(start).getTime() + 86400000,
-        endDate: new Date(end).getTime() + 86400000,
-        includedEmployees: activityPlan.includedEmployees?.map((emp: any) => emp._id || emp) || []
-      };
+    if (this.lastUpdatedTask || this.lastUpdatedClosedTask) {
+      const { task, start, end, activityPlan } = this.lastUpdatedTask || this.lastUpdatedClosedTask;
 
-      this.technicalService.updateActivityPlan(this.technicalId, activityPlan._id, updatedData).subscribe({
-        next: (response) => {
-          console.log('Activity plan dates updated successfully');
-          this.lastUpdatedTask = null;
-          this.isDragging = false;
-        },
-        error: (error) => {
-          console.error('Error updating activity plan dates:', error);
-          this.loadActivityPlans();
-          this.lastUpdatedTask = null;
-          this.isDragging = false;
-        }
-      });
+      const updatedData: any = {};
+
+      if (task.id.includes('closed')) {
+        updatedData.orginalStartDate = new Date(start).getTime() + 86400000;
+        updatedData.orginalEndDate = new Date(end).getTime() + 86400000;
+        updatedData.status = 'Closed';
+      } else {
+        updatedData.startDate = new Date(start).getTime() + 86400000;
+        updatedData.endDate = new Date(end).getTime() + 86400000;
+        updatedData.activityName = activityPlan.activityName;
+        updatedData.includedEmployees = activityPlan.includedEmployees?.map((emp: any) => emp._id || emp) || []
+      }
+      console.log(task.id.includes('closed'))
+      if (task.id.includes('closed')) {
+        this.technicalService.closeActivityPlan(this.technicalId, activityPlan._id, updatedData).subscribe({
+          next: (response) => {
+            this.lastUpdatedClosedTask = null;
+            this.isDragging = false;
+          },
+          error: (error) => {
+            console.error('Error updating activity plan dates:', error);
+            this.loadActivityPlans();
+            this.lastUpdatedClosedTask = null;
+            this.isDragging = false;
+          }
+        });
+      } else {
+        this.technicalService.updateActivityPlan(this.technicalId, activityPlan._id, updatedData).subscribe({
+          next: (response) => {
+            this.lastUpdatedTask = null;
+            this.isDragging = false;
+          },
+          error: (error) => {
+            console.error('Error updating activity plan dates:', error);
+            this.loadActivityPlans();
+            this.lastUpdatedTask = null;
+            this.isDragging = false;
+          }
+        });
+      }
     }
   }
 
@@ -164,17 +214,33 @@ export class ActivityPlanComponent implements OnInit {
   updateGanttChart() {
     if (this.ganttInstance && this.isGanttInitialized) {
       this.ngZone.runOutsideAngular(() => {
-        const tasks = this.activityPlans.map((plan, index) => ({
-          id: plan._id || `task-${index}`,
-          name: plan.activityName,
-          start: this.formatDateForGantt(plan.startDate),
-          end: this.formatDateForGantt(plan.endDate),
-          custom_class: "",
-        }));
+        const tasks = this.activityPlans.flatMap((plan, index) => {
+          let task = [
+            {
+              id: plan._id || `task-${index}`,
+              name: 'Expected',
+              start: this.formatDateForGantt(plan.startDate),
+              end: this.formatDateForGantt(plan.endDate),
+              custom_class: "",
+            }
+          ]
+          if (plan.status === 'Closed') {
+            task.push({
+              id: plan._id + '-closed',
+              name: 'Closed',
+              start: this.formatDateForGantt(plan.orginalStartDate),
+              end: this.formatDateForGantt(plan.orginalEndDate),
+              custom_class: "closed-task",
+            })
+          }
+          return task;
 
+        });
+
+        console.log(tasks);
 
         this.ganttInstance.refresh(tasks);
-        
+
         if (this.activityPlans.length > 0) {
           this.scrollToEarliestDate();
         }
@@ -197,7 +263,7 @@ export class ActivityPlanComponent implements OnInit {
 
       const twoDaysBefore = new Date(earliestDate);
       twoDaysBefore.setDate(twoDaysBefore.getDate() - 1);
-      
+
       const formattedDate = this.formatDateForGantt(twoDaysBefore.toISOString());
       this.ganttInstance.set_scroll_position(formattedDate);
     }
@@ -211,13 +277,13 @@ export class ActivityPlanComponent implements OnInit {
 
   onGanttClick(data: any) {
     const activityPlan = this.activityPlans.find(plan => plan._id === data.id || plan.activityName === data.name);
-    if (activityPlan) {
+    if (activityPlan && !data.id.includes('closed')) {
       this.editActivityPlan(activityPlan);
     }
   }
 
   onSelectActivityPlan(data: any) {
-    if(data._id){
+    if (data._id) {
       this.editActivityPlan(data);
     }
   }
@@ -238,7 +304,7 @@ export class ActivityPlanComponent implements OnInit {
   editActivityPlan(activityPlan: any) {
     const dialogRef = this._dialog.open(AddPlanComponent, {
       width: '500px',
-      data: { 
+      data: {
         technicalId: this.technicalId,
         activityPlan: activityPlan
       }

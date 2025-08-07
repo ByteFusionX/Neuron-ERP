@@ -16,7 +16,7 @@
 
   <div class="m-8 overflow-hidden relative">
     <div class="flex ">
-      <div class="w-64 ">
+      <div >
         <table class="w-full ">
           <thead class="">
             <tr class="h-[5.28rem] ">
@@ -30,14 +30,27 @@
           </thead>
           <tbody>
             @for(plan of activityPlans; track plan._id; let i = $index) {
-            <tr class="hover:bg-gray-100 border-r border-[#c7c7c7] h-[3.65rem] bg-[#fdfdfd]"
-              [class.border-b]="i < activityPlans.length - 1" (click)="onSelectActivityPlan(plan)">
-              <td class="px-4 py-2 text-sm text-gray-600 border-r border-[#e5e7eb]"
-                [class.border-b]="i < activityPlans.length - 1">{{ i + 1 }}</td>
+            <tr class=" border-r border-[#c7c7c7] h-[3.65rem] max-h-[3.65rem] bg-[#fdfdfd]" [ngClass]="{'!h-[7.3rem] !max-h-[7.3rem]': plan.status === 'Closed'}"
+              [class.border-b]="i < activityPlans.length - 1" >
+              <td class="px-4 py-2 text-sm text-gray-600 border-r border-[#e5e7eb] hover:bg-gray-100"
+                [class.border-b]="i < activityPlans.length - 1" (click)="onSelectActivityPlan(plan)">{{ i + 1 }}</td>
+              <td class="px-4 py-2 text-sm text-gray-800 border-r border-[#e5e7eb] hover:bg-gray-100 whitespace-nowrap"
+                [class.border-b]="i < activityPlans.length - 1" (click)="onSelectActivityPlan(plan)">{{ plan.activityName }}</td>
               <td class="px-4 py-2 text-sm text-gray-800 border-r border-[#e5e7eb]"
-                [class.border-b]="i < activityPlans.length - 1">{{ plan.activityName }}</td>
-              <td class="px-4 py-2 text-sm text-gray-800 border-r border-[#e5e7eb]"
-                [class.border-b]="i < activityPlans.length - 1">{{ plan.activityName }}</td>
+                [class.border-b]="i < activityPlans.length - 1">
+                @if(plan.status !== 'Closed') {
+                <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false" [options]="planStatus" [value]="plan.status" (onSelected)="onChangeStatus($event, plan._id)">
+                </app-select-dropdown>
+                }@else {
+                  <div class="flex items-center gap-2 flex-col">
+                    <span class="bg-green-500 text-white px-2 py-1 rounded-md">{{ plan.status }}</span>
+                    @if(plan.comment){
+                      <app-btn size="sm" theme="primary-outline" >Comment</app-btn>
+                    }
+                  </div>
+                }
+                
+              </td>
             </tr>
             }
           </tbody>
