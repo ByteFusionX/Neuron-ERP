@@ -126,7 +126,6 @@ const employeeSchema = new Schema<Employee>({
     createdBy: {
         type: Schema.Types.ObjectId,
         ref: 'Employee',
-        required: true
     },
     targets: {
       type: [targetSchema], 
