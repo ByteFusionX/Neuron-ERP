@@ -16,6 +16,9 @@ export interface TechnicalProject {
   materialRequest: MaterialRequest[];
   status: string;
   projectType: string;
+  supervisors?: string[];
+  notes?: string;
+  involvedPersons?: { name: string; designation: string }[];
 }
 
 export interface AssignEngineer {

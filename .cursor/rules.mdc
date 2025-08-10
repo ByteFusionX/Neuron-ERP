@@ -1,0 +1,62 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# How to Implement a Feature - Forms
+
+- Always use **Angular 19** features a.
+- Ihe **client** folder with proper UI/UX as per requirements.
+  - Follow the structure and naming convention like `@create-supplier.component.ts` and `@create-supplier.component.html`.
+- In the client:
+  - Ensure form validations are complete and user-friendly.
+  - Show a loading state in the submit button while submitting.
+  - After successful backend update, display a toaster notification and navigate to the listing table (e.g., `@suppliers.component.ts` and `@suppliers.component.html`).
+- In the **server**:
+  - Check the model in the `models` folder. If the model exists, update/add the required fields. If not, create a new model.
+  - Create a controller as per the needs. It must be secure and protected from potential hacker attacks.
+  - Ensure the controller is included in the corresponding router file.
+  - Verify all server files are correctly implemented and tested.
+- In the **client**:
+  - Add the necessary API routes in the appropriate service file.
+  - If there is no service file for the feature, create one.
+  - Use the service functions in the UI and ensure the feature works properly without security vulnerabilities.
+
+# How to Implement a Feature - Tables
+
+- Always use **Angular 19** features and best practices as priority.
+- First, check whether there is a model in the server. If not, create one as per the requirements given.
+- Write the routes and controller appropriately. In the controller:
+  - Support filtering for every table column.
+  - Support sorting for every table column.
+  - Support pagination.
+- Implement the UI in the appropriate folder using the naming convention like `@suppliers.component.ts` and `@suppliers.component.html`.
+- If the user specifies the columns, implement them exactly as given.
+- Implement filters for each column appropriately.
+- Ensure there is a **Create** button that navigates to a create page following the structure `@create-supplier.component.ts` and `@create-supplier.component.html`.
+  - If there is no create page, still create the button.
+- For actions in the table, ask for confirmation if they are not already specified.
+
+# Code Ordering and Structure
+
+- Always follow **Angular 19** coding style, syntax, and recommended patterns.
+- Place **import statements** at the top of the file.
+- Define **constants** before variables.
+- Declare **variables** before functions.
+- For Angular components:
+  - Inputs
+  - Outputs
+  - ViewChild/ViewChildren
+  - Constructor
+  - Lifecycle hooks (`ngOnInit`, `ngOnChanges`, `ngAfterViewInit`, etc.)
+  - Public methods
+  - Private methods
+  - Event handlers
+- For Node.js controllers:
+  - Validation functions
+  - Main business logic functions
+  - Helper functions
+  - Error-handling functions
+- Keep related functions grouped together.
+- Keep all asynchronous functions clearly marked with `async` and handle errors with `try...catch`.
+- Maintain consistent naming conventions for variables, functions, and files.

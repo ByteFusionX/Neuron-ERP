@@ -16,68 +16,186 @@
     <div class="bg-white shadow-lg">
       <div class="p-8">
         <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
-          <div class="flex flex-wrap -mx-3 mb-6">
-            <!-- Job ID -->
-            <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-              @if(isEditMode()){
-              <div class="mb-2">
-                <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
-                  Job ID
-                </label>
-                <p class="px-3 py-3 rounded-md bg-gray-100 text-gray-700 min-h-[38px] flex items-center">
-                  <ng-icon name="heroIdentification" class="w-4 h-4 text-gray-400 mr-2"></ng-icon>
-                  {{ getJobIdDisplayValue() }}
-                </p>
-              </div>
-              }@else{
-              <app-select-dropdown label="Job ID" [optionLabel]="'jobId'" [optionValue]="'_id'" [options]="jobIds"
-                [isSubmitted]="isSubmitted()" placeholder="Select job ID" [selected]="projectForm.get('jobId')?.value"
-                (onSelected)="onJobSelected($event)"></app-select-dropdown>
-              }
-            </div>
-
-            <!-- Sales Person Name -->
-            <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0">
-              @if(isEditMode()){
-              <div class="mb-2">
-                <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
-                  Sales Person Name
-                </label>
-                <p class="px-3 py-3 rounded-md bg-gray-100 text-gray-700 min-h-[38px] flex items-center">
-                  <ng-icon name="heroUser" class="w-4 h-4 text-gray-400 mr-2"></ng-icon>
-                  {{ getSalesPersonNameFromJobId() }}
-                </p>
-              </div>
-              }@else{
-              <div class="mb-2">
-                <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
-                  Sales Person Name
-                </label>
-                <div class="relative">
-                  <div class="flex items-center px-3 py-3 rounded-md bg-gray-200 text-gray-700 min-h-[38px]">
-                    <ng-icon *ngIf="getSalesPersonNameFromJobId()" name="heroUser" class="w-4 h-4 text-gray-400 mr-2">
-                    </ng-icon>
-                    @if(getSalesPersonNameFromJobId()){
-                    <span class="text-md font-medium">
+          
+          @if(isEditMode()){
+          <div class="w-full mb-6">
+            <div class="relative overflow-x-auto w-full flex gap-6">
+              <table class="w-full text-md text-left rtl:text-right text-black border bg-gray-50">
+                <tbody>
+                  <tr class="border-b">
+                    <td class="px-2 py-2 border text-left font-medium">
+                      Job ID
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      {{getJobIdDisplayValue()}}
+                    </td>
+                    <td class="px-2 py-2 border text-start font-medium">
+                      Sales Person Name
+                    </td>
+                    <td class="px-2 py-2 border text-start">
                       {{ getSalesPersonNameFromJobId() }}
-                    </span>
-                    }@else{
-                    <span class="text-md font-medium text-gray-400">
-                      Select a job to view sales person
-                    </span>
-                    }
-                  </div>
-                  <div class="absolute inset-y-0 right-0 flex items-center pr-3">
-                    <ng-icon name="heroInformationCircle" class="w-4 h-4 text-gray-600"
-                      title="Sales person assigned to the selected job">
-                    </ng-icon>
-                  </div>
+                    </td>
+                  </tr>
+                  
+                  <tr class="border-b">
+                    <td class="px-2 py-2 border text-left font-medium">
+                      Project Name
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      {{getProjectName()}}
+                    </td>
+                    <td class="px-2 py-2 border text-start font-medium">
+                      Expected Start Date (As Per Activity Plan)
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      {{getExpectedStartDate() | date:'dd-MM-yyyy'}}
+                    </td>
+                  </tr>
+                  <tr class="border-b">
+                    <td class="px-2 py-2 border text-left font-medium">
+                      Project Type
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      {{projectDetails()?.projectType | titlecase}}
+                    </td>
+                    <td class="px-2 py-2 border text-start font-medium">
+                      Expected End Date (As Per Activity Plan)
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      {{getExpectedEndDate() | date:'dd-MM-yyyy'}}
+                    </td>
+                  </tr>
+                  <tr class="border-b">
+                    <td class="px-2 py-2 border text-left font-medium">
+                      Project Status
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false" [options]="projectStatus" [value]="projectDetails()?.status">
+                      </app-select-dropdown>
+                    </td>
+                    <td class="px-2 py-2 border text-start font-medium">
+                      Priority
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false" [options]="priority" [value]="projectDetails()?.priority">
+                      </app-select-dropdown>
+                    </td>
+                  </tr>
+                  <tr class="border-b">
+                    <td class="px-2 py-2 border text-left font-medium">
+                      Assigned By
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      {{projectDetails()?.assignedBy?.firstName}} {{projectDetails()?.assignedBy?.lastName}}
+                    </td>
+                    
+                  </tr>
+
+                </tbody>
+              </table>
+            </div>
+          </div>
+          }
+
+          <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Project Progress</h3>
+            
+            <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+              <div 
+                class="h-full bg-violet-600 transition-all duration-500 ease-out rounded-full relative"
+                [style.width.%]="getProjectProgress()">
+                
+                <div 
+                  class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                  [class.animate-pulse]="getProjectProgress() < 100">
                 </div>
               </div>
-              }
+            </div>
+            
+            <div class="flex justify-between items-center mt-3">
+              <div class="flex items-center gap-2">
+                <ng-icon 
+                  [name]="getProgressIcon()" 
+                  [class]="getProgressIconClass()"
+                  class="text-lg">
+                </ng-icon>
+                
+                <span class="text-sm font-medium text-gray-700">
+                  Overall Progress
+                </span>
+              </div>
+              
+              <span class="text-sm font-semibold text-gray-600">
+                {{ getProjectProgress() }}%
+              </span>
+            </div>
+            
+            <div class="flex justify-between items-center mt-2 text-xs text-gray-500">
+              <span>
+                {{ getCompletedActivities() }} of {{ getTotalActivities() }} activities completed
+              </span>
+              <span class="font-medium">
+                {{ getProjectProgress() }}% Complete
+              </span>
             </div>
           </div>
 
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div class="lg:col-span-1">
+                <label class="block mb-1 text-sm font-medium text-gray-700">Supervisors</label>
+                <app-select-dropdown 
+                  [options]="supervisorOptions" 
+                  [multiple]="true" 
+                  [clearable]="true"
+                  [placeholder]="'Select supervisors'"
+                  [value]="projectForm.get('supervisors')?.value"
+                  (onSelected)="projectForm.get('supervisors')?.setValue($event)">
+                </app-select-dropdown>
+              </div>
+              <div class="lg:col-span-2">
+                <label class="block mb-1 text-sm font-medium text-gray-700">Notes</label>
+                <textarea formControlName="notes" rows="3" class="w-full border rounded px-3 py-2 text-sm" placeholder="Add any project notes"></textarea>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-medium text-gray-700">Involved Persons</label>
+                <app-btn size="sm" theme="primary-outline" (buttonClick)="addPersonRow()">
+                  <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
+                  Add Person
+                </app-btn>
+              </div>
+
+              <div class="overflow-x-auto border rounded-lg">
+                <table class="min-w-full bg-white">
+                  <thead class="bg-gray-100 text-gray-700 text-sm">
+                    <tr>
+                      <th class="px-4 py-2 text-left">Name</th>
+                      <th class="px-4 py-2 text-left">Designation</th>
+                      <th class="px-4 py-2 text-right w-16">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody formArrayName="involvedPersons">
+                    <tr class="border-t" *ngFor="let person of involvedPersonsArray.controls; let i = index" [formGroupName]="i">
+                      <td class="px-4 py-2">
+                        <input type="text" formControlName="name" class="w-full border rounded px-3 py-2 text-sm" placeholder="Enter name">
+                      </td>
+                      <td class="px-4 py-2">
+                        <input type="text" formControlName="designation" class="w-full border rounded px-3 py-2 text-sm" placeholder="Enter designation">
+                      </td>
+                      <td class="px-4 py-2 text-right">
+                        <app-btn size="sm" theme="secondary-outline" (buttonClick)="removePersonRow(i)" [disabled]="involvedPersonsArray.length === 1">
+                          <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
+                        </app-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
           <div class="bg-gray-100 p-4 rounded-md w-full">
 

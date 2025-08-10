@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal, HostListener } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
@@ -16,6 +16,8 @@ import { PurchaseRequestModalComponent } from './purchase-request-modal/purchase
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CanDeactivate } from '@angular/router';
 import { Observable } from 'rxjs';
+import { getProject } from 'src/app/shared/interfaces/project.interface';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
   selector: 'app-add-project',
@@ -38,6 +40,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   private jobService = inject(JobService);
   private purchaseService = inject(PurchaseService);
   private dialog = inject(MatDialog);
+  private employeeService = inject(EmployeeService);
 
   projectId: string = '';
   isSaving = signal<boolean>(false);
@@ -46,8 +49,20 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   hasPurchaseRequests = signal<boolean>(false);
   selectedJobId = signal<any>(null);
   originalFormData: any = null;
-  hasUnsavedChanges = signal<boolean>(false);
+  hasUnsavedChanges = signal(false);
   private isNavigatingAway = false;
+  projectDetails = signal<getProject | null>(null);
+  projectStatus = [
+    { id: 'Pending', name: 'Pending' },
+    { id: 'Approved', name: 'Approved' },
+    { id: 'Rejected', name: 'Rejected' }
+  ];
+
+  priority = [
+    { id: 'Low', name: 'Low' },
+    { id: 'Medium', name: 'Medium' },
+    { id: 'High', name: 'High' }
+  ];
 
   jobIds: any[] = [];
   materialRequests: MaterialRequest[] = [];
@@ -71,7 +86,14 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     status: ['', [Validators.required]],
     assignedTo: ['', [Validators.required]],
     materialRequest: [[]],
+    supervisors: [[]],
+    notes: [''],
+    involvedPersons: this.fb.array([
+      this.createPersonGroup()
+    ])
   });
+
+  supervisorOptions: { id: string; name: string }[] = [];
 
   ngOnInit(): void {
     this.getJobIds();
@@ -82,6 +104,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     }
     this.setupFormChangeDetection();
     this.setupBrowserNavigation();
+    this.loadSupervisors();
   }
 
   setupBrowserNavigation(): void {
@@ -104,6 +127,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       next: (response) => {
         console.log(response);
         this.patchProjectDetails(response.data);
+        this.projectDetails.set(response.data);
       },
       error: (error) => {
         console.error('Error fetching project details:', error);
@@ -119,12 +143,24 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       projectType: project.projectType,
       status: project.status,
       assignedTo: project.assignedTo._id,
-      materialRequest: project.materialRequest
+      materialRequest: project.materialRequest,
+      supervisors: project.supervisors || [],
+      notes: project.notes || ''
     });
 
     this.selectedJobId.set(project.jobId);
     
     this.materialRequests = project.materialRequest || [];
+    const persons = Array.isArray(project.involvedPersons) ? project.involvedPersons : [];
+    const array = this.involvedPersonsArray;
+    while (array.length) {
+      array.removeAt(0);
+    }
+    if (persons.length) {
+      persons.forEach((p: any) => array.push(this.createPersonGroup(p.name, p.designation)));
+    } else {
+      array.push(this.createPersonGroup());
+    }
     this.originalFormData = {
       ...this.projectForm.value,
       materialRequest: [...this.materialRequests]
@@ -206,7 +242,10 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       jobId: this.projectForm.value.jobId,
       projectType: this.projectForm.value.projectType,
       status: this.projectForm.value.status,
-      materialRequest: this.materialRequests
+      materialRequest: this.materialRequests,
+      supervisors: this.projectForm.value.supervisors,
+      notes: this.projectForm.value.notes,
+      involvedPersons: this.projectForm.value.involvedPersons
     };
 
     if(this.isEditMode()){
@@ -365,7 +404,6 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   getJobIds(): void {
     this.jobService.getTechnicalDropdownList().subscribe((response: any) => {
-      console.log(response);
       this.jobIds = response.data;
     });
   }
@@ -374,6 +412,22 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     const jobId = this.projectForm.get('jobId')?.value;
     const job = this.jobIds.find((job: any) => job._id === jobId);
     return job?.salesPersonName || this.selectedJobId() ? this.selectedJobId().quotation.createdBy.fullName : '';
+  }
+
+  getProjectName(): string {
+    return this.projectDetails()?.customer.companyName || '';
+  }
+
+  getExpectedStartDate(): Date | null {
+    return this.projectDetails()?.activityPlan.reduce((acc,current)=>{
+      return acc.startDate < current.startDate ? acc : current;
+    }).startDate || null;
+  }
+
+  getExpectedEndDate(): Date | null {
+    return this.projectDetails()?.activityPlan.reduce((acc,current)=>{
+      return acc.endDate > current.endDate ? acc : current;
+    }).endDate || null;
   }
 
   onJobIdChange(jobId: string): void {
@@ -406,5 +460,71 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   private resetUnsavedChanges(): void {
     this.hasUnsavedChanges.set(false);
     this.isNavigatingAway = false;
+  }
+
+  // Progress Bar Methods
+  getProjectProgress(): number {
+    const totalActivities = this.getTotalActivities();
+    const completedActivities = this.getCompletedActivities();
+    
+    if (totalActivities === 0) return 0;
+    return Math.round((completedActivities / totalActivities) * 100);
+  }
+
+  getTotalActivities(): number {
+    if (!this.projectDetails()?.activityPlan) return 0;
+    return this.projectDetails()!.activityPlan.length;
+  }
+
+  getCompletedActivities(): number {
+    if (!this.projectDetails()?.activityPlan) return 0;
+    return this.projectDetails()!.activityPlan.filter(activity => activity.status === 'Closed').length;
+  }
+
+  getProgressIcon(): string {
+    const progress = this.getProjectProgress();
+    
+    if (progress >= 100) return 'heroCheckCircle';
+    if (progress >= 75) return 'heroClock';
+    if (progress >= 50) return 'heroPlayCircle';
+    return 'heroPauseCircle';
+  }
+
+  getProgressIconClass(): string {
+    const progress = this.getProjectProgress();
+    
+    if (progress >= 100) return 'text-green-600';
+    if (progress >= 75) return 'text-blue-600';
+    if (progress >= 50) return 'text-yellow-600';
+    return 'text-gray-600';
+  }
+
+  get involvedPersonsArray(): FormArray {
+    return this.projectForm.get('involvedPersons') as FormArray;
+  }
+
+  createPersonGroup(name: string = '', designation: string = ''): FormGroup {
+    return this.fb.group({
+      name: [name, [Validators.required]],
+      designation: [designation, [Validators.required]]
+    });
+  }
+
+  addPersonRow(): void {
+    this.involvedPersonsArray.push(this.createPersonGroup());
+    this.checkForUnsavedChanges();
+  }
+
+  removePersonRow(index: number): void {
+    if (this.involvedPersonsArray.length > 1) {
+      this.involvedPersonsArray.removeAt(index);
+      this.checkForUnsavedChanges();
+    }
+  }
+
+  loadSupervisors(): void {
+    this.employeeService.getAllEmployees().subscribe((employees) => {
+      this.supervisorOptions = employees.map((e: any) => ({ id: e._id, name: `${e.firstName} ${e.lastName}` }));
+    });
   }
 } 
