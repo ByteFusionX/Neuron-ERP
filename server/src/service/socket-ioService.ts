@@ -23,10 +23,19 @@ export const socketConnection = async (socketIo:Server) => {
             })
 
             socket.on('auth',(token)=> {
-                const jwtPayload = jwt.verify(token,process.env.JWT_SECRET)
-                const userId = (<any>jwtPayload).id;
-                connectedSockets[userId] = socket.id;
-                socket.join(userId)
+                try {
+                    const jwtPayload = jwt.verify(token,process.env.JWT_SECRET)
+                    const userId = (<any>jwtPayload).id;
+                    connectedSockets[userId] = socket.id;
+                    socket.join(userId)
+                } catch (error) {
+                    console.log('Socket JWT verification failed:', error.message);
+                    socket.emit('auth_error', { 
+                        error: 'Authentication failed', 
+                        message: error.message 
+                    });
+                    socket.disconnect();
+                }
             })
 
         })

@@ -5,7 +5,7 @@ import {
   HttpEvent,
   HttpInterceptor
 } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { catchError, Observable, throwError } from 'rxjs';
 import { EmployeeService } from '../../services/employee/employee.service';
 
 @Injectable()
@@ -31,9 +31,16 @@ export class JwtInterceptor implements HttpInterceptor {
           'Authorization': `Bearer ${token}`
         }
       })
-      return next.handle(modifiedReq)
+      return next.handle(modifiedReq).pipe(
+        catchError((err) => {
+          if (err.status === 401 && err.error?.requiresRefresh) {
+            localStorage.removeItem('employeeToken')
+          }
+          return throwError(() => err)
+        })
+      )
+    
     }
-
     return next.handle(request)
   }
 }

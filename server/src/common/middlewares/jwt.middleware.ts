@@ -7,9 +7,19 @@ const TokenLogger = (req: Request, res: Response, next: NextFunction) => {
         if (req.originalUrl.includes('login') || req.originalUrl.includes('uploads') || req.originalUrl.includes('employee/check') || req.header('Authorization')) {
             if (req.headers.authorization) {
                 const token = req.header('Authorization')?.replace('Bearer ', '');
-                const jwtVerified = jwt.verify(token, process.env.JWT_SECRET);
-                if (jwtVerified) {
-                    next()
+                try {
+                    const jwtVerified = jwt.verify(token, process.env.JWT_SECRET);
+                    if (jwtVerified) {
+                        next()
+                    }
+                } catch (jwtError) {
+                    if (jwtError.name === 'TokenExpiredError') {
+                        return res.status(401).json({ error: 'Token has expired' });
+                    } else if (jwtError.name === 'JsonWebTokenError') {
+                        return res.status(401).json({ error: 'Invalid token' });
+                    } else {
+                        return res.status(401).json({ error: 'Token verification failed' });
+                    }
                 }
             } else {
                 next()
@@ -19,7 +29,7 @@ const TokenLogger = (req: Request, res: Response, next: NextFunction) => {
         }
     } catch (error) {
         console.log(error)
-next(error)
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
