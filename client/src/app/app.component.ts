@@ -14,6 +14,8 @@ import { NgIf } from '@angular/common';
 import { SideBarComponent } from './shared/components/side-bar/side-bar.component';
 import { NotificationComponent } from './shared/components/notification/notification.component';
 import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
+import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
+import { ToastrService } from 'ngx-toastr';
 
 @Component({
     selector: 'app-root',
@@ -42,11 +44,30 @@ export class AppComponent implements OnDestroy, OnInit {
     private _notificationService: NotificationService,
     private _employeeService: EmployeeService,
     private dialog: MatDialog,
-    private router: Router
+    private router: Router,
+    private toaster: ToastrService,
+    private idle: Idle
   ) { }
 
 
   ngOnInit() {
+    this.idle.setIdle(14400); // 4 hours
+    this.idle.setTimeout(5);
+    this.idle.setInterrupts(DEFAULT_INTERRUPTSOURCES);
+    this.idle.watch();
+
+
+    this.idle.onTimeout.subscribe(() => {
+      this.toaster.error('Session expired. Please login again.', 'Session Expired', {
+        timeOut: 0,
+        extendedTimeOut: 0,
+        closeButton: true,
+        tapToDismiss: true
+      });
+      localStorage.removeItem('employeeToken');
+      this.router.navigate(['/login']);
+    });
+
     const token = this._employeeService.getToken() as string;;
     if (token) {
       this._notificationService.authSocketIo(token)

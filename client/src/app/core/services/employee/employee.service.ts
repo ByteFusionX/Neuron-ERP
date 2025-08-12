@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap } from 'rxjs';
+import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap, tap } from 'rxjs';
 import { CreateEmployee, FilterEmployee, GetCategory, getEmployee, getEmployeeByID, Target } from 'src/app/shared/interfaces/employee.interface';
 import { login } from 'src/app/shared/interfaces/login';
 import { environment } from 'src/environments/environment';
@@ -94,6 +94,10 @@ export class EmployeeService {
     }
   }
 
+  blockEmployee(employeeId: string) {
+    return this.http.patch(`${this.api}/employee/block/${employeeId}`, {})
+  }
+
   getEmployee(id: string) {
     return this.http.get<getEmployee>(`${this.api}/employee/get/${id}`)
   }
@@ -120,5 +124,22 @@ export class EmployeeService {
 
   deleteEmployee(data: { dataId: string, employeeId: string }): Observable<any> {
     return this.http.post<any>(`${this.api}/employee/delete`, data);
+  }
+
+  checkCurrentUserBlockedStatus(): Observable<getEmployee> {
+    const token = this.employeeToken();
+    if (token) {
+      return this.getEmployee(token.id);
+    }
+    throw new Error('No user token found');
+  }
+
+  refreshToken(): Observable<{ accessToken: string }> {
+    return this.http.post<{ accessToken: string }>(`${this.api}/employee/refresh-token`, {}, { withCredentials: true }).pipe(
+      tap((res) => {
+        localStorage.setItem('employeeToken', res.accessToken);
+      })
+    );
+
   }
 }

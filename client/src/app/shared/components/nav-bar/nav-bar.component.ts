@@ -30,7 +30,7 @@ export class NavBarComponent {
   constructor(
     private _employeeService: EmployeeService,
     private _router: Router,
-    private _notificationService: NotificationService
+    private _notificationService: NotificationService,
   ) { }
 
   ngOnInit() {

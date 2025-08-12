@@ -16,7 +16,9 @@ interface Employee extends Document {
     password: string;
     createdBy: Types.ObjectId;
     targets: Target[];
+    isBlocked: boolean;
     isDeleted: boolean;
+    lastActivity: number;
 }
 
 interface Target {
@@ -124,7 +126,6 @@ const employeeSchema = new Schema<Employee>({
     createdBy: {
         type: Schema.Types.ObjectId,
         ref: 'Employee',
-        required: true
     },
     targets: {
       type: [targetSchema], 
@@ -132,6 +133,14 @@ const employeeSchema = new Schema<Employee>({
     isDeleted: {
         type: Boolean,
         default: false
+    },
+    isBlocked: {
+        type: Boolean,
+        default: false
+    },
+    lastActivity: {
+        type: Number,
+        required: false
     }
 });
 
