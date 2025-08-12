@@ -8,7 +8,7 @@ import quotationModel from "../models/quotation.model";
 import categoryModel, { UserRole } from "../models/category.model";
 import departmentModel from "../models/department.model";
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees, getUSDRated } from "../common/util";
+import { getAllReportedEmployees, getUSDRated } from "../common/utils/util";
 import customerModel from "../models/customer.model";
 import employeeModel from "../models/employee.model";
 import { CostExplorer } from "aws-sdk";
@@ -691,16 +691,26 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
 }
 
+export const msLogin = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employee: any = req.user;
+
+        if (!employee || !employee._id) {
+            return res.send({ employeeNotFoundError: true })
+        }
+
+        const payload = { id: employee._id, employeeId: employee.employeeId }
+        const token = jwt.sign(payload, process.env.JWT_SECRET)
+        return res.status(200).json({ token: token, employeeData: employee })
+    } catch (error) {
+        console.log(error)
+        next(error)
+    }
+}
+
 export const getEmployee = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const employeeId = req.params.id
-        const employeeData = await Employee.findOne(
-            {
-                employeeId: employeeId,
-                isDeleted: { $ne: true }
-            },
-            { password: 0 }
-        ).populate('category');
+        const employeeData = req.user;
 
         if (employeeData) return res.status(200).json(employeeData)
         return res.status(502).json()

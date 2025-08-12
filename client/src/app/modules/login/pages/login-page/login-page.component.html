@@ -62,6 +62,7 @@
                                         class="text-red-500">Password required</p>
                                 </div>
                                 <p *ngIf="passwordNotMatchError" class="text-red-500">Password incorrect.</p>
+                                <p *ngIf="microsoftAccountNotLinkedError" class="text-red-500">No account is linked to this Microsoft user.</p>
 
                             </div>
                             <div class="flex justify-center">
@@ -74,7 +75,27 @@
                             </div>
 
                         </form>
-                    </div> 
+
+                        <div class="flex items-center my-4">
+                            <div class="flex-1 border-t border-gray-300"></div>
+                            <span class="px-3 text-xs text-gray-500">OR</span>
+                            <div class="flex-1 border-t border-gray-300"></div>
+                        </div>
+
+                        <button type="button" (click)="loginWithMicrosoft()" [disabled]="isSigningInWithMicrosoft"
+                            class="w-full flex items-center justify-center px-4 py-2.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                            <svg class="w-5 h-5 mr-3" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11 0H0V11H11V0Z" fill="#F25022"/>
+                                <path d="M23 0H12V11H23V0Z" fill="#7FBA00"/>
+                                <path d="M11 12H0V23H11V12Z" fill="#00A4EF"/>
+                                <path d="M23 12H12V23H23V12Z" fill="#FFB900"/>
+                            </svg>
+                            <span class="text-gray-700 font-medium">
+                                <ng-icon *ngIf="isSigningInWithMicrosoft" class="spin" name="heroArrowPath"></ng-icon>
+                                Continue with Microsoft
+                            </span>
+                        </button>
+                    </div>
                     <div *ngIf="!isEmployeePresent" class="mt-8 w-full bg-white rounded-lg shadow md:mt-0 sm:max-w-md xl:p-0">
                         <div class="p-6 space-y-2 md:space-y-2 sm:p-8">
                             <p class="text-gray-600 mb-4">

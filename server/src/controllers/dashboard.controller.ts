@@ -3,7 +3,7 @@ import quotationModel from "../models/quotation.model";
 import { ObjectId } from "mongodb"
 import employeeModel from "../models/employee.model";
 import jobModel from "../models/job.model";
-import { buildDashboardFilters, calculateCostPricePipe, calculateDiscountPrice, calculateTotalCost, getUSDRated, lastRangedMonths, months, calculateDiscountPricePipe, getDateRange, calculateQuoteDiscountPricePipe } from "../common/util";
+import { buildDashboardFilters, calculateCostPricePipe, calculateDiscountPrice, calculateTotalCost, getUSDRated, lastRangedMonths, months, calculateDiscountPricePipe, getDateRange, calculateQuoteDiscountPricePipe } from "../common/utils/util";
 import categoryModel, { Privileges } from "../models/category.model";
 import { Filters } from "../interface/dashboard.interface";
 import enquiryModel from "../models/enquiry.model";

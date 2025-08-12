@@ -29,6 +29,10 @@ import eventRouter from './routes/event.router';
 import { connectToDatabase } from './db/connect';
 import notificationRouter from './routes/notification.router';
 import customerTypeRouter from './routes/customerType.router';
+import passport from 'passport';
+import { BearerStrategy } from 'passport-azure-ad';
+import { bearerStrategyOptions } from './common/utils/tokenValidator';
+import Employee from './models/employee.model';
 
 const app = express();
 const server = http.createServer(app);
@@ -57,6 +61,32 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
+
+const bearerStrategy = new BearerStrategy(bearerStrategyOptions, async (token: any, done: any) => {
+  try {
+    const oid = token.oid;
+
+    let employeeData = await Employee.findOne(
+      { microsoftId: oid, isDeleted: { $ne: true } },
+      { password: 0 }
+    ).populate('category');
+
+    if (!employeeData && token.email) {
+      employeeData = await Employee.findOneAndUpdate(
+        { email: token.email, isDeleted: { $ne: true } },
+        { microsoftId: oid },
+        { new: true }
+      ).populate('category');
+    }
+
+    return done(null, employeeData ?? {}, token);
+  } catch (error) {
+    return done(error, null);
+  }
+});
+
+app.use(passport.initialize());
+passport.use(bearerStrategy);
 
 app.use(TokenLogger);
 app.use('/', router);

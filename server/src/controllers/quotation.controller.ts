@@ -5,10 +5,10 @@ import Department from '../models/department.model';
 import Employee from '../models/employee.model'
 import Enquiry from "../models/enquiry.model";
 import { Server } from "socket.io";
-import { calculateDiscountPrice, getAllReportedEmployees, getUSDRated } from "../common/util";
+import { calculateDiscountPrice, getAllReportedEmployees, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
-import { removeFile } from '../common/util'
+import { removeFile } from '../common/utils/util'
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import Event from '../models/events.model'
 

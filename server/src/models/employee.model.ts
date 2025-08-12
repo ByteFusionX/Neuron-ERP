@@ -5,6 +5,7 @@ interface Employee extends Document {
     firstName: string;
     lastName: string;
     email: string;
+    microsoftId: string;
     contactNo: number;
     designation: string;
     dob: Date;
@@ -86,6 +87,9 @@ const employeeSchema = new Schema<Employee>({
     email: {
         type: String,
         required: true,
+    },
+    microsoftId: {
+        type: String,
     },
     contactNo: {
         type: Number,

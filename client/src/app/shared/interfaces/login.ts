@@ -4,5 +4,6 @@ export interface login{
     token?:string,
     employeeData?:getEmployee,
     employeeNotFoundError?:boolean,
-    passwordNotMatchError?:boolean
+    passwordNotMatchError?:boolean,
+    microsoftAccountNotLinkedError?:boolean
 }

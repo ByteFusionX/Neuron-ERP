@@ -12,7 +12,8 @@ import { EmployeeService } from '../../services/employee/employee.service';
 export class JwtInterceptor implements HttpInterceptor {
 
   private excludedUrls: string[] = [
-    'https://latest.currency-api.pages.dev/v1/currencies/qar.min.json'
+    'https://latest.currency-api.pages.dev/v1/currencies/qar.min.json',
+    '/employee/ms-login'
   ];
 
   constructor(private _employeeService: EmployeeService) { }

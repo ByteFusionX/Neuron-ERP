@@ -8,6 +8,8 @@ import { CreateEmployeeDialog } from 'src/app/modules/home/pages/employees/creat
 import { login } from 'src/app/shared/interfaces/login';
 import { NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
+import { MsalService } from '@azure/msal-angular';
+import { AuthenticationResult } from '@azure/msal-browser';
 
 @Component({
     selector: 'app-login-page',
@@ -20,7 +22,9 @@ export class LoginPageComponent {
   submit: boolean = false
   employeeNotFoundError: boolean = false
   passwordNotMatchError: boolean = false
+  microsoftAccountNotLinkedError: boolean = false
   isSaving: boolean = false;
+  isSigningInWithMicrosoft: boolean = false;
   isEmployeePresent: boolean = true;
 
 
@@ -34,6 +38,7 @@ export class LoginPageComponent {
     private router: Router,
     private _dialog:MatDialog,
     private _notificationService: NotificationService,
+    private _msalService: MsalService,
   ) { }
 
   loginForm = this._fb.group({
@@ -72,13 +77,7 @@ export class LoginPageComponent {
       this.isSaving = true;
       this.employeeService.employeeLogin(this.loginForm.value).subscribe((res: login) => {
         if (res.employeeData && res.token) {
-          localStorage.setItem('employeeToken', res.token)
-          this.router.navigate(['/home']);
-          if (res.token) {
-            this._notificationService.authSocketIo(res.token)
-            this._notificationService.getEmployeeNotifications(res.token)
-            this._notificationService.initializeNotifications()
-          }
+          this.handleLoginSuccess(res.token);
         }
         else if (res.employeeNotFoundError) {
           this.isSaving = false;
@@ -90,5 +89,39 @@ export class LoginPageComponent {
         }
       })
     }
+  }
+
+  loginWithMicrosoft() {
+    this.microsoftAccountNotLinkedError = false;
+    this.isSigningInWithMicrosoft = true;
+    this._msalService.loginPopup().subscribe({
+      next: (result: AuthenticationResult) => {
+        this.employeeService.employeeLoginWithMicrosoft(result.idToken).subscribe({
+          next: (res: login) => {
+            if (res.employeeData && res.token) {
+              this.handleLoginSuccess(res.token);
+            } else {
+              this.isSigningInWithMicrosoft = false;
+              this.microsoftAccountNotLinkedError = true;
+            }
+          },
+          error: () => {
+            this.isSigningInWithMicrosoft = false;
+            this.microsoftAccountNotLinkedError = true;
+          }
+        });
+      },
+      error: () => {
+        this.isSigningInWithMicrosoft = false;
+      }
+    });
+  }
+
+  private handleLoginSuccess(token: string) {
+    localStorage.setItem('employeeToken', token)
+    this.router.navigate(['/home']);
+    this._notificationService.authSocketIo(token)
+    this._notificationService.getEmployeeNotifications(token)
+    this._notificationService.initializeNotifications()
   }
 }

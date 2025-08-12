@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap } from 'rxjs';
 import { CreateEmployee, FilterEmployee, GetCategory, getEmployee, getEmployeeByID, Target } from 'src/app/shared/interfaces/employee.interface';
@@ -82,6 +82,11 @@ export class EmployeeService {
     return this.http.post(`${this.api}/employee/login`, employeeData)
   }
 
+  employeeLoginWithMicrosoft(microsoftIdToken: string): Observable<login> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${microsoftIdToken}` })
+    return this.http.post<login>(`${this.api}/employee/ms-login`, {}, { headers })
+  }
+
   getToken(): string | null {
     return <string | null>localStorage.getItem('employeeToken')
   }
@@ -98,8 +103,8 @@ export class EmployeeService {
     return this.http.patch(`${this.api}/employee/block/${employeeId}`, {})
   }
 
-  getEmployee(id: string) {
-    return this.http.get<getEmployee>(`${this.api}/employee/get/${id}`)
+  getEmployee() {
+    return this.http.get<getEmployee>(`${this.api}/employee/get`)
   }
 
   isEmployeePresent(): Observable<{ exists: boolean }> {
@@ -110,9 +115,10 @@ export class EmployeeService {
     return this.http.get<getEmployeeByID>(`${this.api}/employee/view/get/${employeeId}?access=${access}&userId=${userId}`)
   }
 
-  getEmployeeData(id: string) {
-    this.getEmployee(id).subscribe(
+  getEmployeeData() {
+    this.getEmployee().subscribe(
       (employeeData: getEmployee) => {
+        console.log(employeeData)
         this.employeeSubject.next(employeeData);
       }
     );
@@ -129,7 +135,7 @@ export class EmployeeService {
   checkCurrentUserBlockedStatus(): Observable<getEmployee> {
     const token = this.employeeToken();
     if (token) {
-      return this.getEmployee(token.id);
+      return this.getEmployee();
     }
     throw new Error('No user token found');
   }
