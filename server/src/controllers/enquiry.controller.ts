@@ -7,7 +7,7 @@ import { Server } from "socket.io";
 import quotationModel from "../models/quotation.model";
 import { uploadFileToAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees } from "../common/util";
+import { getAllReportedEmployees } from "../common/utils/util";
 const { ObjectId } = require('mongodb')
 
 export const createEnquiry = async (req: any, res: Response, next: NextFunction) => {

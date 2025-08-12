@@ -72,7 +72,7 @@ export class SettingsComponnet {
     const employee = this._employeeService.employeeToken()
     if (employee) {
       const employeeId = employee.employeeId
-      this._employeeService.getEmployeeData(employeeId);
+      this._employeeService.getEmployeeData();
     }
 
     this.subscriptions.add(

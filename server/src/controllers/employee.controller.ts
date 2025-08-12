@@ -8,12 +8,13 @@ import quotationModel from "../models/quotation.model";
 import categoryModel, { UserRole } from "../models/category.model";
 import departmentModel from "../models/department.model";
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees, getUSDRated } from "../common/util";
+import { getAllReportedEmployees, getUSDRated } from "../common/utils/util";
 import customerModel from "../models/customer.model";
 import employeeModel from "../models/employee.model";
 import { CostExplorer } from "aws-sdk";
 import notificationModel from "../models/notification.model";
 import mongoose from "mongoose";
+// import {  } from "../common/utils/tokenValidator";
 const ObjectId = require('mongoose').Types.ObjectId;
 
 export const getEmployees = async (req: Request, res: Response, next: NextFunction) => {
@@ -664,39 +665,46 @@ const generateEmployeeId = async () => {
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { employeeId, password } = req.body
-        const employee = await Employee.findOne(
-            {
-                employeeId: employeeId,
-                isDeleted: { $ne: true },
-                isBlocked: { $ne: true }
-            }
-        )
-        if (employee) {
-            const passwordMatch = await bcrypt.compare(password, employee.password)
-            if (passwordMatch) {
-                const payload = { id: employee._id, employeeId: employee.employeeId }
+        console.log(req.user)
+        const idToken = req.headers.authorization.split(' ')[1];
 
-                const token = jwt.sign(payload, process.env.ACCESS_SECRET, { expiresIn: '15m' })
-                const refreshToken = jwt.sign(payload, process.env.REFRESH_SECRET, { expiresIn: '7d' })
+        // const payload = await validateMicrosoftToken(idToken); 
+        // console.log(payload)
+        // const { oid, email, name } = payload;
 
-                employee.lastActivity = Date.now()
-                await employee.save()
+        // const employee = await Employee.findOne(
+        //     {
+        //         employeeId: employeeId,
+        //         isDeleted: { $ne: true },
+        //         isBlocked: { $ne: true }
+        //     }
+        // )
+        // if (employee) {
+        //     const passwordMatch = await bcrypt.compare(password, employee.password)
+        //     if (passwordMatch) {
+        //         const payload = { id: employee._id, employeeId: employee.employeeId }
 
-                res.cookie('refreshToken', refreshToken, {
-                    httpOnly: true,
-                    secure: false,
-                    sameSite: 'lax',
-                    maxAge: 7 * 24 * 60 * 60 * 1000
-                });
+        //         const token = jwt.sign(payload, process.env.ACCESS_SECRET, { expiresIn: '15m' })
+        //         const refreshToken = jwt.sign(payload, process.env.REFRESH_SECRET, { expiresIn: '7d' })
 
-                return res.status(200).json({ token: token, employeeData: employee })
-            } else {
-                return res.send({ passwordNotMatchError: true })
-            }
-        } else {
-            return res.send({ employeeNotFoundError: true })
-        }
+        //         employee.lastActivity = Date.now()
+        //         await employee.save()
+
+        //         res.cookie('refreshToken', refreshToken, {
+        //             httpOnly: true,
+        //             secure: false,
+        //             sameSite: 'lax',
+        //             maxAge: 7 * 24 * 60 * 60 * 1000
+        //         });
+
+        //         return res.status(200).json({ token: token, employeeData: employee })
+        //     } else {
+        //         return res.send({ passwordNotMatchError: true })
+        //     }
+        // } else {
+        //     return res.send({ employeeNotFoundError: true })
+        // }
+        // return res.status(200).json({ payload })
     } catch (error) {
         console.log(error)
         return next(error)
@@ -716,15 +724,8 @@ export const refreshToken = (req: Request, res: Response, next: NextFunction) =>
 
 export const getEmployee = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const employeeId = req.params.id
-        const employeeData = await Employee.findOne(
-            {
-                employeeId: employeeId,
-                isDeleted: { $ne: true }
-            },
-            { password: 0 }
-        ).populate('category');
-
+        const employeeData = req.user;
+        console.log(employeeData)
         if (employeeData) return res.status(200).json(employeeData)
         return res.status(502).json()
     } catch (error) {

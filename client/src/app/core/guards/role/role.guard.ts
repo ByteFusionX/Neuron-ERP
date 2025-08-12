@@ -15,7 +15,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
 
     const employee = employeeService.employeeToken()
     const employeeId = employee.employeeId
-    return employeeService.getEmployee(employeeId).pipe(
+    return employeeService.getEmployee().pipe(
         map((data) => {
             employeeService.employeeSubject.next(data);
             isSuperAdmin = data.category.role == 'superAdmin'

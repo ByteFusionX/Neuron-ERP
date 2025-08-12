@@ -18,7 +18,7 @@ import celebRouter from './routes/celebrationCheck.router';
 import startCronJob from './service/cronService';
 import quoteRouter from './routes/quotation.router';
 import fileRouter from './routes/file.router';
-import TokenLogger from './common/middlewares/jwt.middleware';
+import PassportMiddleware from './common/middlewares/jwt.middleware';
 import jobRouter from './routes/job.router';
 import catRouter from './routes/category.router';
 import { socketConnection } from './service/socket-ioService';
@@ -33,6 +33,10 @@ import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
 import technicalRouter from './routes/technical.router';
+import { bearerStrategyOptions } from './common/utils/tokenValidator';
+import passport from 'passport';
+import { BearerStrategy } from 'passport-azure-ad';
+import Employee from './models/employee.model'
 
 const app = express();
 const server = http.createServer(app);
@@ -61,7 +65,38 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(TokenLogger);
+const bearerStrategy = new BearerStrategy(bearerStrategyOptions, async (token, done) => {
+  try {
+    const oid = token.oid;
+
+    let employeeData = await Employee.findOne(
+      {
+        microsoftId: oid,
+        isDeleted: { $ne: true }
+      },
+      { password: 0 }
+    ).populate('category');
+
+    if (!employeeData) {
+      const email = token.email;
+      const employee = await Employee.findOneAndUpdate({ email, isDeleted: { $ne: true } }, { microsoftId: oid })
+      employeeData = employee
+    }
+
+    if (!employeeData) return done(null, {}, token);
+
+    return done(null, employeeData, token);
+  } catch (error) {
+    return done(error, null);
+  }
+});
+
+
+app.use(passport.initialize());
+passport.use(bearerStrategy);
+
+app.use(PassportMiddleware);
+
 app.use('/', router);
 app.use('/department', depRouter);
 app.use('/employee', empRouter);

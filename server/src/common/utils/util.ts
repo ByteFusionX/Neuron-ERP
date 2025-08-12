@@ -1,9 +1,9 @@
 import { ObjectId } from "mongodb";
-import { Filters } from "../interface/dashboard.interface";
+import { Filters } from "../../interface/dashboard.interface";
 import fs from 'fs';
 import path from 'path';
 import axios from "axios";
-import employeeModel from "../models/employee.model";
+import employeeModel from "../../models/employee.model";
 
 
 export const calculateDiscountPrice = (discount: any, items: any): number => {
@@ -361,7 +361,7 @@ export const removeFile = (fileName: string) => {
     });
 };
 
-const CACHE_FILE = path.join(__dirname, 'exchangeRate.json');
+const CACHE_FILE = path.join(__dirname, '../exchangeRate.json');
 const API_URL = 'https://latest.currency-api.pages.dev/v1/currencies/usd.min.json'; // Replace with your actual API endpoint
 
 export async function fetchExchangeRate() {

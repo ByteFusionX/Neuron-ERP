@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express"
 import jobModel, { allocateStatus, allocateType } from "../models/job.model"
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller';
-import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated } from "../common/util";
+import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated } from "../common/utils/util";
 import technicalModel from '../models/technical.model';
 
 

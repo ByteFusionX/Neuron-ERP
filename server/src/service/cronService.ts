@@ -1,7 +1,7 @@
 import employeeModel from "../models/employee.model";
 import announcementModel from "../models/announcement.model";
 import Notification from "../models/notification.model";
-import { fetchExchangeRate } from "../common/util";
+import { fetchExchangeRate } from "../common/utils/util";
 import Event from '../models/events.model';
 import { createNotification } from '../controllers/notification.controller';
 import { Server } from "socket.io";

@@ -39,7 +39,7 @@ export class NavBarComponent {
     this.employee = this._employeeService.employeeToken()
     if (this.employee) {
       const employeeId = this.employee.employeeId
-      this._employeeService.getEmployeeData(employeeId)
+      this._employeeService.getEmployeeData()
       this.employeeData$ = this._employeeService.employeeData$
 
       this.employeeData$.subscribe((emp) => {

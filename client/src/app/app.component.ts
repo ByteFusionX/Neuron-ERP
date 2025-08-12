@@ -16,6 +16,7 @@ import { NotificationComponent } from './shared/components/notification/notifica
 import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
 import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
 import { ToastrService } from 'ngx-toastr';
+import { MsalService } from '@azure/msal-angular';
 
 @Component({
     selector: 'app-root',
@@ -32,7 +33,8 @@ export class AppComponent implements OnDestroy, OnInit {
   dialogRef: MatDialogRef<CelebrationDialogComponent> | undefined;
   employeeToken: string | null = null;
   employee!: { id: string, employeeId: string };
-
+  apiScope = [`api://afa89863-e652-4049-825f-efa5df28ceec/access_as_user`];
+  token: string | null = null;
   private destroy$ = new Subject<void>();
   private subscriptions: Subscription = new Subscription()
 
@@ -46,6 +48,7 @@ export class AppComponent implements OnDestroy, OnInit {
     private dialog: MatDialog,
     private router: Router,
     private toaster: ToastrService,
+    private authService: MsalService,
     private idle: Idle
   ) { }
 
@@ -68,12 +71,27 @@ export class AppComponent implements OnDestroy, OnInit {
       this.router.navigate(['/login']);
     });
 
-    const token = this._employeeService.getToken() as string;;
-    if (token) {
-      this._notificationService.authSocketIo(token)
-      this._notificationService.getEmployeeNotifications(token)
-      this._notificationService.getEmployeeTextNotifications(token)
-      this._notificationService.initializeNotifications()
+    // Check if there are any accounts available
+    const accounts = this.authService.instance.getAllAccounts();
+    if (accounts.length > 0) {
+      // Set active account if not already set
+      if (!this.authService.instance.getActiveAccount()) {
+        this.authService.instance.setActiveAccount(accounts[0]);
+      }
+
+      const token = this.authService.acquireTokenSilent({
+        scopes: this.apiScope,
+      });
+      
+      token.subscribe((data) => {
+        if (data) {
+          this.token = data.accessToken
+          this._notificationService.authSocketIo(data.accessToken)
+          this._notificationService.getEmployeeNotifications(data.accessToken)
+          this._notificationService.getEmployeeTextNotifications(data.accessToken)
+          this._notificationService.initializeNotifications()
+        }
+      })
     }
 
     this.router.events.subscribe(event => {
@@ -105,18 +123,18 @@ export class AppComponent implements OnDestroy, OnInit {
   }
 
   isLoginRoute(): boolean {
-    const employeeToken = localStorage.getItem('employeeToken');
-    return (employeeToken === null || employeeToken === undefined) || this.route.snapshot.firstChild?.routeConfig?.path === 'login';
+    const accounts = this.authService.instance.getAllAccounts();
+    const isAuthenticated = accounts.length > 0;
+    return !isAuthenticated || this.route.snapshot.firstChild?.routeConfig?.path === 'login';
   }
 
   isUserThere() {
-    this.employeeToken = localStorage.getItem('employeeToken');
     this.getCelebData()
   }
   
 
   getCelebData() {
-    if (this.employeeToken) {
+    if (this.token) {
       this.birthdaysViewed = this._service.hasTodaysBirthdaysBeenViewed();
       if (!this.birthdaysViewed) {
         this.subscriptions.add(

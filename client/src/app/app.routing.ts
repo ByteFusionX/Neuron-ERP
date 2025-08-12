@@ -1,8 +1,8 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
+import { LoginGuard } from './core/guards/login/login.guard';
 import { AuthGuard } from './core/guards/auth/auth.guard';
 import { RoleGuard } from './core/guards/role/role.guard';
-import { LoginGuard } from './core/guards/login/login.guard';
 import { AnnouncementsComponent } from './modules/home/pages/announcements/announcements.component';
 import { ViewEmployeeComponent } from './modules/home/pages/employees/view-employee/view-employee.component';
 import { EmployeesComponent } from './modules/home/pages/employees/employees.component';
