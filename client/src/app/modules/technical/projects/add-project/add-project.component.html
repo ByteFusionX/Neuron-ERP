@@ -16,7 +16,7 @@
     <div class="bg-white shadow-lg">
       <div class="p-8">
         <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
-          
+
           @if(isEditMode()){
           <div class="w-full mb-6">
             <div class="relative overflow-x-auto w-full flex gap-6">
@@ -36,7 +36,7 @@
                       {{ getSalesPersonNameFromJobId() }}
                     </td>
                   </tr>
-                  
+
                   <tr class="border-b">
                     <td class="px-2 py-2 border text-left font-medium">
                       Project Name
@@ -70,14 +70,16 @@
                       Project Status
                     </td>
                     <td class="px-2 py-2 border text-start">
-                      <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false" [options]="projectStatus" [value]="projectDetails()?.status">
+                      <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false"
+                        [options]="projectStatus" [value]="projectDetails()?.status">
                       </app-select-dropdown>
                     </td>
                     <td class="px-2 py-2 border text-start font-medium">
                       Priority
                     </td>
                     <td class="px-2 py-2 border text-start">
-                      <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false" [options]="priority" [value]="projectDetails()?.priority">
+                      <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false"
+                        [options]="priority" [value]="projectDetails()?.priority">
                       </app-select-dropdown>
                     </td>
                   </tr>
@@ -88,7 +90,7 @@
                     <td class="px-2 py-2 border text-start">
                       {{projectDetails()?.assignedBy?.firstName}} {{projectDetails()?.assignedBy?.lastName}}
                     </td>
-                    
+
                   </tr>
 
                 </tbody>
@@ -99,37 +101,32 @@
 
           <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
             <h3 class="text-lg font-semibold text-gray-800 mb-4">Project Progress</h3>
-            
+
             <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-              <div 
-                class="h-full bg-violet-600 transition-all duration-500 ease-out rounded-full relative"
+              <div class="h-full bg-violet-600 transition-all duration-500 ease-out rounded-full relative"
                 [style.width.%]="getProjectProgress()">
-                
-                <div 
-                  class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+
+                <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
                   [class.animate-pulse]="getProjectProgress() < 100">
                 </div>
               </div>
             </div>
-            
+
             <div class="flex justify-between items-center mt-3">
               <div class="flex items-center gap-2">
-                <ng-icon 
-                  [name]="getProgressIcon()" 
-                  [class]="getProgressIconClass()"
-                  class="text-lg">
+                <ng-icon [name]="getProgressIcon()" [class]="getProgressIconClass()" class="text-lg">
                 </ng-icon>
-                
+
                 <span class="text-sm font-medium text-gray-700">
                   Overall Progress
                 </span>
               </div>
-              
+
               <span class="text-sm font-semibold text-gray-600">
                 {{ getProjectProgress() }}%
               </span>
             </div>
-            
+
             <div class="flex justify-between items-center mt-2 text-xs text-gray-500">
               <span>
                 {{ getCompletedActivities() }} of {{ getTotalActivities() }} activities completed
@@ -140,68 +137,11 @@
             </div>
           </div>
 
-          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div class="lg:col-span-1">
-                <label class="block mb-1 text-sm font-medium text-gray-700">Supervisors</label>
-                <app-select-dropdown 
-                  [options]="supervisorOptions" 
-                  [multiple]="true" 
-                  [clearable]="true"
-                  [placeholder]="'Select supervisors'"
-                  [value]="projectForm.get('supervisors')?.value"
-                  (onSelected)="projectForm.get('supervisors')?.setValue($event)">
-                </app-select-dropdown>
-              </div>
-              <div class="lg:col-span-2">
-                <label class="block mb-1 text-sm font-medium text-gray-700">Notes</label>
-                <textarea formControlName="notes" rows="3" class="w-full border rounded px-3 py-2 text-sm" placeholder="Add any project notes"></textarea>
-              </div>
-            </div>
-
-            <div class="mt-4">
-              <div class="flex items-center justify-between mb-2">
-                <label class="text-sm font-medium text-gray-700">Involved Persons</label>
-                <app-btn size="sm" theme="primary-outline" (buttonClick)="addPersonRow()">
-                  <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
-                  Add Person
-                </app-btn>
-              </div>
-
-              <div class="overflow-x-auto border rounded-lg">
-                <table class="min-w-full bg-white">
-                  <thead class="bg-gray-100 text-gray-700 text-sm">
-                    <tr>
-                      <th class="px-4 py-2 text-left">Name</th>
-                      <th class="px-4 py-2 text-left">Designation</th>
-                      <th class="px-4 py-2 text-right w-16">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody formArrayName="involvedPersons">
-                    <tr class="border-t" *ngFor="let person of involvedPersonsArray.controls; let i = index" [formGroupName]="i">
-                      <td class="px-4 py-2">
-                        <input type="text" formControlName="name" class="w-full border rounded px-3 py-2 text-sm" placeholder="Enter name">
-                      </td>
-                      <td class="px-4 py-2">
-                        <input type="text" formControlName="designation" class="w-full border rounded px-3 py-2 text-sm" placeholder="Enter designation">
-                      </td>
-                      <td class="px-4 py-2 text-right">
-                        <app-btn size="sm" theme="secondary-outline" (buttonClick)="removePersonRow(i)" [disabled]="involvedPersonsArray.length === 1">
-                          <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
-                        </app-btn>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-gray-100 p-4 rounded-md w-full">
-
+          <!-- Project Details Section -->
+          <div class="bg-gray-100 p-4 rounded-md w-full mb-6">
             <h2 class="text-lg font-medium mb-4">Project Details</h2>
 
-            <div class="flex flex-wrap  mb-2 w-full">
+            <div class="flex flex-wrap mb-2 w-full">
               <div class="w-1/2">
                 <div class="flex flex-wrap -mx-3 mb-6">
                   <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 flex gap-2 text-lg">
@@ -233,7 +173,7 @@
 
                 <div class="flex flex-wrap -mx-3 mb-6">
                   <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 flex gap-2 text-lg">
-                    <app-btn theme="primary-outline" (click)="openPage('activity-plan')">
+                    <app-btn theme="primary-outline" (click)="openPage('updates')">
                       <ng-icon name="heroClipboardDocumentCheck" class="text-lg mr-1"></ng-icon>
                       Project Updates
                     </app-btn>
@@ -242,8 +182,7 @@
               </div>
             </div>
 
-
-            <div class="flex flex-wrap -mx-3 ">
+            <div class="flex flex-wrap -mx-3">
               <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 flex gap-2">
                 <app-btn theme="primary-outline" (click)="openMaterialRequestModal()" [disabled]="isSaving()"
                   [loading]="isSaving()">
@@ -254,7 +193,6 @@
                   <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
                   Material Request
                   }
-
                 </app-btn>
                 <app-btn theme="secondary-outline" (click)="openPurchaseRequestModal()"
                   [disabled]="isSaving() || !hasPurchaseRequests()" [loading]="isSaving()">
@@ -279,7 +217,7 @@
 
                 <div class="flex flex-wrap -mx-3 mb-6">
                   <div class="w-full px-3 mb-6 md:mb-0 flex gap-2 text-lg">
-                    <app-btn theme="primary-outline" (click)="openPage('activity-plan')">
+                    <app-btn theme="primary-outline" (click)="openPage('claims')">
                       <ng-icon name="heroUserPlus" class="text-lg mr-1"></ng-icon>
                       Claims
                     </app-btn>
@@ -287,9 +225,193 @@
                 </div>
               </div>
             </div>
-
-
           </div>
+
+          <p-accordion value="0" [multiple]="true" class="my-6">
+            <!-- Notes Section -->
+            <p-accordion-panel value="0">
+              <p-accordion-header>
+                <div class="flex items-center gap-2">
+                  <ng-icon name="heroDocumentText" class="text-lg"></ng-icon>
+                  <span class="font-medium">Notes</span>
+                </div>
+              </p-accordion-header>
+              <p-accordion-content>
+                <div class="bg-white p-4">
+                  <app-form-field label="Project Notes" [control]="projectForm.get('notes')" type="textarea"
+                    placeholder="Add any project notes" [isSubmitted]="isSubmitted()">
+                  </app-form-field>
+                </div>
+              </p-accordion-content>
+            </p-accordion-panel>
+
+            <!-- Users and Involved Persons Section -->
+            <p-accordion-panel value="1">
+              <p-accordion-header>
+                <div class="flex items-center gap-2">
+                  <ng-icon name="heroUserGroup" class="text-lg"></ng-icon>
+                  <span class="font-medium">Users and Involved Persons</span>
+                </div>
+              </p-accordion-header>
+              <p-accordion-content>
+                <div class="bg-white p-4">
+                  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                      <label class="block mb-2 text-sm font-medium text-gray-700">Supervisors</label>
+                      <app-select-dropdown [options]="supervisorOptions" [multiple]="true" [clearable]="true"
+                        [placeholder]="'Select supervisors'" [value]="projectForm.get('supervisors')?.value"
+                        (onSelected)="projectForm.get('supervisors')?.setValue($event)">
+                      </app-select-dropdown>
+                    </div>
+                  </div>
+
+                  <div >
+                    <div class="flex items-center justify-between mb-4">
+                      <label class="text-sm font-medium text-gray-700">Involved Persons</label>
+                      <app-btn size="sm" theme="primary-outline" (buttonClick)="addPersonRow()">
+                        <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
+                        Add Person
+                      </app-btn>
+                    </div>
+
+                    <div class="overflow-x-auto border rounded-lg">
+                      <table class="min-w-full bg-white">
+                        <thead class="bg-gray-100 text-gray-700 text-sm">
+                          <tr>
+                            <th class="px-4 py-3 text-left font-medium">Name</th>
+                            <th class="px-4 py-3 text-left font-medium">Designation</th>
+                            <th class="px-4 py-3 text-right w-16 font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody formArrayName="involvedPersons">
+                          <tr class="border-t hover:bg-gray-50"
+                            *ngFor="let person of involvedPersonsArray.controls; let i = index" [formGroupName]="i">
+                            <td class="px-4 py-3">
+                              <input type="text" formControlName="name"
+                                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                placeholder="Enter name">
+                            </td>
+                            <td class="px-4 py-3">
+                              <input type="text" formControlName="designation"
+                                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                placeholder="Enter designation">
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                              <app-btn size="sm" theme="secondary-outline" (buttonClick)="removePersonRow(i)"
+                                [disabled]="involvedPersonsArray.length === 1">
+                                <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
+                              </app-btn>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </p-accordion-content>
+            </p-accordion-panel>
+
+            <!-- Costing and Billing Section -->
+            <p-accordion-panel value="2">
+              <p-accordion-header>
+                <div class="flex items-center gap-2">
+                  <ng-icon name="heroBanknotes" class="text-lg"></ng-icon>
+                  <span class="font-medium">Costing and Billing</span>
+                </div>
+              </p-accordion-header>
+              <p-accordion-content>
+                <div class="bg-white p-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Left Column -->
+                    <div class="space-y-4">
+                      <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <span class="text-sm font-medium text-gray-700">Estimated cost for project:</span>
+                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.estimatedCostForProject }}</span>
+                      </div>
+
+                      <!-- <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <span class="text-sm font-medium text-gray-700">Professional Service charge in lpo:</span>
+                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.professionalServiceCharge
+                          }}</span>
+                      </div> -->
+
+                      <div class="p-3 bg-blue-50 rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Estimated Cost for man power</label>
+                        <input type="number" [value]="getManpowerEstimation()"
+                          (input)="setManpowerEstimation($any($event.target).value)"
+                          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                          placeholder="Enter estimated cost">
+                      </div>
+
+                      <div class="p-3 bg-green-50 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                          <label class="text-sm font-medium text-gray-700">Add other estimations</label>
+                          <app-btn size="sm" theme="primary-outline" (buttonClick)="addEstimationRow()">
+                            <ng-icon name="heroPlus" class="w-4 h-4"></ng-icon>
+                          </app-btn>
+                        </div>
+
+                        <div formArrayName="estimations" class="space-y-2">
+                          <div class="flex gap-2 items-end"
+                            *ngFor="let estimation of estimationsArray.controls; let i = index" [formGroupName]="i">
+                            @if(i !== 0){  
+                            <div class="flex-1">
+                              <input type="text" formControlName="type"
+                                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                placeholder="Estimation type">
+                            </div>
+                            <div class="flex-1">
+                              <input type="number" formControlName="value"
+                                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                                placeholder="Amount">
+                            </div>
+                            <app-btn size="sm" theme="secondary-outline" (buttonClick)="removeEstimationRow(i)"
+                              [disabled]="estimation.get('type')?.value === 'manpower'">
+                              <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
+                            </app-btn>
+                          }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Right Column -->
+                    <div class="space-y-4">
+                      <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <span class="text-sm font-medium text-gray-700">Total LPO Value:</span>
+                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.totalLPOValue }}</span>
+                      </div>
+
+                      <!-- <div class="flex justify-between items-center p-5 rounded-lg"></div> -->
+                      <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                        <span class="text-sm font-medium text-gray-700">Total Amount claimed for manpower:</span>
+                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.totalAmountClaimedForManpower
+                          }}</span>
+                      </div>
+
+                      <div class="flex justify-between items-center p-3 bg-blue-100 rounded-lg">
+                        <span class="text-sm font-medium text-gray-700">Balance amount in hand:</span>
+                        <span class="text-sm font-semibold text-blue-900">{{ getBalanceAmount() }}</span>
+                      </div>
+
+                      <div class="flex flex-wrap -mx-3 mb-6">
+                        <div class="w-full px-3 mb-6 md:mb-0 flex gap-2 text-lg">
+                          <app-btn theme="primary-outline" (click)="openPage('billing-summary')">
+                            <ng-icon name="heroClipboardDocumentList" class="text-lg mr-1"></ng-icon>
+                            Billing Summary
+                          </app-btn>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                
+              </p-accordion-content>
+            </p-accordion-panel>
+          </p-accordion>
+
+
 
 
         </form>

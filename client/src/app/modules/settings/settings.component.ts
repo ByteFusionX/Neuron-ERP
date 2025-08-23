@@ -2,7 +2,9 @@ import { Component } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
+import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { CreateDepartmentDialog } from './pages/create-department/create-department.component';
+import { WorkflowStepsDialogComponent } from './pages/workflow-steps-dialog/workflow-steps-dialog.component';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import { NoteFormComponent } from './pages/note-form/note-form.component';
@@ -11,6 +13,7 @@ import { CreateCategoryComponent } from 'src/app/modules/home/pages/employees/cr
 import { ToastrService } from 'ngx-toastr';
 import { EditCategoryComponent } from './pages/edit-category/edit-category.component';
 import { GetCategory, Privileges, Target } from 'src/app/shared/interfaces/employee.interface';
+import { Workflow, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
 import { InternalDepartmentComponent } from './pages/internal-department/internal-department.component';
 import { CreateCustomerTypeDialog } from './pages/create-customer-type/create-customer-type.component';
@@ -29,6 +32,7 @@ export class SettingsComponnet {
   privileges!: Privileges | undefined;
 
   isTargetEmpty: boolean = false
+  isWorkflowLoading: boolean = true;
 
   openCreateForm: boolean = false;
   isTargetLoading: boolean = true
@@ -45,8 +49,11 @@ export class SettingsComponnet {
   cstcDisplayedColumns: string[] = ['customerNote', 'termsCondition'];
   categoryDisplayedColumns: string[] = ['slNo', 'categoryName', 'role', 'count', 'action'];
   companyTargetColumns: string[] = ['year', 'targetType', 'targetValue', 'critical', 'moderate', 'action'];
+  workflowDisplayedColumns: string[] = ['slNo', 'feature', 'steps'];
 
   targets: Target[] = [];
+  workflows: any[] = [];
+  workflowFeatures = WorkflowFeature;
 
   departmentDataSource: any = new MatTableDataSource();
   internalDepartmentDataSource: any = new MatTableDataSource();
@@ -55,12 +62,14 @@ export class SettingsComponnet {
   cstcDataSource: any = new MatTableDataSource();
   categoryDataSource: any = new MatTableDataSource();
   compnayTargetDataSource: any = new MatTableDataSource();
+  workflowDataSource: any = new MatTableDataSource();
 
   private subscriptions = new Subscription();
   employeeId!: string;
 
   constructor(
     private _profileService: ProfileService,
+    private _workflowService: WorkflowService,
     public dialog: MatDialog,
     private _employeeService: EmployeeService,
     private _toast: ToastrService
@@ -163,6 +172,11 @@ export class SettingsComponnet {
               }
             })
           )
+        }
+
+        // Load workflows for workflow management
+        if (this.privileges?.portalManagement?.department || employee?.category.role == 'superAdmin') {
+          this.loadWorkflows();
         }
 
       })
@@ -429,6 +443,71 @@ export class SettingsComponnet {
         isFirstRow: false
       }
     ]);
+  }
+
+  loadWorkflows(): void {
+    this.isWorkflowLoading = true;
+    this.workflows = Object.values(WorkflowFeature).map(feature => ({ feature, workflow: null }));
+
+    this.subscriptions.add(
+      this._workflowService.getWorkflows().subscribe({
+        next: (response) => {
+          if (response &&response.success && response.data) {
+            response.data.forEach((workflow: Workflow) => {
+              const workflowData = this.workflows.find(w => w.feature === workflow.feature);
+              if (workflowData) {
+                workflowData.workflow = workflow;
+              }
+            });
+          }
+          this.workflowDataSource.data = this.workflows;
+          this.workflowDataSource._updateChangeSubscription();
+          this.isWorkflowLoading = false;
+        },
+        error: (error) => {
+          console.error('Error loading workflows:', error);
+          this.workflowDataSource.data = this.workflows;
+          this.workflowDataSource._updateChangeSubscription();
+          this.isWorkflowLoading = false;
+        }
+      })
+    );
+  }
+
+  openWorkflowStepsDialog(feature: WorkflowFeature, existingWorkflow?: Workflow): void {
+    const dialogRef = this.dialog.open(WorkflowStepsDialogComponent, {
+      width: '600px',
+      data: {
+        feature: feature,
+        existingSteps: existingWorkflow?.steps || [],
+        workflowId: existingWorkflow?._id,
+        isEdit: !!existingWorkflow
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.loadWorkflows();
+      }
+    });
+  }
+
+  getFeatureDisplayName(feature: WorkflowFeature): string {
+    switch (feature) {
+      case WorkflowFeature.CLAIM:
+        return 'Claim';
+      case WorkflowFeature.PROJECT_CLAIM:
+        return 'Project Claim';
+      default:
+        return feature;
+    }
+  }
+
+  getStepsButtonText(workflowData: any): string {
+    if (workflowData.workflow && workflowData.workflow.steps?.length > 0) {
+      return `Edit Steps (${workflowData.workflow.steps.length})`;
+    }
+    return 'Setup Steps';
   }
 
   ngOnDestroy() {

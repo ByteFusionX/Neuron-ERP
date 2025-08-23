@@ -1,0 +1,91 @@
+<div class="relative">
+  <div class="flex">
+    <input
+      [id]="id"
+      type="text"
+      [placeholder]="placeholder"
+      [value]="inputValue"
+      [disabled]="disabled"
+      (input)="onInputChange($event)"
+      (keydown)="onKeyDown($event)"
+      (blur)="onInputBlur()"
+      (focus)="onInputFocus()"
+      class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+      [class.border-red-500]="!emails.length && isSubmitted"
+      autocomplete="off"
+    />
+    <button 
+      type="button"
+      *ngIf="inputValue.trim().length > 0"
+      class="ml-2 px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 flex-shrink-0"
+      [disabled]="disabled"
+      (click)="addCurrentEmail()">
+      Add
+    </button>
+  </div>
+
+  <!-- Suggestions Dropdown -->
+  @if(showSuggestionsDropdown()) {
+    <div class="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+      <!-- API Suggestions -->
+      @for(suggestion of suggestions; track suggestion.email; let i = $index) {
+        <div 
+          class="px-4 py-2 cursor-pointer hover:bg-gray-100 flex items-center"
+          [class.bg-violet-100]="selectedSuggestionIndex === i"
+          (click)="selectSuggestion(suggestion)">
+          <div class="flex flex-col">
+            <span class="text-sm font-medium text-gray-900">{{ suggestion.displayName }}</span>
+            <span class="text-xs text-gray-600">{{ suggestion.email }}</span>
+          </div>
+        </div>
+      }
+      
+      <!-- Manual Add Option - shown when there's input but no suggestions or when user wants to add manually -->
+      @if(inputValue.trim().length > 0 && shouldShowManualAddOption()) {
+        <div 
+          class="px-4 py-2 cursor-pointer hover:bg-gray-100 flex items-center border-t border-gray-200"
+          [class.bg-violet-100]="selectedSuggestionIndex === suggestions.length"
+          (click)="addCurrentEmail()">
+          <div class="flex items-center">
+            <svg class="w-4 h-4 mr-2 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            <div class="flex flex-col">
+              <span class="text-sm font-medium text-gray-900">Add "{{ inputValue.trim() }}"</span>
+              @if(!isValidEmail(inputValue.trim())) {
+                <span class="text-xs text-orange-600">⚠ Please check email format</span>
+              } @else {
+                <span class="text-xs text-gray-600">Add as new contact</span>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Selected Emails -->
+  @if(emails.length > 0) {
+    <div class="flex flex-wrap items-center gap-2 mt-2">
+      @for(email of emails; track email; let i = $index) {
+        <div class="bg-violet-100 text-violet-800 px-3 py-1 rounded-full flex items-center text-sm">
+          <span>{{ email }}</span>
+          <button 
+            type="button" 
+            class="ml-2 text-violet-600 hover:text-violet-800 focus:outline-none"
+            [disabled]="disabled"
+            (click)="removeEmail(i)">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Helper Text -->
+  <div class="text-gray-600 text-xs mt-2">
+    Type to search for contacts or enter email addresses directly. Press Enter to add.
+  </div>
+</div> 

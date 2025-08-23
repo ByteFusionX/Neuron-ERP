@@ -285,6 +285,28 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           route: '/suppliers/approved'
         }
       ]
+    },
+    {
+      id: 'claims',
+      label: 'Claims',
+      icon: 'heroDocumentPlus',
+      route: '/claims',
+      privilegeKey: 'jobSheet',
+      hasDropdown: true,
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'myClaims',
+          label: 'My Claims',
+          route: '/claims/my-claims',
+          notificationKey: 'dealSheetCount'
+        },
+        {
+          id: 'approvalRequests',
+          label: 'Approval Requests',
+          route: '/claims/approval-requests'
+        }
+      ]
     }
   ];
 

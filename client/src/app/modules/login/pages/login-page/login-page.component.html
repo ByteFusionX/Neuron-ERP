@@ -32,14 +32,21 @@
 
                         <div class="space-y-4">
                             <button type="button" (click)="loginWithMicrosoft()" 
-                                class="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                                <svg class="w-5 h-5 mr-3" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                [disabled]="isMicrosoftLoginLoading"
+                                class="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white">
+                                
+                                <div *ngIf="isMicrosoftLoginLoading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700 mr-3"></div>
+                                
+                                <svg *ngIf="!isMicrosoftLoginLoading" class="w-5 h-5 mr-3" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M11 0H0V11H11V0Z" fill="#F25022"/>
                                     <path d="M23 0H12V11H23V0Z" fill="#7FBA00"/>
                                     <path d="M11 12H0V23H11V12Z" fill="#00A4EF"/>
                                     <path d="M23 12H12V23H23V12Z" fill="#FFB900"/>
                                 </svg>
-                                <span class="text-gray-700 font-medium">Continue with Microsoft</span>
+                                
+                                <span class="text-gray-700 font-medium">
+                                    {{ isMicrosoftLoginLoading ? 'Signing in...' : 'Continue with Microsoft' }}
+                                </span>
                             </button>
                         </div>
 
@@ -59,9 +66,14 @@
                             </p>
                         </div>
                         <button type="button" (click)="onCreateSuperAdmin()"
-                            class="w-full text-white bg-violet-700 hover:bg-violet-600 font-medium rounded-lg text-sm px-5 py-3 text-center flex justify-center items-center gap-2 transition-colors duration-200">
-                            <ng-icon name="heroUserCircle" class="text-white text-lg"></ng-icon>
-                            Create Super Admin Account
+                            [disabled]="isSuperAdminLoading"
+                            class="w-full text-white bg-violet-700 hover:bg-violet-600 font-medium rounded-lg text-sm px-5 py-3 text-center flex justify-center items-center gap-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-violet-700">
+                            
+                            <div *ngIf="isSuperAdminLoading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            
+                            <ng-icon *ngIf="!isSuperAdminLoading" name="heroUserCircle" class="text-white text-lg"></ng-icon>
+                            
+                            {{ isSuperAdminLoading ? 'Creating Account...' : 'Create Super Admin Account' }}
                         </button>
                     </div>
                 </div>

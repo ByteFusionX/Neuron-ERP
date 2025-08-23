@@ -9,12 +9,14 @@ import { getEmployee } from '../../interfaces/employee.interface';
 import { Router, RouterModule } from '@angular/router';
 import { NotificationCounts, TextNotification } from '../../interfaces/notification.interface';
 import { NotificationService } from 'src/app/core/services/notification.service';
+import { ButtonComponent } from '../button/button.component';
+import { MsalService } from '@azure/msal-angular';
 
 @Component({
     selector: 'app-nav-bar',
     templateUrl: './nav-bar.component.html',
     styleUrls: ['./nav-bar.component.css'],
-    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule]
+    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent]
 })
 export class NavBarComponent {
   notificationCounts$!: Observable<NotificationCounts>;
@@ -31,26 +33,26 @@ export class NavBarComponent {
     private _employeeService: EmployeeService,
     private _router: Router,
     private _notificationService: NotificationService,
+    private msalService: MsalService
   ) { }
 
   ngOnInit() {
     this.notificationCounts$ = this._notificationService.notificationCounts$;
     this.textNotificationCount$ = this._notificationService.textNotificationsSubject$;
-    this.employee = this._employeeService.employeeToken()
-    if (this.employee) {
-      const employeeId = this.employee.employeeId
-      this._employeeService.getEmployeeData()
-      this.employeeData$ = this._employeeService.employeeData$
-
-      this.employeeData$.subscribe((emp) => {
-
-        if(emp){
-          this.showPortalMangement = Object.values(emp.category.privileges.portalManagement).some(value => value === true);
-        }
-      })
-    }
+    this.getEmployeeData()
   }
 
+  getEmployeeData() {
+    this.employeeData$ = this._employeeService.employeeData$
+    this.employeeData$.subscribe((emp) => {
+      if(emp){
+        console.log(emp)
+        this.showPortalMangement = Object.values(emp.category.privileges.portalManagement).some(value => value === true);
+      }else{
+        this._employeeService.getEmployeeData()
+      }
+    })
+  }
   reduceSideBar() {
     this.showFullBar = !this.showFullBar
     this.reduce.emit(this.showFullBar)
@@ -69,7 +71,8 @@ export class NavBarComponent {
   }
 
   signOut() {
-    localStorage.removeItem('employeeToken')
+    localStorage.clear();
+    sessionStorage.clear();
     this._router.navigate(['/login'])
   }
 

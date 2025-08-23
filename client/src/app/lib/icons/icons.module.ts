@@ -81,7 +81,14 @@ import {
   heroPlusCircle,
   heroClock,
   heroPlayCircle,
-  heroPauseCircle
+  heroPauseCircle,
+  heroArchiveBoxXMark,
+  heroArchiveBoxArrowDown,
+  heroDocumentChartBar,
+  heroPhoto,
+  heroDocumentDuplicate,
+  heroDocumentPlus,
+  heroBanknotes
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -170,7 +177,14 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroPlusCircle,
       heroClock,
       heroPlayCircle,
-      heroPauseCircle
+      heroPauseCircle,
+      heroArchiveBoxXMark,
+      heroArchiveBoxArrowDown,
+      heroDocumentChartBar,
+      heroPhoto,
+      heroDocumentDuplicate,
+      heroDocumentPlus,
+      heroBanknotes
     }),
   ],
   exports: [NgIconsModule]

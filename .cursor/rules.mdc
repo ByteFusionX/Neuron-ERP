@@ -60,3 +60,4 @@ alwaysApply: true
 - Keep related functions grouped together.
 - Keep all asynchronous functions clearly marked with `async` and handle errors with `try...catch`.
 - Maintain consistent naming conventions for variables, functions, and files.
+- Keep tailwind as first option for designing  throughout the project.

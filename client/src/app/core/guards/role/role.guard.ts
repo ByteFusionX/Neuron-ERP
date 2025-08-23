@@ -13,8 +13,6 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
     const toast: ToastrService = inject(ToastrService);
     const employeeService = inject(EmployeeService)
 
-    const employee = employeeService.employeeToken()
-    const employeeId = employee.employeeId
     return employeeService.getEmployee().pipe(
         map((data) => {
             employeeService.employeeSubject.next(data);

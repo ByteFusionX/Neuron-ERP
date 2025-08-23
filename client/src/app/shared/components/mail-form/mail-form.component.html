@@ -1,0 +1,139 @@
+<div class="bg-white w-full max-w-4xl max-h-[95vh]">
+  <!-- Header -->
+  <div class="border-b p-3 px-6 flex justify-between items-center pt-5">
+    <h3 class="text-lg font-medium text-gray-800">
+      {{data.mailData ? 'Edit Mail' : 'Compose Mail'}}
+    </h3>
+    <button type="button" (click)="onCancel()" class="text-gray-500 hover:text-gray-700">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Mail Form -->
+  <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-6  overflow-y-scroll max-h-[77vh]">
+    <form [formGroup]="mailForm">
+      
+      <!-- To Field -->
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-2">
+          <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold">
+            To <span class="text-red-500">*</span>
+          </label>
+          <button 
+            type="button" 
+            (click)="toggleCC()" 
+            class="text-sm text-violet-700 hover:text-violet-600">
+            {{showCC() ? 'Hide CC' : 'Add CC'}}
+          </button>
+        </div>
+        <app-email-tag-input
+          placeholder="Enter recipient emails..."
+          [isSubmitted]="isSubmitted()"
+          formControlName="to">
+        </app-email-tag-input>
+        @if(f['to'].invalid && isSubmitted()) {
+          <div class="text-red-700 text-sm mt-1">
+            At least one recipient is required
+          </div>
+        }
+      </div>
+
+      <!-- CC Field (Conditional) -->
+      @if(showCC()) {
+        <div class="mb-6">
+          <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">
+            CC
+          </label>
+          <app-email-tag-input
+            placeholder="Enter CC emails..."
+            [isSubmitted]="isSubmitted()"
+            formControlName="cc">
+          </app-email-tag-input>
+        </div>
+      }
+
+      <!-- Subject Field -->
+      <app-form-field 
+        label="Subject" 
+        [control]="f['subject']" 
+        [isSubmitted]="isSubmitted()"
+        placeholder="Enter email subject">
+      </app-form-field>
+
+     
+
+      <!-- Message Field -->
+      <div class="mb-6">
+        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="message">
+          Message <span class="text-red-500">*</span>
+        </label>
+        <textarea 
+          id="message"
+          placeholder="Enter your message..."
+          [class.border-red-500]="f['message'].invalid && isSubmitted()" 
+          class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 min-h-48 resize-y"
+          formControlName="message">
+        </textarea>
+        @if(f['message'].invalid && isSubmitted()) {
+          <div class="text-red-700 text-sm mt-1">
+            Message is required
+          </div>
+        }
+      </div>
+
+       <!-- Attachments -->
+       <div class="mb-6">
+
+        <app-upload-file 
+          (fileUpload)="onFileUpload($event)"
+          [isPadding]="false"
+          [selectedFiles]="selectedFiles">
+        </app-upload-file>
+      </div>
+
+      <!-- Action Buttons -->
+      
+    </form>
+  </div>
+  <div class="border-t p-4 flex justify-between items-center">
+    
+
+    <app-btn 
+      theme="cancel" 
+      type="button" 
+      variant="outline"
+      (buttonClick)="onCancel()">
+      Cancel
+    </app-btn>
+    <div class="flex gap-3">
+      
+      @if(!data.mailData) {
+      <app-btn 
+        theme="secondary"
+        type="button"
+        [disabled]="isSaving()"
+        (buttonClick)="onDraft()">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+        </svg>
+        Save Draft
+      </app-btn>
+    }
+      <app-btn 
+        theme="primary"
+        type="button"
+        [loading]="isSaving()"
+        [disabled]="isSaving()"
+        (buttonClick)="onSend()">
+        <ng-icon name="heroPaperAirplane" class="text-white"></ng-icon>
+        @if(data.mailData) {
+          Edit & Send
+        } @else {
+          Send
+        }
+      </app-btn>
+    </div>
+  </div>
+</div>

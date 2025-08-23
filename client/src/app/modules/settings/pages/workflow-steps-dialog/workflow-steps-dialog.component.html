@@ -1,0 +1,125 @@
+<div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between">
+    <h3 class="text-md font-medium">{{ dialogTitle }}</h3>
+    <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onCloseClicked()">
+        <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+    </button>
+</div>
+
+<div class="p-5 ">
+    <!-- Category Selection -->
+    <div class="mb-4">
+        <label class="block text-gray-700 text-sm font-bold mb-2">
+            Select Role to Add:
+        </label>
+        <div class="flex gap-2">
+            <ng-select 
+                [formControl]="selectedCategory"
+                placeholder="Choose a category..."
+                bindLabel="categoryName" 
+                bindValue="_id"
+                class="flex-1">
+                <ng-option *ngFor="let category of categories$ | async" [value]="category._id">
+                    {{ category.categoryName }}
+                </ng-option>
+            </ng-select>
+            <button 
+                type="button"
+                class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
+                (click)="addStep()"
+                [disabled]="!selectedCategory.value">
+                Add
+            </button>
+        </div>
+    </div>
+
+    <!-- Manager Approval Checkbox -->
+    <div class="mb-4">
+        <div class="flex items-center gap-2">
+            <input 
+                type="checkbox" 
+                id="needsManagerApproval"
+                [formControl]="needsManagerApproval"
+                class="w-4 h-4 text-violet-600 bg-gray-100 border-gray-300 rounded focus:ring-violet-500 focus:ring-2">
+            <label for="needsManagerApproval" class="text-sm font-medium text-gray-700">
+                Requires Reporting Manager Approval
+            </label>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">
+            When enabled, the workflow will automatically include a reporting manager approval step
+        </p>
+    </div>
+
+    <!-- Steps List -->
+    <div class="mb-4">
+        <label class="block text-gray-700 text-sm font-bold mb-2">
+            Approval Workflow Steps:
+        </label>
+        
+        <div *ngIf="steps.length === 0" class="text-gray-500 text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+            <ng-icon name="heroInboxStack" class="text-3xl mb-2"></ng-icon>
+            <p>No approval steps added yet</p>
+            <p class="text-sm">Add roles above to create the workflow</p>
+        </div>
+
+        <div 
+            *ngIf="steps.length > 0"
+            cdkDropList 
+            (cdkDropListDropped)="onDrop($event)"
+            class="space-y-2">
+            
+            <div 
+                *ngFor="let step of steps; let i = index; trackBy: trackByIndex"
+                cdkDrag
+                class="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center justify-between hover:bg-gray-100 transition-colors cursor-move">
+                
+                <div class="flex items-center gap-3">
+                    <div class="flex-shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center font-semibold text-sm">
+                        {{ step.order }}
+                    </div>
+                    <div>
+                        <p class="font-medium text-gray-900">{{ step.role.categoryName }}</p>
+                        <p class="text-sm text-gray-500">Step {{ step.order }} of approval process</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <ng-icon name="heroBars3" class="text-gray-400 cursor-move" cdkDragHandle></ng-icon>
+                    <button 
+                        type="button"
+                        class="text-red-500 hover:text-red-700 p-1"
+                        (click)="removeStep(i)">
+                        <ng-icon name="heroTrash" class="text-sm"></ng-icon>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Info Message -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+        <div class="flex items-start gap-2">
+            <ng-icon name="heroInformationCircle" class="text-blue-500 text-lg mt-0.5"></ng-icon>
+            <div class="text-sm text-blue-700">
+                <p class="font-medium mb-1">Drag and drop to reorder steps</p>
+                <p>The order determines the sequence of approval required for this workflow.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="border border-white border-t-gray-300 p-3 px-6 flex justify-end gap-2">
+    <button 
+        class="bg-orange-600 hover:bg-orange-500 text-white font-medium py-2 px-4 rounded text-sm"  
+        type="button"
+        (click)="onCloseClicked()">
+        Cancel
+    </button>
+    <button 
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm disabled:bg-gray-400 disabled:cursor-not-allowed" 
+        [disabled]="isSaving || steps.length === 0"
+        (click)="onSave()">
+        <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
+        {{ saveButtonText }}
+    </button>
+</div> 

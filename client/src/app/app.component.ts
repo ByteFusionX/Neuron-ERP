@@ -17,6 +17,7 @@ import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
 import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
 import { ToastrService } from 'ngx-toastr';
 import { MsalService } from '@azure/msal-angular';
+import { environment } from 'src/environments/environment';
 
 @Component({
     selector: 'app-root',
@@ -33,7 +34,6 @@ export class AppComponent implements OnDestroy, OnInit {
   dialogRef: MatDialogRef<CelebrationDialogComponent> | undefined;
   employeeToken: string | null = null;
   employee!: { id: string, employeeId: string };
-  apiScope = [`api://afa89863-e652-4049-825f-efa5df28ceec/access_as_user`];
   token: string | null = null;
   private destroy$ = new Subject<void>();
   private subscriptions: Subscription = new Subscription()
@@ -61,13 +61,7 @@ export class AppComponent implements OnDestroy, OnInit {
 
 
     this.idle.onTimeout.subscribe(() => {
-      this.toaster.error('Session expired. Please login again.', 'Session Expired', {
-        timeOut: 0,
-        extendedTimeOut: 0,
-        closeButton: true,
-        tapToDismiss: true
-      });
-      localStorage.removeItem('employeeToken');
+      localStorage.clear();
       this.router.navigate(['/login']);
     });
 
@@ -80,15 +74,15 @@ export class AppComponent implements OnDestroy, OnInit {
       }
 
       const token = this.authService.acquireTokenSilent({
-        scopes: this.apiScope,
+        scopes: [environment.microsoftApiUrl],
       });
       
       token.subscribe((data) => {
         if (data) {
           this.token = data.accessToken
           this._notificationService.authSocketIo(data.accessToken)
-          this._notificationService.getEmployeeNotifications(data.accessToken)
-          this._notificationService.getEmployeeTextNotifications(data.accessToken)
+          this._notificationService.getEmployeeNotifications()
+          this._notificationService.getEmployeeTextNotifications()
           this._notificationService.initializeNotifications()
         }
       })

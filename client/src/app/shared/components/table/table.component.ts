@@ -37,8 +37,7 @@ import { PaginationService } from 'src/app/core/services/pagination.service';
     InputNumberModule
   ],
   templateUrl: './table.component.html',
-  styleUrls: ['./table.component.css'],
-  providers: [PaginationService]
+  styleUrls: ['./table.component.css']
 })
 export class TableComponent implements OnInit, OnChanges {
   @Input() data: any[] = [];
@@ -50,10 +49,12 @@ export class TableComponent implements OnInit, OnChanges {
   @Input() totalItems: number = 0;
   @Input() isEmpty: boolean = true;
   @Input() tableId: string = '';
+  @Input() showPagination: boolean = true;
 
   @Output() rowClick = new EventEmitter<any>();
   @Output() actionClick = new EventEmitter<{ action: string, item: any, event: Event }>();
   @Output() filterChange = new EventEmitter<TableFilter[]>();
+  @Output() paginationChange = new EventEmitter<{ page: number, row: number }>();
 
   @ContentChild('sideColumn') sideColumns!: TemplateRef<any>;
 
@@ -190,6 +191,22 @@ export class TableComponent implements OnInit, OnChanges {
       (obj && obj[key] !== undefined) ? obj[key] : null, item);
   }
 
+  formatCurrencyWithSpace(item: any, column: TableColumn): string {
+    const value = this.getCellValue(item, column);
+    if (value == null || value === undefined) return '';
+    
+    const currencyCode = column.pipeParams?.currency || 'USD';
+    const formatted = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+    
+    // Add space between currency symbol and number
+    return formatted.replace(/([^\d.,\s])(\d)/, '$1 $2');
+  }
+
   preventClick(event: Event): void {
     event.stopPropagation();
   }
@@ -236,5 +253,14 @@ export class TableComponent implements OnInit, OnChanges {
       column.clickFunction(item);
       event.stopPropagation();
     }
+  }
+
+  onPaginationChange(event: { page: number, row: number }): void {
+    this.paginationService.updatePaginationState({
+      page: event.page,
+      row: event.row,
+      total: this.totalItems
+    });
+    this.paginationChange.emit(event);
   }
 }

@@ -20,6 +20,7 @@ export interface TableColumn {
     cellRenderer?: (item: any) => any;
     clickable?: boolean;
     clickFunction?: (item: any) => void;
+    clickableValue?: (item: any) => any;
 }
 
 export interface TableAction {

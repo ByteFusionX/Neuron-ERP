@@ -31,7 +31,7 @@
   </div>
 
 
-  <div class="m-8 overflow-hidden">
+  <div class="m-8 overflow-hidden pb-8">
     <!-- Table with fixed header -->
     <section class="mat-elevation-z8 h-fit max-h-[calc(100vh-40vh)] shadow-sm " >
       <!-- Fixed table container with consistent width -->
@@ -116,8 +116,8 @@
 
                 <!-- Text, Number, Boolean -->
                 <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
-                  <span *ngIf="!column.clickable">{{ getCellValue(item, column) }}</span>
-                  <span *ngIf="column.clickable" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
+                  <span *ngIf="!column.clickable || !column?.clickableValue(item)" >{{ getCellValue(item, column) }}</span>
+                  <span *ngIf="column.clickable && column?.clickableValue(item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
                 </ng-container>
 
                 <!-- Date -->
@@ -127,9 +127,7 @@
 
                 <!-- Currency -->
                 <ng-container *ngIf="column.type === 'currency'">
-                  {{ getCellValue(item, column) | currency:(column.pipeParams?.currency ||
-                  'USD'):(column.pipeParams?.format ||
-                  '1.2-2') }}
+                  {{ formatCurrencyWithSpace(item, column) }}
                 </ng-container>
 
                 <!-- Status Badge -->
@@ -183,9 +181,9 @@
       </div>
     </section>
 
-    <div class="w-full bg-white mt-4" *ngIf="!isEmpty">
+    <div class="w-full bg-white mt-4" *ngIf="!isEmpty && showPagination">
       <app-pagination [page]="paginationService.paginationState().page" [row]="paginationService.paginationState().row"
-        [total]="paginationService.paginationState().total">
+        [total]="paginationService.paginationState().total" (changeData)="onPaginationChange($event)">
       </app-pagination>
     </div>
   </div>

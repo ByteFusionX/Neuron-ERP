@@ -44,6 +44,11 @@ import { OpenToWorkProjectComponent } from './modules/technical/open-to-work/ope
 import { ActivityPlanComponent } from './modules/technical/projects/add-project/activity-plan/activity-plan.component';
 import { TasksComponent } from './modules/technical/projects/add-project/tasks/tasks.component';
 import { IssuesListComponent } from './modules/technical/projects/add-project/issues/list/issues-list.component';
+import { ProjectUpdatesComponent } from './modules/technical/projects/add-project/project-updates/project-updates.component';
+import { ViewProjectUpdateComponent } from './modules/technical/projects/add-project/project-updates/view-project-update/view-project-update.component';
+import { ClaimsComponent } from './modules/claims/claims.component';
+import { BillingSummaryComponent } from './modules/technical/projects/add-project/billing-summary/billing-summary.component';
+import { RequestForApprovalsComponent } from './modules/claims/request-for-approvals/request-for-approvals.component';
 
 
 export const routes: Routes = [
@@ -191,11 +196,23 @@ export const routes: Routes = [
       { path: 'project/add', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/edit/:id', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/activity-plan/:id', component: ActivityPlanComponent},
+      { path: 'project/updates/:id', component: ProjectUpdatesComponent},
+      { path: 'project/updates/:technicalId/:updateId', component: ViewProjectUpdateComponent},
       { path: 'project/tasks/:id', component: TasksComponent},
       { path: 'project/issues/:id', component: IssuesListComponent},
+      { path: 'project/claims/:id', component: ClaimsComponent},
+      { path: 'project/billing-summary/:id', component: BillingSummaryComponent},
       { path: 'mr-requests', component: MrRequestsComponent },
       { path: 'open-to-work-project', component: OpenToWorkProjectComponent },
       { path: 'mr-requests', component: MrRequestsComponent }
+    ]
+  },
+  {
+    path: 'claims',
+    // loadComponent: () => import('./modules/claims/claims.component').then((c) => c.ClaimsComponent),
+    children: [
+      { path: 'my-claims', component: ClaimsComponent },
+      { path: 'approval-requests', component: RequestForApprovalsComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

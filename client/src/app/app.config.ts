@@ -40,8 +40,8 @@ export function loggerCallback(logLevel: LogLevel, message: string) {
 export function MSALInstanceFactory(): IPublicClientApplication {
   return new PublicClientApplication({
     auth: {
-      clientId: 'afa89863-e652-4049-825f-efa5df28ceec',
-      authority: 'https://login.microsoftonline.com/37523550-92de-4ec6-8e2c-9a7ebc99d8e6',
+      clientId: environment.microsoftClientId,
+      authority: `https://login.microsoftonline.com/${environment.microsoftTenantId}`,
       redirectUri: 'http://localhost:4200',
     },
     cache: {
@@ -51,7 +51,7 @@ export function MSALInstanceFactory(): IPublicClientApplication {
     system: {
       loggerOptions: {
         loggerCallback,
-        logLevel: LogLevel.Info,
+        logLevel: LogLevel.Warning,
         piiLoggingEnabled: false
       }
     }
@@ -61,7 +61,9 @@ export function MSALInstanceFactory(): IPublicClientApplication {
 export function MSALInterceptorConfigFactory(): MsalInterceptorConfiguration {
   const protectedResourceMap = new Map<string, Array<string>>();
   protectedResourceMap.set('https://graph.microsoft.com/v1.0/me', ['user.read']);
-  protectedResourceMap.set(environment.api, ['api://afa89863-e652-4049-825f-efa5df28ceec/access_as_user']);
+  protectedResourceMap.set('https://graph.microsoft.com/v1.0/me/contacts', ['Contacts.Read','Contacts.ReadWrite']);
+  protectedResourceMap.set('https://graph.microsoft.com/v1.0/me/people', ['People.Read','People.Read.All']);
+  protectedResourceMap.set(environment.api, [environment.microsoftApiUrl]);
 
   return {
     interactionType: InteractionType.Redirect,
@@ -73,7 +75,7 @@ export function MSALGuardConfigFactory(): MsalGuardConfiguration {
   return {
     interactionType: InteractionType.Redirect,
     authRequest: {
-      scopes: ['user.read']
+      scopes: ['user.read', 'Contacts.Read', 'Contacts.ReadWrite', 'People.Read', 'People.Read.All']
     }
   };
 }

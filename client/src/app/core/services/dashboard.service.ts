@@ -42,28 +42,28 @@ export class DashboardService {
 
     constructor(private http: HttpClient) { }
 
-    getDashboardMetrics(userId: any, filters: Filters): Observable<Metric[]> {
-        return this.http.post<Metric[]>(`${this.apiUrl}/dashboard/metrics`, { userId, filters })
+    getDashboardMetrics(filters: Filters): Observable<Metric[]> {
+        return this.http.post<Metric[]>(`${this.apiUrl}/dashboard/metrics`, { filters })
     }
 
-    getRevenuePerSalesperson(userId: any, filters: Filters): Observable<RevenuePerPerson[]> {
-        return this.http.post<RevenuePerPerson[]>(`${this.apiUrl}/dashboard/revenueperperson`, { userId, filters })
+    getRevenuePerSalesperson(filters: Filters): Observable<RevenuePerPerson[]> {
+        return this.http.post<RevenuePerPerson[]>(`${this.apiUrl}/dashboard/revenueperperson`, { filters })
     }
 
-    getGrossProfitForLastSevenMonths(userId: any, filters: Filters): Observable<ProfitPerMonth> {
-        return this.http.post<ProfitPerMonth>(`${this.apiUrl}/dashboard/grossProfitForLastSevenMonths`, { userId, filters })
+    getGrossProfitForLastSevenMonths(filters: Filters): Observable<ProfitPerMonth> {
+        return this.http.post<ProfitPerMonth>(`${this.apiUrl}/dashboard/grossProfitForLastSevenMonths`, { filters })
     }
 
-    getEnquirySalesConversion(userId: any, filters: Filters): Observable<SalesConversion> {
-        return this.http.post<SalesConversion>(`${this.apiUrl}/dashboard/enquirySalesConversion`, { userId, filters })
+    getEnquirySalesConversion(filters: Filters): Observable<SalesConversion> {
+        return this.http.post<SalesConversion>(`${this.apiUrl}/dashboard/enquirySalesConversion`, { filters })
     }
 
-    getPresaleJobSalesConversion(userId: any, filters: Filters): Observable<SalesConversion> {
-        return this.http.post<SalesConversion>(`${this.apiUrl}/dashboard/presaleSalesConversion`, { userId, filters })
+    getPresaleJobSalesConversion(filters: Filters): Observable<SalesConversion> {
+        return this.http.post<SalesConversion>(`${this.apiUrl}/dashboard/presaleSalesConversion`, { filters })
     }
 
-    getRePresaleJobSalesConversion(userId: any, filters: Filters): Observable<SalesConversion> {
-        return this.http.post<SalesConversion>(`${this.apiUrl}/dashboard/rePresaleSalesConversion`, { userId, filters })
+    getRePresaleJobSalesConversion(filters: Filters): Observable<SalesConversion> {
+        return this.http.post<SalesConversion>(`${this.apiUrl}/dashboard/rePresaleSalesConversion`, { filters })
     }
 
     updateGuageChart(updatedValues: { targetValue?: number, badRange?: number, moderateRange?: number, companyRevenue?: number }) {

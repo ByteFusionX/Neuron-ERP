@@ -1,0 +1,25 @@
+<data-table
+        [data]="tableData"
+        [columns]="tableColumns"
+        [title]="pageTitle"
+        [isLoading]="isLoading"
+        [totalItems]="totalItems"
+        [isEmpty]="isEmpty"
+        [tableId]="'claims-' + claimType"
+        (rowClick)="onViewApprovalStatus($event)"
+        (actionClick)="onActionClick($event)"
+        (filterChange)="onFilterChange($event)"
+        (paginationChange)="onPaginationChange($event)">
+
+  <ng-template #sideColumn>
+    <app-btn theme="secondary-outline" (buttonClick)="onRefreshClaims()">
+      <ng-icon name="heroArrowPath"></ng-icon>
+        Refresh
+    </app-btn>
+
+    <app-btn theme="primary" (buttonClick)="onCreateClaim()">
+      <ng-icon name="heroPlus"></ng-icon>
+        Create Claim
+    </app-btn>
+  </ng-template>
+</data-table>

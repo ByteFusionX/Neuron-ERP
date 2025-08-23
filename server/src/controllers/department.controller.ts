@@ -9,8 +9,6 @@ import { newTrash } from '../controllers/trash.controller'
 
 export const getDepartments = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        console.log(req.user)
-
         const departments = await Department.aggregate([
             {
                 $match: {
@@ -32,7 +30,7 @@ export const getDepartments = async (req: Request, res: Response, next: NextFunc
         return res.status(204).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -48,7 +46,7 @@ export const createDepartment = async (req: Request, res: Response, next: NextFu
         return res.status(502).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -65,7 +63,7 @@ export const updateDepartment = async (req: Request, res: Response, next: NextFu
         return res.status(502).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -93,7 +91,7 @@ export const getCustomerDepartments = async (req: Request, res: Response, next: 
         return res.status(204).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -109,7 +107,7 @@ export const createCustomerDepartment = async (req: Request, res: Response, next
         return res.status(502).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -136,7 +134,7 @@ export const updateCustomerDepartment = async (req: Request, res: Response, next
         return res.status(502).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -217,7 +215,7 @@ export const totalEnquiries = async (req: Request, res: Response, next: NextFunc
         return res.status(502).json();
     } catch (error) {
         console.log(error)
-next(error);
+        next(error);
     }
 }
 
@@ -233,7 +231,7 @@ export const createInternalDepartment = async (req: Request, res: Response, next
         return res.status(502).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -259,7 +257,7 @@ export const getInternalDepartments = async (req: Request, res: Response, next: 
         return res.status(204).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -286,7 +284,7 @@ export const updateInternalDepartment = async (req: Request, res: Response, next
         return res.status(502).json()
     } catch (error) {
         console.log(error)
-next(error)
+        next(error)
     }
 }
 
@@ -336,7 +334,7 @@ export const deleteInternalDepartment = async (req: Request, res: Response, next
         await internalDepartment.findByIdAndUpdate(dataId, {
             isDeleted: true
         });
-        
+
         newTrash('InternalDepartment', dataId, employee)
 
         return res.status(200).json({

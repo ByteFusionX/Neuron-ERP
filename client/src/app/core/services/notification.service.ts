@@ -127,14 +127,14 @@ export class NotificationService {
         this.notificationsSubject.next(updatedCounts);
     }
 
-    getEmployeeNotifications(token: string) {
-        this.http.get<NotificationCounts>(`${this.api}/employee/notifications/${token}`).subscribe((data) => {
+    getEmployeeNotifications() {
+        this.http.get<NotificationCounts>(`${this.api}/employee/notifications`).subscribe((data) => {
             this.notificationsSubject.next(data);
         })
     }
 
-    getEmployeeTextNotifications(token: string) {
-        this.http.get<{ viewed: TextNotification[], unviewed: TextNotification[] }>(`${this.api}/notification/${token}`).subscribe((data) => {
+    getEmployeeTextNotifications() {
+        this.http.get<{ viewed: TextNotification[], unviewed: TextNotification[] }>(`${this.api}/notification`).subscribe((data) => {
             this.textNotificationsSubject.next(data)
         })
     }

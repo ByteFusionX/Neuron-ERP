@@ -82,43 +82,43 @@ export const buildDashboardFilters = (filters: Filters, accessFilter: any) => {
 export const getDateRange = (fromDate: string, toDate: string) => {
     let gte: Date, lte: Date;
     const currentDate = new Date();
-    
+
     // Case 1: No dates provided
     if (!toDate && !fromDate) {
-      gte = new Date(currentDate);
-      gte.setFullYear(currentDate.getFullYear() - 1);
-      lte = currentDate;
-    } 
+        gte = new Date(currentDate);
+        gte.setFullYear(currentDate.getFullYear() - 1);
+        lte = currentDate;
+    }
     // Case 2: Only toDate provided
     else if (!fromDate && toDate) {
-      lte = new Date(toDate);
-      gte = new Date(lte);
-      gte.setFullYear(lte.getFullYear() - 1);
-    } 
+        lte = new Date(toDate);
+        gte = new Date(lte);
+        gte.setFullYear(lte.getFullYear() - 1);
+    }
     // Case 3: Only fromDate provided
     else if (fromDate && !toDate) {
-      gte = new Date(fromDate);
-      lte = currentDate;
-    } 
+        gte = new Date(fromDate);
+        lte = currentDate;
+    }
     // Case 4: Both dates provided
     else if (fromDate && toDate) {
-      gte = new Date(fromDate);
-      lte = new Date(toDate);
-      
-      // Check if there's approximately a one-month gap
-      const monthsDiff = (lte.getFullYear() - gte.getFullYear()) * 12 + (lte.getMonth() - gte.getMonth());
-      
-      if (monthsDiff <= 1) {
-        // Set gte to first day of previous month
-        gte = new Date(gte.getFullYear(), gte.getMonth() - 2, 1);
-        
-        // Set lte to last day of next month
-        lte = new Date(lte.getFullYear(), lte.getMonth() + 1, 0);
-      }
+        gte = new Date(fromDate);
+        lte = new Date(toDate);
+
+        // Check if there's approximately a one-month gap
+        const monthsDiff = (lte.getFullYear() - gte.getFullYear()) * 12 + (lte.getMonth() - gte.getMonth());
+
+        if (monthsDiff <= 1) {
+            // Set gte to first day of previous month
+            gte = new Date(gte.getFullYear(), gte.getMonth() - 2, 1);
+
+            // Set lte to last day of next month
+            lte = new Date(lte.getFullYear(), lte.getMonth() + 1, 0);
+        }
     }
-    
+
     return { gte, lte };
-  };
+};
 
 
 export const calculateDiscountPricePipe = (input: string, discount: string) => {
@@ -425,3 +425,33 @@ export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> 
         return [];
     }
 };
+
+export const getEmployeeData = async (userToken: any): Promise<any> => {
+    try {
+        const oid = userToken.oid
+        const employee = await employeeModel.findOne({ microsoftId: oid }).populate('category reportingTo');
+        return employee;
+    } catch (error) {
+        console.error('Error fetching employee data:', error);
+        return null;
+    }
+}
+
+export const getDateRangeByDay = (startDate: string, endDate?: string) => {
+    if (!endDate) {
+        const dateObj = new Date(startDate);
+        const startOfDay = new Date(dateObj);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(dateObj);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        return { startOfDay, endOfDay };
+    } else {
+        const startOfDay = new Date(startDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        return { startOfDay, endOfDay };
+    }
+}

@@ -1,5 +1,7 @@
 import { Server } from "socket.io";
 import jwt from 'jsonwebtoken'
+import { verifyAndExtractOid } from "../common/utils/extractToken";
+import { getEmployeeData } from "../common/utils/util";
 
 export const connectedSockets = {};
 
@@ -22,9 +24,10 @@ export const socketConnection = async (socketIo:Server) => {
                 }
             })
 
-            socket.on('auth',(token)=> {
-                const jwtPayload = jwt.verify(token,process.env.ACCESS_SECRET)
-                const userId = (<any>jwtPayload).id;
+            socket.on('auth', async (token) => {
+                const microsoftPayload = jwt.decode(token)
+                const employeeData = await getEmployeeData(microsoftPayload)
+                const userId = employeeData._id;
                 connectedSockets[userId] = socket.id;
                 socket.join(userId)
             })

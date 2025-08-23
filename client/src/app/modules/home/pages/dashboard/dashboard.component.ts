@@ -27,11 +27,11 @@ import { DoughnutChartComponent } from '../../../../shared/components/charts/dou
 import { LineChartComponent } from '../../../../shared/components/charts/line-chart/line-chart.component';
 import { HalfDoughnutChartComponent } from '../../../../shared/components/charts/half-doughnut-chart/half-doughnut-chart.component';
 @Component({
-    selector: 'app-dashboard',
-    templateUrl: './dashboard.component.html',
-    styleUrls: ['./dashboard.component.css'],
-    animations: [opacityState],
-    imports: [MatDrawerContainer, MatDrawer, FormsModule, ReactiveFormsModule, NgIcon, dateFutureDirective, NgSelectComponent, NgFor, NgOptionComponent, NgIf, NgLoadingSpinnerTemplateDirective, NgClass, SkeltonLoadingComponent, GaugeChartComponent, DoughnutChartComponent, LineChartComponent, HalfDoughnutChartComponent, AsyncPipe]
+  selector: 'app-dashboard',
+  templateUrl: './dashboard.component.html',
+  styleUrls: ['./dashboard.component.css'],
+  animations: [opacityState],
+  imports: [MatDrawerContainer, MatDrawer, FormsModule, ReactiveFormsModule, NgIcon, dateFutureDirective, NgSelectComponent, NgFor, NgOptionComponent, NgIf, NgLoadingSpinnerTemplateDirective, NgClass, SkeltonLoadingComponent, GaugeChartComponent, DoughnutChartComponent, LineChartComponent, HalfDoughnutChartComponent, AsyncPipe]
 })
 
 export class DashboardComponent implements OnInit, OnDestroy {
@@ -97,11 +97,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.filterForm.patchValue({ fromDate: fromDate, toDate: toDate })
 
     console.log(this.filterForm.value)
-    
+
     this.onFilter()
 
     this.selectedTargetYear = currentYear.toString();
-    this.onTargetYearChange(true,false)
+    this.onTargetYearChange(true, false)
     this.getSalesPerson();
     this.getDepartments();
     // this.getSalesTarget(true);
@@ -110,67 +110,57 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   getDashboardReports() {
-    this.subscriptions.add(
-      this._employeeService.employeeData$.subscribe((employee) => {
-        if (employee) {
-          this.userId = employee?._id;
-          if (this.userId) {
-            this.dashboardMetrics$ = this._dashboardService.getDashboardMetrics(this.userId, this.filterForm.value).pipe(
-              map(metrics => {
-                const sortedMetrics = metrics.sort((a, b) => a.rank - b.rank);
+    this.dashboardMetrics$ = this._dashboardService.getDashboardMetrics(this.filterForm.value).pipe(
+      map(metrics => {
+        const sortedMetrics = metrics.sort((a, b) => a.rank - b.rank);
 
-                let companyRevenue = 0;
-                sortedMetrics.forEach((metric) => {
-                  if (metric.name === 'Revenue Achieved') {
-                    companyRevenue = metric.value;
-                  }
-                });
-                this.updateGuageReports(companyRevenue);
-                return sortedMetrics;
-              })
-            );
-            this.subscriptions.add(
-              this._dashboardService.getRevenuePerSalesperson(this.userId, this.filterForm.value).subscribe((res: any) => {
-                if (res.length == 1) {
-
-                  this._dashboardService.guageChart$.subscribe((report) => {
-                    let criticalRange = report.criticalRange
-
-                    if (criticalRange > res[0].value) {
-                      res.push({ name: 'To Achieve Target', value: criticalRange - res[0].value, itemStyle: { color: '#D3D3D3' } })
-                    }
-                  })
-                }
-                this._dashboardService.updateDonutChart(res)
-              })
-            )
-
-            this.subscriptions.add(
-              this._dashboardService.getGrossProfitForLastSevenMonths(this.userId, this.filterForm.value).subscribe((res) => {
-                this._dashboardService.updateGraphChart({ profitPerMonths: res, profitTarget: this.grossProfitTarget })
-              })
-            )
-
-            this.subscriptions.add(
-              this._dashboardService.getEnquirySalesConversion(this.userId, this.filterForm.value).subscribe((res) => {
-                this._dashboardService.updateEnquiryConversions(res)
-              })
-            )
-
-            this.subscriptions.add(
-              this._dashboardService.getPresaleJobSalesConversion(this.userId, this.filterForm.value).subscribe((res) => {
-                this._dashboardService.updatePresaleConversions(res)
-              })
-            )
-
-            this.subscriptions.add(
-              this._dashboardService.getRePresaleJobSalesConversion(this.userId, this.filterForm.value).subscribe((res) => {
-                this._dashboardService.updateRePresaleConversions(res)
-              })
-            )
-
+        let companyRevenue = 0;
+        sortedMetrics.forEach((metric) => {
+          if (metric.name === 'Revenue Achieved') {
+            companyRevenue = metric.value;
           }
+        });
+        this.updateGuageReports(companyRevenue);
+        return sortedMetrics;
+      })
+    );
+    this.subscriptions.add(
+      this._dashboardService.getRevenuePerSalesperson(this.filterForm.value).subscribe((res: any) => {
+        if (res.length == 1) {
+
+          this._dashboardService.guageChart$.subscribe((report) => {
+            let criticalRange = report.criticalRange
+
+            if (criticalRange > res[0].value) {
+              res.push({ name: 'To Achieve Target', value: criticalRange - res[0].value, itemStyle: { color: '#D3D3D3' } })
+            }
+          })
         }
+        this._dashboardService.updateDonutChart(res)
+      })
+    )
+
+    this.subscriptions.add(
+      this._dashboardService.getGrossProfitForLastSevenMonths(this.filterForm.value).subscribe((res) => {
+        this._dashboardService.updateGraphChart({ profitPerMonths: res, profitTarget: this.grossProfitTarget })
+      })
+    )
+
+    this.subscriptions.add(
+      this._dashboardService.getEnquirySalesConversion(this.filterForm.value).subscribe((res) => {
+        this._dashboardService.updateEnquiryConversions(res)
+      })
+    )
+
+    this.subscriptions.add(
+      this._dashboardService.getPresaleJobSalesConversion(this.filterForm.value).subscribe((res) => {
+        this._dashboardService.updatePresaleConversions(res)
+      })
+    )
+
+    this.subscriptions.add(
+      this._dashboardService.getRePresaleJobSalesConversion(this.filterForm.value).subscribe((res) => {
+        this._dashboardService.updateRePresaleConversions(res)
       })
     )
   }
@@ -292,10 +282,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.selectedTargetYear = 'total';
       this._toaster.warning('There is no targets for the current year')
     }
-    this.onTargetYearChange(false,true);
+    this.onTargetYearChange(false, true);
   }
 
-  onTargetYearChange(reset: boolean,updateValues:boolean) {
+  onTargetYearChange(reset: boolean, updateValues: boolean) {
     if (this.selectedTargetYear == 'total') {
       this.minDate = ''
       this.maxDate = ''
@@ -304,10 +294,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.maxDate = `${this.selectedTargetYear}-12-31`
     }
 
-    if(updateValues){
+    if (updateValues) {
       this.filterForm.patchValue({ fromDate: this.minDate, toDate: this.maxDate })
 
-      
+
     }
     this.getDashboardReports();
 

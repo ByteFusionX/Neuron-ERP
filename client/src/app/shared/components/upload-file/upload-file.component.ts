@@ -13,6 +13,7 @@ import { appFileValidator } from '../../directives/file-validator.directive';
 })
 export class UploadFileComponent {
     @Input() label: string = '';
+    @Input() isPadding: boolean = true;
     @Output() fileUpload = new EventEmitter<File[]>();
     @ViewChild('fileInput') fileInput!: ElementRef;
     fileError: boolean = false;

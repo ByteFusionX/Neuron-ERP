@@ -16,12 +16,14 @@
                 <!-- <div class="flex items-center me-5">
                     <ng-icon name="heroMagnifyingGlass" class="text-2xl cursor-pointer"></ng-icon>
                 </div> -->
-                <button (click)="onBellClick()" class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition duration-200 ease-in-out focus:outline-none">
+                <button (click)="onBellClick()"
+                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition duration-200 ease-in-out focus:outline-none">
                     <ng-icon name="heroBell" class="text-2xl text-gray-800"></ng-icon>
 
-                    <ng-container *ngIf="(textNotificationCount$ | async) as textNotification" >
+                    <ng-container *ngIf="(textNotificationCount$ | async) as textNotification">
 
-                        <span *ngIf="textNotification.unviewed.length" class="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center ">
+                        <span *ngIf="textNotification.unviewed.length"
+                            class="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center ">
                             {{textNotification.unviewed.length}}
                         </span>
                     </ng-container>
@@ -36,13 +38,13 @@
                 </button>
                 <div class="flex items-center cursor-pointer" [matMenuTriggerFor]="beforeMenu"
                     (menuOpened)="menuOpened()" (menuClosed)="menuClosed()">
-                    <div *ngIf="employeeData$ | async as employeeData"
-                    class="w-8 h-8 flex items-center justify-center rounded-full overflow-hidden bg-orange-200 text-center">
-                    <p class="text-orange-400 text-xs font-bold">
-                        {{ employeeData.firstName[0].toUpperCase() }}{{
-                        employeeData.lastName[0].toUpperCase() }}
-                    </p>
-                </div>
+                    <div *ngIf="employeeData$ | async as employeeData; else logoutButton"
+                        class="w-8 h-8 flex items-center justify-center rounded-full overflow-hidden bg-orange-200 text-center">
+                        <p class="text-orange-400 text-xs font-bold">
+                            {{ employeeData.firstName[0].toUpperCase() }}{{
+                            employeeData.lastName[0].toUpperCase() }}
+                        </p>
+                    </div>
 
                     <div class="flex items-center" *ngIf="employeeData$ | async as employeeData">
                         <p class="mx-2 text-sm font-medium">{{employeeData.firstName}} {{employeeData.lastName}}</p>
@@ -88,7 +90,8 @@
                                     <ng-icon name="heroCog6Tooth" class="text-lg mx-3"></ng-icon>
                                     <p class="text-sm">Portal Management</p>
                                 </li>
-                                <li *ngIf="showPortalMangement" class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-gray-100 hover:text-violet-900 hover:scale-105 cursor-pointer"
+                                <li *ngIf="showPortalMangement"
+                                    class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-gray-100 hover:text-violet-900 hover:scale-105 cursor-pointer"
                                     routerLink="/recycle">
                                     <ng-icon name="heroTrash" class="text-lg mx-3"></ng-icon>
                                     <p class="text-sm">Recycle Bin</p>
@@ -102,6 +105,12 @@
                         </div>
                     </div>
                 </mat-menu>
+
+                <ng-template #logoutButton>
+                    <app-btn [title]="'Sign Out'" [type]="'button'" [theme]="'primary'" (click)="signOut()">
+                        Sign Out
+                    </app-btn>
+                </ng-template>
 
             </div>
         </div>
