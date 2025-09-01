@@ -22,13 +22,13 @@ import { appFileSizeValidator } from '../../../../shared/directives/file-size.di
 import { MatTooltip } from '@angular/material/tooltip';
 
 @Component({
-    selector: 'app-create-enquiry',
-    templateUrl: './create-enquiry.component.html',
-    styleUrls: ['./create-enquiry.component.css'],
-    animations: [fileEnterState],
-    encapsulation: ViewEncapsulation.None,
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [NgIcon, FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, appFileValidator, appFileSizeValidator, NgIf, MatTooltip, AsyncPipe]
+  selector: 'app-create-enquiry',
+  templateUrl: './create-enquiry.component.html',
+  styleUrls: ['./create-enquiry.component.css'],
+  animations: [fileEnterState],
+  encapsulation: ViewEncapsulation.None,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgIcon, FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, appFileValidator, appFileSizeValidator, NgIf, MatTooltip, AsyncPipe]
 })
 export class CreateEnquiryDialog implements OnInit, OnDestroy {
 
@@ -41,8 +41,9 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
   selectedDep!: string;
   selectedFiles: any[] = []
   private subscriptions = new Subscription();
-  tokenData!: { id: string, employeeId: string };
+  tokenData!: any;
   submit: boolean = false;
+  employeeData$!: any;
 
   isSaving: boolean = false;
   isQuoting: boolean = false;
@@ -78,7 +79,9 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.tokenData = this._employeeService.employeeToken()
+    this.employeeData$ = this._employeeService.employeeData$
+    this.tokenData = this._employeeService.getEmployeeData()
+    console.log(this.tokenData)
     this.getEmployee()
     this.getAllCustomers()
     this.getDepartments()
@@ -129,8 +132,11 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
 
   setUpFormData(): FormData {
     let formData = new FormData();
+    this.employeeData$.subscribe((data: any) => {
+      this.enquiryForm.controls.salesPerson.setValue(data._id)
+      this.tokenData = data;
+    });
 
-    this.enquiryForm.controls.salesPerson.setValue(this.tokenData.id)
     let data = this.enquiryForm.value as Partial<Enquiry>
 
     formData.append('enquiryData', JSON.stringify(data));
@@ -191,7 +197,7 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
 
   getAllCustomers() {
     let userId;
-    this._employeeService.employeeData$.subscribe((data)=>{
+    this._employeeService.employeeData$.subscribe((data) => {
       userId = data?._id
     })
     this.customers$ = this._customerService.getAllCustomers(userId)

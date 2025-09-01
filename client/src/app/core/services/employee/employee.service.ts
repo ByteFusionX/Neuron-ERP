@@ -117,7 +117,6 @@ export class EmployeeService {
   getEmployeeData() {
     this.getEmployee().subscribe(
       (employeeData: getEmployee) => {
-        console.log(employeeData)
         this.employeeSubject.next(employeeData);
       }
     );
