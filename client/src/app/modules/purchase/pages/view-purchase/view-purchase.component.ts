@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnDestroy, signal } from '@angular/core';
 import { ActivatedRoute, Router, TitleStrategy } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
@@ -44,7 +44,6 @@ export class ViewPurchaseComponent {
     this.purchaseService.purchaseFormData$.subscribe({
       next: (data) => {
         if (data) {
-          console.log(data)
           this.purchase = data;
           this.isLoading = false;
         }
@@ -66,14 +65,13 @@ export class ViewPurchaseComponent {
     this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
     if (this.purchaseId == 'none') return
     if (!this.purchaseId) {
-      this.notificationService.error('Invalid Purchase ID');
+      this.notificationService.error('Invalid Purchase Id');
       this.router.navigate(['/purchase/pendings']);
       return;
     }
 
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
-        console.log(response.data)
         this.purchase = response.data;
         this.isLoading = false;
       },
@@ -162,9 +160,50 @@ export class ViewPurchaseComponent {
     });
   }
 
+  getTotalUnitCost(items: any[]): number {
+    if (!Array.isArray(items)) return 0;
+
+    return items.reduce((total, item) => {
+      if (Array.isArray(item.itemDetails)) {
+        const itemTotal = item.itemDetails.reduce((subTotal: any, detail: any) => {
+          return subTotal + (detail.unitCost || 0);
+        }, 0);
+        return total + itemTotal;
+      }
+      return total;
+    }, 0);
+  }
+
+  getSelectedTotal(items: any[]): number {
+    if (!Array.isArray(items)) return 0;
+
+    return items.reduce((total, item) => {
+      if (Array.isArray(item.itemDetails)) {
+        const itemTotal = item.itemDetails.reduce((subTotal: any, detail: any) => {
+          if (Array.isArray(detail.comparisons)) {
+            const selected = detail.comparisons.find((c: any) => c.selected === true);
+            if (selected) {
+              return subTotal + (selected.unitPrice * selected.quantity);
+            }
+          }
+          return subTotal;
+        }, 0);
+        return total + itemTotal;
+      }
+      return total;
+    }, 0);
+  }
+
+  getProfitMargin(totalCost: number, discountedCost: number): number {
+    if (!discountedCost || discountedCost <= 0) return 0;
+    return ((totalCost - discountedCost) / discountedCost) * 100;
+  }
+
+
   onEdit() {
     if (!this.purchase?._id) return;
-    this.router.navigate(['/purchases', 'edit', this.purchase._id]);
+    this.router.navigate(['/purchase', 'edit', this.purchase._id]);
+    this.purchaseService.setPurchaseFormData(this.purchase)
   }
 
   onDownloadFile(file: any) {
@@ -190,20 +229,48 @@ export class ViewPurchaseComponent {
     );
   }
 
-  approvedSupplier(comparisons: Comparisons[]) {
-    const selected = comparisons.find(c => c.selected);
-    if (!selected) return null;
+  getSelectedRows(items: any[]) {
+    if (!Array.isArray(items) || items.length === 0) return [];
 
-    const supplier = this.suppliersList().find(s => s._id === selected.supplierId);
-    return {
-      supplierName: supplier?.supplierName || 'Unknown Supplier',
-      unitPrice: selected.unitPrice,
-      quantity: selected.quantity,
-      etaTerms: selected.etaTerms
-    };
+    const rows: any[] = [];
+
+    for (const item of items) {
+      if (!item.itemDetails?.length) continue;
+
+      for (const detail of item.itemDetails) {
+        const selected = detail.comparisons?.find((c: any) => c.selected);
+        if (selected) {
+          const supplier = this.suppliersList().find(
+            (s: any) => s._id === selected.supplierId
+          );
+
+          rows.push({
+            itemName: item.itemName,
+            detail,
+            selectedSupplier: {
+              supplierName: supplier?.supplierName ?? 'Unknown Supplier',
+              unitPrice: selected.unitPrice,
+              quantity: selected.quantity,
+              etaTerms: selected.etaTerms,
+            },
+          });
+        }
+      }
+    }
+
+    return rows;
   }
 
   onExit() {
-    this.router.navigate(['/purchase/pendings'])
+    if(this.purchaseId == 'none'){
+      this.purchaseService.setPurchaseFormData(this.purchase)
+      this.router.navigate(['/purchase/create'])
+    }else{
+      this.router.navigate(['/purchase/pendings'])
+    }
+  }
+
+  onDestroy(): void {
+    this.purchaseService.setPurchaseFormData(this.purchase)
   }
 }

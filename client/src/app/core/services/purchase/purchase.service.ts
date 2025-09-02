@@ -25,6 +25,17 @@ export class PurchaseService {
   private comparisonData = new BehaviorSubject<any>(null)
   comparisonFormData$ = this.comparisonData.asObservable()
 
+  private editMode = new BehaviorSubject<boolean>(false)
+  editMode$ = this.editMode.asObservable()
+
+  purchaseId = new BehaviorSubject<string | null>(null)
+  purchaseId$ = this.purchaseId.asObservable()
+
+  setEditingorNot(isEdit: boolean, purchaseId: string) {
+    this.purchaseId.next(purchaseId)
+    this.editMode.next(isEdit)
+  }
+
   setPurchaseJob(jobData: getJob) {
     this.purchaseJob.next(jobData)
   }
@@ -70,5 +81,9 @@ export class PurchaseService {
 
   getPurchaseRequestsByJobId(jobId: string): Observable<any> {
     return this.http.get<any>(`${this.api}/purchase/purchase-request/job/${jobId}`);
+  }
+
+  updatePurchase(purchaseId: string, purchaseData: PurchaseData): Observable<any> {
+    return this.http.put<any>(`${this.api}/purchase/purchase-update/${purchaseId}`, purchaseData)
   }
 }

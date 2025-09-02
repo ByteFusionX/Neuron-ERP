@@ -6,7 +6,8 @@ import {
     getPurchaseRequests,
     getPurchaseRequestsByStatus,
     getPurchaseRequestsByJobId,
-    updatePurchaseRequestStatus
+    updatePurchaseRequestStatus,
+    updatePurchaseRequest
 } from '../controllers/purchaseRequest.controller'
 
 const purchaseRequestRouter = Router()
@@ -17,6 +18,7 @@ purchaseRequestRouter.get('/purchase-request/status/:id', getPurchaseRequestsByS
 purchaseRequestRouter.get('/purchase-request/job/:jobId', getPurchaseRequestsByJobId)
 purchaseRequestRouter.get('/purchase-request/generate-purchase-no', generatePurchaseNumber)
 purchaseRequestRouter.get('/purchase-request/:id', getPurchaseRequestById)
+purchaseRequestRouter.put('/purchase-update/:id', updatePurchaseRequest)
 purchaseRequestRouter.patch('/purchase-request/status/:id', updatePurchaseRequestStatus)
 purchaseRequestRouter.patch('/purchase-request/:id')
 purchaseRequestRouter.delete('/purchase-request/:id')

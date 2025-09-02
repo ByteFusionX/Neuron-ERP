@@ -6,12 +6,14 @@ import { ToastrService } from 'ngx-toastr';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { PurchaseData, QuoteItem } from 'src/app/shared/interfaces/purchase.interface';
+import { LpoListComponent } from '../lpo-list/lpo-list.component';
 
 @Component({
   selector: 'app-initiate-lpo',
   imports: [
     CommonModule,
     NgIcon,
+    LpoListComponent
   ],
   templateUrl: './initiate-lpo.component.html',
   styleUrl: './initiate-lpo.component.css'

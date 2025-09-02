@@ -194,7 +194,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
     },
     {
       id: 'purchase',
-      label: 'Purchase Requisition',
+      label: 'Purchase',
       icon: 'heroShoppingCart',
       hasDropdown: true,
       // privilegeKey: 'purchase',
@@ -210,22 +210,6 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'approvedPurchase',
           label: 'Approved PR',
           route: '/purchase/approves',
-          notificationKey: 'purchaseCount'
-        },
-      ]
-    },
-    {
-      id: 'purchaseOrder',
-      label: 'Purchase Order',
-      icon: 'heroShoppingCart',
-      hasDropdown: true,
-      // privilegeKey: 'purchaseOrder',
-      notificationKey: 'purchaseCount',
-      children: [
-        {
-          id: 'issuedLpo',
-          label: 'Issued LPO',
-          route: '/purchase-order/lpo-list',
           notificationKey: 'purchaseCount'
         },
       ]

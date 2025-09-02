@@ -4,6 +4,7 @@ import employeeModel from "../models/employee.model";
 import technicalModel from "../models/technical.model";
 import { ObjectId } from "mongodb";
 import mongoose from "mongoose";
+
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const jobs = await jobModel.find({

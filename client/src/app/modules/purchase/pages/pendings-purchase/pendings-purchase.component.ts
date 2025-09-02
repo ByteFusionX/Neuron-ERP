@@ -9,7 +9,6 @@ import { PaginationService } from 'src/app/core/services/pagination.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 
@@ -21,7 +20,6 @@ import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.
     NgSelectModule,
     MatMenuModule,
     IconsModule,
-    SearchComponent,
     ButtonComponent,
     FormsModule
   ],
@@ -162,7 +160,7 @@ export class PendingPurchaseComponent implements OnInit {
       ...filters
     }
 
-    console.log(filterParams);
+    // console.log(filterParams);
 
     this.purchaseService.getPurchases(filterParams).subscribe({
       next: (response) => {

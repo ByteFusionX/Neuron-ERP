@@ -388,8 +388,24 @@ export const deleteJob = async (req: Request, res: Response, next: NextFunction)
 
 export const jobSheets = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const jobs = await jobModel.find({
+            status: { $nin: ["Purchase Requested"] }
+        }).select("_id jobId").sort({ createdDate: -1 });
+        return res.status(200).json({ jobs: jobs })
+    } catch (error) {
+        next(error)
+        console.error(error)
+    }
+}
+
+export const oneJobSheet = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
         const qatarUsdRate = await getUSDRated();
         const jobData = await jobModel.aggregate([
+            {
+                $match: { _id: new ObjectId(id), isDeleted: { $ne: true } }
+            },
             {
                 $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
             },
@@ -462,7 +478,7 @@ export const jobSheets = async (req: Request, res: Response, next: NextFunction)
 
             }
         ]);
-        return res.status(200).json({ jobs: jobData })
+        return res.status(200).json(jobData)
     } catch (error) {
         next(error)
     }
@@ -617,13 +633,13 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
             {
                 $match: {
                     isDeleted: { $ne: true },
-                   allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.AMC] },
+                    allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.AMC] },
                     _id: { $nin: technicalJobIds }
                 }
             },
             {
                 $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
-            }, 
+            },
             {
                 $unwind: '$quotation'
             },

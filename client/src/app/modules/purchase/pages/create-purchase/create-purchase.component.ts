@@ -1,9 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, signal, Type } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MrRequestComponent } from '../mr-request/mr-request.component';
@@ -41,6 +41,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   private fb = inject(FormBuilder);
   private _dialog = inject(MatDialog)
   private router = inject(Router)
+  private route = inject(ActivatedRoute)
   private toaster = inject(ToastrService)
   private purchaseService = inject(PurchaseService)
   private jobService = inject(JobService)
@@ -59,6 +60,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   selectedJobSheet!: getJob;
   requestedJobId = signal<string>('')
   tokenData!: { id: string, employeeId: string };
+  isEditing: boolean = false;
 
   purchaseForm: FormGroup = this.fb.group({
     customerId: ['', [Validators.required]],
@@ -75,10 +77,17 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   })
 
   ngOnInit(): void {
+    const url = this.route.snapshot.routeConfig?.path || '';
+    this.isEditing = url.includes('edit');
+    if (this.isEditing) {
+      const purchaseId = <string>this.route.snapshot.paramMap.get('id');
+      this.purchaseService.setEditingorNot(this.isEditing, purchaseId);
+    }
+
     this.tokenData = this.employeeService.employeeToken();
     this.deelSheets()
     this.purchaseForm.reset()
-    this.getPurchaseNo()
+    if (!this.isEditing) this.getPurchaseNo()
     this.generatedPRId = this.generateId()
     this.subscriptions.add(
       this.purchaseService.selectedJob$.subscribe((job) => {
@@ -94,11 +103,20 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         if (data) {
           this.selectedJobSheet = data;
           this.purchaseForm.patchValue(data)
+          if (data.jobId.jobId) {
+            this.purchaseForm.get('jobId')?.setValue(data.jobId.jobId)
+          }
+
+          if (this.isEditing) {
+            this.patchEditValues(data)
+          }
           if (data.items) {
             this.itemsList.set(data.items)
             this.patchItemsValues(data.items)
+            this.updateTotalLpo()
           }
           if (data.mrRequest) this.patchMrValues(data.mrRequest)
+          if (data.supplierDiscounts) this.patchSupplierDiscounts(data.supplierDiscounts)
         }
       })
     )
@@ -106,16 +124,18 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.purchaseService.supplierDiscount$.subscribe((data) => {
         if (data?.suppliers) {
-          if (!this.purchaseForm.get('supplierDiscounts')) {
-            this.purchaseForm.addControl('supplierDiscounts', this.createSupplierGroup());
+          if (this.purchaseForm.get('supplierDiscounts')) {
+            this.purchaseForm.removeControl('supplierDiscounts');
           }
+
+          this.purchaseForm.addControl('supplierDiscounts', this.createSupplierGroup());
           const supplierForm = this.purchaseForm.get('supplierDiscounts') as FormGroup;
           const supplierArray = supplierForm.get('suppliers') as FormArray;
+
           data.suppliers.forEach((supplier: any) => {
             supplierArray.push(this.fb.group({
-              supplierId: [supplier.supplierId],
+              supplierId: [supplier.supplierId._id],
               discount: [supplier.discount],
-              // discountType: [supplier.discountType]
             }));
           });
           supplierForm.patchValue({
@@ -123,7 +143,11 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
           });
         }
       })
-    )
+    );
+
+    (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
+      this.updateTotalLpo()
+    });
   }
 
   onSubmit(): void {
@@ -137,6 +161,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   sendToService() {
+    const job = this.purchaseForm.get('job')?.value;
+    this.purchaseForm.get('jobId')?.setValue(job);
     this.purchaseForm.removeControl('job')
     this.purchaseForm.get('createdBy')?.setValue(this.tokenData.id)
     this.purchaseService.createPurchase(this.purchaseForm.value).subscribe({
@@ -176,12 +202,12 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   createQuoteItemDetailGroup(): FormGroup {
     return this.fb.group({
       detail: ['', Validators.required],
-      quantity: [0, [Validators.required, Validators.min(1)]],
-      unitCost: [0, [Validators.required, Validators.min(0)]],
-      unitSellingPrice: [0, [Validators.required, Validators.min(0)]],
-      availability: ['', Validators.required],
+      quantity: [0, [Validators.required]],
+      unitCost: [0, [Validators.required]],
+      unitSellingPrice: [0],
+      availability: [''],
       supplierName: [''],
-      email: ['', [Validators.email]],
+      email: [''],
       phoneNo: [''],
       dealSelected: [false],
     });
@@ -189,7 +215,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   createQuoteItemGroup(): FormGroup {
     return this.fb.group({
-      itemName: ['', Validators.required],
+      itemName: [''],
       itemDetails: this.fb.array([
         this.createQuoteItemDetailGroup()
       ])
@@ -203,8 +229,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       customerId: job?.clientDetails?._id,
       salesManager: `${job?.salesPersonDetails?.[0]?.firstName || ''} ${job?.salesPersonDetails?.[0]?.lastName || ''}`.trim(),
       dealSheetId: job?.quotation?.dealData?.dealId,
-      jobId: job._id,
-      job: job.jobId
+      jobId: job.jobId,
+      job: job._id
     })
 
     this.itemsList.set(job.quotation?.dealData?.updatedItems)
@@ -227,6 +253,25 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     (this.purchaseForm.get('mrRequest') as FormGroup).patchValue(data);
   }
 
+  patchSupplierDiscounts(supplierDiscounts: any) {
+    if (!supplierDiscounts) return;
+
+    if (!this.purchaseForm.get('supplierDiscounts')) {
+      this.purchaseForm.addControl('supplierDiscounts', this.fb.control(supplierDiscounts));
+    } else {
+      this.purchaseForm.get('supplierDiscounts')?.setValue(supplierDiscounts);
+    }
+  }
+
+  patchEditValues(data: any) {
+    this.purchaseForm.patchValue({
+      dealSheetId: data.jobId?.quoteId?.dealData?.dealId,
+      customer: data.customerId?.companyName,
+      salesManager: `${data.createdBy?.firstName || ''} ${data.createdBy?.lastName || ''}`.trim(),
+      purchaseNo: data.purchaseNo,
+    })
+  }
+
   createItemGroup(item: QuoteItem): FormGroup {
     return this.fb.group({
       itemName: [item?.itemName || '', Validators.required],
@@ -237,10 +282,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   createItemDetailsGroup(item: QuoteItemDetails): FormGroup {
-    (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
-      this.purchaseForm.get('totalLpo')?.reset()
-      this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
-    });
     return this.fb.group({
       detail: [item.detail || '', Validators.required],
       quantity: [item.quantity || 0, Validators.required],
@@ -301,8 +342,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.jobService.getJobids().subscribe({
         next: (res: any) => {
-          const filteredJobs = res.jobs.filter((job: any) => job.status !== 'Purchase Requested');
-          this.jobSheets.set(filteredJobs);
+          if (res.jobs) this.jobSheets.set(res.jobs);
         }, error: (err) => {
           console.error(err)
         }
@@ -312,9 +352,17 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   onJobSelected(selected: string | string[]) {
     this.purchaseForm.reset()
-    this.purchaseForm.get('purchaseNo')?.setValue(this.purchaseNo)
-    const job = <getJob>this.jobSheets().find(job => job._id === selected);
-    this.patchValues(job);
+    this.purchaseForm.get('purchaseNo')?.setValue(this.purchaseNo);
+    this.jobService.getOneJob(selected as string).subscribe({
+      next: (res) => {
+        if (res && res.length > 0) {
+          this.patchValues(res[0])
+          this.selectedJobSheet = res[0];
+        }
+      }, error: (error) => {
+        console.error(error)
+      }
+    })
   }
 
   onComparisonClicks(item: QuoteItemDetails) {
@@ -375,17 +423,17 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   calculateTotalLpo(): number {
     const items = this.purchaseForm.get('items') as FormArray;
-    let total = 0;
-    items.controls.forEach((itemGroup: AbstractControl) => {
+    return items.controls.reduce((total, itemGroup: AbstractControl) => {
       const itemDetailsArray = itemGroup.get('itemDetails') as FormArray;
-      itemDetailsArray.controls.forEach((detailGroup: AbstractControl) => {
-        const quantity = detailGroup.get('quantity')?.value || 0;
-        const unitSellingPrice = detailGroup.get('unitSellingPrice')?.value || 0;
-        total += quantity * unitSellingPrice;
-      });
-    });
-    return total;
+      const itemTotal = itemDetailsArray.controls.reduce((subTotal, detailGroup: AbstractControl) => {
+        const quantity = +detailGroup.get('quantity')?.value || 0;
+        const unitSellingPrice = +detailGroup.get('unitCost')?.value || 0;
+        return subTotal + (quantity * unitSellingPrice);
+      }, 0);
+      return total + itemTotal;
+    }, 0);
   }
+
 
   updateTotalLpo() {
     this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
@@ -447,8 +495,50 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onFinalDasdboardClicks() {
-    this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
-    this.router.navigate(['/purchase/view-purchase', 'none']);
+    this.subscriptions.add(
+      this.employeeService.getEmployee(this.tokenData.employeeId).subscribe({
+        next: (res) => {
+          if (res) {
+            this.purchaseForm.patchValue({
+              customerId: {
+                _id: this.selectedJobSheet._id,
+                companyName: this.selectedJobSheet.clientDetails?.companyName
+              },
+              createdBy: {
+                firstName: res.firstName,
+                lastName: res.lastName
+              },
+              jobId: {
+                jobId: this.selectedJobSheet.jobId,
+                quoteId: this.selectedJobSheet.quotation
+              },
+            });
+            this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
+            this.router.navigate(['/purchase/view-purchase', 'none']);
+          }
+        }, error: (error) => {
+          console.error(error)
+        }
+      })
+    )
+  }
+
+  onEditSubmits() {
+    console.log(this.purchaseForm.value)
+    const purchaseId = <string>this.route.snapshot.paramMap.get('id');
+    this.subscriptions.add(
+      this.purchaseService.updatePurchase(purchaseId, this.purchaseForm.value).subscribe({
+        next: (res) => {
+          if (res.success) {
+            this.toaster.success('Purchase Updated Successfully')
+            this.purchaseForm.reset()
+            this.router.navigate(['/purchase/view-purchase', purchaseId]);
+          }
+        }, error: (error) => {
+          console.error(error)
+        }
+      })
+    )
   }
 
   ngOnDestroy(): void {

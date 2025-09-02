@@ -173,13 +173,7 @@ export const routes: Routes = [
       { path: 'comparison-summary', component: ComparisonSummaryComponent },
       { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
       { path: 'issue-lpo', component: IssueLpoComponent },
-    ]
-  },
-  {
-    path: 'purchase-order',
-    loadComponent: () => import('./modules/purchase-order/purchase-order.component').then((c) => c.PurchaseOrderComponent),
-    children: [
-      { path: 'lpo-list', component: LpoListComponent }
+      { path: 'edit/:id', component: CreatePurchaseComponent }
     ]
   },
   {
@@ -190,9 +184,9 @@ export const routes: Routes = [
       { path: 'amc', component: ProjectsComponent },
       { path: 'project/add', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/edit/:id', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
-      { path: 'project/activity-plan/:id', component: ActivityPlanComponent},
-      { path: 'project/tasks/:id', component: TasksComponent},
-      { path: 'project/issues/:id', component: IssuesListComponent},
+      { path: 'project/activity-plan/:id', component: ActivityPlanComponent },
+      { path: 'project/tasks/:id', component: TasksComponent },
+      { path: 'project/issues/:id', component: IssuesListComponent },
       { path: 'mr-requests', component: MrRequestsComponent },
       { path: 'open-to-work-project', component: OpenToWorkProjectComponent },
       { path: 'mr-requests', component: MrRequestsComponent }

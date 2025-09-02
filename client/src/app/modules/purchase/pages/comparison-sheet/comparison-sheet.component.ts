@@ -66,7 +66,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
             this.comparisonList.set(item[0].comparisons)
           }
         } else {
-          this.router.navigate(['/purchase/create'])
+          this.navigate()
         }
       },
       error: (error) => {
@@ -87,13 +87,13 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     if (data) {
       data.items = this.updateComparisonList();
       this.purchaseService.setPurchaseFormData(data)
-      this.router.navigate(['/purchase/create'])
+      this.navigate()
     }
   }
 
   onClose() {
     this.purchaseService.setPurchaseFormData(this.selectedJob())
-    this.router.navigate(['/purchase/create'])
+    this.navigate()
   }
 
   get f() {
@@ -124,7 +124,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   getFormattedProducts(): string {
     const item = this.getItem()
     if (item) {
-      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitPrice}`
+      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitCost}`
     }
     return '';
   }
@@ -141,7 +141,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
       width: '500px',
       disableClose: true,
       maxHeight: '90vh',
-      autoFocus: false    
+      autoFocus: false
     })
 
     dialog.afterClosed().subscribe((res) => {
@@ -162,6 +162,20 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
   onAddSupplier() {
     this.router.navigate(['/suppliers/create']);
+  }
+
+  navigate() {
+    this.purchaseService.editMode$.subscribe((isEdit) => {
+      if (isEdit) {
+        this.purchaseService.purchaseId$.subscribe((id) => {
+          if (id) {
+            this.router.navigate(['/purchase/edit', id]);
+          }
+        })
+      } else {
+        this.router.navigate(['/purchase/create']);
+      }
+    })
   }
 
   onDeleteComparison(index: number) {

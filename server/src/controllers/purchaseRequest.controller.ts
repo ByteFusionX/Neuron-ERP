@@ -46,9 +46,9 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             isDeleted: false
         };
 
-        if(Array.isArray(status)){
+        if (Array.isArray(status)) {
             matchStage.status = { $in: status }
-        }else{
+        } else {
             matchStage.status = status
         }
 
@@ -59,7 +59,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
         if (firstName) {
             matchStage['createdBy.firstName'] = { $regex: firstName, $options: 'i' }
         }
-        
+
         if (fromDate && toDate) {
             matchStage.createdAt = {
                 $gte: new Date(fromDate),
@@ -386,20 +386,33 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
         const year = now.getFullYear().toString().slice(-2);
         const month = (now.getMonth() + 1).toString().padStart(2, '0');
 
-        const latestPR = await PurchaseRequest.findOne().sort({ createdAt: -1 })
+        const latestPR = await PurchaseRequest.findOne().sort({ createdAt: -1 });
         let nextNumber = 1;
 
         if (latestPR) {
-            const parts = latestPR.purchaseNo.split('-').reverse();
-            nextNumber = parseInt(parts[0]) + 1;
+            const parts = latestPR.purchaseNo.split('-');
+
+            const lastYear = parts[1];
+            const lastMonth = parts[2];
+            const lastCounter = parseInt(parts[3]);
+
+            if (lastYear === year && lastMonth === month) {
+                nextNumber = lastCounter + 1;
+            } else {
+                nextNumber = 1;
+            }
         }
 
-        const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber.toString().padStart(4, '0')}`;
+        const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber
+            .toString()
+            .padStart(4, '0')}`;
+
         return res.status(200).json({
             success: true,
             message: "Purchase number generated successfully",
-            data: { purchaseNo: newPurchaseNumber }
+            data: { purchaseNo: newPurchaseNumber },
         });
+
     } catch (error) {
         console.log(error)
         next(error);
@@ -468,47 +481,45 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
     }
 };
 
-// // Edit a PR
-// export const updatePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
-//     try {
-//         const { id } = req.params;
-//         const updateData = req.body;
+// Edit a PR
+export const updatePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
 
-//         // Remove fields that shouldn't be directly updated
-//         delete updateData._id;
-//         delete updateData.purchaseNo;
-//         delete updateData.createdAt;
-//         delete updateData.createdBy;
-//         delete updateData.isDeleted;
+        // Remove fields that shouldn't be directly updated
+        delete updateData.purchaseNo;
+        delete updateData.createdAt;
+        delete updateData.createdBy;
+        delete updateData.isDeleted;
 
-//         // Add updated metadata
-//         updateData.updatedBy = req.user?._id;
-//         updateData.updatedAt = new Date();
+        // Add updated metadata
+        updateData.updatedBy = updateData.createdBy;
+        updateData.updatedAt = new Date();
 
-//         const updatedPurchaseRequest = await PurchaseRequest.findOneAndUpdate(
-//             { _id: id, isDeleted: false },
-//             { $set: updateData },
-//             { new: true, runValidators: true }
-//         );
+        const updatedPurchaseRequest = await PurchaseRequest.findOneAndUpdate(
+            { _id: id, isDeleted: false },
+            { $set: updateData },
+            { new: true, runValidators: true }
+        );
 
-//         if (!updatedPurchaseRequest) {
-//             return res.status(404).json({
-//                 success: false,
-//                 message: "Purchase request not found",
-//                 status: 404
-//             });
-//         }
+        if (!updatedPurchaseRequest) {
+            return res.status(404).json({
+                success: false,
+                message: "Purchase request not found",
+                status: 404
+            });
+        }
 
-//         return res.status(200).json({
-//             success: true,
-//             message: "Purchase request updated successfully",
-//             data: updatedPurchaseRequest,
-//             status: 200
-//         });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
+        return res.status(200).json({
+            success: true,
+            message: "Purchase request updated successfully",
+            status: 200
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 // // Soft delete a PR
 // export const deletePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
@@ -644,7 +655,7 @@ export const getPurchaseRequestsByJobId = async (req: Request, res: Response, ne
 
         const purchaseRequests = await PurchaseRequest.aggregate([
             {
-                $match: { 
+                $match: {
                     jobId: new ObjectId(jobId),
                     isDeleted: false
                 }

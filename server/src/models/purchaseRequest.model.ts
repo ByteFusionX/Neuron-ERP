@@ -150,6 +150,7 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         },
         createdDate: {
             type: Date,
+            default: new Date()
         }
     },
     customerId: {
