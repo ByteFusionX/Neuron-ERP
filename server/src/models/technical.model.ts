@@ -106,7 +106,7 @@ const activityPlanSchema = new Schema<ActivityPlan>({
         required: true,
     },
     endDate: {
-        type: Date,
+        type: Date, 
         required: true,
     },
     orginalStartDate: {

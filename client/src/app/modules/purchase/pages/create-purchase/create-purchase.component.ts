@@ -88,6 +88,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.deelSheets()
     this.purchaseForm.reset()
     if (!this.isEditing) this.getPurchaseNo()
+
     this.generatedPRId = this.generateId()
     this.subscriptions.add(
       this.purchaseService.selectedJob$.subscribe((job) => {
@@ -202,9 +203,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   createQuoteItemDetailGroup(): FormGroup {
     return this.fb.group({
       detail: ['', Validators.required],
-      quantity: [0, [Validators.required]],
-      unitCost: [0, [Validators.required]],
-      unitSellingPrice: [0],
+      quantity: ['', Validators.required],
+      unitCost: ['', Validators.required],
+      unitSellingPrice: [''],
       availability: [''],
       supplierName: [''],
       email: [''],
@@ -269,6 +270,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       customer: data.customerId?.companyName,
       salesManager: `${data.createdBy?.firstName || ''} ${data.createdBy?.lastName || ''}`.trim(),
       purchaseNo: data.purchaseNo,
+      job: data.jobId?._id,
     })
   }
 
@@ -285,9 +287,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     return this.fb.group({
       detail: [item.detail || '', Validators.required],
       quantity: [item.quantity || 0, Validators.required],
-      unitSellingPrice: [item.unitSellingPrice || 0, Validators.required],
+      unitSellingPrice: [item.unitSellingPrice || 0],
       unitCost: [item.unitCost || 0, Validators.required],
-      availability: [item.availability || '', Validators.required],
+      availability: [item.availability || ''],
       supplierName: [item.supplierName || ''],
       email: [item.email || ''],
       phoneNo: [item.phoneNo || ''],
@@ -472,18 +474,19 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     const itemValue = lastItem.value;
 
     const hasRequiredValues =
-      itemValue.itemName &&
-      itemValue.itemDetails?.[0]?.detail &&
-      itemValue.itemDetails?.[0]?.unitSellingPrice > 0 &&
-      itemValue.itemDetails?.[0]?.quantity > 0;
+      itemValue.itemDetails[0]?.detail &&
+      itemValue.itemDetails[0]?.unitCost > 0 &&
+      itemValue.itemDetails[0]?.quantity > 0;
 
     if (!hasRequiredValues) {
       this.toaster.warning('Please fill all required fields!');
       return;
     }
+
     this.itemsList.set([...(this.itemsList() || []), itemValue]);
-    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+    itemsArray.push(this.fb.group(itemValue));
     this.isAddingItem = false;
+    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
   }
 
   checkMRExists(): boolean {
@@ -524,7 +527,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onEditSubmits() {
-    console.log(this.purchaseForm.value)
+    const job = this.purchaseForm.get('job')?.value;
+    this.purchaseForm.get('jobId')?.setValue(job);
+    this.purchaseForm.removeControl('job')
     const purchaseId = <string>this.route.snapshot.paramMap.get('id');
     this.subscriptions.add(
       this.purchaseService.updatePurchase(purchaseId, this.purchaseForm.value).subscribe({
