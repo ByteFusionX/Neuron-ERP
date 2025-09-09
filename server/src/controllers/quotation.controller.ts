@@ -5,7 +5,7 @@ import Department from '../models/department.model';
 import Employee from '../models/employee.model'
 import Enquiry from "../models/enquiry.model";
 import { Server } from "socket.io";
-import { calculateDiscountPrice, getAllReportedEmployees, getUSDRated } from "../common/utils/util";
+import { calculateDiscountPrice, getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
@@ -15,6 +15,12 @@ import Event from '../models/events.model'
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const quoteData = req.body;
+        const userToken = req.user;
+
+        
+        const createdBy = await getEmployeeData(userToken)
+        quoteData.createdBy = createdBy._id
+
         let quoteId: string = await generateQuoteId(quoteData.department, quoteData.createdBy, quoteData.date);
         quoteData.quoteId = quoteId;
 

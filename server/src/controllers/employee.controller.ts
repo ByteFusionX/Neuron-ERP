@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import Employee from '../models/employee.model'
 import * as bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import announcementModel from "../models/announcement.model";
 import enquiryModel from "../models/enquiry.model";
 import quotationModel from "../models/quotation.model";
@@ -11,10 +10,7 @@ import { newTrash } from '../controllers/trash.controller'
 import { getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
 import customerModel from "../models/customer.model";
 import employeeModel from "../models/employee.model";
-import { CostExplorer } from "aws-sdk";
-import notificationModel from "../models/notification.model";
 import mongoose from "mongoose";
-// import {  } from "../common/utils/tokenValidator";
 const ObjectId = require('mongoose').Types.ObjectId;
 
 export const getEmployees = async (req: Request, res: Response, next: NextFunction) => {
@@ -457,9 +453,6 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
         let employeeId: string = await generateEmployeeId();
         const employeeData = req.body;
         employeeData.employeeId = employeeId;
-
-        const password = employeeData.password;
-        employeeData.password = await bcrypt.hash(password, 10);
 
         const employee = new Employee(employeeData);
 

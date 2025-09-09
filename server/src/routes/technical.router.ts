@@ -1,13 +1,15 @@
 import { Router } from "express";
-import { getProjectAndAMCJobs, getEngineers, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan, getProjectUpdates, getProjectUpdateById, createProjectUpdate, updateProjectUpdate, deleteProjectUpdate, removeProjectUpdateAttachment, updateMaterialRequest, getBillingSummaries, getBillingSummaryById, createBillingSummary, updateBillingSummary, deleteBillingSummary, getCostingDetails } from "../controllers/technical.controller";
+import { getProjectAndAMCJobs, getEngineers, getUnassignedJobsByCustomer, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan, getProjectUpdates, getProjectUpdateById, createProjectUpdate, updateProjectUpdate, deleteProjectUpdate, removeProjectUpdateAttachment, updateMaterialRequest, getBillingSummaries, getBillingSummaryById, createBillingSummary, updateBillingSummary, deleteBillingSummary, getCostingDetails, createProject } from "../controllers/technical.controller";
 const upload = require("../common/multer.storage")
 
 const technicalRouter = Router()
 
 technicalRouter.get('/getProjectAndAMCJobs', getProjectAndAMCJobs)
 technicalRouter.get('/getEngineers', getEngineers)
+technicalRouter.get('/unassigned-jobs/:customerId', getUnassignedJobsByCustomer)
 technicalRouter.post('/assignEngineer', assignEngineer)
 technicalRouter.post('/getProjects', getProjects)
+technicalRouter.post('/createProject', createProject)
 technicalRouter.get('/:id', getProjectById)
 technicalRouter.put('/:id', updateProject)
 technicalRouter.get('/costing-details/:id', getCostingDetails)

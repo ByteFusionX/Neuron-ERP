@@ -127,7 +127,7 @@ const employeeSchema = new Schema<Employee>({
   },
   password: {
     type: String,
-    required: true,
+    required: false,
   },
   createdBy: {
     type: Schema.Types.ObjectId,
