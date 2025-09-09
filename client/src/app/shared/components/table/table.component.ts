@@ -255,6 +255,13 @@ export class TableComponent implements OnInit, OnChanges {
     }
   }
 
+  isClickableValue(column: TableColumn, item: any): boolean {
+    if (!column.clickableValue || typeof column.clickableValue !== 'function') {
+      return false;
+    }
+    return column.clickableValue(item);
+  }
+
   onPaginationChange(event: { page: number, row: number }): void {
     this.paginationService.updatePaginationState({
       page: event.page,

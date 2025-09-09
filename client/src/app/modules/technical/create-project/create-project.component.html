@@ -1,0 +1,114 @@
+<div class="bg-white">
+  <div class="border-b p-3 px-9 flex justify-between pt-5">
+    <h3 class="text-lg font-medium text-gray-800">
+      {{ isEditMode() ? 'Edit' : 'Create' }} Project
+    </h3>
+  </div>
+  
+  <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9 max-h-[70vh] overflow-y-auto">
+    <!-- @if(isLoading()) {
+      <div class="flex justify-center items-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+        <span class="ml-3 text-gray-600">Loading...</span>
+      </div>
+    } @else { -->
+      <div class="w-full">
+        <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
+          <div class="flex flex-col mx-auto text-gray-900 bg-white">
+
+            <!-- Two-sided Layout -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              <!-- Left Side -->
+              <div class="space-y-6">
+                
+                <!-- Customer Selection -->
+                <app-select-dropdown 
+                  label="Customer" 
+                  [options]="getCustomerOptions()"
+                  optionLabel="label" 
+                  optionValue="value"
+                  formControlName="customerId"
+                  placeholder="Select Customer" 
+                  [isSubmitted]="isSubmitted()"
+                  (onSelected)="onCustomerChange($event)">
+                </app-select-dropdown>
+
+                <!-- Project Type Selection -->
+                <app-select-dropdown 
+                  label="Project Type" 
+                  [options]="projectTypeOptions"
+                  optionLabel="label" 
+                  optionValue="value"
+                  formControlName="projectType"
+                  placeholder="Select Project Type" 
+                  [isSubmitted]="isSubmitted()">
+                </app-select-dropdown>
+
+              </div>
+
+              <!-- Right Side -->
+              <div class="space-y-6">
+
+                <!-- Engineer Assignment -->
+                <app-select-dropdown 
+                  label="Assign Engineer" 
+                  [options]="getEngineerOptions()"
+                  optionLabel="label" 
+                  optionValue="value"
+                  formControlName="engineerId"
+                  placeholder="Select Engineer" 
+                  [isSubmitted]="isSubmitted()">
+                </app-select-dropdown>
+
+                <!-- Priority Selection -->
+                <app-select-dropdown 
+                  label="Priority" 
+                  [options]="priorityOptions"
+                  optionLabel="label" 
+                  optionValue="value"
+                  formControlName="priority"
+                  placeholder="Select Priority" 
+                  [isSubmitted]="isSubmitted()">
+                </app-select-dropdown>
+
+              </div>
+
+            </div>
+
+            <!-- Full Width Comment Field (Optional) -->
+            <div class="w-full mt-6">
+              <app-form-field 
+                label="Comment (Optional)" 
+                [control]="projectForm.get('comment')" 
+                [isSubmitted]="isSubmitted()"
+                type="textarea"
+                placeholder="Enter project comment or description (optional)">
+              </app-form-field>
+            </div>
+
+          </div>
+        </form>
+      </div>
+    <!-- } -->
+  </div>
+
+  <!-- Form Actions -->
+  <div class="border-t p-3 px-9 flex justify-end gap-3">
+    <app-btn 
+      theme="cancel" 
+      type="button"
+      (buttonClick)="onCancel()"
+      [disabled]="isSaving()">
+      Cancel
+    </app-btn>
+
+    <app-btn 
+      type="submit" 
+      [loading]="isSaving()" 
+      [disabled]="isSaving() || isLoading()"
+      (buttonClick)="onSubmit()">
+      {{ isEditMode() ? 'Update' : 'Create' }} Project
+    </app-btn>
+  </div>
+</div>

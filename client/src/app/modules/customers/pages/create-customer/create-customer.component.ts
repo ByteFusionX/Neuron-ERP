@@ -69,7 +69,6 @@ export class CreateCustomerDialog {
       customerEmailId: ['', [Validators.required, Validators.email]],
       customerType:[null, Validators.required],
       contactNo: ['', Validators.required],
-      createdBy: ['', Validators.required],
     });
   }
 
@@ -155,8 +154,6 @@ export class CreateCustomerDialog {
     this.customerExist = false
     this.isSubmitted = true;
     this.isSaving = true;
-    let userId = this._employeeService.employeeToken().id;
-    this.customerForm.patchValue({ createdBy: userId })
     if (this.customerForm.valid) {
       this._customerService.createCustomer(this.customerForm.value).subscribe((res: any) => {
         if (res.companyExist) {

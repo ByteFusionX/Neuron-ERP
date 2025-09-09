@@ -3,11 +3,7 @@
     <!-- Header -->
     <div class="bg-white shadow-lg border border-white border-b-gray-300 p-3 px-6 flex justify-between">
       <h3 class="text-md font-medium">
-        @if(isEditMode()){
         Edit Project
-        }@else{
-        Add New Project
-        }
       </h3>
 
     </div>
@@ -17,25 +13,51 @@
       <div class="p-8">
         <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
 
-          @if(isEditMode()){
           <div class="w-full mb-6">
             <div class="relative overflow-x-auto w-full flex gap-6">
               <table class="w-full text-md text-left rtl:text-right text-black border bg-gray-50">
                 <tbody>
-                  <tr class="border-b">
-                    <td class="px-2 py-2 border text-left font-medium">
-                      Job ID
-                    </td>
-                    <td class="px-2 py-2 border text-start">
-                      {{getJobIdDisplayValue()}}
-                    </td>
-                    <td class="px-2 py-2 border text-start font-medium">
-                      Sales Person Name
-                    </td>
-                    <td class="px-2 py-2 border text-start">
-                      {{ getSalesPersonNameFromJobId() }}
-                    </td>
-                  </tr>
+                    <tr class="border-b">
+                      <td class="px-2 py-2 border text-left font-medium">
+                        Job ID
+                      </td>
+                      
+                      @if(getJobIdDisplayValue()){
+                        <td class="px-2 py-2 border text-start">
+                          {{getJobIdDisplayValue()}}
+                        </td>
+                        <td class="px-2 py-2 border text-start font-medium">
+                          Sales Person Name
+                        </td>
+                        <td class="px-2 py-2 border text-start">
+                          {{ getSalesPersonNameFromJobId() }}
+                        </td>
+                      }@else {
+                        <td class="px-2 py-2 border text-start">
+                          <div class="flex items-center gap-4">
+                            <span class="text-gray-500 whitespace-nowrap">No Job ID Attached</span>
+                            
+                          </div>
+                        </td>
+
+                        <td class="px-2 py-2 border text-start font-medium">
+                          Attach Job ID
+                        </td>
+                        <td class="px-2 py-2 border text-start">
+                          <div class="flex-1 min-w-0">
+                            <app-select-dropdown 
+                              [options]="unassignedJobOptions"
+                              [clearable]="true"
+                              [class]="'!mb-0 !mt-0'"
+                              [defaultClass]="false"
+                              placeholder="Select Job ID to attach"
+                              formControlName="jobId"
+                              (onSelected)="onJobIdSelected($event)">
+                            </app-select-dropdown>
+                          </div>
+                        </td>
+                      }
+                    </tr>
 
                   <tr class="border-b">
                     <td class="px-2 py-2 border text-left font-medium">
@@ -71,7 +93,7 @@
                     </td>
                     <td class="px-2 py-2 border text-start">
                       <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false"
-                        [options]="projectStatus" [value]="projectDetails()?.status">
+                        [options]="statusOptions" [value]="projectDetails()?.status">
                       </app-select-dropdown>
                     </td>
                     <td class="px-2 py-2 border text-start font-medium">
@@ -97,7 +119,6 @@
               </table>
             </div>
           </div>
-          }
 
           <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
             <h3 class="text-lg font-semibold text-gray-800 mb-4">Project Progress</h3>
@@ -186,13 +207,8 @@
               <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 flex gap-2">
                 <app-btn theme="primary-outline" (click)="openMaterialRequestModal()" [disabled]="isSaving()"
                   [loading]="isSaving()">
-                  @if(isEditMode()){
-                  <ng-icon name="heroPencil" class="w-4 h-4 mr-1"></ng-icon>
-                  Edit Material Request
-                  }@else{
                   <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
                   Material Request
-                  }
                 </app-btn>
                 <app-btn theme="secondary-outline" (click)="openPurchaseRequestModal()"
                   [disabled]="isSaving() || !hasPurchaseRequests()" [loading]="isSaving()">
@@ -265,7 +281,7 @@
                     </div>
                   </div>
 
-                  <div >
+                  <div>
                     <div class="flex items-center justify-between mb-4">
                       <label class="text-sm font-medium text-gray-700">Involved Persons</label>
                       <app-btn size="sm" theme="primary-outline" (buttonClick)="addPersonRow()">
@@ -326,7 +342,8 @@
                     <div class="space-y-4">
                       <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                         <span class="text-sm font-medium text-gray-700">Estimated cost for project:</span>
-                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.estimatedCostForProject }}</span>
+                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.estimatedCostForProject
+                          }}</span>
                       </div>
 
                       <!-- <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
@@ -354,7 +371,7 @@
                         <div formArrayName="estimations" class="space-y-2">
                           <div class="flex gap-2 items-end"
                             *ngFor="let estimation of estimationsArray.controls; let i = index" [formGroupName]="i">
-                            @if(i !== 0){  
+                            @if(i !== 0){
                             <div class="flex-1">
                               <input type="text" formControlName="type"
                                 class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
@@ -369,7 +386,7 @@
                               [disabled]="estimation.get('type')?.value === 'manpower'">
                               <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
                             </app-btn>
-                          }
+                            }
                           </div>
                         </div>
                       </div>
@@ -385,7 +402,8 @@
                       <!-- <div class="flex justify-between items-center p-5 rounded-lg"></div> -->
                       <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                         <span class="text-sm font-medium text-gray-700">Total Amount claimed for manpower:</span>
-                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.totalAmountClaimedForManpower
+                        <span class="text-sm font-semibold text-gray-900">{{
+                          costingDetails.totalAmountClaimedForManpower
                           }}</span>
                       </div>
 
@@ -406,7 +424,7 @@
                   </div>
                 </div>
 
-                
+
               </p-accordion-content>
             </p-accordion-panel>
           </p-accordion>
@@ -427,11 +445,7 @@
           class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
           [disabled]="isSaving()" (click)="onSubmit()">
           <ng-icon *ngIf="isSaving()" class="spin" name="heroArrowPath"></ng-icon>
-          @if(isEditMode()){
           Update Project
-          }@else{
-          Create Project
-          }
         </button>
       </div>
     </div>

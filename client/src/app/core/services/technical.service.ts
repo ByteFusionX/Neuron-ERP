@@ -21,21 +21,21 @@ export interface BillingSummary {
 }
 
 export interface TechnicalProject {
-  jobId: string;
   materialRequest?: MaterialRequest[];
   status: string;
-  projectType: string;
   supervisors?: string[];
   notes?: string;
   involvedPersons?: { name: string; designation: string }[];
-  estimationCost:{type:string,value:string}[];
+  estimations:{type:string,value:string}[];
+  priority: string;
+  jobId?: string;
 }
 
 export interface AssignEngineer {
   jobId: string;
   engineerId: string;
   comment: string;
-  assignedBy: string;
+  assignedBy?: string;
   projectType: string;
   customerId: string;
   priority: string;
@@ -65,6 +65,10 @@ export class TechnicalService {
     return this.http.post<any>(`${this.apiUrl}/technical/assignEngineer`, projectData);
   }
 
+  createProject(projectData: AssignEngineer): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/createProject`, projectData);
+  }
+
   updateMaterialRequest(technicalId: string, materialRequest: MaterialRequest[]): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/technical/material-request/${technicalId}`, { materialRequest });
   }
@@ -91,6 +95,10 @@ export class TechnicalService {
 
   getEngineers(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/technical/getEngineers`);
+  }
+
+  getUnassignedJobsByCustomer(customerId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/unassigned-jobs/${customerId}`);
   }
 
   // Activity Plan CRUD

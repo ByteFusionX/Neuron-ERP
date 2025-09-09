@@ -53,7 +53,6 @@ export class CreateQuotatationComponent {
   customerNotes!: Note[];
   termsAndConditions!: Note[];
   contacts: ContactDetail[] = []
-  tokenData!: { id: string, employeeId: string };
   calculatedValues: { totalCost: number, sellingPrice: number, totalProfit: number, discount: number } = {
     totalCost: 0,
     sellingPrice: 0,
@@ -97,7 +96,6 @@ export class CreateQuotatationComponent {
     this.getAllCustomers();
     this.getDepartment();
     this.getNotes();
-    this.tokenData = this._employeeService.employeeToken();
 
     this.quoteForm = this._fb.group({
       client: [null, Validators.required],
@@ -115,7 +113,7 @@ export class CreateQuotatationComponent {
       closingDate: ['', Validators.required],
     });
 
-    this.quoteForm.patchValue({ totalDiscount: '0', createdBy: this.tokenData.id })
+    this.quoteForm.patchValue({ totalDiscount: '0' })
     this.enquiryData$ = this._enquiryService.enquiryData$;
     this.subscriptions.add(this.enquiryData$.subscribe((data) => {
       if (data) {
