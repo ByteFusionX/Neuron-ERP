@@ -47,6 +47,7 @@ export interface PurchaseData {
     salesManager: string;
     purchaseNo: string;
     jobId: any;
+    quoteId?: any;
     dealSheetId: string;
     items: QuoteItem[];
     totalLpo: number;
@@ -65,4 +66,18 @@ export enum PurchaseStatus {
     PENDING = 'Pending',
     APPROVED = 'Approved',
     REJECTED = 'Rejected'
+}
+
+export interface PurchaseOrder {
+  _id?: string;
+  lpoNo?: string;
+  lpoValue?: number;
+  lpoStatus?: string;
+  items: any[];         
+  purchaseId: string;
+  jobId: string;
+  quoteId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  createdBy: any;
 }

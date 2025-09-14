@@ -32,7 +32,6 @@ export class InitiateLpoComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadPurchase()
-
     this.supplierService.supplierList().subscribe({
       next: (res) => {
         this.suppliersList.set(res.data)
@@ -55,7 +54,6 @@ export class InitiateLpoComponent implements OnInit {
       next: (response) => {
         this.purchase = response.data;
         this.isLoading = false;
-        console.log(this.purchase)
       },
       error: (error) => {
         this.notificationService.error('Failed to load purchase details');
@@ -96,5 +94,22 @@ export class InitiateLpoComponent implements OnInit {
     });
 
     return result;
+  }
+
+  onIssueLpoClick() {
+    if (this.purchase)
+      this.purchaseService.setSuppliersData(this.hasComparisons(this.purchase.items))
+
+    this.router.navigate(['/purchase/issue-lpo', this.purchaseId || 'none'])
+  }
+
+  hasComparisons(items: any[]): any[] {
+    if (!items?.length) return [];
+
+    return items.flatMap(item =>
+      (item.itemDetails || []).flatMap((detail: any) =>
+        (detail.comparisons || []).filter((c: any) => c.selected === true)
+      )
+    );
   }
 }

@@ -116,7 +116,7 @@ export class LpoListComponent implements OnInit {
       },
       {
         key: 'actions',
-        label: 'View Supplier Invoice',
+        label: 'Supplier Invoice',
         type: 'action',
         headerClass: '!text-center',
         actions: [
@@ -139,20 +139,20 @@ export class LpoListComponent implements OnInit {
   getPurchases() {
     this.isLoading.set(true);
     const currentState = this.paginationService.paginationState();
-    this.purchaseService.getPurchases({
-      page: 1,
-      row: currentState.row,
-      status: this.selectedStatus(),
-    }).subscribe({
-      next: (response) => {
-        this.tableData.set(response.purchase.data);
-        this.totalItems.set(response.purchase.total);
-        this.isEmpty.set(this.tableData().length === 0);
-        this.isLoading.set(false);
-      }, error: (error) => {
-        console.log(error);
-      }
-    })
+    // this.purchaseService.getPurchases({
+    //   page: 1,
+    //   row: currentState.row,
+    //   status: this.selectedStatus(),
+    // }).subscribe({
+    //   next: (response) => {
+    //     this.tableData.set(response.purchase.data);
+    //     this.totalItems.set(response.purchase.total);
+    //     this.isEmpty.set(this.tableData().length === 0);
+    //     this.isLoading.set(false);
+    //   }, error: (error) => {
+    //     console.log(error);
+    //   }
+    // })
   }
 
   viewPurchaseDetails(purchase: any): void {
@@ -182,28 +182,28 @@ export class LpoListComponent implements OnInit {
   onSearch(searchInput: string) {
     this.isLoading.set(true);
     const currentState = this.paginationService.paginationState();
-    this.paginationService.updatePaginationState({
-      page: 1,
-      row: currentState.row,
-      total: currentState.total
-    });
-    this.purchaseService.getPurchases({
-      page: 1,
-      row: currentState.row,
-      status: this.selectedStatus(),
-      search: searchInput
-    }).subscribe({
-      next: (response) => {
-        this.tableData.set(response.data.purchase);
-        this.totalItems.set(response.data.pagination.total);
-        this.isEmpty.set(this.tableData().length === 0);
-        this.isLoading.set(false);
-      },
-      error: (error) => {
-        this.notificationService.error('Failed to search purchases');
-        console.error('Error searching pruchases:', error);
-        this.isLoading.set(false);
-      }
-    });
+    // this.paginationService.updatePaginationState({
+    //   page: 1,
+    //   row: currentState.row,
+    //   total: currentState.total
+    // });
+    // this.purchaseService.getPurchases({
+    //   page: 1,
+    //   row: currentState.row,
+    //   status: this.selectedStatus(),
+    //   search: searchInput
+    // }).subscribe({
+    //   next: (response) => {
+    //     this.tableData.set(response.data.purchase);
+    //     this.totalItems.set(response.data.pagination.total);
+    //     this.isEmpty.set(this.tableData().length === 0);
+    //     this.isLoading.set(false);
+    //   },
+    //   error: (error) => {
+    //     this.notificationService.error('Failed to search purchases');
+    //     console.error('Error searching pruchases:', error);
+    //     this.isLoading.set(false);
+    //   }
+    // });
   }
 }

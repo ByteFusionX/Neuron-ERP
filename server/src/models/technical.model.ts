@@ -67,33 +67,33 @@ interface ActivityPlan {
     comment: string;
 }
 
-// const MaterialRequestSchema = new Schema({
-//     itemName: {
-//         type: String,
-//         required: true,
-//         trim: true
-//     },
-//     quantity: {
-//         type: Number,
-//         required: true,
-//         min: 0
-//     },
-//     estimatedCost: {
-//         type: Number,
-//         required: true,
-//         min: 0
-//     },
-//     requiredOn: {
-//         type: Date,
-//         required: true
-//     },
-//     remarks: {
-//         type: String,
-//         trim: true
-//     }
-// }, {
-//     timestamps: true
-// });
+const MaterialRequestSchema = new Schema({
+    itemName: {
+        type: String,
+        required: true,
+        trim: true  
+    },
+    quantity: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    estimatedCost: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    requiredOn: {
+        type: Date,
+        required: true
+    },
+    remarks: {
+        type: String,
+        trim: true
+    }
+}, {
+    timestamps: true
+});
 
 
 const activityPlanSchema = new Schema<ActivityPlan>({
@@ -229,7 +229,7 @@ const technicalSchema = new Schema<Technical>({
         ref: 'Customer'
     },
     materialRequest: {
-        type: [],
+        type: [MaterialRequestSchema],
         required: true,
         default: [],
     },

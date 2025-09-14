@@ -31,6 +31,13 @@ export class PurchaseService {
   purchaseId = new BehaviorSubject<string | null>(null)
   purchaseId$ = this.purchaseId.asObservable()
 
+  private suppliersData = new BehaviorSubject<any[]>([])
+  suppliersData$ = this.suppliersData.asObservable()
+
+  setSuppliersData(suppliers: any[]) {
+    this.suppliersData.next(suppliers)
+  }
+
   setEditingorNot(isEdit: boolean, purchaseId: string) {
     this.purchaseId.next(purchaseId)
     this.editMode.next(isEdit)

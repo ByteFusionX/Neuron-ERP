@@ -172,7 +172,7 @@ export const routes: Routes = [
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
       { path: 'comparison-summary', component: ComparisonSummaryComponent },
       { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
-      { path: 'issue-lpo', component: IssueLpoComponent },
+      { path: 'issue-lpo/:id', component: IssueLpoComponent },
       { path: 'edit/:id', component: CreatePurchaseComponent }
     ]
   },
