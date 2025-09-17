@@ -173,6 +173,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
           this.purchaseForm.reset()
           this.itemsList.set([])
           this.deelSheets()
+          this.router.navigate(['/purchase/pendings'])
         }
       },
       error: (error) => {
@@ -182,6 +183,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onDiscardClicks() {
+    this.purchaseForm.reset()
+    this.itemsList.set([])
     this.router.navigate(['/purchase/pendings'])
   }
 
@@ -547,6 +550,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.subscriptions.unsubscribe()
+    this.subscriptions.unsubscribe();
   }
 }

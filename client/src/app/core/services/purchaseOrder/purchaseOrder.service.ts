@@ -24,11 +24,21 @@ export class PurchaseOrderService {
     return this.http.get<PurchaseOrder>(`${this.baseUrl}/${id}`);
   }
 
-  getAllPurchaseOrders(): Observable<PurchaseOrder[]> {
-    return this.http.get<PurchaseOrder[]>(this.baseUrl);
+  getAllPurchaseOrders(params?: {
+    page?: number;
+    row?: number;
+    search?: string;
+    status?: string[];
+    purchaseId?: string;
+  }): Observable<any> {
+    return this.http.get<any>(this.baseUrl, { params: params as any });
   }
 
   deletePurchaseOrder(id: string): Observable<any> {
     return this.http.delete(`${this.baseUrl}/${id}`);
+  }
+
+  generatePONumber(): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/generate-po-no`);
   }
 }

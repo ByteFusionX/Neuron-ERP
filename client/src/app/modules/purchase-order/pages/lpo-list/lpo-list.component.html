@@ -7,8 +7,26 @@
 [totalItems]="totalItems()"
 (rowClick)="onRowClick($event)"
 (actionClick)="onActionClick($event)"
+(pageChange)="onPageChange($event)"
+(rowsPerPageChange)="onRowsPerPageChange($event)"
+(search)="onSearch($event)"
 [title]="'Issued LPO List'"
 >
 <ng-template #sideColumn>
+      <ng-select 
+        [items]="[
+          {label: 'Open', value: 'Open'},
+          {label: 'Hold', value: 'Hold'},
+          {label: 'Closed', value: 'Closed'},
+          {label: 'Cancelled', value: 'Cancelled'}
+        ]"
+        bindLabel="label"
+        bindValue="value"
+        [multiple]="true"
+        [ngModel]="selectedStatus()"
+        (ngModelChange)="selectedStatus.set($event); onStatusFilterChange()"
+        placeholder="Select Status"
+        class="w-full">
+      </ng-select>
 </ng-template>
 </data-table>

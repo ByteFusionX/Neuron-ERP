@@ -33,8 +33,6 @@ export interface File {
     originalname: string;
 }
 
-
-
 export interface Quotatation {
     _id?: string;
     quoteId?: string;

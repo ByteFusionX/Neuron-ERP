@@ -16,6 +16,7 @@ export class FormFieldComponent {
   @Input() placeholder = '';
   @Input() id = '';
   @Input() readonly = false;
+  @Input() class = '';
 
   ngOnInit() {
     if (!this.id) {

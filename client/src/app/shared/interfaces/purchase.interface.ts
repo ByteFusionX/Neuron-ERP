@@ -1,3 +1,7 @@
+import { getJob } from "./job.interface";
+import { Quotatation } from "./quotation.interface";
+import { Supplier } from "./suppliers.interface";
+
 export interface QuoteItemDetails {
     detail: string;
     quantity: number;
@@ -35,7 +39,7 @@ export interface MrDetails {
 }
 
 export interface SupplierDiscount {
-    supplier: string;
+    supplierId: string;
     discount: string;
     discountType?: string;
 }
@@ -70,13 +74,27 @@ export enum PurchaseStatus {
 
 export interface PurchaseOrder {
   _id?: string;
-  lpoNo?: string;
-  lpoValue?: number;
-  lpoStatus?: string;
-  items: any[];         
-  purchaseId: string;
-  jobId: string;
-  quoteId: string;
+  poNo: string;
+  poStatus: string;
+  items: {
+    detail: string;
+    quantity: number;
+    unitCost: number;
+    totalCost: number;
+  }[];
+  supplierId: any;
+  purchaseId: any;
+  jobId: any;
+  quoteId?: any;
+  etaTerms: string;
+  paymentTerms: string;
+  shippingTerms: string;
+  placeOfDelivery: string;
+  subject: string;
+  poDate: Date;
+  termsAndCondition: string;
+  discount: number;
+  purchaseCompany?: string;
   createdAt?: Date;
   updatedAt?: Date;
   createdBy: any;

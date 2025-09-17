@@ -111,7 +111,7 @@ export class ViewPurchaseComponent {
         ).subscribe({
           next: () => {
             this.notificationService.success('Purchase approved successfully');
-            this.router.navigate(['/purchase/approves']);
+            this.router.navigate(['/purchase/pendings']);
           },
           error: (error) => {
             this.notificationService.error(error.error?.message || 'Failed to approve purchase');
