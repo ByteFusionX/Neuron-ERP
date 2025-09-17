@@ -1,0 +1,20 @@
+<data-table
+        [data]="tableData"
+        [columns]="tableColumns"
+        [title]="'Request for Approvals'"
+        [isLoading]="isLoading"
+        [totalItems]="totalItems"
+        [isEmpty]="isEmpty"
+        [tableId]="'claims-approval-requests'"
+        (actionClick)="onActionClick($event)"
+        (filterChange)="onFilterChange($event)"
+        (paginationChange)="onPaginationChange($event)">
+
+        <ng-template #sideColumn>
+        <app-btn theme="secondary-outline" (buttonClick)="onRefreshClaims()">
+                <ng-icon name="heroArrowPath"></ng-icon>
+                   Refresh
+                </app-btn>
+                  
+        </ng-template>
+</data-table>

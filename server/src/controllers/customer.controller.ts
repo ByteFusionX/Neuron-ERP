@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import Customer from '../models/customer.model';
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees } from "../common/util";
+import { getAllReportedEmployees } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
 const { ObjectId } = require('mongodb')
 

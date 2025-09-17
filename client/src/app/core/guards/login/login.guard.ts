@@ -1,12 +1,15 @@
 import { inject } from '@angular/core';
-import { ActivatedRouteSnapshot, CanActivateFn, Router, RouterStateSnapshot } from '@angular/router';
+import { CanActivateFn, Router } from '@angular/router';
+import { MsalService } from '@azure/msal-angular';
 
-export const LoginGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: RouterStateSnapshot) => {
-  const token = <string>localStorage.getItem('employeeToken')
+export const LoginGuard: CanActivateFn = (route, state) => {
+  const authService: MsalService = inject(MsalService);
   const router: Router = inject(Router);
-  if (token) {
-    router.navigate(['/home'])
-    return false
+
+  if (authService.instance.getAllAccounts().length > 0) {
+    router.navigate(['/home']);
+    return false;
   }
+
   return true;
 };

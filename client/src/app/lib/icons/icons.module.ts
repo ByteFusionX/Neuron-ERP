@@ -78,7 +78,17 @@ import {
   heroWrenchScrewdriver,
   heroPencil,
   heroListBullet,
-  heroPlusCircle
+  heroPlusCircle,
+  heroClock,
+  heroPlayCircle,
+  heroPauseCircle,
+  heroArchiveBoxXMark,
+  heroArchiveBoxArrowDown,
+  heroDocumentChartBar,
+  heroPhoto,
+  heroDocumentDuplicate,
+  heroDocumentPlus,
+  heroBanknotes
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -165,6 +175,16 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroWrenchScrewdriver,
       heroListBullet,
       heroPlusCircle,
+      heroClock,
+      heroPlayCircle,
+      heroPauseCircle,
+      heroArchiveBoxXMark,
+      heroArchiveBoxArrowDown,
+      heroDocumentChartBar,
+      heroPhoto,
+      heroDocumentDuplicate,
+      heroDocumentPlus,
+      heroBanknotes
     }),
   ],
   exports: [NgIconsModule]

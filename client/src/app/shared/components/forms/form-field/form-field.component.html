@@ -17,7 +17,8 @@
         <input [id]="id" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted" 
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
             [formControl]="control" 
-            [readonly]="readonly"/>
+            [readonly]="readonly"
+            [type]="type"/>
     }
 
     @if(control?.invalid && isSubmitted) {
@@ -33,6 +34,9 @@
             }
             @if(control?.errors?.['max']) {
                 <span>Value must not exceed {{control?.errors?.['max']?.max}}.</span>
+            }
+            @if(control?.errors?.['minlength']) {
+                <span>Minimum length is {{control?.errors?.['minlength']?.requiredLength}} characters.</span>
             }
         </div>
     }

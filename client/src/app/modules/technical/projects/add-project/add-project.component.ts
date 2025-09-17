@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal, HostListener } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
@@ -16,6 +16,9 @@ import { PurchaseRequestModalComponent } from './purchase-request-modal/purchase
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CanDeactivate } from '@angular/router';
 import { Observable } from 'rxjs';
+import { getProject } from 'src/app/shared/interfaces/project.interface';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { AccordionModule } from 'primeng/accordion';
 
 @Component({
   selector: 'app-add-project',
@@ -26,6 +29,8 @@ import { Observable } from 'rxjs';
     IconsModule,
     ButtonComponent,
     SelectDropdownComponent,
+    FormFieldComponent,
+    AccordionModule,
   ],
   templateUrl: './add-project.component.html',
   styleUrl: './add-project.component.css'
@@ -38,6 +43,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   private jobService = inject(JobService);
   private purchaseService = inject(PurchaseService);
   private dialog = inject(MatDialog);
+  private employeeService = inject(EmployeeService);
 
   projectId: string = '';
   isSaving = signal<boolean>(false);
@@ -46,8 +52,20 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   hasPurchaseRequests = signal<boolean>(false);
   selectedJobId = signal<any>(null);
   originalFormData: any = null;
-  hasUnsavedChanges = signal<boolean>(false);
+  hasUnsavedChanges = signal(false);
   private isNavigatingAway = false;
+  projectDetails = signal<getProject | null>(null);
+  projectStatus = [
+    { id: 'Pending', name: 'Pending' },
+    { id: 'Approved', name: 'Approved' },
+    { id: 'Rejected', name: 'Rejected' }
+  ];
+
+  priority = [
+    { id: 'Low', name: 'Low' },
+    { id: 'Medium', name: 'Medium' },
+    { id: 'High', name: 'High' }
+  ];
 
   jobIds: any[] = [];
   materialRequests: MaterialRequest[] = [];
@@ -65,13 +83,44 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     { id: 'Rejected', name: 'Rejected' }
   ];
 
+  createEstimationGroup(type: string, value: number): FormGroup {
+    return this.fb.group({
+      type: [type, [Validators.required]],
+      value: [value, [Validators.required, Validators.min(0)]]
+    });
+  }
+
+  createPersonGroup(name: string = '', designation: string = ''): FormGroup {
+    return this.fb.group({
+      name: [name, [Validators.required]],
+      designation: [designation, [Validators.required]]
+    });
+  }
+
   projectForm: FormGroup = this.fb.group({
     jobId: ['', [Validators.required]],
     projectType: ['', [Validators.required]],
     status: ['', [Validators.required]],
     assignedTo: ['', [Validators.required]],
     materialRequest: [[]],
+    supervisors: [[]],
+    notes: [''],
+    involvedPersons: this.fb.array([
+      this.createPersonGroup()
+    ]),
+    estimations: this.fb.array([
+      this.createEstimationGroup('manpower', 0)
+    ])
   });
+
+  supervisorOptions: { id: string; name: string }[] = [];
+
+  costingDetails = {
+    estimatedCostForProject: 1500,
+    totalLPOValue: 1500,
+    professionalServiceCharge: 300,
+    totalAmountClaimedForManpower: 120
+  };
 
   ngOnInit(): void {
     this.getJobIds();
@@ -82,19 +131,15 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     }
     this.setupFormChangeDetection();
     this.setupBrowserNavigation();
+    this.loadSupervisors();    
   }
 
-  setupBrowserNavigation(): void {
-    window.history.pushState(null, '', window.location.href);
-  }
-
-  setupFormChangeDetection(): void {
-    this.projectForm.valueChanges.subscribe(() => {
-      if (this.isEditMode() && this.originalFormData) {
-        const currentFormData = this.projectForm.value;
-        const hasChanges = JSON.stringify(currentFormData) !== JSON.stringify(this.originalFormData) ||
-                          JSON.stringify(this.materialRequests) !== JSON.stringify(this.originalFormData.materialRequest);
-        this.hasUnsavedChanges.set(hasChanges);
+  loadCostingDetails(): void {
+    this.technicalService.getCostingDetails(this.projectId).subscribe({
+      next: (response) => {
+        if(response && response.data){
+          this.costingDetails = response.data;
+        }
       }
     });
   }
@@ -104,6 +149,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       next: (response) => {
         console.log(response);
         this.patchProjectDetails(response.data);
+        this.projectDetails.set(response.data);
       },
       error: (error) => {
         console.error('Error fetching project details:', error);
@@ -119,17 +165,45 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       projectType: project.projectType,
       status: project.status,
       assignedTo: project.assignedTo._id,
-      materialRequest: project.materialRequest
+      materialRequest: project.materialRequest,
+      supervisors: project.supervisors || [],
+      notes: project.notes || ''
     });
 
     this.selectedJobId.set(project.jobId);
     
     this.materialRequests = project.materialRequest || [];
+    const persons = Array.isArray(project.involvedPersons) ? project.involvedPersons : [];
+    const array = this.involvedPersonsArray;
+    while (array.length) {
+      array.removeAt(0);
+    }
+    if (persons.length) {
+      persons.forEach((p: any) => array.push(this.createPersonGroup(p.name, p.designation)));
+    } else {
+      array.push(this.createPersonGroup());
+    }
+
+    // Handle estimations
+    const estimations = Array.isArray(project.estimations) ? project.estimations : [];
+    const estimationsArray = this.estimationsArray;
+    while (estimationsArray.length) {
+      estimationsArray.removeAt(0);
+    }
+    if (estimations.length) {
+      estimations.forEach((e: any) => estimationsArray.push(this.createEstimationGroup(e.type, e.value)));
+    } else {
+      estimationsArray.push(this.createEstimationGroup('manpower', 0));
+    }
+
     this.originalFormData = {
       ...this.projectForm.value,
       materialRequest: [...this.materialRequests]
     };
-    console.log(this.projectForm.value);
+    
+    if(this.projectForm.get('jobId')?.value){
+      this.loadCostingDetails();
+    }
   }
 
   getJobIdDisplayValue(): string {
@@ -146,8 +220,15 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     dialogRef.afterClosed().subscribe((result: MaterialRequest[]) => {
       if (result) {
         this.materialRequests = result;
-        this.projectForm.patchValue({ materialRequest: result });
-        this.isEditMode.set(true);
+        this.technicalService.updateMaterialRequest(this.projectId, result).subscribe((response) => {
+          if(response.success){
+            this.notificationService.success(response.message);
+            this.projectForm.patchValue({ materialRequest: result });
+          }else{
+            this.notificationService.error(response.message);
+          }
+        });
+        this.originalFormData.materialRequest = result;
         this.checkForUnsavedChanges();
       }
     });
@@ -206,14 +287,19 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       jobId: this.projectForm.value.jobId,
       projectType: this.projectForm.value.projectType,
       status: this.projectForm.value.status,
-      materialRequest: this.materialRequests
+      supervisors: this.projectForm.value.supervisors,
+      notes: this.projectForm.value.notes,
+      involvedPersons: this.projectForm.value.involvedPersons,
+      estimationCost: this.estimationsArray.value
     };
 
-    if(this.isEditMode()){
-      this.updateTechnicalProject(this.projectId, technicalData);
-    }else{
-      this.createTechnicalProject(technicalData);
-    }
+    console.log(technicalData);
+
+    // if(this.isEditMode()){
+    //   this.updateTechnicalProject(this.projectId, technicalData);
+    // }else{
+    //   this.createTechnicalProject(technicalData);
+    // }
   }
 
   createTechnicalProject(technicalData: TechnicalProject): void {
@@ -246,6 +332,22 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
         this.isSaving.set(false);
         this.notificationService.error('Failed to update technical project');
         console.error('Error updating technical project:', error);
+      }
+    });
+  }
+
+  // For navigation block
+  setupBrowserNavigation(): void {
+    window.history.pushState(null, '', window.location.href);
+  }
+
+  setupFormChangeDetection(): void {
+    this.projectForm.valueChanges.subscribe(() => {
+      if (this.isEditMode() && this.originalFormData) {
+        const currentFormData = this.projectForm.value;
+        const hasChanges = JSON.stringify(currentFormData) !== JSON.stringify(this.originalFormData) ||
+                          JSON.stringify(this.materialRequests) !== JSON.stringify(this.originalFormData.materialRequest);
+        this.hasUnsavedChanges.set(hasChanges);
       }
     });
   }
@@ -365,7 +467,6 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   getJobIds(): void {
     this.jobService.getTechnicalDropdownList().subscribe((response: any) => {
-      console.log(response);
       this.jobIds = response.data;
     });
   }
@@ -374,6 +475,22 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     const jobId = this.projectForm.get('jobId')?.value;
     const job = this.jobIds.find((job: any) => job._id === jobId);
     return job?.salesPersonName || this.selectedJobId() ? this.selectedJobId().quotation.createdBy.fullName : '';
+  }
+
+  getProjectName(): string {
+    return this.projectDetails()?.customer.companyName || '';
+  }
+
+  getExpectedStartDate(): Date | null {
+    return this.projectDetails()?.activityPlan.reduce((acc,current)=>{
+      return acc.startDate < current.startDate ? acc : current;
+    }).startDate || null;
+  }
+
+  getExpectedEndDate(): Date | null {
+    return this.projectDetails()?.activityPlan.reduce((acc,current)=>{
+      return acc.endDate > current.endDate ? acc : current;
+    }).endDate || null;
   }
 
   onJobIdChange(jobId: string): void {
@@ -394,7 +511,11 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       jobId: 'Job ID',
       status: 'Status',
       assignedTo: 'Assigned To',
-      allocatedDate: 'Allocated Date'
+      allocatedDate: 'Allocated Date',
+      estimatedCost: 'Estimated Cost',
+      estimatedDuration: 'Estimated Duration',
+      actualCost: 'Actual Cost',
+      actualDuration: 'Actual Duration',
     };
     return labels[fieldName] || fieldName;
   }
@@ -406,5 +527,112 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   private resetUnsavedChanges(): void {
     this.hasUnsavedChanges.set(false);
     this.isNavigatingAway = false;
+  }
+
+  // Progress Bar Methods
+  getProjectProgress(): number {
+    const totalActivities = this.getTotalActivities();
+    const completedActivities = this.getCompletedActivities();
+    
+    if (totalActivities === 0) return 0;
+    return Math.round((completedActivities / totalActivities) * 100);
+  }
+
+  getTotalActivities(): number {
+    if (!this.projectDetails()?.activityPlan) return 0;
+    return this.projectDetails()!.activityPlan.length;
+  }
+
+  getCompletedActivities(): number {
+    if (!this.projectDetails()?.activityPlan) return 0;
+    return this.projectDetails()!.activityPlan.filter(activity => activity.status === 'Closed').length;
+  }
+
+  getProgressIcon(): string {
+    const progress = this.getProjectProgress();
+    
+    if (progress >= 100) return 'heroCheckCircle';
+    if (progress >= 75) return 'heroClock';
+    if (progress >= 50) return 'heroPlayCircle';
+    return 'heroPauseCircle';
+  }
+
+  getProgressIconClass(): string {
+    const progress = this.getProjectProgress();
+    
+    if (progress >= 100) return 'text-green-600';
+    if (progress >= 75) return 'text-blue-600';
+    if (progress >= 50) return 'text-yellow-600';
+    return 'text-gray-600';
+  }
+
+  get involvedPersonsArray(): FormArray {
+    return this.projectForm.get('involvedPersons') as FormArray;
+  }
+
+  addPersonRow(): void {
+    this.involvedPersonsArray.push(this.createPersonGroup());
+    this.checkForUnsavedChanges();
+  }
+
+  removePersonRow(index: number): void {
+    if (this.involvedPersonsArray.length > 1) {
+      this.involvedPersonsArray.removeAt(index);
+      this.checkForUnsavedChanges();
+    }
+  }
+
+  loadSupervisors(): void {
+    this.employeeService.getAllEmployees().subscribe((employees) => {
+      this.supervisorOptions = employees.map((e: any) => ({ id: e._id, name: `${e.firstName} ${e.lastName}` }));
+    });
+  }
+
+  // Costing calculation methods
+  getTotalEstimatedCost(): number {
+    return this.estimationsArray.controls.reduce((total, control) => {
+      return total + (control.get('value')?.value || 0);
+    }, 0);
+  }
+
+  getBalanceAmount(): number {
+    const totalClaimed = this.costingDetails.totalAmountClaimedForManpower;
+    const totalEstimated = this.getManpowerEstimation();
+    return  Number(totalClaimed) - Number(totalEstimated);
+  }
+
+  getManpowerEstimation(): number {
+    const manpowerControl = this.estimationsArray.controls.find(control => 
+      control.get('type')?.value === 'manpower'
+    );
+    return manpowerControl?.get('value')?.value || 0;
+  }
+
+  setManpowerEstimation(value: number): void {
+    const manpowerControl = this.estimationsArray.controls.find(control => 
+      control.get('type')?.value === 'manpower'
+    );
+    if (manpowerControl) {
+      manpowerControl.get('value')?.setValue(value);
+    }
+  }
+
+  get estimationsArray(): FormArray {
+    return this.projectForm.get('estimations') as FormArray;
+  }
+
+  addEstimationRow(): void {
+    this.estimationsArray.push(this.createEstimationGroup('', 0));
+    this.checkForUnsavedChanges();
+  }
+
+  removeEstimationRow(index: number): void {
+    const estimation = this.estimationsArray.at(index);
+    const isManpower = estimation?.get('type')?.value === 'manpower';
+    
+    if (this.estimationsArray.length > 1 && !isManpower) {
+      this.estimationsArray.removeAt(index);
+      this.checkForUnsavedChanges();
+    }
   }
 } 

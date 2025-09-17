@@ -14,6 +14,10 @@ import { NgIf } from '@angular/common';
 import { SideBarComponent } from './shared/components/side-bar/side-bar.component';
 import { NotificationComponent } from './shared/components/notification/notification.component';
 import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
+import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
+import { ToastrService } from 'ngx-toastr';
+import { MsalService } from '@azure/msal-angular';
+import { environment } from 'src/environments/environment';
 
 @Component({
     selector: 'app-root',
@@ -30,7 +34,7 @@ export class AppComponent implements OnDestroy, OnInit {
   dialogRef: MatDialogRef<CelebrationDialogComponent> | undefined;
   employeeToken: string | null = null;
   employee!: { id: string, employeeId: string };
-
+  token: string | null = null;
   private destroy$ = new Subject<void>();
   private subscriptions: Subscription = new Subscription()
 
@@ -42,17 +46,46 @@ export class AppComponent implements OnDestroy, OnInit {
     private _notificationService: NotificationService,
     private _employeeService: EmployeeService,
     private dialog: MatDialog,
-    private router: Router
+    private router: Router,
+    private toaster: ToastrService,
+    private authService: MsalService,
+    private idle: Idle
   ) { }
 
 
   ngOnInit() {
-    const token = this._employeeService.getToken() as string;;
-    if (token) {
-      this._notificationService.authSocketIo(token)
-      this._notificationService.getEmployeeNotifications(token)
-      this._notificationService.getEmployeeTextNotifications(token)
-      this._notificationService.initializeNotifications()
+    this.idle.setIdle(14400); // 4 hours
+    this.idle.setTimeout(5);
+    this.idle.setInterrupts(DEFAULT_INTERRUPTSOURCES);
+    this.idle.watch();
+
+
+    this.idle.onTimeout.subscribe(() => {
+      localStorage.clear();
+      this.router.navigate(['/login']);
+    });
+
+    // Check if there are any accounts available
+    const accounts = this.authService.instance.getAllAccounts();
+    if (accounts.length > 0) {
+      // Set active account if not already set
+      if (!this.authService.instance.getActiveAccount()) {
+        this.authService.instance.setActiveAccount(accounts[0]);
+      }
+
+      const token = this.authService.acquireTokenSilent({
+        scopes: [environment.microsoftApiUrl],
+      });
+      
+      token.subscribe((data) => {
+        if (data) {
+          this.token = data.accessToken
+          this._notificationService.authSocketIo(data.accessToken)
+          this._notificationService.getEmployeeNotifications()
+          this._notificationService.getEmployeeTextNotifications()
+          this._notificationService.initializeNotifications()
+        }
+      })
     }
 
     this.router.events.subscribe(event => {
@@ -84,18 +117,18 @@ export class AppComponent implements OnDestroy, OnInit {
   }
 
   isLoginRoute(): boolean {
-    const employeeToken = localStorage.getItem('employeeToken');
-    return (employeeToken === null || employeeToken === undefined) || this.route.snapshot.firstChild?.routeConfig?.path === 'login';
+    const accounts = this.authService.instance.getAllAccounts();
+    const isAuthenticated = accounts.length > 0;
+    return !isAuthenticated || this.route.snapshot.firstChild?.routeConfig?.path === 'login';
   }
 
   isUserThere() {
-    this.employeeToken = localStorage.getItem('employeeToken');
     this.getCelebData()
   }
   
 
   getCelebData() {
-    if (this.employeeToken) {
+    if (this.token) {
       this.birthdaysViewed = this._service.hasTodaysBirthdaysBeenViewed();
       if (!this.birthdaysViewed) {
         this.subscriptions.add(

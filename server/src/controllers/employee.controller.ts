@@ -8,12 +8,13 @@ import quotationModel from "../models/quotation.model";
 import categoryModel, { UserRole } from "../models/category.model";
 import departmentModel from "../models/department.model";
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees, getUSDRated } from "../common/util";
+import { getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
 import customerModel from "../models/customer.model";
 import employeeModel from "../models/employee.model";
 import { CostExplorer } from "aws-sdk";
 import notificationModel from "../models/notification.model";
 import mongoose from "mongoose";
+// import {  } from "../common/utils/tokenValidator";
 const ObjectId = require('mongoose').Types.ObjectId;
 
 export const getEmployees = async (req: Request, res: Response, next: NextFunction) => {
@@ -167,9 +168,9 @@ export const getEmployeesForCustomerTransfer = async (req: Request, res: Respons
             { $project: { password: 0 } },
         ]);
 
-        
-        allEmployees = [...allEmployees,reportedEmployee]   
-        
+
+        allEmployees = [...allEmployees, reportedEmployee]
+
         const employeesWithoutAccess = await Promise.all(
             allEmployees.map(async (employee) => {
                 // Check if the employee is in the sharedWith array
@@ -664,45 +665,46 @@ const generateEmployeeId = async () => {
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { employeeId, password } = req.body
-        const employee = await Employee.findOne(
-            {
-                employeeId: employeeId,
-                isDeleted: { $ne: true }
-            }
-        )
-        if (employee) {
-            const passwordMatch = await bcrypt.compare(password, employee.password)
-            if (passwordMatch) {
-                const payload = { id: employee._id, employeeId: employee.employeeId }
-                const token = jwt.sign(payload, process.env.JWT_SECRET)
-                res.status(200).json({ token: token, employeeData: employee })
-            } else {
-                res.send({ passwordNotMatchError: true })
-            }
-        } else {
-            res.send({ employeeNotFoundError: true })
-        }
-    } catch (error) {
-        console.log(error)
-        next(error)
-    }
+        console.log(req.user, 'ividem work aaknd')
+        const token = req.user as any;
+        const oid = token.oid;
 
-}
-
-export const getEmployee = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const employeeId = req.params.id
-        const employeeData = await Employee.findOne(
+        let employeeData = await Employee.findOne(
             {
-                employeeId: employeeId,
+                microsoftId: oid,
                 isDeleted: { $ne: true }
             },
             { password: 0 }
         ).populate('category');
 
+        if (!employeeData) {
+            const email = token.email || token.upn;
+            const employee = await Employee.findOneAndUpdate({ email, isDeleted: { $ne: true } }, { microsoftId: oid })
+            employeeData = employee
+        }
+
+        if (!employeeData) return res.status(401).json({ message: 'Unauthorized' });
+
+        res.status(200).json({
+            message: 'Login successful',
+            employee: employeeData,
+            token: token
+        })
+
+    } catch (error) {
+        console.log(error)
+        return next(error)
+    }
+}
+
+export const getEmployee = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userData = await getEmployeeData(req.user);
+        const employeeData = userData;
+
         if (employeeData) return res.status(200).json(employeeData)
-        return res.status(502).json()
+
+        return res.status(401).json()
     } catch (error) {
         console.log(error)
         next(error)
@@ -711,12 +713,9 @@ export const getEmployee = async (req: Request, res: Response, next: NextFunctio
 
 export const getNotificationCounts = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const token = req.params.token
-        const jwtPayload = jwt.verify(token, process.env.JWT_SECRET)
-        const userId = (<any>jwtPayload).id
-
-        // Get user's category
-        const employee = await Employee.findById(userId);
+        const userData = await getEmployeeData(req.user);
+        const employee = userData;
+        const userId = employee._id;
         const userCategoryId = employee.category;
 
         // Updated announcement count query
@@ -819,3 +818,22 @@ export const deleteEmployee = async (req: Request, res: Response, next: NextFunc
 }
 
 
+export const blockEmployee = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { employeeId } = req.params;
+        const employee = await Employee.findOne({ _id: employeeId });
+        console.log(employee)
+        if (employee) {
+            let isBlocked = employee.isBlocked ? false : true;
+            console.log(isBlocked)
+            await Employee.findByIdAndUpdate(employeeId, { isBlocked: isBlocked }, { new: true });
+            return res.status(200).json({ isBlocked });
+        } else {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+    } catch (error) {
+        console.log(error)
+        next(error)
+    }
+}

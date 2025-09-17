@@ -3,11 +3,12 @@ import { HttpRequest, HttpHandler, HttpEvent, HttpInterceptor, HttpErrorResponse
 import { Observable, catchError, throwError } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { Router } from '@angular/router';
+import { MsalService } from '@azure/msal-angular';
 
 @Injectable()
 export class ErrorInterceptor implements HttpInterceptor {
 
-  constructor(private toast: ToastrService, private router: Router) { }
+  constructor(private toast: ToastrService, private router: Router, private msalService: MsalService) { }
 
   intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
     return next.handle(request).pipe(
@@ -21,6 +22,8 @@ export class ErrorInterceptor implements HttpInterceptor {
               break;
             case 401:
               this.toast.warning('Access Denied, Please sign in again.')
+              localStorage.clear();
+              sessionStorage.clear();
               this.router.navigate(['/login'])
               break;
             default:

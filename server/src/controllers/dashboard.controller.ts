@@ -3,7 +3,7 @@ import quotationModel from "../models/quotation.model";
 import { ObjectId } from "mongodb"
 import employeeModel from "../models/employee.model";
 import jobModel from "../models/job.model";
-import { buildDashboardFilters, calculateCostPricePipe, calculateDiscountPrice, calculateTotalCost, getUSDRated, lastRangedMonths, months, calculateDiscountPricePipe, getDateRange, calculateQuoteDiscountPricePipe } from "../common/util";
+import { buildDashboardFilters, calculateCostPricePipe, calculateDiscountPrice, calculateTotalCost, getUSDRated, lastRangedMonths, months, calculateDiscountPricePipe, getDateRange, calculateQuoteDiscountPricePipe, getEmployeeData } from "../common/utils/util";
 import categoryModel, { Privileges } from "../models/category.model";
 import { Filters } from "../interface/dashboard.interface";
 import enquiryModel from "../models/enquiry.model";
@@ -11,7 +11,9 @@ import enquiryModel from "../models/enquiry.model";
 
 export const getDashboardMetrics = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, filters } = req.body;
+        const userData = await getEmployeeData(req.user);
+        const userId = userData?._id;
+        const { filters } = req.body;
         if (userId) {
             const userCategory = (await employeeModel.findById(userId)).category;
             const privileges: Privileges = (await categoryModel.findById(userCategory)).privileges;
@@ -827,7 +829,9 @@ const getAssignedJobs = async (access: string, userId: string, filters: Filters)
 
 export const getRevenuePerSalesperson = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, filters } = req.body;
+        const userData = await getEmployeeData(req.user);
+        const userId = userData?._id;
+        const { filters } = req.body;
         if (userId) {
             const userCategory = (await employeeModel.findById(userId)).category;
             const privileges: Privileges = (await categoryModel.findById(userCategory)).privileges;
@@ -948,7 +952,9 @@ export const getRevenuePerSalesperson = async (req: Request, res: Response, next
 
 export const getGrossProfitForLastSevenMonths = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, filters } = req.body;
+        const userData = await getEmployeeData(req.user);
+        const userId = userData?._id;
+        const { filters } = req.body;
         if (userId) {
             const userCategory = (await employeeModel.findById(userId)).category;
             const privileges: Privileges = (await categoryModel.findById(userCategory)).privileges;
@@ -1109,7 +1115,9 @@ export const getGrossProfitForLastSevenMonths = async (req: Request, res: Respon
 
 export const getEnquirySalesConversion = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, filters } = req.body;
+        const userData = await getEmployeeData(req.user);
+        const userId = userData?._id;
+        const { filters } = req.body;
         if (userId) {
             const userCategory = (await employeeModel.findById(userId)).category;
             const privileges: Privileges = (await categoryModel.findById(userCategory)).privileges;
@@ -1232,7 +1240,9 @@ export const getEnquirySalesConversion = async (req: Request, res: Response, nex
 
 export const getPresaleJobSalesConversion = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, filters } = req.body;
+        const userData = await getEmployeeData(req.user);
+        const userId = userData?._id;
+        const { filters } = req.body;
         if (userId) {
             const userCategory = (await employeeModel.findById(userId)).category;
             const privileges: Privileges = (await categoryModel.findById(userCategory)).privileges;
@@ -1356,8 +1366,9 @@ export const getPresaleJobSalesConversion = async (req: Request, res: Response, 
 
 export const getReAssignedPresaleJobSalesConversion = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { userId, filters } = req.body;
-        console.log(filters)
+        const userData = await getEmployeeData(req.user);
+        const userId = userData?._id;
+        const { filters } = req.body;
         if (userId) {
             const userCategory = (await employeeModel.findById(userId)).category;
             const privileges: Privileges = (await categoryModel.findById(userCategory)).privileges;
@@ -1392,7 +1403,7 @@ export const getReAssignedPresaleJobSalesConversion = async (req: Request, res: 
                 },
                 {
                     $lookup: {
-                        from: "enquiries", // The name of your Enquiry collection
+                        from: "enquiries", 
                         localField: "enqId",
                         foreignField: "_id",
                         as: "enquiry"
@@ -1401,7 +1412,7 @@ export const getReAssignedPresaleJobSalesConversion = async (req: Request, res: 
                 {
                     $unwind: {
                         path: "$enquiry",
-                        preserveNullAndEmptyArrays: false // This will remove documents where enqId doesn't exist
+                        preserveNullAndEmptyArrays: false 
                     }
                 },
                 {
@@ -1438,15 +1449,11 @@ export const getReAssignedPresaleJobSalesConversion = async (req: Request, res: 
                         as: "job"
                     }
                 },
-
-                // Stage 6: Add a field to check if job exists
                 {
                     $addFields: {
                         hasJob: { $gt: [{ $size: "$job" }, 0] }
                     }
                 },
-
-                // Stage 7: Group and count
                 {
                     $group: {
                         _id: null,
@@ -1456,8 +1463,6 @@ export const getReAssignedPresaleJobSalesConversion = async (req: Request, res: 
                         }
                     }
                 },
-
-                // Stage 8: Project to reshape the output
                 {
                     $project: {
                         _id: 0,

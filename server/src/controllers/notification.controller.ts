@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import Notification from "../models/notification.model";
 import Employee from "../models/employee.model";
 import jwt from 'jsonwebtoken';
+import { getEmployeeData } from "../common/utils/util";
 
 
 interface NotificationData {
@@ -46,10 +47,8 @@ export const createNotification = async (notification: NotificationData) => {
 
 export const getAllNotifications = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const token = req.params.token
-        const jwtPayload = jwt.verify(token, process.env.JWT_SECRET)
-        const userId = (<any>jwtPayload).id
-        const employee = await Employee.findById(userId);
+        const userData = await getEmployeeData(req.user);
+        const employee = userData;
 
         const unReadNotifications = await Notification.find({
             'recipients': { $elemMatch: { objectId: employee._id, status: 'unread' } }

@@ -1,0 +1,139 @@
+<div class="max-h-[95vh]">
+  <div class="flex justify-between items-center p-6 border-b border-gray-200">
+    <h2 class="text-xl font-semibold text-gray-900">Approval Status</h2>
+    <button (click)="onClose()" class="text-gray-400 hover:text-gray-600 transition-colors">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div class="p-6  overflow-y-scroll max-h-[77vh]">
+    <!-- Approval Histories Custom Accordion -->
+    <div *ngIf="getApprovalHistories().length > 0">
+      <div class="space-y-4">
+        @for (history of getApprovalHistories(); track $index) {
+          <div class="border border-gray-300 rounded-lg overflow-hidden">
+            <!-- Accordion Header -->
+            <button 
+              (click)="toggleAccordion($index)"
+              class="w-full p-4 text-left font-semibold flex items-center justify-between transition-colors"
+              [ngClass]="getAccordionHeaderClasses($index)">
+              <span class="flex items-center gap-2">
+                <ng-icon [name]="getHistoryIcon($index)"></ng-icon>
+                {{ getHistoryTitle(history, $index) }}
+              </span>
+              <svg 
+                class="w-5 h-5 transition-transform duration-200"
+                [class.rotate-180]="isAccordionOpen($index)"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </button>
+            
+            <!-- Accordion Content -->
+            <div 
+              class="overflow-hidden transition-all duration-300"
+              [class.max-h-0]="!isAccordionOpen($index)"
+              [class.max-h-none]="isAccordionOpen($index)">
+              <div class="p-4 border-t border-gray-200 bg-gray-50">
+                <div class="space-y-3">
+                  @for (approval of history; track approval.step) {
+                    
+                    <!-- Manager Approval -->
+                    @if (approval.managerApproval) {
+                      <div class="mb-6">
+                        <div class="flex items-center gap-3 p-3 border rounded-lg" [ngClass]="getManagerApprovalClasses(approval)">
+                          <div class="w-8 h-8 rounded-full flex items-center justify-center" [ngClass]="getManagerApprovalIconClasses(approval)">
+                            <ng-icon class="text-xl" [name]="getStatusIcon(getManagerApprovalStatus(approval))"></ng-icon>
+                          </div>
+                          <div>
+                            @if (approval.updatedBy) {
+                              <p class="font-medium" [ngClass]="getManagerApprovalTextClasses(approval)">
+                                {{ approval.updatedBy.firstName }} {{ approval.updatedBy.lastName }}
+                              </p>
+                              <p class="text-sm text-black" *ngIf="approval.comment">
+                                comment: {{ approval.comment }}
+                              </p>
+                              <p class="text-sm" [ngClass]="getManagerApprovalSubtextClasses(approval)">
+                                {{ getManagerApprovalStatus(approval) | titlecase }} on {{ approval.updatedDate | date:'short' }}
+                              </p>
+                            } @else {
+                              <div *ngIf="data.claim.raisedBy.reportingTo; else noEmployeeData">
+                                <p class="font-medium" [ngClass]="getManagerApprovalTextClasses(approval)">
+                                  Pending Approval from {{ data.claim.raisedBy.reportingTo.firstName }} {{ data.claim.raisedBy.reportingTo.lastName }}
+                                </p>
+                                <p class="text-sm" [ngClass]="getManagerApprovalSubtextClasses(approval)">
+                                  Waiting for reporting manager to approve
+                                </p>
+                              </div>
+                              <ng-template #noEmployeeData>
+                                <p class="font-medium" [ngClass]="getManagerApprovalTextClasses(approval)">
+                                  Pending Approval from Reporting Manager
+                                </p>
+                                <p class="text-sm" [ngClass]="getManagerApprovalSubtextClasses(approval)">
+                                  Waiting for reporting manager to approve
+                                </p>
+                              </ng-template>
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    } 
+                    
+                    <!-- Regular Approval Steps -->
+                    @else {
+                      @if (isPreviousStepApprovedInHistory(approval, history)) {
+                        <div [ngClass]="getStepClasses(approval)">
+                          
+                          <!-- Step Number -->
+                          <div [ngClass]="getStepNumberClasses(approval)">
+                            {{ approval.step }}
+                          </div>
+
+                          <!-- Approval Details -->
+                          <div class="flex-grow">
+                            <div class="flex items-center justify-between">
+                              <div>
+                                <p class="font-medium text-gray-900">
+                                  {{ approval.role?.categoryName || 'Unknown Role' }}
+                                </p>
+                                <p class="text-sm text-gray-600" *ngIf="approval.updatedBy">
+                                  {{ approval.updatedBy.firstName }} {{ approval.updatedBy.lastName }}
+                                </p>
+                                <p class="text-sm text-gray-600" *ngIf="approval.comment">
+                                  comment: {{ approval.comment }}
+                                </p>
+                              </div>
+
+                              <!-- Status Badge -->
+                              <div class="px-3 py-1 rounded-full text-xs font-medium flex justify-center items-center gap-2" [ngClass]="getStatusColor(approval.status)">
+                                <ng-icon [name]="getStatusIcon(approval.status)" class="text-lg"></ng-icon> {{ approval.status | titlecase }}
+                              </div>
+                            </div>
+
+                            <p class="text-xs text-gray-500 mt-1" *ngIf="approval.updatedDate">
+                              {{ approval.updatedDate | date:'short' }}
+                            </p>
+                          </div>
+                        </div>
+                      }
+                    }
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- No Approval Status Message -->
+    <div *ngIf="getApprovalHistories().length === 0" class="text-center py-8 text-gray-500">
+      No approval history available
+    </div>
+
+  </div>
+</div>

@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import announcementModel from "../models/announcement.model";
 import { Server } from "socket.io";
-import { connectedSockets } from "../service/socket-ioService";
+import { connectedSockets } from "../services/socket-io.service";
 import employeeModel from "../models/employee.model";
 import { Types } from "mongoose";
 

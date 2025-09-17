@@ -16,6 +16,92 @@ export interface Project {
   createdBy?: string;
 }
 
+interface MaterialRequest {
+  itemName: string;
+  quantity: number;
+  estimatedCost: number;
+  requiredOn: Date;    
+  remarks: string;
+}
+
+interface Task {
+  taskName: string;
+  description: string;
+  priority: string;
+  timeline: {
+      expectedStartDate: Date;
+      expectedEndDate: Date;
+      expectedDuration: number;
+  };
+  progress: number;
+  notes: string;
+  associatedWith: {_id:string, firstName:string, lastName:string}[];
+  status: string;
+}
+
+
+interface Issue {
+  subject: string;
+  customer: {
+    _id?:string;
+    companyName:string;
+  };
+  issueType: string;
+  raisedBy: string;
+  description: string;
+  status: string;
+  respondedOn: Date;
+  closedBy: {
+    _id?:string;
+    firstName:string;
+    lastName:string;
+  };
+  closedOn: Date;
+  comments: string;
+  updatedBy: {
+    _id?:string;
+    firstName:string;
+    lastName:string;
+  };
+  updatedAt: Date;
+}
+
+interface ActivityPlan {
+  activityName: string;
+  startDate: Date;
+  endDate: Date;
+  orginalStartDate: Date;
+  orginalEndDate: Date;
+  includedEmployees: {_id:string, firstName:string, lastName:string}[];
+  status: string;
+  comment: string;
+}
+
+export interface getProject {
+  _id?:string;
+  jobId: {
+    _id?:string;
+    jobId:string;
+  };
+  customer: {
+    _id?:string;
+    companyName:string;
+  };
+  materialRequest: MaterialRequest[];
+  tasks: Task[];
+  issues: Issue[];
+  assignedTo: {_id:string, firstName:string, lastName:string};
+  comment: string;
+  status: string;
+  projectType: string;
+  assignedBy: {_id:string, firstName:string, lastName:string};
+  assignedAt: Date;
+  updatedBy: {_id:string, firstName:string, lastName:string};
+  updatedAt: Date;
+  priority: string;
+  activityPlan: ActivityPlan[];
+}
+
 export enum ProjectType {
   SupplyOnly = 'Supply Only',
   ProjectWithSupply = 'Project With Supply',

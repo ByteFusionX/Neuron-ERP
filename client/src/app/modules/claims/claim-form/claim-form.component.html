@@ -1,0 +1,77 @@
+<div class="bg-white w-full max-w-4xl max-h-[95vh]">
+  <div class="flex justify-between items-center p-6 border-b border-gray-200">
+    <h2 class="text-xl font-semibold text-gray-900">{{ formTitle }}</h2>
+    <button 
+      (click)="onCancel()" 
+      class="text-gray-400 hover:text-gray-600 transition-colors">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+      </svg>
+    </button>
+  </div>
+
+  <form [formGroup]="claimForm" (ngSubmit)="onSubmit()" class="p-6 space-y-6 overflow-y-scroll max-h-[77vh]">
+    <!-- Reason Field -->
+    <app-form-field
+      label="Reason *"
+      [control]="f['reason']"
+      [isSubmitted]="isSubmitted()"
+      placeholder="Enter the reason for this claim"
+      type="textarea">
+    </app-form-field>
+
+    <!-- Amount Field -->
+    <app-form-field
+      label="Amount *"
+      [control]="f['amount']"
+      [isSubmitted]="isSubmitted()"
+      placeholder="Enter claim amount"
+      type="number">
+    </app-form-field>
+
+    @if(data.type === 'normal'){
+    <!-- Job Id Field -->
+    <app-form-field
+      label="Job Id (Optional)"
+      [control]="f['jobId']"
+      [isSubmitted]="isSubmitted()"
+      placeholder="Enter job id"
+      type="text">
+    </app-form-field>
+    } @else {
+      <app-select-dropdown label="Category" [options]="categoryOptions" [clearable]="true"
+      [placeholder]="'Select category'" [value]="claimForm.get('category')?.value"
+      (onSelected)="claimForm.get('category')?.setValue($event)">
+    </app-select-dropdown> 
+    }
+
+    <!-- File Upload Section -->
+    <div class="space-y-3">
+      <app-upload-file
+        [selectedFiles]="selectedFiles"
+        [isPadding]="false"
+        (fileUpload)="onFileUpload($event)">
+      </app-upload-file>
+    </div>
+
+    <!-- Form Actions -->
+  </form>
+  <div class="flex justify-end gap-3 p-4 border-t border-gray-200">
+    <app-btn
+      type="button"
+      theme="cancel"
+      (buttonClick)="onCancel()"
+      [disabled]="isSaving()">
+      Cancel
+    </app-btn>
+    
+    <app-btn
+      type="submit"
+      theme="primary"
+      [loading]="isSaving()"
+      [disabled]="isSaving()"
+      (buttonClick)="onSubmit()">
+      {{ data.mode === 'edit' ? 'Update Claim' : 'Create Claim' }}
+    </app-btn>
+  </div>
+</div>

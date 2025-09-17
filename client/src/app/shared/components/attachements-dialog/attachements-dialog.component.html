@@ -1,0 +1,99 @@
+<div class="bg-white rounded-lg overflow-hidden ">
+  <!-- Header -->
+  <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+    <div class="flex items-center gap-3">
+      <ng-icon name="heroDocumentDuplicate" class="text-xl text-violet-700"></ng-icon>
+      <h2 class="text-lg font-medium text-gray-900">{{ data.title }}</h2>
+      <span class="bg-violet-100 text-violet-700 text-xs font-medium px-2 py-1 rounded-full">
+        {{ data.attachments.length }} file{{ data.attachments.length !== 1 ? 's' : '' }}
+      </span>
+    </div>
+    <button
+      type="button"
+      (click)="onClose()"
+      class="text-gray-400 hover:text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 rounded-lg p-1"
+    >
+      <ng-icon name="heroXMark" class="text-xl"></ng-icon>
+    </button>
+  </div>
+
+  <!-- Content -->
+  <div class="px-6 py-4 max-h-96 overflow-y-auto">
+    <div *ngIf="data.attachments.length === 0" class="text-center py-8">
+      <ng-icon name="heroArchiveBoxXMark" class="text-4xl text-gray-300 mx-auto mb-3"></ng-icon>
+      <p class="text-gray-500 text-sm">No attachments available</p>
+    </div>
+
+    <div *ngIf="data.attachments.length > 0" class="space-y-3">
+      <div
+        *ngFor="let attachment of data.attachments; trackBy: trackByFileName"
+        class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors group"
+      >
+        <!-- File Info -->
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          <div class="flex-shrink-0 w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center">
+            <ng-icon 
+              [name]="getFileIcon(attachment.originalname)" 
+              class="text-lg"
+              [ngClass]="{
+                'text-red-500': getFileExtension(attachment.originalname) === 'pdf',
+                'text-blue-500': ['doc', 'docx'].includes(getFileExtension(attachment.originalname)),
+                'text-green-500': ['xls', 'xlsx'].includes(getFileExtension(attachment.originalname)),
+                'text-purple-500': ['jpg', 'jpeg', 'png', 'gif'].includes(getFileExtension(attachment.originalname)),
+                'text-yellow-500': ['zip', 'rar'].includes(getFileExtension(attachment.originalname)),
+                'text-gray-500': !['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'gif', 'zip', 'rar'].includes(getFileExtension(attachment.originalname))
+              }"
+            ></ng-icon>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-900 truncate" [title]="attachment.originalname">
+              {{ attachment.originalname }}
+            </p>
+            <p class="text-xs text-gray-500 uppercase tracking-wide">
+              {{ getFileExtension(attachment.originalname) || 'file' }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-2 ml-4">
+          <!-- View Button (only for PDFs) -->
+          <button
+            *ngIf="isPdfFile(attachment.originalname)"
+            type="button"
+            (click)="onViewPDF(attachment)"
+            aria-label="View File"
+            class="w-8 h-8 flex justify-center items-center border border-gray-300 rounded-full hover:bg-gray-200 transition"
+            title="View in new tab"
+          >
+            <ng-icon name="heroEye" class="text-sm"></ng-icon>
+          </button>
+
+          <!-- Download Button -->
+          <button
+            type="button"
+            (click)="onDownload(attachment)"
+            aria-label="Download File"
+            class="w-8 h-8 flex justify-center items-center border border-gray-300 rounded-full hover:bg-gray-200 transition"
+            title="Download file"
+          >
+            <ng-icon name="heroArrowDownTray" class="text-sm"></ng-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
+    <div class="flex justify-end">
+      <button
+        type="button"
+        (click)="onClose()"
+        class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition-colors"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,27 +1,11 @@
-import { NextFunction } from "express";
-import { Response } from "express";
-import jwt from 'jsonwebtoken';
 
-const TokenLogger = (req: any, res: Response, next: NextFunction) => {
-    try {
-        if (req.originalUrl.includes('login') || req.originalUrl.includes('uploads') || req.originalUrl.includes('employee/check') || req.header('Authorization')) {
-            if (req.headers.authorization) {
-                const token = req.header('Authorization')?.replace('Bearer ', '');
-                const jwtVerified = jwt.verify(token, process.env.JWT_SECRET);
-                if (jwtVerified) {
-                    req.auth = { credentials: jwtVerified };
-                    next()
-                }
-            } else {
-                next()
-            }
-        } else {
-            return res.status(401).json({ error: 'Authorization token is missing' })
-        }
-    } catch (error) {
-        console.log(error)
-next(error)
+import passport from "passport";
+
+const PassportMiddleware = (req: any, res: any, next: any) => {
+    if (req.path.includes('/uploads')) {
+        return next();
     }
+    return passport.authenticate('oauth-bearer', { session: false })(req, res, next);
 }
 
-export default TokenLogger 
+export default PassportMiddleware

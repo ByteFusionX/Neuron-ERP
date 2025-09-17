@@ -1,0 +1,35 @@
+:host {
+  display: block;
+}
+
+.suggestion-item {
+  transition: background-color 0.15s ease-in-out;
+}
+
+.suggestion-item:hover {
+  background-color: #f3f4f6;
+}
+
+.suggestion-item.selected {
+  background-color: #ede9fe;
+}
+
+.email-tag {
+  transition: all 0.15s ease-in-out;
+}
+
+.email-tag:hover {
+  background-color: #ddd6fe;
+}
+
+.remove-button {
+  transition: color 0.15s ease-in-out;
+}
+
+.remove-button:hover {
+  color: #7c3aed;
+}
+
+.dropdown {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+} 

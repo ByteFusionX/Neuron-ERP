@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { FormBuilder, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -8,6 +8,11 @@ import { CreateEmployeeDialog } from 'src/app/modules/home/pages/employees/creat
 import { login } from 'src/app/shared/interfaces/login';
 import { NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
+import { MsalBroadcastService, MsalService } from '@azure/msal-angular';
+import { AuthenticationResult, InteractionStatus } from '@azure/msal-browser';
+import { filter, Subject } from 'rxjs';
+import { takeUntil } from 'rxjs';
+import { ToastrService } from 'ngx-toastr';
 
 @Component({
     selector: 'app-login-page',
@@ -15,80 +20,107 @@ import { NgIcon } from '@ng-icons/core';
     styleUrls: ['./login-page.component.css'],
     imports: [NgIf, FormsModule, ReactiveFormsModule, NgIcon]
 })
-export class LoginPageComponent {
-
-  submit: boolean = false
-  employeeNotFoundError: boolean = false
-  passwordNotMatchError: boolean = false
-  isSaving: boolean = false;
+export class LoginPageComponent implements OnDestroy {
   isEmployeePresent: boolean = true;
+  loginDisplay = false;
+  activeAccount: any | null = null;
+  isMicrosoftLoginLoading: boolean = false;
+  isSuperAdminLoading: boolean = false;
 
-
-  showPassword: boolean = false;
-  passwordType: string = this.showPassword ? 'text' : 'password';
-  showIcon: string = this.showPassword ? 'heroEye' : 'heroEyeSlash';
-
+  private readonly _destroying$ = new Subject<void>();
+  
   constructor(
-    private employeeService: EmployeeService,
-    private _fb: FormBuilder,
     private router: Router,
-    private _dialog:MatDialog,
-    private _notificationService: NotificationService,
+    private _dialog: MatDialog,
+    private msalService: MsalService,
+    private employeeService: EmployeeService,
+    private msalBroadcastService: MsalBroadcastService,
+    private notificationService: NotificationService,
+    private toastr: ToastrService
   ) { }
 
-  loginForm = this._fb.group({
-    employeeId: ['', Validators.required],
-    password: ['', Validators.required]
-  })
+  ngOnInit(): void {
+    this.msalBroadcastService.inProgress$
+      .pipe(
+        filter((status: InteractionStatus) => status === InteractionStatus.None),
+        takeUntil(this._destroying$)
+      )
+      .subscribe((response: InteractionStatus) => {
+        this.setLoginDisplay();
+        this.setActiveAccount();
+      });
+  }
 
-  ngOnInit() {
-    this.employeeService.isEmployeePresent().subscribe((res) => {
-      this.isEmployeePresent = res.exists;
+  setLoginDisplay() {
+    this.loginDisplay = this.msalService.instance.getAllAccounts().length > 0;
+  }
+
+  setActiveAccount() {
+    this.activeAccount = this.msalService.instance.getActiveAccount() || this.msalService.instance.getAllAccounts()[0];
+  }
+
+  loginEmployee(){
+    this.employeeService.employeeLoginWithMicrosoft().subscribe({
+      next: (data: any) => {
+        this.isMicrosoftLoginLoading = false;
+        this.router.navigate(['/home']);
+      },
+      error: (error: any) => {
+        this.isMicrosoftLoginLoading = false;
+        this.toastr.error('Microsoft login failed. Please try again.');
+      }
     })
   }
 
+  loginWithMicrosoft(){
+    if (!this.msalService.instance.getAllAccounts().length) {
+      localStorage.clear();
+      sessionStorage.clear();
+      this.isMicrosoftLoginLoading = true;
+      this.msalService.loginPopup({
+        prompt : 'select_account',
+        scopes : ['user.read']
+      }).subscribe({
+        next: (response: AuthenticationResult) => {
+          this.setLoginDisplay();
+          this.msalService.instance.setActiveAccount(this.activeAccount);
+          this.loginEmployee();
+        },
+        error: (error: any) => {
+          this.isMicrosoftLoginLoading = false;
+          console.error('Microsoft login failed:', error);
+          this.toastr.error('Microsoft login failed. Please try again.');
+        }
+      });
+    }
+  }
+
   onCreateSuperAdmin(){
+    this.isSuperAdminLoading = true;
     const dialogRef = this._dialog.open(CreateEmployeeDialog,{
       data:{
         createSuperAdmin : true
       }
     });
-    dialogRef.close((data: any)=>{
-      if(data){
-        this.isEmployeePresent = true;
+    
+    dialogRef.afterClosed().subscribe({
+      next: (data: any) => {
+        this.isSuperAdminLoading = false;
+        if(data){
+          this.isEmployeePresent = true;
+          this.toastr.success('Super admin account created successfully!');
+        }
+      },
+      error: (error: any) => {
+        this.isSuperAdminLoading = false;
+        console.error('Super admin creation failed:', error);
+        this.toastr.error('Failed to create super admin account. Please try again.');
       }
-    })
+    });
   }
 
-  passwordShow() {
-    this.showPassword = !this.showPassword
-    this.passwordType = this.showPassword ? 'text' : 'password';
-    this.showIcon = this.showPassword ? 'heroEye' : 'heroEyeSlash';
-  }
-
-  onSubmit() {
-    this.submit = true
-    if (this.loginForm.valid) {
-      this.isSaving = true;
-      this.employeeService.employeeLogin(this.loginForm.value).subscribe((res: login) => {
-        if (res.employeeData && res.token) {
-          localStorage.setItem('employeeToken', res.token)
-          this.router.navigate(['/home']);
-          if (res.token) {
-            this._notificationService.authSocketIo(res.token)
-            this._notificationService.getEmployeeNotifications(res.token)
-            this._notificationService.initializeNotifications()
-          }
-        }
-        else if (res.employeeNotFoundError) {
-          this.isSaving = false;
-          this.employeeNotFoundError = true;
-
-        } else if (res.passwordNotMatchError) {
-          this.isSaving = false;
-          this.passwordNotMatchError = true
-        }
-      })
-    }
+  ngOnDestroy(): void {
+    this._destroying$.next(undefined);
+    this._destroying$.complete();
   }
 }

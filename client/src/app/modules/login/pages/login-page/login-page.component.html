@@ -19,78 +19,64 @@
                     <img class="w-8 h-8 mr-2" src="../../../../../assets/images/favicon.png" alt="logo">
                     <img class="w-46 h-8 mr-2" src="../../../../../assets/images/companyTransparent.png" alt="logo">
                 </a>
-                <div  class="w-full bg-white rounded-lg shadow md:mt-0 sm:max-w-md xl:p-0">
-                    <div *ngIf="isEmployeePresent" class="p-6 space-y-4 md:space-y-6 sm:p-8">
-                        <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl ">
-                            Sign in to your account
-                        </h1>
-                        <form [formGroup]="loginForm" class="space-y-4 md:space-y-6" (ngSubmit)="onSubmit()">
-                            <div>
-                                <label for="id" class="block mb-2 text-sm font-medium text-gray-900 ">Employee
-                                    ID</label>
-                                <input formControlName="employeeId" type="text" name="id" id="email" appNoLeadingSpace
-                                    [class.border-red-500]="submit&&(loginForm.controls['employeeId'].hasError('required')||employeeNotFoundError)"
-                                    class="bg-gray-50 border outline-none border-gray-300 text-gray-900 sm:text-sm rounded-lg  block w-full p-2.5 "
-                                    placeholder="NT-1100" required="">
-
-                            </div>
-                            <div>
-                                <label for="password"
-                                    class="block mb-2 text-sm font-medium text-gray-900 ">Password</label>
-                                <div [class.border-red-500]="submit&&loginForm.controls['password'].hasError('required')"
-                                    class="flex justify-center items-center   w-full text-gray-700  rounded leading-tight bg-gray-50 border border-gray-300">
-                                    <input formControlName="password" [type]="passwordType" name="password"
-                                        id="password" placeholder="••••••••" appNoLeadingSpace
-                                        class="outline-none text-gray-900 sm:text-sm rounded-lg bg-gray-50  block w-full p-2.5"
-                                        required="">
-
-                                    <button class="p-2 hover:bg-gray-300 rounded-full w-8 h-8 mx-1" type="button"
-                                        (click)="passwordShow()">
-
-                                        <ng-icon [name]="showIcon" class="text-black"></ng-icon>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="text-sm">
-                                <div *ngIf="loginForm.controls['employeeId'].errors">
-                                    <p *ngIf="submit&&(loginForm.controls['employeeId'].hasError('required'))"
-                                        class="text-red-500">Employee id required</p>
-                                </div>
-                                <p *ngIf="employeeNotFoundError" class="text-red-500">Employee not found.</p>
-                                <div *ngIf="loginForm.controls['password'].errors">
-                                    <p *ngIf="submit&&loginForm.controls['password'].hasError('required')"
-                                        class="text-red-500">Password required</p>
-                                </div>
-                                <p *ngIf="passwordNotMatchError" class="text-red-500">Password incorrect.</p>
-
-                            </div>
-                            <div class="flex justify-center">
-                                <button type="submit"
-                                    class="w-full  text-white bg-violet-700 hover:bg-violet-600  font-medium rounded-lg text-sm px-5 py-2.5 mb-2 text-center flex justify-center items-center gap-2">
-                                    <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
-                                    Sign in
-                                </button>
-
-                            </div>
-
-                        </form>
-                    </div> 
-                    <div *ngIf="!isEmployeePresent" class="mt-8 w-full bg-white rounded-lg shadow md:mt-0 sm:max-w-md xl:p-0">
-                        <div class="p-6 space-y-2 md:space-y-2 sm:p-8">
-                            <p class="text-gray-600 mb-4">
-                                No Employees Found in the Database
+                <div class="w-full bg-white rounded-lg shadow md:mt-0 sm:max-w-md xl:p-0">
+                    <div *ngIf="isEmployeePresent" class="p-6 space-y-6 md:space-y-8 sm:p-8">
+                        <div class="text-center">
+                            <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-700 md:text-2xl mb-2">
+                                Welcome Back
+                            </h1>
+                            <p class="text-gray-600 text-sm">
+                                Sign in to your account using Microsoft
                             </p>
-                            <button type="button" (click)="onCreateSuperAdmin()"
-                                class="w-full text-white bg-violet-700 hover:bg-violet-600 font-medium rounded-lg text-sm px-5 py-2.5 mb-2 text-center flex justify-center items-center gap-2">
-                                <ng-icon name="heroUserCircle" class="text-white text-lg"></ng-icon>
-                                Create Super Admin Account
+                        </div>
+
+                        <div class="space-y-4">
+                            <button type="button" (click)="loginWithMicrosoft()" 
+                                [disabled]="isMicrosoftLoginLoading"
+                                class="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white">
+                                
+                                <div *ngIf="isMicrosoftLoginLoading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700 mr-3"></div>
+                                
+                                <svg *ngIf="!isMicrosoftLoginLoading" class="w-5 h-5 mr-3" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M11 0H0V11H11V0Z" fill="#F25022"/>
+                                    <path d="M23 0H12V11H23V0Z" fill="#7FBA00"/>
+                                    <path d="M11 12H0V23H11V12Z" fill="#00A4EF"/>
+                                    <path d="M23 12H12V23H23V12Z" fill="#FFB900"/>
+                                </svg>
+                                
+                                <span class="text-gray-700 font-medium">
+                                    {{ isMicrosoftLoginLoading ? 'Signing in...' : 'Continue with Microsoft' }}
+                                </span>
                             </button>
                         </div>
+
+                        <div class="text-center">
+                            <p class="text-xs text-gray-500">
+                                By signing in, you agree to our Terms of Service and Privacy Policy
+                            </p>
+                        </div>
+                    </div> 
+                    <div *ngIf="!isEmployeePresent" class="p-6 space-y-4 md:space-y-6 sm:p-8">
+                        <div class="text-center">
+                            <h2 class="text-xl font-bold text-gray-900 mb-2">
+                                Setup Required
+                            </h2>
+                            <p class="text-gray-600 mb-6">
+                                No employees found in the database. Create a super admin account to get started.
+                            </p>
+                        </div>
+                        <button type="button" (click)="onCreateSuperAdmin()"
+                            [disabled]="isSuperAdminLoading"
+                            class="w-full text-white bg-violet-700 hover:bg-violet-600 font-medium rounded-lg text-sm px-5 py-3 text-center flex justify-center items-center gap-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-violet-700">
+                            
+                            <div *ngIf="isSuperAdminLoading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            
+                            <ng-icon *ngIf="!isSuperAdminLoading" name="heroUserCircle" class="text-white text-lg"></ng-icon>
+                            
+                            {{ isSuperAdminLoading ? 'Creating Account...' : 'Create Super Admin Account' }}
+                        </button>
                     </div>
-
                 </div>
-
-               
             </div>
         </section>
     </div>

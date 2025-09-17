@@ -311,7 +311,7 @@
                                 No </th>
                             <td mat-cell *matCellDef="let element; let i=index"> {{i+1}} </td>
                         </ng-container>
-    
+        
                         <!-- Name Column -->
                         <ng-container matColumnDef="name">
                             <th *matHeaderCellDef
@@ -319,7 +319,7 @@
                                 Name </th>
                             <td mat-cell *matCellDef="let element"> {{element.customerTypeName}} </td>
                         </ng-container>
-    
+        
                         <!-- date Column -->
                         <ng-container matColumnDef="date">
                             <th *matHeaderCellDef
@@ -327,7 +327,7 @@
                                 Created Date </th>
                             <td mat-cell *matCellDef="let element"> {{element.createdDate | date: 'dd/MM/yyyy'}} </td>
                         </ng-container>
-    
+        
                         <!-- action Column -->
                         <ng-container matColumnDef="action">
                             <th *matHeaderCellDef
@@ -340,7 +340,7 @@
                                     (click)="onCustomerTypeDeleteClick(i)"></ng-icon>
                             </td>
                         </ng-container>
-    
+        
                         <tr mat-header-row *matHeaderRowDef="customerDepartmentDisplayedColumns; sticky: true"></tr>
                         <tr mat-row *matRowDef="let row; columns: customerDepartmentDisplayedColumns;"></tr>
                     </table>
@@ -422,6 +422,67 @@
             </div>
         </div>
     </div>
+
+    <!-- Workflow Management -->
+    <div class="w-full h-full bg-white p-10 m-2 rounded-md" *ngIf="this.privileges?.portalManagement?.department || categorySection">
+        <div class="mb-3 flex justify-between">
+            <div class="flex gap-1">
+                <i><ng-icon name="heroSquares2X2" class="text-orange-400 text-lg mt-[1px]"></ng-icon></i>
+                <p class="font-medium text-orange-400">Workflow Management:</p>
+            </div>
+        </div>
+        <div>
+            <div class="h-full h-max-80 overflow-hidden overflow-y-auto example border">
+                <table mat-table [dataSource]="workflowDataSource" class="rounded-lg table-fixed">
+
+                    <!-- slNo Column -->
+                    <ng-container matColumnDef="slNo">
+                        <th *matHeaderCellDef
+                            class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
+                            No </th>
+                        <td mat-cell *matCellDef="let element; let i=index"> {{i+1}} </td>
+                    </ng-container>
+                    
+                    <!-- Feature Column -->
+                    <ng-container matColumnDef="feature">
+                        <th *matHeaderCellDef
+                            class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
+                            Feature </th>
+                        <td mat-cell *matCellDef="let element">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium">{{ getFeatureDisplayName(element.feature) }}</span>
+                            </div>
+                        </td>
+                    </ng-container>
+
+                    <!-- Steps Column -->
+                    <ng-container matColumnDef="steps">
+                        <th *matHeaderCellDef
+                            class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
+                            Approval Steps </th>
+                        <td mat-cell *matCellDef="let element">
+                            <button 
+                                class="bg-violet-700 px-4 py-2 text-white hover:bg-violet-600 rounded-md text-sm font-medium transition-colors"
+                                (click)="openWorkflowStepsDialog(element.feature, element.workflow)">
+                                {{ getStepsButtonText(element) }}
+                            </button>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="workflowDisplayedColumns; sticky: true"></tr>
+                    <tr mat-row *matRowDef="let row; columns: workflowDisplayedColumns;"></tr>
+                </table>
+                <div *ngIf="workflows.length === 0 && !isWorkflowLoading" class="w-full flex justify-center items-center">
+                    <div class="p-3 flex flex-col justify-center items-center">
+                        <img src="assets/images/empty.png" alt="">
+                        <p class="m-2 text-center text-gray-500">No Workflows Found</p>
+                    </div>
+                </div>
+                <app-skelton-loading *ngIf="isWorkflowLoading" [lineLength]="2"></app-skelton-loading>
+            </div>
+        </div>
+    </div>
+    <!-- /Workflow Management -->
 
     <div class="w-full h-full bg-white p-10 m-2 rounded-md" *ngIf="categorySection">
         <div class="mb-3 flex justify-between">

@@ -16,6 +16,8 @@ interface Technical {
     updatedAt: Date;
     priority: string;
     activityPlan: ActivityPlan[];
+    projectUpdates: ProjectUpdate[];
+    billingSummary: BillingSummary[];
 }
 
 interface MaterialRequest {
@@ -95,6 +97,94 @@ const MaterialRequestSchema = new Schema({
     timestamps: true
 });
 
+
+interface ProjectUpdate {
+    subject: string;
+    from: string;
+    to: string[];
+    cc: string[];
+    message: string;
+    attachments: { fileName: string; originalname: string }[];
+    status: string;
+    updatedBy: Types.ObjectId;
+    updatedAt: Date;
+    createdDate: Date;
+}
+
+interface BillingSummary {
+    invoicedAmount: number;
+    invoicedAgainst: string;
+    invoicedDate: Date;
+    createdBy: Types.ObjectId;
+    createdAt: Date;
+}
+
+const billingSummarySchema = new Schema<BillingSummary>({
+    invoicedAmount: {
+        type: Number,
+        required: true,
+    },
+    invoicedAgainst: {
+        type: String,
+        required: true,
+    },
+    invoicedDate: {
+        type: Date,
+    },
+    createdBy: {
+        type: Schema.Types.ObjectId,
+        required: true,
+        ref: 'Employee'
+    },
+    createdAt: {
+        type: Date,
+        required: true,
+    },
+})
+
+const projectUpdateSchema = new Schema<ProjectUpdate>({
+    subject: {
+        type: String,
+        required: true,
+    },
+    from: {
+        type: String,
+        required: true,
+    },
+    to: {
+        type: [String],
+    },
+    cc: {
+        type: [String],
+    },
+    message: {
+        type: String,
+        required: true,
+    },
+    attachments: {
+        type: [{
+            fileName: String,
+            originalname: String
+        }],
+        default: []
+    },
+    createdDate: {
+        type: Date,
+        required: true,
+    },
+    updatedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    updatedAt: {
+        type: Date,
+    },
+    status: {
+        type: String,
+        required: true,
+        enum: ['Drafted', 'Sent', 'Failed']
+    },
+})
 
 const activityPlanSchema = new Schema<ActivityPlan>({
     activityName: {
@@ -281,6 +371,14 @@ const technicalSchema = new Schema<Technical>({
     },
     activityPlan: {
         type: [activityPlanSchema],
+        default: [],
+    },
+    projectUpdates: {
+        type: [projectUpdateSchema],
+        default: [],
+    },
+    billingSummary: {
+        type: [billingSummarySchema],
         default: [],
     },
 })

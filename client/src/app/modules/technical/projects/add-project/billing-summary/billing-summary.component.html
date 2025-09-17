@@ -1,0 +1,24 @@
+<!-- Main Container -->
+<data-table title="Billing Summary" [columns]="tableColumns" [data]="tableData" [isLoading]="isLoading()"
+      [isEmpty]="!isLoading() && tableData.length === 0" [enableColumnCustomization]="false"
+      (actionClick)="onActionClick($event)" [showPagination]="false">
+
+      <ng-template #sideColumn>
+        <div class="flex items-center gap-2">
+          <span class="text-gray-600 font-medium">Project ID:</span>
+          <span class="text-gray-900 font-semibold">{{ projectIdDisplay }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-gray-600 font-medium">LPO Value:</span>
+          <span class="text-green-600 font-semibold text-lg">{{ lpoValue | number:'1.2-2' }} QAR</span>
+        </div>
+        <app-btn theme="primary" size="md" (buttonClick)="openInvoiceForm()">
+          <span class="flex items-center gap-2">
+            <span>Add Invoice plan</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+          </span>
+        </app-btn>
+      </ng-template>
+    </data-table>

@@ -11,11 +11,24 @@ export interface MaterialRequest {
   requiredOn: Date;
 }
 
+export interface BillingSummary {
+  _id?: string;
+  invoicedAmount: number;
+  invoicedAgainst: number;
+  invoicedDate: Date;
+  createdBy: string;
+  createdAt: Date;
+}
+
 export interface TechnicalProject {
   jobId: string;
-  materialRequest: MaterialRequest[];
+  materialRequest?: MaterialRequest[];
   status: string;
   projectType: string;
+  supervisors?: string[];
+  notes?: string;
+  involvedPersons?: { name: string; designation: string }[];
+  estimationCost:{type:string,value:string}[];
 }
 
 export interface AssignEngineer {
@@ -28,6 +41,19 @@ export interface AssignEngineer {
   priority: string;
 }
 
+export interface ProjectUpdate {
+  _id?: string;
+  subject: string;
+  from: string;
+  to: string[];
+  cc: string[];
+  message: string;
+  attachments: { fileName: string; originalname: string }[];
+  status: 'Drafted' | 'Sent';
+  updatedBy: string;
+  updatedAt: Date;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -37,6 +63,10 @@ export class TechnicalService {
 
   assignEngineer(projectData: AssignEngineer): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/technical/assignEngineer`, projectData);
+  }
+
+  updateMaterialRequest(technicalId: string, materialRequest: MaterialRequest[]): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-request/${technicalId}`, { materialRequest });
   }
 
   createTechnicalProject(projectData: TechnicalProject): Observable<any> {
@@ -112,4 +142,66 @@ export class TechnicalService {
   deleteIssue(id: string, issueId: string): Observable<any> {
     return this.http.delete<any>(`${this.apiUrl}/technical/issues/${id}/${issueId}`);
   }
+
+  // Project Updates CRUD
+  getProjectUpdates(technicalId: string, filterParams: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/project-updates/get/${technicalId}`, filterParams);
+  }
+
+  getProjectUpdateById(technicalId: string, updateId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/project-updates/${technicalId}/${updateId}`);
+  }
+
+  createProjectUpdate(technicalId: string, formData: FormData): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/project-updates/${technicalId}`, formData);
+  }
+
+  updateProjectUpdate(technicalId: string, updateId: string, formData: FormData): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/technical/project-updates/${technicalId}/${updateId}`, formData);
+  }
+
+  deleteProjectUpdate(technicalId: string, updateId: string): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/technical/project-updates/${technicalId}/${updateId}`);
+  }
+
+  removeProjectUpdateAttachment(technicalId: string, updateId: string, fileName: string): Observable<any> {
+    return this.http.patch<any>(`${this.apiUrl}/technical/project-updates/${technicalId}/${updateId}/remove-attachment`, { fileName });
+  }
+
+  // Billing Summary CRUD
+  getBillingSummaries(technicalId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/billing-summary/${technicalId}`);
+  }
+
+  getBillingSummaryById(technicalId: string, billingSummaryId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/billing-summary/${technicalId}/${billingSummaryId}`);
+  }
+
+  createBillingSummary(technicalId: string, billingSummary: Omit<BillingSummary, '_id' | 'createdBy' | 'createdAt'>): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/billing-summary/${technicalId}`, billingSummary);
+  }
+
+  updateBillingSummary(technicalId: string, billingSummaryId: string, billingSummary: Partial<Omit<BillingSummary, '_id' | 'createdBy' | 'createdAt'>>): Observable<any> {
+    return this.http.put<any>(`${this.apiUrl}/technical/billing-summary/${technicalId}/${billingSummaryId}`, billingSummary);
+  }
+
+  deleteBillingSummary(technicalId: string, billingSummaryId: string): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/technical/billing-summary/${technicalId}/${billingSummaryId}`);
+  }
+
+  getContacts(search: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/contacts/${search}`);
+  }
+
+  createContact(email: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/contacts`, { email });
+  }
+
+  getCostingDetails(projectId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/costing-details/${projectId}`);
+  }
+
+   getMrRequests(filterParams: any): Observable<any> {
+      return this.http.post<any>(`${this.apiUrl}/technical/getMrRequests`, filterParams);
+    }
 } 

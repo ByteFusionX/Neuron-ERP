@@ -74,7 +74,7 @@ export class ProjectsComponent implements OnInit {
     this.loadData();
   }
 
-  setupTableColumns(): void {
+  setupTableColumns(): void {``
     this.tableColumns = [
       {
         key: 'customer.companyName',

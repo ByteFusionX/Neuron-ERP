@@ -502,30 +502,30 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   onFinalDasdboardClicks() {
     this.subscriptions.add(
-      this.employeeService.getEmployee(this.tokenData.employeeId).subscribe({
-        next: (res) => {
-          if (res) {
-            this.purchaseForm.patchValue({
-              customerId: {
-                _id: this.selectedJobSheet._id,
-                companyName: this.selectedJobSheet.clientDetails?.companyName
-              },
-              createdBy: {
-                firstName: res.firstName,
-                lastName: res.lastName
-              },
-              jobId: {
-                jobId: this.selectedJobSheet.jobId,
-                quoteId: this.selectedJobSheet.quotation
-              },
-            });
-            this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
-            this.router.navigate(['/purchase/view-purchase', 'none']);
-          }
-        }, error: (error) => {
-          console.error(error)
-        }
-      })
+      // this.employeeService.getEmployee(this.tokenData.employeeId).subscribe({
+      //   next: (res) => {
+      //     if (res) {
+      //       this.purchaseForm.patchValue({
+      //         customerId: {
+      //           _id: this.selectedJobSheet._id,
+      //           companyName: this.selectedJobSheet.clientDetails?.companyName
+      //         },
+      //         createdBy: {
+      //           firstName: res.firstName,
+      //           lastName: res.lastName
+      //         },
+      //         jobId: {
+      //           jobId: this.selectedJobSheet.jobId,
+      //           quoteId: this.selectedJobSheet.quotation
+      //         },
+      //       });
+      //       this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
+      //       this.router.navigate(['/purchase/view-purchase', 'none']);
+      //     }
+      //   }, error: (error) => {
+      //     console.error(error)
+      //   }
+      // })
     )
   }
 
