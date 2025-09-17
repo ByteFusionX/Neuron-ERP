@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import { uploadFileToAws } from "../common/aws-connect";
 import { calculateCostPricePipe, calculateDiscountPricePipe, getDateRangeByDay, getEmployeeData, getUSDRated } from "../common/utils/util";
 import { emailQueue } from "../common/queues/email.queue";
+import purchaseRequestModel from "../models/purchaseRequest.model";
 
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
    try {
@@ -2107,3 +2108,157 @@ export const deleteBillingSummary = async (req: Request, res: Response, next: Ne
       });
    }
 }
+
+export const getMrRequests = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { engineer, jobId,requestedBy, purchaseNo, message,fromDate,toDate , row, page } = req.body;
+      console.log("fromDate : ",fromDate)
+      console.log("toDate : ",toDate)
+
+      const pipeline: any[] = [
+         {
+            $lookup: {
+               from: "jobs",
+               localField: "jobId",
+               foreignField: "_id",
+               as: "jobId"
+            }
+         },
+         {
+            $unwind: "$jobId"
+         },
+         {
+            $lookup: {
+               from: "customers",
+               localField: "customerId",
+               foreignField: "_id",
+               as: "customer"
+            }
+         },
+         {
+            $unwind: "$customer"
+         },
+         {
+            $lookup: {
+               from: "employees",
+               localField: "createdBy",
+               foreignField: "_id",
+               as: "createdBy"
+            }
+         },
+         {
+            $unwind: "$createdBy"
+         },
+         {
+            $addFields: {
+               "createdBy.fullName": {
+                  $concat: ["$createdBy.firstName", " ", "$createdBy.lastName"]
+               }
+            }
+         },
+         {
+            $lookup: {
+               from: "employees",
+               localField: "updatedBy",
+               foreignField: "_id",
+               as: "updatedBy"
+            }
+         },
+         {
+            $unwind: {
+               path: "$updatedBy",
+               preserveNullAndEmptyArrays: true
+            }
+         },
+         {
+            $addFields: {
+               "updatedBy.fullName": {
+                  $concat: ["$updatedBy.firstName", " ", "$updatedBy.lastName"]
+               }
+            }
+         },
+         {
+            $skip: (page - 1) * row
+         },
+         {
+            $limit: row
+         }
+      ];
+
+      const matchConditions: any = {
+         isDeleted: false
+      };
+
+      if (engineer) {
+         matchConditions["mrRequest.engineer"] = { $regex: engineer, $options: 'i' };
+      }
+
+      if (jobId) {
+         matchConditions["jobId.jobId"] = { $regex: jobId, $options: 'i' };
+      }
+
+      if (purchaseNo) {
+         matchConditions.purchaseNo = { $regex: purchaseNo, $options: 'i' };
+      }
+
+      if (message) {
+         matchConditions["mrRequest.message"] = { $regex: message, $options: 'i' };
+      }
+
+      // if (fromDate||toDate) {
+      //    const startDate = new Date(fromDate);
+      //    const endDate = new Date(toDate);
+      //    endDate.setDate(endDate.getDate() + 1);
+         
+      //    matchConditions["mrRequest.createdDate"] = {
+      //       $gte: startDate,
+      //       $lt: endDate
+      //    };
+      // }
+
+       if (fromDate && !toDate) {
+         const { startOfDay, endOfDay } = getDateRangeByDay(fromDate);
+         matchConditions["mrRequest.createdDate"] = { $gte: startOfDay, $lte: endOfDay };
+      }
+
+      if (fromDate && toDate) {
+         const fromDateObj = new Date(fromDate);
+         const toDateObj = new Date(toDate);
+         if (fromDateObj.toDateString() === toDateObj.toDateString()) {
+            const { startOfDay, endOfDay } = getDateRangeByDay(fromDate);
+            matchConditions["mrRequest.createdDate"] = { $gte: startOfDay, $lte: endOfDay };
+         } else {
+            const { startOfDay, endOfDay } = getDateRangeByDay(fromDate, toDate);
+            matchConditions["mrRequest.createdDate"] = { $gte: startOfDay, $lte: endOfDay };
+         }
+      }
+
+      if (requestedBy) {
+         matchConditions["$or"] = [
+            { "createdBy.firstName": { $regex: requestedBy, $options: 'i' } },
+            { "createdBy.lastName": { $regex: requestedBy, $options: 'i' } },
+            { "createdBy.fullName": { $regex: requestedBy, $options: 'i' } }
+         ];
+      }
+
+      if (Object.keys(matchConditions).length > 1) { // > 1 because isDeleted is always there
+         pipeline.push({ $match: matchConditions });
+      } else {
+         pipeline.push({ $match: { isDeleted: false } });
+      }
+
+      const mrRequests = await purchaseRequestModel.aggregate(pipeline);
+
+      return res.status(200).json({
+         success: true,
+         message: mrRequests.length > 0 ? "MR Requests fetched successfully" : "No MR requests found",
+         data: mrRequests
+      });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to get MR requests",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};
