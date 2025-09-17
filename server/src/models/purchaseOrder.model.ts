@@ -1,91 +1,44 @@
 import { Schema, Document, model } from "mongoose";
 
 interface PurchaseOrder extends Document {
-    lpoNo: string;
-    lpoValue: number;
-    lpoStatus: String;
+    poNo: string;
+    poStatus: String;
     items: {
         detail: string;
         quantity: number;
         unitCost: number;
         totalCost: number;
     }[];
+    supplierId: any;
     purchaseId: any;
     jobId: any;
     quoteId: any;
+    etaTerms: string;
+    paymentTerms: string;
+    shippingTerms: string;
+    placeOfDelivery: string;
+    subject: string;
+    poDate: Date;
+    termsAndCondition: string;
+    discount: number;
     createdAt: Date;
     updatedAt: Date;
     createdBy: any;
 }
 
-interface Comparison {
-  supplierId: any;
-  quantity: number;
-  unitPrice: number;
-  etaTerms: string;
-  paymentTerms: string;
-  selected: boolean;
-  createdBy: any;
-  createdAt: Date; 
-}
-
-interface ItemDetails extends Document {
-  detail: string;
-  quantity: number;
-  unitCost: number;
-  profit: number;
-  availability: string;
-  supplierName: string;
-  email: string;
-  phoneNo: string;
-  dealSelected: boolean;
-  comparisons: Comparison;
-  itemName: string;
-}
-
-const comparisonSchema = new Schema<Comparison>({
-  supplierId: { type: Schema.Types.ObjectId, ref: "Supplier" },
-  quantity: { type: Number },
-  unitPrice: { type: Number },
-  etaTerms: { type: String },
-  paymentTerms: { type: String },
-  selected: { type: Boolean, default: false },
-  createdBy: { type: Schema.Types.ObjectId, ref: "Employee" },
-  createdAt: { type: Date, default: Date.now },
-});
-
-const ItemDetailSchema = new Schema<ItemDetails>({
-  detail: { type: String },
-  quantity: { type: Number },
-  unitCost: { type: Number },
-  profit: { type: Number },
-  availability: { type: String },
-  supplierName: { type: String },
-  email: { type: String },
-  phoneNo: { type: String },
-  dealSelected: { type: Boolean, default: false },
-  comparisons: { type: comparisonSchema },
-  itemName: { type: String },
-});
-
-
 const purchaseOrderSchema = new Schema<PurchaseOrder>(
     {
-        lpoNo: {
+        poNo: {
             type: String,
             required: true,
             unique: true,
         },
-        lpoValue: {
-            type: Number,
-            required: true,
-        },
-        lpoStatus: {
+        poStatus: {
             type: String,
-            enum: ["open", 'Hold', 'Closed', 'Cancelled'],
-            default: "open",
+            enum: ["Open", 'Hold', 'Closed', 'Cancelled'],
+            default: "Open",
         },
-        items: [ItemDetailSchema],
+        items: [],
         purchaseId: {
             type: Schema.Types.ObjectId,
             required: true,
@@ -107,6 +60,41 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         createdBy: {
             type: Schema.Types.ObjectId,
             ref: "Employee",
+        },
+        poDate: {
+            type: Date,
+            required: true,
+        },
+        termsAndCondition: {
+            type: String,
+        },
+        discount: {
+            type: Number,
+            required: true,
+        },
+        supplierId: {
+            type: Schema.Types.ObjectId,
+            ref: "Supplier",
+        },
+        shippingTerms: {
+            type: String,
+            required: true,
+        },
+        placeOfDelivery: {
+            type: String,
+            required: true,
+        },
+        subject: {
+            type: String,
+            required: true,
+        },
+        etaTerms: {
+            type: String,
+            required: true,
+        },
+        paymentTerms: {
+            type: String,
+            required: true,
         },
     },
     { timestamps: true }

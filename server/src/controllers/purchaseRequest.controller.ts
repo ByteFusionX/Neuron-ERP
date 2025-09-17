@@ -386,21 +386,13 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
         const year = now.getFullYear().toString().slice(-2);
         const month = (now.getMonth() + 1).toString().padStart(2, '0');
 
-        const latestPR = await PurchaseRequest.findOne().sort({ createdAt: -1 });
+        const latestPR = await PurchaseRequest.findOne().sort({ purchaseNo: -1 });
         let nextNumber = 1;
 
         if (latestPR) {
             const parts = latestPR.purchaseNo.split('-');
-
-            const lastYear = parts[1];
-            const lastMonth = parts[2];
             const lastCounter = parseInt(parts[3]);
-
-            if (lastYear === year && lastMonth === month) {
-                nextNumber = lastCounter + 1;
-            } else {
-                nextNumber = 1;
-            }
+            nextNumber = lastCounter + 1;
         }
 
         const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber
