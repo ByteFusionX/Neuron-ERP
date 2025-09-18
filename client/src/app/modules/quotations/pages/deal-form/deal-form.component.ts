@@ -11,6 +11,8 @@ import { appFileSizeValidator } from '../../../../shared/directives/file-size.di
 import { MatTooltip } from '@angular/material/tooltip';
 import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
+import { SupplierService } from '../../../../core/services/supplier.service';
+import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
 
 @Component({
     selector: 'app-deal-form',
@@ -28,18 +30,32 @@ export class DealFormComponent {
   costForm!: FormGroup;
   selectedFiles: any[] = [];
   selectedOption: number = 0;
+  suppliers: Supplier[] = [];
 
   constructor(
     public dialogRef: MatDialogRef<DealFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: Quotatation,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private supplierService: SupplierService
   ) { }
 
   ngOnInit() {
+    this.loadSuppliers();
     this.costForm = this.fb.group({
       paymentTerms: ['', Validators.required],
       items: this.fb.array(this.data.optionalItems[0].items.map(item => this.createItemGroup(item))),
       costs: this.fb.array([], this.additionalCostsValidator())
+    });
+  }
+
+  loadSuppliers() {
+    this.supplierService.supplierList().subscribe({
+      next: (response) => {
+        this.suppliers = response.data || response;
+      },
+      error: (error) => {
+        console.error('Error loading suppliers:', error);
+      }
     });
   }
 
@@ -77,9 +93,7 @@ export class DealFormComponent {
       profit: [profit, Validators.required],
       unitSellingPrice: [detail.unitSellingPrice, Validators.required],
       availability: [detail.availability, Validators.required],
-      supplierName: ['', this.supplierNameValidator()],
-      phoneNo: ['', this.supplierNameValidator()],
-      email: ['', [this.supplierNameValidator(), Validators.email]],
+      supplierId: ['', this.supplierValidator()]
     });
   }
 
@@ -98,13 +112,19 @@ export class DealFormComponent {
       value: ['', Validators.required]
     });
     
-    if (type !== 'Customer Discount') {
+    if (type === 'Additional Cost') {
       group = this.fb.group({
         type: [type, Validators.required],
-        name:['', Validators.required],
+        name: ['', Validators.required],
         value: ['', Validators.required]
       });
-    } 
+    } else if (type === 'Supplier Discount') {
+      group = this.fb.group({
+        type: [type, Validators.required],
+        supplierId: ['', Validators.required],
+        value: ['', Validators.required]
+      });
+    }
     
     this.costs.push(group);
   }
@@ -120,6 +140,11 @@ export class DealFormComponent {
       const itemDetails = this.getItemDetailsArray(item);
       itemDetails.forEach(detail => {
         detail.get('dealSelected')?.setValue(isChecked);
+        // Clear supplier if unchecking and trigger validation
+        if (!isChecked) {
+          detail.get('supplierId')?.setValue('');
+        }
+        detail.get('supplierId')?.updateValueAndValidity();
       });
     });
   }
@@ -129,14 +154,17 @@ export class DealFormComponent {
       return this.getItemDetailsArray(item).every(detail => detail.get('dealSelected')?.value === true);
     });
 
+    const itemDetail = this.getItemDetailsArray(this.items.controls[i])[j];
+    
     if (!event.target.checked) {
-      this.getItemDetailsArray(this.items.controls[i])[j].get('quantity')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].quantity)
-      this.getItemDetailsArray(this.items.controls[i])[j].get('unitCost')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].unitCost)
-      this.getItemDetailsArray(this.items.controls[i])[j].get('unitSellingPrice')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].unitSellingPrice)
-      this.getItemDetailsArray(this.items.controls[i])[j].get('supplierName')?.setValue('')
-      this.getItemDetailsArray(this.items.controls[i])[j].get('phoneNo')?.setValue('')
-      this.getItemDetailsArray(this.items.controls[i])[j].get('email')?.setValue('')
+      itemDetail.get('quantity')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].quantity);
+      itemDetail.get('unitCost')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].unitCost);
+      itemDetail.get('unitSellingPrice')?.setValue(this.data.optionalItems[this.selectedOption].items[i].itemDetails[j].unitSellingPrice);
+      itemDetail.get('supplierId')?.setValue('');
     }
+    
+    // Trigger validation update for supplier field
+    itemDetail.get('supplierId')?.updateValueAndValidity();
 
     this.isAllSelected = allSelected;
   }
@@ -165,12 +193,37 @@ export class DealFormComponent {
       ...item,
       itemDetails: item.itemDetails.map((detail: any) => ({
         ...detail,
-        supplierName: detail.supplierName,
-        phoneNo: detail.phoneNo,
-        email: detail.email,
+        supplierId: detail.supplierId,
       }))
     }));
-    formData.append('dealData', JSON.stringify({ ...data, items: updatedItems, totalDiscount : this.data.optionalItems[this.selectedOption].totalDiscount }));
+
+    const updatedCosts = data.costs.map((cost: any) => {
+      if (cost.type === 'Supplier Discount') {
+        return {
+          type: cost.type,
+          supplierId: cost.supplierId,
+          value: cost.value
+        };
+      } else if (cost.type === 'Additional Cost') {
+        return {
+          type: cost.type,
+          name: cost.name,
+          value: cost.value
+        };
+      } else {
+        return {
+          type: cost.type,
+          value: cost.value
+        };
+      }
+    });
+
+    formData.append('dealData', JSON.stringify({ 
+      ...data, 
+      items: updatedItems, 
+      costs: updatedCosts,
+      totalDiscount: this.data.optionalItems[this.selectedOption].totalDiscount 
+    }));
     for (let i = 0; i < this.selectedFiles.length; i++) {
       formData.append('attachments', (this.selectedFiles[i] as Blob))
     }
@@ -197,7 +250,10 @@ export class DealFormComponent {
 
       for (const cost of costs.controls) {
         const type = cost?.get('type')?.value;
-        if (type !== 'Customer Discount' && !cost?.get('name')?.value) {
+        if (type === 'Additional Cost' && !cost?.get('name')?.value) {
+          return { 'additionalCostInvalid': true };
+        }
+        if (type === 'Supplier Discount' && !cost?.get('supplierId')?.value) {
           return { 'additionalCostInvalid': true };
         }
         if (!cost?.get('value')?.value) {
@@ -216,13 +272,13 @@ export class DealFormComponent {
     return this.items.at(index).get('itemDetails') as FormArray;
   }
 
-  supplierNameValidator(): ValidatorFn {
+  supplierValidator(): ValidatorFn {
     return (control: AbstractControl): { [key: string]: any } | null => {
       const formGroup = control.parent as FormGroup;
       if (formGroup) {
         const dealSelected = formGroup.get('dealSelected')?.value;
         if (dealSelected && !control.value) {
-          return { 'supplierNameRequired': true };
+          return { 'supplierRequired': true };
         }
       }
       return null;
@@ -309,6 +365,32 @@ export class DealFormComponent {
 
   onClose() {
     this.dialogRef.close()
+  }
+
+  getSupplierById(supplierId: string): Supplier | undefined {
+    return this.suppliers.find(supplier => supplier._id === supplierId);
+  }
+
+  getSupplierName(supplierId: string): string {
+    const supplier = this.getSupplierById(supplierId);
+    return supplier ? supplier.supplierName : '';
+  }
+
+  getSelectedSuppliers(): Supplier[] {
+    const selectedSupplierIds = new Set<string>();
+    
+    this.items.controls.forEach(item => {
+      const itemDetails = this.getItemDetailsArray(item);
+      itemDetails.forEach(detail => {
+        const dealSelected = detail.get('dealSelected')?.value;
+        const supplierId = detail.get('supplierId')?.value;
+        if (dealSelected && supplierId) {
+          selectedSupplierIds.add(supplierId);
+        }
+      });
+    });
+
+    return this.suppliers.filter(supplier => supplier._id && selectedSupplierIds.has(supplier._id));
   }
 
 }

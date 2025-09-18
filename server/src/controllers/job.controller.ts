@@ -88,6 +88,43 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
             },
             {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'quotation.dealData.additionalCosts.supplierId',
+                    foreignField: '_id',
+                    as: 'costSupplierDetails'
+                }
+            },
+            {
+                $addFields: {
+                    'quotation.dealData.additionalCosts': {
+                        $map: {
+                            input: '$quotation.dealData.additionalCosts',
+                            as: 'cost',
+                            in: {
+                                $mergeObjects: [
+                                    '$$cost',
+                                    {
+                                        supplierDetails: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$costSupplierDetails',
+                                                        as: 'supplier',
+                                                        cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $addFields: {
                     attention: {
                         $arrayElemAt: [
@@ -388,13 +425,116 @@ export const deleteJob = async (req: Request, res: Response, next: NextFunction)
 
 export const jobSheets = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const jobs = await jobModel.find({
+            status: { $nin: ["Purchase Requested"] }
+        }).select("_id jobId").sort({ createdDate: -1 });
+        return res.status(200).json({ jobs: jobs })
+    } catch (error) {
+        next(error)
+        console.error(error)
+    }
+}
+
+export const oneJobSheet = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
         const qatarUsdRate = await getUSDRated();
         const jobData = await jobModel.aggregate([
+            {
+                $match: { _id: new ObjectId(id), isDeleted: { $ne: true } }
+            },
             {
                 $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
             },
             {
                 $unwind: "$quotation"
+            },
+            {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'quotation.dealData.additionalCosts.supplierId',
+                    foreignField: '_id',
+                    as: 'costSupplierDetails'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'quotation.dealData.updatedItems.itemDetails.supplierId',
+                    foreignField: '_id',
+                    as: 'itemSupplierDetails'
+                }
+            },
+            {
+                $addFields: {
+                    'quotation.dealData.additionalCosts': {
+                        $map: {
+                            input: '$quotation.dealData.additionalCosts',
+                            as: 'cost',
+                            in: {
+                                $mergeObjects: [
+                                    '$$cost',
+                                    {
+                                        supplierDetails: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$costSupplierDetails',
+                                                        as: 'supplier',
+                                                        cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    'quotation.dealData.updatedItems': {
+                        $map: {
+                            input: '$quotation.dealData.updatedItems',
+                            as: 'item',
+                            in: {
+                                $mergeObjects: [
+                                    '$$item',
+                                    {
+                                        itemDetails: {
+                                            $map: {
+                                                input: '$$item.itemDetails',
+                                                as: 'detail',
+                                                in: {
+                                                    $mergeObjects: [
+                                                        '$$detail',
+                                                        {
+                                                            supplierDetails: {
+                                                                $arrayElemAt: [
+                                                                    {
+                                                                        $filter: {
+                                                                            input: '$itemSupplierDetails',
+                                                                            as: 'supplier',
+                                                                            cond: { $eq: ['$$supplier._id', '$$detail.supplierId'] }
+                                                                        }
+                                                                    },
+                                                                    0
+                                                                ]
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
             },
             {
                 $lookup: { from: 'customers', localField: 'quotation.client', foreignField: '_id', as: 'clientDetails' }
@@ -462,7 +602,7 @@ export const jobSheets = async (req: Request, res: Response, next: NextFunction)
 
             }
         ]);
-        return res.status(200).json({ jobs: jobData })
+        return res.status(200).json(jobData)
     } catch (error) {
         next(error)
     }
@@ -617,13 +757,14 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
             {
                 $match: {
                     isDeleted: { $ne: true },
-                   allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.AMC] },
+                    allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.AMC] },
                     _id: { $nin: technicalJobIds }
                 }
             },
             {
                 $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
-            }, 
+            },
+            
             {
                 $unwind: '$quotation'
             },

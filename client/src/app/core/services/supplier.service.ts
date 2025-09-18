@@ -69,6 +69,6 @@ export class SupplierService {
     }
 
     supplierList(): Observable<any> {
-        return this.http.get(`${this.api}/supplier/suppliers-list`)
+        return this.http.get(`${this.api}/supplier/suppliers-list`);
     }
 }

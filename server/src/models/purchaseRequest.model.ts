@@ -142,14 +142,15 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     },
     mrRequest: {
         engineer: {
-            // type: Schema.Types.ObjectId,
-            type: String,
+            type: Schema.Types.ObjectId,
+            // type: String,
         },
         message: {
             type: String,
         },
         createdDate: {
             type: Date,
+            default: new Date()
         }
     },
     customerId: {

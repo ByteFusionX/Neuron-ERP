@@ -213,6 +213,43 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
                 }
             },
             {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'dealData.additionalCosts.supplierId',
+                    foreignField: '_id',
+                    as: 'costSupplierDetails'
+                }
+            },
+            {
+                $addFields: {
+                    'dealData.additionalCosts': {
+                        $map: {
+                            input: '$dealData.additionalCosts',
+                            as: 'cost',
+                            in: {
+                                $mergeObjects: [
+                                    '$$cost',
+                                    {
+                                        supplierDetails: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$costSupplierDetails',
+                                                        as: 'supplier',
+                                                        cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $match: {
                     isDeleted: { $ne: true },
                     status: { $ne: 'revised' }
@@ -366,6 +403,57 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
                 }
             },
             {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'dealData.updatedItems.itemDetails.supplierId',
+                    foreignField: '_id',
+                    as: 'supplierDetails'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$supplierDetails',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'dealData.additionalCosts.supplierId',
+                    foreignField: '_id',
+                    as: 'costSupplierDetails'
+                }
+            },
+            {
+                $addFields: {
+                    'dealData.additionalCosts': {
+                        $map: {
+                            input: '$dealData.additionalCosts',
+                            as: 'cost',
+                            in: {
+                                $mergeObjects: [
+                                    '$$cost',
+                                    {
+                                        supplierDetails: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$costSupplierDetails',
+                                                        as: 'supplier',
+                                                        cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $addFields: {
                     attention: {
                         $arrayElemAt: [
@@ -384,6 +472,8 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
                 }
             }
         ]);
+
+        console.log(dealData)
 
         if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
         return res.status(200).json({ total: total, dealSheet: dealData })
@@ -540,6 +630,57 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                 }
             },
             {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'dealData.updatedItems.itemDetails.supplierId',
+                    foreignField: '_id',
+                    as: 'supplierDetails'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$supplierDetails',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $lookup: {
+                    from: 'suppliers',
+                    localField: 'dealData.additionalCosts.supplierId',
+                    foreignField: '_id',
+                    as: 'costSupplierDetails'
+                }
+            },
+            {
+                $addFields: {
+                    'dealData.additionalCosts': {
+                        $map: {
+                            input: '$dealData.additionalCosts',
+                            as: 'cost',
+                            in: {
+                                $mergeObjects: [
+                                    '$$cost',
+                                    {
+                                        supplierDetails: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$costSupplierDetails',
+                                                        as: 'supplier',
+                                                        cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $addFields: {
                     attention: {
                         $arrayElemAt: [
@@ -558,6 +699,8 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                 }
             }
         ]);
+
+        console.log(dealData)
 
         if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
         return res.status(200).json({ total: total, dealSheet: dealData })

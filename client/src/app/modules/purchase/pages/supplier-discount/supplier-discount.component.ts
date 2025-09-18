@@ -11,6 +11,7 @@ import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { Observable, map } from 'rxjs';
 
 @Component({
   selector: 'app-supplier-discount',
@@ -36,13 +37,12 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
   selectedJob!: getJob;
   isSubmitted = signal<boolean>(false);
   suppliers = signal<{ supplierId: string, discount: string }[]>([])
-  suppliersList = signal<any[]>([])
   isExist: boolean = false;
 
   supplierForm: FormGroup = this.fb.group({
     jobId: ['', [Validators.required]],
     purchaseNo: ['', [Validators.required]],
-    suppliers: this.fb.array([this.supplierDiscounts()]),
+    suppliers: this.fb.array([]),
     totalDiscount: [''],
   })
 
@@ -52,27 +52,21 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
         if (job) {
           this.selectedJob = job
           this.supplierForm.patchValue({
-            jobId: job.job,
+            jobId: job.jobId,
             purchaseNo: job.purchaseNo,
           })
 
           if (job.supplierDiscounts) {
             this.isExist = true
-            this.suppliers.set(job.supplierDiscounts.suppliers)
+            job.supplierDiscounts.suppliers.map((s: any) => {
+              this.pushSupplierData(s.supplierId, s.discount)
+            })
           }
         } else {
-          this.router.navigate(['/purchase/create'])
+          this.navigate()
         }
       })
     )
-
-    this.supplierService.supplierList().subscribe({
-      next: (res) => {
-        this.suppliersList.set(res.data)
-      }, error: (error) => {
-        console.log(error);
-      }
-    })
 
     const suppliersArray = this.supplierForm.get('suppliers') as FormArray;
     suppliersArray.valueChanges.subscribe(() => {
@@ -81,11 +75,27 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
     });
   }
 
-  getSupplierName(id: string): string {
-    const supplier = this.suppliersList().find((data) => data._id == id)
-    return supplier.supplierName
+  getSupplierName(id: string): Observable<string> {
+    return this.supplierService.getSupplierById(id).pipe(
+      map((res: any) => res.data?.supplierName || '')
+    )
   }
 
+  getSuppliers(): any[] {
+    const suppliersArray = this.supplierDiscount;
+    return suppliersArray?.value;
+  }
+
+  pushSupplierData(supplierId: string, discount: string) {
+    this.supplierService.getSupplierById(supplierId).subscribe((res: any) => {
+      this.supplierDiscount.push(
+        this.fb.group({
+          supplierId: [res.data || '', Validators.required],
+          discount: [discount || '', Validators.required],
+        })
+      )
+    })
+  }
 
   supplierDiscounts(data?: any): FormGroup {
     return this.fb.group({
@@ -105,28 +115,18 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
 
     dialogRef.afterClosed().subscribe((data) => {
       if (data) {
-        const suppliers = this.suppliers()
-        suppliers.push(data)
-        this.suppliers.set(suppliers)
-        this.patchSupplierData()
+        this.pushSupplierData(data.supplierId, data.discount)
         const total = this.calculateTotalDiscount();
         this.supplierForm.get('totalDiscount')?.setValue(total);
       }
     })
   }
 
-  patchSupplierData() {
-    const supplierArray = this.fb.array(
-      this.suppliers().map(s => this.supplierDiscounts(s))
-    );
-    this.supplierForm.setControl('suppliers', supplierArray);
-  }
-
   onSubmit() {
-    if (this.supplierForm.valid && this.suppliers().length > 0) {
+    if (this.supplierForm.valid && this.supplierDiscount.length > 0) {
       this.purchaseService.setSupplierDiscount(this.supplierForm.value)
       this.purchaseService.setPurchaseFormData(this.selectedJob)
-      this.router.navigate(['/purchase/create'])
+      this.navigate()
     } else {
       this.toaster.warning("Please add supplier and discount value")
     }
@@ -134,7 +134,7 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
 
   onClose() {
     this.purchaseService.setPurchaseFormData(this.selectedJob)
-    this.router.navigate(['/purchase/create'])
+    this.navigate()
   }
 
   get supplierDiscount(): FormArray {
@@ -163,7 +163,21 @@ export class SupplierDiscountComponent implements OnInit, OnDestroy {
     this.supplierForm.removeControl('suppliers')
     this.purchaseService.setSupplierDiscount(this.supplierForm.value)
     this.purchaseService.setPurchaseFormData(this.selectedJob)
-    this.router.navigate(['/purchase/create'])
+    this.navigate()
+  }
+
+  navigate() {
+    this.purchaseService.editMode$.subscribe((isEdit) => {
+      if (isEdit) {
+        this.purchaseService.purchaseId$.subscribe((id) => {
+          if (id) {
+            this.router.navigate(['/purchase/edit', id]);
+          }
+        })
+      } else {
+        this.router.navigate(['/purchase/create']);
+      }
+    })
   }
 
   get f() {

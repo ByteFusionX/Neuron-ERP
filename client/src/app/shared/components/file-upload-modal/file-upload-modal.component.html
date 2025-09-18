@@ -1,0 +1,174 @@
+<div>
+    <!-- Header -->
+    <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between">
+        <h3 class="text-md font-medium">{{ data.title }}</h3>
+        <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
+            <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+        </button>
+    </div>
+
+    <!-- Content -->
+    <div class="flex flex-col mx-auto text-gray-900 bg-white rounded-lg shadow px-6 overflow-y-scroll max-h-[70vh]">
+        
+        <!-- Upload Area -->
+        <div class="mt-5 space-y-3" *ngIf="data.showActions?.upload">
+            <div class="grid grid-cols-1 space-y-2">
+                <label class="text-sm text-gray-900 tracking-wide">Upload Documents</label>
+                <div class="flex items-center justify-center w-full">
+                    <label
+                        class="flex flex-col rounded-lg border-4 border-dashed w-full p-10 group text-center transition-colors duration-200 ease-in-out"
+                        [class.border-violet-500]="isDragging && !isUploading"
+                        [class.border-gray-300]="!isDragging && !isUploading"
+                        [class.border-gray-400]="isUploading"
+                        [class.bg-violet-50]="isDragging && !isUploading"
+                        [class.bg-gray-200]="!isDragging && !isUploading"
+                        [class.bg-gray-100]="isUploading"
+                        [class.cursor-pointer]="!isUploading"
+                        [class.cursor-not-allowed]="isUploading"
+                        (dragover)="!isUploading && onDragOver($event)"
+                        (dragleave)="!isUploading && onDragLeave($event)"
+                        (drop)="!isUploading && onDrop($event)">
+                        <div class="h-full w-full text-center flex flex-col items-center justify-center">
+                            <ng-icon *ngIf="!isUploading" name="heroCloudArrowUp" 
+                                [class.text-violet-500]="!isDragging"
+                                [class.text-violet-600]="isDragging"
+                                class="text-5xl transition-colors duration-200 ease-in-out"></ng-icon>
+                            <ng-icon *ngIf="isUploading" name="heroArrowPath" 
+                                class="text-5xl text-violet-500 spin"></ng-icon>
+                            <p *ngIf="!isUploading" class="pointer-none text-gray-500">
+                                <span class="text-sm">Drop</span> files here
+                                <br /> or <a (click)="!isUploading && triggerFileInput()" class="text-violet-500 hover:underline cursor-pointer">select a file</a> from
+                                your device
+                            </p>
+                            <p *ngIf="isUploading" class="text-violet-600 font-medium">
+                                Uploading files... {{ uploadProgress }}%
+                            </p>
+                            <p *ngIf="!isUploading" class="text-sm text-gray-500">
+                                <span>File type: {{ data.acceptedTypes }}</span>
+                            </p>
+                            <p *ngIf="!isUploading && data.maxFileSize" class="text-xs text-gray-400">
+                                Max file size: {{ formatFileSize(data.maxFileSize) }}
+                            </p>
+                        </div>
+                        <input 
+                            type="file" 
+                            class="hidden" 
+                            [multiple]="data.allowMultiple"
+                            (input)="onFileSelected($event)" 
+                            #fileInput 
+                            appFileValidator 
+                            [accept]="data.acceptedTypes"
+                            [disabled]="isUploading">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Upload Progress -->
+            <div *ngIf="isUploading" class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                <div class="bg-violet-600 h-2.5 rounded-full transition-all duration-300" 
+                     [style.width.%]="uploadProgress"></div>
+            </div>
+
+            <!-- Error Messages -->
+            <div *ngIf="fileError" class="bg-red-50 border border-red-200 rounded-md p-3">
+                <p class="text-red-600 text-sm">{{ errorMessage }}</p>
+            </div>
+        </div>
+
+        <!-- Files List -->
+        <div class="mt-6" *ngIf="files.length > 0">
+            <h4 class="text-md font-medium text-gray-800 mb-4">
+                {{ files.length > 0 ? 'Files (' + files.length + ')' : 'No files' }}
+            </h4>
+            
+            <div class="space-y-2 max-h-[300px] overflow-y-auto">
+                <div *ngFor="let file of files; let i = index"
+                     class="flex items-center gap-4 p-4 bg-gray-50 border rounded-lg shadow-sm hover:bg-gray-100 transition">
+                    
+                    <!-- File Icon -->
+                    <div class="flex-shrink-0">
+                        <ng-icon [name]="getFileIcon(file.originalname)" 
+                                 class="text-2xl"
+                                 [class.text-gray-600]="!file.isUploaded"
+                                 [class.text-violet-600]="file.isUploaded"></ng-icon>
+                    </div>
+
+                    <!-- File Info -->
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-700 truncate"
+                           [matTooltip]="file.originalname"
+                           matTooltipPosition="above">
+                            {{ file.originalname }}
+                        </p>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                                  [class.bg-green-100]="file.isUploaded"
+                                  [class.text-green-800]="file.isUploaded"
+                                  [class.bg-yellow-100]="!file.isUploaded"
+                                  [class.text-yellow-800]="!file.isUploaded">
+                                {{ file.isUploaded ? 'Uploaded' : 'Pending' }}
+                            </span>
+                            <span class="text-xs text-gray-500" *ngIf="file.file">
+                                {{ formatFileSize(file.file.size) }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-2 flex-shrink-0">
+                        <!-- Download Button -->
+                        <button *ngIf="data.showActions?.download && file.isUploaded"
+                                class="w-8 h-8 flex justify-center items-center border border-gray-300 rounded-full hover:bg-gray-200 transition"
+                                (click)="onDownload(file)"
+                                [matTooltip]="'Download File'"
+                                matTooltipPosition="above">
+                            <ng-icon class="text-gray-700" name="heroInboxArrowDown"></ng-icon>
+                        </button>
+
+                        <!-- View Button -->
+                        <button *ngIf="data.showActions?.view && file.isUploaded && isPDF(file.originalname)"
+                                class="w-8 h-8 flex justify-center items-center border border-gray-300 rounded-full hover:bg-gray-200 transition"
+                                (click)="onView(file)"
+                                [matTooltip]="'View PDF'"
+                                matTooltipPosition="above">
+                            <ng-icon class="text-gray-700" name="heroEye"></ng-icon>
+                        </button>
+
+                        <!-- Delete Button -->
+                        <button *ngIf="data.showActions?.delete"
+                                class="w-8 h-8 flex justify-center items-center border border-red-300 rounded-full hover:bg-red-100 transition"
+                                (click)="onRemoveFile(i)"
+                                [matTooltip]="'Delete File'"
+                                matTooltipPosition="above">
+                            <ng-icon class="text-red-600" name="heroTrash"></ng-icon>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div *ngIf="files.length === 0" class="text-center py-8">
+            <ng-icon name="heroDocumentText" class="text-6xl text-gray-400 mb-4"></ng-icon>
+            <p class="text-gray-500">No files uploaded yet</p>
+            <p class="text-sm text-gray-400">Upload files using the area above</p>
+        </div>
+    </div>
+
+    <!-- Footer Actions -->
+    <div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2">
+        <!-- Close/Save Buttons -->
+        <div class="flex gap-2">
+            <button class="border text-black font-medium py-2 px-4 rounded text-sm" 
+                    (click)="onCancel()">
+                Close
+            </button>
+            <button class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded text-sm"
+                    (click)="onSave()"
+                    [disabled]="isUploading">
+                <ng-icon *ngIf="isUploading" class="spin" name="heroArrowPath"></ng-icon>
+                {{ isUploading ? 'Uploading...' : 'Save Changes' }}
+            </button>
+        </div>
+    </div>
+</div>

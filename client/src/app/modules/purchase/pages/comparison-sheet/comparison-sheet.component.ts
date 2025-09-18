@@ -33,7 +33,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
   isSubmitted = signal<boolean>(false);
   selectedJob = signal<PurchaseData | null>(null)
-  selectedItem = signal<QuoteItemDetails | null>(null)
+  selectedItemId = signal<string | null>(null)
   comparisonList = signal<any[]>([])
 
   comparisonForm: FormGroup = this.fb.group({
@@ -60,13 +60,15 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
             jobId: data.jobId,
             product: data.item
           })
+          
+          this.selectedItemId.set(data.selectedItem);
 
-          const item = this.getItem()
-          if (item[0].comparisons) {
-            this.comparisonList.set(item[0].comparisons)
+          const item = this.getItem().find((item: QuoteItemDetails) => item._id === this.selectedItemId())
+          if (item.comparisons) {
+            this.comparisonList.set(item.comparisons)
           }
         } else {
-          this.router.navigate(['/purchase/create'])
+          this.navigate()
         }
       },
       error: (error) => {
@@ -87,13 +89,13 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     if (data) {
       data.items = this.updateComparisonList();
       this.purchaseService.setPurchaseFormData(data)
-      this.router.navigate(['/purchase/create'])
+      this.navigate()
     }
   }
 
   onClose() {
     this.purchaseService.setPurchaseFormData(this.selectedJob())
-    this.router.navigate(['/purchase/create'])
+    this.navigate()
   }
 
   get f() {
@@ -122,9 +124,9 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   }
 
   getFormattedProducts(): string {
-    const item = this.getItem()
+    const item = this.getItem().find((item: QuoteItemDetails) => item._id === this.selectedItemId())
     if (item) {
-      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitPrice}`
+      return `Product: ${item.detail} \n Qty: ${item.quantity} \n Unit Cost: ₹${item.unitCost}`
     }
     return '';
   }
@@ -141,11 +143,12 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
       width: '500px',
       disableClose: true,
       maxHeight: '90vh',
-      autoFocus: false    
+      autoFocus: false
     })
 
     dialog.afterClosed().subscribe((res) => {
       if (res) {
+        if(this.comparisonList().length == 0) res.selected = true
         this.comparisonList().push(res)
         this.comparisonList().sort((a, b) => a.unitPrice - b.unitPrice)
       }
@@ -162,6 +165,20 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
   onAddSupplier() {
     this.router.navigate(['/suppliers/create']);
+  }
+
+  navigate() {
+    this.purchaseService.editMode$.subscribe((isEdit) => {
+      if (isEdit) {
+        this.purchaseService.purchaseId$.subscribe((id) => {
+          if (id) {
+            this.router.navigate(['/purchase/edit', id]);
+          }
+        })
+      } else {
+        this.router.navigate(['/purchase/create']);
+      }
+    })
   }
 
   onDeleteComparison(index: number) {

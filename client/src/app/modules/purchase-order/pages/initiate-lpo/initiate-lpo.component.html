@@ -64,17 +64,11 @@
             </div>
         </div>
 
-        <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
-            <div class="md:flex gap-3">
-                <button
-                    class="w-fit px-3 py-2 text-sm border border-orange-500 hover:ring-1 hover:ring-orange-400 rounded mb-3"
-                    type="button">Save
-                    & Close</button>
-                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
-                    type="button">Exit</button>
-            </div>
-            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3"
-                type="button">Issue LPO</button>
+        <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
+            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded"
+                type="button" (click)="onIssueLpoClick()">Issue LPO</button>
         </div>
     </div>
 </div>
+
+<app-lpo-list [purchaseId]="purchaseId"></app-lpo-list>

@@ -30,14 +30,14 @@
                                 Client
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{(quoteData?.client?.companyName || 'N/A') +
-                                (quoteData?.client?.clientRef ? ' (' + quoteData?.client?.clientRef + ')' : '')}}
+                                {{(quoteData.client.companyName || 'N/A') +
+                                (quoteData.client.clientRef ? ' (' + quoteData.client.clientRef + ')' : '')}}
                             </td>
                             <td class="px-2 py-2 border text-start font-medium">
                                 Attention
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{((quoteData?.attention?.firstName || '') + ' ' + (quoteData?.attention?.lastName ||
+                                {{((quoteData.attention.firstName || '') + ' ' + (quoteData.attention.lastName ||
                                 '')).trim() || 'N/A'}}
                             </td>
                         </tr>
@@ -46,13 +46,13 @@
                                 Date
                             </td>
                             <td class="px-2 py-2 border text-start uppercase">
-                                {{ quoteData?.date ? (quoteData?.date | date: 'dd/MM/yyyy') : 'N/A' }}
+                                {{ quoteData.date ? (quoteData.date | date: 'dd/MM/yyyy') : 'N/A' }}
                             </td>
                             <td class="px-2 py-2 border text-start font-medium">
                                 Closing Date
                             </td>
                             <td class="px-2 py-2 border text-start uppercase">
-                                {{ quoteData?.closingDate ? (quoteData?.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}
+                                {{ quoteData.closingDate ? (quoteData.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}
                             </td>
                         </tr>
                         <tr class="border-b">
@@ -60,13 +60,13 @@
                                 Subject
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{quoteData?.subject || 'N/A'}}
+                                {{quoteData.subject || 'N/A'}}
                             </td>
                             <td class="px-2 py-2 border text-start font-medium">
                                 Sales Person
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{((quoteData?.createdBy?.firstName || '') + ' ' + (quoteData?.createdBy?.lastName ||
+                                {{((quoteData.createdBy.firstName || '') + ' ' + (quoteData.createdBy.lastName ||
                                 '')).trim() || 'N/A'}}
                             </td>
                         </tr>
@@ -75,13 +75,13 @@
                                 Enq Ref Id
                             </td>
                             <td *ngIf="quoteData?.enqId?.enquiryId" class="px-2 py-2 border text-start">
-                                {{quoteData?.enqId?.enquiryId}}
+                                {{quoteData.enqId.enquiryId}}
                             </td>
                             <td class="px-2 py-2 border text-start font-medium">
                                 Quoting Company
                             </td>
                             <td class="px-2 py-2 border text-start">
-                                {{quoteData?.quoteCompany || 'N/A'}}
+                                {{quoteData.quoteCompany || 'N/A'}}
                             </td>
                         </tr>
                     </tbody>

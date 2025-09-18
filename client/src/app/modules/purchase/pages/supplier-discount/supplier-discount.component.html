@@ -35,14 +35,14 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <ng-container *ngIf="suppliers().length > 0; else elseSupplier">
-                        <ng-container *ngFor="let supplier of suppliers(); let i = index">
+                    <ng-container *ngIf="getSuppliers().length > 0; else elseSupplier">
+                        <ng-container *ngFor="let supplier of getSuppliers(); let i = index">
                             <tr class="bg-white border-b text-gray-800">
                                 <td class="px-2  border text-center">
                                     {{i+1}}
                                 </td>
                                 <td class="px-2 py-2 border text-center">
-                                    {{getSupplierName(supplier.supplierId)}}
+                                  {{supplier.supplierId.supplierName}}
                                 </td>
                                 <td class="px-2 py-2 border text-center ">
                                     {{supplier.discount}}

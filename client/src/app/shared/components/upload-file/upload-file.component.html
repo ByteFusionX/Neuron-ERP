@@ -34,7 +34,7 @@
         </div>
     </div>
 
-    <div class="px-5" *ngIf="selectedFiles.length > 0">
+    <div class="px-5" *ngIf="selectedFiles && selectedFiles.length > 0">
         <div class="" *ngFor="let file of selectedFiles; let i = index">
             <div class="flex justify-center items-center mb-5">
                 <ng-icon name="heroXMark" 

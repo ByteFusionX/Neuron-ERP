@@ -5,7 +5,6 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { NgIconsModule } from '@ng-icons/core';
-import { heroChevronDown, heroAdjustmentsHorizontal, heroChevronLeft, heroChevronRight, heroXMark } from '@ng-icons/heroicons/outline';
 
 // PrimeNG imports
 import { InputTextModule } from 'primeng/inputtext';
@@ -16,7 +15,8 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { TableColumn, TableFilter, DateRange, ApprovalRejectionList } from './table.model';
 import { SkeltonLoadingComponent } from '../skelton-loading/skelton-loading.component';
 import { PaginationComponent } from '../pagination/pagination.component';
-import { PaginationService } from 'src/app/core/services/pagination.service';
+import { PaginationService } from 'src/app/core/services/pagination.service'; 
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 // import { ListModalComponent } from '../list-modal/list-modal.component';
 
 @Component({
@@ -34,7 +34,7 @@ import { PaginationService } from 'src/app/core/services/pagination.service';
     InputTextModule,
     DatePickerModule,
     DropdownModule,
-    InputNumberModule
+    InputNumberModule,
   ],
   templateUrl: './table.component.html',
   styleUrls: ['./table.component.css']
@@ -55,6 +55,7 @@ export class TableComponent implements OnInit, OnChanges {
   @Output() actionClick = new EventEmitter<{ action: string, item: any, event: Event }>();
   @Output() filterChange = new EventEmitter<TableFilter[]>();
   @Output() paginationChange = new EventEmitter<{ page: number, row: number }>();
+  @Output() statusChange = new EventEmitter<any>();
 
   @ContentChild('sideColumn') sideColumns!: TemplateRef<any>;
 
@@ -269,5 +270,37 @@ export class TableComponent implements OnInit, OnChanges {
       total: this.totalItems
     });
     this.paginationChange.emit(event);
+  }
+
+  onStatusChange(item: any, column: TableColumn, oldValue: string, newValue: string): void {
+    // Create confirmation message
+    let confirmMessage = `Are you sure you want to change status from "${oldValue}" to "${newValue}"?`;
+    
+    if (column.confirmationMessage) {
+      confirmMessage = column.confirmationMessage(oldValue, newValue);
+    }
+
+    // Show confirmation dialog
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Confirm Status Change',
+        description: confirmMessage,
+        icon: 'heroExclamationCircle',
+        IconColor: 'orange'
+      },
+      width: '400px'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.statusChange.emit({
+          type: 'statusChange',
+          item: item,
+          column: column.key,
+          oldValue: oldValue,
+          newValue: newValue
+        });
+      }
+    });
   }
 }

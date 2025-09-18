@@ -77,7 +77,12 @@ export interface Supplier {
     rejectHistory: {
         date: Date;
         reason: string;
-        rejectedBy: string;
+        rejectedBy: {
+            _id: string;
+            firstName: string;
+            lastName: string;
+            email?: string;
+        };
     }[];
 }
 

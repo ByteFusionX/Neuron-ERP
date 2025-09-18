@@ -1,26 +1,43 @@
 <div class="bg-white mx-5 mt-5 rounded-2x max-h-[calc(100vh-70px)]">
   <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
-    <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-      <h3 class="font-semibold">{{title}}</h3>
+    <div
+      class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3"
+    >
+      <h3 class="font-semibold">{{ title }}</h3>
 
       <div class="flex justify-end gap-4 items-center">
         <ng-container [ngTemplateOutlet]="sideColumns"></ng-container>
 
-        <div *ngIf="enableColumnCustomization"
+        <div
+          *ngIf="enableColumnCustomization"
           class="flex items-center cursor-pointer border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors"
-          [matMenuTriggerFor]="columnMenu">
-          <ng-icon name="heroAdjustmentsHorizontal" class="text-gray-600"></ng-icon>
+          [matMenuTriggerFor]="columnMenu"
+        >
+          <ng-icon
+            name="heroAdjustmentsHorizontal"
+            class="text-gray-600"
+          ></ng-icon>
           <span class="mx-2 text-sm">Columns</span>
           <ng-icon name="heroChevronDown" class="text-gray-600"></ng-icon>
         </div>
 
         <mat-menu #columnMenu="matMenu" class="column-menu">
           <div class="p-3 min-w-[200px]">
-            <div *ngFor="let column of availableColumns" class="flex items-center gap-2 py-1.5">
-              <input type="checkbox" [id]="'col-' + column.key" [checked]="isColumnVisible(column)"
+            <div
+              *ngFor="let column of availableColumns"
+              class="flex items-center gap-2 py-1.5"
+            >
+              <input
+                type="checkbox"
+                [id]="'col-' + column.key"
+                [checked]="isColumnVisible(column)"
                 (change)="toggleColumnVisibility(column)"
-                class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded">
-              <label [for]="'col-' + column.key" class="text-sm text-gray-700 cursor-pointer select-none">
+                class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+              />
+              <label
+                [for]="'col-' + column.key"
+                class="text-sm text-gray-700 cursor-pointer select-none"
+              >
                 {{ column.label }}
               </label>
             </div>
@@ -30,42 +47,52 @@
     </div>
   </div>
 
-
   <div class="m-8 overflow-hidden pb-8">
     <!-- Table with fixed header -->
-    <section class="mat-elevation-z8 h-fit max-h-[calc(100vh-40vh)] shadow-sm " >
+    <section class="mat-elevation-z8 h-fit max-h-[calc(100vh-40vh)] shadow-sm">
       <!-- Fixed table container with consistent width -->
       <div class="w-full overflow-y-auto max-h-[calc(100vh-40vh)]">
         <table class="w-full border-collapse">
           <!-- Fixed Header -->
           <thead class="sticky top-0 z-10 bg-gray-50">
             <tr>
-              <th *ngFor="let column of columns" 
-                class="bg-gray-100 px-4 py-4 text-start text-dark text-[15px] font-medium border-b border-gray-300 min-w-[116px] sticky top-0 z-10" [ngClass]="column.headerClass"
-                [class.hidden]="!displayedColumns.includes(column.key)">
+              <th
+                *ngFor="let column of columns"
+                class="bg-gray-100 px-4 py-4 text-start text-dark text-[15px] font-medium border-b border-gray-300 min-w-[116px] sticky top-0 z-10"
+                [ngClass]="column.headerClass"
+                [class.hidden]="!displayedColumns.includes(column.key)"
+              >
                 <div class="flex flex-col gap-2 overflow-visible">
                   <div class="flex items-center justify-between">
                     <span>{{ column.label }}</span>
-                    <button *ngIf="getFilterValue(column)" 
+                    <button
+                      *ngIf="getFilterValue(column)"
                       class="text-gray-500 hover:text-gray-700"
-                      (click)="clearFilter(column); $event.stopPropagation()">
+                      (click)="clearFilter(column); $event.stopPropagation()"
+                    >
                       <ng-icon name="heroXMark" class="w-4 h-4"></ng-icon>
                     </button>
                   </div>
-                  
+
                   <!-- Filter Input -->
-                  <div *ngIf="column.filterable" class="w-full overflow-visible">
+                  <div
+                    *ngIf="column.filterable"
+                    class="w-full overflow-visible"
+                  >
                     <!-- Text Filter -->
-                    <input *ngIf="column.filterType === 'text'"
+                    <input
+                      *ngIf="column.filterType === 'text'"
                       pInputText
                       [placeholder]="column.filterPlaceholder || 'Search...'"
                       [(ngModel)]="filterValues[column.key]"
                       (ngModelChange)="onFilterChange(column, $event)"
                       class="w-full"
-                      (click)="$event.stopPropagation()">
+                      (click)="$event.stopPropagation()"
+                    />
 
                     <!-- Select Filter -->
-                    <p-dropdown *ngIf="column.filterType === 'select'"
+                    <p-dropdown
+                      *ngIf="column.filterType === 'select'"
                       [options]="column.filterOptions"
                       [(ngModel)]="filterValues[column.key]"
                       (onChange)="onFilterChange(column, $event.value)"
@@ -74,46 +101,55 @@
                       class="w-full"
                       (click)="$event.stopPropagation()"
                       [appendTo]="'body'"
-                      >
+                    >
                     </p-dropdown>
 
                     <!-- Date Filter -->
-                    <p-datepicker *ngIf="column.filterType === 'date'"
+                    <p-datepicker
+                      *ngIf="column.filterType === 'date'"
                       class="w-full"
-                      [style]="{'width':'100%'}"
+                      [style]="{ width: '100%' }"
                       selectionMode="range"
                       [readonlyInput]="true"
                       [(ngModel)]="filterValues[column.key]"
                       (ngModelChange)="onFilterChange(column, $event)"
-                      appendTo="body">
+                      appendTo="body"
+                    >
                     </p-datepicker>
 
                     <!-- Number Filter -->
-                    <p-inputNumber *ngIf="column.filterType === 'number'"
+                    <p-inputNumber
+                      *ngIf="column.filterType === 'number'"
                       [(ngModel)]="filterValues[column.key]"
                       (onInput)="onFilterChange(column, $event.value)"
-                      [placeholder]="column.filterPlaceholder || 'Enter number...'"
+                      [placeholder]="
+                        column.filterPlaceholder || 'Enter number...'
+                      "
                       [showButtons]="false"
                       class="w-full"
-                      (click)="$event.stopPropagation()">
+                      (click)="$event.stopPropagation()"
+                    >
                     </p-inputNumber>
                   </div>
                 </div>
               </th>
             </tr>
           </thead>
-          
+
           <!-- Table Body -->
           <tbody class="bg-white divide-y divide-gray-200">
             @if(!isLoading) {
-            <tr *ngFor="let item of filteredData; let i = index"
-              class="transition-colors"
-              >
-
-              <td *ngFor="let column of columns" [ngClass]="column.cellClass"
+            <tr
+              *ngFor="let item of filteredData; let i = index"
+              class="transition-colors hover:bg-gray-50 cursor-pointer"
+              (click)="onRowClick(item)"
+            >
+              <td
+                *ngFor="let column of columns"
+                [ngClass]="column.cellClass"
                 class="px-4 py-3 whitespace-nowrap text-sm text-gray-800 border-b border-gray-300"
-                [class.hidden]="!displayedColumns.includes(column.key)">
-
+                [class.hidden]="!displayedColumns.includes(column.key)"
+              >
                 <!-- Text, Number, Boolean -->
                 <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
                   <span *ngIf="!column.clickable || !isClickableValue(column, item)" >{{ getCellValue(item, column) }}</span>
@@ -122,7 +158,10 @@
 
                 <!-- Date -->
                 <ng-container *ngIf="column.type === 'date'">
-                  {{ getCellValue(item, column) | date:(column.pipeParams || 'dd/MM/yyyy') }}
+                  {{
+                    getCellValue(item, column)
+                      | date : column.pipeParams || "dd/MM/yyyy"
+                  }}
                 </ng-container>
 
                 <!-- Currency -->
@@ -132,28 +171,87 @@
 
                 <!-- Status Badge -->
                 <ng-container *ngIf="column.type === 'status'">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium" [ngClass]="{
-                            'bg-green-100 text-green-800': getCellValue(item, column) === 'Won' || getCellValue(item, column) === 'Approved',
-                            'bg-red-100 text-red-800': getCellValue(item, column) === 'Lost' || getCellValue(item, column) === 'Rejected',
-                            'bg-yellow-100 text-yellow-800': getCellValue(item, column) === 'Pending',
-                            'bg-blue-100 text-blue-800': !['Won', 'Lost', 'Approved', 'Rejected', 'Pending'].includes(getCellValue(item, column))
-                          }">
+                  <span
+                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                    [ngClass]="{
+                      'bg-green-100 text-green-800':
+                        getCellValue(item, column) === 'Won' ||
+                        getCellValue(item, column) === 'Approved',
+                      'bg-red-100 text-red-800':
+                        getCellValue(item, column) === 'Lost' ||
+                        getCellValue(item, column) === 'Rejected',
+                      'bg-yellow-100 text-yellow-800':
+                        getCellValue(item, column) === 'Pending',
+                      'bg-blue-100 text-blue-800': ![
+                        'Won',
+                        'Lost',
+                        'Approved',
+                        'Rejected',
+                        'Pending'
+                      ].includes(getCellValue(item, column))
+                    }"
+                  >
                     {{ getCellValue(item, column) | titlecase }}
-                    <span class="ml-1 cursor-pointer" *ngIf="column.tooltip && (getCellValue(item, column) === 'Rejected' || getCellValue(item, column) === 'Approved')" (click)="onTooltipClick(item, column)">
-                      <ng-icon name="heroInformationCircle" class="w-4 h-4"></ng-icon>
+                    <span
+                      class="ml-1 cursor-pointer"
+                      *ngIf="
+                        column.tooltip &&
+                        (getCellValue(item, column) === 'Rejected' ||
+                          getCellValue(item, column) === 'Approved')
+                      "
+                      (click)="onTooltipClick(item, column)"
+                    >
+                      <ng-icon
+                        name="heroInformationCircle"
+                        class="w-4 h-4"
+                      ></ng-icon>
                     </span>
                   </span>
                 </ng-container>
 
+                <!-- Status Dropdown -->
+                <ng-container *ngIf="column.type === 'statusDropdown'">
+                  <div (click)="preventClick($event)" class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
+                       [matMenuTriggerFor]="statusMenu" mat-button>
+                    <p class="mx-2 text-sm whitespace-nowrap">{{ getCellValue(item, column) }}</p>
+                    <div class="mt-1">
+                      <ng-icon name="heroChevronDown"></ng-icon>
+                    </div>
+                  </div>
+                  <mat-menu #statusMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
+                    <div class="">
+                      <div *ngFor="let status of column.statusOptions">
+                        <p class="p-2 hover:bg-violet-200 cursor-pointer px-[12px] text-dark text-[15px]"
+                           *ngIf="status !== getCellValue(item, column)"
+                           (click)="onStatusChange(item, column, getCellValue(item, column), status)">
+                          {{ status }}
+                        </p>
+                      </div>
+                    </div>
+                  </mat-menu>
+                </ng-container>
+
                 <!-- Action Buttons -->
                 <ng-container *ngIf="column.type === 'action'">
-                  <div class="flex items-center justify-center gap-2" (click)="preventClick($event)">
+                  <div
+                    class="flex items-center justify-center gap-2"
+                    (click)="preventClick($event)"
+                  >
                     <ng-container *ngFor="let action of column.actions">
-                      <button *ngIf="!action.condition || action.condition(item)"
-                        [ngClass]="action.buttonClass || 'w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'"
-                        [matTooltip]="action.tooltip || ''" matTooltipPosition="above"
-                        (click)="onActionClick(action.action, item, $event)">
-                        <ng-icon [name]="action.icon" [color]="action.color || 'currentColor'"></ng-icon>
+                      <button
+                        *ngIf="!action.condition || action.condition(item)"
+                        [ngClass]="
+                          action.buttonClass ||
+                          'w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'
+                        "
+                        [matTooltip]="action.tooltip || ''"
+                        matTooltipPosition="above"
+                        (click)="onActionClick(action.action, item, $event)"
+                      >
+                        <ng-icon
+                          [name]="action.icon"
+                          [color]="action.color || 'currentColor'"
+                        ></ng-icon>
                       </button>
                     </ng-container>
                   </div>
@@ -169,9 +267,12 @@
               </td>
             </tr>
             <tr *ngIf="filteredData.length === 0 && !isLoading">
-              <td [attr.colspan]="displayedColumns.length" class="px-4 py-8 text-center text-gray-500">
+              <td
+                [attr.colspan]="displayedColumns.length"
+                class="px-4 py-8 text-center text-gray-500"
+              >
                 <div class="p-3 flex justify-center items-center flex-col">
-                  <img src="assets/images/empty.png" alt="">
+                  <img src="assets/images/empty.png" alt="" />
                   <p class="m-2 text-center text-gray-500">No Data</p>
                 </div>
               </td>

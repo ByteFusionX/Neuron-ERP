@@ -6,6 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { Supplier, SupplierStatus } from 'src/app/shared/interfaces/suppliers.interface';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
+import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { FileService } from 'src/app/core/services/file.service';
@@ -162,5 +163,38 @@ export class SupplierViewComponent implements OnInit {
         }
       }
     );
+  }
+
+  getStatusClass(status: string): string {
+    switch (status) {
+      case 'Pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Approved':
+        return 'bg-green-100 text-green-800';
+      case 'Rejected':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  }
+
+  showStatusHistory(): void {
+    if (!this.supplier?.rejectHistory?.length) return;
+
+    const historyData = this.supplier.rejectHistory.map(item => ({
+      rejectedBy: item.rejectedBy,
+      comment: item.reason,
+      rejectedAt: item.date.toString(),
+      _id: Math.random().toString()
+    }));
+
+    this.dialog.open(StatusHistoryModalComponent, {
+      data: {
+        title: 'Supplier Rejection History',
+        history: historyData
+      },
+      width: '600px',
+      maxHeight: '80vh'
+    });
   }
 } 

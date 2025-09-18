@@ -80,7 +80,11 @@ export class MrRequestsComponent {
               sortable: true,
               filterable: true,
               filterType: 'text',
-              filterPlaceholder: 'Search Engineer...'
+              filterPlaceholder: 'Search Engineer...',
+              cellRenderer: (item: any) =>
+                item?.mrRequest?.engineer
+                  ? `${item.mrRequest.engineer.firstName} ${item.mrRequest.engineer.lastName}`
+                  : ''
             },
             {
               key: 'jobId.jobId',

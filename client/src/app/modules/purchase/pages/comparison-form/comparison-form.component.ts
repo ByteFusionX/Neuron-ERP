@@ -3,7 +3,6 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialogRef } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
-import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
@@ -28,11 +27,9 @@ export class ComparisonFormComponent implements OnInit {
   private dialogRef = inject(MatDialogRef<ComparisonFormComponent>)
   private supplierService = inject(SupplierService)
   private toaster = inject(ToastrService)
-  private employeeService = inject(EmployeeService)
 
   isSubmitted = signal<boolean>(false);
   suppliers = signal<any[]>([])
-  tokenData!: { id: string, employeeId: string };
 
   comparisonForm: FormGroup = this.fb.group({
     supplierName: [''],
@@ -43,7 +40,6 @@ export class ComparisonFormComponent implements OnInit {
     paymentTerms: ['', Validators.required],
     totalCost: [''],
     selected: [false],
-    createdBy: ['']
   });
 
   constructor() {
@@ -51,8 +47,6 @@ export class ComparisonFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.tokenData = this.employeeService.employeeToken();
-    this.comparisonForm.get('createdBy')?.setValue(this.tokenData.id)
     this.supplierService.supplierList().subscribe({
       next: (res) => {
         this.suppliers.set(res.data)

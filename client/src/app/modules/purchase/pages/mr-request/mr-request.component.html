@@ -6,12 +6,16 @@
     </div>
     <form [formGroup]="mrForm" (ngSubmit)="onSubmit()">
         <div class="m-5">
-            <app-form-field label="jobId" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
-                placeholder="Enter Job Id" class="w-full" [readonly]="true">
-            </app-form-field>
-            <app-form-field label="engineer" [control]="f['engineer']" [isSubmitted]="isSubmitted()"
-                placeholder="Enter Engineer Name" class="w-full">
-            </app-form-field>
+            <app-select-dropdown 
+                label="engineer" 
+                formControlName="engineer" 
+                [isSubmitted]="isSubmitted()"
+                [options]="employees"
+                optionLabel="fullName"
+                optionValue="_id"
+                placeholder="Select Engineer"
+                class="w-full">
+            </app-select-dropdown>
             <div class="w-full pe-3 mb-3">
                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="message">
                     Message

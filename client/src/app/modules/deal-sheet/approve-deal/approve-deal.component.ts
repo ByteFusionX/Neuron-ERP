@@ -19,6 +19,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ParseBoldTextPipe } from '../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from '../../../shared/pipes/numFormatter.pipe';
+import { SupplierService } from '../../../core/services/supplier.service';
+import { Supplier } from '../../../shared/interfaces/suppliers.interface';
 
 
 @Component({
@@ -30,6 +32,7 @@ import { NumberFormatterPipe } from '../../../shared/pipes/numFormatter.pipe';
 })
 export class ApproveDealComponent implements OnInit {
   isApproving: boolean = false;
+  suppliers: Supplier[] = [];
 
   constructor(
     public dialogRef: MatDialogRef<ApproveDealComponent>,
@@ -39,6 +42,7 @@ export class ApproveDealComponent implements OnInit {
     private _enquiryService: EnquiryService,
     private toast: ToastrService,
     private _notificationService: NotificationService,
+    private supplierService: SupplierService,
     @Inject(MAT_DIALOG_DATA) public data: { approval: boolean, quoteData: Quotatation, quoteItems: (QuoteItem | undefined)[], priceDetails: priceDetails, quoteView: boolean }
   ) {
   }
@@ -46,6 +50,8 @@ export class ApproveDealComponent implements OnInit {
   userId!: string
 
   ngOnInit(): void {
+    console.log(this.data.quoteData);
+    this.loadSuppliers();
     this._employeeService.employeeData$.subscribe((data) => {
       if (data?._id) {
         this.userId = data?._id;
@@ -58,6 +64,17 @@ export class ApproveDealComponent implements OnInit {
         }
       })
     }
+  }
+
+  loadSuppliers() {
+    this.supplierService.supplierList().subscribe({
+      next: (response) => {
+        this.suppliers = response.data || response;
+      },
+      error: (error) => {
+        console.error('Error loading suppliers:', error);
+      }
+    });
   }
 
 
@@ -129,6 +146,25 @@ export class ApproveDealComponent implements OnInit {
     return item?.itemDetails?.some((detail: any) => detail.dealSelected)
   }
 
+  getSupplierById(supplierId: string): Supplier | undefined {
+    return this.suppliers.find(supplier => supplier._id === supplierId);
+  }
+
+  getSupplierName(supplierId: string): string {
+    const supplier = this.getSupplierById(supplierId);
+    console.log(supplier)
+    return supplier ? supplier.supplierName : '';
+  }
+
+  getSupplierEmail(supplierId: string): string {
+    const supplier = this.getSupplierById(supplierId);
+    return supplier && supplier.contactDetails ? supplier.contactDetails.email : '';
+  }
+
+  getSupplierPhone(supplierId: string): string {
+    const supplier = this.getSupplierById(supplierId);
+    return supplier && supplier.contactDetails ? supplier.contactDetails.phoneNumber : '';
+  }
 
   onViewPDF(file: any) {
     // Check if the file is a PDF

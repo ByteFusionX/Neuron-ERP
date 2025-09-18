@@ -69,6 +69,10 @@ export class TechnicalService {
     return this.http.post<any>(`${this.apiUrl}/technical/createProject`, projectData);
   }
 
+  getMaterialRequestByJobId(jobId: string): Observable<any> { 
+    return this.http.get<any>(`${this.apiUrl}/technical/material-request/${jobId}`);
+  }
+
   updateMaterialRequest(technicalId: string, materialRequest: MaterialRequest[]): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/technical/material-request/${technicalId}`, { materialRequest });
   }

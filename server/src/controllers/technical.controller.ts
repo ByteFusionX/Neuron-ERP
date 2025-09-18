@@ -2112,8 +2112,7 @@ export const deleteBillingSummary = async (req: Request, res: Response, next: Ne
 export const getMrRequests = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { engineer, jobId,requestedBy, purchaseNo, message,fromDate,toDate , row, page } = req.body;
-      console.log("fromDate : ",fromDate)
-      console.log("toDate : ",toDate)
+
 
       const pipeline: any[] = [
          {
@@ -2171,6 +2170,20 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
             }
          },
          {
+            $lookup: {
+               from: "employees",
+               localField: "mrRequest.engineer",
+               foreignField: "_id",
+               as: "mrRequest.engineer"
+            }
+         },
+         {
+            $unwind: {
+               path: "$mrRequest.engineer",
+               preserveNullAndEmptyArrays: true
+            }
+         },
+         {
             $addFields: {
                "updatedBy.fullName": {
                   $concat: ["$updatedBy.firstName", " ", "$updatedBy.lastName"]
@@ -2205,16 +2218,6 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
          matchConditions["mrRequest.message"] = { $regex: message, $options: 'i' };
       }
 
-      // if (fromDate||toDate) {
-      //    const startDate = new Date(fromDate);
-      //    const endDate = new Date(toDate);
-      //    endDate.setDate(endDate.getDate() + 1);
-         
-      //    matchConditions["mrRequest.createdDate"] = {
-      //       $gte: startDate,
-      //       $lt: endDate
-      //    };
-      // }
 
        if (fromDate && !toDate) {
          const { startOfDay, endOfDay } = getDateRangeByDay(fromDate);
@@ -2255,6 +2258,7 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
          data: mrRequests
       });
    } catch (error) {
+      console.log(error)
       return res.status(500).json({
          success: false,
          message: "Failed to get MR requests",
@@ -2262,3 +2266,30 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
       });
    }
 };
+
+
+export const getMaterialRequestByJobId = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { jobId } = req.params;
+      const technicalProject = await technicalModel.findOne({ jobId: new ObjectId(jobId) });
+      if(!technicalProject){
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+      const materialRequest = technicalProject.materialRequest;
+      return res.status(200).json({
+         success: true,
+         message: "Material request fetched successfully",
+         data: materialRequest
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to get material request by job ID",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}

@@ -33,6 +33,7 @@ import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
 import technicalRouter from './routes/technical.router';
+import purchaseOrderRouter from "./routes/purchaseOrder.router"; 
 import workflowRouter from './routes/workflow.router';
 import { bearerStrategyOptions } from './common/utils/tokenValidator';
 import passport from 'passport';
@@ -104,6 +105,7 @@ app.use('/purchase', purchaseRequestRouter)
 app.use('/technical', technicalRouter)
 app.use('/workflow', workflowRouter)
 app.use('/claim', claimRouter)
+app.use("/purchase-orders", purchaseOrderRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');

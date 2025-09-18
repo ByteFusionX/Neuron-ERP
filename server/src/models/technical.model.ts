@@ -28,7 +28,7 @@ interface MaterialRequest {
     itemName: string;
     quantity: number;
     estimatedCost: number;
-    requiredOn: Date;    
+    requiredOn: Date;
     remarks: string;
 }
 
@@ -72,6 +72,35 @@ interface ActivityPlan {
     status: string;
     comment: string;
 }
+
+const MaterialRequestSchema = new Schema({
+    itemName: {
+        type: String,
+        required: true,
+        trim: true  
+    },
+    quantity: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    estimatedCost: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    requiredOn: {
+        type: Date,
+        required: true
+    },
+    remarks: {
+        type: String,
+        trim: true
+    }
+}, {
+    timestamps: true
+});
+
 
 interface ProjectUpdate {
     subject: string;
@@ -171,7 +200,7 @@ const activityPlanSchema = new Schema<ActivityPlan>({
         required: true,
     },
     endDate: {
-        type: Date,
+        type: Date, 
         required: true,
     },
     orginalStartDate: {
@@ -293,7 +322,7 @@ const technicalSchema = new Schema<Technical>({
         ref: 'Customer'
     },
     materialRequest: {
-        type: [],
+        type: [MaterialRequestSchema],
         required: true,
         default: [],
     },
@@ -319,8 +348,8 @@ const technicalSchema = new Schema<Technical>({
     },
     projectType: {
         type: String,
-        required:true,
-        enum:['project','amc']
+        required: true,
+        enum: ['project', 'amc']
     },
     priority: {
         type: String,

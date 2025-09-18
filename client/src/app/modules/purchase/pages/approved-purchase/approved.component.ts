@@ -9,7 +9,6 @@ import { PaginationService } from 'src/app/core/services/pagination.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
@@ -22,7 +21,6 @@ import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
     NgSelectModule,
     MatMenuModule,
     IconsModule,
-    SearchComponent,
     ButtonComponent,
     FormsModule
   ],
@@ -47,6 +45,7 @@ export class ApprovedPurchaseComponent {
   selectedLocation = signal<string>('');
   selectedCategory = signal<string>('');
   selectedStatus = signal<string[]>(['Approved']);
+  statusOptions: string[] = ['Pending', 'Drafted'];
 
   ngOnInit(): void {
     this.setupTableColumns()
@@ -61,21 +60,32 @@ export class ApprovedPurchaseComponent {
         type: 'date',
         pipeParams: 'dd/MM/yyyy',
         sortable: true,
+        filterable: true,
+        filterType: 'date'
       },
       {
         key: 'customerId.companyName',
         label: 'Customer Name',
         type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search customer...'
       },
       {
         key: 'purchaseNo',
         label: 'PR NO',
         type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search PR No...'
       },
       {
         key: 'jobId.jobId',
         label: 'Job ID',
         type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search Job ID...'
       },
       {
         key: 'totalLpo',
@@ -86,12 +96,18 @@ export class ApprovedPurchaseComponent {
         key: 'createdBy.firstName',
         label: 'Created By',
         type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search created by...'
       },
       {
         key: 'status',
         label: 'Status',
         type: 'status',
-        headerClass: 'text-center'
+        headerClass: 'text-center',
+        filterable: true,
+        filterType: 'select',
+        filterOptions: this.statusOptions.map(type => ({ label: type, value: type }))
       },
       {
         key: 'initiateLpo',
