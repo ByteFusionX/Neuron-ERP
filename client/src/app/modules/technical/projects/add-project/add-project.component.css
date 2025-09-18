@@ -34,6 +34,24 @@ select.ng-invalid.ng-touched:focus {
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
 
+/* Bottom popup styles */
+.update-popup {
+  backdrop-filter: blur(4px);
+  animation: slideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1), 0 -2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 640px) {
   .max-w-4xl {

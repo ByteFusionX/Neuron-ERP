@@ -16,11 +16,17 @@ interface PurchaseOrder extends Document {
     etaTerms: string;
     paymentTerms: string;
     shippingTerms: string;
+    deliveryTerms: string;
     placeOfDelivery: string;
     subject: string;
     poDate: Date;
     termsAndCondition: string;
     discount: number;
+    supplierInvoices: {
+        fileName: string;
+        originalname: string;
+        isUploaded?: boolean;
+    }[];
     createdAt: Date;
     updatedAt: Date;
     createdBy: any;
@@ -80,6 +86,10 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
             type: String,
             required: true,
         },
+        deliveryTerms: {
+            type: String,
+            required: true,
+        },
         placeOfDelivery: {
             type: String,
             required: true,
@@ -95,6 +105,23 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         paymentTerms: {
             type: String,
             required: true,
+        },
+        supplierInvoices: {
+            type: [{
+                fileName: {
+                    type: String,
+                    required: true
+                },
+                originalname: {
+                    type: String,
+                    required: true
+                },
+                isUploaded: {
+                    type: Boolean,
+                    default: true
+                }
+            }],
+            default: []
         },
     },
     { timestamps: true }

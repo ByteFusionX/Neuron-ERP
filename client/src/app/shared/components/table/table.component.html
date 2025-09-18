@@ -152,8 +152,8 @@
               >
                 <!-- Text, Number, Boolean -->
                 <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
-                  <span *ngIf="!column.clickable || !column?.clickableValue(item)" >{{ getCellValue(item, column) }}</span>
-                  <span *ngIf="column.clickable && column?.clickableValue(item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
+                  <span *ngIf="!column.clickable || !isClickableValue(column, item)" >{{ getCellValue(item, column) }}</span>
+                  <span *ngIf="column.clickable && isClickableValue(column, item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
                 </ng-container>
 
                 <!-- Date -->
@@ -207,6 +207,28 @@
                       ></ng-icon>
                     </span>
                   </span>
+                </ng-container>
+
+                <!-- Status Dropdown -->
+                <ng-container *ngIf="column.type === 'statusDropdown'">
+                  <div (click)="preventClick($event)" class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
+                       [matMenuTriggerFor]="statusMenu" mat-button>
+                    <p class="mx-2 text-sm whitespace-nowrap">{{ getCellValue(item, column) }}</p>
+                    <div class="mt-1">
+                      <ng-icon name="heroChevronDown"></ng-icon>
+                    </div>
+                  </div>
+                  <mat-menu #statusMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
+                    <div class="">
+                      <div *ngFor="let status of column.statusOptions">
+                        <p class="p-2 hover:bg-violet-200 cursor-pointer px-[12px] text-dark text-[15px]"
+                           *ngIf="status !== getCellValue(item, column)"
+                           (click)="onStatusChange(item, column, getCellValue(item, column), status)">
+                          {{ status }}
+                        </p>
+                      </div>
+                    </div>
+                  </mat-menu>
                 </ng-container>
 
                 <!-- Action Buttons -->

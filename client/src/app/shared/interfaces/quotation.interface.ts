@@ -23,6 +23,7 @@ export interface QuoteItemDetail {
     availability: string;
     dealSelected: boolean;
     supplierName: string;
+    supplierId?: string;
     phoneNo: string;
     unitSellingPrice: number;
     email: string;
@@ -132,7 +133,7 @@ export interface dealData {
     updatedItems: QuoteItem[];
     totalDiscount: number;
     additionalCosts: {
-        type: string; name: string, value: number
+        type: string; name: string, value: number, supplierId?: string, supplierDetails?: any
     }[];
     savedDate: string;
     seenByApprover: boolean;

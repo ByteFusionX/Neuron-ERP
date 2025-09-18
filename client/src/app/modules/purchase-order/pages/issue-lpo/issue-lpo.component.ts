@@ -41,7 +41,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
-  placeOfDelivery: string = 'Neuron Technologies WLL';
   requestedSupplierId = signal<string>('');
   purchaseId!: string;
   purchase: PurchaseData | null = null;
@@ -50,7 +49,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   isSubmitted = signal<boolean>(false);
   selectedSupplier = signal<any>(null);
   items = signal<any[]>([]);
-  tokenData!: { id: string, employeeId: string };
   subscriptions = new Subscription();
   generatedPONumber = signal<string>('');
   isCreatingPO = signal<boolean>(false);
@@ -71,7 +69,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     this.initializeForm();
     this.loadTermsAndConditions();
     this.generatePONumber();
-    this.tokenData = this.employeeService.employeeToken();
     this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
     if (!this.purchaseId) {
       this.notificationService.error('Invalid Purchase ID');
@@ -106,6 +103,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       poNo: ['', [Validators.required]],
       subject: ['', [Validators.required]],
       shippingTerms: ['', [Validators.required]],
+      placeOfDelivery: ['', [Validators.required]],
       poDate: [new Date().toISOString().split('T')[0], [Validators.required]],
       termsAndCondition: ['', [Validators.required]],
       discount: [0, [Validators.min(0)]]
@@ -150,21 +148,26 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   }
 
   onSupplierSelected(supplierId: any) {
+    if(!supplierId) {
+      this.selectedSupplier.set(null);
+      this.items.set([]);
+      this.poForm.reset();
+      this.poForm.get('poNo')?.setValue(this.generatedPONumber());
+      this.requestedSupplierId.set('');
+      return;
+    };
     const suppliers = this.suppliersList()
     const items = this.hasComparisons(this.purchase)
     const hasSupplier = suppliers.find(supplier => supplier._id === supplierId)
     if (items) {
       const supplierDiscount = this.purchase?.supplierDiscounts?.suppliers.find(supplier => supplier.supplierId === supplierId)?.discount || 0
-      console.log(items,this.purchase)
       const hasItem = items.filter(item => item.comparisons.supplierId === supplierId);
-      console.log(hasItem,'hasItem')
       if (hasSupplier && hasItem) {
         this.selectedSupplier.set(hasSupplier)
         this.items.set(hasItem)
             this.poForm.patchValue({
               discount: supplierDiscount
             })
-        console.log(this.selectedSupplier());
       } else {
         this.notificationService.error('Selected supplier is not associated with this purchase order.');
         this.requestedSupplierId.set('');
@@ -257,12 +260,12 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       etaTerms: this.items()[0]?.comparisons?.etaTerms || '',
       paymentTerms: this.items()[0]?.comparisons?.paymentTerms || '',
       shippingTerms: formData.shippingTerms,
-      placeOfDelivery: this.placeOfDelivery,
+      deliveryTerms: this.items()[0]?.comparisons?.etaTerms || 'As per terms',
+      placeOfDelivery: formData.placeOfDelivery,
       subject: formData.subject,
       poDate: new Date(formData.poDate),
       termsAndCondition: formData.termsAndCondition,
       discount: discount,
-      createdBy: this.tokenData.id
     };
 
     this.subscriptions.add(

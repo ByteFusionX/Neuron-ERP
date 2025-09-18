@@ -5,7 +5,8 @@ import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { PurchaseData, PurchaseOrder, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
 import { environment } from 'src/environments/environment';
 
-import * as pdfMake from 'pdfmake/build/pdfmake';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 
 @Injectable({
   providedIn: 'root'
@@ -84,8 +85,8 @@ export class PurchaseService {
     return this.http.get(`${this.api}/purchase/purchase-request/${purchaseId}`)
   }
 
-  updatePurchaseStatus(purchaseId: string, status: PurchaseStatus, userId: string, comment?: string): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, userId, comment });
+  updatePurchaseStatus(purchaseId: string, status: PurchaseStatus, comment?: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, comment });
   }
 
   getPurchaseRequestsByJobId(jobId: string): Observable<any> {
@@ -125,9 +126,9 @@ export class PurchaseService {
 
 
   async generatePDF(purchaseData: PurchaseOrder, includeStamp: boolean) {
-    const pdfMakeInstance = { ...pdfMake };
+    pdfMake.vfs = pdfFonts.vfs;
 
-    (pdfMakeInstance as any).fonts = {
+    (pdfMake as any).fonts = {
       EBGaramond: {
         normal: `${window.location.origin}/assets/font/EBGaramond-Regular.ttf`,
         bold: `${window.location.origin}/assets/font/EBGaramond-Bold.ttf`,
@@ -159,7 +160,7 @@ export class PurchaseService {
     });
 
     const finalAmount = [
-      { text: `Total Amount (${purchaseData.quoteId?.currency})`, style: 'tableFooter', colSpan: 4 }, '', '', '',
+      { text: `Total (${purchaseData.quoteId?.currency})`, style: 'tableFooter', colSpan: 4 }, '', '', '',
       { text: this.formatNumber(totalCost), style: 'tableFooter' }
     ];
 
@@ -174,7 +175,6 @@ export class PurchaseService {
         ]
       }
     };
-
 
     const documentDefinition: any = {
       defaultStyle: {
@@ -236,86 +236,100 @@ export class PurchaseService {
             body: [
               [
                 { style: 'tableHead', text: 'Supplier:', alignment: 'left' },
-                { style: 'tableHead', text: purchaseData.supplierId.supplierName, alignment: 'left', colSpan: 3 },
+                { style: 'tableBody', text: purchaseData.supplierId.supplierName, alignment: 'left', colSpan: 3 },
                 {},
                 {},
                 { style: 'tableHead', text: 'Delivery Terms:', alignment: 'left' },
-                { style: 'quoteId', text: purchaseData.etaTerms, alignment: 'left' }
+                { style: 'tableBody', text: purchaseData.etaTerms, alignment: 'left' }
               ],
               [
                 { style: 'tableHead', text: 'Address:', alignment: 'left' },
-                { style: 'tableHead', text: purchaseData.supplierId.address, alignment: 'left', colSpan: 3 },
+                {
+                  style: 'tableBody',
+                  text: [
+                    purchaseData.supplierId.address?.buildingNo,
+                    purchaseData.supplierId.address?.location,
+                    purchaseData.supplierId.address?.streetNo,
+                    purchaseData.supplierId.address?.zoneNo
+                  ].filter(Boolean).join(', '),
+                  alignment: 'left',
+                  colSpan: 3
+                },
                 {},
                 {},
                 { style: 'tableHead', text: 'Place of Delivery:', alignment: 'left' },
-                { style: 'quoteId', text: purchaseData.placeOfDelivery, alignment: 'left' }
+                { style: 'tableBody', text: purchaseData.placeOfDelivery, alignment: 'left' }
               ],
               [
                 { style: 'tableHead', text: 'Contact Person:', alignment: 'left' },
-                { style: 'tableHead', text: purchaseData.supplierId.contactDetails.name, alignment: 'left', colSpan: 3 },
+                { style: 'tableBody', text: purchaseData.supplierId.contactDetails.name, alignment: 'left', colSpan: 3 },
                 {},
                 {},
                 { style: 'tableHead', text: 'Payment Terms:', alignment: 'left' },
-                { style: 'quoteId', text: purchaseData.paymentTerms, alignment: 'left' }
+                { style: 'tableBody', text: purchaseData.paymentTerms, alignment: 'left' }
               ],
               [
                 { style: 'tableHead', text: 'Phone Number:', alignment: 'left' },
-                { style: 'tableHead', text: purchaseData.supplierId.contactDetails.phoneNumber, alignment: 'left', colSpan: 3 },
+                { style: 'tableBody', text: purchaseData.supplierId.contactDetails.phoneNumber, alignment: 'left', colSpan: 3 },
                 {},
                 {},
                 { style: 'tableHead', text: 'Shipping Terms:', alignment: 'left' },
-                { style: 'quoteId', text: purchaseData.shippingTerms, alignment: 'left' }
+                { style: 'tableBody', text: purchaseData.shippingTerms, alignment: 'left' }
               ],
               [
                 { style: 'tableHead', text: 'Email:', alignment: 'left' },
-                { style: 'tableHead', text: purchaseData.supplierId.contactDetails.email, alignment: 'left', colSpan: 3 },
+                { style: 'tableBody', text: purchaseData.supplierId.contactDetails.email, alignment: 'left', colSpan: 3 },
                 {},
                 {},
                 { style: 'tableHead', text: 'PO Date:', alignment: 'left' },
-                { style: 'quoteId', text: purchaseData.poDate, alignment: 'left' }
+                { style: 'tableBody', text: purchaseData.poDate ? new Date(purchaseData.poDate).toLocaleDateString('en-GB') : '', alignment: 'left' }
               ],
               [
                 { style: 'tableHead', text: 'Quote Ref:', alignment: 'left' },
-                { style: 'tableHead', text: purchaseData.quoteId?.quoteNo, alignment: 'left', colSpan: 3 },
+                { style: 'tableBody', text: purchaseData.quoteId?.quoteId, alignment: 'left', colSpan: 3 },
                 {},
                 {},
                 { style: 'tableHead', text: 'PO No:', alignment: 'left' },
-                { style: 'quoteId', text: purchaseData.poNo, alignment: 'left' }
+                { style: 'tableBody', text: purchaseData.poNo, alignment: 'left' }
               ],
               [
                 { style: 'tableHead', text: 'Subject:', alignment: 'left' },
-                { style: 'tableHead', text: purchaseData.subject, alignment: 'left', colSpan: 3 },
+                { style: 'tableBody', text: purchaseData.subject, alignment: 'left', colSpan: 3 },
                 {},
                 {},
                 { style: 'tableHead', text: 'Job No:', alignment: 'left' },
-                { style: 'quoteId', text: purchaseData.jobId?.jobId, alignment: 'left' }
+                { style: 'tableBody', text: purchaseData.jobId?.jobId, alignment: 'left' }
               ]
             ]
 
           }
         },
         itemsTable,
-        { text: 'TERMS & CONDITIONS', style: 'subHeading' },
+        { text: 'General Terms & Conditions', style: 'subHeading' },
+        {
+          ul: [
+            { text: 'The Supplier/Contractor should deliver the Goods/Service as per the specifications agreed and approved.', style: 'text' },
+            { text: 'The Supplier/Contractor is responsible for any damage to any persons (or) property whatever and responsible to insure for the same.', style: 'text' },
+            { text: 'If the delivery is not made as per schedule and as per the approved specification. Neuron has the right to cancel the order partially or fully.', style: 'text' },
+            { text: 'The Supplier\'s/Contractor\'s payment will be made as per the agreed terms.', style: 'text' },
+          ], style: 'text'
+        },
+
         { text: purchaseData.termsAndCondition, style: 'text' },
         {
-          columns: [
-            {
-              text: [
-                { text: 'Thanking you\nFor ', style: 'footerText' },
-                { text: purchaseData.purchaseCompany == "Neuron Security System" ? 'Neuron Security System W.L.L' : 'Neuron Technologies W.L.L', style: 'footerBoldText', id: 'lastPage' }]
-            },
-            ...(includeStamp ? [{
-              image: await this.getBase64ImageFromURL(
-                "../../assets/images/stamp.jpg"
-              ),
-              width: 90,
-              margin: [30, 5, 0, 0]
-            }] : []),
-            { text: `${purchaseData.createdBy.firstName + ' ' + purchaseData.createdBy.lastName}\nMob: - ${purchaseData.createdBy.contactNo}\nE: ${purchaseData.createdBy.email}`, style: 'footerText', alignment: 'right' },
-          ],
-          margin: [0, 10, 0, 0],
-          pageBreak: 'avoid'
+          text: [
+            { text: 'Point of Contact :', style: 'subHeading' },
+            { text: '\t' },
+            { text: purchaseData.createdBy.firstName + ' ' + purchaseData.createdBy.lastName, style: 'text', id: 'lastPage' }],
+          margin: [0, 20, 0, 10]
         },
+        ...(includeStamp ? [{
+          image: await this.getBase64ImageFromURL(
+            "../../assets/images/stamp.jpg"
+          ),
+          width: 90,
+          margin: [30, 5, 0, 0]
+        }] : []),
       ],
       styles: {
         mainHead: {
@@ -325,7 +339,12 @@ export class PurchaseService {
         },
         tableHead: {
           color: 'black',
-          fontSize: 10
+          fontSize: 10,
+          bold: true
+        },
+        tableBody: {
+          fontSize: 10,
+          color: 'black'
         },
         quoteId: {
           color: 'black',
@@ -334,14 +353,14 @@ export class PurchaseService {
         header: {
           fontSize: 18,
           bold: true,
-          margin: [0, 0, 0, 10]
+          margin: [0, 0, 0, 0]
         },
         text: {
           fontSize: 12,
           margin: [0, 5, 0, 0]
         },
         subHeading: {
-          fontSize: 11,
+          fontSize: 12,
           margin: [0, 12, 0, 0],
           decoration: 'underline',
           bold: true
@@ -350,8 +369,8 @@ export class PurchaseService {
           fontSize: 12,
           alignment: 'center',
           margin: [0, 10],
-          fillColor: "#1E4E79",
-          color: 'white',
+          fillColor: "#f4b083",
+          color: 'black',
           bold: true
         },
         tableSlNo: {
@@ -359,14 +378,13 @@ export class PurchaseService {
           fontSize: 12,
           alignment: 'center',
           margin: [0, 5],
-          fillColor: "#1E4E79",
-          color: 'white'
+          fillColor: "#f4b083",
+          color: 'black'
         },
         tableFooter: {
           bold: true,
           fontSize: 11,
           alignment: 'center',
-          fillColor: "#BFBEBE",
           margin: [0, 5, 0, 5]
         },
         tableText: {

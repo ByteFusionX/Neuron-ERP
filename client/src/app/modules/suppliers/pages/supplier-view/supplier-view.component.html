@@ -35,13 +35,20 @@
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Supplier Type</td>
               <td class="px-2 py-2 border text-start">{{supplier.supplierType}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Status</td>
-              <td class="px-2 py-2 border text-start">
+              <td class="px-2 py-2 border text-start flex items-center gap-2">
                 @if(supplier.status === 'Pending'){
                 <span class="bg-yellow-500 text-white px-2 py-1 rounded-md">Pending</span>
                 }@else if(supplier.status === 'Approved'){
                 <span class="bg-green-500 text-white px-2 py-1 rounded-md">Approved</span>
                 }@else if(supplier.status === 'Rejected'){
                 <span class="bg-red-500 text-white px-2 py-1 rounded-md">Rejected</span>
+                }
+                @if(supplier?.status === 'Rejected' && supplier?.rejectHistory?.length) {
+                  <div class="h-4 w-px bg-gray-300"></div>
+                  <app-btn theme="secondary" (click)="showStatusHistory()" size="sm">
+                    <ng-icon name="heroClock" class="mr-1"></ng-icon>
+                    View Reason
+                  </app-btn>
                 }
               </td>
             </tr>

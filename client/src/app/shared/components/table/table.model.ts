@@ -1,7 +1,7 @@
 export interface TableColumn {
     key: string;
     label: string;
-    type: 'text' | 'date' | 'number' | 'currency' | 'status' | 'badge' | 'image' | 'boolean' | 'custom' | 'action';
+    type: 'text' | 'date' | 'number' | 'currency' | 'status' | 'badge' | 'image' | 'boolean' | 'custom' | 'action' | 'statusDropdown';
     pipe?: string; // For formatting (date, number, etc.)
     pipeParams?: any; // Parameters for the pipe
     sortable?: boolean;
@@ -21,6 +21,9 @@ export interface TableColumn {
     clickable?: boolean;
     clickFunction?: (item: any) => void;
     clickableValue?: (item: any) => any;
+    // For statusDropdown type
+    statusOptions?: string[]; // Available status options
+    confirmationMessage?: (oldValue: string, newValue: string) => string; // Custom confirmation message
 }
 
 export interface TableAction {
@@ -33,9 +36,12 @@ export interface TableAction {
 }
 
 export interface TableEvent {
-    type: 'row' | 'action';
+    type: 'row' | 'action' | 'statusChange';
     action?: string;
     item: any;
+    column?: string; // For status change events
+    oldValue?: any; // For status change events
+    newValue?: any; // For status change events
 }
 
 export interface DateRange {

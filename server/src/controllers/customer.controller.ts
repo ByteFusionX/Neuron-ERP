@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import Customer from '../models/customer.model';
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees } from "../common/utils/util";
+import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
 const { ObjectId } = require('mongodb')
 
@@ -570,12 +570,18 @@ export const stopSharingCustomer = async (req: Request, res: Response, next: Nex
 export const createCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const customerData = req.body
+        const userToken = req.user;
+
         customerData.companyName = customerData.companyName.trim();
         const companyExist = await Customer.findOne({ companyName: new RegExp(`^${customerData.companyName}$`, 'i') })
 
         if (companyExist) {
             return res.status(200).json({ companyExist: true })
         }
+
+        const createdBy = await getEmployeeData(userToken)
+        customerData.createdBy = createdBy._id
+
         let clientId: string = await generateClientRef(customerData.createdDate);
         customerData.clientRef = clientId;
 
@@ -585,6 +591,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
         if (saveCustomer) {
             return res.status(200).json(saveCustomer)
         }
+        
         return res.status(502).json()
     } catch (error) {
         console.log(error)

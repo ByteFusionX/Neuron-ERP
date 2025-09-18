@@ -9,6 +9,8 @@ import { NgIf, NgFor, NgClass, DecimalPipe } from '@angular/common';
 import { MatTooltip } from '@angular/material/tooltip';
 import { ParseBoldTextPipe } from '../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../shared/pipes/highlightParse.pipe';
+import { SupplierService } from '../../../core/services/supplier.service';
+import { Supplier } from '../../../shared/interfaces/suppliers.interface';
 
 
 @Component({
@@ -30,16 +32,19 @@ export class UpdatedealsheetComponent implements OnInit {
   existingFiles: any[] = [];
 
   selectedOption: number = 0;
+  suppliers: Supplier[] = [];
 
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { approval: boolean, quoteData: Quotatation, quoteItems: (QuoteItem | undefined)[], priceDetails: priceDetails, quoteView: boolean },
     public dialogRef: MatDialogRef<UpdatedealsheetComponent>,
     public _dialog: MatDialog,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private supplierService: SupplierService
   ) { }
 
   ngOnInit() {
+    this.loadSuppliers();
     this.costForm = this.fb.group({
       paymentTerms: [this.data.quoteData.dealData.paymentTerms || '', Validators.required],
       items: this.fb.array(this.data.quoteItems.map(item => this.createItemGroup(item as QuoteItem))),
@@ -51,6 +56,17 @@ export class UpdatedealsheetComponent implements OnInit {
 
     this.selectedFiles = this.data.quoteData.dealData.attachments;
     this.existingFiles = [...this.selectedFiles]
+  }
+
+  loadSuppliers() {
+    this.supplierService.supplierList().subscribe({
+      next: (response) => {
+        this.suppliers = response.data || response;
+      },
+      error: (error) => {
+        console.error('Error loading suppliers:', error);
+      }
+    });
   }
 
   onCalculationOptionChange() {
@@ -68,12 +84,39 @@ export class UpdatedealsheetComponent implements OnInit {
       ...item,
       itemDetails: item.itemDetails.map((detail: any) => ({
         ...detail,
-        supplierName: detail.supplierName,
-        phoneNo: detail.phoneNo,
-        email: detail.email,
+        supplierId: detail.supplierId,
       })),
     }));
-    formData.append('dealData', JSON.stringify({ ...data, items: updatedItems, removedFiles: this.removedFiles, existingFiles: this.existingFiles, totalDiscount: this.data.quoteData.optionalItems[this.selectedOption].totalDiscount }));
+
+    const updatedCosts = data.costs.map((cost: any) => {
+      if (cost.type === 'Supplier Discount') {
+        return {
+          type: cost.type,
+          supplierId: cost.supplierId,
+          value: cost.value
+        };
+      } else if (cost.type === 'Additional Cost') {
+        return {
+          type: cost.type,
+          name: cost.name,
+          value: cost.value
+        };
+      } else {
+        return {
+          type: cost.type,
+          value: cost.value
+        };
+      }
+    });
+
+    formData.append('dealData', JSON.stringify({ 
+      ...data, 
+      items: updatedItems, 
+      costs: updatedCosts,
+      removedFiles: this.removedFiles, 
+      existingFiles: this.existingFiles, 
+      totalDiscount: this.data.quoteData.optionalItems[this.selectedOption].totalDiscount 
+    }));
     for (let i = 0; i < this.selectedFiles.length; i++) {
       formData.append('attachments', (this.selectedFiles[i] as Blob))
     }
@@ -158,19 +201,17 @@ export class UpdatedealsheetComponent implements OnInit {
       profit: [profit, Validators.required],
       unitSellingPrice: [detail.unitSellingPrice, Validators.required],
       availability: [detail.availability, Validators.required],
-      supplierName: [detail.supplierName, this.supplierNameValidator()],
-      phoneNo: [detail.phoneNo, this.supplierNameValidator()],
-      email: [detail.email, [this.supplierNameValidator(), Validators.email]],
+      supplierId: [(detail as any).supplierId || '', Validators.required]
     });
   }
 
-  supplierNameValidator(): ValidatorFn {
+  supplierValidator(): ValidatorFn {
     return (control: AbstractControl): { [key: string]: any } | null => {
       const formGroup = control.parent as FormGroup;
       if (formGroup) {
         const dealSelected = formGroup.get('dealSelected')?.value;
         if (dealSelected && !control.value) {
-          return { 'supplierNameRequired': true };
+          return { 'supplierRequired': true };
         }
       }
       return null;
@@ -190,7 +231,10 @@ export class UpdatedealsheetComponent implements OnInit {
 
       for (const cost of costs.controls) {
         const type = cost?.get('type')?.value;
-        if (type !== 'Customer Discount' && !cost?.get('name')?.value) {
+        if (type === 'Additional Cost' && !cost?.get('name')?.value) {
+          return { 'additionalCostInvalid': true };
+        }
+        if (type === 'Supplier Discount' && !cost?.get('supplierId')?.value) {
           return { 'additionalCostInvalid': true };
         }
         if (!cost?.get('value')?.value) {
@@ -206,11 +250,17 @@ export class UpdatedealsheetComponent implements OnInit {
       return this.getItemDetailsArray(item).every(detail => detail.get('dealSelected')?.value === true);
     });
 
+    const itemDetail = this.getItemDetailsArray(this.items.controls[i])[j];
+    
     if (!event.target.checked) {
-      this.getItemDetailsArray(this.items.controls[i])[j].get('supplierName')?.setValue('')
-      this.getItemDetailsArray(this.items.controls[i])[j].get('phoneNo')?.setValue('')
-      this.getItemDetailsArray(this.items.controls[i])[j].get('email')?.setValue('')
+      itemDetail.get('quantity')?.setValue(this.data.quoteItems[i]?.itemDetails[j].quantity);
+      itemDetail.get('unitCost')?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitCost);
+      itemDetail.get('unitSellingPrice')?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitSellingPrice);
+      itemDetail.get('supplierId')?.setValue('');
     }
+    
+    // Trigger validation update for supplier field
+    itemDetail.get('supplierId')?.updateValueAndValidity();
 
     this.isAllSelected = allSelected;
   }
@@ -222,6 +272,11 @@ export class UpdatedealsheetComponent implements OnInit {
       const itemDetails = this.getItemDetailsArray(item);
       itemDetails.forEach(detail => {
         detail.get('dealSelected')?.setValue(isChecked);
+        // Clear supplier if unchecking and trigger validation
+        if (!isChecked) {
+          detail.get('supplierId')?.setValue('');
+        }
+        detail.get('supplierId')?.updateValueAndValidity();
       });
     });
   }
@@ -236,19 +291,25 @@ export class UpdatedealsheetComponent implements OnInit {
       type: [type, Validators.required],
       value: ['', Validators.required]
     });
-
-    if (type !== 'Customer Discount') {
+    
+    if (type === 'Additional Cost') {
       group = this.fb.group({
         type: [type, Validators.required],
         name: ['', Validators.required],
         value: ['', Validators.required]
       });
+    } else if (type === 'Supplier Discount') {
+      group = this.fb.group({
+        type: [type, Validators.required],
+        supplierId: ['', Validators.required],
+        value: ['', Validators.required]
+      });
     }
-
+    
     this.costs.push(group);
   }
 
-  patchCost(cost: { type: string, value: number, name: string }): void {
+  patchCost(cost: { type: string, value: number, name: string, supplierId?: string }): void {
     let group;
     if (!cost.type) {
       cost.type = 'Additional Cost'
@@ -258,10 +319,16 @@ export class UpdatedealsheetComponent implements OnInit {
       value: [cost.value, Validators.required]
     });
 
-    if (cost.type !== 'Customer Discount') {
+    if (cost.type === 'Additional Cost') {
       group = this.fb.group({
         type: [cost.type, Validators.required],
         name: [cost.name, Validators.required],
+        value: [cost.value, Validators.required]
+      });
+    } else if (cost.type === 'Supplier Discount') {
+      group = this.fb.group({
+        type: [cost.type, Validators.required],
+        supplierId: [(cost as any).supplierId || '', Validators.required],
         value: [cost.value, Validators.required]
       });
     }
@@ -365,5 +432,31 @@ export class UpdatedealsheetComponent implements OnInit {
 
   getItemDetailsControls(index: number): FormArray {
     return this.items.at(index).get('itemDetails') as FormArray;
+  }
+
+  getSupplierById(supplierId: string): Supplier | undefined {
+    return this.suppliers.find(supplier => supplier._id === supplierId);
+  }
+
+  getSupplierName(supplierId: string): string {
+    const supplier = this.getSupplierById(supplierId);
+    return supplier ? supplier.supplierName : '';
+  }
+
+  getSelectedSuppliers(): Supplier[] {
+    const selectedSupplierIds = new Set<string>();
+    
+    this.items.controls.forEach(item => {
+      const itemDetails = this.getItemDetailsArray(item);
+      itemDetails.forEach(detail => {
+        const dealSelected = detail.get('dealSelected')?.value;
+        const supplierId = detail.get('supplierId')?.value;
+        if (dealSelected && supplierId) {
+          selectedSupplierIds.add(supplierId);
+        }
+      });
+    });
+
+    return this.suppliers.filter(supplier => supplier._id && selectedSupplierIds.has(supplier._id));
   }
 }

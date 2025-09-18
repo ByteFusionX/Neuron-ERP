@@ -24,6 +24,7 @@ import { TechnicalService } from 'src/app/core/services/technical.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { allocateType } from '../../job-sheet/pages/allocate-type-modal/allocate-type-modal.component';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
+import { CreateProjectComponent } from '../create-project/create-project.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -315,7 +316,16 @@ export class OpenToWorkProjectComponent implements OnInit {
   }
 
   addProject(): void {
-    this.router.navigate(['/technical/project', 'add']);
+    const dialogRef = this.dialog.open(CreateProjectComponent, {
+      data: { isEditMode: false },
+      width: '900px'
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.loadJobs();
+      }
+    });
   }
 
   onActionClick(event: { action: string; item: job_interface.getJob }): void {

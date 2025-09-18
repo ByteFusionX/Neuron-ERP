@@ -15,6 +15,7 @@ import { Project, ProjectType, ProjectStatus } from 'src/app/shared/interfaces/p
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
+import { CreateProjectComponent } from '../create-project/create-project.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -262,9 +263,5 @@ export class ProjectsComponent implements OnInit {
         });
       }
     });
-  }
-
-  addProject(): void {
-    this.router.navigate(['/technical/project', 'add']);
   }
 }

@@ -2,12 +2,17 @@ import { NextFunction, Request, Response } from "express";
 import { PurchaseRequestStatus } from "../models/purchaseRequest.model";
 import PurchaseRequest from '../models/purchaseRequest.model'
 import jobModel from "../models/job.model";
+import supplierModel from "../models/supplier.model";
+import { getEmployeeData } from "../common/utils/util";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
 // Create a new Purchase Request
 export const createPurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
+
         const {
             jobId,
             purchaseNo,
@@ -23,9 +28,30 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
-        const newPurchaseRequest = new PurchaseRequest(req.body);
+        const requestData = {...req.body, createdBy: employee._id};
+        
+        if (requestData.items && Array.isArray(requestData.items)) {
+            requestData.items = requestData.items.map((item: any) => {
+                if (item.itemDetails && Array.isArray(item.itemDetails)) {
+                    item.itemDetails = item.itemDetails.map((detail: any) => {
+                        if (detail.comparisons && Array.isArray(detail.comparisons)) {
+                            detail.comparisons = detail.comparisons.map((comparison: any) => {
+                                if (!comparison.createdBy) {
+                                    comparison.createdBy = employee._id;
+                                }
+                                return comparison;
+                            });
+                        }
+                        return detail;
+                    });
+                }
+                return item;
+            });
+        }
+
+        const newPurchaseRequest = new PurchaseRequest(requestData);
         const savedPurchaseRequest = await newPurchaseRequest.save();
-        await jobModel.updateOne({ _id: jobId }, { $set: { status: 'Purchase Requested' } })
+        await jobModel.updateOne({ _id: jobId }, { $set: { status: `Purchase ${savedPurchaseRequest.status !== 'Drafted' ? 'Requested' : savedPurchaseRequest.status}` } })
 
         return res.status(201).json({
             success: true,
@@ -66,8 +92,6 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 $lte: new Date(toDate)
             };
         }
-
-        console.log(matchStage);
 
         const purchases = await PurchaseRequest.aggregate([
             {
@@ -143,9 +167,46 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 }
             },
             {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'rejectedReason.rejectedBy',
+                    foreignField: '_id',
+                    as: 'rejectedByDetails'
+                }
+            },
+            {
+                $addFields: {
+                    rejectedReason: {
+                        $map: {
+                            input: '$rejectedReason',
+                            as: 'reason',
+                            in: {
+                                $mergeObjects: [
+                                    '$$reason',
+                                    {
+                                        rejectedBy: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$rejectedByDetails',
+                                                        cond: { $eq: ['$$this._id', '$$reason.rejectedBy'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $project: {
                     mrEngineer: 0,
-                    hasMr: 0
+                    hasMr: 0,
+                    rejectedByDetails: 0
                 }
             },
             { $unwind: { path: '$mrEngineer', preserveNullAndEmptyArrays: true } },
@@ -259,9 +320,46 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
                 }
             },
             {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'rejectedReason.rejectedBy',
+                    foreignField: '_id',
+                    as: 'rejectedByDetails'
+                }
+            },
+            {
+                $addFields: {
+                    rejectedReason: {
+                        $map: {
+                            input: '$rejectedReason',
+                            as: 'reason',
+                            in: {
+                                $mergeObjects: [
+                                    '$$reason',
+                                    {
+                                        rejectedBy: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$rejectedByDetails',
+                                                        cond: { $eq: ['$$this._id', '$$reason.rejectedBy'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $project: {
                     mrEngineer: 0,
-                    hasMr: 0
+                    hasMr: 0,
+                    rejectedByDetails: 0
                 }
             },
             { $unwind: { path: '$mrEngineer', preserveNullAndEmptyArrays: true } },
@@ -318,6 +416,15 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             {
                 $lookup: {
                     from: 'employees',
+                    localField: 'jobId.quoteId.createdBy',
+                    foreignField: '_id',
+                    as: 'jobId.createdBy'
+                }
+            },
+            { $unwind: { path: '$jobId.createdBy', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
                     as: 'createdBy'
@@ -353,9 +460,46 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                 }
             },
             {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'rejectedReason.rejectedBy',
+                    foreignField: '_id',
+                    as: 'rejectedByDetails'
+                }
+            },
+            {
+                $addFields: {
+                    rejectedReason: {
+                        $map: {
+                            input: '$rejectedReason',
+                            as: 'reason',
+                            in: {
+                                $mergeObjects: [
+                                    '$$reason',
+                                    {
+                                        rejectedBy: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$rejectedByDetails',
+                                                        cond: { $eq: ['$$this._id', '$$reason.rejectedBy'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $project: {
                     mrEngineer: 0,
-                    hasMr: 0
+                    hasMr: 0,
+                    rejectedByDetails: 0
                 }
             },
             { $unwind: { path: '$mrEngineer', preserveNullAndEmptyArrays: true } },
@@ -369,10 +513,24 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             });
         }
 
+        const populatedPurchaseRequest = purchaseRequest[0];
+
+        for (const item of populatedPurchaseRequest.items) {
+            for (const itemDetail of item.itemDetails) {
+                for (const comparison of itemDetail.comparisons) {
+                    const supplier = await supplierModel.findById(comparison.supplierId);
+                    if (supplier) {
+                        comparison.supplierName = supplier.supplierName;
+                    }
+                    comparison.totalCost = comparison.quantity * comparison.unitPrice;
+                }
+            }
+        }
+
         return res.status(200).json({
             success: true,
             message: "Purchase request fetched successfully",
-            data: purchaseRequest[0],
+            data: populatedPurchaseRequest,
         });
     } catch (error) {
         next(error);
@@ -415,7 +573,9 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
 export const updatePurchaseRequestStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { status, userId, comment } = req.body;
+        const { status, comment } = req.body;
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
 
         const rejectedReason = comment
         // Validate status
@@ -449,7 +609,7 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
 
             // Add rejected reason to the array
             purchaseRequest.rejectedReason.push({
-                rejectedBy: userId,
+                rejectedBy: employee._id,
                 comment: comment,
                 rejectedAt: new Date()
             });
@@ -457,7 +617,7 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
 
         // Update status and other fields
         purchaseRequest.status = status;
-        purchaseRequest.updatedBy = userId;
+        purchaseRequest.updatedBy = employee._id;
         purchaseRequest.updatedAt = new Date();
 
         const updatedPurchaseRequest = await purchaseRequest.save();
@@ -477,6 +637,8 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
 export const updatePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
         const updateData = req.body;
 
         // Remove fields that shouldn't be directly updated
@@ -485,8 +647,27 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         delete updateData.createdBy;
         delete updateData.isDeleted;
 
+        if (updateData.items && Array.isArray(updateData.items)) {
+            updateData.items = updateData.items.map((item: any) => {
+                if (item.itemDetails && Array.isArray(item.itemDetails)) {
+                    item.itemDetails = item.itemDetails.map((detail: any) => {
+                        if (detail.comparisons && Array.isArray(detail.comparisons)) {
+                            detail.comparisons = detail.comparisons.map((comparison: any) => {
+                                if (!comparison.createdBy) {
+                                    comparison.createdBy = employee._id;
+                                }
+                                return comparison;
+                            });
+                        }
+                        return detail;
+                    });
+                }
+                return item;
+            });
+        }
+
         // Add updated metadata
-        updateData.updatedBy = updateData.createdBy;
+        updateData.updatedBy = employee._id;
         updateData.updatedAt = new Date();
 
         const updatedPurchaseRequest = await PurchaseRequest.findOneAndUpdate(
@@ -708,9 +889,46 @@ export const getPurchaseRequestsByJobId = async (req: Request, res: Response, ne
                 }
             },
             {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'rejectedReason.rejectedBy',
+                    foreignField: '_id',
+                    as: 'rejectedByDetails'
+                }
+            },
+            {
+                $addFields: {
+                    rejectedReason: {
+                        $map: {
+                            input: '$rejectedReason',
+                            as: 'reason',
+                            in: {
+                                $mergeObjects: [
+                                    '$$reason',
+                                    {
+                                        rejectedBy: {
+                                            $arrayElemAt: [
+                                                {
+                                                    $filter: {
+                                                        input: '$rejectedByDetails',
+                                                        cond: { $eq: ['$$this._id', '$$reason.rejectedBy'] }
+                                                    }
+                                                },
+                                                0
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $project: {
                     mrEngineer: 0,
-                    hasMr: 0
+                    hasMr: 0,
+                    rejectedByDetails: 0
                 }
             },
             { $sort: { createdAt: -1 } }

@@ -43,8 +43,8 @@ export class PendingPurchaseComponent implements OnInit {
 
   selectedLocation = signal<string>('');
   selectedCategory = signal<string>('');
-  selectedStatus = signal<string[]>(['Pending', 'Drafted']);
-  statusOptions: string[] = ['Pending', 'Drafted'];
+  selectedStatus = signal<string[]>(['Pending', 'Drafted', 'Rejected']);
+  statusOptions: string[] = ['Pending', 'Drafted', 'Rejected'];
 
   ngOnInit(): void {
     this.setupTableColumns()

@@ -49,8 +49,18 @@
                             <td
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Place
                                 of Delivery</td>
-                            <td class="px-2 py-2 border w-2/6" *ngIf="this.selectedSupplier()">
-                                {{placeOfDelivery}}
+                            <td class="px-2 py-2 border w-2/6">
+                                <div class="flex items-center justify-center h-full min-h-[60px]">
+                                    <app-form-field
+                                        label=""
+                                        [control]="f['placeOfDelivery']"
+                                        [isSubmitted]="isSubmitted()"
+                                        type="text"
+                                        placeholder="Enter Place of Delivery"
+                                        [class]="'!mb-0'"
+                                        class="w-full justify-center items-center mb-0">
+                                    </app-form-field>
+                                </div>
                             </td>
                         </tr>
                         <tr class="border-b">

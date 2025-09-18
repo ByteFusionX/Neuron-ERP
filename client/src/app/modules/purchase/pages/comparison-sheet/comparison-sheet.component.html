@@ -22,9 +22,9 @@
                     <textarea class="p-2 rounded bg-gray-200 outline-none" rows="3" [value]="getFormattedProducts()"
                         readonly></textarea>
                 </div>
-                <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
+                <!-- <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
                     placeholder="Inventory List" class="w-full" [readonly]="true">
-                </app-form-field>
+                </app-form-field> -->
                 <div class="flex gap-3 items-end mb-3">
                     <button
                         class="w-36 px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
@@ -35,14 +35,7 @@
                         (click)="onAddSupplier()" type="button">+ Add Supplier</button>
                 </div>
             </div>
-            <div class="w-full flex justify-end gap-2 py-2">
-                <span>Currency:</span>
-                <div class="flex">
-                    <button class="text-gray-500 hover:text-gray-700">USD</button>/
-                    <button class="text-violet-600 underline">QAR</button>
-                </div>
-            </div>
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-5">
+            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border my-5">
                 <thead class="text-xs text-gray-700 uppercase bg-violet-50">
                     <tr>
                         <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">

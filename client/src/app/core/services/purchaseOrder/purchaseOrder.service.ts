@@ -41,4 +41,12 @@ export class PurchaseOrderService {
   generatePONumber(): Observable<any> {
     return this.http.get<any>(`${this.baseUrl}/generate-po-no`);
   }
+
+  updatePurchaseOrderStatus(id: string, poStatus: string): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}/status`, { poStatus });
+  }
+
+  updateSupplierInvoices(lpoId: string, data: { supplierInvoices: any[] }): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${lpoId}/supplier-invoices`, data);
+  }
 }

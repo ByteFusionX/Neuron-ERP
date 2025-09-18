@@ -1,0 +1,163 @@
+/* Spinner animation for upload progress */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Custom scrollbar styling */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Smooth hover transitions */
+.transition {
+  transition: all 0.2s ease-in-out;
+}
+
+/* File item hover effects */
+.file-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Upload area styling */
+.upload-area {
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 2rem;
+  background-color: #f9fafb;
+  transition: all 0.3s ease;
+}
+
+.upload-area.drag-over {
+  border-color: #8b5cf6;
+  background-color: #f3f4f6;
+}
+
+.upload-area:hover {
+  border-color: #8b5cf6;
+}
+
+/* Progress bar animation */
+.progress-bar {
+  transition: width 0.3s ease;
+}
+
+/* Badge styling */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Button hover effects */
+.btn-hover:hover {
+  transform: scale(1.05);
+}
+
+/* File type icon colors */
+.file-icon-pdf {
+  color: #dc2626;
+}
+
+.file-icon-doc {
+  color: #2563eb;
+}
+
+.file-icon-image {
+  color: #059669;
+}
+
+.file-icon-excel {
+  color: #16a34a;
+}
+
+.file-icon-default {
+  color: #6b7280;
+}
+
+/* Modal content max height adjustment */
+.modal-content {
+  max-height: calc(100vh - 200px);
+}
+
+/* Error state styling */
+.error-border {
+  border-color: #ef4444 !important;
+}
+
+.error-bg {
+  background-color: #fef2f2 !important;
+}
+
+/* Success state styling */
+.success-border {
+  border-color: #10b981 !important;
+}
+
+.success-bg {
+  background-color: #f0fdf4 !important;
+}
+
+/* Upload progress styling */
+.upload-progress {
+  background: linear-gradient(90deg, #8b5cf6 0%, #a855f7 100%);
+  transition: width 0.3s ease-in-out;
+}
+
+/* File list item animations */
+.file-list-enter {
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Disabled button styling */
+.btn-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-disabled:hover {
+  transform: none;
+}
+
+/* Tooltip adjustments */
+.mat-tooltip {
+  font-size: 12px !important;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+}

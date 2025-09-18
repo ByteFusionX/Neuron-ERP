@@ -8,7 +8,7 @@
     <div class="gap-3 border p-4 rounded-md flex flex-col">
 
       <app-select-dropdown [options]="suppliers()" label="Supplier" optionLabel="supplierName" optionValue="_id"
-        formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()" class="w-full -m-1">
+        formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()" class="w-full">
       </app-select-dropdown>
       <div class="flex gap-3">
         <app-form-field label="QTY" type="number" [control]="f['quantity']" [isSubmitted]="isSubmitted()"
@@ -33,7 +33,7 @@
         <label for="paymentTerms" class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">Payment
           Terms</label>
         <textarea class="p-2 rounded bg-gray-200 outline-none" rows="2" formControlName="paymentTerms"
-          placeholder="Enter ETA Terms"></textarea>
+          placeholder="Enter Payment Terms"></textarea>
       </div>
       <!-- <app-form-field label="ETA Terms" [control]="f['etaTerms']" [isSubmitted]="isSubmitted()"
         placeholder="Enter ETA Terms" class="col-span-2"></app-form-field> -->

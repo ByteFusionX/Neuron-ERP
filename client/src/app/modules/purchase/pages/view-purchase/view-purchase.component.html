@@ -4,8 +4,28 @@
             Purchase Details -
             <span class="uppercase">{{ purchase?.purchaseNo }}</span>
         </h3>
-        <div class="flex gap-2">
-            @if(purchaseId !== 'none'){
+        <div class="flex gap-2 items-center">
+            @if(purchase?.status) {
+                <div class="flex items-center gap-1 mr-4 p-3 bg-gray-50 rounded-lg border">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium text-gray-700">Status:</span>
+                        <span [class]="getStatusClass(purchase?.status)" 
+                              class="px-3 py-1 rounded-full text-sm font-medium">
+                            {{ purchase?.status }}
+                        </span>
+                    </div>
+                    
+                    @if(purchase?.status === 'Rejected' && purchase?.rejectedReason?.length) {
+                        <div class="h-4 w-px bg-gray-300"></div>
+                        <app-btn theme="secondary" (click)="showStatusHistory()" size="sm">
+                            <ng-icon name="heroClock" class="mr-1"></ng-icon>
+                            View Reason
+                        </app-btn>
+                    }
+                </div>
+            }
+            
+            @if(purchaseId !== 'none' && purchase?.status !== 'Pending'){
                 <app-btn theme="primary" (click)="onEdit()">
                     <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
                     Edit
@@ -38,8 +58,8 @@
                                 Sales Manager Name
                             </td>
                             <td class="px-2 py-2 border" colspan="2">
-                                {{ purchase.createdBy?.firstName }}
-                                {{ purchase.createdBy?.lastName }}
+                                {{ purchase.jobId?.createdBy?.firstName }}
+                                {{ purchase.jobId?.createdBy?.lastName }}
                             </td>
                         </tr>
                         <tr class="border-b">
@@ -86,9 +106,9 @@
                             *ngIf="getSelectedRows(purchase.items) as rows">
                             <tr class="border-b" *ngFor="let row of rows">
                                 <td class="px-4 py-2 border font-semibold">{{
-                                    row.itemName }}</td>
+                                    row.detail.detail  }}</td>
                                 <td class="px-4 py-2 border">{{
-                                    row.detail.detail }}</td>
+                                    row.detail.quantity}}</td>
                                 <td class="px-4 py-2 border">{{
                                     row.detail.unitCost | number : "1.2-2" }}</td>
                                 <td class="px-4 py-2 border">{{
@@ -186,9 +206,6 @@
                     [loading]="isRejecting">
                     <ng-icon name="heroXCircle" class="mr-1"></ng-icon>
                     Reject
-                </app-btn>
-                <app-btn theme="warning" [loading]="isApproving">
-                    Revise & Submit
                 </app-btn>
                 <app-btn theme="success" (click)="onApprove()"
                     [loading]="isApproving">

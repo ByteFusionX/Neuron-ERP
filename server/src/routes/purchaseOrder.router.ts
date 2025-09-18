@@ -5,13 +5,17 @@ import {
   getPurchaseOrderById,
   getAllPurchaseOrders,
   getPurchaseOrderByPurchaseId,
-  generateLpoNo
+  generateLpoNo,
+  updatePurchaseOrderStatus,
+  updateSupplierInvoices
 } from "../controllers/purchaseOrder.controller"; 
 
 const router = Router();
 
 router.post("/", createPurchaseOrder);
 router.put("/:id", updatePurchaseOrder);
+router.patch("/:id/status", updatePurchaseOrderStatus);
+router.patch("/:id/supplier-invoices", updateSupplierInvoices);
 router.get("/generate-po-no", generateLpoNo);
 router.get("/:id", getPurchaseOrderById);
 router.get("purchase/:id", getPurchaseOrderByPurchaseId);

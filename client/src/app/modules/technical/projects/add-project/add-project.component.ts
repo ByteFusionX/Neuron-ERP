@@ -46,35 +46,25 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   private employeeService = inject(EmployeeService);
 
   projectId: string = '';
-  isSaving = signal<boolean>(false);
-  isSubmitted = signal<boolean>(false);
-  isEditMode = signal<boolean>(false);
-  hasPurchaseRequests = signal<boolean>(false);
   selectedJobId = signal<any>(null);
+  projectDetails = signal<getProject | null>(null);
+  jobIds: any[] = [];
+  unassignedJobOptions: any[] = [];
+  materialRequests: MaterialRequest[] = [];
+  purchaseRequests: any[] = [];
+  
+  hasPurchaseRequests = signal<boolean>(false);
+
   originalFormData: any = null;
   hasUnsavedChanges = signal(false);
+  isSaving = signal<boolean>(false);
+  isSubmitted = signal<boolean>(false);
   private isNavigatingAway = false;
-  projectDetails = signal<getProject | null>(null);
-  projectStatus = [
-    { id: 'Pending', name: 'Pending' },
-    { id: 'Approved', name: 'Approved' },
-    { id: 'Rejected', name: 'Rejected' }
-  ];
-
+  
   priority = [
     { id: 'Low', name: 'Low' },
     { id: 'Medium', name: 'Medium' },
     { id: 'High', name: 'High' }
-  ];
-
-  jobIds: any[] = [];
-  materialRequests: MaterialRequest[] = [];
-  purchaseRequests: any[] = [];
-  projectTypes = [
-    { id: 'Supply Only', name: 'Supply Only' },
-    { id: 'Project With Supply', name: 'Project With Supply' },
-    { id: 'Projects With Out Supply', name: 'Projects With Out Supply' },
-    { id: 'AMC', name: 'AMC' }
   ];
 
   statusOptions = [
@@ -83,65 +73,35 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     { id: 'Rejected', name: 'Rejected' }
   ];
 
-  createEstimationGroup(type: string, value: number): FormGroup {
-    return this.fb.group({
-      type: [type, [Validators.required]],
-      value: [value, [Validators.required, Validators.min(0)]]
-    });
-  }
-
-  createPersonGroup(name: string = '', designation: string = ''): FormGroup {
-    return this.fb.group({
-      name: [name, [Validators.required]],
-      designation: [designation, [Validators.required]]
-    });
-  }
-
-  projectForm: FormGroup = this.fb.group({
-    jobId: ['', [Validators.required]],
-    projectType: ['', [Validators.required]],
-    status: ['', [Validators.required]],
-    assignedTo: ['', [Validators.required]],
-    materialRequest: [[]],
-    supervisors: [[]],
-    notes: [''],
-    involvedPersons: this.fb.array([
-      this.createPersonGroup()
-    ]),
-    estimations: this.fb.array([
-      this.createEstimationGroup('manpower', 0)
-    ])
-  });
-
   supervisorOptions: { id: string; name: string }[] = [];
 
   costingDetails = {
-    estimatedCostForProject: 1500,
-    totalLPOValue: 1500,
-    professionalServiceCharge: 300,
-    totalAmountClaimedForManpower: 120
+    estimatedCostForProject: 0,
+    totalLPOValue: 0,
+    professionalServiceCharge: 0,
+    totalAmountClaimedForManpower: 0
   };
+
+  projectForm: FormGroup = this.fb.group({
+    status: ['', [Validators.required]],
+    supervisors: [[]],
+    notes: [''],
+    involvedPersons: this.fb.array([]),
+    priority: ['', [Validators.required]],
+    estimations: this.fb.array([
+      this.createEstimationGroup('manpower', 0)
+    ]),
+    jobId: ['']
+  });
 
   ngOnInit(): void {
     this.getJobIds();
-    this.isEditMode.set(this.router.url.includes('edit'));
+    this.loadUnassignedJobs();
     this.projectId = this.router.url.split('/').pop() || '';
-    if (this.isEditMode()) {
       this.getProjectDetails();
-    }
     this.setupFormChangeDetection();
     this.setupBrowserNavigation();
     this.loadSupervisors();    
-  }
-
-  loadCostingDetails(): void {
-    this.technicalService.getCostingDetails(this.projectId).subscribe({
-      next: (response) => {
-        if(response && response.data){
-          this.costingDetails = response.data;
-        }
-      }
-    });
   }
 
   getProjectDetails(): void {
@@ -159,16 +119,41 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     });
   }
 
+  loadCostingDetails(): void {
+    this.technicalService.getCostingDetails(this.projectId).subscribe({
+      next: (response) => {
+        if(response && response.data){
+          this.costingDetails = response.data;
+        }
+      }
+    });
+  }
+
+  createEstimationGroup(type: string, value: number): FormGroup {
+    return this.fb.group({
+      type: [type, [Validators.required]],
+      value: [value, [Validators.required]]
+    });
+  }
+
+  createPersonGroup(name: string = '', designation: string = ''): FormGroup {
+    return this.fb.group({
+      name: [name, [Validators.required]],
+      designation: [designation, [Validators.required]]
+    });
+  }
+  
   patchProjectDetails(project: any): void {
     this.projectForm.patchValue({
-      jobId: project.jobId._id,
-      projectType: project.projectType,
       status: project.status,
-      assignedTo: project.assignedTo._id,
       materialRequest: project.materialRequest,
       supervisors: project.supervisors || [],
-      notes: project.notes || ''
-    });
+      notes: project.notes || '',
+      priority: project.priority,
+      estimations: project.estimations || [],
+      involvedPersons: project.involvedPersons || [],
+      jobId: project.jobId?._id || ''
+    }); 
 
     this.selectedJobId.set(project.jobId);
     
@@ -180,8 +165,6 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     }
     if (persons.length) {
       persons.forEach((p: any) => array.push(this.createPersonGroup(p.name, p.designation)));
-    } else {
-      array.push(this.createPersonGroup());
     }
 
     // Handle estimations
@@ -201,16 +184,12 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       materialRequest: [...this.materialRequests]
     };
     
-    if(this.projectForm.get('jobId')?.value){
+    if(this.projectDetails()?.jobId._id){
       this.loadCostingDetails();
     }
   }
 
-  getJobIdDisplayValue(): string {
-    const jobId = this.projectForm.get('jobId')?.value;
-    const job = this.jobIds.find((job: any) => job._id === jobId);
-    return job?.jobId || this.selectedJobId() ? this.selectedJobId().jobId : '';
-  }
+
 
   openMaterialRequestModal(): void {
     const dialogRef = this.dialog.open(MaterialRequestModalComponent, {
@@ -276,6 +255,8 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   onSubmit(): void {
     this.isSubmitted.set(true);
 
+    console.log(this.projectForm.value);
+
     if (this.projectForm.invalid) {
       this.notificationService.error('Please fill all required fields correctly');
       return;
@@ -284,37 +265,19 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     this.isSaving.set(true);
 
     const technicalData: TechnicalProject = {
-      jobId: this.projectForm.value.jobId,
-      projectType: this.projectForm.value.projectType,
       status: this.projectForm.value.status,
       supervisors: this.projectForm.value.supervisors,
       notes: this.projectForm.value.notes,
       involvedPersons: this.projectForm.value.involvedPersons,
-      estimationCost: this.estimationsArray.value
+      estimations: this.projectForm.value.estimations,
+      priority: this.projectForm.value.priority,
+      jobId: this.projectForm.value.jobId
     };
 
-    console.log(technicalData);
 
-    // if(this.isEditMode()){
-    //   this.updateTechnicalProject(this.projectId, technicalData);
-    // }else{
-    //   this.createTechnicalProject(technicalData);
-    // }
-  }
-
-  createTechnicalProject(technicalData: TechnicalProject): void {
-    this.technicalService.createTechnicalProject(technicalData).subscribe({
-      next: (response) => {
-        this.notificationService.success('Technical project created successfully');
-        this.resetUnsavedChanges();
-        this.router.navigate(['/technical/project']);
-      },
-      error: (error) => {
-        this.isSaving.set(false);
-        this.notificationService.error('Failed to create technical project');
-        console.error('Error creating technical project:', error);
-      }
-    });
+    if(this.projectId){
+      this.updateTechnicalProject(this.projectId, technicalData);
+    }
   }
 
   updateTechnicalProject(projectId: string, technicalData: TechnicalProject): void {
@@ -326,7 +289,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
           ...this.projectForm.value,
           materialRequest: [...this.materialRequests]
         };
-        this.router.navigate(['/technical/project']);
+        this.router.navigate([`/technical/${this.projectDetails()?.projectType}`]);
       },
       error: (error) => {
         this.isSaving.set(false);
@@ -343,7 +306,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   setupFormChangeDetection(): void {
     this.projectForm.valueChanges.subscribe(() => {
-      if (this.isEditMode() && this.originalFormData) {
+      if (this.originalFormData) {
         const currentFormData = this.projectForm.value;
         const hasChanges = JSON.stringify(currentFormData) !== JSON.stringify(this.originalFormData) ||
                           JSON.stringify(this.materialRequests) !== JSON.stringify(this.originalFormData.materialRequest);
@@ -353,7 +316,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   }
 
   canDeactivate(): Observable<boolean> | Promise<boolean> | boolean {
-    if (this.isEditMode() && this.hasUnsavedChanges() && !this.isNavigatingAway) {
+    if (this.hasUnsavedChanges() && !this.isNavigatingAway) {
       return new Promise<boolean>((resolve) => {
         const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
           data: {
@@ -377,7 +340,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   onCancel(): void {
     this.isNavigatingAway = true;
-    if (this.isEditMode() && this.hasUnsavedChanges()) {
+    if (this.hasUnsavedChanges()) {
       this.showUnsavedChangesDialog();
     } else {
       this.router.navigate(['/technical/project']);
@@ -386,7 +349,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   @HostListener('window:beforeunload', ['$event'])
   onBeforeUnload(event: BeforeUnloadEvent): void {
-    if (this.isEditMode() && this.hasUnsavedChanges()) {
+    if (this.hasUnsavedChanges()) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -394,7 +357,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   @HostListener('window:popstate', ['$event'])
   onPopState(event: PopStateEvent): void {
-    if (this.isEditMode() && this.hasUnsavedChanges()) {
+    if (this.hasUnsavedChanges()) {
       event.preventDefault();
       this.handleBrowserNavigation();
     }
@@ -421,7 +384,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   }
 
   private checkForUnsavedChanges(): void {
-    if (this.isEditMode() && this.originalFormData) {
+    if (this.originalFormData) {
       const currentFormData = this.projectForm.value;
       const hasChanges = JSON.stringify(currentFormData) !== JSON.stringify(this.originalFormData) ||
                         JSON.stringify(this.materialRequests) !== JSON.stringify(this.originalFormData.materialRequest);
@@ -471,8 +434,30 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     });
   }
 
+  loadUnassignedJobs(): void {
+    const filterParams = {
+      page: 1,
+      row: 100
+    };
+    
+    this.jobService.getUnassignedToTechnical(filterParams).subscribe({
+      next: (response) => {
+        if (response && response.data) {
+          this.unassignedJobOptions = response.data.map((job: any) => ({
+            id: job._id,
+            name: `${job.jobId} - ${job.clientDetails.companyName}`,
+            fullData: job
+          }));
+        }
+      },
+      error: (error) => {
+        console.error('Error fetching unassigned jobs:', error);
+      }
+    });
+  }
+
   getSalesPersonNameFromJobId(): string {
-    const jobId = this.projectForm.get('jobId')?.value;
+    const jobId = this.projectDetails()?.jobId._id;
     const job = this.jobIds.find((job: any) => job._id === jobId);
     return job?.salesPersonName || this.selectedJobId() ? this.selectedJobId().quotation.createdBy.fullName : '';
   }
@@ -482,12 +467,14 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   }
 
   getExpectedStartDate(): Date | null {
+    if(!this.projectDetails()?.activityPlan.length) return null;
     return this.projectDetails()?.activityPlan.reduce((acc,current)=>{
       return acc.startDate < current.startDate ? acc : current;
     }).startDate || null;
   }
 
   getExpectedEndDate(): Date | null {
+    if(!this.projectDetails()?.activityPlan.length            ) return null;
     return this.projectDetails()?.activityPlan.reduce((acc,current)=>{
       return acc.endDate > current.endDate ? acc : current;
     }).endDate || null;
@@ -499,8 +486,23 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
   onJobSelected(jobId: any): void {
     const jobIdString = Array.isArray(jobId) ? jobId[0] : jobId;
-    this.projectForm.get('jobId')?.setValue(jobIdString);
     this.onJobIdChange(jobIdString);
+  }
+
+  onJobIdSelected(jobId: string | string[]): void {
+    const selectedJobId = Array.isArray(jobId) ? jobId[0] : jobId;
+    
+    if (selectedJobId) {
+      const selectedJob = this.unassignedJobOptions.find(job => job.id === selectedJobId);
+      if (selectedJob) {
+        this.selectedJobId.set(selectedJob.fullData);
+        this.checkPurchaseRequests(selectedJobId);
+      }
+    } else {
+      this.selectedJobId.set(null);
+      this.purchaseRequests = [];
+      this.hasPurchaseRequests.set(false);
+    }
   }
 
   private getFieldLabel(fieldName: string): string {
@@ -588,7 +590,19 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     });
   }
 
-  // Costing calculation methods
+  getJobIdDisplayValue(): string {
+    // First check if there's a saved/existing job in project details
+    if (this.projectDetails()?.jobId?._id) {
+      const jobId = this.projectDetails()?.jobId._id;
+      const job = this.jobIds.find((job: any) => job._id === jobId);
+      return job?.jobId || this.projectDetails()?.jobId?.jobId || '';
+    }
+    
+    // If no saved job, check if there's a selected job that hasn't been saved yet
+    // Only show this as attached after saving, so return empty for unsaved selections
+    return '';
+  }
+
   getTotalEstimatedCost(): number {
     return this.estimationsArray.controls.reduce((total, control) => {
       return total + (control.get('value')?.value || 0);

@@ -3,6 +3,7 @@ import Supplier, { supplierStatus } from '../models/supplier.model';
 import { Types } from 'mongoose';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
+import { getEmployeeData } from '../common/utils/util';
 
 
 export const getSuppliers = async (req: Request, res: Response) => {
@@ -298,7 +299,9 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
    try {
       const { id: supplierId } = req.params;
       const { status, comment } = req.body;
-      const { id: userId } = req.auth.credentials;
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      const userId = employee._id;
 
       // Validate required fields
       if (!supplierId || !status) {
@@ -637,6 +640,14 @@ export const getSupplierById = async (req: Request, res: Response) => {
          })
          .populate({
             path: 'approvedHistory.approvedBy',
+            select: 'firstName lastName designation department',
+            populate: {
+               path: 'department',
+               select: 'departmentName',
+            },
+         })
+         .populate({
+            path: 'rejectHistory.rejectedBy',
             select: 'firstName lastName designation department',
             populate: {
                path: 'department',

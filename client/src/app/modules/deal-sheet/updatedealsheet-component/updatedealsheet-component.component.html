@@ -61,21 +61,15 @@
             <th scope="col" class="border-l border-r border-t text-center">
               <div class="px-6 py-3">Total Selling Price</div>
             </th>
-            <th scope="col" class="border-l border-r border-t text-center min-w-[90px]">
-              <div class="px-2 py-3">Supplier Name</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center min-w-[90px]">
-              <div class="px-2 py-3">Phone No.</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center min-w-[90px]">
-              <div class="px-2 py-3">Email Id</div>
+            <th scope="col" class="border-l border-r border-t   text-center min-w-[200px]">
+              <div class="px-2 py-3">Supplier</div>
             </th>
           </tr>
         </thead>
         <tbody formArrayName="items">
           <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
             <tr>
-              <td colspan="10" class="border px-6 py-2 bg-gray-50">
+              <td colspan="9" class="border px-6 py-2 bg-gray-50">
                 <div class="flex justify-center items-center text-md text-black font-medium uppercase">
                   {{ item.get('itemName')?.value }}
                 </div>
@@ -138,33 +132,16 @@
                   </td>
 
                   <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                    <input formControlName="supplierName" type="text"
-                      class="w-[150px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      placeholder="Enter supplier name">
-                    <div *ngIf="detail.get('supplierName')?.hasError('supplierNameRequired') && isSubmitted"
+                    <select formControlName="supplierId"
+                      class="w-[200px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                      <option value="">Select Supplier</option>
+                      <option *ngFor="let supplier of suppliers" [value]="supplier._id">
+                        {{ supplier.supplierName }}
+                      </option>
+                    </select>
+                    <div *ngIf="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted"
                       class="text-red-500 text-xs">
-                      Supplier name is required
-                    </div>
-                  </td>
-                  <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                    <input formControlName="phoneNo" type="text"
-                      class="w-[150px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      placeholder="Enter Phone No.">
-                    <div *ngIf="detail.get('phoneNo')?.hasError('supplierNameRequired') && isSubmitted"
-                      class="text-red-500 text-xs">
-                      Phone No. is required
-                    </div>
-                  </td>
-                  <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                    <input formControlName="email" type="text"
-                      class="w-[150px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      placeholder="Enter Email">
-                    <div *ngIf="detail.get('email')?.hasError('supplierNameRequired') && isSubmitted"
-                      class="text-red-500 text-xs">
-                      Email is required
-                    </div>
-                    <div *ngIf="detail.get('email')?.hasError('email') && isSubmitted" class="text-red-500 text-xs">
-                      Email should be valid
+                      Supplier is required
                     </div>
                   </td>
                 </tr>
@@ -180,20 +157,48 @@
             <div class="w-1/6 font-medium text-gray-700">
               {{ cost.get('type')?.value }}
             </div>
-            <input *ngIf="cost.get('type')?.value !== 'Customer Discount'" type="text" formControlName="name"
-              class="w-4/6 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost Name' : 'Supplier Name'">
-            <input type="number" formControlName="value"
-              [class]="cost.get('type')?.value !== 'Customer Discount' ? 'w-4/6' : 'w-5/6'"
-              class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost' : 'Discount Amount'">
+            <div *ngIf="cost.get('type')?.value === 'Additional Cost'" class="w-4/6">
+              <input type="text" 
+                formControlName="name"
+                [class.border-red-500]="cost.get('name')?.invalid && isSubmitted"
+                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                placeholder="Cost Name">
+              <div *ngIf="cost.get('name')?.hasError('required') && isSubmitted" 
+                class="text-red-500 text-xs mt-1">
+                Cost name is required
+              </div>
+            </div>
+            <div *ngIf="cost.get('type')?.value === 'Supplier Discount'" class="w-4/6">
+              <select formControlName="supplierId"
+                [class.border-red-500]="cost.get('supplierId')?.invalid && isSubmitted"
+                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                <option value="">Select Supplier</option>
+                <option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
+                  {{supplier.supplierName}}
+                </option>
+              </select>
+              <div *ngIf="cost.get('supplierId')?.hasError('required') && isSubmitted" 
+                class="text-red-500 text-xs mt-1">
+                Supplier is required
+              </div>
+            </div>
+            <div [class]="cost.get('type')?.value !== 'Customer Discount' ? 'w-4/6' : 'w-5/6'">
+              <input type="number" formControlName="value"
+                [class.border-red-500]="cost.get('value')?.invalid && isSubmitted"
+                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost' : 'Discount Amount'">
+              <div *ngIf="cost.get('value')?.hasError('required') && isSubmitted" 
+                class="text-red-500 text-xs mt-1">
+                Value is required
+              </div>
+            </div>
             <button type="button" class="bg-red-500 hover:bg-red-600 text-white font-medium p-2 rounded text-sm"
               (click)="removeCost(i)">&times;</button>
           </div>
         </ng-container>
 
         <div *ngIf="costs.errors?.['additionalCostInvalid'] && isSubmitted" class="text-red-500 text-xs">
-          All costs must have a name and value
+          All costs must have required fields filled (name for additional costs, supplier for supplier discounts, and value for all)
         </div>
 
         <div class="flex gap-2 mt-2">

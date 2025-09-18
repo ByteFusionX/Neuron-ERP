@@ -294,7 +294,7 @@
                                 <ng-icon name="heroEye" class="text-black"></ng-icon>
                             </div>
                             <div (click)="onPreviewDeal(false, element, $event , i)"
-                                *ngIf="element.status == 'Won' && element.lpoFiles.length && element.dealData"
+                                *ngIf="element.status == 'Won' && element.lpoFiles.length && element.dealData && element.dealData._id"
                                 matTooltip="Deal Status" matTooltipPosition="above" matTooltipClass="mat-tooltip"
                                 class="cursor-pointer w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center relative">
                                 <ng-icon name="heroClipboardDocumentCheck" class="text-black"></ng-icon>
@@ -304,7 +304,7 @@
                             </div>
 
                             <div (click)="onConvertToDealSheet(element,$event,i)"
-                                *ngIf="element.status == 'Won' && element.lpoFiles.length && !element.dealData"
+                                *ngIf="element.status == 'Won' && element.lpoFiles.length && !element.dealData && !element.dealData._id"
                                 matTooltip="Convert To Deal Sheet" matTooltipPosition="above"
                                 matTooltipClass="mat-tooltip"
                                 class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium">

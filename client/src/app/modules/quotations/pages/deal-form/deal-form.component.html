@@ -68,14 +68,8 @@
               <div class="px-6 py-3">Total Selling Price ({{data.currency}})</div>
             </th>
 
-            <th scope="col" class="border-l border-r border-t   text-center min-w-[90px]">
-              <div class="px-2 py-3">Supplier Name</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center min-w-[90px]">
-              <div class="px-2 py-3">Phone No.</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center min-w-[90px]">
-              <div class="px-2 py-3">Email Id</div>
+            <th scope="col" class="border-l border-r border-t   text-center min-w-[200px]">
+              <div class="px-2 py-3">Supplier</div>
             </th>
           </tr>
         </thead>
@@ -88,95 +82,78 @@
                 </div>
               </td>
             </tr>
-            <ng-container *ngFor="let detail of getItemDetailsArray(item) as FormArray; let j = index"
-              formArrayName="itemDetails">
-              <tr class=" border-b text-gray-400" [formGroupName]="j"
-                [ngClass]="{'text-gray-800':detail.get('dealSelected')?.value}">
-                <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line ">
-                  <input type="checkbox" name="" id="" formControlName="dealSelected"
-                    (change)="onItemCheckboxChange(i,j,$event)">
-                </th>
+          <ng-container *ngFor="let detail of getItemDetailsArray(item) as FormArray; let j = index"
+            formArrayName="itemDetails">
+            <tr class=" border-b text-gray-400" [formGroupName]="j"
+              [ngClass]="{'text-gray-800':detail.get('dealSelected')?.value}">
+              <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line ">
+                <input type="checkbox" name="" id="" formControlName="dealSelected"
+                  (change)="onItemCheckboxChange(i,j,$event)">
+              </th>
 
-                <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line">
-                  <div [innerHTML]="detail.get('detail')?.value | parseBracketsText | parseBoldText"></div>
-                </th>
+              <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line">
+                <div [innerHTML]="detail.get('detail')?.value | parseBracketsText | parseBoldText"></div>
+              </th>
 
-                <td
-                  [class.border-red-500]="getItemDetailsControls(i).controls[j].get('quantity')?.invalid && isSubmitted"
-                  class="border px-2 py-2 text-center">
-                  <input appNoLeadingSpace formControlName="quantity" *ngIf="detail.get('dealSelected')?.value"
-                    class="w-10 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    type="number" placeholder="00">
-                  <p *ngIf="!detail.get('dealSelected')?.value"> {{ detail.get('quantity')?.value }} </p>
-                </td>
+              <td
+                [class.border-red-500]="getItemDetailsControls(i).controls[j].get('quantity')?.invalid && isSubmitted"
+                class="border px-2 py-2 text-center">
+                <input appNoLeadingSpace formControlName="quantity" *ngIf="detail.get('dealSelected')?.value"
+                  class="w-10 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  type="number" placeholder="00">
+                <p *ngIf="!detail.get('dealSelected')?.value"> {{ detail.get('quantity')?.value }} </p>
+              </td>
 
-                <td
-                  [class.border-red-500]="getItemDetailsControls(i).controls[j].get('unitCost')?.invalid && isSubmitted"
-                  class="border px-6 py-3">
-                  <input appNoLeadingSpace formControlName="unitCost" *ngIf="detail.get('dealSelected')?.value"
-                    class="w-24 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    type="number" placeholder="00.00">
-                  <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitCost')?.value.toFixed(2) }}</p>
-                </td>
+              <td
+                [class.border-red-500]="getItemDetailsControls(i).controls[j].get('unitCost')?.invalid && isSubmitted"
+                class="border px-6 py-3">
+                <input appNoLeadingSpace formControlName="unitCost" *ngIf="detail.get('dealSelected')?.value"
+                  class="w-24 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  type="number" placeholder="00.00">
+                <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitCost')?.value.toFixed(2) }}</p>
+              </td>
 
-                <td class="px-6 py-3 border-l border-b border-t text-center">
-                  <p>{{ calculateTotalCost(i,j) }}</p>
-                </td>
+              <td class="px-6 py-3 border-l border-b border-t text-center">
+                <p>{{ calculateTotalCost(i,j) }}</p>
+              </td>
 
-                <td [class.border-red-500]="getItemDetailsControls(i).controls[j].get('profit')?.invalid && isSubmitted"
-                  class="border py-2 px-6 text-center">
-                  <div class="flex justify-center items-center">
-                    <input appNoLeadingSpace formControlName="profit" *ngIf="detail.get('dealSelected')?.value"
-                      class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      type="number" placeholder="00" (input)="calculateUnitSellingPriceForInput(i, j)">
-                    <p *ngIf="!detail.get('dealSelected')?.value">{{ calculateProfit(i,j) | number:'1.2-2' }}</p>
-                    <p class="ml-0.5 mb-0.5">%</p>
-                  </div>
-                </td>
+              <td [class.border-red-500]="getItemDetailsControls(i).controls[j].get('profit')?.invalid && isSubmitted"
+                class="border py-2 px-6 text-center">
+                <div class="flex justify-center items-center">
+                  <input appNoLeadingSpace formControlName="profit" *ngIf="detail.get('dealSelected')?.value"
+                    class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    type="number" placeholder="00" (input)="calculateUnitSellingPriceForInput(i, j)">
+                  <p *ngIf="!detail.get('dealSelected')?.value">{{ calculateProfit(i,j) | number:'1.2-2' }}</p>
+                  <p class="ml-0.5 mb-0.5">%</p>
+                </div>
+              </td>
 
-                <td class="px-6 py-3 border-l border-b border-t text-center">
-                  <input appNoLeadingSpace formControlName="unitSellingPrice" *ngIf="detail.get('dealSelected')?.value"
-                  class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  type="number" placeholder="00" (input)="calculateProfitForInput(i,j)">
-                  <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitSellingPrice')?.value }}</p>
-                </td>
+              <td class="px-6 py-3 border-l border-b border-t text-center">
+                <input appNoLeadingSpace formControlName="unitSellingPrice" *ngIf="detail.get('dealSelected')?.value"
+                class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                type="number" placeholder="00" (input)="calculateProfitForInput(i,j)">
+                <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitSellingPrice')?.value }}</p>
+              </td>
 
-                <td class="px-6 py-3 border-l border-b border-t text-center">
-                  <p>{{ calculateTotalPrice(i,j).toFixed(2) }}</p>
-                </td>
+              <td class="px-6 py-3 border-l border-b border-t text-center">
+                <p>{{ calculateTotalPrice(i,j).toFixed(2) }}</p>
+              </td>
 
-                <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                  <input formControlName="supplierName" type="text"
-                    class="w-[150px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    placeholder="Enter supplier name">
-                  <div *ngIf="detail.get('supplierName')?.hasError('supplierNameRequired') && isSubmitted"
-                    class="text-red-500 text-xs">
-                    Supplier name is required
-                  </div>
-                </td>
-                <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                  <input formControlName="phoneNo" type="text"
-                    class="w-[150px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    placeholder="Enter Phone No.">
-                  <div *ngIf="detail.get('phoneNo')?.hasError('supplierNameRequired') && isSubmitted"
-                    class="text-red-500 text-xs">
-                    Phone No. is required
-                  </div>
-                </td>
-                <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                  <input formControlName="email" type="text"
-                    class="w-[150px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    placeholder="Enter Email">
-                  <div *ngIf="detail.get('email')?.hasError('supplierNameRequired') && isSubmitted"
-                    class="text-red-500 text-xs">
-                    Email is required
-                  </div>
-                  <div *ngIf="detail.get('email')?.hasError('email') && isSubmitted" class="text-red-500 text-xs">
-                    Email should be valid
-                  </div>
-                </td>
-              </tr>
-            </ng-container>
+              <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
+                <select formControlName="supplierId"
+                  class="w-[200px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                  <option value="">Select Supplier</option>
+                  <option *ngFor="let supplier of suppliers" [value]="supplier._id">
+                    {{ supplier.supplierName }}
+                  </option>
+                </select>
+                <div *ngIf="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted"
+                  class="text-red-500 text-xs">
+                  Supplier is required
+                </div>
+              </td>
+            </tr>
+          </ng-container>
           </ng-container>
         </tbody>
 
@@ -188,16 +165,42 @@
             <div class="w-1/6 font-medium text-gray-700">
               {{ cost.get('type')?.value }}
             </div>
-            <input *ngIf="cost.get('type')?.value !== 'Customer Discount'" 
-              type="text" 
-              formControlName="name"
-              class="w-4/6 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost Name' : 'Supplier Name'">
-            <input type="number" 
-              formControlName="value"
-              [class]="cost.get('type')?.value !== 'Customer Discount' ? 'w-4/6' : 'w-5/6'"
-              class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost' : 'Discount Amount'">
+            <div *ngIf="cost.get('type')?.value === 'Additional Cost'" class="w-4/6">
+              <input type="text" 
+                formControlName="name"
+                [class.border-red-500]="cost.get('name')?.invalid && isSubmitted"
+                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                placeholder="Cost Name">
+              <div *ngIf="cost.get('name')?.hasError('required') && isSubmitted" 
+                class="text-red-500 text-xs mt-1">
+                Cost name is required
+              </div>
+            </div>
+            <div *ngIf="cost.get('type')?.value === 'Supplier Discount'" class="w-4/6">
+              <select formControlName="supplierId"
+                [class.border-red-500]="cost.get('supplierId')?.invalid && isSubmitted"
+                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                <option value="">Select Supplier</option>
+                <option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
+                  {{supplier.supplierName}}
+                </option>
+              </select>
+              <div *ngIf="cost.get('supplierId')?.hasError('required') && isSubmitted" 
+                class="text-red-500 text-xs mt-1">
+                Supplier is required
+              </div>
+            </div>
+            <div [class]="cost.get('type')?.value !== 'Customer Discount' ? 'w-4/6' : 'w-5/6'">
+              <input type="number" 
+                formControlName="value"
+                [class.border-red-500]="cost.get('value')?.invalid && isSubmitted"
+                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost' : 'Discount Amount'">
+              <div *ngIf="cost.get('value')?.hasError('required') && isSubmitted" 
+                class="text-red-500 text-xs mt-1">
+                Value is required
+              </div>
+            </div>
             <button type="button" 
               class="bg-red-500 hover:bg-red-600 text-white font-medium p-2 rounded text-sm"
               (click)="removeCost(i)">&times;</button>
@@ -205,7 +208,7 @@
         </ng-container>
 
         <div *ngIf="costs.errors?.['additionalCostInvalid'] && isSubmitted" class="text-red-500 text-xs">
-          All costs must have a name and value
+          All costs must have required fields filled (name for additional costs, supplier for supplier discounts, and value for all)
         </div>
         
         <div class="flex gap-2 mt-2">

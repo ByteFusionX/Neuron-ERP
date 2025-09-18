@@ -5,6 +5,7 @@ import { getQuotatation } from '../../interfaces/quotation.interface';
 import { FormsModule } from '@angular/forms';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { CommonModule } from '@angular/common';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 
 @Component({
     selector: 'app-quotation-preview',
@@ -21,8 +22,9 @@ export class QuotationPreviewComponent {
 
   constructor(
     public dialogRef: MatDialogRef<QuotationPreviewComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { url: string, formatedQuote: getQuotatation },
-    private _quoteService: QuotationService
+    @Inject(MAT_DIALOG_DATA) public data: { url: string, formatedQuote: any, type?: 'quotation' | 'purchase' },
+    private _quoteService: QuotationService,
+    private _purchaseService: PurchaseService
   ) {
     this.url = data.url;
     dialogRef.beforeClosed().subscribe((result) => {
@@ -38,11 +40,21 @@ export class QuotationPreviewComponent {
 
 
   async previewQuote() {
+    if(this.data.type === 'purchase') {
+      const pdfDoc = await this._purchaseService.generatePDF(this.data.formatedQuote, this.includeStamp);
+      pdfDoc.getBlob((blob: Blob) => {
+        let url = window.URL.createObjectURL(blob);
+        this.isPreviewing = false;
+        this.url = url;
+      });
+    }
+    else {
     const pdfDoc = await this._quoteService.generatePDF(this.data.formatedQuote, this.includeStamp);
-    pdfDoc.getBlob((blob: Blob) => {
+      pdfDoc.getBlob((blob: Blob) => {
       let url = window.URL.createObjectURL(blob);
       this.isPreviewing = false;
-      this.url = url;
-    });
+        this.url = url;
+      });
+    };
   }
 }

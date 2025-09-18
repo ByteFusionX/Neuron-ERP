@@ -3,6 +3,7 @@ import { Quotatation } from "./quotation.interface";
 import { Supplier } from "./suppliers.interface";
 
 export interface QuoteItemDetails {
+    _id?: string;
     detail: string;
     quantity: number;
     unitCost: number;
@@ -44,9 +45,21 @@ export interface SupplierDiscount {
     discountType?: string;
 }
 
+export interface RejectedReason {
+    rejectedBy: {
+        _id: string;
+        firstName: string;
+        lastName: string;
+        email?: string;
+    };
+    comment: string;
+    rejectedAt: string;
+    _id: string;
+}
+
 export interface PurchaseData {
     _id?: string,
-    customer?: string;
+    customer?: any;
     customerId: any;
     salesManager: string;
     purchaseNo: string;
@@ -56,6 +69,7 @@ export interface PurchaseData {
     items: QuoteItem[];
     totalLpo: number;
     status?: string;
+    rejectedReason?: RejectedReason[];
     mr?: MrDetails;
     supplierDiscounts?: {
         suppliers: SupplierDiscount[];
@@ -97,5 +111,5 @@ export interface PurchaseOrder {
   purchaseCompany?: string;
   createdAt?: Date;
   updatedAt?: Date;
-  createdBy: any;
+  createdBy?: any;
 }

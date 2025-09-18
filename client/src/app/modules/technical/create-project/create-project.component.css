@@ -1,0 +1,78 @@
+:host {
+  display: block;
+}
+
+/* Loading animation */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Form styling enhancements */
+.max-h-70vh {
+  max-height: 70vh;
+}
+
+/* Custom scrollbar for the dialog content */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Focus states for form elements */
+.focus\:ring-violet-500:focus {
+  --tw-ring-color: rgb(139 92 246);
+}
+
+/* Button hover states */
+.hover\:bg-violet-600:hover {
+  background-color: rgb(124 58 237);
+}
+
+/* Error state styling */
+.border-red-500 {
+  border-color: rgb(239 68 68);
+}
+
+.text-red-500 {
+  color: rgb(239 68 68);
+}
+
+/* Success state styling */
+.border-green-500 {
+  border-color: rgb(34 197 94);
+}
+
+.text-green-500 {
+  color: rgb(34 197 94);
+}
+
+/* Disabled state styling */
+.disabled\:opacity-50:disabled {
+  opacity: 0.5;
+}
+
+.disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
+}

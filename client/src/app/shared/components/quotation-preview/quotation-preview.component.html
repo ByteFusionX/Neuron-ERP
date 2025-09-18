@@ -1,7 +1,7 @@
 <div class="w-[700px] h-[98vh]  bg-gray-50 rounded-lg shadow-lg overflow-hidden">
   <!-- Header Bar -->
   <div class=" top-0 left-0 right-0 bg-gray-100 flex justify-between items-center p-4 border-b">
-    <h3 class="text-lg font-semibold text-gray-700">Quotation Preview</h3>
+    <h3 class="text-lg font-semibold text-gray-700">{{data.type === 'purchase' ? 'Purchase Order Preview' : 'Quotation Preview'}}</h3>
     <div class="flex items-center space-x-4">
       <!-- Toggle Switch -->
       <label class="flex items-center cursor-pointer">

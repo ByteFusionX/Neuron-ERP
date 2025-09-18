@@ -51,9 +51,104 @@ export const getEngineers = async (req: Request, res: Response, next: NextFuncti
    }
 };
 
+export const getUnassignedJobsByCustomer = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { customerId } = req.params;
+      
+      if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {
+         return res.status(400).json({
+            success: false,
+            message: "Valid customer ID is required"
+         });
+      }
+
+      // Get all assigned job IDs
+      const assignedJobIds = await technicalModel.distinct('jobId');
+      
+      // Find unassigned jobs for specific customer
+      const unassignedJobs = await jobModel.aggregate([
+         {
+            $match: {
+               isDeleted: { $ne: true },
+               allocateType: { $in: [allocateType.ProjectWithSupply, allocateType.AMC] },
+               _id: { $nin: assignedJobIds }
+            }
+         },
+         {
+            $lookup: { 
+               from: 'quotations', 
+               localField: 'quoteId', 
+               foreignField: '_id', 
+               as: 'quotation' 
+            }
+         },
+         {
+            $unwind: '$quotation'
+         },
+         {
+            $lookup: { 
+               from: 'customers', 
+               localField: 'quotation.client', 
+               foreignField: '_id', 
+               as: 'clientDetails' 
+            }
+         },
+         {
+            $unwind: '$clientDetails'
+         },
+         {
+            $match: {
+               'clientDetails._id': new ObjectId(customerId)
+            }
+         },
+         {
+            $project: {
+               _id: 1,
+               jobId: 1,
+               allocateType: 1,
+               quotation: {
+                  _id: 1,
+                  subject: 1,
+                  quoteId: 1
+               },
+               clientDetails: {
+                  _id: 1,
+                  companyName: 1
+               }
+            }
+         },
+         {
+            $sort: { createdDate: -1 }
+         }
+      ]);
+
+      return res.status(200).json({
+         success: true,
+         message: unassignedJobs.length > 0 ? "Unassigned jobs fetched successfully" : "No unassigned jobs found for this customer",
+         data: unassignedJobs
+      });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: "Failed to fetch unassigned jobs",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};
+
 export const assignEngineer = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { jobId, engineerId, comment, assignedBy, projectType, customerId, priority } = req.body;
+      
+      // Validate required fields
+      if (!jobId || !engineerId || !comment || !assignedBy || !projectType || !customerId || !priority) {
+         return res.status(400).json({
+            success: false,
+            message: "All fields are required"
+         });
+      }
+
+      // Check if engineer exists
       const engineer = await employeeModel.findById(engineerId);
       if (!engineer) {
          return res.status(404).json({
@@ -61,6 +156,17 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
             message: "Engineer not found"
          });
       }
+
+      // Check if job is already assigned
+      const existingAssignment = await technicalModel.findOne({ jobId: jobId });
+      if (existingAssignment) {
+         return res.status(400).json({
+            success: false,
+            message: "This job is already assigned to an engineer"
+         });
+      }
+
+      // Create technical project
       const technicalProject = await technicalModel.create({
          jobId: jobId,
          customer: customerId,
@@ -70,17 +176,66 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
          assignedAt: new Date(),
          status: 'Pending',
          projectType: projectType,
-         priority: priority
+         priority: priority,
+         createdAt: new Date(),
+         updatedAt: new Date()
       });
-      return res.status(200).json({
+
+      // Populate the response with engineer and customer details
+      const populatedProject = await technicalModel.findById(technicalProject._id)
+         .populate('assignedTo', 'firstName lastName employeeId')
+         .populate('assignedBy', 'firstName lastName')
+         .populate('customer', 'companyName')
+         .populate('jobId', 'jobId');
+
+      return res.status(201).json({
          success: true,
-         message: "Engineer assigned successfully",
-         data: technicalProject
+         message: "Project created and engineer assigned successfully",
+         data: populatedProject
       });
    } catch (error) {
       return res.status(500).json({
          success: false,
          message: "Failed to assign engineer",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+};
+
+export const createProject = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const token = req.user;
+      const userData = await getEmployeeData(token);
+      const assignedBy = userData?._id;
+      const { engineerId, comment, projectType, customerId, priority } = req.body;
+
+      const technicalProject = await technicalModel.create({
+         assignedTo: engineerId,
+         comment,
+         assignedBy,
+         projectType,
+         customer: customerId,
+         assignedAt: new Date(),
+         status: 'Pending',
+         priority
+      });
+
+      const populatedProject = await technicalModel.findById(technicalProject._id)
+         .populate('assignedTo', 'firstName lastName employeeId')
+         .populate('assignedBy', 'firstName lastName')
+         .populate('customer', 'companyName')
+
+      return res.status(201).json({
+         success: true,
+         message: "Project created successfully",
+         data: populatedProject
+      });
+
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to create project",
          error: error instanceof Error ? error.message : "Unknown error"
       });
    }
@@ -100,7 +255,10 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
             }
          },
          {
-            $unwind: "$jobId"
+            $unwind: {
+               path: "$jobId",
+               preserveNullAndEmptyArrays: true
+            }
          },
          {
             $lookup: {
@@ -422,7 +580,10 @@ export const getProjectById = async (req: Request, res: Response, next: NextFunc
             }
          },
          {
-            $unwind: "$jobId"
+            $unwind: {
+               path: "$jobId",
+               preserveNullAndEmptyArrays: true
+            }
          },
          {
             $lookup: {
@@ -433,7 +594,10 @@ export const getProjectById = async (req: Request, res: Response, next: NextFunc
             }
          },
          {
-            $unwind: "$jobId.quotation"
+            $unwind: {
+               path: "$jobId.quotation",
+               preserveNullAndEmptyArrays: true
+            }
          },
          {
             $lookup: {
@@ -444,7 +608,10 @@ export const getProjectById = async (req: Request, res: Response, next: NextFunc
             }
          },
          {
-            $unwind: "$jobId.quotation.createdBy"
+            $unwind: {
+               path: "$jobId.quotation.createdBy",
+               preserveNullAndEmptyArrays: true
+            }
          },
          {
             $addFields: {
@@ -526,9 +693,9 @@ export const getProjectById = async (req: Request, res: Response, next: NextFunc
 export const updateProject = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { id } = req.params;
-      const { jobId, status, priority, projectType, materialRequest } = req.body;
+      const { status, priority, projectType, materialRequest, supervisors, notes, involvedPersons, estimations, jobId } = req.body;
 
-      const project = await technicalModel.findByIdAndUpdate(id, { jobId, status, priority, projectType, materialRequest }, { new: true });
+      const project = await technicalModel.findByIdAndUpdate(id, { status, priority, projectType, materialRequest, supervisors, notes, involvedPersons, estimations, jobId }, { new: true });
 
       return res.status(200).json({
          success: true,
@@ -536,6 +703,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
          data: project
       });
    } catch (error) {
+      console.log(error);
       return res.status(500).json({
          success: false,
          message: "Failed to update project",
@@ -1944,8 +2112,7 @@ export const deleteBillingSummary = async (req: Request, res: Response, next: Ne
 export const getMrRequests = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { engineer, jobId,requestedBy, purchaseNo, message,fromDate,toDate , row, page } = req.body;
-      console.log("fromDate : ",fromDate)
-      console.log("toDate : ",toDate)
+
 
       const pipeline: any[] = [
          {
@@ -2003,6 +2170,20 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
             }
          },
          {
+            $lookup: {
+               from: "employees",
+               localField: "mrRequest.engineer",
+               foreignField: "_id",
+               as: "mrRequest.engineer"
+            }
+         },
+         {
+            $unwind: {
+               path: "$mrRequest.engineer",
+               preserveNullAndEmptyArrays: true
+            }
+         },
+         {
             $addFields: {
                "updatedBy.fullName": {
                   $concat: ["$updatedBy.firstName", " ", "$updatedBy.lastName"]
@@ -2037,16 +2218,6 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
          matchConditions["mrRequest.message"] = { $regex: message, $options: 'i' };
       }
 
-      // if (fromDate||toDate) {
-      //    const startDate = new Date(fromDate);
-      //    const endDate = new Date(toDate);
-      //    endDate.setDate(endDate.getDate() + 1);
-         
-      //    matchConditions["mrRequest.createdDate"] = {
-      //       $gte: startDate,
-      //       $lt: endDate
-      //    };
-      // }
 
        if (fromDate && !toDate) {
          const { startOfDay, endOfDay } = getDateRangeByDay(fromDate);
@@ -2087,6 +2258,7 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
          data: mrRequests
       });
    } catch (error) {
+      console.log(error)
       return res.status(500).json({
          success: false,
          message: "Failed to get MR requests",
@@ -2094,3 +2266,30 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
       });
    }
 };
+
+
+export const getMaterialRequestByJobId = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { jobId } = req.params;
+      const technicalProject = await technicalModel.findOne({ jobId: new ObjectId(jobId) });
+      if(!technicalProject){
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+      const materialRequest = technicalProject.materialRequest;
+      return res.status(200).json({
+         success: true,
+         message: "Material request fetched successfully",
+         data: materialRequest
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to get material request by job ID",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}

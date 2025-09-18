@@ -16,6 +16,7 @@ import { TableColumn, TableFilter, DateRange, ApprovalRejectionList } from './ta
 import { SkeltonLoadingComponent } from '../skelton-loading/skelton-loading.component';
 import { PaginationComponent } from '../pagination/pagination.component';
 import { PaginationService } from 'src/app/core/services/pagination.service'; 
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 // import { ListModalComponent } from '../list-modal/list-modal.component';
 
 @Component({
@@ -54,6 +55,7 @@ export class TableComponent implements OnInit, OnChanges {
   @Output() actionClick = new EventEmitter<{ action: string, item: any, event: Event }>();
   @Output() filterChange = new EventEmitter<TableFilter[]>();
   @Output() paginationChange = new EventEmitter<{ page: number, row: number }>();
+  @Output() statusChange = new EventEmitter<any>();
 
   @ContentChild('sideColumn') sideColumns!: TemplateRef<any>;
 
@@ -254,6 +256,13 @@ export class TableComponent implements OnInit, OnChanges {
     }
   }
 
+  isClickableValue(column: TableColumn, item: any): boolean {
+    if (!column.clickableValue || typeof column.clickableValue !== 'function') {
+      return false;
+    }
+    return column.clickableValue(item);
+  }
+
   onPaginationChange(event: { page: number, row: number }): void {
     this.paginationService.updatePaginationState({
       page: event.page,
@@ -261,5 +270,37 @@ export class TableComponent implements OnInit, OnChanges {
       total: this.totalItems
     });
     this.paginationChange.emit(event);
+  }
+
+  onStatusChange(item: any, column: TableColumn, oldValue: string, newValue: string): void {
+    // Create confirmation message
+    let confirmMessage = `Are you sure you want to change status from "${oldValue}" to "${newValue}"?`;
+    
+    if (column.confirmationMessage) {
+      confirmMessage = column.confirmationMessage(oldValue, newValue);
+    }
+
+    // Show confirmation dialog
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Confirm Status Change',
+        description: confirmMessage,
+        icon: 'heroExclamationCircle',
+        IconColor: 'orange'
+      },
+      width: '400px'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        this.statusChange.emit({
+          type: 'statusChange',
+          item: item,
+          column: column.key,
+          oldValue: oldValue,
+          newValue: newValue
+        });
+      }
+    });
   }
 }

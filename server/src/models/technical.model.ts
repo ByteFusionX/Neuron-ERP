@@ -15,6 +15,10 @@ interface Technical {
     updatedBy: Types.ObjectId;
     updatedAt: Date;
     priority: string;
+    supervisors: Types.ObjectId[];
+    notes: string;
+    involvedPersons: { name: string; designation: string }[];
+    estimations: { type: string; value: string }[];
     activityPlan: ActivityPlan[];
     projectUpdates: ProjectUpdate[];
     billingSummary: BillingSummary[];
@@ -310,7 +314,6 @@ const taskSchema = new Schema<Task>({
 const technicalSchema = new Schema<Technical>({
     jobId: {
         type: Schema.Types.ObjectId,
-        required: true,
         ref: 'Job'
     },
     customer: {
@@ -379,6 +382,27 @@ const technicalSchema = new Schema<Technical>({
     },
     billingSummary: {
         type: [billingSummarySchema],
+        default: [],
+    },
+    supervisors: {
+        type: [Types.ObjectId],
+        default: [],
+    },
+    notes: {
+        type: String,
+        default: '',
+    },
+    involvedPersons: {
+        type: [{ name: String, designation: String }],
+        default: [],
+    },
+    estimations: {
+        type: [
+            {
+              type: { type: String, required: true },
+              value: { type: String, required: true },
+            },
+          ],
         default: [],
     },
 })

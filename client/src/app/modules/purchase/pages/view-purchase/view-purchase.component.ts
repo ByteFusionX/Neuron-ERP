@@ -6,6 +6,7 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
 import { FileService } from 'src/app/core/services/file.service';
 import { Comparisons, PurchaseData, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
+import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
@@ -25,7 +26,6 @@ export class ViewPurchaseComponent {
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private fileService = inject(FileService);
-  private employeeService = inject(EmployeeService)
   private supplierService = inject(SupplierService)
 
   purchase: PurchaseData | null = null;
@@ -35,12 +35,10 @@ export class ViewPurchaseComponent {
   downloadProgress = 0;
   isDownloading = false;
   purchaseId!: string;
-  tokenData!: { id: string, employeeId: string };
   suppliersList = signal<any[]>([])
 
   ngOnInit(): void {
     this.loadPurchase();
-    this.tokenData = this.employeeService.employeeToken();
     this.purchaseService.purchaseFormData$.subscribe({
       next: (data) => {
         if (data) {
@@ -73,6 +71,7 @@ export class ViewPurchaseComponent {
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
         this.purchase = response.data;
+        console.log(this.purchase, 'this.purchase')
         this.isLoading = false;
       },
       error: (error) => {
@@ -106,7 +105,6 @@ export class ViewPurchaseComponent {
         this.purchaseService.updatePurchaseStatus(
           this.purchaseId,
           PurchaseStatus.APPROVED,
-          this.tokenData.id,
           result.comment,
         ).subscribe({
           next: () => {
@@ -144,7 +142,6 @@ export class ViewPurchaseComponent {
         this.purchaseService.updatePurchaseStatus(
           this.purchaseId,
           PurchaseStatus.REJECTED,
-          this.tokenData.id,
           result.comment,
         ).subscribe({
           next: () => {
@@ -233,7 +230,6 @@ export class ViewPurchaseComponent {
     if (!Array.isArray(items) || items.length === 0) return [];
 
     const rows: any[] = [];
-
     for (const item of items) {
       if (!item.itemDetails?.length) continue;
 
@@ -263,8 +259,18 @@ export class ViewPurchaseComponent {
 
   onExit() {
     if(this.purchaseId == 'none'){
-      this.purchaseService.setPurchaseFormData(this.purchase)
-      this.router.navigate(['/purchase/create'])
+      this.purchaseService.editMode$.subscribe(isEdit => {
+        this.purchaseService.purchaseId$.subscribe(purchaseId => {
+          if(isEdit && purchaseId){
+            this.purchaseService.setPurchaseFormData(this.purchase)
+            this.router.navigate([`/purchase/edit`, purchaseId])
+          }else{
+            this.purchase!.customerId = this.purchase?.customer._id as any
+            this.purchaseService.setPurchaseFormData(this.purchase)
+            this.router.navigate([`/purchase/create`])
+          }
+        })
+      })
     }else{
       this.router.navigate(['/purchase/pendings'])
     }
@@ -272,5 +278,31 @@ export class ViewPurchaseComponent {
 
   onDestroy(): void {
     this.purchaseService.setPurchaseFormData(this.purchase)
+  }
+
+  getStatusClass(status?: string): string {
+    switch (status) {
+      case 'Pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Approved':
+        return 'bg-green-100 text-green-800';
+      case 'Rejected':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  }
+
+  showStatusHistory(): void {
+    if (!this.purchase?.rejectedReason?.length) return;
+
+    this.dialog.open(StatusHistoryModalComponent, {
+      data: {
+        title: 'Purchase Rejection History',
+        history: this.purchase.rejectedReason
+      },
+      width: '600px',
+      maxHeight: '80vh'
+    });
   }
 }

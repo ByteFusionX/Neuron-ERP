@@ -9,6 +9,7 @@ interface QuoteItemDetail {
     supplierName?: string;
     email?: string;
     phoneNo?: string;
+    supplierId?: Types.ObjectId;
     dealSelected?: boolean;
 }
 
@@ -24,7 +25,8 @@ interface OptionalItems {
 
 interface AdditionalCost {
     type: string;
-    name: string;
+    name?: string;
+    supplierId?: Types.ObjectId;
     value: number;
 }
 
@@ -109,6 +111,11 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
         type: String,
         required: false,
     },
+    supplierId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Supplier',
+        required: false,
+    },
     dealSelected: {
         type: Boolean,
         required: false,
@@ -142,6 +149,12 @@ const additionalCostSchema = new Schema<AdditionalCost>({
     },
     name: {
         type: String,
+        required: false
+    },
+    supplierId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Supplier',
+        required: false
     },
     value: {
         type: Number,

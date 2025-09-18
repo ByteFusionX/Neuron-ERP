@@ -29,7 +29,12 @@ export class UploadFileComponent {
     handleFiles(files: FileList) {
         for (let i = 0; i < files.length; i++) {
             const newFile = files[i];
-            const exist = this.selectedFiles.some(file => file.name === newFile.name);
+            let exist = false;
+            if(this.selectedFiles){
+                exist = this.selectedFiles.some(file => file.name === newFile.name);
+            }else{
+                this.selectedFiles = [];
+            }
             if (!exist) {
                 this.selectedFiles.push(files[i]);
             }

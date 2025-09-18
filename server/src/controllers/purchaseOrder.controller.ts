@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import PurchaseOrder from "../models/purchaseOrder.model"; 
 import purchaseRequest from "../models/purchaseRequest.model"
 import mongoose from "mongoose";
+import { getEmployeeData } from "../common/utils/util";
 
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
@@ -15,13 +16,15 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       etaTerms,
       paymentTerms,
       shippingTerms,
+      deliveryTerms,
       placeOfDelivery,
       subject,
       poDate,
       termsAndCondition,
       discount,
-      createdBy
     } = req.body;
+    const tokenData = req.user;
+    const employee = await getEmployeeData(tokenData);
 
     // Validate required fields
     if (!poNo || !supplierId || !purchaseId || !items || !Array.isArray(items) || items.length === 0) {
@@ -70,12 +73,13 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       etaTerms: etaTerms || '',
       paymentTerms: paymentTerms || '',
       shippingTerms: shippingTerms || '',
+      deliveryTerms: deliveryTerms || '',
       placeOfDelivery: placeOfDelivery || '',
       subject: subject || '',
       poDate: poDate ? new Date(poDate) : new Date(),
       termsAndCondition: termsAndCondition || '',
       discount: discount || 0,
-      createdBy
+      createdBy: employee._id,
     };
 
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
@@ -270,6 +274,15 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
       { $unwind: { path: "$jobId", preserveNullAndEmptyArrays: true } },
       {
         $lookup: {
+          from: "quotations",
+          localField: "jobId.quoteId",
+          foreignField: "_id",
+          as: "quoteId"
+        }
+      },
+      { $unwind: { path: "$quoteId", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
           from: "employees",
           localField: "createdBy",
           foreignField: "_id",
@@ -364,6 +377,128 @@ export const generateLpoNo = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to generate purchase order number",
+      error: error.message,
+    });
+  }
+};
+
+export const updatePurchaseOrderStatus = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { poStatus } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Purchase Order ID",
+      });
+    }
+
+    // Validate status
+    const validStatuses = ["Open", "Hold", "Closed", "Cancelled"];
+    if (!poStatus || !validStatuses.includes(poStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+      });
+    }
+
+    const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
+      id,
+      { 
+        $set: { 
+          poStatus: poStatus,
+          updatedAt: new Date()
+        }
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!updatedPurchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase order not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Purchase order status updated successfully",
+      data: updatedPurchaseOrder,
+    });
+  } catch (error: any) {
+    console.error("Update purchase order status error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update purchase order status",
+      error: error.message,
+    });
+  }
+};
+
+export const updateSupplierInvoices = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { supplierInvoices } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Purchase Order ID",
+      });
+    }
+
+    if (!supplierInvoices || !Array.isArray(supplierInvoices)) {
+      return res.status(400).json({
+        success: false,
+        message: "supplierInvoices must be an array",
+      });
+    }
+
+    // Validate supplier invoices structure
+    for (const invoice of supplierInvoices) {
+      if (!invoice.fileName || !invoice.originalname) {
+        return res.status(400).json({
+          success: false,
+          message: "Each supplier invoice must have fileName and originalname",
+        });
+      }
+    }
+
+    const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
+      id,
+      { 
+        $set: { 
+          supplierInvoices: supplierInvoices,
+          updatedAt: new Date()
+        }
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!updatedPurchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase order not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Supplier invoices updated successfully",
+      data: updatedPurchaseOrder,
+    });
+  } catch (error: any) {
+    console.error("Update supplier invoices error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update supplier invoices",
       error: error.message,
     });
   }

@@ -33,7 +33,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
   isSubmitted = signal<boolean>(false);
   selectedJob = signal<PurchaseData | null>(null)
-  selectedItem = signal<QuoteItemDetails | null>(null)
+  selectedItemId = signal<string | null>(null)
   comparisonList = signal<any[]>([])
 
   comparisonForm: FormGroup = this.fb.group({
@@ -60,10 +60,12 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
             jobId: data.jobId,
             product: data.item
           })
+          
+          this.selectedItemId.set(data.selectedItem);
 
-          const item = this.getItem()
-          if (item[0].comparisons) {
-            this.comparisonList.set(item[0].comparisons)
+          const item = this.getItem().find((item: QuoteItemDetails) => item._id === this.selectedItemId())
+          if (item.comparisons) {
+            this.comparisonList.set(item.comparisons)
           }
         } else {
           this.navigate()
@@ -122,9 +124,9 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   }
 
   getFormattedProducts(): string {
-    const item = this.getItem()
+    const item = this.getItem().find((item: QuoteItemDetails) => item._id === this.selectedItemId())
     if (item) {
-      return `Product: ${item[0].detail} \n Qty: ${item[0].quantity} \n Unit Cost: ₹${item[0].unitCost}`
+      return `Product: ${item.detail} \n Qty: ${item.quantity} \n Unit Cost: ₹${item.unitCost}`
     }
     return '';
   }
@@ -146,6 +148,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
 
     dialog.afterClosed().subscribe((res) => {
       if (res) {
+        if(this.comparisonList().length == 0) res.selected = true
         this.comparisonList().push(res)
         this.comparisonList().sort((a, b) => a.unitPrice - b.unitPrice)
       }

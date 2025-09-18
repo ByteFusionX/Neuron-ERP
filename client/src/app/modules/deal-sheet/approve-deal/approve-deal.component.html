@@ -201,13 +201,34 @@
                                         {{ (detail.quantity * detail.unitCost) | numberFormatter }}
                                     </td>
                                     <td class="py-2 border text-center">
-                                        {{ detail.supplierName }}
+                                        <!-- Legacy supplier data -->
+                                        <span *ngIf="detail.supplierName || !detail.supplierId">
+                                            {{ detail.supplierName || '-' }}
+                                        </span>
+                                        <!-- New supplier data -->
+                                        <span *ngIf="detail.supplierId && !detail.supplierName">
+                                            {{ getSupplierName(detail.supplierId) || '-' }}
+                                        </span>
                                     </td>
                                     <td class="py-2 border text-center px-2">
-                                        {{ detail.email }}
+                                        <!-- Legacy supplier data -->
+                                        <span *ngIf="detail.email || !detail.supplierId">
+                                            {{ detail.email || '-' }}
+                                        </span>
+                                        <!-- New supplier data -->
+                                        <span *ngIf="detail.supplierId && !detail.email">
+                                            {{ getSupplierEmail(detail.supplierId) || '-' }}
+                                        </span>
                                     </td>
                                     <td class="py-2 border text-center  px-2">
-                                        {{ detail.phoneNo }}
+                                        <!-- Legacy supplier data -->
+                                        <span *ngIf="detail.phoneNo || !detail.supplierId">
+                                            {{ detail.phoneNo || '-' }}
+                                        </span>
+                                        <!-- New supplier data -->
+                                        <span *ngIf="detail.supplierId && !detail.phoneNo">
+                                            {{ getSupplierPhone(detail.supplierId) || '-' }}
+                                        </span>
                                     </td>
                                 </tr>
                             </ng-container>
@@ -228,7 +249,15 @@
                             </td>
                             <td [attr.colspan]="cost.type ? (cost.type === 'Customer Discount' ? 2 : 4) : 5"
                                 class="border px-6 py-2">
-                                {{ cost?.name }}
+                                <span *ngIf="cost.type === 'Supplier Discount' && cost.supplierDetails">
+                                    {{ cost.supplierDetails.supplierName }}
+                                </span>
+                                <span *ngIf="cost.type === 'Supplier Discount' && cost.name && !cost.supplierDetails">
+                                    {{ cost.name }}
+                                </span>
+                                <span *ngIf="cost.type !== 'Supplier Discount'">
+                                    {{ cost?.name }}
+                                </span>
                             </td>
                             <td colspan="1" class=" border py-2 text-center">
                                 {{ cost.value }}
