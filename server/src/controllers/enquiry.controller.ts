@@ -1034,7 +1034,7 @@ export const markFeedbackResponseAsViewed = async (req: Request, res: Response, 
         const result = await enquiryModel.updateOne(
             { _id: enqId, "preSale.feedback._id": feedbackId },
             { $set: { "preSale.feedback.$.seenByFeedbackRequester": true } },
-            { new: true }
+            { new: true } as any
         );
 
         if (result.modifiedCount === 0) {
