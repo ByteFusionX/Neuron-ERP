@@ -304,7 +304,7 @@
                             </div>
 
                             <div (click)="onConvertToDealSheet(element,$event,i)"
-                                *ngIf="element.status == 'Won' && element.lpoFiles.length && !element.dealData && !element.dealData._id"
+                                *ngIf="element.status == 'Won' && element.lpoFiles.length && (!element.dealData || !element.dealData._id)"
                                 matTooltip="Convert To Deal Sheet" matTooltipPosition="above"
                                 matTooltipClass="mat-tooltip"
                                 class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium">
