@@ -291,6 +291,34 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           route: '/claims/approval-requests'
         }
       ]
+    },
+    {
+      id: 'inventory',
+      label: 'Inventory',
+      icon: 'heroCube',
+      route: '/inventory',
+      privilegeKey: 'jobSheet',
+      hasDropdown: true,
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'Products',
+          label: 'All Products',
+          route: '/inventory/products',
+          notificationKey: 'dealSheetCount'
+        },
+        {
+          id: 'blockedProducts',
+          label: 'Blocked Products',
+          route: '/inventory/blocked-products'
+        },
+        {
+          id: 'stockEntries',
+          label: 'Stock Entries',
+          route: '/inventory/stock-entries'
+        },
+
+      ]
     }
   ];
 

@@ -42,7 +42,7 @@ export function MSALInstanceFactory(): IPublicClientApplication {
     auth: {
       clientId: environment.microsoftClientId,
       authority: `https://login.microsoftonline.com/${environment.microsoftTenantId}`,
-      redirectUri: 'https://neuron-erp.vercel.app',
+      redirectUri: 'http://localhost:4200',
     },
     cache: {
       cacheLocation: BrowserCacheLocation.LocalStorage,
