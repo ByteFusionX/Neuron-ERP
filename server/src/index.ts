@@ -42,6 +42,11 @@ import Employee from './models/employee.model'
 import { emailWorker } from './common/workers/email.worker';
 import { emailQueue } from './common/queues/email.queue';
 import claimRouter from './routes/claim.router';
+import productRouter from './routes/product.router';
+import productCategoryRouter from './routes/productCategory.router';
+import warehouseRouter from './routes/warehouse.router';
+import stockEntryRouter from './routes/stockEntry.router';
+import grnRouter from './routes/grn.router';
 
 const app = express();
 const server = http.createServer(app);
@@ -106,6 +111,11 @@ app.use('/technical', technicalRouter)
 app.use('/workflow', workflowRouter)
 app.use('/claim', claimRouter)
 app.use("/purchase-orders", purchaseOrderRouter);
+app.use('/product', productRouter);
+app.use('/productCategory', productCategoryRouter);
+app.use('/warehouse', warehouseRouter);
+app.use('/stock-entry', stockEntryRouter);
+app.use('/grn', grnRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');

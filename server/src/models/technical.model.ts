@@ -4,6 +4,17 @@ interface Technical {
     jobId: Types.ObjectId;
     customer: Types.ObjectId;
     materialRequest: MaterialRequest[];
+    materialRequestAttachements: Array<{
+        fileName: string;
+        originalname: string;
+        status?: 'pending' | 'approved' | 'rejected';
+        statusHistory?: Array<{
+            status: 'pending' | 'approved' | 'rejected';
+            comment: string;
+            changedBy: Types.ObjectId;
+            changedDate: Date;
+        }>;
+    }>;
     tasks: Task[];
     issues: Issue[];
     assignedTo: Types.ObjectId;
@@ -19,6 +30,7 @@ interface Technical {
     notes: string;
     involvedPersons: { name: string; designation: string }[];
     estimations: { type: string; value: string }[];
+    estimatedCostForProject?: number;
     activityPlan: ActivityPlan[];
     projectUpdates: ProjectUpdate[];
     billingSummary: BillingSummary[];
@@ -30,6 +42,13 @@ interface MaterialRequest {
     estimatedCost: number;
     requiredOn: Date;
     remarks: string;
+    status?: 'pending' | 'approved' | 'rejected';
+    statusHistory?: Array<{
+        status: 'pending' | 'approved' | 'rejected';
+        comment: string;
+        changedBy: Types.ObjectId;
+        changedDate: Date;
+    }>;
 }
 
 interface Task {
@@ -96,6 +115,35 @@ const MaterialRequestSchema = new Schema({
     remarks: {
         type: String,
         trim: true
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+    },
+    statusHistory: {
+        type: [{
+            status: {
+                type: String,
+                enum: ['pending', 'approved', 'rejected'],
+                required: true
+            },
+            comment: {
+                type: String,
+                default: ''
+            },
+            changedBy: {
+                type: Schema.Types.ObjectId,
+                ref: 'Employee',
+                required: true
+            },
+            changedDate: {
+                type: Date,
+                required: true,
+                default: Date.now
+            }
+        }],
+        default: []
     }
 }, {
     timestamps: true
@@ -326,6 +374,42 @@ const technicalSchema = new Schema<Technical>({
         required: true,
         default: [],
     },
+    materialRequestAttachements: {
+        type: [{
+            fileName: String,
+            originalname: String,
+            status: {
+                type: String,
+                enum: ['pending', 'approved', 'rejected'],
+                default: 'pending'
+            },
+            statusHistory: {
+                type: [{
+                    status: {
+                        type: String,
+                        enum: ['pending', 'approved', 'rejected'],
+                        required: true
+                    },
+                    comment: {
+                        type: String,
+                        default: ''
+                    },
+                    changedBy: {
+                        type: Schema.Types.ObjectId,
+                        ref: 'Employee',
+                        required: true
+                    },
+                    changedDate: {
+                        type: Date,
+                        required: true,
+                        default: Date.now
+                    }
+                }],
+                default: []
+            }
+        }],
+        default: [],
+    },
     tasks: {
         type: [taskSchema],
         required: true,
@@ -404,6 +488,10 @@ const technicalSchema = new Schema<Technical>({
             },
           ],
         default: [],
+    },
+    estimatedCostForProject: {
+        type: Number,
+        default: 0,
     },
 })
 

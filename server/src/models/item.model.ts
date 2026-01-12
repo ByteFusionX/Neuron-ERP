@@ -1,16 +1,21 @@
 import { Schema, Document, model, Types } from "mongoose";
 import supplierComparisonModel, { SupplierComparison, supplierComparisonSchema } from "./supplierComparison.model";
 
-export interface ItemDetail extends Document {
+export interface ItemDetail {
     detail: string;
     quantity: number;
     unitCost: number;
+    unitSellingPrice: number;
     profit: number;
     availability: string;
+    partNo?: Types.ObjectId;
     supplierName?: string;
     email?: string;
     phoneNo?: string;
     dealSelected: boolean;
+    isNewlyAdded?: boolean;
+    merged?: boolean;
+    fromMrRequest?: boolean;
 }
 
 export interface Item extends Document {
@@ -34,12 +39,21 @@ const itemDetailSchema = new Schema({
         required: true,
         min: 0
     },
+    unitSellingPrice: {
+        type: Number,
+        required: false,
+        min: 0
+    },
     profit: {
         type: Number,
         min: 0
     },
     availability: {
         type: String,
+    },
+    partNo: {
+        type: Schema.Types.ObjectId,
+        ref: 'Product',
     },
     supplierName: {
         type: String
@@ -55,6 +69,26 @@ const itemDetailSchema = new Schema({
         type: String
     },
     dealSelected: {
+        type: Boolean,
+        default: false
+    },
+    isNewlyAdded: {
+        type: Boolean,
+        default: false
+    },
+    merged: {
+        type: Boolean,
+        default: false
+    },
+    issued: {
+        type: Boolean,
+        default: false
+    },
+    issuedQuantity: {
+        type: Number,
+        default: 0
+    },
+    fromMrRequest: {
         type: Boolean,
         default: false
     },

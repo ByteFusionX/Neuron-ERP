@@ -13,16 +13,24 @@ export class SearchComponent {
   searchQuery: string = '';
   searchSubmitted: OutputEmitterRef<string> = output();
   isEnter:boolean = false;
+  previousTrimmedValue: string = '';
 
   ngModelChange() {
+    const trimmedQuery = this.searchQuery.trim();
+    
     if (this.searchQuery === '' && this.isEnter) {
       this.onSearch();
       this.isEnter = false;
+    } else if (trimmedQuery === '' && this.previousTrimmedValue !== '') {
+      this.onSearch();
     }
+    
+    this.previousTrimmedValue = trimmedQuery;
   }
 
   onSearch() {
-    this.searchSubmitted.emit(this.searchQuery);
+    const trimmedQuery = this.searchQuery.trim();
+    this.searchSubmitted.emit(trimmedQuery);
     this.isEnter = false;
   }
 

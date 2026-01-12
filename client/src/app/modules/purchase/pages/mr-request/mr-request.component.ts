@@ -8,6 +8,7 @@ import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
+import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 
 @Component({
   selector: 'app-mr-request',
@@ -27,26 +28,49 @@ export class MrRequestComponent implements OnInit {
   private fb = inject(FormBuilder);
   private toaster = inject(ToastrService);
   private employeeService = inject(EmployeeService);
+  private purchaseService = inject(PurchaseService);
   isSubmitted = signal<boolean>(false);
   employees: getEmployee[] = [];
+  purchaseId!: string;
+  hasMrRequest = signal<boolean>(false);
 
   mrForm: FormGroup = this.fb.group({
-    jobId: ['', [Validators.required]],
     engineer: ['', [Validators.required]],
-    message: ['', [Validators.required]]
+    message: ['', [Validators.required]],
+    totalPurchase: [0]
   })
 
-  constructor(@Inject(MAT_DIALOG_DATA) public data: any, private dialogRef: MatDialogRef<MrRequestComponent>) { }
+  constructor(@Inject(MAT_DIALOG_DATA) public data: any, private dialogRef: MatDialogRef<MrRequestComponent>) {
+    this.purchaseId = data.purchaseId || '';
+  }
 
   ngOnInit(): void {
     this.loadEmployees();
-    if (this.data.job.jobId) {
-      this.mrForm.patchValue({
-        jobId: this.data.job.job || this.data.job.jobId,
-        engineer: this.data.job?.mrRequest?.engineer._id || '',
-        message: this.data.job?.mrRequest?.message || '',
-      })
+    if (this.purchaseId) {
+      this.loadPurchaseData();
     }
+  }
+
+  loadPurchaseData(): void {
+    this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
+      next: (res) => {
+        if (res.data?.mrRequest?.engineer) {
+          const mrRequest = res.data.mrRequest;
+          this.hasMrRequest.set(true);
+          this.mrForm.patchValue({
+            engineer: typeof mrRequest.engineer === 'object' ? mrRequest.engineer._id : mrRequest.engineer || '',
+            message: mrRequest.message || '',
+            totalPurchase: mrRequest.totalPurchase || 0,
+          });
+        } else {
+          this.hasMrRequest.set(false);
+        }
+      },
+      error: (error) => {
+        console.error('Error loading purchase data:', error);
+        this.hasMrRequest.set(false);
+      }
+    });
   }
 
   loadEmployees(): void {
@@ -72,18 +96,68 @@ export class MrRequestComponent implements OnInit {
   onSubmit() {
     if (this.mrForm.invalid) {
       this.toaster.warning("Please fill all required fields correctly")
-    } else {
-      this.dialogRef.close(this.mrForm.value)
+      return;
     }
+
+    if (!this.purchaseId) {
+      this.toaster.error('Purchase ID is required');
+      return;
+    }
+
+    const mrRequest = {
+      engineer: this.mrForm.value.engineer,
+      message: this.mrForm.value.message,
+      totalPurchase: this.mrForm.value.totalPurchase || 0,
+      createdDate: new Date()
+    };
+    
+
+    this.purchaseService.updatePurchaseMrRequest(this.purchaseId, mrRequest).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.hasMrRequest.set(true);
+          this.toaster.success('MR request updated successfully');
+          this.dialogRef.close({ success: true });
+        }
+      },
+      error: (error) => {
+        console.error('Error updating MR request:', error);
+        this.toaster.error('Failed to update MR request');
+      }
+    });
   }
 
   onClearClicks(){
-    this.mrForm.get('engineer')?.reset()
-    this.mrForm.get('message')?.reset()
-    this.dialogRef.close(this.mrForm.value)
+    if (!this.purchaseId) {
+      this.toaster.error('Purchase ID is required');
+      return;
+    }
+
+    const mrRequest = {
+      engineer: null,
+      message: '',
+      totalPurchase: 0,
+      createdDate: new Date()
+    };
+
+    this.purchaseService.updatePurchaseMrRequest(this.purchaseId, mrRequest).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.toaster.success('MR request cleared successfully');
+          this.hasMrRequest.set(false);
+          this.mrForm.reset();
+          this.dialogRef.close({ success: true });
+        }
+      },
+      error: (error) => {
+        console.error('Error clearing MR request:', error);
+        this.toaster.error('Failed to clear MR request');
+      }
+    });
   }
 
   get f() {
     return this.mrForm.controls;
   }
 }
+

@@ -88,6 +88,13 @@
 
             <table *ngIf="!isLoading && !isEmpty" mat-table [dataSource]="dataSource" class="rounded-lg table-fixed">
 
+                <ng-container matColumnDef="updatedDate">
+                    <th *matHeaderCellDef
+                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
+                        Date </th>
+                    <td mat-cell *matCellDef="let element"> {{element.updatedDate ? (element.updatedDate | date: 'dd/MM/yyyy') : '-'}} </td>
+                </ng-container>
+
                 <ng-container matColumnDef="jobId">
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">

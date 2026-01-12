@@ -1,0 +1,78 @@
+<div class="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+  <div class="border-b p-4 px-6 flex justify-between items-center flex-shrink-0">
+    <div>
+      <h3 class="text-lg font-medium text-gray-800">Blocked Items</h3>
+      <p class="text-sm text-gray-500 mt-1">
+        Part No: <span class="font-medium">{{ stockEntry?.partNo?.partNo || 'N/A' }}</span>
+        | Total Blocked: <span class="font-medium text-orange-600">{{ getTotalBlockedQuantity() }}</span>
+        | Available: <span class="font-medium text-green-600">{{ availableQuantity }}</span>
+      </p>
+    </div>
+    <button
+      type="button"
+      class="text-gray-400 hover:text-gray-600 transition-colors"
+      (click)="onClose()">
+      <ng-icon name="heroXMark" class="w-5 h-5"></ng-icon>
+    </button>
+  </div>
+
+  <div class="flex-1 overflow-y-auto p-6">
+    <div *ngIf="blockedItems.length === 0" class="text-center py-12">
+      <ng-icon name="heroLockOpen" class="w-16 h-16 text-gray-300 mx-auto mb-4"></ng-icon>
+      <p class="text-gray-500 text-lg">No items are currently blocked</p>
+    </div>
+
+    <div *ngIf="blockedItems.length > 0" class="space-y-2">
+      <div
+        *ngFor="let item of blockedItems; let i = index"
+        class="border border-gray-200 rounded-md p-3 hover:bg-gray-50 transition-colors"
+        [class.bg-orange-50]="isActive(item)"
+        [class.bg-gray-50]="!isActive(item)">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 flex-1">
+            <ng-icon
+              [name]="isActive(item) ? 'heroLockClosed' : 'heroLockOpen'"
+              [class.text-orange-600]="isActive(item)"
+              [class.text-gray-500]="!isActive(item)"
+              class="w-5 h-5">
+            </ng-icon>
+            <div class="flex-1 grid grid-cols-3 gap-2 text-sm">
+              <div>
+                <div>
+                  <span class="text-gray-500">Qty:</span>
+                  <span class="font-medium text-gray-900 ml-1">{{ item.quantity }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Salesperson:</span>
+                  <span class="font-medium text-gray-900 ml-1">{{ item.salesPersonName }}</span>
+                </div>
+              </div>
+              <div>
+                <span class="text-gray-500">Customer:</span>
+                <span class="font-medium text-gray-900 ml-1">{{ item.customerName }}</span>
+              </div>
+              <div>
+                <span class="text-gray-500">Period:</span>
+                <span class="font-medium text-gray-900 ml-1">{{ formatDate(item.fromDate) }} - {{ formatDate(item.toDate) }}</span>
+              </div>
+            </div>
+          </div>
+          <span
+            *ngIf="isActive(item)"
+            class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700 whitespace-nowrap">
+            Active
+          </span>
+          <span
+            *ngIf="!isActive(item)"
+            class="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600 whitespace-nowrap">
+            Expired
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="border-t border-gray-200 p-4 px-6 flex justify-end flex-shrink-0">
+    <app-btn theme="primary" (buttonClick)="onClose()">Close</app-btn>
+  </div>
+</div>

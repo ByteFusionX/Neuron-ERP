@@ -1,3 +1,5 @@
+import { getQuotatation } from './quotation.interface';
+
 export interface Project {
   _id?: string;
   projectName: string;
@@ -82,6 +84,7 @@ export interface getProject {
   jobId: {
     _id?:string;
     jobId:string;
+    quotation?: getQuotatation;
   };
   customer: {
     _id?:string;
@@ -132,4 +135,5 @@ export interface ProjectResponse {
   data: Project[];
   message: string;
   success: boolean;
+  total?: number;
 } 

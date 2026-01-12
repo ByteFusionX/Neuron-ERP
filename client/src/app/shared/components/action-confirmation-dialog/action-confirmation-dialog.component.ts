@@ -12,6 +12,7 @@ export interface ActionConfirmationDialogData {
   cancelButtonText?: string;
   commentLabel?: string;
   commentPlaceholder?: string;
+  showComment?: boolean;
   requireComment?: boolean;
 }
 
@@ -43,6 +44,7 @@ export class ActionConfirmationDialogComponent {
       cancelButtonText: 'Cancel',
       commentLabel: 'Comment',
       commentPlaceholder: 'Enter your comment here...',
+      showComment: true,
       requireComment: false,
       ...this.data
     };

@@ -6,14 +6,24 @@
 [isEmpty]="isEmpty()"
 [totalItems]="totalItems()"
 [tableId]="'pending-suppliers-table'"
+[enableExport]="true"
+[exportFileName]="(isPendingView() ? 'pending-suppliers' : 'approved-suppliers') + '.xlsx'"
 (filterChange)="onFilterChange($event)"
+(paginationChange)="onPaginationChange($event)"
 (rowClick)="onRowClick($event)"
 (actionClick)="onActionClick($event)"
+(exportRequest)="onExportRequest()"
 [title]="isPendingView() ? 'Pending Suppliers' : 'Approved Suppliers'"
 >
 <ng-template #sideColumn>
-    @if(isPendingView()) {
-        <app-btn  theme="primary" routerLink="/suppliers/create">+ Create Supplier</app-btn>
-    }
+    <div class="flex items-center gap-3">
+        <data-search 
+            placeholder="Search by product name..."
+            (searchSubmitted)="onProductNameSearch($event)"
+        ></data-search>
+        @if(isPendingView()) {
+            <app-btn  theme="primary" routerLink="/suppliers/create">+ Create Supplier</app-btn>
+        }
+    </div>
 </ng-template>
 </data-table>

@@ -37,11 +37,17 @@ import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-
 import { InitiateLpoComponent } from './modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { IssueLpoComponent } from './modules/purchase-order/pages/issue-lpo/issue-lpo.component';
 import { LpoListComponent } from './modules/purchase-order/pages/lpo-list/lpo-list.component';
-import { MrRequestsComponent } from './modules/technical/mr-requests/mr-requests.component';
+import { LpoApprovalComponent } from './modules/purchase-order/pages/lpo-approval/lpo-approval.component';
+import { ViewLpoComponent } from './modules/purchase-order/pages/view-lpo/view-lpo.component';
+import { CreateGrnComponent } from './modules/purchase-order/pages/create-grn/create-grn.component';
+import { ViewGrnComponent } from './modules/purchase-order/pages/view-grn/view-grn.component';
+import { MrApprovalRequestsComponent } from './modules/technical/mr-approval-requests/mr-approval-requests.component';
+import { ViewMaterialRequestComponent } from './modules/technical/view-material-request/view-material-request.component';
 import { ProjectsComponent } from './modules/technical/projects/projects.component';
 import { AddProjectComponent } from './modules/technical/projects/add-project/add-project.component';
 import { OpenToWorkProjectComponent } from './modules/technical/open-to-work/open-to-work-project.component';
 import { ActivityPlanComponent } from './modules/technical/projects/add-project/activity-plan/activity-plan.component';
+import { MaterialRequestModalComponent } from './modules/technical/projects/add-project/material-request-modal/material-request-modal.component';
 import { TasksComponent } from './modules/technical/projects/add-project/tasks/tasks.component';
 import { IssuesListComponent } from './modules/technical/projects/add-project/issues/list/issues-list.component';
 import { ProjectUpdatesComponent } from './modules/technical/projects/add-project/project-updates/project-updates.component';
@@ -49,6 +55,9 @@ import { ViewProjectUpdateComponent } from './modules/technical/projects/add-pro
 import { ClaimsComponent } from './modules/claims/claims.component';
 import { BillingSummaryComponent } from './modules/technical/projects/add-project/billing-summary/billing-summary.component';
 import { RequestForApprovalsComponent } from './modules/claims/request-for-approvals/request-for-approvals.component';
+import { AllProductsComponent } from './modules/inventory/pages/all-products/all-products.component';
+import { StockEntriesComponent } from './modules/inventory/pages/stock-entries/stock-entries.component';
+import { CreateStockEntryComponent } from './modules/inventory/pages/stock-entries/modals/create-stock-entry/create-stock-entry.component';
 
 
 export const routes: Routes = [
@@ -156,6 +165,7 @@ export const routes: Routes = [
   },
   {
     path: 'suppliers',
+    canActivate: [AuthGuard],
     loadComponent: () => import('./modules/suppliers/suppliers.component').then((c) => c.SuppliersComponent),
     children: [
       { path: 'pendings', component: PendingSuppliersComponent },
@@ -167,22 +177,38 @@ export const routes: Routes = [
   },
   {
     path: 'purchase',
+    canActivate: [AuthGuard],
     loadComponent: () => import('./modules/purchase/purchase.component').then((c) => c.PurchaseComponent),
     children: [
       { path: 'pendings', component: PendingPurchaseComponent },
       { path: 'approves', component: ApprovedPurchaseComponent },
       { path: 'create', component: CreatePurchaseComponent },
-      { path: 'supplier-discount', component: SupplierDiscountComponent },
-      { path: 'comparison-sheet', component: ComparisonSheetComponent },
+      { path: 'supplier-discount/:purchaseId', component: SupplierDiscountComponent },
+      { path: 'comparison-sheet/:purchaseId', component: ComparisonSheetComponent },
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
-      { path: 'comparison-summary', component: ComparisonSummaryComponent },
+      { path: 'comparison-summary/:purchaseId', component: ComparisonSummaryComponent },
       { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
       { path: 'issue-lpo/:id', component: IssueLpoComponent },
+      { path: 'issue-lpo/:id/edit/:lpoId', component: IssueLpoComponent },
+      { path: 'issue-lpo/:id/reissue/:lpoId', component: IssueLpoComponent },
       { path: 'edit/:id', component: CreatePurchaseComponent }
     ]
   },
   {
+    path: 'purchase-order',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/purchase-order/purchase-order.component').then((c) => c.PurchaseOrderComponent),
+    children: [
+      { path: 'pending-approval', component: LpoApprovalComponent },
+      { path: 'approved', component: LpoApprovalComponent },
+      { path: 'view-lpo/:id', component: ViewLpoComponent },
+      { path: 'create-grn/:lpoId', component: CreateGrnComponent },
+      { path: 'view-grn/:id', component: ViewGrnComponent }
+    ]
+  },
+  {
     path: 'technical',
+    canActivate: [AuthGuard],
     loadComponent: () => import('./modules/technical/technical.component').then((c) => c.TechnicalComponent),
     children: [
       { path: 'project', component: ProjectsComponent },
@@ -190,15 +216,16 @@ export const routes: Routes = [
       { path: 'project/add', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/edit/:id', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/activity-plan/:id', component: ActivityPlanComponent},
+      { path: 'project/material-request/:id', component: MaterialRequestModalComponent},
       { path: 'project/updates/:id', component: ProjectUpdatesComponent},
       { path: 'project/updates/:technicalId/:updateId', component: ViewProjectUpdateComponent},
       { path: 'project/tasks/:id', component: TasksComponent},
       { path: 'project/issues/:id', component: IssuesListComponent},
       { path: 'project/claims/:id', component: ClaimsComponent},
       { path: 'project/billing-summary/:id', component: BillingSummaryComponent},
-      { path: 'mr-requests', component: MrRequestsComponent },
       { path: 'open-to-work-project', component: OpenToWorkProjectComponent },
-      { path: 'mr-requests', component: MrRequestsComponent }
+      { path: 'mr-approval-requests', component: MrApprovalRequestsComponent },
+      { path: 'mr-approval-requests/view/:id', component: ViewMaterialRequestComponent }
     ]
   },
   {
@@ -207,6 +234,16 @@ export const routes: Routes = [
     children: [
       { path: 'my-claims', component: ClaimsComponent },
       { path: 'approval-requests', component: RequestForApprovalsComponent }
+    ]
+  },
+  {
+    path: 'inventory',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/inventory/inventory.component').then((c) => c.InventoryComponent),
+    children: [
+      { path: 'products', component: AllProductsComponent },
+      { path: 'stock-entries', component: StockEntriesComponent },
+      { path: 'stock-entries/create', component: CreateStockEntryComponent }
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

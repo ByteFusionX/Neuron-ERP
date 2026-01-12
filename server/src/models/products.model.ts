@@ -40,6 +40,7 @@ const productSchema = new Schema<Product>({
     },
     createdBy: {
         type: Schema.Types.ObjectId,
+        ref: 'Employee',
         required: true,
     },
     createdDate: {

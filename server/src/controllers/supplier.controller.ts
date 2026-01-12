@@ -8,7 +8,7 @@ import { getEmployeeData } from '../common/utils/util';
 
 export const getSuppliers = async (req: Request, res: Response) => {
    try {
-      let { page = 1, row = 10, toDate, fromDate, status, category, supplierType, supplierName, location } = req.body;
+      let { page = 1, row = 10, toDate, fromDate, status, category, supplierType, supplierName, search, location, productName } = req.body;
 
       // Convert string page and row to numbers
       page = parseInt(page.toString());
@@ -50,14 +50,20 @@ export const getSuppliers = async (req: Request, res: Response) => {
          filter.supplierType = supplierType;
       }
 
-      // Add supplierName filter if provided
-      if (supplierName) {
-         filter.supplierName = { $regex: supplierName, $options: 'i' };
+      // Add supplierName filter if provided (search parameter maps to supplierName)
+      const searchTerm = search || supplierName;
+      if (searchTerm) {
+         filter.supplierName = { $regex: searchTerm, $options: 'i' };
       }
 
       // Add location filter if provided
       if (location) {
          filter['address.location'] = { $regex: location, $options: 'i' };
+      }
+
+      // Add productName filter if provided
+      if (productName) {
+         filter['products.productName'] = { $regex: productName, $options: 'i' };
       }
 
       // Use aggregation pipeline for advanced querying with lookups

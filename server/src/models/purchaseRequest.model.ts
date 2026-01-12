@@ -1,5 +1,5 @@
 import { Schema, Document, model, Types, } from "mongoose";
-import { Item, itemSchema } from "./item.model";
+import { Item, ItemDetail, itemSchema } from "./item.model";
 
 interface discounts {
     suppliers: [{
@@ -56,6 +56,52 @@ const revokedHistory = new Schema<revokedHistory>({
     }
 })
 
+interface PurchaseRequestApprovalStatus {
+    status: string;
+    role: Types.ObjectId;
+    step: number;
+    managerApproval: boolean;
+    updatedBy: Types.ObjectId;
+    updatedDate: Date;
+    comment: string;
+}
+
+const PurchaseRequestApprovalStatusSchema = new Schema<PurchaseRequestApprovalStatus>({
+    status: {
+        type: String,
+        required: true,
+        enum: ['pending', 'approved', 'rejected']
+    },
+    role: {
+        type: Schema.Types.ObjectId,
+        ref: 'Category',
+    },
+    comment: {
+        type: String,
+        default: ''
+    },
+    step: {
+        type: Number,
+        required: true
+    },
+    managerApproval: {
+        type: Boolean,
+        required: true,
+        default: false
+    },
+    updatedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+    },
+    updatedDate: {
+        type: Date,
+    }
+})
+
+type PurchaseRequestItem = Omit<Item, 'itemDetails'> & {
+    itemDetails: ItemDetail[];
+};
+
 export enum PurchaseRequestStatus {
     Drafted = 'Drafted',
     Pending = 'Pending',
@@ -68,10 +114,11 @@ export enum PurchaseRequestStatus {
 interface PurchaseRequest extends Document {
     jobId: Types.ObjectId;
     purchaseNo: String;
-    items: Item[];
+    items: PurchaseRequestItem[];
     supplierDiscounts: discounts[];
     status: PurchaseRequestStatus;
     rejectedReason: rejectedReason[];
+    approvalStatus: PurchaseRequestApprovalStatus[];
     // comparisonSummary : [];
     revokedHistory: revokedHistory[];
     createdBy: Types.ObjectId;
@@ -82,10 +129,13 @@ interface PurchaseRequest extends Document {
     mrRequest: {
         engineer: Types.ObjectId;
         message: string;
+        totalPurchase?: number;
         createdDate: Date;
     };
     customerId: Types.ObjectId;
     totalLpo: Number | String;
+    procurementPerson?: Types.ObjectId;
+    currency?: String;
 }
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
@@ -118,6 +168,10 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     rejectedReason: {
         type: [rejectedReasonSchema],
     },
+    approvalStatus: {
+        type: [PurchaseRequestApprovalStatusSchema],
+        default: []
+    },
     // comparisonSummary : [],
     revokedHistory: {
         type: [revokedHistory],
@@ -148,6 +202,10 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         message: {
             type: String,
         },
+        totalPurchase: {
+            type: Number,
+            default: 0
+        },
         createdDate: {
             type: Date,
             default: new Date()
@@ -159,6 +217,13 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     },
     totalLpo: {
         type: Number
+    },
+    procurementPerson: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    currency: {
+        type: String
     }
 })
 

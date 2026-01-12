@@ -9,7 +9,8 @@ interface Job extends Document {
     updatedDate: Date;
     isDeleted: boolean;
     allocateStatus: string;
-    allocateType : string
+    allocateType : string;
+    procurementPerson?: Types.ObjectId;
 }
 
 export enum jobStatus {
@@ -75,6 +76,10 @@ const jobSchema = new Schema<Job>({
     allocateType : {
         type : String,
         enum : Object.values(allocateType)
+    },
+    procurementPerson: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
     }
 });
 

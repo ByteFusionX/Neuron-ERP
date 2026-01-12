@@ -25,6 +25,7 @@ export class SupplierService {
         fromDate?: string;
         toDate?: string;
         search?: string;
+        productName?: string;
     }): Observable<SupplierListResponse> {
         return this.http.post<SupplierListResponse>(`${this.api}/supplier`, params);
     }

@@ -45,7 +45,7 @@
                                   {{supplier.supplierId.supplierName}}
                                 </td>
                                 <td class="px-2 py-2 border text-center ">
-                                    {{supplier.discount}}
+                                    {{supplier.discount}} {{ currency() }}
                                 </td>
                                 <td class="px-2 py-2 text-center">
                                     <button class="text-red-600 hover:text-red-800" (click)="onDeleteSupplier(i)"
@@ -62,7 +62,7 @@
                                         <span>Total Discount received:</span>
                                         <input type="text" class="px-3 py-1.5 outline-none rounded"
                                             formControlName="totalDiscount" readonly
-                                            [value]="supplierForm.get('totalDiscount')?.value | number:'1.2-2'">
+                                            [value]="(supplierForm.get('totalDiscount')?.value | number:'1.2-2') + ' ' + currency()">
                                     </div>
                                 </div>
                             </td>

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
@@ -10,13 +10,14 @@ import { TableComponent } from 'src/app/shared/components/table/table.component'
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { ToastrService } from 'ngx-toastr';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
 import * as job_interface from 'src/app/shared/interfaces/job.interface';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import { DialogModule } from 'primeng/dialog';
 import { DropdownModule } from "primeng/dropdown";
@@ -25,6 +26,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { allocateType } from '../../job-sheet/pages/allocate-type-modal/allocate-type-modal.component';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { CreateProjectComponent } from '../create-project/create-project.component';
+import { AssignEngineerDialogComponent } from './assign-engineer-dialog/assign-engineer-dialog.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -52,16 +54,18 @@ interface FilterParams {
   styleUrls: ['./open-to-work-project.component.css'],
   providers: [PaginationService]
 })
-export class OpenToWorkProjectComponent implements OnInit {
+export class OpenToWorkProjectComponent implements OnInit, OnDestroy {
   private jobService = inject(JobService);
   private profileService = inject(ProfileService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private paginationService = inject(PaginationService);
   private quotationService = inject(QuotationService);
   private technicalService = inject(TechnicalService);
   private _employeeService = inject(EmployeeService);
+  private subscriptions = new Subscription();
 
   tableData = signal<job_interface.getJob[]>([]);
   tableColumns: TableColumn[] = [
@@ -177,26 +181,49 @@ export class OpenToWorkProjectComponent implements OnInit {
   isLoading = signal<boolean>(true);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
-  showAssignEngineerModal = signal<boolean>(false);
   userId: any = '';
-  selectedEngineer: any = '';
   selectedJobId: any = '';
   projectType:string = '';
-  assignComment: string = '';
   assignEngineerJob: any = null;
-  isAssignSubmitted = false;
   engineerOptions: { label: string, value: string }[] = [];
   priorityOptions: { label: string, value: string }[] = [
     { label: 'High', value: 'High' },
     { label: 'Medium', value: 'Medium' },
     { label: 'Low', value: 'Low' }
   ];
-  selectedPriority: string = '';
 
   ngOnInit(): void {
-    this.loadJobs();
     this.loadEngineers();
     this.loadOptions();
+    this.initializeFromUrlParams();
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  initializeFromUrlParams(): void {
+    this.route.queryParams.subscribe(params => {
+      const page = params['page'] ? parseInt(params['page']) : 1;
+      const row = params['row'] ? parseInt(params['row']) : 10;
+
+      this.paginationService.updatePaginationState({
+        page,
+        row,
+        total: this.totalItems()
+      });
+
+      this.loadJobs();
+    });
+  }
+
+  onPaginationChange(event: { page: number, row: number }): void {
+    this.paginationService.updatePaginationState({
+      page: event.page,
+      row: event.row,
+      total: this.totalItems()
+    });
+    this.loadJobs();
   }
 
   onFilterChange(filters: TableFilter[]): void {
@@ -230,8 +257,8 @@ export class OpenToWorkProjectComponent implements OnInit {
       return acc;
     }, {} as Partial<FilterParams>);
 
-    console.log(filterParams)
     this.loadJobs(filterParams);
+    this.updateUrlParams();
   }
 
   loadJobs(filters?: Partial<FilterParams>): void {
@@ -249,34 +276,49 @@ export class OpenToWorkProjectComponent implements OnInit {
     };
 
 
-    this.jobService.getUnassignedToTechnical(filterParams).subscribe({
-      next: (response) => {
-        console.log(response);
-        if(response && response.data && response.data.length){
-          this.tableData.set(response.data);
-          this.totalItems.set(response.total);
-          this.isEmpty.set(false);
-          this.isLoading.set(false);
-        }else{
-          this.tableData.set([]);
-          this.totalItems.set(0);
-          this.isLoading.set(false);
-          this.isEmpty.set(true);
+    this.subscriptions.add(
+      this.jobService.getUnassignedToTechnical(filterParams).subscribe({
+        next: (response) => {
+          if(response && response.data && response.data.length){
+            this.tableData.set(response.data);
+            const total = response.total || 0;
+            this.totalItems.set(total);
+            
+            this.paginationService.updatePaginationState({
+              page: paginationState.page,
+              row: paginationState.row,
+              total: total
+            });
+            
+            this.isEmpty.set(false);
+            this.isLoading.set(false);
+          }else{
+            this.tableData.set([]);
+            this.totalItems.set(0);
+            this.paginationService.updatePaginationState({
+              page: paginationState.page,
+              row: paginationState.row,
+              total: 0
+            });
+            this.isLoading.set(false);
+            this.isEmpty.set(true);
+          }
+          this.updateUrlParams();
+        },
+        error: (error) => {
+          if (error.status === 204) {
+            this.tableData.set([]);
+            this.totalItems.set(0);
+            this.isLoading.set(false);
+            this.isEmpty.set(true);
+          } else {
+            this.notificationService.error('Failed to load jobs');
+            this.isLoading.set(false);
+            this.isEmpty.set(true);
+          }
         }
-      },
-      error: (error) => {
-        if (error.status === 204) {
-          this.tableData.set([]);
-          this.totalItems.set(0);
-          this.isLoading.set(false);
-          this.isEmpty.set(true);
-        } else {
-          this.notificationService.error('Failed to load jobs');
-          this.isLoading.set(false);
-          this.isEmpty.set(true);
-        }
-      }
-    });
+      })
+    );
   }
 
   loadOptions(): void {
@@ -338,43 +380,46 @@ export class OpenToWorkProjectComponent implements OnInit {
       }else if(event.item.allocateType == allocateType.AMC){
         this.projectType = 'amc'
       }
-      this.showAssignEngineerModal.set(true);
-      this.selectedEngineer = '';
-      this.assignComment = '';
-      this.isAssignSubmitted = false;
+
+      this.openAssignEngineerDialog();
     }
   }
 
-  closeAssignEngineerModal() {
-    this.showAssignEngineerModal.set(false);
+  openAssignEngineerDialog(): void {
+    const dialogRef = this.dialog.open(AssignEngineerDialogComponent, {
+      width: '400px',
+      data: {
+        engineerOptions: this.engineerOptions,
+        priorityOptions: this.priorityOptions
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.submitAssignEngineer(result);
+      }
+    });
   }
 
-  submitAssignEngineer() {
-    if (this.selectedEngineer == '') {
-      this.notificationService.error('Please select an engineer');
-      return;
-    } else {
-      this.technicalService.assignEngineer({
-        jobId: this.selectedJobId,
-        engineerId: this.selectedEngineer,
-        comment: this.assignComment,
-        assignedBy: this.userId,
-        projectType: this.projectType,
-        customerId: this.assignEngineerJob.clientDetails._id,
-        priority: this.selectedPriority
-      }).subscribe({
-        next: (response) => {
-          this.notificationService.success('Assigned to Engineer: ' + this.selectedEngineer + ' for job: ' + this.assignEngineerJob.jobId);
-          this.loadJobs();
-        },
-        error: (error) => {
-          this.notificationService.error('Failed to assign engineer');
-        }
-      });
-    }
-
-    this.isAssignSubmitted = true;
-    this.showAssignEngineerModal.set(false);
+  submitAssignEngineer(dialogResult: { engineerId: string; priority: string; comment: string }): void {
+    this.technicalService.assignEngineer({
+      jobId: this.selectedJobId,
+      engineerId: dialogResult.engineerId,
+      comment: dialogResult.comment,
+      assignedBy: this.userId,
+      projectType: this.projectType,
+      customerId: this.assignEngineerJob.clientDetails._id,
+      priority: dialogResult.priority
+    }).subscribe({
+      next: (response) => {
+        const engineerName = this.engineerOptions.find(e => e.value === dialogResult.engineerId)?.label || 'Engineer';
+        this.notificationService.success(`Assigned to ${engineerName} for job: ${this.assignEngineerJob.jobId}`);
+        this.loadJobs();
+      },
+      error: (error) => {
+        this.notificationService.error('Failed to assign engineer');
+      }
+    });
   }
 
   onPreviewPdf(quotedData: any, salesPerson: any, customer: any, attention: any) {
@@ -386,7 +431,7 @@ export class OpenToWorkProjectComponent implements OnInit {
     pdfDoc.then((pdf: any) => {
       pdf.getBlob((blob: Blob) => {
         let url = window.URL.createObjectURL(blob);
-        this.dialog.open(QuotationPreviewComponent, { data: { url: url, formatedQuote: quotedData } });
+        this.dialog.open(PdfPreviewComponent, { data: { url: url, formatedQuote: quotedData } });
       });
     });
   }
@@ -434,4 +479,20 @@ export class OpenToWorkProjectComponent implements OnInit {
       width: '1200x'
     });
   }
+
+  updateUrlParams(): void {
+    const paginationState = this.paginationService.paginationState();
+    const queryParams: any = {};
+
+    queryParams.page = paginationState.page !== 1 ? paginationState.page : null;
+    queryParams.row = paginationState.row !== 10 ? paginationState.row : null;
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: queryParams,
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+  }
 }
+

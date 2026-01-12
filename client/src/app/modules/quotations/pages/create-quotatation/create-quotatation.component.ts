@@ -17,7 +17,7 @@ import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { OptionalItems, Quotatation, QuoteItem, getQuotatation, quotatationForm } from 'src/app/shared/interfaces/quotation.interface';
 import { customerNoteValidator } from 'src/app/shared/validators/quoation.validator';
 import { Note, Notes } from 'src/app/shared/interfaces/notes.interface';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { NgIf, NgFor, AsyncPipe, DecimalPipe } from '@angular/common';
@@ -269,7 +269,7 @@ export class CreateQuotatationComponent {
         pdfDoc.getBlob((blob: Blob) => {
           let url = window.URL.createObjectURL(blob);
           this.isPreviewing = false;
-          this._dialog.open(QuotationPreviewComponent, { data: { url: url, formatedQuote: finalQuoteData } });
+          this._dialog.open(PdfPreviewComponent, { data: { url: url, formatedQuote: finalQuoteData } });
         });
 
       } catch (error) {

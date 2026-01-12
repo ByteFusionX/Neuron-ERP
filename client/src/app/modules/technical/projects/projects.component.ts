@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
@@ -10,12 +10,14 @@ import { TableComponent } from 'src/app/shared/components/table/table.component'
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { ProjectService } from 'src/app/core/services/project.service';
 import { ToastrService } from 'ngx-toastr';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { Project, ProjectType, ProjectStatus } from 'src/app/shared/interfaces/project.interface';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
 import { CreateProjectComponent } from '../create-project/create-project.component';
+import { TransferEngineerComponent } from './transfer-engineer/transfer-engineer.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -38,26 +40,27 @@ interface FilterParams {
     NgSelectModule,
     MatMenuModule,
     IconsModule,
-    ButtonComponent,
     FormsModule
   ],
   templateUrl: './projects.component.html',
   styleUrl: './projects.component.css',
   providers: [PaginationService]
 })
-export class ProjectsComponent implements OnInit {
+export class ProjectsComponent implements OnInit, OnDestroy {
   private projectService = inject(ProjectService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private paginationService = inject(PaginationService);
+  private subscriptions = new Subscription();
 
 
   tableData = signal<Project[]>([]);
   tableColumns: TableColumn[] = [];
   defaultColumns: string[] = [];
   currentRoute = this.router.url;
-  currentPage =  `Pending ${this.router.url.split('/').pop()?.split('-').map(word => 
+  currentPage =  `Pending ${this.router.url.split('?')[0].split('/').pop()?.split('-').map(word => 
     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
   ).join(' ')}`;
 
@@ -67,15 +70,34 @@ export class ProjectsComponent implements OnInit {
 
   priorityOptions: string[] = ['High', 'Medium', 'Low'];
   
-  selectedProjectType = this.router.url.split('/').pop();
+  selectedProjectType = this.router.url.split('?')[0].split('/').pop();
   selectedStatus = signal<Array<ProjectStatus>>([]);
 
   ngOnInit(): void {
     this.setupTableColumns();
-    this.loadData();
+    this.initializeFromUrlParams();
   }
 
-  setupTableColumns(): void {``
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  initializeFromUrlParams(): void {
+    this.route.queryParams.subscribe(params => {
+      const page = params['page'] ? parseInt(params['page']) : 1;
+      const row = params['row'] ? parseInt(params['row']) : 10;
+
+      this.paginationService.updatePaginationState({
+        page,
+        row,
+        total: this.totalItems()
+      });
+
+      this.loadData();
+    });
+  }
+
+  setupTableColumns(): void {
     this.tableColumns = [
       {
         key: 'customer.companyName',
@@ -103,10 +125,21 @@ export class ProjectsComponent implements OnInit {
         filterable: true,
         filterType: 'text',
         filterPlaceholder: 'Search engineer...',
-        cellRenderer: (item: any) =>
-          item?.assignedTo
-            ? `${item.assignedTo.firstName} ${item.assignedTo.lastName}`
-            : ''
+        cellRenderer: (item: any) => {
+          if (item?.assignedTo) {
+            return `${item.assignedTo.firstName} ${item.assignedTo.lastName}`;
+          }
+          return '-';
+        },
+        inlineButton: {
+          icon: 'heroUserPlus',
+          tooltip: 'Transfer Engineer',
+          buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-1 px-1 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-full font-medium transition-colors',
+          condition: (item: any) => !!item?.assignedTo,
+          onClick: (item: any, event: Event) => {
+            this.onTransferEngineer(item);
+          }
+        }
       },
       {
         key: 'assignedBy',
@@ -172,21 +205,39 @@ export class ProjectsComponent implements OnInit {
       ...filters
     };
 
-    this.projectService.getProjects(filterParams).subscribe({
-      next: (response) => {
-        console.log(response);
-        this.tableData.set(response.data);
-        this.totalItems.set(response.data.length);
-        this.isEmpty.set(this.tableData().length === 0);
-        this.isLoading.set(false);
-      },
-      error: (error) => {
+    this.subscriptions.add(
+      this.projectService.getProjects(filterParams).subscribe({
+        next: (response) => {
+          this.tableData.set(response.data);
+          const total = response.total || response.data.length;
+          this.totalItems.set(total);
+          
+          this.paginationService.updatePaginationState({
+            page: paginationState.page,
+            row: paginationState.row,
+            total: total
+          });
+          
+          this.isEmpty.set(this.tableData().length === 0);
+          this.isLoading.set(false);
+          this.updateUrlParams();
+        },
+        error: (error) => {
+          this.notificationService.error('Failed to load projects');
+          console.error('Error loading projects:', error);
+          this.isLoading.set(false);
+        }
+      })
+    );
+  }
 
-        this.notificationService.error('Failed to load projects');
-        console.error('Error loading projects:', error);
-        this.isLoading.set(false);
-      }
+  onPaginationChange(event: { page: number, row: number }): void {
+    this.paginationService.updatePaginationState({
+      page: event.page,
+      row: event.row,
+      total: this.totalItems()
     });
+    this.loadData();
   }
 
   onFilterChange(filters: TableFilter[]): void {
@@ -220,6 +271,22 @@ export class ProjectsComponent implements OnInit {
     }, {} as Partial<FilterParams>);
 
     this.loadData(filterParams);
+    this.updateUrlParams();
+  }
+
+  updateUrlParams(): void {
+    const paginationState = this.paginationService.paginationState();
+    const queryParams: any = {};
+
+    queryParams.page = paginationState.page !== 1 ? paginationState.page : null;
+    queryParams.row = paginationState.row !== 10 ? paginationState.row : null;
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: queryParams,
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   onActionClick(event: { action: string; item: Project }): void {
@@ -259,6 +326,34 @@ export class ProjectsComponent implements OnInit {
           error: (error) => {
             this.notificationService.error('Failed to delete project');
             console.error('Error deleting project:', error);
+          }
+        });
+      }
+    });
+  }
+
+  onTransferEngineer(project: any): void {
+    const dialogRef = this.dialog.open(TransferEngineerComponent, {
+      data: {
+        projectId: project._id,
+        currentEngineer: project.assignedTo
+      },
+      width: '500px',
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.engineerId) {
+        this.projectService.transferEngineer(project._id, result.engineerId).subscribe({
+          next: (response) => {
+            if (response.success) {
+              this.notificationService.success('Engineer transferred successfully');
+              this.loadData();
+            }
+          },
+          error: (error) => {
+            this.notificationService.error('Failed to transfer engineer');
+            console.error('Transfer failed:', error);
           }
         });
       }

@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, Input, OnInit, signal } from '@angular/core';
+import { Component, EventEmitter, inject, Input, OnInit, Output, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
@@ -9,11 +10,13 @@ import { ToastrService } from 'ngx-toastr';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
+import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-lpo-list',
@@ -31,11 +34,13 @@ import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/co
 })
 export class LpoListComponent implements OnInit {
   @Input() purchaseId?: string; // Optional input for filtering by purchase ID
+  @Output() lpoListUpdated = new EventEmitter<void>(); // Emit when LPO list changes (revoke, create, etc.)
 
   private router = inject(Router);
   private paginationService = inject(PaginationService);
   private purchaseService = inject(PurchaseService);
   private purchaseOrderService = inject(PurchaseOrderService);
+  private grnService = inject(GrnService);
   private notificationService = inject(ToastrService);
 
   tableData = signal<any[]>([]);
@@ -87,6 +92,27 @@ export class LpoListComponent implements OnInit {
         key: 'totalLpoValue',
         label: 'LPO Value',
         type: 'text',
+        cellRenderer: (item: any) => {
+          const value =
+            typeof item.totalLpoValue === 'number'
+              ? item.totalLpoValue
+              : parseFloat(item.totalLpoValue) || 0;
+          const currency =
+            item.currency ||
+            item.quoteId?.currency ||
+            item.quoteId?.dealData?.currency ||
+            item.purchaseId?.jobId?.quoteId?.currency ||
+            item.purchaseId?.jobId?.quoteId?.dealData?.currency ||
+            '';
+          const formattedValue = value.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          if (currency) {
+            return `${formattedValue} ${currency}`;
+          }
+          return formattedValue;
+        }
       },
       {
         key: 'createdBy.firstName',
@@ -96,29 +122,67 @@ export class LpoListComponent implements OnInit {
       {
         key: 'poStatus',
         label: 'Status',
-        type: 'statusDropdown',
+        type: 'status',
         headerClass: 'text-center',
-        statusOptions: ['Open', 'Hold', 'Closed', 'Cancelled'],
-        confirmationMessage: (oldValue: string, newValue: string) => 
-          `Are you sure you want to change Purchase Order status from "${oldValue}" to "${newValue}"?`
       },
       {
-        key: 'actions',
-        label: 'View/Download',
+        key: 'comments',
+        label: 'Comments',
+        type: 'text',
+        headerClass: 'text-center',
+        cellRenderer: (item: any) => {
+          if (item.approvedHistory && item.approvedHistory.length > 0) {
+            const lastApproval = item.approvedHistory[item.approvedHistory.length - 1];
+            return lastApproval.reason || '-';
+          }
+          if (item.rejectedHistory && item.rejectedHistory.length > 0) {
+            const lastRejection = item.rejectedHistory[item.rejectedHistory.length - 1];
+            return lastRejection.reason || '-';
+          }
+          return '-';
+        }
+      },
+      {
+        key: 'sendForApproval',
+        label: 'Send for Approval',
         type: 'action',
         headerClass: '!text-center',
         actions: [
           {
+            icon: 'heroPaperAirplane',
+            tooltip: 'Send for Approval',
+            action: 'sendForApproval',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-green-500 hover:border-green-700 text-green-500 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus === 'Draft'
+          },
+        ]
+      },
+      {
+        key: 'actions',
+        label: 'Actions',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroPencil',
+            tooltip: 'Edit LPO',
+            action: 'editLpo',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-blue-300 hover:border-blue-500 text-blue-600 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus === 'Draft'
+          },
+          {
             icon: 'heroEye',
             tooltip: 'View LPO',
             action: 'viewLpo',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus === 'Approved'
           },
           {
             icon: 'heroArrowDownTray',
             tooltip: 'Download LPO',
             action: 'downloadLpo',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium'
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus === 'Approved'
           },
         ]
       },
@@ -132,7 +196,45 @@ export class LpoListComponent implements OnInit {
             icon: 'heroPaperAirplane',
             tooltip: 'Re Issue',
             action: 'reIssue',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-500 hover:border-orange-700 text-orange-500 text-sm rounded-full font-medium'
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-500 hover:border-orange-700 text-orange-500 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus !== 'Draft' && item.poStatus !== 'Approved'
+          },
+        ]
+      },
+      {
+        key: 'actions',
+        label: 'Revoke LPO',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroTrash',
+            tooltip: 'Revoke LPO',
+            action: 'revokeLpo',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-red-500 hover:border-red-700 text-red-500 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus !== 'Approved'
+          },
+        ]
+      },
+      {
+        key: 'grn',
+        label: 'GRN',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroClipboardDocumentCheck',
+            tooltip: 'Create GRN',
+            action: 'createGrn',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-green-500 hover:border-green-700 text-green-500 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus === 'Approved' && !item.hasGrn
+          },
+          {
+            icon: 'heroEye',
+            tooltip: 'View GRN',
+            action: 'viewGrn',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-blue-500 hover:border-blue-700 text-blue-500 text-sm rounded-full font-medium',
+            condition: (item: any) => item.poStatus === 'Approved' && item.hasGrn
           },
         ]
       },
@@ -147,7 +249,7 @@ export class LpoListComponent implements OnInit {
             tooltip: 'Upload Invoice',
             action: 'uploadInvoice',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-violet-500 hover:border-violet-700 text-violet-500 text-sm rounded-full font-medium',
-            condition: (item: any) => item.poStatus === 'Closed'
+            condition: (item: any) => item.poStatus === 'Approved'
           },
         ],
 
@@ -155,7 +257,7 @@ export class LpoListComponent implements OnInit {
     ]
 
     this.defaultColumns = [
-      'poDate', 'supplierId.supplierName', 'poNo', 'jobId.jobId', 'totalLpoValue', 'createdBy.firstName', 'poStatus', 'actions'
+      'poDate', 'supplierId.supplierName', 'poNo', 'jobId.jobId', 'totalLpoValue', 'createdBy.firstName', 'poStatus', 'comments', 'sendForApproval', 'grn', 'actions'
     ];
   }
 
@@ -177,9 +279,12 @@ export class LpoListComponent implements OnInit {
     this.purchaseOrderService.getAllPurchaseOrders(params).subscribe({
       next: (response) => {
         if (response.success) {
-          this.tableData.set(response.data);
-          this.totalItems.set(response.pagination.total);
-          this.isEmpty.set(this.tableData().length === 0);
+          const lpos = response.data;
+          this.checkGrnExistence(lpos).then((enrichedLpos) => {
+            this.tableData.set(enrichedLpos);
+            this.totalItems.set(response.pagination.total);
+            this.isEmpty.set(enrichedLpos.length === 0);
+          });
         }
         this.isLoading.set(false);
       },
@@ -189,6 +294,28 @@ export class LpoListComponent implements OnInit {
         this.isLoading.set(false);
       }
     });
+  }
+
+  async checkGrnExistence(lpos: any[]): Promise<any[]> {
+    const enrichedLpos = await Promise.all(
+      lpos.map(async (lpo) => {
+        try {
+          const response = await firstValueFrom(this.grnService.getGRNByLpoId(lpo._id));
+          return {
+            ...lpo,
+            hasGrn: response?.success && response?.data,
+            grnId: response?.success && response?.data ? response.data._id : null
+          };
+        } catch (error) {
+          return {
+            ...lpo,
+            hasGrn: false,
+            grnId: null
+          };
+        }
+      })
+    );
+    return enrichedLpos;
   }
 
   viewPurchaseDetails(purchase: any): void {
@@ -202,6 +329,9 @@ export class LpoListComponent implements OnInit {
   onActionClick(event: { action: string; item: any }): void {
     const { action, item } = event;
     switch (action) {
+      case 'editLpo':
+        this.editLpo(item);
+        break;
       case 'viewLpo':
         this.viewLpo(item);
         break;
@@ -217,12 +347,31 @@ export class LpoListComponent implements OnInit {
       case 'uploadInvoice':
         this.uploadInvoice(item);
         break;
+      case 'sendForApproval':
+        this.sendForApproval(item);
+        break;
       case 'viewPurchase':
         this.viewPurchaseDetails(item);
         break;
       case 'viewDocuments':
         this.viewDocuments(item);
         break;
+      case 'revokeLpo':
+        this.revokeLpo(item);
+        break;
+      case 'createGrn':
+        this.createGrn(item);
+        break;
+      case 'viewGrn':
+        this.viewGrn(item);
+        break;
+    }
+  }
+
+  editLpo(lpo: any): void {
+    if (lpo.purchaseId) {
+      const purchaseId = lpo.purchaseId._id || lpo.purchaseId;
+      this.router.navigate(['/purchase/issue-lpo', purchaseId, 'edit', lpo._id]);
     }
   }
 
@@ -230,7 +379,7 @@ export class LpoListComponent implements OnInit {
     const pdfDoc = await this.purchaseService.generatePDF(lpo, true)
     pdfDoc.getBlob((blob: Blob) => {
       let url = window.URL.createObjectURL(blob);
-      this._dialog.open(QuotationPreviewComponent, { data: { url: url, formatedQuote: lpo, type: 'purchase' } });
+      this._dialog.open(PdfPreviewComponent, { data: { url: url, formatedQuote: lpo, type: 'purchase' } });
     });
   }
 
@@ -241,9 +390,65 @@ export class LpoListComponent implements OnInit {
   }
 
   reIssueLpo(lpo: any): void {
-    console.log('Re-issuing LPO:', lpo);
-    // Navigate to re-issue LPO page
-    this.router.navigate(['/purchase-order/re-issue', lpo._id]);
+    if (lpo.purchaseId) {
+      const purchaseId = lpo.purchaseId._id || lpo.purchaseId;
+      this.router.navigate(['/purchase/issue-lpo', purchaseId, 'reissue', lpo._id]);
+    }
+  }
+
+  createGrn(lpo: any): void {
+    this.router.navigate(['/purchase-order/create-grn', lpo._id]);
+  }
+
+  viewGrn(lpo: any): void {
+    if (lpo.grnId) {
+      this.router.navigate(['/purchase-order/view-grn', lpo.grnId]);
+    } else {
+      this.grnService.getGRNByLpoId(lpo._id).subscribe({
+        next: (response: any) => {
+          if (response.success && response.data) {
+            this.router.navigate(['/purchase-order/view-grn', response.data._id]);
+          } else {
+            this.notificationService.error('GRN not found');
+          }
+        },
+        error: () => {
+          this.notificationService.error('Failed to load GRN');
+        }
+      });
+    }
+  }
+
+  revokeLpo(lpo: any): void {
+    const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Revoke LPO',
+        description: `Are you sure you want to revoke (permanently delete) LPO "${lpo.poNo}"? This action cannot be undone and will permanently delete the LPO.`,
+        icon: 'heroExclamationCircle',
+        IconColor: 'red'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+      if (confirmed) {
+        this.purchaseOrderService.revokePurchaseOrder(lpo._id).subscribe({
+          next: (response: any) => {
+            if (response.success) {
+              this.notificationService.success('LPO revoked successfully');
+              this.getPurchases(); // Refresh the list
+              // Notify parent component that LPO list has been updated
+              this.lpoListUpdated.emit();
+            } else {
+              this.notificationService.error('Failed to revoke LPO');
+            }
+          },
+          error: (error: any) => {
+            console.error('Error revoking LPO:', error);
+            this.notificationService.error('Failed to revoke LPO: ' + (error.error?.message || error.message));
+          }
+        });
+      }
+    });
   }
 
   viewInvoice(lpo: any): void {
@@ -305,15 +510,40 @@ export class LpoListComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result && result.action === 'save') {
-        console.log('Files uploaded:', result.files);
+        console.log('Files to upload:', result.files);
         
-        // Update the LPO with new invoice files
-        const updateData = {
-          supplierInvoices: result.files
-        };
+        // Create FormData for file upload
+        const formData = new FormData();
+        
+        // Separate new files (with File objects) from existing files (metadata only)
+        const newFiles: File[] = [];
+        const existingFiles: any[] = [];
+        
+        result.files.forEach((file: any) => {
+          if (file.file) {
+            // New file to upload (has File object)
+            newFiles.push(file.file);
+          } else if (file.isUploaded && file.fileName) {
+            // Existing file - keep metadata (no File object, but has fileName)
+            existingFiles.push({
+              fileName: file.fileName,
+              originalname: file.originalname
+            });
+          }
+        });
+        
+        // Append new files to FormData (backend expects 'files' field name)
+        newFiles.forEach(file => {
+          formData.append('files', file);
+        });
+        
+        // Append existing files metadata if any
+        if (existingFiles.length > 0) {
+          formData.append('existingFiles', JSON.stringify(existingFiles));
+        }
         
         // Call service to update LPO with invoice files
-        this.purchaseOrderService.updateSupplierInvoices(lpo._id, updateData).subscribe({
+        this.purchaseOrderService.updateSupplierInvoices(lpo._id, formData).subscribe({
           next: (response: any) => {
             if (response.success) {
               this.notificationService.success('Supplier invoices uploaded successfully');
@@ -333,6 +563,23 @@ export class LpoListComponent implements OnInit {
 
   viewDocuments(purchase: any): void {
     console.log('Viewing documents for purchase:', purchase);
+  }
+
+  sendForApproval(lpo: any): void {
+    this.purchaseOrderService.updatePurchaseOrderStatus(lpo._id, 'Pending for Approval').subscribe({
+      next: (response: any) => {
+        if (response.success) {
+          this.notificationService.success('LPO sent for approval successfully');
+          this.getPurchases();
+        } else {
+          this.notificationService.error('Failed to send LPO for approval');
+        }
+      },
+      error: (error: any) => {
+        console.error('Error sending LPO for approval:', error);
+        this.notificationService.error('Failed to send LPO for approval: ' + (error.error?.message || error.message));
+      }
+    });
   }
 
   onSearch(searchInput: any) {

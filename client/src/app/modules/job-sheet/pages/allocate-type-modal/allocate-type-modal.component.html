@@ -56,6 +56,27 @@
     </div>
   </div>
 
+  <!-- Procurement Person Selection -->
+  <div class="mt-6" *ngIf="shouldShowProcurementPerson()">
+    <label class="block text-sm font-medium text-gray-700 mb-2">
+      Procurement Person <span class="text-red-500">*</span>
+    </label>
+    <ng-select
+      [items]="employeeOptions"
+      [(ngModel)]="selectedProcurementPerson"
+      (ngModelChange)="onProcurementPersonChange()"
+      placeholder="Select procurement person..."
+      [clearable]="true"
+      bindLabel="label"
+      bindValue="value"
+      [class.border-red-500]="procurementPersonError"
+      class="w-full">
+    </ng-select>
+    <div *ngIf="procurementPersonError" class="mt-1 text-sm text-red-500">
+      Procurement person is required
+    </div>
+  </div>
+
   <!-- Action Buttons -->
   <div class="mt-8 flex gap-3 justify-end">
     <button 
@@ -65,7 +86,7 @@
     </button>
     <button 
       class="px-6 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200"
-      [disabled]="!selectedAllocationType"
+      [disabled]="!selectedAllocationType || (shouldShowProcurementPerson() && !selectedProcurementPerson)"
       (click)="onConfirm()">
       Confirm Selection
     </button>

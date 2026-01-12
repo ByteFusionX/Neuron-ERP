@@ -123,4 +123,12 @@ export class ProfileService {
   deleteCustomerDepartment(data: { dataId: string, employee: string }): Observable<any> {
     return this.http.post<any>(`${this.api}/department/delete-customer`,data)
   }
+
+  createPlaceOfDelivery(note: NotePost): Observable<Notes> {
+    return this.http.post<Notes>(`${this.api}/note/placeOfDelivery`, note)
+  }
+
+  createShippingTerms(note: NotePost): Observable<Notes> {
+    return this.http.post<Notes>(`${this.api}/note/shippingTerms`, note)
+  }
 }

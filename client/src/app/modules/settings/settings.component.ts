@@ -498,6 +498,8 @@ export class SettingsComponnet {
         return 'Claim';
       case WorkflowFeature.PROJECT_CLAIM:
         return 'Project Claim';
+      case WorkflowFeature.PURCHASE_APPROVAL:
+        return 'Purchase Approval';
       default:
         return feature;
     }

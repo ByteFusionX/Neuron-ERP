@@ -1,0 +1,49 @@
+<div class="flex items-center justify-center">
+  <div class="bg-white rounded-lg shadow-lg w-full">
+    <div class="border-b px-4 py-3 flex justify-between items-center">
+      <h3 class="text-lg font-semibold text-gray-900">Transfer Procurement Person</h3>
+      <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center hover:bg-gray-300 transition-colors" (click)="onClose()">
+        <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+      </button>
+    </div>
+    <div class="px-4 py-5">
+      <div *ngIf="data.currentProcurementPerson" class="mb-4 p-3 bg-gray-50 rounded-md">
+        <p class="text-sm text-gray-600 mb-1">Current Procurement Person:</p>
+        <p class="text-base font-medium text-gray-900">
+          {{ data.currentProcurementPerson.firstName }} {{ data.currentProcurementPerson.lastName }}
+        </p>
+      </div>
+      <label for="employee-select" class="block text-sm font-medium text-gray-700 mb-2">Select New Procurement Person</label>
+      <div class="mt-1">
+        <ng-select 
+          id="employee" 
+          class="filter" 
+          placeholder="Select employee..." 
+          appendTo="body" 
+          [(ngModel)]="selectedEmployee"
+          [ngClass]="{'border-red-500': showError}">
+          <ng-option *ngFor="let employee of employees$ | async"
+            [value]="employee._id">
+            {{ employee.firstName }} {{ employee.lastName }}
+          </ng-option>
+        </ng-select>
+        <div *ngIf="showError" class="text-red-500 mt-1 text-sm">
+          Please select an employee.
+        </div>
+      </div>
+    </div>
+    <div class="border-t px-4 py-3 flex justify-end gap-3">
+      <button 
+        class="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+        (click)="onClose()">
+        Cancel
+      </button>
+      <button 
+        class="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 transition-colors"
+        (click)="onSubmit()">
+        Transfer
+      </button>
+    </div>
+  </div>
+</div>
+

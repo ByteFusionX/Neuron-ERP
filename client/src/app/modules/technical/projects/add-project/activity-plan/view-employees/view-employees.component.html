@@ -1,0 +1,30 @@
+<div class="bg-black bg-opacity-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg shadow-lg max-w-lg w-full p-6">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-bold">Included Employees</h2>
+      <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
+        <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+      </button>
+    </div>
+    <div class="space-y-2 max-h-[400px] overflow-y-auto">
+      @if(data.employees && data.employees.length > 0) {
+        @for(emp of data.employees; track emp._id || emp) {
+          <div class="p-3 bg-gray-100 rounded">
+            @if(typeof emp === 'string') {
+              <p class="text-gray-700">{{ emp }}</p>
+            } @else {
+              <p class="text-gray-700 font-medium">{{ emp.firstName || '' }} {{ emp.lastName || '' }}</p>
+              @if(emp.designation) {
+                <p class="text-sm text-gray-500">{{ emp.designation }}</p>
+              }
+            }
+          </div>
+        }
+      } @else {
+        <div class="p-4 bg-gray-100 rounded text-center">
+          <p class="text-gray-500">No employees assigned</p>
+        </div>
+      }
+    </div>
+  </div>
+</div>

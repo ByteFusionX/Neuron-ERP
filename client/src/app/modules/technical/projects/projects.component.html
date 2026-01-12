@@ -7,6 +7,7 @@
   [totalItems]="totalItems()"
   [tableId]="'projects-table'"
   (filterChange)="onFilterChange($event)"
+  (paginationChange)="onPaginationChange($event)"
   (actionClick)="onActionClick($event)"
   [title]="currentPage"
 >

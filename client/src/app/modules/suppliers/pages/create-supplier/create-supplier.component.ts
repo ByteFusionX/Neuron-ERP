@@ -126,7 +126,7 @@ export class CreateSupplierComponent implements OnInit {
     this.supplierForm.patchValue({
       supplierName: supplier.supplierName || '',
       supplierType: supplier.supplierType || '',
-      category: supplier.category || '',
+      category: supplier.category?._id || supplier.category || '',
       creditDays: supplier.creditDays || 30,
       creditValue: supplier.creditValue || 0
     });

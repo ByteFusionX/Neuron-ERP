@@ -38,9 +38,16 @@
                     Material Request from {{ purchase.mrRequest.engineer.firstName }} {{ purchase.mrRequest.engineer.lastName }}
                   </h4>
                   <p class="text-sm text-blue-700 mb-2">{{ purchase.mrRequest.message }}</p>
-                  <p class="text-xs text-blue-600">
-                    Requested on {{ formatDate(purchase.mrRequest.createdDate) }}
-                  </p>
+                  <div class="flex items-center gap-4 mt-2">
+                    <p class="text-xs text-blue-600">
+                      Requested on {{ formatDate(purchase.mrRequest.createdDate) }}
+                    </p>
+                    @if(purchase.mrRequest.totalPurchase !== undefined && purchase.mrRequest.totalPurchase !== null){
+                      <p class="text-xs font-medium text-blue-900">
+                        Total Proposed Amount: {{ purchase.mrRequest.totalPurchase | numberFormatter }}
+                      </p>
+                    }
+                  </div>
                 </div>
               </div>
             </div>

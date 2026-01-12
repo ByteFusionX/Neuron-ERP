@@ -40,4 +40,11 @@ export class ProjectService {
     return this.http.post<ProjectResponse>(`${this.api}/project/getProjectAndAMCJobs`, filterParams);
   }
 
+  transferEngineer(projectId: string, engineerId: string): Observable<any> {
+    return this.http.post<any>(`${this.api}/technical/transferEngineer`, {
+      projectId,
+      engineerId
+    })
+  }
+
 } 

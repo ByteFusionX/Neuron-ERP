@@ -215,6 +215,24 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       ]
     },
     {
+      id: 'supplierLpo',
+      label: 'Supplier LPO',
+      icon: 'heroClipboardDocumentList',
+      hasDropdown: true,
+      children: [
+        {
+          id: 'pendingLpoApproval',
+          label: 'LPO Approval Requests',
+          route: '/purchase-order/pending-approval',
+        },
+        {
+          id: 'approvedLpos',
+          label: 'Approved LPOs',
+          route: '/purchase-order/approved',
+        },
+      ]
+    },
+    {
       id: 'technical',
       label: 'Technical',
       icon: 'heroWrenchScrewdriver',
@@ -241,9 +259,9 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           notificationKey: 'purchaseCount'
         },
         {
-          id: 'mrRequests',
-          label: 'MR Requests',
-          route: '/technical/mr-requests',
+          id: 'mrApprovalRequests',
+          label: 'MR Approval Requests',
+          route: '/technical/mr-approval-requests',
           notificationKey: 'purchaseCount'
         },
       ]
@@ -306,11 +324,6 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           label: 'All Products',
           route: '/inventory/products',
           notificationKey: 'dealSheetCount'
-        },
-        {
-          id: 'blockedProducts',
-          label: 'Blocked Products',
-          route: '/inventory/blocked-products'
         },
         {
           id: 'stockEntries',

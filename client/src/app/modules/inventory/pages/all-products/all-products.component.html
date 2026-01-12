@@ -1,0 +1,23 @@
+<data-table
+  [data]="tableData()"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading()"
+  [isEmpty]="isEmpty()"
+  [totalItems]="totalItems()"
+  [tableId]="'all-products-table'"
+  [title]="'All Products'"
+  (rowClick)="onRowClick($event)"
+  (actionClick)="onActionClick($event)"
+  (filterChange)="onFilterChange($event)"
+  (paginationChange)="onPaginationChange($event)">
+
+  <ng-template #sideColumn>
+    <div class="flex flex-wrap items-center gap-3 justify-end">
+      <app-btn theme="primary" (buttonClick)="onCreateProduct()">
+        <ng-icon name="heroPlus"></ng-icon>
+        Create Part No.
+      </app-btn>
+    </div>
+  </ng-template>
+</data-table>

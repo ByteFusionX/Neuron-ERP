@@ -17,7 +17,7 @@ import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { OptionalItems, Quotatation, QuoteItem, getQuotatation, quotatationForm } from 'src/app/shared/interfaces/quotation.interface';
 import { fadeInOut } from 'src/app/shared/animations/animations';
 import { Note, Notes } from 'src/app/shared/interfaces/notes.interface';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 import { OptionalItemsComponent } from '../../../../shared/components/optional-items/optional-items.component';
@@ -286,7 +286,7 @@ export class QuotationEditComponent {
         pdfDoc.getBlob((blob: Blob) => {
           let url = window.URL.createObjectURL(blob);
           this.isPreviewing = false;
-          this._dialog.open(QuotationPreviewComponent, { data: { url: url, formatedQuote: finalQuoteData } });
+          this._dialog.open(PdfPreviewComponent, { data: { url: url, formatedQuote: finalQuoteData } });
         });
 
       } catch (error) {

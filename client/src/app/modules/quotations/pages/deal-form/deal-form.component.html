@@ -109,7 +109,7 @@
                 class="border px-6 py-3">
                 <input appNoLeadingSpace formControlName="unitCost" *ngIf="detail.get('dealSelected')?.value"
                   class="w-24 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  type="number" placeholder="00.00">
+                  type="number" placeholder="00.00" (input)="onUnitCostChange(i, j)">
                 <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitCost')?.value.toFixed(2) }}</p>
               </td>
 
@@ -140,13 +140,12 @@
               </td>
 
               <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                <select formControlName="supplierId"
-                  class="w-[200px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
-                  <option value="">Select Supplier</option>
-                  <option *ngFor="let supplier of suppliers" [value]="supplier._id">
+                <ng-select [class.border-red-500]="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted" class="form border"
+                  bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
+                  <ng-option *ngFor="let supplier of suppliers" [value]="supplier._id">
                     {{ supplier.supplierName }}
-                  </option>
-                </select>
+                  </ng-option>
+                </ng-select>
                 <div *ngIf="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted"
                   class="text-red-500 text-xs">
                   Supplier is required
@@ -177,14 +176,12 @@
               </div>
             </div>
             <div *ngIf="cost.get('type')?.value === 'Supplier Discount'" class="w-4/6">
-              <select formControlName="supplierId"
-                [class.border-red-500]="cost.get('supplierId')?.invalid && isSubmitted"
-                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
-                <option value="">Select Supplier</option>
-                <option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
+              <ng-select [class.border-red-500]="cost.get('supplierId')?.invalid && isSubmitted" class="form border"
+                bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
+                <ng-option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
                   {{supplier.supplierName}}
-                </option>
-              </select>
+                </ng-option>
+              </ng-select>
               <div *ngIf="cost.get('supplierId')?.hasError('required') && isSubmitted" 
                 class="text-red-500 text-xs mt-1">
                 Supplier is required

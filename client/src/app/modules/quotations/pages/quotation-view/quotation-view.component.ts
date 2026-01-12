@@ -8,7 +8,7 @@ import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
@@ -100,7 +100,7 @@ export class QuotationViewComponent {
       pdf.getBlob((blob: Blob) => {
         let url = window.URL.createObjectURL(blob);
         this.isPreviewing = false;
-        let dialogRef = this._dialog.open(QuotationPreviewComponent,
+        let dialogRef = this._dialog.open(PdfPreviewComponent,
           { data: { url: url, formatedQuote: quoteData }});
       });
     });

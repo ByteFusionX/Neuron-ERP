@@ -1,0 +1,85 @@
+<div class="bg-white rounded-lg shadow-lg w-full max-w-md">
+  <div class="border-b px-4 py-3 flex justify-between items-center">
+    <h3 class="text-lg font-semibold text-gray-900">Assign To Engineer</h3>
+    <button 
+      type="button"
+      class="bg-gray-200 rounded-lg p-1 flex items-center justify-center hover:bg-gray-300 transition-colors" 
+      (click)="onCancel()">
+      <ng-icon name="heroXMark" class="text-md"></ng-icon>
+    </button>
+  </div>
+  
+  <form [formGroup]="form" (ngSubmit)="onSubmit()" class="px-4 py-5">
+    <div class="mb-4">
+      <label for="assign-engineer" class="block text-sm font-medium text-gray-700 mb-1">
+        Assign To Engineer <span class="text-red-500">*</span>
+      </label>
+      <p-dropdown
+        id="assign-engineer"
+        class="w-full"
+        [options]="engineerOptions"
+        formControlName="engineerId"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select Engineer"
+        [ngClass]="{'ng-invalid ng-dirty': form.get('engineerId')?.invalid && form.get('engineerId')?.touched}"
+      ></p-dropdown>
+      <div 
+        *ngIf="form.get('engineerId')?.invalid && form.get('engineerId')?.touched" 
+        class="text-red-500 mt-1 text-sm">
+        Please select an engineer.
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label for="assign-priority" class="block text-sm font-medium text-gray-700 mb-1">
+        Priority <span class="text-red-500">*</span>
+      </label>
+      <p-dropdown
+        id="assign-priority"
+        class="w-full"
+        [options]="priorityOptions"
+        formControlName="priority"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select Priority"
+        [ngClass]="{'ng-invalid ng-dirty': form.get('priority')?.invalid && form.get('priority')?.touched}"
+      ></p-dropdown>
+      <div 
+        *ngIf="form.get('priority')?.invalid && form.get('priority')?.touched" 
+        class="text-red-500 mt-1 text-sm">
+        Please select a priority.
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label for="assign-comment" class="block text-sm font-medium text-gray-700 mb-1">Comment</label>
+      <textarea
+        id="assign-comment"
+        formControlName="comment"
+        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white mt-1"
+        rows="3"
+        placeholder="Enter comment (optional)..."
+      ></textarea>
+    </div>
+
+    <div class="border-t px-4 py-3 flex justify-end gap-2 -mx-4 -mb-5">
+      <button 
+        type="button" 
+        class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors" 
+        (click)="onCancel()">
+        Cancel
+      </button>
+      <button 
+        type="submit" 
+        class="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+        [disabled]="form.invalid">
+        Submit
+      </button>
+    </div>
+  </form>
+</div>
+
+
+
+

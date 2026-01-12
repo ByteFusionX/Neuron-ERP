@@ -411,12 +411,6 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
                 }
             },
             {
-                $unwind: {
-                    path: '$supplierDetails',
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            {
                 $lookup: {
                     from: 'suppliers',
                     localField: 'dealData.additionalCosts.supplierId',
@@ -426,6 +420,44 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
             },
             {
                 $addFields: {
+                    'dealData.updatedItems': {
+                        $map: {
+                            input: '$dealData.updatedItems',
+                            as: 'item',
+                            in: {
+                                $mergeObjects: [
+                                    '$$item',
+                                    {
+                                        itemDetails: {
+                                            $map: {
+                                                input: '$$item.itemDetails',
+                                                as: 'itemDetail',
+                                                in: {
+                                                    $mergeObjects: [
+                                                        '$$itemDetail',
+                                                        {
+                                                            supplierDetails: {
+                                                                $arrayElemAt: [
+                                                                    {
+                                                                        $filter: {
+                                                                            input: '$supplierDetails',
+                                                                            as: 'supplier',
+                                                                            cond: { $eq: ['$$supplier._id', '$$itemDetail.supplierId'] }
+                                                                        }
+                                                                    },
+                                                                    0
+                                                                ]
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
                     'dealData.additionalCosts': {
                         $map: {
                             input: '$dealData.additionalCosts',
@@ -638,12 +670,6 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                 }
             },
             {
-                $unwind: {
-                    path: '$supplierDetails',
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            {
                 $lookup: {
                     from: 'suppliers',
                     localField: 'dealData.additionalCosts.supplierId',
@@ -653,6 +679,44 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             },
             {
                 $addFields: {
+                    'dealData.updatedItems': {
+                        $map: {
+                            input: '$dealData.updatedItems',
+                            as: 'item',
+                            in: {
+                                $mergeObjects: [
+                                    '$$item',
+                                    {
+                                        itemDetails: {
+                                            $map: {
+                                                input: '$$item.itemDetails',
+                                                as: 'itemDetail',
+                                                in: {
+                                                    $mergeObjects: [
+                                                        '$$itemDetail',
+                                                        {
+                                                            supplierDetails: {
+                                                                $arrayElemAt: [
+                                                                    {
+                                                                        $filter: {
+                                                                            input: '$supplierDetails',
+                                                                            as: 'supplier',
+                                                                            cond: { $eq: ['$$supplier._id', '$$itemDetail.supplierId'] }
+                                                                        }
+                                                                    },
+                                                                    0
+                                                                ]
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
                     'dealData.additionalCosts': {
                         $map: {
                             input: '$dealData.additionalCosts',

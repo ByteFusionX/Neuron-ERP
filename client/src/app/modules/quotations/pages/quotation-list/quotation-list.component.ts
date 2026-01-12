@@ -172,8 +172,8 @@ export class QuotationListComponent {
     const queryParams: any = {};
     
     // Add pagination params
-    if (this.page !== 1) queryParams.page = this.page;
-    if (this.row !== 10) queryParams.row = this.row;
+    queryParams.page = this.page !== 1 ? this.page : null;
+    queryParams.row = this.row !== 10 ? this.row : null;
     
     // Add filter params (only if they have values)
     queryParams.search = this.searchQuery ? this.searchQuery : null;

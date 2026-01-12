@@ -3,6 +3,7 @@ import { Component, Inject, OnInit, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 
 interface PurchaseRequest {
   _id: string;
@@ -25,6 +26,7 @@ interface PurchaseRequest {
       lastName: string;
     };
     message: string;
+    totalPurchase?: number;
     createdDate: Date;
   };
 }
@@ -35,7 +37,8 @@ interface PurchaseRequest {
   imports: [
     CommonModule,
     IconsModule,
-    ButtonComponent
+    ButtonComponent,
+    NumberFormatterPipe
   ],
   templateUrl: './purchase-request-modal.component.html',
   styleUrl: './purchase-request-modal.component.css'

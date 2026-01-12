@@ -66,6 +66,18 @@ export const updateNote = async (req: Request, res: Response, next: NextFunction
                 { $set: { "customerNotes.$.note": note } },
                 { new: true }
             );
+        } else if (noteType == 'placeOfDelivery') {
+            updateResult = await Notes.findOneAndUpdate(
+                { "placeOfDelivery._id": noteId },
+                { $set: { "placeOfDelivery.$.note": note } },
+                { new: true }
+            );
+        } else if (noteType == 'shippingTerms') {
+            updateResult = await Notes.findOneAndUpdate(
+                { "shippingTerms._id": noteId },
+                { $set: { "shippingTerms.$.note": note } },
+                { new: true }
+            );
         } else {
             updateResult = await Notes.findOneAndUpdate(
                 { "termsAndConditions._id": noteId },
@@ -103,13 +115,65 @@ next(error)
     }
 }
 
+export const createPlaceOfDelivery = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { note } = req.body;
+
+        if (!note) {
+            return res.status(400).json({ message: "Note is required" });
+        }
+
+        const newNote = {
+            _id: new mongoose.Types.ObjectId(),
+            note,
+        };
+
+        const updatedNotes = await Notes.findOneAndUpdate(
+            {},
+            { $push: { placeOfDelivery: newNote } },
+            { new: true, upsert: true }
+        );
+        res.status(200).json(updatedNotes);
+    } catch (error) {
+        console.log(error)
+next(error)
+    }
+}
+
+export const createShippingTerms = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { note } = req.body;
+
+        if (!note) {
+            return res.status(400).json({ message: "Note is required" });
+        }
+
+        const newNote = {
+            _id: new mongoose.Types.ObjectId(),
+            note,
+        };
+
+        const updatedNotes = await Notes.findOneAndUpdate(
+            {},
+            { $push: { shippingTerms: newNote } },
+            { new: true, upsert: true }
+        );
+        res.status(200).json(updatedNotes);
+    } catch (error) {
+        console.log(error)
+next(error)
+    }
+}
+
 export const getNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const notes = await Notes.findOne();
         if(!notes){
             const emptyNote = {
                 customerNotes: [],
-                termsAndConditions: []
+                termsAndConditions: [],
+                placeOfDelivery: [],
+                shippingTerms: []
             };
             const newNotes = await Notes.create(emptyNote);
             return res.status(200).json(newNotes);

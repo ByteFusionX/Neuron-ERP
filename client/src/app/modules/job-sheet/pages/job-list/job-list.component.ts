@@ -14,14 +14,14 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import { getQuotatation, Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { LoadingBarService } from '@ngx-loading-bar/core';
 import { getCreators } from 'src/app/shared/interfaces/employee.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import * as pdfMake from 'pdfmake/build/pdfmake';
 import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
 import { ActivatedRoute, Router } from '@angular/router';
-import { NgIf, NgFor, AsyncPipe } from '@angular/common';
+import { NgIf, NgFor, AsyncPipe, DatePipe } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
 import { GenerateReportComponent } from '../../../../shared/components/generate-report/generate-report.component';
@@ -40,7 +40,7 @@ import { MrRequestComponent } from 'src/app/modules/purchase/pages/mr-request/mr
   templateUrl: './job-list.component.html',
   styleUrls: ['./job-list.component.css'],
   providers: [NumberFormatterPipe],
-  imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, NumberFormatterPipe_1]
+  imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, DatePipe, NumberFormatterPipe_1]
 })
 export class JobListComponent {
 
@@ -60,6 +60,8 @@ export class JobListComponent {
   total: number = 0;
   page: number = 1;
   row: number = 10;
+  currentMonthIndex: number = new Date().getMonth();
+  currentYear: string = new Date().getFullYear().toString();
 
   private subject = new BehaviorSubject<{ page: number, row: number }>({ page: this.page, row: this.row });
 
@@ -92,12 +94,12 @@ export class JobListComponent {
 
   ngOnInit() {
     this.employees$ = this._jobService.getJobSalesPerson();
-    const currentYear = new Date().getFullYear().toString();
+    this.currentYear = new Date().getFullYear().toString();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const currentMonthIndex = new Date().getMonth();
-    const currentMonthName = monthNames[currentMonthIndex];
+    this.currentMonthIndex = new Date().getMonth();
+    const currentMonthName = monthNames[this.currentMonthIndex];
 
-    this.reportDate = `${currentMonthName} - ${currentYear}`;
+    this.reportDate = `${currentMonthName} - ${this.currentYear}`;
 
     // Read URL parameters
     this.route.queryParams.subscribe(params => {
@@ -122,7 +124,7 @@ export class JobListComponent {
         this.row = data.row;
         // Update URL parameters for pagination
         this.updateUrlParams();
-        this.getAllJobs(currentMonthIndex + 1, currentYear);
+        this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
       })
     );
 
@@ -156,8 +158,8 @@ export class JobListComponent {
   updateUrlParams() {
     const queryParams: any = {};
 
-    if (this.page !== 1) queryParams.page = this.page;
-    if (this.row !== 10) queryParams.row = this.row;
+    queryParams.page = this.page !== 1 ? this.page : null;
+    queryParams.row = this.row !== 10 ? this.row : null;
     queryParams.search = this.searchQuery ? this.searchQuery : null;
     queryParams.employee = this.selectedEmployee;
     queryParams.status = this.selectedStatus;
@@ -174,7 +176,7 @@ export class JobListComponent {
   onfilterApplied() {
     this.page = 1
     this.updateUrlParams();
-    this.getAllJobs();
+    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
   }
 
   ngModelChange() {
@@ -190,10 +192,10 @@ export class JobListComponent {
     this.isLoading = true;
     this.page = 1
     this.updateUrlParams();
-    this.getAllJobs();
+    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
   }
 
-  displayedColumns: string[] = ['jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'lpo', 'lpoValue', 'status', 'action'];
+  displayedColumns: string[] = ['updatedDate', 'jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'lpo', 'lpoValue', 'status', 'action'];
 
   getAllJobs(selectedMonth?: number, selectedYear?: string) {
     this.isLoading = true;
@@ -274,7 +276,7 @@ export class JobListComponent {
   }
 
   onGenerateReport() {
-    this.getAllJobs();
+    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
   }
 
   onViewDealSheet(quoteData: Quotatation, salesPerson: any, customer: any) {
@@ -375,7 +377,7 @@ export class JobListComponent {
       pdf.getBlob((blob: Blob) => {
         let url = window.URL.createObjectURL(blob);
 
-        let dialogRef = this._dialog.open(QuotationPreviewComponent,
+        let dialogRef = this._dialog.open(PdfPreviewComponent,
           { data: { url: url, formatedQuote: quoteData } });
       });
     });
@@ -503,7 +505,7 @@ export class JobListComponent {
 
   onRemoveReport() {
     this.reportDate = '';
-    this.getAllJobs();
+    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
   }
 
   formatNumber(value: any, minimumFractionDigits: number = 2, maximumFractionDigits: number = 2): string {
@@ -551,7 +553,7 @@ export class JobListComponent {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        this.handleAllocationTypeSelection(result.id, result.jobId, result.allocationType);
+        this.handleAllocationTypeSelection(result.id, result.jobId, result.allocationType, result.procurementPerson);
       } else {
         // User cancelled or closed dialog without selection
         console.log('Dialog was cancelled');
@@ -560,18 +562,19 @@ export class JobListComponent {
   }
 
   // Optional: Create a separate method to handle the selection
-  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType): void {
+  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType, procurementPerson?: string): void {
     const data = {
       id,
       jobId,
-      allocationType
+      allocationType,
+      procurementPerson
     };
 
     this._jobService.updateAllocateType(data as any).subscribe({
       next: (res) => {
         if (res.success) {
           this.toast.success('Job Allocated successfully');
-          this.getAllJobs()
+          this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
 
         }
       },
@@ -598,8 +601,8 @@ export class JobListComponent {
       if (result) {
         this._jobService.deleteJob({ dataId: jobId, employeeId: employee.id }).subscribe({
           next: () => {
-            this.toast.success('Job deleted successfully');
-            this.getAllJobs();
+          this.toast.success('Job deleted successfully');
+          this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
           },
           error: (error) => {
             this.toast.error('Failed to delete job');

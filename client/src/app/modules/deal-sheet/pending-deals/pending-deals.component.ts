@@ -1,7 +1,7 @@
 import { Component, ElementRef, QueryList, ViewChildren } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { LoadingBarService } from '@ngx-loading-bar/core';
 import { BehaviorSubject, Subject, Subscription, takeUntil } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -10,7 +10,7 @@ import { getDealSheet, getQuotatation, getQuotation, Quotatation, QuoteItem } fr
 import { ApproveDealComponent } from '../approve-deal/approve-deal.component';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { RejectDealComponent } from '../reject-deal/reject-deal.component';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
@@ -61,6 +61,7 @@ export class PendingDealsComponent {
     private _quoteService: QuotationService,
     private _jobService: JobService,
     private _router: Router,
+    private _route: ActivatedRoute,
     private _dialog: MatDialog,
     private _employeeService: EmployeeService,
     private _notificationService: NotificationService,
@@ -69,11 +70,21 @@ export class PendingDealsComponent {
   ) { }
 
   ngOnInit() {
+    this._route.queryParams.subscribe(params => {
+      this.page = params['page'] ? parseInt(params['page']) : 1;
+      this.row = params['row'] ? parseInt(params['row']) : 10;
+      this.searchQuery = params['search'] || '';
+      this.searchCriteria = params['searchCriteria'] || 'dealId';
+
+      this.subject.next({ page: this.page, row: this.row });
+    });
+
     this.subscriptions.add(
       this.subject.subscribe((data) => {
         this.page = data.page
         this.row = data.row
         this.getDealSheet()
+        this.updateUrlParams();
       })
     )
   }
@@ -102,7 +113,9 @@ export class PendingDealsComponent {
   onSearch() {
     this.isEnter = true
     this.isLoading = true;
+    this.page = 1;
     this.getDealSheet()
+    this.updateUrlParams();
   }
 
   getDealSheet() {
@@ -198,7 +211,7 @@ export class PendingDealsComponent {
       pdf.getBlob((blob: Blob) => {
         let url = window.URL.createObjectURL(blob);
 
-        let dialogRef = this._dialog.open(QuotationPreviewComponent,
+        let dialogRef = this._dialog.open(PdfPreviewComponent,
           { data: { url: url, formatedQuote: quoteData } });
       });
     });
@@ -301,6 +314,22 @@ export class PendingDealsComponent {
 
   onPageNumberClick(event: { page: number, row: number }) {
     this.subject.next(event)
+  }
+
+  updateUrlParams() {
+    const queryParams: any = {};
+    
+    queryParams.page = this.page !== 1 ? this.page : null;
+    queryParams.row = this.row !== 10 ? this.row : null;
+    queryParams.search = this.searchQuery ? this.searchQuery : null;
+    queryParams.searchCriteria = this.searchCriteria !== 'dealId' ? this.searchCriteria : null;
+    
+    this._router.navigate([], {
+      relativeTo: this._route,
+      queryParams: queryParams,
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   onRejectDeal(quoteData: Quotatation, index: number) {

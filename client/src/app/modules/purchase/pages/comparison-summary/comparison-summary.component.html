@@ -1,6 +1,9 @@
 <div class="bg-white m-6 rounded-lg">
     <div class="border-b p-3 px-9 flex justify-between items-center">
         <h3 class="text-md font-medium">Comparison Summary</h3>
+        <button (click)="onBack()" class="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">
+            Back
+        </button>
     </div>
 
 
@@ -29,7 +32,8 @@
                                 [ngClass]="{'bg-violet-100 border border-violet-500': item.comparisons.length > 0}">
                                 <ng-container *ngIf="getApprovedComparison(item)">
                                     <span class="font-medium">
-                                        {{ getApprovedComparison(item)?.totalCost | number:'1.2-2' }}
+                                        {{ getApprovedComparison(item)?.supplierName }} - 
+                                        {{ getApprovedComparison(item)?.totalCost | number:'1.2-2' }} {{ currency() }}
                                     </span>
                                 </ng-container>
                             </td>
@@ -37,7 +41,7 @@
                             <td *ngFor="let comp of item.comparisons" class="px-6 py-4 text-center border">
                                 <span [ngClass]="{ 'text-orange-600 font-semibold': comp.selected }">
                                     {{comp.supplierName}} - 
-                                   {{ comp.totalCost | number:'1.2-2' }}
+                                   {{ comp.totalCost | number:'1.2-2' }} {{ currency() }}
                                 </span>
                             </td>
                         </tr>

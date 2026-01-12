@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { ToastrService } from 'ngx-toastr';
 import { PaginationService } from 'src/app/core/services/pagination.service';
@@ -11,6 +11,9 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
+import { MatDialog } from '@angular/material/dialog';
+import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-pendings',
@@ -27,11 +30,14 @@ import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.
   styleUrl: './pendings-purchase.component.css',
   providers: [PaginationService]
 })
-export class PendingPurchaseComponent implements OnInit {
+export class PendingPurchaseComponent implements OnInit, OnDestroy {
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private paginationService = inject(PaginationService);
   private purchaseService = inject(PurchaseService);
   private notificationService = inject(ToastrService);
+  private dialog = inject(MatDialog);
+  private subscriptions = new Subscription();
 
   tableData = signal<any[]>([]);
   tableColumns: TableColumn[] = [];
@@ -45,10 +51,33 @@ export class PendingPurchaseComponent implements OnInit {
   selectedCategory = signal<string>('');
   selectedStatus = signal<string[]>(['Pending', 'Drafted', 'Rejected']);
   statusOptions: string[] = ['Pending', 'Drafted', 'Rejected'];
+  searchQuery = signal<string>('');
 
   ngOnInit(): void {
-    this.setupTableColumns()
-    this.getPurchases()
+    this.setupTableColumns();
+    this.initializeFromUrlParams();
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  initializeFromUrlParams(): void {
+    this.route.queryParams.subscribe(params => {
+      const page = params['page'] ? parseInt(params['page']) : 1;
+      const row = params['row'] ? parseInt(params['row']) : 10;
+      const search = params['search'] || '';
+
+      this.paginationService.updatePaginationState({
+        page,
+        row,
+        total: this.totalItems()
+      });
+
+      if (search) this.searchQuery.set(search);
+
+      this.getPurchases();
+    });
   }
 
   setupTableColumns(): void {
@@ -90,6 +119,15 @@ export class PendingPurchaseComponent implements OnInit {
         key: 'totalLpo',
         label: 'LPO Value',
         type: 'text',
+        cellRenderer: (item: any) => {
+          const value = typeof item.totalLpo === 'number' ? item.totalLpo : parseFloat(item.totalLpo) || 0;
+          const currency = item.currency || '';
+          const formattedValue = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          if (currency) {
+            return `${formattedValue} ${currency}`;
+          }
+          return formattedValue;
+        }
       },
       {
         key: 'createdBy.firstName',
@@ -100,19 +138,54 @@ export class PendingPurchaseComponent implements OnInit {
         filterPlaceholder: 'Search created by...'
       },
       {
+        key: 'procurementPerson',
+        label: 'Procurement Person',
+        type: 'text',
+        filterable: false,
+        cellRenderer: (item: any) => {
+          if (item.procurementPerson && item.procurementPerson.firstName) {
+            return `${item.procurementPerson.firstName} ${item.procurementPerson.lastName}`;
+          }
+          return '-';
+        }
+      },
+      {
         key: 'status',
         label: 'Status',
         type: 'status',
         filterable: true,
         filterType: 'select',
         filterOptions: this.statusOptions.map(type => ({ label: type, value: type })),
-        headerClass: 'text-center'
+        headerClass: 'text-center',
+        cellRenderer: (item: any) => {
+          if (item.status === 'Drafted') {
+            return 'Drafted';
+          }
+          return item.overallStatus || item.status || 'Pending';
+        }
+      },
+      {
+        key: 'actions',
+        label: 'Actions',
+        type: 'action',
+        actions: [
+          { icon: 'heroListBullet', tooltip: 'View Approval Status', action: 'viewApprovalStatus' },
+        ]
       },
     ]
 
     this.defaultColumns = [
-      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'status'
+      'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'procurementPerson', 'status', 'actions'
     ];
+  }
+
+  onPaginationChange(event: { page: number, row: number }): void {
+    this.paginationService.updatePaginationState({
+      page: event.page,
+      row: event.row,
+      total: this.totalItems()
+    });
+    this.getPurchases();
   }
 
   onFilterChange(filters: TableFilter[]): void {
@@ -134,7 +207,7 @@ export class PendingPurchaseComponent implements OnInit {
           acc[filter.column] = filter.value;
           break;
         case 'date':
-          if (filter.column === 'createdDate') {
+          if (filter.column === 'createdAt') {
             acc['fromDate'] = filter.value[0];
             acc['toDate'] = filter.value[1];
           }
@@ -147,6 +220,7 @@ export class PendingPurchaseComponent implements OnInit {
     }, {} as Partial<any>);
 
     this.getPurchases(filterParams);
+    this.updateUrlParams();
   }
 
   getPurchases(filters?: Partial<any>) {
@@ -157,21 +231,49 @@ export class PendingPurchaseComponent implements OnInit {
       page: currentState.page,
       row: currentState.row,
       status: this.selectedStatus(),
+      search: this.searchQuery() || undefined,
       ...filters
     }
 
-    // console.log(filterParams);
+    this.subscriptions.add(
+      this.purchaseService.getPurchases(filterParams).subscribe({
+        next: (response) => {
+          this.tableData.set(response.purchase.data);
+          const total = response.purchase.total;
+          this.totalItems.set(total);
+          
+          this.paginationService.updatePaginationState({
+            page: currentState.page,
+            row: currentState.row,
+            total: total
+          });
+          
+          this.isEmpty.set(this.tableData().length === 0);
+          this.isLoading.set(false);
+          this.updateUrlParams();
+        }, error: (error) => {
+          this.notificationService.error('Failed to load purchases');
+          console.error('Error loading purchases:', error);
+          this.isLoading.set(false);
+        }
+      })
+    );
+  }
 
-    this.purchaseService.getPurchases(filterParams).subscribe({
-      next: (response) => {
-        this.tableData.set(response.purchase.data);
-        this.totalItems.set(response.purchase.total);
-        this.isEmpty.set(this.tableData().length === 0);
-        this.isLoading.set(false);
-      }, error: (error) => {
-        console.log(error);
-      }
-    })
+  updateUrlParams(): void {
+    const paginationState = this.paginationService.paginationState();
+    const queryParams: any = {};
+
+    queryParams.page = paginationState.page !== 1 ? paginationState.page : null;
+    queryParams.row = paginationState.row !== 10 ? paginationState.row : null;
+    queryParams.search = this.searchQuery() || null;
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: queryParams,
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   viewPurchaseDetails(purchase: any): void {
@@ -194,6 +296,35 @@ export class PendingPurchaseComponent implements OnInit {
       case 'viewDocuments':
         this.viewDocuments(item);
         break;
+      case 'viewApprovalStatus':
+        this.viewApprovalStatus(item);
+        break;
+      default:
+        console.warn('Unknown action:', action);
+        break;
+    }
+  }
+
+  viewApprovalStatus(purchase: any): void {
+    if (!purchase) {
+      this.notificationService.error('Purchase data is missing');
+      return;
+    }
+    
+    try {
+      const dialogData: ApprovalStatusData = {
+        entity: purchase,
+        entityType: 'purchaseRequest'
+      };
+      
+      this.dialog.open(ApprovalStatusComponent, {
+        width: '800px',
+        maxHeight: '90vh',
+        data: dialogData
+      });
+    } catch (error) {
+      console.error('Error opening approval status dialog:', error);
+      this.notificationService.error('Failed to open approval status');
     }
   }
 
@@ -206,30 +337,14 @@ export class PendingPurchaseComponent implements OnInit {
   }
 
   onSearch(searchInput: string) {
-    this.isLoading.set(true);
+    this.searchQuery.set(searchInput || '');
     const currentState = this.paginationService.paginationState();
     this.paginationService.updatePaginationState({
       page: 1,
       row: currentState.row,
       total: currentState.total
     });
-    this.purchaseService.getPurchases({
-      page: 1,
-      row: currentState.row,
-      status: this.selectedStatus(),
-      search: searchInput
-    }).subscribe({
-      next: (response) => {
-        this.tableData.set(response.data.purchase);
-        this.totalItems.set(response.data.pagination.total);
-        this.isEmpty.set(this.tableData().length === 0);
-        this.isLoading.set(false);
-      },
-      error: (error) => {
-        this.notificationService.error('Failed to search purchases');
-        console.error('Error searching pruchases:', error);
-        this.isLoading.set(false);
-      }
-    });
+    this.getPurchases();
+    this.updateUrlParams();
   }
 }

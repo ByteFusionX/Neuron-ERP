@@ -6,7 +6,17 @@
       <h3 class="font-semibold">{{ title }}</h3>
 
       <div class="flex justify-end gap-4 items-center">
-        <ng-container [ngTemplateOutlet]="sideColumns"></ng-container>
+        <ng-container *ngIf="sideColumns" [ngTemplateOutlet]="sideColumns"></ng-container>
+
+        <button
+          *ngIf="enableExport"
+          type="button"
+          class="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+          (click)="exportToExcel()"
+        >
+          <ng-icon name="heroArrowDownTray" class="text-gray-600"></ng-icon>
+          <span>Export as Excel</span>
+        </button>
 
         <div
           *ngIf="enableColumnCustomization"
@@ -133,6 +143,12 @@
                   </div>
                 </div>
               </th>
+              <th
+                *ngIf="isInlineEditEnabled() && (inlineEditConfig?.showActionsColumn !== false)"
+                class="bg-gray-100 px-4 py-4 text-start text-dark text-[15px] font-medium border-b border-gray-300 min-w-[120px] sticky top-0 z-10"
+              >
+                Actions
+              </th>
             </tr>
           </thead>
 
@@ -143,119 +159,218 @@
               *ngFor="let item of filteredData; let i = index"
               class="transition-colors hover:bg-gray-50 cursor-pointer"
               (click)="onRowClick(item)"
-            >
+              >
               <td
                 *ngFor="let column of columns"
                 [ngClass]="column.cellClass"
                 class="px-4 py-3 whitespace-nowrap text-sm text-gray-800 border-b border-gray-300"
                 [class.hidden]="!displayedColumns.includes(column.key)"
               >
-                <!-- Text, Number, Boolean -->
-                <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
-                  <span *ngIf="!column.clickable || !isClickableValue(column, item)" >{{ getCellValue(item, column) }}</span>
-                  <span *ngIf="column.clickable && isClickableValue(column, item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
-                </ng-container>
-
-                <!-- Date -->
-                <ng-container *ngIf="column.type === 'date'">
-                  {{
-                    getCellValue(item, column)
-                      | date : column.pipeParams || "dd/MM/yyyy"
-                  }}
-                </ng-container>
-
-                <!-- Currency -->
-                <ng-container *ngIf="column.type === 'currency'">
-                  {{ formatCurrencyWithSpace(item, column) }}
-                </ng-container>
-
-                <!-- Status Badge -->
-                <ng-container *ngIf="column.type === 'status'">
-                  <span
-                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                    [ngClass]="{
-                      'bg-green-100 text-green-800':
-                        getCellValue(item, column) === 'Won' ||
-                        getCellValue(item, column) === 'Approved',
-                      'bg-red-100 text-red-800':
-                        getCellValue(item, column) === 'Lost' ||
-                        getCellValue(item, column) === 'Rejected',
-                      'bg-yellow-100 text-yellow-800':
-                        getCellValue(item, column) === 'Pending',
-                      'bg-blue-100 text-blue-800': ![
-                        'Won',
-                        'Lost',
-                        'Approved',
-                        'Rejected',
-                        'Pending'
-                      ].includes(getCellValue(item, column))
-                    }"
-                  >
-                    {{ getCellValue(item, column) | titlecase }}
-                    <span
-                      class="ml-1 cursor-pointer"
-                      *ngIf="
-                        column.tooltip &&
-                        (getCellValue(item, column) === 'Rejected' ||
-                          getCellValue(item, column) === 'Approved')
-                      "
-                      (click)="onTooltipClick(item, column)"
-                    >
-                      <ng-icon
-                        name="heroInformationCircle"
-                        class="w-4 h-4"
-                      ></ng-icon>
-                    </span>
-                  </span>
-                </ng-container>
-
-                <!-- Status Dropdown -->
-                <ng-container *ngIf="column.type === 'statusDropdown'">
-                  <div (click)="preventClick($event)" class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
-                       [matMenuTriggerFor]="statusMenu" mat-button>
-                    <p class="mx-2 text-sm whitespace-nowrap">{{ getCellValue(item, column) }}</p>
-                    <div class="mt-1">
-                      <ng-icon name="heroChevronDown"></ng-icon>
-                    </div>
-                  </div>
-                  <mat-menu #statusMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
-                    <div class="">
-                      <div *ngFor="let status of column.statusOptions">
-                        <p class="p-2 hover:bg-violet-200 cursor-pointer px-[12px] text-dark text-[15px]"
-                           *ngIf="status !== getCellValue(item, column)"
-                           (click)="onStatusChange(item, column, getCellValue(item, column), status)">
-                          {{ status }}
-                        </p>
-                      </div>
-                    </div>
-                  </mat-menu>
-                </ng-container>
-
-                <!-- Action Buttons -->
-                <ng-container *ngIf="column.type === 'action'">
-                  <div
-                    class="flex items-center justify-center gap-2"
-                    (click)="preventClick($event)"
-                  >
-                    <ng-container *ngFor="let action of column.actions">
-                      <button
-                        *ngIf="!action.condition || action.condition(item)"
-                        [ngClass]="
-                          action.buttonClass ||
-                          'w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'
-                        "
-                        [matTooltip]="action.tooltip || ''"
-                        matTooltipPosition="above"
-                        (click)="onActionClick(action.action, item, $event)"
+                <ng-container *ngIf="isRowEditing(item) && isColumnInlineEditable(column.key); else readCell">
+                  <div class="w-full" (click)="preventClick($event)">
+                    <ng-container [ngSwitch]="getInlineColumnConfig(column.key)?.type">
+                      <textarea
+                        *ngSwitchCase="'textarea'"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        [placeholder]="getInlineColumnConfig(column.key)?.placeholder || ''"
+                        [ngModel]="getDraftValue(column.key)"
+                        (ngModelChange)="updateDraftValue(column.key, $event)"
+                        [disabled]="getInlineColumnConfig(column.key)?.disabled ?? false"
+                      ></textarea>
+                      <select
+                        *ngSwitchCase="'select'"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                        [ngModel]="getInlineSelectValue(column.key)"
+                        (ngModelChange)="updateDraftValue(column.key, $event)"
+                        [disabled]="getInlineColumnConfig(column.key)?.disabled ?? false"
                       >
-                        <ng-icon
-                          [name]="action.icon"
-                          [color]="action.color || 'currentColor'"
-                        ></ng-icon>
-                      </button>
+                        <option [ngValue]="null">Select...</option>
+                        <option
+                          *ngFor="let option of getInlineColumnConfig(column.key)?.options || []"
+                          [ngValue]="option.value"
+                        >
+                          {{ option.label }}
+                        </option>
+                      </select>
+                      <input
+                        *ngSwitchCase="'number'"
+                        type="number"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        [placeholder]="getInlineColumnConfig(column.key)?.placeholder || ''"
+                        [ngModel]="getDraftValue(column.key)"
+                        (ngModelChange)="updateDraftValue(column.key, $event)"
+                        [disabled]="getInlineColumnConfig(column.key)?.disabled ?? false"
+                        [min]="getInlineColumnConfig(column.key)?.min ?? null"
+                        [max]="getInlineColumnConfig(column.key)?.max ?? null"
+                        [step]="getInlineColumnConfig(column.key)?.step || 'any'"
+                      />
+                      <input
+                        *ngSwitchCase="'date'"
+                        type="date"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        [ngModel]="getDraftValue(column.key) | date:'yyyy-MM-dd'"
+                        (ngModelChange)="updateDraftValue(column.key, $event)"
+                        [disabled]="getInlineColumnConfig(column.key)?.disabled ?? false"
+                      />
+                      <input
+                        *ngSwitchDefault
+                        type="text"
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        [placeholder]="getInlineColumnConfig(column.key)?.placeholder || ''"
+                        [ngModel]="getDraftValue(column.key)"
+                        (ngModelChange)="updateDraftValue(column.key, $event)"
+                        [disabled]="getInlineColumnConfig(column.key)?.disabled ?? false"
+                      />
                     </ng-container>
                   </div>
                 </ng-container>
+
+                <ng-template #readCell>
+                  <!-- Text, Number, Boolean -->
+                  <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
+                    <div class="flex items-center gap-2">
+                      <span *ngIf="!column.clickable || !isClickableValue(column, item)" >{{ getCellValue(item, column) }}</span>
+                      <span *ngIf="column.clickable && isClickableValue(column, item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
+                      <button 
+                        *ngIf="column.inlineButton && (!column.inlineButton.condition || column.inlineButton.condition(item))"
+                        [ngClass]="column.inlineButton.buttonClass || 'cursor-pointer text-center flex justify-center items-center gap-1 px-1 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-full font-medium transition-colors'"
+                        (click)="column.inlineButton.onClick(item, $event); $event.stopPropagation()" 
+                        [matTooltip]="column.inlineButton.tooltip" 
+                        matTooltipPosition="above">
+                        <ng-icon [name]="column.inlineButton.icon" size="18"></ng-icon>
+                      </button>
+                    </div>
+                  </ng-container>
+
+                  <!-- Date -->
+                  <ng-container *ngIf="column.type === 'date'">
+                    {{
+                      getCellValue(item, column)
+                        | date : column.pipeParams || "dd/MM/yyyy"
+                    }}
+                  </ng-container>
+
+                  <!-- Currency -->
+                  <ng-container *ngIf="column.type === 'currency'">
+                    {{ formatCurrencyWithSpace(item, column) }}
+                  </ng-container>
+
+                  <!-- Status Badge -->
+                  <ng-container *ngIf="column.type === 'status'">
+                    <span
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      [ngClass]="getStatusColorClass(getCellValue(item, column))"
+                    >
+                      {{ getCellValue(item, column) | titlecase }}
+                      <span
+                        class="ml-1 cursor-pointer"
+                        *ngIf="
+                          column.tooltip &&
+                          (getCellValue(item, column)?.toLowerCase() === 'rejected' ||
+                            getCellValue(item, column)?.toLowerCase() === 'approved')
+                        "
+                        (click)="onTooltipClick(item, column)"
+                      >
+                        <ng-icon
+                          name="heroInformationCircle"
+                          class="w-4 h-4"
+                        ></ng-icon>
+                      </span>
+                    </span>
+                  </ng-container>
+
+                  <!-- Status Dropdown -->
+                  <ng-container *ngIf="column.type === 'statusDropdown'">
+                    <div (click)="preventClick($event)" class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
+                         [matMenuTriggerFor]="statusMenu" mat-button>
+                      <p class="mx-2 text-sm whitespace-nowrap">{{ getCellValue(item, column) }}</p>
+                      <div class="mt-1">
+                        <ng-icon name="heroChevronDown"></ng-icon>
+                      </div>
+                    </div>
+                    <mat-menu #statusMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
+                      <div class="">
+                        <div *ngFor="let status of column.statusOptions">
+                          <p class="p-2 hover:bg-violet-200 cursor-pointer px-[12px] text-dark text-[15px]"
+                             *ngIf="status !== getCellValue(item, column)"
+                             (click)="onStatusChange(item, column, getCellValue(item, column), status)">
+                            {{ status }}
+                          </p>
+                        </div>
+                      </div>
+                    </mat-menu>
+                  </ng-container>
+
+                  <!-- Action Buttons -->
+                  <ng-container *ngIf="column.type === 'action'">
+                    <div
+                      class="flex items-center justify-center gap-2"
+                      (click)="preventClick($event)"
+                    >
+                      <ng-container *ngFor="let action of column.actions">
+                        <button
+                          *ngIf="!action.condition || action.condition(item)"
+                          [ngClass]="
+                            action.buttonClass ||
+                            'w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'
+                          "
+                          [matTooltip]="action.tooltip || ''"
+                          matTooltipPosition="above"
+                          (click)="onActionClick(action.action, item, $event)"
+                        >
+                          <ng-icon
+                            [name]="action.icon"
+                            [color]="action.color || 'currentColor'"
+                          ></ng-icon>
+                        </button>
+                      </ng-container>
+                    </div>
+                  </ng-container>
+                </ng-template>
+              </td>
+              <td
+                *ngIf="isInlineEditEnabled() && (inlineEditConfig?.showActionsColumn !== false)"
+                class="px-4 py-3 whitespace-nowrap border-b border-gray-300"
+              >
+                <div class="flex items-center justify-center gap-2" (click)="preventClick($event)">
+                  <ng-container *ngIf="isRowEditing(item); else editActions">
+                    <button
+                      class="w-9 h-9 rounded-full border border-green-200 hover:bg-green-50 flex items-center justify-center"
+                      type="button"
+                      matTooltip="Save"
+                      (click)="saveInlineEdit($event)"
+                    >
+                      <ng-icon name="heroCheck" class="text-green-600"></ng-icon>
+                    </button>
+                    <button
+                      class="w-9 h-9 rounded-full border border-gray-200 hover:bg-gray-50 flex items-center justify-center"
+                      type="button"
+                      matTooltip="Cancel"
+                      (click)="cancelInlineEdit($event)"
+                    >
+                      <ng-icon name="heroXMark" class="text-gray-600"></ng-icon>
+                    </button>
+                  </ng-container>
+                  <ng-template #editActions>
+                    <button
+                      class="w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex items-center justify-center"
+                      type="button"
+                      matTooltip="Edit Line"
+                      (click)="startInlineEdit(item, $event)"
+                    >
+                      <ng-icon name="heroPencilSquare" class="text-blue-600"></ng-icon>
+                    </button>
+                    <button
+                      *ngIf="inlineEditConfig?.allowDelete"
+                      class="w-9 h-9 rounded-full border border-red-200 hover:bg-red-50 flex items-center justify-center"
+                      type="button"
+                      matTooltip="Delete Line"
+                      (click)="deleteInlineRow(item, $event)"
+                    >
+                      <ng-icon name="heroTrash" class="text-red-500"></ng-icon>
+                    </button>
+                  </ng-template>
+                </div>
               </td>
             </tr>
             }

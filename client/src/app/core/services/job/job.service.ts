@@ -51,11 +51,22 @@ export class JobService {
     return this.http.get<getJob[]>(`${this.apiUrl}/job/jobIdDatas/${jobId}`)
   }
 
-  updateAllocateType(data: { id: string, jobId: string, allocationType: allocateType }): Observable<any> {
+  updateAllocateType(data: { id: string, jobId: string, allocationType: allocateType, procurementPerson?: string }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/job/updateAllocateType`, data)
   }
 
   getTechnicalDropdownList(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/job/technical`)
+  }
+
+  transferProcurementPerson(jobId: string, procurementPersonId: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/job/transferProcurementPerson`, {
+      jobId,
+      procurementPersonId
+    })
+  }
+
+  getConvertibleJobs(): Observable<{ success: boolean; jobs: getJob[] }> {
+    return this.http.get<{ success: boolean; jobs: getJob[] }>(`${this.apiUrl}/purchase/purchase-request/convertible-jobs`)
   }
 }

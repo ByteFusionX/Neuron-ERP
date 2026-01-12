@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { Comparisons, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
 
@@ -11,20 +12,44 @@ import { Comparisons, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfa
 })
 export class ComparisonSummaryComponent implements OnInit {
   private purchaseService = inject(PurchaseService)
+  private route = inject(ActivatedRoute)
+  private router = inject(Router)
+  
+  purchaseId!: string;
   itemsList = signal<QuoteItem[]>([])
   isComparison: boolean = true
+  currency = signal<string>('')
 
   ngOnInit(): void {
-    this.purchaseService.purchaseFormData$.subscribe({
-      next: (data) => {
-        if (data.items) {
-          this.itemsList.set(data.items)
+    this.purchaseId = this.route.snapshot.paramMap.get('purchaseId') || '';
+    
+    if (!this.purchaseId) {
+      this.router.navigate(['/purchase/pendings']);
+      return;
+    }
+
+    this.loadPurchaseData();
+  }
+
+  loadPurchaseData(): void {
+    this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
+      next: (res) => {
+        if (res.data?.items) {
+          this.itemsList.set(res.data.items);
+        }
+        if (res.data?.currency) {
+          this.currency.set(res.data.currency);
         }
       },
       error: (error) => {
-        console.log(error)
+        console.error('Error loading purchase data:', error);
+        this.router.navigate(['/purchase/pendings']);
       }
-    })
+    });
+  }
+
+  onBack(): void {
+    this.router.navigate(['/purchase/edit', this.purchaseId]);
   }
 
   getApprovedComparison(item: QuoteItemDetails): Comparisons | undefined {

@@ -105,6 +105,46 @@
                       </app-select-dropdown>
                     </td>
                   </tr>
+                  <tr class="border-b" *ngIf="getQuotationId()">
+                    <td class="px-2 py-2 border text-left font-medium">
+                      Quotation ID
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      <span class="hover:text-purple-600 hover:font-semibold cursor-pointer" 
+                        matTooltip="Preview Quote"
+                        matTooltipPosition="above" 
+                        matTooltipClass="mat-tooltip"
+                        (click)="onPreviewPdf(getQuotationData(), getSalesPersonData(), getCustomerData(), getAttentionData())">
+                        {{getQuotationId()}}
+                      </span>
+                    </td>
+                    <td class="px-2 py-2 border text-start font-medium">
+                      LPO Files
+                    </td>
+                    <td class="px-2 py-2 border text-start">
+                      <div class="flex flex-col gap-2" *ngIf="getLpoFiles() && getLpoFiles().length > 0">
+                        <div *ngFor="let file of getLpoFiles(); let i=index">
+                          <div class="flex items-center gap-2" *ngIf="file.originalname">
+                            <p class="w-24 truncate" matTooltip="{{file.originalname}}"
+                              matTooltipPosition="above" matTooltipClass="mat-tooltip">{{file.originalname}}
+                            </p>
+                            <button class="w-5 h-5 border rounded-full flex justify-center items-center"
+                              (click)="onViewPDF(file)">
+                              <ng-icon class="text-black" name="heroEye"></ng-icon>
+                            </button>
+                            <button class="w-5 h-5 border rounded-full flex justify-center items-center"
+                              (click)="onDownloadClicks(file)">
+                              <ng-icon class="text-black" name="heroInboxArrowDown"></ng-icon>
+                            </button>
+                          </div>
+                          <div class="w-24" *ngIf="file.fileName && file.fileName === selectedFile">
+                            <mat-progress-bar mode="determinate" [value]="progress"></mat-progress-bar>
+                          </div>
+                        </div>
+                      </div>
+                      <span *ngIf="!getLpoFiles() || getLpoFiles().length === 0" class="text-gray-500">No LPO files</span>
+                    </td>
+                  </tr>
                   <tr class="border-b">
                     <td class="px-2 py-2 border text-left font-medium">
                       Assigned By
@@ -209,15 +249,6 @@
                   [loading]="isSaving()">
                   <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
                   Material Request
-                </app-btn>
-                <app-btn theme="secondary-outline" (click)="openPurchaseRequestModal()"
-                  [disabled]="isSaving() || !hasPurchaseRequests()" [loading]="isSaving()">
-                  <ng-icon name="heroShoppingCart" class="w-4 h-4 mr-1"></ng-icon>
-                  @if(hasPurchaseRequests()){
-                  View Request from Purchase
-                  }@else{
-                  No Requests from Purchase
-                  }
                 </app-btn>
               </div>
 
@@ -340,10 +371,15 @@
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- Left Column -->
                     <div class="space-y-4">
-                      <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <span class="text-sm font-medium text-gray-700">Estimated cost for project:</span>
-                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.estimatedCostForProject
-                          }}</span>
+                      <div class="p-3 bg-gray-50 rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Estimated cost for project</label>
+                        <input type="number" [(ngModel)]="costingDetails.estimatedCostForProject"
+                          [ngModelOptions]="{standalone: true}"
+                          (ngModelChange)="onEstimatedCostChange($event)"
+                          class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                          placeholder="Enter estimated cost for project"
+                          step="0.01"
+                          min="0">
                       </div>
 
                       <!-- <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
@@ -396,20 +432,18 @@
                     <div class="space-y-4">
                       <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                         <span class="text-sm font-medium text-gray-700">Total LPO Value:</span>
-                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.totalLPOValue }}</span>
+                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.totalLPOValue | numberFormatter }} QAR</span>
                       </div>
 
                       <!-- <div class="flex justify-between items-center p-5 rounded-lg"></div> -->
                       <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                         <span class="text-sm font-medium text-gray-700">Total Amount claimed for manpower:</span>
-                        <span class="text-sm font-semibold text-gray-900">{{
-                          costingDetails.totalAmountClaimedForManpower
-                          }}</span>
+                        <span class="text-sm font-semibold text-gray-900">{{ costingDetails.totalAmountClaimedForManpower | numberFormatter }} QAR</span>
                       </div>
 
                       <div class="flex justify-between items-center p-3 bg-blue-100 rounded-lg">
                         <span class="text-sm font-medium text-gray-700">Balance amount in hand:</span>
-                        <span class="text-sm font-semibold text-blue-900">{{ getBalanceAmount() }}</span>
+                        <span class="text-sm font-semibold text-blue-900">{{ getBalanceAmount() | numberFormatter }} QAR</span>
                       </div>
 
                       <div class="flex flex-wrap -mx-3 mb-6">

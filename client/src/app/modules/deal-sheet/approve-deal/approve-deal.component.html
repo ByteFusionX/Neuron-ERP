@@ -156,12 +156,6 @@
                         <th scope="col" class="border   text-center min-w-[90px]">
                             <div class="px-2 py-3">Supplier Name</div>
                         </th>
-                        <th scope="col" class="border   text-center min-w-[90px]">
-                            <div class="px-2 py-3">Email</div>
-                        </th>
-                        <th scope="col" class="border   text-center min-w-[90px]">
-                            <div class="px-2 py-3">Phone No.</div>
-                        </th>
 
                     </tr>
                 </thead>
@@ -169,7 +163,7 @@
                     <ng-container *ngFor="let item of data.quoteItems; let i = index">
                         <ng-container *ngIf="checkAtLeastOneDealSelected(item)">
                             <tr>
-                                <td colspan="10" class="border px-6 py-2 bg-gray-50">
+                                <td colspan="8" class="border px-6 py-2 bg-gray-50">
                                     <div
                                         class="flex justify-center items-center text-md text-black font-medium uppercase">
                                         {{ item?.itemName }}
@@ -210,32 +204,12 @@
                                             {{ getSupplierName(detail.supplierId) || '-' }}
                                         </span>
                                     </td>
-                                    <td class="py-2 border text-center px-2">
-                                        <!-- Legacy supplier data -->
-                                        <span *ngIf="detail.email || !detail.supplierId">
-                                            {{ detail.email || '-' }}
-                                        </span>
-                                        <!-- New supplier data -->
-                                        <span *ngIf="detail.supplierId && !detail.email">
-                                            {{ getSupplierEmail(detail.supplierId) || '-' }}
-                                        </span>
-                                    </td>
-                                    <td class="py-2 border text-center  px-2">
-                                        <!-- Legacy supplier data -->
-                                        <span *ngIf="detail.phoneNo || !detail.supplierId">
-                                            {{ detail.phoneNo || '-' }}
-                                        </span>
-                                        <!-- New supplier data -->
-                                        <span *ngIf="detail.supplierId && !detail.phoneNo">
-                                            {{ getSupplierPhone(detail.supplierId) || '-' }}
-                                        </span>
-                                    </td>
                                 </tr>
                             </ng-container>
                         </ng-container>
                     </ng-container>
                     <tr class="border-none text-gray-800">
-                        <td colspan="10" class="px-6 py-2 "></td>
+                        <td colspan="8" class="px-6 py-2 "></td>
                     </tr>
                     <ng-container *ngFor="let cost of data.quoteData.dealData.additionalCosts;let i = index">
                         <tr class=" border-b text-gray-800 mt-4">

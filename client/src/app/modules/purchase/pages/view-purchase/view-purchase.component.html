@@ -72,7 +72,14 @@
                                 Deel Sheet ID
                             </td>
                             <td class="px-2 py-2 border">
-                                {{ purchase.jobId?.quoteId?.dealData?.dealId }}
+                                <button
+                                    *ngIf="purchase.jobId?.quoteId?.dealData?.dealId"
+                                    type="button"
+                                    class="text-purple-600 hover:font-semibold cursor-pointer"
+                                    (click)="onViewDealSheet()">
+                                    {{ purchase.jobId?.quoteId?.dealData?.dealId }}
+                                </button>
+                                <span *ngIf="!purchase.jobId?.quoteId?.dealData?.dealId">-</span>
                             </td>
                             <td
                                 class="px-2 py-2 border font-medium bg-gray-50">Job
@@ -91,6 +98,7 @@
                     <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                         <tr>
                             <th class="px-4 py-2 border">Item</th>
+                            <th class="px-4 py-2 border">Part No.</th>
                             <th class="px-4 py-2 border">Quantity</th>
                             <th class="px-4 py-2 border">Unit Cost</th>
                             <th class="px-4 py-2 border">Total Cost</th>
@@ -105,22 +113,31 @@
                         <ng-container
                             *ngIf="getSelectedRows(purchase.items) as rows">
                             <tr class="border-b" *ngFor="let row of rows">
-                                <td class="px-4 py-2 border font-semibold">{{
-                                    row.detail.detail  }}</td>
+                                <td class="px-4 py-2 border font-semibold">
+                                    <div class="flex items-center gap-2">
+                                        <span>{{ row.detail.detail }}</span>
+                                        <span *ngIf="getItemStatus(row.detail)" 
+                                              [class]="'px-2 py-0.5 text-xs font-medium rounded-full ' + getItemStatus(row.detail)?.class">
+                                            {{ getItemStatus(row.detail)?.label }}
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-2 border">{{ formatPartNumber(row.detail.partNo) }}</td>
                                 <td class="px-4 py-2 border">{{
                                     row.detail.quantity}}</td>
-                                <td class="px-4 py-2 border">{{
-                                    row.detail.unitCost | number : "1.2-2" }}</td>
-                                <td class="px-4 py-2 border">{{
-                                    row.detail.quantity * row.detail.unitCost | number : "1.2-2" }}</td>
                                 <td class="px-4 py-2 border">
                                     {{ row.selectedSupplier.unitPrice
-                                    | number : "1.2-2" }}
+                                    | number : "1.2-2" }} {{ purchase?.currency }}
                                 </td>
                                 <td class="px-4 py-2 border">
                                     {{ row.selectedSupplier.unitPrice *
-                                    row.selectedSupplier.quantity |
-                                    number:"1.2-2" }}
+                                        row.selectedSupplier.quantity |
+                                        number:"1.2-2" }} {{ purchase?.currency }}</td>
+                                <td class="px-4 py-2 border">
+                                    {{ row.detail.unitSellingPrice | number : "1.2-2" }} {{ purchase?.currency }}
+                                </td>
+                                <td class="px-4 py-2 border">
+                                    {{ row.detail.quantity * row.detail.unitSellingPrice | number : "1.2-2" }} {{ purchase?.currency }}
                                 </td>
                                 <td class="px-4 py-2 border">{{
                                     row.selectedSupplier.supplierName }}</td>
@@ -150,45 +167,45 @@
                                 colspan="1">
                                 LPO Value
                             </td>
-                            <td class="px-2 py-2 border">{{getTotalUnitCost(purchase.items)}}</td>
+                            <td class="px-2 py-2 border">{{ purchase?.lpoValue | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
                         <tr class="border-b">
                             <td class="px-2 py-2 border font-medium bg-gray-50"
                                 colspan="1">
                                 Total Cost as per PR
                             </td>
-                            <td class="px-2 py-2 border">{{getSelectedTotal(purchase.items)}}</td>
+                            <td class="px-2 py-2 border">{{ (purchase?.totalPRCost || 0) - (purchase?.totalDiscountReceived || 0) | number : '1.2-2' }} {{ purchase?.currency }}</td>
                             <td class="px-2 py-2 border font-medium bg-gray-50"
                                 colspan="1">
                                 Total Cost Price as per Deal sheet
                             </td>
-                            <td class="px-2 py-2 border"></td>
+                            <td class="px-2 py-2 border">{{ purchase?.totalDealCost | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
                         <tr class="border-b">
                             <td class="px-2 py-2 border font-medium bg-gray-50"
                                 colspan="1">
                                 Total Discount Received
                             </td>
-                            <td class="px-2 py-2 border">{{getTotalUnitCost(purchase.items) - getSelectedTotal(purchase.items)}}</td>
+                            <td class="px-2 py-2 border">{{ purchase?.totalDiscountReceived | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
                         <tr class="border-b">
                             <td class="px-2 py-2 border font-medium bg-gray-50"
                                 colspan="1">
                                 Profit Margin
                             </td>
-                            <td class="px-2 py-2 border"> {{ getProfitMargin(getTotalUnitCost(purchase.items), getSelectedTotal(purchase.items)) | number : '1.2-2' }}%</td>
+                            <td class="px-2 py-2 border"> {{ getProfitMargin(purchase?.lpoValue || 0, (purchase?.totalPRCost || 0) - (purchase?.totalDiscountReceived || 0)) | number : '1.2-2' }} {{ purchase?.currency }}</td>
                             <td class="px-2 py-2 border font-medium bg-gray-50"
                                 colspan="1">
-                                Profit Margin
+                                Deal Profit
                             </td>
-                            <td class="px-2 py-2 border">%</td>
+                            <td class="px-2 py-2 border">{{ (purchase?.dealProfit || 0) | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
                         <tr class="border-b">
                             <td class="px-2 py-2 border font-medium bg-gray-50"
                                 colspan="1">
                                 Difference In Profit
                             </td>
-                            <td class="px-2 py-2 border"></td>
+                            <td class="px-2 py-2 border">{{ ((getProfitMargin(purchase?.lpoValue || 0, (purchase?.totalPRCost || 0) - (purchase?.totalDiscountReceived || 0)) || 0) - (purchase?.dealProfit || 0) ) | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -202,6 +219,18 @@
             </app-btn>
             @if(purchase.status === 'Pending'){
             <div class="flex justify-end gap-4">
+                @if(hasNewItemsToMerge()){
+                    <app-btn theme="primary" (click)="onMergeItems()" [loading]="isMerging">
+                        <ng-icon name="heroArrowRightCircle" class="mr-1"></ng-icon>
+                        Merge Items
+                    </app-btn>
+                }
+                @if(hasMergedItems()){
+                    <app-btn theme="warning" (click)="onRevokeMerge()" [loading]="isRevoking">
+                        <ng-icon name="heroArrowLeftCircle" class="mr-1"></ng-icon>
+                        Revoke Merge
+                    </app-btn>
+                }
                 <app-btn theme="danger" (click)="onReject()"
                     [loading]="isRejecting">
                     <ng-icon name="heroXCircle" class="mr-1"></ng-icon>

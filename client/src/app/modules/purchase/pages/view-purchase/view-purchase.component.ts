@@ -7,11 +7,14 @@ import { FileService } from 'src/app/core/services/file.service';
 import { Comparisons, PurchaseData, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
+import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 
 @Component({
   selector: 'app-view-purchase',
@@ -32,6 +35,8 @@ export class ViewPurchaseComponent {
   isLoading = true;
   isApproving = false;
   isRejecting = false;
+  isMerging = false;
+  isRevoking = false;
   downloadProgress = 0;
   isDownloading = false;
   purchaseId!: string;
@@ -39,16 +44,6 @@ export class ViewPurchaseComponent {
 
   ngOnInit(): void {
     this.loadPurchase();
-    this.purchaseService.purchaseFormData$.subscribe({
-      next: (data) => {
-        if (data) {
-          this.purchase = data;
-          this.isLoading = false;
-        }
-      }, error: (error) => {
-        console.error(error)
-      }
-    })
 
     this.supplierService.supplierList().subscribe({
       next: (res) => {
@@ -71,6 +66,7 @@ export class ViewPurchaseComponent {
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
         this.purchase = response.data;
+        console.log(response, 'response') 
         console.log(this.purchase, 'this.purchase')
         this.isLoading = false;
       },
@@ -79,6 +75,159 @@ export class ViewPurchaseComponent {
         console.error('Error loading purchase:', error);
         this.isLoading = false;
         this.router.navigate(['/purchase/pendings']);
+      }
+    });
+  }
+
+  /**
+   * Open deal sheet for the job linked to this purchase (via job.quoteId.dealData).
+   * This reuses the same dialog and calculation logic pattern used in job-sheet/open-to-work.
+   */
+  onViewDealSheet(): void {
+    const quoteData: any = this.purchase?.jobId?.quoteId;
+
+    if (!quoteData?.dealData?.updatedItems) {
+      this.notificationService.error('Deal sheet data not available');
+      return;
+    }
+
+    const priceDetails = {
+      totalSellingPrice: 0,
+      totalCost: 0,
+      profit: 0,
+      perc: 0
+    };
+
+    const quoteItems = quoteData.dealData.updatedItems.map((item: any) => {
+      let itemSelected = 0;
+
+      item.itemDetails.map((itemDetail: any) => {
+        if (itemDetail.dealSelected) {
+          itemSelected++;
+          priceDetails.totalSellingPrice += itemDetail.unitSellingPrice * itemDetail.quantity;
+          priceDetails.totalCost += itemDetail.quantity * itemDetail.unitCost;
+          return itemDetail;
+        }
+        return;
+      });
+
+      if (itemSelected) return item;
+      return;
+    });
+
+    if (Array.isArray(quoteData.dealData.additionalCosts)) {
+      quoteData.dealData.additionalCosts.forEach((cost: any) => {
+        if (cost.type === 'Additional Cost') {
+          priceDetails.totalCost += cost.value;
+        } else if (cost.type === 'Supplier Discount') {
+          priceDetails.totalCost -= cost.value;
+        } else if (cost.type === 'Customer Discount') {
+          priceDetails.totalSellingPrice -= cost.value;
+        } else {
+          priceDetails.totalCost += cost.value;
+        }
+      });
+    }
+
+    priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
+    priceDetails.perc = priceDetails.totalSellingPrice
+      ? (priceDetails.profit / priceDetails.totalSellingPrice) * 100
+      : 0;
+
+    this.dialog.open(ApproveDealComponent, {
+      data: {
+        approval: false,
+        quoteData: quoteData as Quotatation,
+        quoteItems,
+        priceDetails,
+        quoteView: false
+      },
+      width: '1200x'
+    });
+  }
+
+  hasNewItemsToMerge(): boolean {
+    if (!this.purchase?.items) return false;
+    
+    return this.purchase.items.some((item: any) => 
+      item.itemDetails?.some((detail: any) => detail.isNewlyAdded && !detail.merged)
+    );
+  }
+
+  hasMergedItems(): boolean {
+    if (!this.purchase?.items) return false;
+    
+    return this.purchase.items.some((item: any) => 
+      item.itemDetails?.some((detail: any) => detail.merged)
+    );
+  }
+
+  getItemStatus(detail: any): { label: string; class: string } | null {
+    if (detail.merged) {
+      return { label: 'Merged', class: 'bg-green-100 text-green-700' };
+    }
+    if (detail.isNewlyAdded) {
+      return { label: 'Newly Added', class: 'bg-blue-100 text-blue-700' };
+    }
+    return null;
+  }
+
+  onMergeItems(): void {
+    if (!this.purchase?._id) return;
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Merge Items to Deal Sheet',
+        description: 'Are you sure you want to merge all newly added items to the deal sheet?',
+        icon: 'heroArrowRightCircle',
+        IconColor: 'green'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.isMerging = true;
+        this.purchaseService.mergeItemsToDealSheet(this.purchaseId).subscribe({
+          next: () => {
+            this.loadPurchase();
+            this.isMerging = false;
+            this.notificationService.success('Items merged to deal sheet successfully');
+          },
+          error: (error) => {
+            this.notificationService.error(error.error?.message || 'Failed to merge items');
+            this.isMerging = false;
+          }
+        });
+      }
+    });
+  }
+
+  onRevokeMerge(): void {
+    if (!this.purchase?._id) return;
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Revoke Merged Items',
+        description: 'Are you sure you want to revoke the merged items from the deal sheet?',
+        icon: 'heroArrowLeftCircle',
+        IconColor: 'orange'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.isRevoking = true;
+        this.purchaseService.revokeMergedItems(this.purchaseId).subscribe({
+          next: () => {
+            this.loadPurchase();
+            this.isRevoking = false;
+            this.notificationService.success('Merged items revoked successfully');
+          },
+          error: (error) => {
+            this.notificationService.error(error.error?.message || 'Failed to revoke merged items');
+            this.isRevoking = false;
+          }
+        });
       }
     });
   }
@@ -104,7 +253,7 @@ export class ViewPurchaseComponent {
         this.isApproving = true;
         this.purchaseService.updatePurchaseStatus(
           this.purchaseId,
-          PurchaseStatus.APPROVED,
+          'approved',
           result.comment,
         ).subscribe({
           next: () => {
@@ -130,7 +279,7 @@ export class ViewPurchaseComponent {
         icon: 'heroXCircle',
         iconColor: 'red',
         confirmButtonText: 'Reject',
-        requireComment: false,
+        requireComment: true,
         commentLabel: 'Rejection Reason',
         commentPlaceholder: 'Enter your rejection reason here...'
       }
@@ -138,10 +287,15 @@ export class ViewPurchaseComponent {
 
     dialogRef.afterClosed().subscribe((result) => {
       if (result?.isConfirmed) {
+        if (!result.comment || result.comment.trim() === '') {
+          this.notificationService.error('Rejection reason is required');
+          return;
+        }
+        
         this.isRejecting = true;
         this.purchaseService.updatePurchaseStatus(
           this.purchaseId,
-          PurchaseStatus.REJECTED,
+          'rejected',
           result.comment,
         ).subscribe({
           next: () => {
@@ -193,14 +347,13 @@ export class ViewPurchaseComponent {
 
   getProfitMargin(totalCost: number, discountedCost: number): number {
     if (!discountedCost || discountedCost <= 0) return 0;
-    return ((totalCost - discountedCost) / discountedCost) * 100;
+    return (totalCost - discountedCost) || 0;
   }
 
 
   onEdit() {
     if (!this.purchase?._id) return;
     this.router.navigate(['/purchase', 'edit', this.purchase._id]);
-    this.purchaseService.setPurchaseFormData(this.purchase)
   }
 
   onDownloadFile(file: any) {
@@ -257,27 +410,17 @@ export class ViewPurchaseComponent {
     return rows;
   }
 
-  onExit() {
-    if(this.purchaseId == 'none'){
-      this.purchaseService.editMode$.subscribe(isEdit => {
-        this.purchaseService.purchaseId$.subscribe(purchaseId => {
-          if(isEdit && purchaseId){
-            this.purchaseService.setPurchaseFormData(this.purchase)
-            this.router.navigate([`/purchase/edit`, purchaseId])
-          }else{
-            this.purchase!.customerId = this.purchase?.customer._id as any
-            this.purchaseService.setPurchaseFormData(this.purchase)
-            this.router.navigate([`/purchase/create`])
-          }
-        })
-      })
-    }else{
-      this.router.navigate(['/purchase/pendings'])
+  formatPartNumber(partNo: any): string {
+    if (!partNo) return '-';
+    if (typeof partNo === 'string') {
+      return partNo;
     }
+    const code = partNo?.partNo || '';
+    return code || '-';
   }
 
-  onDestroy(): void {
-    this.purchaseService.setPurchaseFormData(this.purchase)
+  onExit() {
+    this.router.navigate(['/purchase/pendings']);
   }
 
   getStatusClass(status?: string): string {

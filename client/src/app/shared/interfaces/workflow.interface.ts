@@ -57,7 +57,8 @@ export interface WorkflowFilter {
 
 export enum WorkflowFeature {
     CLAIM = 'claim',
-    PROJECT_CLAIM = 'projectClaim'
+    PROJECT_CLAIM = 'projectClaim',
+    PURCHASE_APPROVAL = 'purchaseApproval'
 }
 
 export interface DeleteWorkflowResponse {

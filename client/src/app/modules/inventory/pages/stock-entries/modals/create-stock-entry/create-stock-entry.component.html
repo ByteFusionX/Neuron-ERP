@@ -1,0 +1,203 @@
+<div class="bg-white m-6 rounded-lg">
+  <div class="border-b p-3 px-9 flex justify-between items-center">
+    <h3 class="text-lg font-medium text-gray-800">Stock Entry</h3>
+  </div>
+  <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+    <form [formGroup]="stockEntryForm" (ngSubmit)="onSubmit()">
+      <div class="space-y-4">
+        <div class="grid grid-cols-3 gap-4">
+          <app-select-dropdown
+            label="Part Nos"
+            [options]="products"
+            optionLabel="displayLabel"
+            optionValue="_id"
+            formControlName="partNo"
+            placeholder="Choose from this list"
+            [isSubmitted]="isSubmitting"
+            (onSelected)="onProductChange($event)">
+          </app-select-dropdown>
+
+          <app-form-field
+            label="GRN"
+            [control]="stockEntryForm.get('grn')"
+            [isSubmitted]="isSubmitting"
+            placeholder="NO (Automatically generate)"
+            [readonly]="true">
+          </app-form-field>
+
+          <app-form-field
+            label="Date Of Purchase"
+            [control]="stockEntryForm.get('dateOfPurchase')"
+            [isSubmitted]="isSubmitting"
+            type="date">
+          </app-form-field>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4">
+          <app-select-dropdown
+            label="Job Id"
+            [options]="jobIds"
+            optionLabel="jobId"
+            optionValue="_id"
+            formControlName="jobId"
+            placeholder="Select job ID"
+            [isSubmitted]="isSubmitting">
+          </app-select-dropdown>
+
+          <app-select-dropdown
+            label="Supplier Name"
+            [options]="suppliers"
+            optionLabel="supplierName"
+            optionValue="_id"
+            formControlName="supplierName"
+            placeholder="Select supplier"
+            [isSubmitted]="isSubmitting">
+          </app-select-dropdown>
+
+          <app-form-field
+            label="Supplier LPO No"
+            [control]="stockEntryForm.get('supplierLpoNo')"
+            [isSubmitted]="isSubmitting"
+            placeholder="Enter LPO number">
+          </app-form-field>
+        </div>
+
+        <app-form-field
+          label="Product Description"
+          [control]="stockEntryForm.get('productDescription')"
+          [isSubmitted]="isSubmitting"
+          type="textarea"
+          placeholder="Enter product description (Auto fill)">
+        </app-form-field>
+
+        <div class="grid grid-cols-3 gap-4">
+          <app-select-dropdown
+            label="Product Segment"
+            [options]="departments"
+            optionLabel="departmentName"
+            optionValue="_id"
+            formControlName="productSegment"
+            placeholder="Auto fill"
+            [isSubmitted]="isSubmitting">
+          </app-select-dropdown>
+
+          <app-select-dropdown
+            label="Product Category"
+            [options]="categories"
+            optionLabel="categoryName"
+            optionValue="_id"
+            formControlName="productCategory"
+            placeholder="Select category (Auto fill)"
+            [isSubmitted]="isSubmitting"
+            footerLabel="+ Add category"
+            (footerAction)="onAddCategory()">
+          </app-select-dropdown>
+
+          <app-select-dropdown
+            label="Target Warehouse"
+            [options]="warehouses"
+            optionLabel="wareHouseName"
+            optionValue="_id"
+            formControlName="targetWarehouse"
+            placeholder="Select warehouse (Auto fill)"
+            [isSubmitted]="isSubmitting"
+            footerLabel="+ Add warehouse"
+            (footerAction)="onAddWarehouse()">
+          </app-select-dropdown>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4">
+          <app-form-field
+            label="Quantity"
+            [control]="stockEntryForm.get('quantity')"
+            [isSubmitted]="isSubmitting"
+            type="number"
+            placeholder="Enter quantity">
+          </app-form-field>
+
+          <app-form-field
+            label="Unit Cost"
+            [control]="stockEntryForm.get('unitCost')"
+            [isSubmitted]="isSubmitting"
+            type="number"
+            placeholder="Enter unit cost">
+          </app-form-field>
+
+          <app-form-field
+            label="Total Cost"
+            [control]="stockEntryForm.get('totalCost')"
+            [isSubmitted]="isSubmitting"
+            type="number"
+            placeholder="Auto calculated"
+            [readonly]="true">
+          </app-form-field>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4">
+          <app-form-field
+            label="UOM"
+            [control]="stockEntryForm.get('uom')"
+            [isSubmitted]="isSubmitting"
+            placeholder="Enter unit of measure">
+          </app-form-field>
+
+          <app-form-field
+            label="Selling Price"
+            [control]="stockEntryForm.get('sellingPrice')"
+            [isSubmitted]="isSubmitting"
+            type="number"
+            placeholder="Enter selling price">
+          </app-form-field>
+
+          <app-form-field
+            label="Remarks"
+            [control]="stockEntryForm.get('remarks')"
+            [isSubmitted]="isSubmitting"
+            type="textarea"
+            placeholder="Enter remarks (optional)"
+            class="col-span-3 md:col-span-3">
+          </app-form-field>
+        </div>
+
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-2">
+            <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold">
+              Serial Numbers
+            </label>
+            <app-btn size="sm" theme="primary-outline" type="button" (buttonClick)="addSerialNumber()">
+              <ng-icon name="heroPlus" class="w-4 h-4"></ng-icon>
+              Add Serial Number
+            </app-btn>
+          </div>
+          <div formArrayName="serialNumbers" class="space-y-3">
+            <div class="flex gap-4 items-end" *ngFor="let serialControl of serialNumbersArray.controls; let i = index">
+              <div class="flex-1">
+                <app-form-field
+                  [control]="serialControl"
+                  [isSubmitted]="isSubmitting"
+                  placeholder="Enter serial number">
+                </app-form-field>
+              </div>
+              <div class="flex-shrink-0 mb-6">
+                <app-btn 
+                  size="sm" 
+                  theme="secondary-outline" 
+                  type="button" 
+                  (buttonClick)="removeSerialNumber(i)"
+                  [disabled]="serialNumbersArray.length === 1">
+                  <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
+                </app-btn>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-200 mt-6 pt-4 flex justify-end gap-3">
+        <app-btn theme="cancel" type="button" (buttonClick)="onCancel()">Cancel</app-btn>
+        <app-btn theme="primary" type="submit" [loading]="isSubmitting">Save & Exit</app-btn>
+      </div>
+    </form>
+  </div>
+</div>
+

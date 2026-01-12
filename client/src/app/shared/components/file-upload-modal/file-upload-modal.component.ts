@@ -45,8 +45,6 @@ export class FileUploadModalComponent implements OnInit {
   files: FileItem[] = [];
   selectedFiles: File[] = [];
   isDragging = false;
-  isUploading = false;
-  uploadProgress = 0;
   fileError = false;
   errorMessage = '';
 
@@ -120,10 +118,9 @@ export class FileUploadModalComponent implements OnInit {
       validFiles.push(file);
     }
 
-    // Auto-upload if there are valid files and upload is enabled
-    if (validFiles.length > 0 && this.data.showActions?.upload) {
-      this.selectedFiles = validFiles;
-      this.onUpload();
+    // Store selected files for later upload
+    if (validFiles.length > 0) {
+      this.selectedFiles = [...this.selectedFiles, ...validFiles];
     }
   }
 
@@ -233,72 +230,28 @@ export class FileUploadModalComponent implements OnInit {
     });
   }
 
-  onUpload() {
-    if (this.selectedFiles.length === 0) {
-      this.fileError = true;
-      this.errorMessage = 'Please select at least one file to upload';
-      return;
-    }
-
-    this.isUploading = true;
-    this.uploadProgress = 0;
-
-    // Create FormData
-    const formData = new FormData();
-    this.selectedFiles.forEach(file => {
-      formData.append('files', file);
-    });
-
-    // For now, simulate upload progress and complete
-    // This would be replaced with actual file upload service call
-    const interval = setInterval(() => {
-      this.uploadProgress += 10;
-      if (this.uploadProgress >= 100) {
-        clearInterval(interval);
-        this.completeUpload();
-      }
-    }, 200);
-
-    // TODO: Replace simulation with actual upload service
-    // Example real implementation:
-    // this.fileUploadService.uploadFiles(formData).subscribe({
-    //   next: (event) => {
-    //     if (event.type === HttpEventType.UploadProgress) {
-    //       this.uploadProgress = Math.round(100 * event.loaded / event.total);
-    //     } else if (event.type === HttpEventType.Response) {
-    //       this.completeUpload(event.body.files);
-    //     }
-    //   },
-    //   error: (error) => {
-    //     this.isUploading = false;
-    //     this.uploadProgress = 0;
-    //     this.toast.error('Upload failed: ' + error.message);
-    //   }
-    // });
-  }
-
-  private completeUpload() {
-    // Mark files as uploaded and generate file names
-    this.files.forEach(file => {
-      if (!file.isUploaded) {
-        file.isUploaded = true;
-        file.fileName = `upload_${Date.now()}_${file.originalname}`;
-      }
-    });
-
-    this.selectedFiles = [];
-    this.isUploading = false;
-    this.uploadProgress = 0;
-    this.toast.success('Files uploaded successfully');
-    
-    if (this.fileInput) {
-      this.fileInput.nativeElement.value = '';
-    }
-  }
 
   onSave() {
-    const uploadedFiles = this.files.filter(f => f.isUploaded);
-    this.dialogRef.close({ files: uploadedFiles, action: 'save' });
+    // Return files with File objects for new uploads, and metadata for existing files
+    const filesToReturn = this.files.map(file => {
+      // If file has a File object, it's a new file that needs to be uploaded
+      if (file.file) {
+        return {
+          fileName: file.fileName || '',
+          originalname: file.originalname,
+          file: file.file,
+          isUploaded: false
+        };
+      }
+      
+      // Existing uploaded file (from existingFiles) - return metadata only
+      return {
+        fileName: file.fileName,
+        originalname: file.originalname,
+        isUploaded: true
+      };
+    });
+    this.dialogRef.close({ files: filesToReturn, action: 'save' });
   }
 
   onCancel() {
@@ -330,9 +283,5 @@ export class FileUploadModalComponent implements OnInit {
 
   isPDF(filename: string): boolean {
     return filename.toLowerCase().endsWith('.pdf');
-  }
-
-  hasUploadingFiles(): boolean {
-    return this.isUploading;
   }
 }

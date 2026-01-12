@@ -16,10 +16,9 @@
 <ng-template #sideColumn>
       <ng-select 
         [items]="[
-          {label: 'Open', value: 'Open'},
-          {label: 'Hold', value: 'Hold'},
-          {label: 'Closed', value: 'Closed'},
-          {label: 'Cancelled', value: 'Cancelled'}
+          {label: 'Pending for Approval', value: 'Pending for Approval'},
+          {label: 'Approved', value: 'Approved'},
+          {label: 'Draft', value: 'Draft'}
         ]"
         bindLabel="label"
         bindValue="value"

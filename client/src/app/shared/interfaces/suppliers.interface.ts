@@ -74,6 +74,16 @@ export interface Supplier {
     approvedDate: Date;
     approvedBy: string;
     isDeleted: boolean;
+    approvedHistory?: {
+        date: Date;
+        reason: string;
+        approvedBy: {
+            _id: string;
+            firstName: string;
+            lastName: string;
+            email?: string;
+        };
+    }[];
     rejectHistory: {
         date: Date;
         reason: string;

@@ -1,0 +1,20 @@
+<data-table
+  [data]="tableData()"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading()"
+  [isEmpty]="isEmpty()"
+  [totalItems]="totalItems()"
+  [tableId]="'mr-approval-requests-table'"
+  (filterChange)="onFilterChange($event)"
+  (paginationChange)="onPaginationChange($event)"
+  (actionClick)="onActionClick($event)"
+  [title]="currentPage"
+>
+</data-table>
+
+
+
+
+
+

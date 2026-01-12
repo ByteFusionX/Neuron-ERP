@@ -30,6 +30,17 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
             ]
         };
 
+        let sortAggregate = {}
+        
+
+        if (allocateStatus == "OpenToWork") {
+            sortAggregate = { updatedDate : -1 }
+        }else {
+            sortAggregate = { createdDate : -1 }
+        }
+
+        console.log(sortAggregate)
+
         if (selectedMonth && selectedYear) {
             let startDate = new Date(selectedYear, selectedMonth - 1, 1);
             let endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
@@ -79,7 +90,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 $unwind: "$clientDetails"
             },
             {
-                $sort: { createdDate: -1 }
+                $sort: sortAggregate
             },
             {
                 $lookup: { from: 'departments', localField: 'quotation.department', foreignField: '_id', as: 'departmentDetails' }
@@ -87,6 +98,10 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
             {
                 $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
             },
+            {
+                $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' }
+            },
+            { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'suppliers',
@@ -173,6 +188,37 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                     }
                 }
 
+            },
+            {
+                $lookup: {
+                    from: 'purchases',
+                    localField: '_id',
+                    foreignField: 'jobId',
+                    as: 'purchaseRequests'
+                }
+            },
+            {
+                $addFields: {
+                    hasPurchaseRequest: {
+                        $gt: [
+                            {
+                                $size: {
+                                    $filter: {
+                                        input: '$purchaseRequests',
+                                        as: 'pr',
+                                        cond: { $eq: ['$$pr.isDeleted', false] }
+                                    }
+                                }
+                            },
+                            0
+                        ]
+                    }
+                }
+            },
+            {
+                $project: {
+                    purchaseRequests: 0
+                }
             },
             {
                 $match: { ...accessFilter, ...matchFilters }
@@ -610,7 +656,7 @@ export const oneJobSheet = async (req: Request, res: Response, next: NextFunctio
 
 export const updateAllocateType = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { id, allocationType } = req.body;
+        const { id, allocationType, procurementPerson } = req.body;
 
         // Validate required fields
         if (!id || !allocationType) {
@@ -628,12 +674,60 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             });
         }
 
+        const updateData: any = {
+            allocateType: allocationType,
+            allocateStatus: allocateStatus.OpenToWork,
+            updatedDate: new Date()
+        };
+
+        if (procurementPerson) {
+            updateData.procurementPerson = procurementPerson;
+        }
+
         // Update the job with new allocationType and set allocateStatus to OpenToWork
         const updateJob = await jobModel.findByIdAndUpdate(
             { _id: id },
+            updateData,
             {
-                allocateType: allocationType,
-                allocateStatus: allocateStatus.OpenToWork,
+                new: true, // Return the updated document
+            }
+        );
+
+        if (!updateJob) {
+            return res.status(404).json({
+                success: false,
+                message: 'Job not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Allocation type updated successfully',
+            data: updateJob
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const transferProcurementPerson = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { jobId, procurementPersonId } = req.body;
+
+        // Validate required fields
+        if (!jobId || !procurementPersonId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Job ID and procurement person ID are required'
+            });
+        }
+
+        // Update the job with new procurement person
+        const updateJob = await jobModel.findByIdAndUpdate(
+            { _id: jobId },
+            {
+                procurementPerson: procurementPersonId,
                 updatedDate: new Date()
             },
             {
@@ -650,7 +744,7 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
 
         res.status(200).json({
             success: true,
-            message: 'Allocation type updated successfully',
+            message: 'Procurement person transferred successfully',
             data: updateJob
         });
 
@@ -738,7 +832,7 @@ export const getDropdownListForTechnical = async (req: Request, res: Response, n
 
 export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { jobId, companyName, subject, salesPersonDetails, departmentDetails, quoteId, dealId } = req.body;
+        const { jobId, companyName, subject, salesPersonDetails, departmentDetails, quoteId, dealId, page = 1, row = 10 } = req.body;
         const allocateTypeFilter = req.body.allocateType
         let matchFilters: any = {
             isDeleted: { $ne: true }
@@ -753,7 +847,7 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
         }
 
         const technicalJobIds = await technicalModel.distinct('jobId');
-        const jobs = await jobModel.aggregate([
+        const pipeline: any[] = [
             {
                 $match: {
                     isDeleted: { $ne: true },
@@ -808,14 +902,29 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
                 }
             },
             {
-                $sort: { createdDate: -1 }
+                $sort: { updatedDate: -1 }
             }
-        ]);
+        ];
+
+        const countPipeline = [...pipeline];
+        countPipeline.push({ $count: "total" });
+
+        const totalResult = await jobModel.aggregate(countPipeline);
+        const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+        pipeline.push({
+            $skip: (page - 1) * row
+        });
+        pipeline.push({
+            $limit: row
+        });
+
+        const jobs = await jobModel.aggregate(pipeline);
 
         if (jobs.length > 0) {
-            return res.status(200).json({ success: true, data: jobs, total: jobs.length, message: 'Jobs fetched successfully' });
+            return res.status(200).json({ success: true, data: jobs, total: total, message: 'Jobs fetched successfully' });
         } else {
-            return res.status(204).json({ success: true, message: 'No available jobs found', data: [] });
+            return res.status(200).json({ success: true, message: 'No available jobs found', data: [], total: 0 });
         }
     } catch (error) {
         next(error);

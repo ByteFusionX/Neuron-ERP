@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, Signal, signal } from '@angular/core';
-import { FormBuilder, FormGroup, FormArray, ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
+import { AbstractControl, FormBuilder, FormGroup, FormArray, ReactiveFormsModule, Validators, FormControl, ValidationErrors } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { NgIconsModule } from '@ng-icons/core';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -54,11 +54,46 @@ export class ClosedPlanComponent {
     return date.toISOString().split('T')[0];
   }
 
+  dateRangeValidator = (control: AbstractControl): ValidationErrors | null => {
+    const startDate = control.get('orginalStartDate');
+    const endDate = control.get('orginalEndDate');
+
+    if (!startDate?.value || !endDate?.value) {
+      if (endDate?.errors?.['dateRange']) {
+        const errors = endDate.errors;
+        delete errors['dateRange'];
+        endDate.setErrors(Object.keys(errors).length > 0 ? errors : null);
+      }
+      return null;
+    }
+
+    const start = new Date(startDate.value);
+    const end = new Date(endDate.value);
+
+    if (start > end) {
+      const currentErrors = endDate.errors || {};
+      endDate.setErrors({ ...currentErrors, dateRange: true });
+      return { dateRange: true };
+    } else {
+      const errors = endDate.errors;
+      if (errors && errors['dateRange']) {
+        delete errors['dateRange'];
+        endDate.setErrors(Object.keys(errors).length > 0 ? errors : null);
+      }
+    }
+
+    return null;
+  };
+
   form = this.fb.group({
     orginalStartDate: ['', Validators.required],
     orginalEndDate: ['', Validators.required],
     comment: [''],
-  });
+  }, { validators: this.dateRangeValidator });
+
+  get orginalEndDateControl(): FormControl {
+    return this.form.get('orginalEndDate') as FormControl;
+  }
 
   onSave() {
     this.isSubmitted = true;

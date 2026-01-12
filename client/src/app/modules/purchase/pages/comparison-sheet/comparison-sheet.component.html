@@ -22,6 +22,20 @@
                     <textarea class="p-2 rounded bg-gray-200 outline-none" rows="3" [value]="getFormattedProducts()"
                         readonly></textarea>
                 </div>
+                <div class="w-full md:w-1/3">
+                    <app-select-dropdown
+                        label="Part Number"
+                        formControlName="partNo"
+                        [options]="partNumberOptions()"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Select Part Number"
+                        [isSubmitted]="isSubmitted()"
+                        (onSelected)="onPartNumberSelected($event)"
+                        [footerLabel]="'Create Part Number'"
+                        (footerAction)="onCreatePartNumber()"
+                    ></app-select-dropdown>
+                </div>
                 <!-- <app-form-field label="Inventory List" [control]="f['inventoryList']" [isSubmitted]="isSubmitted()"
                     placeholder="Inventory List" class="w-full" [readonly]="true">
                 </app-form-field> -->
@@ -35,65 +49,141 @@
                         (click)="onAddSupplier()" type="button">+ Add Supplier</button>
                 </div>
             </div>
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border my-5">
-                <thead class="text-xs text-gray-700 uppercase bg-violet-50">
-                    <tr>
-                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
-                            <div class="px-2 py-3">Select</div>
-                        </th>
-                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
-                            <div class="px-2 py-3">SL.NO</div>
-                        </th>
-                        <th scope="col" resizable key="supplierName" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Supplier Name</div>
-                        </th>
-                        <th scope="col" resizable key="quantity" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">QTY</div>
-                        </th>
-                        <th scope="col" resizable key="unitPrice" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Unit Selling Cost</div>
-                        </th>
-                        <th scope="col" resizable key="totalCost" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Total Selling Cost</div>
-                        </th>
-                        <th scope="col" resizable key="availability" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Availability</div>
-                        </th>
-                        <th scope="col" resizable key="paymentTerms" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Payment Terms</div>
-                        </th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <ng-container *ngIf="comparisonList().length > 0; else comparisonElse">
-                        <tr *ngFor="let data of comparisonList(); let i = index" class="text-center">
-                            <td><input type="checkbox" name="selected" id="selected" [checked]="data.selected"
-                                    (change)="onSelectionChange(i)"></td>
-                            <td class="px-4 py-2 border">{{i+1}}</td>
-                            <td class="px-4 py-2 border font-medium bg-gray-50">{{data.supplierName}}</td>
-                            <td class="px-4 py-2 border">{{data.quantity}}</td>
-                            <td class="px-4 py-2 border">{{data.unitPrice}}</td>
-                            <td class="px-4 py-2 border">{{data.totalCost}}</td>
-                            <td class="px-4 py-2 border">{{data.etaTerms}}</td>
-                            <td class="px-4 py-2 border">{{data.paymentTerms}}</td>
-                            <td class="px-4 py-2 border">
-                                <button class="text-red-600 hover:text-red-800" (click)="onDeleteComparison(i)"
-                                    matTooltip="Delete comparison" matTooltipPosition="above">
-                                    <ng-icon name="heroTrash"></ng-icon>
-                                </button>
-                            </td>
-                        </tr>
-                    </ng-container>
-                    <ng-template #comparisonElse>
-                        <tr>
-                            <td colspan="12">
-                                <p class="text-center text-base p-2">Items empty</p>
-                            </td>
-                        </tr>
-                    </ng-template>
-                </tbody>
-            </table>
+            <div class="my-5">
+                <div class="mb-4 flex items-center justify-between">
+                    <h4 class="text-sm font-semibold text-gray-700">Supplier Comparisons</h4>
+                    <div *ngIf="comparisonList().length > 0" class="flex items-center gap-2 text-xs text-gray-600">
+                        <span class="px-2 py-1 bg-violet-100 text-violet-700 rounded">Total: {{comparisonList().length}}</span>
+                        <span *ngIf="getSelectedComparison()" class="px-2 py-1 bg-green-100 text-green-700 rounded">
+                            Selected: {{getSelectedComparison()?.supplierName}}
+                        </span>
+                        <span *ngIf="!getSelectedComparison() && comparisonList().length > 0" 
+                            class="px-2 py-1 bg-amber-100 text-amber-700 rounded flex items-center gap-1">
+                            <ng-icon name="heroExclamationCircle" class="w-3 h-3"></ng-icon>
+                            No selection
+                        </span>
+                    </div>
+                </div>
+
+                <div *ngIf="comparisonList().length > 0 && !getSelectedComparison()" 
+                    class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                    <ng-icon name="heroExclamationCircle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></ng-icon>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-amber-800">No Supplier Selected</p>
+                        <p class="text-xs text-amber-700 mt-1">Please select a supplier from the comparisons below to proceed.</p>
+                    </div>
+                </div>
+
+                <div *ngIf="comparisonList().length > 0" class="overflow-x-auto border rounded-lg">
+                    <table class="w-full text-sm text-left rtl:text-right text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-violet-50">
+                            <tr>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-2 py-3">Select</div>
+                                </th>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-2 py-3">SL.NO</div>
+                                </th>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-6 py-3">Supplier Name</div>
+                                </th>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-6 py-3">QTY</div>
+                                </th>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-6 py-3">Cost/Unit</div>
+                                </th>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-6 py-3">Total Cost</div>
+                                </th>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-6 py-3">Availability</div>
+                                </th>
+                                <th scope="col" class="border-b border-r text-center">
+                                    <div class="px-6 py-3">Payment Terms</div>
+                                </th>
+                                <th scope="col" class="border-b text-center">
+                                    <div class="px-6 py-3">Actions</div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let data of comparisonList(); let i = index" 
+                                [class.bg-violet-50]="data.selected"
+                                [class.border-violet-200]="data.selected"
+                                class="text-center border-b hover:bg-gray-50 transition-colors">
+                                <td class="px-4 py-3 border-r">
+                                    <div class="flex justify-center items-center">
+                                        <input type="radio" 
+                                            name="selectedSupplier" 
+                                            [id]="'supplier-' + i"
+                                            [checked]="data.selected"
+                                            (change)="onSelectionChange(i)"
+                                            class="w-4 h-4 text-violet-600 focus:ring-violet-500">
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 border-r font-medium">{{i+1}}</td>
+                                <td class="px-4 py-3 border-r font-medium">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <span [class.text-violet-700]="data.selected" [class.font-semibold]="data.selected">
+                                            {{data.supplierName}}
+                                        </span>
+                                        <span *ngIf="data.selected" class="px-2 py-0.5 text-xs bg-violet-600 text-white rounded-full">
+                                            Selected
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 border-r">{{data.quantity}}</td>
+                                <td class="px-4 py-3 border-r">{{data.unitPrice}} {{ currency() }}</td>
+                                <td class="px-4 py-3 border-r font-medium">{{data.totalCost}} {{ currency() }}</td>
+                                <td class="px-4 py-3 border-r">{{data.etaTerms || '-'}}</td>
+                                <td class="px-4 py-3 border-r">{{data.paymentTerms || '-'}}</td>
+                                <td class="px-4 py-3">
+                                    <div class="flex justify-center items-center gap-2">
+                                        <button type="button" 
+                                            class="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors" 
+                                            (click)="onEditComparison(i)"
+                                            matTooltip="Edit comparison" 
+                                            matTooltipPosition="above">
+                                            <ng-icon name="heroPencil" class="w-4 h-4"></ng-icon>
+                                        </button>
+                                        <button type="button" 
+                                            class="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors" 
+                                            (click)="onDeleteComparison(i)"
+                                            matTooltip="Delete comparison" 
+                                            matTooltipPosition="above">
+                                            <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div *ngIf="comparisonList().length === 0" 
+                    class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center bg-gray-50">
+                    <div class="flex flex-col items-center justify-center gap-4">
+                        <div class="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+                            <ng-icon name="heroBuildingOffice" class="w-8 h-8 text-gray-400"></ng-icon>
+                        </div>
+                        <div class="max-w-md">
+                            <h5 class="text-lg font-semibold text-gray-700 mb-2">No Supplier Comparisons</h5>
+                            <p class="text-sm text-gray-500 mb-4">
+                                Add supplier comparisons to compare prices, availability, and payment terms. 
+                                Select the best option for your purchase.
+                            </p>
+                            <button
+                                type="button"
+                                class="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded hover:bg-violet-700 transition-colors"
+                                (click)="onComparisonClicks()">
+                                <ng-icon name="heroPlus" class="w-4 h-4 inline mr-1"></ng-icon>
+                                Add First Comparison
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">

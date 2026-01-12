@@ -1,0 +1,195 @@
+<div class="p-6 max-h-[90vh] overflow-y-auto">
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-xl font-semibold text-gray-900">
+      Purchase Details - 
+      <span class="uppercase">{{ purchase?.purchaseNo }}</span>
+    </h2>
+    <button 
+      (click)="onClose()" 
+      class="text-gray-400 hover:text-gray-600 transition-colors">
+      <ng-icon name="heroXMark" class="w-6 h-6"></ng-icon>
+    </button>
+  </div>
+
+  <div *ngIf="purchase" class="flex flex-col w-full text-gray-900">
+    <!-- Status Badge -->
+    <div *ngIf="purchase.status" class="mb-4 flex items-center gap-2">
+      <span class="text-sm font-medium text-gray-700">Status:</span>
+      <span [class]="getStatusClass(purchase.status)" 
+            class="px-3 py-1 rounded-full text-sm font-medium">
+        {{ purchase.status }}
+      </span>
+    </div>
+
+    <!-- Basic Information Table -->
+    <div class="w-full mb-6">
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Customer
+              </td>
+              <td class="px-2 py-2 border" colspan="2">
+                {{ purchase.customerId?.companyName || '-' }}
+              </td>
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Sales Manager Name
+              </td>
+              <td class="px-2 py-2 border" colspan="2">
+                {{ purchase.jobId?.createdBy?.firstName || '' }}
+                {{ purchase.jobId?.createdBy?.lastName || '' }}
+              </td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border font-medium bg-gray-50">
+                Purchase No
+              </td>
+              <td class="px-2 py-2 border">{{ purchase.purchaseNo }}</td>
+              <td class="px-2 py-2 border font-medium bg-gray-50">
+                Deal Sheet ID
+              </td>
+              <td class="px-2 py-2 border">
+                {{ purchase.jobId?.quoteId?.dealData?.dealId || '-' }}
+              </td>
+              <td class="px-2 py-2 border font-medium bg-gray-50">Job ID</td>
+              <td class="px-2 py-2 border">
+                {{ (purchase.jobId?.jobId?.jobId || purchase.jobId?.jobId) || '-' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Items Table -->
+    <div class="w-full mb-6">
+      <h4 class="text-lg font-semibold mb-3">Items</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+            <tr>
+              <th class="px-3 py-2 border">Item</th>
+              <th class="px-3 py-2 border">Part No.</th>
+              <th class="px-3 py-2 border">Quantity</th>
+              <th class="px-3 py-2 border">Unit Cost</th>
+              <th class="px-3 py-2 border">Total Cost</th>
+              <th class="px-3 py-2 border">Unit Selling Price</th>
+              <th class="px-3 py-2 border">Total Selling Price</th>
+              <th class="px-3 py-2 border">Approved Supplier</th>
+              <th class="px-3 py-2 border">ETA Terms</th>
+            </tr>
+          </thead>
+          <tbody>
+            <ng-container *ngIf="getSelectedRows(purchase.items) as rows">
+              <tr class="border-b" *ngFor="let row of rows">
+                <td class="px-3 py-2 border font-semibold">
+                  <div class="flex items-center gap-2">
+                    <span>{{ row.detail.detail }}</span>
+                    <span *ngIf="getItemStatus(row.detail)" 
+                          [class]="'px-2 py-0.5 text-xs font-medium rounded-full ' + getItemStatus(row.detail)?.class">
+                      {{ getItemStatus(row.detail)?.label }}
+                    </span>
+                  </div>
+                </td>
+                <td class="px-3 py-2 border">{{ formatPartNumber(row.detail.partNo) }}</td>
+                <td class="px-3 py-2 border">{{ row.detail.quantity }}</td>
+                <td class="px-3 py-2 border">
+                  {{ row.selectedSupplier.unitPrice | number : "1.2-2" }} {{ purchase.currency || 'QAR' }}
+                </td>
+                <td class="px-3 py-2 border">
+                  {{ row.selectedSupplier.unitPrice * row.selectedSupplier.quantity | number:"1.2-2" }} {{ purchase.currency || 'QAR' }}
+                </td>
+                <td class="px-3 py-2 border">
+                  {{ row.detail.unitCost | number : "1.2-2" }} {{ purchase.currency || 'QAR' }}
+                </td>
+                <td class="px-3 py-2 border">
+                  {{ row.detail.quantity * row.detail.unitCost | number : "1.2-2" }} {{ purchase.currency || 'QAR' }}
+                </td>
+                <td class="px-3 py-2 border">{{ row.selectedSupplier.supplierName }}</td>
+                <td class="px-3 py-2 border">{{ row.selectedSupplier.etaTerms }}</td>
+              </tr>
+
+              <tr *ngIf="rows.length === 0">
+                <td colspan="9" class="px-3 py-2 border text-center text-gray-400 italic">
+                  No supplier selected
+                </td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Job Summary -->
+    <div class="w-full mb-6">
+      <h4 class="text-lg font-semibold mb-3">Job Summary</h4>
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-md text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                LPO Value
+              </td>
+              <td class="px-2 py-2 border">
+                {{ (purchase.lpoValue || 0) | number : '1.2-2' }} {{ purchase.currency || 'QAR' }}
+              </td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Total Cost as per PR
+              </td>
+              <td class="px-2 py-2 border">
+                {{ ((purchase.totalPRCost || 0) - (purchase.totalDiscountReceived || 0)) | number : '1.2-2' }} {{ purchase.currency || 'QAR' }}
+              </td>
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Total Cost Price as per Deal sheet
+              </td>
+              <td class="px-2 py-2 border">
+                {{ (purchase.totalDealCost || 0) | number : '1.2-2' }} {{ purchase.currency || 'QAR' }}
+              </td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Total Discount Received
+              </td>
+              <td class="px-2 py-2 border">
+                {{ (purchase.totalDiscountReceived || 0) | number : '1.2-2' }} {{ purchase.currency || 'QAR' }}
+              </td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Profit Margin
+              </td>
+              <td class="px-2 py-2 border">
+                {{ getProfitMargin(purchase.lpoValue || 0, (purchase.totalPRCost || 0) - (purchase.totalDiscountReceived || 0)) | number : '1.2-2' }} {{ purchase.currency || 'QAR' }}
+              </td>
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Deal Profit
+              </td>
+              <td class="px-2 py-2 border">
+                {{ (purchase.dealProfit || 0) | number : '1.2-2' }} {{ purchase.currency || 'QAR' }}
+              </td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border font-medium bg-gray-50" colspan="1">
+                Difference In Profit
+              </td>
+              <td class="px-2 py-2 border">
+                {{ ((getProfitMargin(purchase.lpoValue || 0, (purchase.totalPRCost || 0) - (purchase.totalDiscountReceived || 0)) || 0) - (purchase.dealProfit || 0)) | number : '1.2-2' }} {{ purchase.currency || 'QAR' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Close Button -->
+    <div class="flex justify-end mt-6 pt-4 border-t">
+      <app-btn theme="secondary" (click)="onClose()">
+        Close
+      </app-btn>
+    </div>
+  </div>
+</div>
+

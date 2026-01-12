@@ -9,7 +9,7 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ClaimService } from 'src/app/core/services/claim.service';
-import { ApprovalStatusComponent } from '../approval-status/approval-status.component';
+import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AttachementsDialogComponent } from 'src/app/shared/components/attachements-dialog/attachements-dialog.component';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
@@ -224,9 +224,15 @@ export class RequestForApprovalsComponent implements OnInit {
   }
 
   onViewDetails(claim: any): void {
+    const dialogData: ApprovalStatusData = {
+      entity: claim,
+      entityType: 'claim'
+    };
+    
     this._dialog.open(ApprovalStatusComponent, {
       width: '800px',
-      data: { claim }
+      maxHeight: '90vh',
+      data: dialogData
     });
   }
 

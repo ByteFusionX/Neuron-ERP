@@ -16,6 +16,7 @@ export interface getJob {
     quotation: Quotatation;
     status: string;
     createdDate: string;
+    updatedDate?: string;
     clientDetails?: any;
     salesPersonDetails?: any;
     purchaseNo?: any;
@@ -23,6 +24,12 @@ export interface getJob {
     supplierDiscounts?:any;
     allocateStatus: allocateStatus
     allocateType: allocateType
+    hasPurchaseRequest?: boolean;
+    procurementPerson?: {
+        _id: string;
+        firstName: string;
+        lastName: string;
+    };
 }
 
 export interface Files {

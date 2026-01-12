@@ -5,20 +5,29 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from '../button/button.component';
 
 export interface StatusHistoryItem {
-  rejectedBy: {
+  rejectedBy?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+  };
+  approvedBy?: {
     _id: string;
     firstName: string;
     lastName: string;
     email?: string;
   };
   comment: string;
-  rejectedAt: string;
+  rejectedAt?: string;
+  approvedAt?: string;
   _id: string;
+  type?: 'approval' | 'rejection';
 }
 
 export interface StatusHistoryData {
   title: string;
   history: StatusHistoryItem[];
+  type?: 'approval' | 'rejection';
 }
 
 @Component({
@@ -38,7 +47,8 @@ export class StatusHistoryModalComponent {
     this.dialogRef.close();
   }
 
-  formatDate(dateString: string): string {
+  formatDate(dateString?: string): string {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
       year: 'numeric',
@@ -47,5 +57,9 @@ export class StatusHistoryModalComponent {
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  isApprovalType(data: StatusHistoryData, item: StatusHistoryItem): boolean {
+    return data.type === 'approval' || item.type === 'approval';
   }
 }

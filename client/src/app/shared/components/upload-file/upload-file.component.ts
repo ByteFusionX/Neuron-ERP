@@ -22,24 +22,40 @@ export class UploadFileComponent {
     @Input() selectedFiles: any[] = [];
 
     onFileSelected(event: any) {
-        let files = event.target.files;
-        this.handleFiles(files);
+        const files = event.target.files;
+        if (files && files.length > 0) {
+            this.handleFiles(files);
+            this.resetFileInput();
+        }
     }
 
     handleFiles(files: FileList) {
+        if (!files || files.length === 0) {
+            return;
+        }
+
+        if (!this.selectedFiles) {
+            this.selectedFiles = [];
+        }
+
         for (let i = 0; i < files.length; i++) {
             const newFile = files[i];
-            let exist = false;
-            if(this.selectedFiles){
-                exist = this.selectedFiles.some(file => file.name === newFile.name);
-            }else{
-                this.selectedFiles = [];
-            }
+            const exist = this.selectedFiles.some(file => 
+                file.name === newFile.name && 
+                file.size === newFile.size && 
+                file.lastModified === newFile.lastModified
+            );
             if (!exist) {
                 this.selectedFiles.push(files[i]);
             }
         }
         this.onUpload();
+    }
+
+    resetFileInput() {
+        if (this.fileInput?.nativeElement) {
+            this.fileInput.nativeElement.value = '';
+        }
     }
 
     onUpload() {
@@ -51,9 +67,11 @@ export class UploadFileComponent {
     }
 
     onFileRemoved(index: number) {
-        this.selectedFiles.splice(index, 1);
-        this.fileInput.nativeElement.value = '';
-        this.onUpload();
+        if (this.selectedFiles && index >= 0 && index < this.selectedFiles.length) {
+            this.selectedFiles.splice(index, 1);
+            this.resetFileInput();
+            this.onUpload();
+        }
     }
 
     // Drag and drop handlers

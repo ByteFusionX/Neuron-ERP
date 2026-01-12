@@ -8,6 +8,7 @@ interface PurchaseOrder extends Document {
         quantity: number;
         unitCost: number;
         totalCost: number;
+        partNo?: any;
     }[];
     supplierId: any;
     purchaseId: any;
@@ -27,10 +28,44 @@ interface PurchaseOrder extends Document {
         originalname: string;
         isUploaded?: boolean;
     }[];
+    approvedHistory: {
+        approvedBy: any;
+        reason: string;
+        date: Date;
+    }[];
+    rejectedHistory: {
+        rejectedBy: any;
+        reason: string;
+        date: Date;
+    }[];
     createdAt: Date;
     updatedAt: Date;
     createdBy: any;
+    currency?: string;
 }
+
+const purchaseOrderItemSchema = new Schema({
+    detail: {
+        type: String,
+        required: true
+    },
+    quantity: {
+        type: Number,
+        required: true
+    },
+    unitCost: {
+        type: Number,
+        required: true
+    },
+    totalCost: {
+        type: Number,
+        required: true
+    },
+    partNo: {
+        type: Schema.Types.ObjectId,
+        ref: 'Product'
+    }
+}, { _id: false });
 
 const purchaseOrderSchema = new Schema<PurchaseOrder>(
     {
@@ -41,14 +76,45 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         },
         poStatus: {
             type: String,
-            enum: ["Open", 'Hold', 'Closed', 'Cancelled'],
-            default: "Open",
+            enum: ["Draft", "Pending for Approval", "Approved"],
+            default: "Pending for Approval",
         },
-        items: [],
+        approvedHistory: {
+            type: [{
+                approvedBy: {
+                    type: Schema.Types.ObjectId,
+                    ref: 'Employee'
+                },
+                reason: String,
+                date: {
+                    type: Date,
+                    default: Date.now
+                }
+            }],
+            default: []
+        },
+        rejectedHistory: {
+            type: [{
+                rejectedBy: {
+                    type: Schema.Types.ObjectId,
+                    ref: 'Employee'
+                },
+                reason: String,
+                date: {
+                    type: Date,
+                    default: Date.now
+                }
+            }],
+            default: []
+        },
+        items: {
+            type: [purchaseOrderItemSchema],
+            default: []
+        },
         purchaseId: {
             type: Schema.Types.ObjectId,
             required: true,
-            ref: "PurchaseRequest",
+            ref: "Purchase",
         },
         jobId: {
             type: Schema.Types.ObjectId,
@@ -122,6 +188,9 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
                 }
             }],
             default: []
+        },
+        currency: {
+            type: String
         },
     },
     { timestamps: true }

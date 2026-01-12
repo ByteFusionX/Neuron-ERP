@@ -16,16 +16,28 @@
                             <td
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Supplier</td>
                             <td class="px-2 py-2 border w-2/6 align-middle h-full">
-                                    <app-select-dropdown [options]="suppliersList()"
-                                        label optionLabel="supplierName"
-                                        optionValue="_id"
+                                    <ng-select 
+                                        formControlName="supplierId"
+                                        (change)="onSupplierSelected($event)"
+                                        [class.border-red-500]="f['supplierId'].invalid && isSubmitted()"
+                                        class="w-full form-component border capitalize"
                                         placeholder="Select Supplier Id"
-                                        [isSubmitted]="isSubmitted()"
-                                        [class]="'w-full justify-center items-center !mb-0'"
-                                        (onSelected)="onSupplierSelected($event)"
-                                        [selected]="requestedSupplierId()"
+                                        appendTo="body"
+                                        [clearable]="true"
+                                    >
+                                        <ng-option 
+                                            *ngFor="let supplier of suppliersList()" 
+                                            [value]="supplier._id"
+                                            [disabled]="!supplier.canSelect"
+                                            class="capitalize"
                                         >
-                                    </app-select-dropdown>
+                                            {{ supplier.supplierName }}
+                                            <span *ngIf="!supplier.canSelect" class="text-gray-400 ml-2">(All quantities issued)</span>
+                                        </ng-option>
+                                    </ng-select>
+                                    <div class="mb-2 text-red-700 text-sm" *ngIf="f['supplierId'].invalid && isSubmitted()">
+                                        Please select a supplier.
+                                    </div>
                             </td>
                             <td
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Delivery
@@ -50,16 +62,43 @@
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Place
                                 of Delivery</td>
                             <td class="px-2 py-2 border w-2/6">
-                                <div class="flex items-center justify-center h-full min-h-[60px]">
-                                    <app-form-field
-                                        label=""
-                                        [control]="f['placeOfDelivery']"
-                                        [isSubmitted]="isSubmitted()"
-                                        type="text"
-                                        placeholder="Enter Place of Delivery"
-                                        [class]="'!mb-0'"
-                                        class="w-full justify-center items-center mb-0">
-                                    </app-form-field>
+                                <div class="flex flex-col gap-1 justify-center h-full min-h-[60px]">
+                                    <div class="flex items-center gap-2">
+                                        <ng-select 
+                                            formControlName="placeOfDelivery"
+                                            [class.border-red-500]="f['placeOfDelivery'].invalid && isSubmitted()"
+                                            class="w-full form border capitalize"
+                                            placeholder="Select or enter place of delivery"
+                                            appendTo="body"
+                                            [searchable]="true"
+                                            [clearable]="true"
+                                            [addTag]="true"
+                                            [items]="placesOfDelivery"
+                                            bindLabel="note"
+                                            bindValue="note">
+                                            <ng-option *ngFor="let place of placesOfDelivery" [value]="place.note">
+                                                {{place.note}}
+                                            </ng-option>
+                                        </ng-select>
+
+                                        <button
+                                            *ngIf="f['placeOfDelivery'].value && !isPlaceSaved(f['placeOfDelivery'].value)"
+                                            type="button"
+                                            (click)="createPlaceOfDelivery()"
+                                            class="shrink-0 px-3 py-1.5 text-xs font-semibold text-violet-700 border border-violet-300 rounded-md bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition">
+                                            + Save
+                                        </button>
+                                    </div>
+                                    <div
+                                        *ngIf="f['placeOfDelivery'].value && !isPlaceSaved(f['placeOfDelivery'].value)"
+                                        class="text-xs text-orange-600">
+                                        Not saved yet – click <span class="font-semibold">Save</span> to store this place for future use.
+                                    </div>
+                                    <div
+                                        class="text-xs text-red-700"
+                                        *ngIf="f['placeOfDelivery'].invalid && isSubmitted()">
+                                        Please enter a valid place of delivery.
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -93,16 +132,43 @@
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Shipping
                                 Terms</td>
                             <td class="px-2 py-2 border w-2/6">
-                                <div class="flex items-center justify-center h-full min-h-[60px]">
-                                    <app-form-field
-                                        label=""
-                                        [control]="f['shippingTerms']"
-                                        [isSubmitted]="isSubmitted()"
-                                        type="text"
-                                        placeholder="Enter Shipping Terms"
-                                        [class]="'!mb-0'"
-                                        class="w-full justify-center items-center mb-0">
-                                    </app-form-field>
+                                <div class="flex flex-col gap-1 justify-center h-full min-h-[60px]">
+                                    <div class="flex items-center gap-2">
+                                        <ng-select 
+                                            formControlName="shippingTerms"
+                                            [class.border-red-500]="f['shippingTerms'].invalid && isSubmitted()"
+                                            class="w-full form border"
+                                            placeholder="Select or enter shipping terms"
+                                            appendTo="body"
+                                            [searchable]="true"
+                                            [clearable]="true"
+                                            [addTag]="true"
+                                            [items]="shippingTermsList"
+                                            bindLabel="note"
+                                            bindValue="note">
+                                            <ng-option *ngFor="let term of shippingTermsList" [value]="term.note">
+                                                {{term.note}}
+                                            </ng-option>
+                                        </ng-select>
+
+                                        <button
+                                            *ngIf="f['shippingTerms'].value && !isShippingTermSaved(f['shippingTerms'].value)"
+                                            type="button"
+                                            (click)="createShippingTerm()"
+                                            class="shrink-0 px-3 py-1.5 text-xs font-semibold text-violet-700 border border-violet-300 rounded-md bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition">
+                                            + Save
+                                        </button>
+                                    </div>
+                                    <div
+                                        *ngIf="f['shippingTerms'].value && !isShippingTermSaved(f['shippingTerms'].value)"
+                                        class="text-xs text-orange-600">
+                                        Not saved yet – click <span class="font-semibold">Save</span> to store these shipping terms for future use.
+                                    </div>
+                                    <div
+                                        class="text-xs text-red-700"
+                                        *ngIf="f['shippingTerms'].invalid && isSubmitted()">
+                                        Please enter valid shipping terms.
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -200,22 +266,72 @@
                 <table class="w-full text-md text-left border">
                     <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                         <tr>
+                            <th class="px-4 py-2 border">
+                                <input 
+                                    type="checkbox" 
+                                    [checked]="isAllSelected()"
+                                    (change)="toggleSelectAll()"
+                                    class="cursor-pointer"
+                                    *ngIf="this.selectedSupplier() && this.items().length > 0"
+                                />
+                            </th>
                             <th class="px-4 py-2 border">SL.NO</th>
                             <th class="px-4 py-2 border">Description</th>
-                            <th class="px-4 py-2 border">Quantity</th>
+                            <th class="px-4 py-2 border">Part No.</th>
+                            <th class="px-4 py-2 border">Original Qty</th>
+                            <th class="px-4 py-2 border">Issued Qty</th>
+                            <th class="px-4 py-2 border">Remaining Qty</th>
+                            <th class="px-4 py-2 border">Issue Qty</th>
                             <th class="px-4 py-2 border">Unit Cost</th>
                             <th class="px-4 py-2 border">Total Price</th>
                         </tr>
                     </thead>
                     <tbody>
                         <ng-container *ngIf="this.selectedSupplier()">
-                            @for (item of this.items(); track item._id; let i = $index) {
-                            <tr class="border-b">
+                            @for (item of this.items(); track item._id || $index; let i = $index) {
+                            @let itemId = item._id || (item.detail + '-' + item.comparisons.quantity);
+                            @let isIssued = item.isIssued || false;
+                            @let issueQuantity = getItemQuantity(itemId);
+                            <tr class="border-b" [class.opacity-50]="isIssued && !isReissueMode" [class.bg-gray-100]="isIssued && !isReissueMode">
+                                <td class="px-4 py-2 border">
+                                    <input 
+                                        type="checkbox" 
+                                        [checked]="isItemSelected(itemId) && (!isIssued || isReissueMode)"
+                                        (change)="toggleItemSelection(itemId, isIssued)"
+                                        [disabled]="isIssued && !isReissueMode"
+                                        class="cursor-pointer"
+                                    />
+                                </td>
                                 <td class="px-4 py-2 border">{{i+1}}</td>
-                                <td class="px-4 py-2 border">{{item.detail}}</td>
-                                <td class="px-4 py-2 border">{{item.comparisons.quantity}}</td>
-                                <td class="px-4 py-2 border">{{item.comparisons.unitPrice}}</td>
-                                <td class="px-4 py-2 border">{{item.comparisons.quantity * item.comparisons.unitPrice | number:'1.2-2'}}</td>
+                                <td class="px-4 py-2 border">
+                                    {{item.detail}}
+                                    <span *ngIf="isIssued" class="ml-2 text-xs text-orange-600 font-semibold">(Fully Issued)</span>
+                                </td>
+                                <td class="px-4 py-2 border">{{getPartNumberForItem(item)}}</td>
+                                <td class="px-4 py-2 border">{{item.originalQuantity || item.comparisons?.quantity || item.quantity}}</td>
+                                <td class="px-4 py-2 border">{{item.issuedQuantity || 0}}</td>
+                                <td class="px-4 py-2 border">{{item.remainingQuantity || 0}}</td>
+                                <td class="px-4 py-2 border">
+                                    <div *ngIf="(!isIssued || isReissueMode) && isItemSelected(itemId)" class="flex flex-col">
+                                        <input 
+                                            type="number" 
+                                            [value]="issueQuantity"
+                                            (input)="updateItemQuantity(itemId, $any($event.target).value)"
+                                            (blur)="updateItemQuantity(itemId, $any($event.target).value)"
+                                            [disabled]="(isIssued && !isReissueMode) || !isItemSelected(itemId)"
+                                            class="w-20 px-2 py-1 border rounded text-center"
+                                            [class.border-gray-300]="!getItemQuantityError(itemId)"
+                                            [class.border-red-500]="getItemQuantityError(itemId)"
+                                            placeholder="0"
+                                        />
+                                        <span *ngIf="getItemQuantityError(itemId)" class="text-xs text-red-600 mt-1">
+                                            {{getItemQuantityError(itemId)}}
+                                        </span>
+                                    </div>
+                                    <span *ngIf="(isIssued && !isReissueMode) || !isItemSelected(itemId)">-</span>
+                                </td>
+                                <td class="px-4 py-2 border">{{ formatCurrency(item.comparisons?.unitPrice || item.unitPrice || 0) }}</td>
+                                <td class="px-4 py-2 border">{{ formatCurrency(issueQuantity * (item.comparisons?.unitPrice || item.unitPrice || 0)) }}</td>
                             </tr>
                             }
                         </ng-container>
@@ -249,7 +365,7 @@
                                 class="px-2 py-2 border font-medium bg-gray-50">Sub
                                 Total</td>    
                             <td class="px-2 py-2 border" *ngIf="this.selectedSupplier()">
-                                {{ getSubTotal() | numberFormatter}}
+                                {{ formatCurrency(getSubTotal()) }}
                             </td>
                         </tr>
                         <tr>
@@ -273,7 +389,7 @@
                                 class="px-2 py-2 border font-medium bg-gray-50">Total
                                 Amount after discount </td>
                             <td class="px-2 py-2 border" *ngIf="this.selectedSupplier()">
-                                {{ this.getDiscountedPrice() | numberFormatter}}
+                                {{ formatCurrency(this.getDiscountedPrice()) }}
                             </td>
                         </tr>
                     </tbody>
@@ -291,20 +407,22 @@
                     class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
                     type="button" (click)="onDiscardClicks()">Exit</button>
             </div>
-            <button
-                class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                type="button" 
-                [disabled]="isCreatingPO()"
-                (click)="onIssueClicks()">
-                <span *ngIf="!isCreatingPO()">Issue LPO</span>
-                <span *ngIf="isCreatingPO()" class="flex items-center">
-                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Creating PO...
-                </span>
-            </button>
+                <button
+                    class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    type="button" 
+                    [disabled]="isCreatingPO()"
+                    (click)="onIssueClicks()">
+                    <span *ngIf="!isCreatingPO()">
+                      {{isReissueMode ? 'Re-issue LPO' : (isEditMode ? 'Update & Issue LPO' : 'Issue LPO')}}
+                    </span>
+                    <span *ngIf="isCreatingPO()" class="flex items-center">
+                        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        {{isReissueMode ? 'Re-issuing...' : (isEditMode ? 'Updating...' : 'Creating PO...')}}
+                    </span>
+                </button>
         </div>
         </div>
     </form>

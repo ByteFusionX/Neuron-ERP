@@ -2,6 +2,12 @@ import { getJob } from "./job.interface";
 import { Quotatation } from "./quotation.interface";
 import { Supplier } from "./suppliers.interface";
 
+export interface ProductPartNumber {
+    _id: string;
+    partNo: string;
+    productDescription?: string;
+}
+
 export interface QuoteItemDetails {
     _id?: string;
     detail: string;
@@ -9,12 +15,15 @@ export interface QuoteItemDetails {
     unitCost: number;
     unitSellingPrice: number;
     availability: string;
+    partNo?: string | ProductPartNumber;
     supplierName?: string;
     email?: string;
     phoneNo?: string;
     dealSelected: boolean;
     comparison: boolean;
     comparisons: Comparisons[];
+    isNewlyAdded?: boolean;
+    merged?: boolean;
 }
 
 export interface Comparisons {
@@ -78,6 +87,12 @@ export interface PurchaseData {
     createdBy: any,
     createdAt: Date,
     updatedAt?: Date,
+    lpoValue?: number;
+    totalPRCost?: number;
+    totalDealCost?: number;
+    totalDiscountReceived?: number;
+    dealProfit?: number;
+    currency?: string;
 }
 
 export enum PurchaseStatus {
