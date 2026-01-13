@@ -41,6 +41,8 @@ export class CreateGrnComponent implements OnInit {
   employees: any[] = [];
   isLoading = signal<boolean>(true);
   isSubmitting = signal<boolean>(false);
+  isFormDisabled = signal<boolean>(false);
+  existingGRNs: any[] = [];
 
   grnForm: FormGroup = this.fb.group({
     grnNo: ['', [Validators.required]],
@@ -93,9 +95,8 @@ export class CreateGrnComponent implements OnInit {
 
           if (lpoData.items && Array.isArray(lpoData.items)) {
             this.populateItems(lpoData.items);
+            this.checkExistingGrn();
           }
-
-          this.checkExistingGrn();
         } else {
           this.toastr.error('LPO not found');
           if (this.purchaseId) {
@@ -120,34 +121,100 @@ export class CreateGrnComponent implements OnInit {
   }
 
   checkExistingGrn(): void {
-    this.grnService.getGRNByLpoId(this.lpoId).subscribe({
+    this.grnService.getAllGRNsByLpoId(this.lpoId).subscribe({
       next: (response: any) => {
         if (response.success && response.data) {
-          const grn = response.data;
-          this.grnForm.patchValue({
-            grnNo: grn.grnNo || '',
-            grnDate: grn.grnDate ? new Date(grn.grnDate).toISOString().split('T')[0] : '',
-            supplierInvoiceNo: grn.supplierInvoiceNo || '',
-            supplierInvoiceDate: grn.supplierInvoiceDate ? new Date(grn.supplierInvoiceDate).toISOString().split('T')[0] : '',
-            supplierDeliveryNoteNo: grn.supplierDeliveryNoteNo || '',
-            receivedBy: grn.receivedBy?._id || grn.receivedBy || '',
-            warehouse: grn.warehouse?._id || grn.warehouse || ''
-          });
-
-          if (grn.items && Array.isArray(grn.items)) {
-            const itemsArray = this.grnForm.get('items') as FormArray;
-            itemsArray.clear();
-            grn.items.forEach((item: any, index: number) => {
-              const itemGroup = this.createItemGroup(item, index);
-              itemsArray.push(itemGroup);
-            });
-          }
+          this.existingGRNs = response.data || [];
+          this.calculateBalanceQuantities();
+        } else {
+          this.existingGRNs = [];
+          this.calculateBalanceQuantities();
         }
       },
       error: (error) => {
-        console.log('No existing GRN found or error:', error);
+        console.log('Error fetching existing GRNs:', error);
+        this.existingGRNs = [];
+        this.calculateBalanceQuantities();
       }
     });
+  }
+
+  calculateBalanceQuantities(): void {
+    const itemsArray = this.grnForm.get('items') as FormArray;
+    if (!itemsArray || itemsArray.length === 0) return;
+
+    const lpoItems = this.lpo?.items || [];
+    let allBalancesZero = true;
+
+    itemsArray.controls.forEach((itemGroup: any, index: number) => {
+      const orderedQty = itemGroup.get('orderedQty')?.value || 0;
+      const lpoItem = lpoItems[index];
+      
+      let totalAcceptedQty = 0;
+      
+      this.existingGRNs.forEach((grn: any) => {
+        if (grn.items && Array.isArray(grn.items)) {
+          grn.items.forEach((grnItem: any) => {
+            const partNoMatch = this.matchPartNo(grnItem.partNo, lpoItem?.partNo);
+            const descriptionMatch = grnItem.itemDescription === lpoItem?.detail;
+            
+            if (partNoMatch || descriptionMatch) {
+              totalAcceptedQty += grnItem.acceptedQty || 0;
+            }
+          });
+        }
+      });
+
+      const balanceQty = Math.max(0, orderedQty - totalAcceptedQty);
+      
+      if (!itemGroup.get('balanceQty')) {
+        itemGroup.addControl('balanceQty', this.fb.control(balanceQty));
+      } else {
+        itemGroup.get('balanceQty')?.setValue(balanceQty, { emitEvent: false });
+      }
+
+      if (balanceQty > 0) {
+        allBalancesZero = false;
+      }
+
+      const receivedQtyControl = itemGroup.get('receivedQty');
+      if (receivedQtyControl) {
+        receivedQtyControl.setValidators([
+          Validators.required,
+          Validators.min(0),
+          Validators.max(balanceQty)
+        ]);
+        receivedQtyControl.updateValueAndValidity({ emitEvent: false });
+      }
+    });
+
+    this.isFormDisabled.set(allBalancesZero);
+    
+    if (allBalancesZero) {
+      this.grnForm.disable();
+      this.toastr.info('All quantities have been fully received. No new GRN can be created.');
+    } else {
+      this.grnForm.enable();
+      const grnNoControl = this.grnForm.get('grnNo');
+      const supplierNameControl = this.grnForm.get('supplierName');
+      const linkedLpoNoControl = this.grnForm.get('linkedLpoNo');
+      const jobIdControl = this.grnForm.get('jobId');
+      if (grnNoControl) grnNoControl.disable();
+      if (supplierNameControl) supplierNameControl.disable();
+      if (linkedLpoNoControl) linkedLpoNoControl.disable();
+      if (jobIdControl) jobIdControl.disable();
+    }
+  }
+
+  matchPartNo(grnPartNo: any, lpoPartNo: any): boolean {
+    const formatPartNo = (partNo: any): string => {
+      if (!partNo) return '';
+      if (typeof partNo === 'string') return partNo;
+      if (partNo.partNo) return partNo.partNo;
+      return '';
+    };
+    
+    return formatPartNo(grnPartNo) === formatPartNo(lpoPartNo);
   }
 
   populateItems(lpoItems: any[]): void {
@@ -155,12 +222,14 @@ export class CreateGrnComponent implements OnInit {
     itemsArray.clear();
     
     lpoItems.forEach((item: any, index: number) => {
+      const orderedQty = item.quantity || 0;
       const itemGroup = this.fb.group({
         slNo: [index + 1],
         partNo: [this.formatPartNumber(item.partNo) || ''],
         itemDescription: [item.detail || ''],
         uom: [''],
-        orderedQty: [item.quantity || 0],
+        orderedQty: [orderedQty],
+        balanceQty: [orderedQty],
         receivedQty: [0, [Validators.required, Validators.min(0)]],
         acceptedQty: [0, [Validators.required, Validators.min(0)]],
         rejectedQty: [0],
@@ -170,14 +239,58 @@ export class CreateGrnComponent implements OnInit {
       
       itemGroup.get('receivedQty')?.valueChanges.subscribe(() => {
         this.calculateRejectedQty(itemGroup);
+        this.validateReceivedQty(itemGroup);
       });
       
       itemGroup.get('acceptedQty')?.valueChanges.subscribe(() => {
         this.calculateRejectedQty(itemGroup);
+        this.validateAcceptedQty(itemGroup);
       });
       
       itemsArray.push(itemGroup);
     });
+  }
+
+  validateReceivedQty(itemGroup: FormGroup): void {
+    const receivedQty = itemGroup.get('receivedQty')?.value || 0;
+    const balanceQty = itemGroup.get('balanceQty')?.value || 0;
+    
+    if (receivedQty > balanceQty) {
+      itemGroup.get('receivedQty')?.setErrors({ max: true });
+    } else {
+      const errors = itemGroup.get('receivedQty')?.errors;
+      if (errors && errors['max']) {
+        delete errors['max'];
+        if (Object.keys(errors).length === 0) {
+          itemGroup.get('receivedQty')?.setErrors(null);
+        } else {
+          itemGroup.get('receivedQty')?.setErrors(errors);
+        }
+      }
+    }
+  }
+
+  validateAcceptedQty(itemGroup: FormGroup): void {
+    const acceptedQty = itemGroup.get('acceptedQty')?.value || 0;
+    const receivedQty = itemGroup.get('receivedQty')?.value || 0;
+    const balanceQty = itemGroup.get('balanceQty')?.value || 0;
+    
+    if (acceptedQty > receivedQty) {
+      itemGroup.get('acceptedQty')?.setErrors({ max: true });
+    } else if (acceptedQty > balanceQty) {
+      itemGroup.get('acceptedQty')?.setErrors({ maxBalance: true });
+    } else {
+      const errors = itemGroup.get('acceptedQty')?.errors;
+      if (errors) {
+        if (errors['max']) delete errors['max'];
+        if (errors['maxBalance']) delete errors['maxBalance'];
+        if (Object.keys(errors).length === 0) {
+          itemGroup.get('acceptedQty')?.setErrors(null);
+        } else {
+          itemGroup.get('acceptedQty')?.setErrors(errors);
+        }
+      }
+    }
   }
 
   calculateRejectedQty(itemGroup: FormGroup): void {
@@ -282,14 +395,33 @@ export class CreateGrnComponent implements OnInit {
   }
 
   onSave(): void {
+    if (this.isFormDisabled()) {
+      this.toastr.warning('All quantities have been fully received. Cannot create new GRN.');
+      return;
+    }
+
     if (this.grnForm.invalid) {
       this.grnForm.markAllAsTouched();
-      this.toastr.warning('Please fill all required fields');
+      const itemsArray = this.grnForm.get('items') as FormArray;
+      itemsArray.controls.forEach((itemGroup: any) => {
+        const receivedQty = itemGroup.get('receivedQty');
+        const acceptedQty = itemGroup.get('acceptedQty');
+        if (receivedQty?.errors?.['max']) {
+          this.toastr.error('Received quantity cannot exceed balance quantity');
+        }
+        if (acceptedQty?.errors?.['max']) {
+          this.toastr.error('Accepted quantity cannot exceed received quantity');
+        }
+        if (acceptedQty?.errors?.['maxBalance']) {
+          this.toastr.error('Accepted quantity cannot exceed balance quantity');
+        }
+      });
+      this.toastr.warning('Please fill all required fields correctly');
       return;
     }
 
     this.isSubmitting.set(true);
-    const formValue = this.grnForm.value;
+    const formValue = this.grnForm.getRawValue();
     
     const grnData = {
       grnNo: formValue.grnNo,

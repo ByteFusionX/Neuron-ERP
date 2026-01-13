@@ -1,0 +1,122 @@
+<div class="p-6 max-h-[90vh] flex flex-col">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h2 class="text-xl font-semibold text-gray-900">GRN List - {{ data.lpoNo }}</h2>
+      <p class="text-sm text-gray-500 mt-1">Select a GRN to view details</p>
+    </div>
+    <button
+      (click)="onClose()"
+      class="text-gray-400 hover:text-gray-600 transition-colors"
+      type="button">
+      <ng-icon name="heroXMark" class="w-6 h-6"></ng-icon>
+    </button>
+  </div>
+
+  <div class="flex-1 overflow-hidden flex flex-col">
+    <div class="mb-4 flex items-center justify-between gap-4">
+      <div class="flex-1 relative">
+        <input
+          type="text"
+          [value]="searchTerm()"
+          (input)="onSearchChange($any($event.target).value)"
+          placeholder="Search by GRN No, Warehouse, or Date..."
+          class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+        <ng-icon
+          name="heroMagnifyingGlass"
+          class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5">
+        </ng-icon>
+      </div>
+      @if (data.hasBalanceQty) {
+        <app-btn
+          theme="primary"
+          type="button"
+          (buttonClick)="onCreateGrn()"
+          class="whitespace-nowrap">
+          <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
+          Create New GRN
+        </app-btn>
+      }
+    </div>
+
+    <div class="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
+      @if (isLoading()) {
+        <div class="flex items-center justify-center py-12">
+          <div class="text-gray-500">Loading GRNs...</div>
+        </div>
+      } @else if (filteredGrns().length === 0) {
+        <div class="flex flex-col items-center justify-center py-12 px-4">
+          <ng-icon name="heroDocumentText" class="w-16 h-16 text-gray-300 mb-4"></ng-icon>
+          <p class="text-gray-500 text-center">
+            @if (searchTerm()) {
+              No GRNs found matching your search.
+            } @else {
+              No GRNs found for this LPO.
+            }
+          </p>
+          @if (data.hasBalanceQty && !searchTerm()) {
+            <app-btn
+              theme="primary"
+              type="button"
+              (buttonClick)="onCreateGrn()"
+              class="mt-4">
+              <ng-icon name="heroPlus" class="w-4 h-4 mr-1"></ng-icon>
+              Create First GRN
+            </app-btn>
+          }
+        </div>
+      } @else {
+        <table class="w-full text-sm text-left">
+          <thead class="bg-gray-50 sticky top-0 z-10">
+            <tr>
+              <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">GRN No</th>
+              <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">Date</th>
+              <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">Warehouse</th>
+              <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Items</th>
+              <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Received Qty</th>
+              <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Accepted Qty</th>
+              <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            @for (grn of filteredGrns(); track grn._id) {
+              <tr class="hover:bg-gray-50 transition-colors cursor-pointer" (click)="onViewGrn(grn)">
+                <td class="px-4 py-3 border-b">
+                  <span class="font-medium text-violet-600">{{ grn.grnNo || '-' }}</span>
+                </td>
+                <td class="px-4 py-3 border-b text-gray-700">
+                  {{ formatDate(grn.grnDate) }}
+                </td>
+                <td class="px-4 py-3 border-b text-gray-700">
+                  {{ grn.warehouse?.wareHouseName || '-' }}
+                </td>
+                <td class="px-4 py-3 border-b text-center text-gray-700">
+                  {{ getTotalItems(grn) }}
+                </td>
+                <td class="px-4 py-3 border-b text-center text-gray-700">
+                  {{ getTotalReceivedQty(grn) }}
+                </td>
+                <td class="px-4 py-3 border-b text-center text-gray-700">
+                  <span class="font-medium">{{ getTotalAcceptedQty(grn) }}</span>
+                </td>
+                <td class="px-4 py-3 border-b text-center" (click)="$event.stopPropagation()">
+                  <button
+                    (click)="onViewGrn(grn)"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors">
+                    <ng-icon name="heroEye" class="w-4 h-4"></ng-icon>
+                    View
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+    @if (filteredGrns().length > 0 && !isLoading()) {
+      <div class="mt-4 text-sm text-gray-500 text-center">
+        Showing {{ filteredGrns().length }} of {{ data.grns?.length || 0 }} GRN(s)
+      </div>
+    }
+  </div>
+</div>

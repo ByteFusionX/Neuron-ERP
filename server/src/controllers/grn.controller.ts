@@ -82,16 +82,20 @@ export const createGRN = async (req: Request, res: Response) => {
     }
 
     for (const item of items) {
-      if (!item.itemDescription || typeof parseInt(item.orderedQty) !== 'number' || 
-          typeof parseInt(item.receivedQty) !== 'number' || typeof parseInt(item.acceptedQty) !== 'number') {
+      const orderedQty = Number(item.orderedQty);
+      const receivedQty = Number(item.receivedQty);
+      const acceptedQty = Number(item.acceptedQty);
+      
+      if (!item.itemDescription || isNaN(orderedQty) || isNaN(receivedQty) || isNaN(acceptedQty) ||
+          orderedQty < 0 || receivedQty < 0 || acceptedQty < 0) {
         return res.status(400).json({
           success: false,
-          message: "Invalid item structure. Each item must have itemDescription, orderedQty, receivedQty, and acceptedQty"
+          message: "Invalid item structure. Each item must have itemDescription, and valid numeric values for orderedQty, receivedQty, and acceptedQty"
         });
       }
     }
 
-    const existingGRN = await GRN.findOne({ 
+    const existingGRNs = await GRN.find({ 
       purchaseOrderId,
       isDeleted: { $ne: true }
     });
@@ -118,56 +122,31 @@ export const createGRN = async (req: Request, res: Response) => {
       grnData.receivedBy = receivedBy;
     }
 
-    let grn;
-    if (existingGRN) {
-      grn = await GRN.findByIdAndUpdate(
-        existingGRN._id,
-        grnData,
-        { new: true, runValidators: true }
-      ).populate('warehouse')
-       .populate('receivedBy')
-       .populate({
-         path: 'purchaseOrderId',
-         populate: [
-           { path: 'supplierId' },
-           { 
-             path: 'purchaseId', 
-             populate: [
-               { path: 'jobId', populate: { path: 'quoteId', populate: { path: 'client' } } },
-               { path: 'customerId' }
-             ]
-           },
-           { path: 'quoteId', populate: { path: 'client' } }
-         ]
-       })
-       .populate('createdBy');
-    } else {
-      grn = new GRN(grnData);
-      await grn.save();
-      grn = await GRN.findById(grn._id)
-        .populate('warehouse')
-        .populate('receivedBy')
-        .populate({
-          path: 'purchaseOrderId',
-          populate: [
-            { path: 'supplierId' },
-            { 
-              path: 'purchaseId', 
-              populate: [
-                { path: 'jobId', populate: { path: 'quoteId', populate: { path: 'client' } } },
-                { path: 'customerId' }
-              ]
-            },
-            { path: 'quoteId', populate: { path: 'client' } }
-          ]
-        })
-        .populate('createdBy');
-    }
+    const grn = new GRN(grnData);
+    await grn.save();
+    const populatedGrn = await GRN.findById(grn._id)
+      .populate('warehouse')
+      .populate('receivedBy')
+      .populate({
+        path: 'purchaseOrderId',
+        populate: [
+          { path: 'supplierId' },
+          { 
+            path: 'purchaseId', 
+            populate: [
+              { path: 'jobId', populate: { path: 'quoteId', populate: { path: 'client' } } },
+              { path: 'customerId' }
+            ]
+          },
+          { path: 'quoteId', populate: { path: 'client' } }
+        ]
+      })
+      .populate('createdBy');
 
     return res.status(200).json({
       success: true,
-      message: existingGRN ? "GRN updated successfully" : "GRN created successfully",
-      data: grn
+      message: "GRN created successfully",
+      data: populatedGrn
     });
   } catch (error: any) {
     console.error("Create GRN error:", error);
@@ -210,7 +189,8 @@ export const getGRNByLpoId = async (req: Request, res: Response) => {
           { path: 'quoteId', populate: { path: 'client' } }
         ]
       })
-      .populate('createdBy');
+      .populate('createdBy')
+      .sort({ createdAt: -1 });
 
     if (!grn) {
       return res.status(404).json({
@@ -228,6 +208,54 @@ export const getGRNByLpoId = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch GRN",
+      error: error.message,
+    });
+  }
+};
+
+export const getAllGRNsByLpoId = async (req: Request, res: Response) => {
+  try {
+    const { lpoId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(lpoId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Purchase Order ID"
+      });
+    }
+
+    const grns = await GRN.find({ 
+      purchaseOrderId: lpoId,
+      isDeleted: { $ne: true }
+    })
+      .populate('warehouse')
+      .populate('receivedBy')
+      .populate({
+        path: 'purchaseOrderId',
+        populate: [
+          { path: 'supplierId' },
+          { 
+            path: 'purchaseId', 
+            populate: [
+              { path: 'jobId', populate: { path: 'quoteId', populate: { path: 'client' } } },
+              { path: 'customerId' }
+            ]
+          },
+          { path: 'quoteId', populate: { path: 'client' } }
+        ]
+      })
+      .populate('createdBy')
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      data: grns
+    });
+  } catch (error: any) {
+    console.error("Get all GRNs by LPO ID error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch GRNs",
       error: error.message,
     });
   }

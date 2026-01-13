@@ -25,6 +25,10 @@ export class GrnService {
     return this.http.get<any>(`${this.baseUrl}/purchase-order/${lpoId}`);
   }
 
+  getAllGRNsByLpoId(lpoId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/purchase-order/${lpoId}/all`);
+  }
+
   getGRNById(id: string): Observable<any> {
     return this.http.get<any>(`${this.baseUrl}/${id}`);
   }

@@ -17,6 +17,7 @@ import { TableComponent } from 'src/app/shared/components/table/table.component'
 import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { GrnListModalComponent, GrnListModalData } from 'src/app/shared/components/grn-list-modal/grn-list-modal.component';
 
 @Component({
   selector: 'app-lpo-list',
@@ -227,14 +228,14 @@ export class LpoListComponent implements OnInit {
             tooltip: 'Create GRN',
             action: 'createGrn',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-green-500 hover:border-green-700 text-green-500 text-sm rounded-full font-medium',
-            condition: (item: any) => item.poStatus === 'Approved' && !item.hasGrn
+            condition: (item: any) => item.poStatus === 'Approved' && item.hasBalanceQty
           },
           {
             icon: 'heroEye',
             tooltip: 'View GRN',
             action: 'viewGrn',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-blue-500 hover:border-blue-700 text-blue-500 text-sm rounded-full font-medium',
-            condition: (item: any) => item.poStatus === 'Approved' && item.hasGrn
+            condition: (item: any) => item.poStatus === 'Approved' && item.grnCount > 0
           },
         ]
       },
@@ -300,22 +301,72 @@ export class LpoListComponent implements OnInit {
     const enrichedLpos = await Promise.all(
       lpos.map(async (lpo) => {
         try {
-          const response = await firstValueFrom(this.grnService.getGRNByLpoId(lpo._id));
+          const response = await firstValueFrom(this.grnService.getAllGRNsByLpoId(lpo._id));
+          const grns = response?.success && response?.data ? response.data : [];
+          const grnCount = grns.length;
+          const latestGrnId = grnCount > 0 ? grns[0]._id : null;
+          
+          let hasBalanceQty = false;
+          if (lpo.items && Array.isArray(lpo.items) && grnCount > 0) {
+            lpo.items.forEach((lpoItem: any) => {
+              const orderedQty = lpoItem.quantity || 0;
+              let totalAcceptedQty = 0;
+              
+              grns.forEach((grn: any) => {
+                if (grn.items && Array.isArray(grn.items)) {
+                  grn.items.forEach((grnItem: any) => {
+                    const partNoMatch = this.matchPartNo(grnItem.partNo, lpoItem?.partNo);
+                    const descriptionMatch = grnItem.itemDescription === lpoItem?.detail;
+                    
+                    if (partNoMatch || descriptionMatch) {
+                      totalAcceptedQty += grnItem.acceptedQty || 0;
+                    }
+                  });
+                }
+              });
+              
+              const balanceQty = orderedQty - totalAcceptedQty;
+              if (balanceQty > 0) {
+                hasBalanceQty = true;
+              }
+            });
+          } else if (lpo.items && Array.isArray(lpo.items) && grnCount === 0) {
+            hasBalanceQty = lpo.items.some((item: any) => (item.quantity || 0) > 0);
+          }
+          
           return {
             ...lpo,
-            hasGrn: response?.success && response?.data,
-            grnId: response?.success && response?.data ? response.data._id : null
+            hasGrn: grnCount > 0,
+            grnId: latestGrnId,
+            grnCount: grnCount,
+            hasBalanceQty: hasBalanceQty
           };
         } catch (error) {
+          const hasBalanceQty = lpo.items && Array.isArray(lpo.items) 
+            ? lpo.items.some((item: any) => (item.quantity || 0) > 0)
+            : false;
           return {
             ...lpo,
             hasGrn: false,
-            grnId: null
+            grnId: null,
+            grnCount: 0,
+            hasBalanceQty: hasBalanceQty
           };
         }
       })
     );
     return enrichedLpos;
+  }
+
+  matchPartNo(grnPartNo: any, lpoPartNo: any): boolean {
+    const formatPartNo = (partNo: any): string => {
+      if (!partNo) return '';
+      if (typeof partNo === 'string') return partNo;
+      if (partNo.partNo) return partNo.partNo;
+      return '';
+    };
+    
+    return formatPartNo(grnPartNo) === formatPartNo(lpoPartNo);
   }
 
   viewPurchaseDetails(purchase: any): void {
@@ -401,22 +452,34 @@ export class LpoListComponent implements OnInit {
   }
 
   viewGrn(lpo: any): void {
-    if (lpo.grnId) {
-      this.router.navigate(['/purchase-order/view-grn', lpo.grnId]);
-    } else {
-      this.grnService.getGRNByLpoId(lpo._id).subscribe({
-        next: (response: any) => {
-          if (response.success && response.data) {
-            this.router.navigate(['/purchase-order/view-grn', response.data._id]);
-          } else {
-            this.notificationService.error('GRN not found');
-          }
-        },
-        error: () => {
-          this.notificationService.error('Failed to load GRN');
-        }
-      });
-    }
+    this.grnService.getAllGRNsByLpoId(lpo._id).subscribe({
+      next: (response: any) => {
+        const grns = response?.success && response?.data ? response.data : [];
+        const purchaseId = lpo.purchaseId?._id || lpo.purchaseId || '';
+        
+        const modalData: GrnListModalData = {
+          lpoId: lpo._id,
+          lpoNo: lpo.poNo || 'N/A',
+          grns: grns,
+          hasBalanceQty: lpo.hasBalanceQty || false,
+          purchaseId: purchaseId
+        };
+
+        const dialogRef = this._dialog.open(GrnListModalComponent, {
+          data: modalData,
+          width: '900px',
+          maxHeight: '90vh',
+          disableClose: false
+        });
+
+        dialogRef.afterClosed().subscribe(() => {
+        });
+      },
+      error: (error) => {
+        console.error('Error loading GRNs:', error);
+        this.notificationService.error('Failed to load GRNs');
+      }
+    });
   }
 
   revokeLpo(lpo: any): void {
