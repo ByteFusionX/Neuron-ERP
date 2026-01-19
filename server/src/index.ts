@@ -33,7 +33,7 @@ import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
 import technicalRouter from './routes/technical.router';
-import purchaseOrderRouter from "./routes/purchaseOrder.router"; 
+import purchaseOrderRouter from "./routes/purchaseOrder.router";
 import workflowRouter from './routes/workflow.router';
 import { bearerStrategyOptions } from './common/utils/tokenValidator';
 import passport from 'passport';
@@ -47,6 +47,7 @@ import productCategoryRouter from './routes/productCategory.router';
 import warehouseRouter from './routes/warehouse.router';
 import stockEntryRouter from './routes/stockEntry.router';
 import grnRouter from './routes/grn.router';
+import deliveryNoteRouter from './routes/deliveryNote.router';
 
 const app = express();
 const server = http.createServer(app);
@@ -116,6 +117,7 @@ app.use('/productCategory', productCategoryRouter);
 app.use('/warehouse', warehouseRouter);
 app.use('/stock-entry', stockEntryRouter);
 app.use('/grn', grnRouter);
+app.use('/delivery-note', deliveryNoteRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');

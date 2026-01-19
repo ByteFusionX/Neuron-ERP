@@ -58,10 +58,11 @@ import { RequestForApprovalsComponent } from './modules/claims/request-for-appro
 import { AllProductsComponent } from './modules/inventory/pages/all-products/all-products.component';
 import { StockEntriesComponent } from './modules/inventory/pages/stock-entries/stock-entries.component';
 import { CreateStockEntryComponent } from './modules/inventory/pages/stock-entries/modals/create-stock-entry/create-stock-entry.component';
-import { DnRegisterComponent } from './modules/dispatch/dn-register/dn-register.component';
-import { PendingDeliveryComponent } from './modules/dispatch/pending-delivery/pending-delivery.component';
-import { InvoiceLinkingComponent } from './modules/dispatch/invoice-linking/invoice-linking.component';
-import { InventoryDeductionComponent } from './modules/dispatch/inventory-deduction/inventory-deduction.component';
+import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
+import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
+import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
+import { InvoiceLinkingComponent } from './modules/dispatch/pages/invoice-linking/invoice-linking.component';
+import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-deduction/inventory-deduction.component';
 
 
 export const routes: Routes = [
@@ -256,6 +257,7 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/dispatch/dispatch.component').then((c) => c.DispatchComponent),
     children: [
       { path: 'delivery-note-register', component: DnRegisterComponent },
+      { path: 'delivery-note-register/create', component: CreateDnComponent },
       { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
       { path: 'invoice-linking-report', component: InvoiceLinkingComponent },
       { path: 'inventory-deduction-report', component: InventoryDeductionComponent },

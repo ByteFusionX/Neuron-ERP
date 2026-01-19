@@ -1,0 +1,60 @@
+<div class="relative w-full max-w-4xl mx-auto bg-white rounded-lg shadow-lg">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b rounded-t">
+        <h3 class="text-xl font-semibold text-gray-900">
+            Delivery Report <span *ngIf="jobDetails">- Job: {{jobDetails.jobId}}</span>
+        </h3>
+        <button type="button" (click)="onClose()"
+            class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center">
+            <ng-icon name="heroXMark" class="text-lg"></ng-icon>
+        </button>
+    </div>
+
+    <!-- Body -->
+    <div class="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+        
+        <div *ngIf="isLoading" class="flex justify-center py-10">
+            <app-skelton-loading [lineLength]="5"></app-skelton-loading>
+        </div>
+
+        <div *ngIf="!isLoading && reportItems.length === 0" class="text-center py-10 text-gray-500">
+            No items found for this Job.
+        </div>
+
+        <div *ngIf="!isLoading && reportItems.length > 0" class="relative overflow-x-auto">
+            <table class="w-full text-sm text-left text-gray-500 border">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 border">Description</th>
+                        <th scope="col" class="px-6 py-3 border text-center">Ordered Qty</th>
+                        <th scope="col" class="px-6 py-3 border text-center">Delivered Qty</th>
+                        <th scope="col" class="px-6 py-3 border text-center">Pending Qty</th>
+                        <th scope="col" class="px-6 py-3 border text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let item of reportItems" class="bg-white border-b hover:bg-gray-50">
+                        <td class="px-6 py-4 border font-medium text-gray-900">
+                            {{item.description}}
+                        </td>
+                        <td class="px-6 py-4 border text-center">
+                            {{item.orderedQty}}
+                        </td>
+                        <td class="px-6 py-4 border text-center font-semibold text-blue-600">
+                            {{item.deliveredQty}}
+                        </td>
+                        <td class="px-6 py-4 border text-center font-semibold" 
+                            [ngClass]="{'text-red-600': item.pendingQty > 0, 'text-green-600': item.pendingQty <= 0}">
+                            {{item.pendingQty}}
+                        </td>
+                        <td class="px-6 py-4 border text-center">
+                            <span *ngIf="item.pendingQty <= 0" class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded">Completed</span>
+                            <span *ngIf="item.pendingQty > 0 && item.deliveredQty > 0" class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded">Partial</span>
+                            <span *ngIf="item.deliveredQty === 0" class="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">Pending</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
