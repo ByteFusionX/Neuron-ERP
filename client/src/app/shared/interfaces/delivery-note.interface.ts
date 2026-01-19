@@ -1,9 +1,10 @@
+import { getJob } from "./job.interface";
 
 export interface DeliveryNote {
     _id: string;
     dnNo: string;
     dnDate: string; // or Date
-    jobId: string | { _id: string, jobId: string, projectName: string }; // Populated or ID
+    jobId: any; // Populated or ID
     clientName: string;
     customerLpoNumber: string;
     subject: string;

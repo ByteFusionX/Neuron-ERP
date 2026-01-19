@@ -63,6 +63,7 @@ import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.
 import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
 import { InvoiceLinkingComponent } from './modules/dispatch/pages/invoice-linking/invoice-linking.component';
 import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-deduction/inventory-deduction.component';
+import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
 
 
 export const routes: Routes = [
@@ -258,6 +259,7 @@ export const routes: Routes = [
     children: [
       { path: 'delivery-note-register', component: DnRegisterComponent },
       { path: 'delivery-note-register/create', component: CreateDnComponent },
+      { path: 'delivery-note-register/view/:id', component: DeliveryNoteViewComponent },
       { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
       { path: 'invoice-linking-report', component: InvoiceLinkingComponent },
       { path: 'inventory-deduction-report', component: InventoryDeductionComponent },

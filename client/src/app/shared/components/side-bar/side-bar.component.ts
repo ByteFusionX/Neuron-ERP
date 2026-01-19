@@ -335,7 +335,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
     },
     {
       id: 'dispatch',
-      label: 'Dispatch & Billing',
+      label: 'Dispatch',
       icon: 'heroTruck',
       route: '/dispatch',
       privilegeKey: 'jobSheet',

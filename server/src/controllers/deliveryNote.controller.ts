@@ -28,7 +28,7 @@ export const createDn = async (req: Request, res: Response) => {
         // 1. Create DN
         const newDn = new DeliveryNote({
             ...req.body,
-            createdBy: (req as any).user?._id 
+            createdBy: (req as any).user?._id
         });
         const savedDn = await newDn.save();
 
@@ -120,5 +120,52 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Get All DNs Error:", error);
         res.status(500).json({ message: 'Error fetching DNs', error });
+    }
+};
+
+export const getDnById = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const dn = await DeliveryNote.findById(id)
+            .populate('jobId', 'jobId projectName')
+            .populate('createdBy', 'firstName lastName');
+
+        if (!dn) {
+            return res.status(404).json({ message: 'Delivery Note not found' });
+        }
+
+        return res.status(200).json(dn);
+    } catch (error) {
+        console.error("Get DN by ID Error:", error);
+        res.status(500).json({ message: 'Error fetching DN', error });
+    }
+};
+
+export const cancelDn = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const dn = await DeliveryNote.findById(id);
+
+        if (!dn) {
+            return res.status(404).json({ message: 'Delivery Note not found' });
+        }
+
+        if (dn.status === 'Cancelled') {
+            return res.status(400).json({ message: 'Delivery Note is already cancelled' });
+        }
+
+        if (dn.status === 'Delivered') {
+            return res.status(400).json({ message: 'Cannot cancel a delivered DN' });
+        }
+
+        dn.status = 'Cancelled';
+        await dn.save();
+
+        return res.status(200).json({ message: 'Delivery Note cancelled successfully', dn });
+    } catch (error) {
+        console.error("Cancel DN Error:", error);
+        res.status(500).json({ message: 'Error cancelling DN', error });
     }
 };

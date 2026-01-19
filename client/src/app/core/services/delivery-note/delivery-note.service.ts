@@ -26,4 +26,12 @@ export class DeliveryNoteService {
   getAllDeliveryNotes(filter: any): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/get`, filter);
   }
+
+  getDnById(id: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/${id}`);
+  }
+
+  cancelDn(id: string): Observable<any> {
+    return this.http.patch<any>(`${this.apiUrl}/${id}/cancel`, {});
+  }
 }

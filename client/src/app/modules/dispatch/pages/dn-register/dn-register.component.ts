@@ -1,25 +1,32 @@
-
-import { Component, OnDestroy, OnInit } from '@angular/core';
-import { CommonModule, DatePipe } from '@angular/common';
-import { FormBuilder, FormControl, FormsModule, ReactiveFormsModule, FormGroup } from '@angular/forms';
+import { Component, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
-import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { NavigationExtras, Router, ActivatedRoute, RouterModule } from '@angular/router';
-import { BehaviorSubject, Subscription } from 'rxjs';
-import { MatMenuModule } from '@angular/material/menu';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { NgIconComponent, provideIcons } from '@ng-icons/core';
-import { heroAdjustmentsHorizontal, heroCalendarDays, heroChevronDown, heroDocumentText, heroEye, heroMagnifyingGlass, heroXMark } from '@ng-icons/heroicons/outline';
-import { NgSelectModule } from '@ng-select/ng-select';
+import { Router, ActivatedRoute, RouterModule } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { ToastrService } from 'ngx-toastr';
 
+import { TableComponent } from 'src/app/shared/components/table/table.component';
+import { SearchComponent } from 'src/app/shared/components/search/search.component';
+import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { DeliveryNote, DnStatus } from 'src/app/shared/interfaces/delivery-note.interface';
-import { SkeltonLoadingComponent } from 'src/app/shared/components/skelton-loading/skelton-loading.component';
-import { PaginationComponent } from 'src/app/shared/components/pagination/pagination.component';
-import { dateFutureDirective } from 'src/app/shared/directives/date-future.directive';
-import { ToastrService } from 'ngx-toastr';
-import { DnJobReportComponent } from './dn-job-report/dn-job-report.component';
-import { DnCustomerReportComponent } from './dn-customer-report/dn-customer-report.component';
+import { PaginationService } from 'src/app/core/services/pagination.service';
+import { IconsModule } from 'src/app/lib/icons/icons.module';
+import { MatMenuModule } from '@angular/material/menu';
+
+interface FilterParams {
+  [key: string]: any;
+  page: number;
+  row: number;
+  search?: string;
+  customer?: string;
+  fromDate?: string;
+  toDate?: string;
+  status?: string;
+  jobId?: string;
+}
 
 @Component({
   selector: 'app-dn-register',
@@ -29,143 +36,228 @@ import { DnCustomerReportComponent } from './dn-customer-report/dn-customer-repo
     FormsModule,
     ReactiveFormsModule,
     RouterModule,
-    MatTableModule,
-    MatMenuModule,
-    MatTooltipModule,
-    NgIconComponent,
-    NgSelectModule,
-    SkeltonLoadingComponent,
-    PaginationComponent,
-    dateFutureDirective
+    TableComponent,
+    SearchComponent,
+    ButtonComponent,
+    IconsModule,
+    MatMenuModule
   ],
   templateUrl: './dn-register.component.html',
   styleUrl: './dn-register.component.css',
-  providers: [DatePipe, provideIcons({ heroAdjustmentsHorizontal, heroChevronDown, heroMagnifyingGlass, heroCalendarDays, heroDocumentText, heroEye, heroXMark })]
+  providers: [PaginationService]
 })
 export class DnRegisterComponent implements OnInit, OnDestroy {
+  @ViewChild(TableComponent) tableComponent!: TableComponent;
 
-  isLoading: boolean = true;
-  isEmpty: boolean = false;
-  isFiltered: boolean = false;
-  isEnter: boolean = false;
+  private _dnService = inject(DeliveryNoteService);
+  private _router = inject(Router);
+  private _route = inject(ActivatedRoute);
+  private _dialog = inject(MatDialog);
+  private toaster = inject(ToastrService);
+  private paginationService = inject(PaginationService);
+  private subscriptions = new Subscription();
 
-  searchQuery: string = '';
+  tableData = signal<DeliveryNote[]>([]);
+  tableColumns: TableColumn[] = [];
+  defaultColumns: string[] = [];
+
+  isLoading = signal<boolean>(true);
+  isEmpty = signal<boolean>(false);
+  totalItems = signal<number>(0);
 
   dnStatuses = Object.values(DnStatus);
-  displayedColumns: string[] = ['date', 'dnNo', 'jobId', 'customer', 'status', 'action'];
+  searchQuery = signal<string>('');
 
-  dataSource = new MatTableDataSource<DeliveryNote>();
-
-  total: number = 0;
-  page: number = 1;
-  row: number = 10;
-
-  fromDate: string | null = null;
-  toDate: string | null = null;
-  selectedCustomer: string | null = null;
-  selectedJobId: string | null = null;
-  selectedStatus: string | null = null;
-
-  formData: FormGroup;
-
-  private subscriptions = new Subscription();
-  private subject = new BehaviorSubject<{ page: number, row: number }>({ page: this.page, row: this.row });
-
-  constructor(
-    private _fb: FormBuilder,
-    private _dnService: DeliveryNoteService,
-    private _router: Router,
-    private _route: ActivatedRoute,
-    private _dialog: MatDialog,
-    private toaster: ToastrService
-  ) {
-    this.formData = this._fb.group({
-      fromDate: [null],
-      toDate: [null],
-    });
-  }
-
-  ngOnInit() {
-    this._route.queryParams.subscribe(params => {
-      this.page = params['page'] ? parseInt(params['page']) : 1;
-      this.row = params['row'] ? parseInt(params['row']) : 10;
-      this.searchQuery = params['search'] || '';
-      this.fromDate = params['fromDate'] || null;
-      this.toDate = params['toDate'] || null;
-      this.selectedCustomer = params['customer'] || null;
-      this.selectedStatus = params['status'] || null;
-      this.selectedJobId = params['jobId'] || null;
-
-      if (this.fromDate) this.formData.controls['fromDate'].setValue(this.fromDate);
-      if (this.toDate) this.formData.controls['toDate'].setValue(this.toDate);
-
-      this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.selectedCustomer || this.selectedStatus || this.selectedJobId);
-
-      this.subject.next({ page: this.page, row: this.row });
-    });
-
-    this.subscriptions.add(
-      this.subject.subscribe((data) => {
-        this.page = data.page;
-        this.row = data.row;
-        this.getDeliveryNotes();
-        this.updateUrlParams();
-      })
-    );
+  ngOnInit(): void {
+    this.setupTableColumns();
+    this.initializeFromUrlParams();
   }
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
   }
 
-  getDeliveryNotes() {
-    this.isLoading = true;
-    let filterData = {
-      search: this.searchQuery,
-      page: this.page,
-      row: this.row,
-      customer: this.selectedCustomer,
-      fromDate: this.fromDate,
-      toDate: this.toDate,
-      status: this.selectedStatus,
-      jobId: this.selectedJobId
+  initializeFromUrlParams(): void {
+    this._route.queryParams.subscribe(params => {
+      const page = params['page'] ? parseInt(params['page']) : 1;
+      const row = params['row'] ? parseInt(params['row']) : 10;
+      const search = params['search'] || '';
+      const customer = params['customer'] || '';
+      const status = params['status'] || '';
+      const jobId = params['jobId'] || '';
+      const fromDate = params['fromDate'] || '';
+      const toDate = params['toDate'] || '';
+
+      this.paginationService.updatePaginationState({
+        page,
+        row,
+        total: this.totalItems()
+      });
+
+      if (search) this.searchQuery.set(search);
+
+      this.loadData();
+    });
+  }
+
+  setupTableColumns(): void {
+    const baseColumns: TableColumn[] = [
+      {
+        key: 'dnDate',
+        label: 'DN Date',
+        type: 'date',
+        pipeParams: 'dd/MM/yyyy',
+        sortable: true,
+        filterable: true,
+        filterType: 'date'
+      },
+      {
+        key: 'dnNo',
+        label: 'DN No',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search DN No...',
+        cellClass: 'text-purple-600 font-medium'
+      },
+      {
+        key: 'job.jobId',
+        label: 'Job ID',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search Job ID...',
+        cellRenderer: (item: DeliveryNote) => item.job?.jobId || 'N/A'
+      },
+      {
+        key: 'clientName',
+        label: 'Customer',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search customer...'
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        type: 'status',
+        headerClass: 'text-center',
+        filterable: true,
+        filterType: 'select',
+        filterOptions: this.dnStatuses.map(status => ({ label: status, value: status }))
+      },
+      {
+        key: 'actions',
+        label: 'Action',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroEye',
+            tooltip: 'View Details',
+            action: 'viewDn',
+            buttonClass: 'cursor-pointer w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'
+          }
+        ]
+      }
+    ];
+
+    this.tableColumns = baseColumns;
+    this.defaultColumns = ['dnDate', 'dnNo', 'job.jobId', 'clientName', 'status', 'actions'];
+  }
+
+  loadData(filters?: Partial<FilterParams>): void {
+    this.isLoading.set(true);
+    const paginationState = this.paginationService.paginationState();
+
+    const filterParams: FilterParams = {
+      page: paginationState.page,
+      row: paginationState.row,
+      search: this.searchQuery() || undefined,
+      ...filters
     };
 
     this.subscriptions.add(
-      this._dnService.getAllDeliveryNotes(filterData).subscribe(
-        (data) => {
-          if (data && data.dns) {
-            this.dataSource.data = data.dns;
-            this.total = data.total;
-            this.isEmpty = data.total === 0;
-          } else {
-            this.dataSource.data = [];
-            this.total = 0;
-            this.isEmpty = true;
-          }
-          this.isLoading = false;
+      this._dnService.getAllDeliveryNotes(filterParams).subscribe({
+        next: (response) => {
+          this.tableData.set(response.dns || []);
+          this.totalItems.set(response.total || 0);
+
+          this.paginationService.updatePaginationState({
+            page: paginationState.page,
+            row: paginationState.row,
+            total: response.total || 0
+          });
+
+          this.isEmpty.set(this.tableData().length === 0);
+          this.isLoading.set(false);
+          this.updateUrlParams();
         },
-        (error) => {
-          this.isLoading = false;
-          this.isEmpty = true;
-          this.dataSource.data = [];
-          console.error(error);
+        error: (error) => {
+          this.toaster.error('Failed to load delivery notes');
+          console.error('Error loading delivery notes:', error);
+          this.isLoading.set(false);
+          this.isEmpty.set(true);
         }
-      )
+      })
     );
   }
 
-  updateUrlParams() {
-    const queryParams: any = {
-      page: this.page !== 1 ? this.page : null,
-      row: this.row !== 10 ? this.row : null,
-      search: this.searchQuery ? this.searchQuery : null,
-      fromDate: this.fromDate,
-      toDate: this.toDate,
-      customer: this.selectedCustomer,
-      status: this.selectedStatus,
-      jobId: this.selectedJobId
-    };
+  onPaginationChange(event: { page: number, row: number }): void {
+    this.paginationService.updatePaginationState({
+      page: event.page,
+      row: event.row,
+      total: this.totalItems()
+    });
+    this.loadData();
+  }
+
+  onFilterChange(filters: TableFilter[]): void {
+    this.isLoading.set(true);
+    const currentState = this.paginationService.paginationState();
+    this.paginationService.updatePaginationState({
+      page: 1,
+      row: currentState.row,
+      total: currentState.total
+    });
+
+    const filterParams: Partial<FilterParams> = filters.reduce((acc, filter) => {
+      switch (filter.type) {
+        case 'text':
+          if (filter.column === 'dnNo') {
+            acc.search = filter.value;
+          } else if (filter.column === 'job.jobId') {
+            acc.jobId = filter.value;
+          } else {
+            acc[filter.column] = filter.value;
+          }
+          break;
+        case 'select':
+          if (filter.column === 'status') {
+            acc.status = filter.value;
+          }
+          break;
+        case 'date':
+          if (filter.column === 'dnDate') {
+            acc.fromDate = filter.value[0];
+            acc.toDate = filter.value[1];
+          }
+          break;
+      }
+      return acc;
+    }, {} as Partial<FilterParams>);
+
+    this.loadData(filterParams);
+  }
+
+  updateUrlParams(): void {
+    const paginationState = this.paginationService.paginationState();
+    const queryParams: any = {};
+
+    queryParams.page = paginationState.page !== 1 ? paginationState.page : null;
+    queryParams.row = paginationState.row !== 10 ? paginationState.row : null;
+    queryParams.search = this.searchQuery() || null;
 
     this._router.navigate([], {
       relativeTo: this._route,
@@ -175,104 +267,70 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     });
   }
 
-  onSearch() {
-    this.isEnter = true;
-    this.page = 1;
-    this.getDeliveryNotes();
-    this.updateUrlParams();
-  }
+  onActionClick(event: { action: string; item: DeliveryNote }): void {
+    const { action, item } = event;
 
-  ngModelChange() {
-    if (this.searchQuery == '' && this.isEnter) {
-      this.onSearch();
-      this.isEnter = false;
+    switch (action) {
+      case 'viewDn':
+        this.viewDnDetails(item);
+        break;
     }
   }
 
-  onSubmit() {
-    const from = this.formData.get('fromDate')?.value;
-    const to = this.formData.get('toDate')?.value;
-
-    // Basic validation could go here
-    this.fromDate = from;
-    this.toDate = to;
-
-    this.isFiltered = true;
-    this.page = 1;
-    this.getDeliveryNotes();
-    this.updateUrlParams();
+  viewDnDetails(dn: DeliveryNote): void {
+    this._router.navigate(['/dispatch/delivery-note-register/view', dn._id]);
   }
 
-  onClear() {
-    this.isFiltered = false;
-    this.searchQuery = '';
-    this.fromDate = null;
-    this.toDate = null;
-    this.selectedCustomer = null;
-    this.selectedStatus = null;
-    this.selectedJobId = null;
-    this.formData.reset();
-    this.page = 1;
-    this.getDeliveryNotes();
+  onRowClick(row: DeliveryNote): void {
+    this.viewDnDetails(row);
+  }
 
-    this._router.navigate([], {
-      relativeTo: this._route,
-      queryParams: {},
-      replaceUrl: true
+  onSearchSubmit(searchTerm: string): void {
+    this.searchQuery.set(searchTerm || '');
+    const currentState = this.paginationService.paginationState();
+    this.paginationService.updatePaginationState({
+      page: 1,
+      row: currentState.row,
+      total: currentState.total
     });
-  }
-
-  onfilterApplied() {
-    this.isFiltered = true;
-    this.page = 1;
-    this.getDeliveryNotes();
+    this.loadData();
     this.updateUrlParams();
   }
 
-  onPageNumberClick(event: { page: number, row: number }) {
-    this.subject.next(event);
+  generateJobReport(): void {
+    // For now, open dialog without pre-filtering
+    // In future, can pass jobId from filters
+    this.toaster.info('Please select a Job ID filter first');
   }
 
-  onRowClick(row: DeliveryNote) {
-    // Navigate to detail view if exists, or show preview
-    // For now, maybe navigate to a view page or open a dialog?
-    // The requirement mentions: "Navigation from the register to DN detail or summary views must use the same routing... used in other list screens"
-    // Usually /dispatch/dn-view/:id or similar.
-    // I'll leave it as a log or basic navigation for now until I know the detail route.
-    // Assuming /dispatch/view-dn/:id based on other modules.
-    // this._router.navigate(['/dispatch/view-dn', row._id]);
-    console.log('Row clicked', row);
+  generateCustomerReport(): void {
+    // For now, open dialog without pre-filtering
+    this.toaster.info('Please select a Customer filter first');
   }
 
-  preventClick(event: Event) {
-    event.stopPropagation();
-  }
-
-  handleNotClose(event: MouseEvent) {
-    event.stopPropagation();
-  }
-
-  // Placeholder for Report generation
-  generateJobReport() {
-    if (!this.selectedJobId) {
-      this.toaster.warning("Please filter by a Job ID to generate the Job Report.");
+  onExportRequest(): void {
+    const total = this.totalItems();
+    if (total === 0) {
+      this.toaster.warning('No data to export');
       return;
     }
-    this._dialog.open(DnJobReportComponent, {
-      data: { jobId: this.selectedJobId },
-      width: '900px'
-    });
-  }
 
-  generateCustomerReport() {
-    if (!this.selectedCustomer) {
-      this.toaster.warning("Please filter by a Customer to generate the Customer Report.");
-      return;
-    }
-    this._dialog.open(DnCustomerReportComponent, {
-      data: { customer: this.selectedCustomer },
-      width: '900px'
+    const filterParams: FilterParams = {
+      page: 1,
+      row: total,
+      search: this.searchQuery() || undefined
+    };
+
+    this._dnService.getAllDeliveryNotes(filterParams).subscribe({
+      next: (response) => {
+        if (this.tableComponent && response.dns.length > 0) {
+          this.tableComponent.exportAllData(response.dns);
+        }
+      },
+      error: (error) => {
+        this.toaster.error('Failed to export delivery notes');
+        console.error('Error exporting delivery notes:', error);
+      }
     });
   }
 }
-
