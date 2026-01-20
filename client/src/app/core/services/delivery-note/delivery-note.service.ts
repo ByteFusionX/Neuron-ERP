@@ -34,4 +34,8 @@ export class DeliveryNoteService {
   cancelDn(id: string): Observable<any> {
     return this.http.patch<any>(`${this.apiUrl}/${id}/cancel`, {});
   }
+
+  getInventoryDeductionReport(params: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/inventory-deduction-report`, params);
+  }
 }

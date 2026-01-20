@@ -1,5 +1,5 @@
 import express from 'express';
-import { generateDnNumber, createDn, getDnsByJobId, getAllDeliveryNotes, getDnById, cancelDn } from '../controllers/deliveryNote.controller';
+import { generateDnNumber, createDn, getDnsByJobId, getAllDeliveryNotes, getDnById, cancelDn, getInventoryDeductionReport } from '../controllers/deliveryNote.controller';
 
 const deliveryNoteRouter = express.Router();
 
@@ -9,5 +9,6 @@ deliveryNoteRouter.get('/job/:jobId', getDnsByJobId);
 deliveryNoteRouter.post('/get', getAllDeliveryNotes);
 deliveryNoteRouter.get('/:id', getDnById);
 deliveryNoteRouter.patch('/:id/cancel', cancelDn);
+deliveryNoteRouter.post('/inventory-deduction-report', getInventoryDeductionReport);
 
 export default deliveryNoteRouter;

@@ -1,1 +1,32 @@
-<p>inventory-deduction works!</p>
+<data-table
+  [data]="tableData()"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading()"
+  [isEmpty]="isEmpty()"
+  [totalItems]="totalItems()"
+  [tableId]="'inventory-deduction-table'"
+  [enableExport]="true"
+  [exportFileName]="'inventory-deduction-report.xlsx'"
+  (filterChange)="onFilterChange($event)"
+  (paginationChange)="onPaginationChange($event)"
+  (rowClick)="onRowClick($event)"
+  (exportRequest)="onExportRequest()"
+  [title]="'Inventory Deduction Report'"
+>
+  <!-- Optional: if we want a top-level search for Part No similar to Pending Suppliers -->
+  <!-- <ng-template #sideColumn>
+    <div class="flex items-center gap-3">
+        <data-search 
+            placeholder="Search by Part No..."
+            (searchSubmitted)="onPartNoSearch($event)"
+        ></data-search>
+    </div>
+  </ng-template> -->
+  <!-- However, I implemented Part No as a column filter. 
+       If I want to strictly follow "filter panel structure", and Pending Suppliers has a search box, 
+       I should probably check if I should add it.
+       The prompt says "Part No filter... follow the same search or multi-select behavior already used for item-based filtering elsewhere."
+       I'll stick to column filters for consistency with the rest of the filters unless I add a specific method.
+  -->
+</data-table>
