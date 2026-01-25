@@ -1,0 +1,204 @@
+<div class="bg-white m-6 rounded-lg">
+    <div class="border-b p-3 px-9 flex justify-between items-center">
+        <h3 class="text-md font-medium">Create Delivery Note (DN)</h3>
+    </div>
+    <form [formGroup]="dnForm">
+        <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+            
+            <!-- Job Details Section -->
+            <div class="flex flex-col md:flex-row md:mb-5 gap-3">
+                <app-select-dropdown
+                    label="Job Id"
+                    [options]="jobIds"
+                    optionLabel="jobId"
+                    optionValue="_id"
+                    formControlName="jobId"
+                    placeholder="Choose from the list"
+                    [isSubmitted]="isSubmitting()"
+                    class="w-full">
+                </app-select-dropdown>
+
+                <app-form-field 
+                    label="Client Name" 
+                    [control]="dnForm.get('clientName')" 
+                    [isSubmitted]="isSubmitting()" 
+                    class="w-full" 
+                    [readonly]="true">
+                </app-form-field>
+
+                <app-form-field 
+                    label="Customer LPO Number" 
+                    [control]="dnForm.get('customerLpoNumber')" 
+                    [isSubmitted]="isSubmitting()" 
+                    class="w-full">
+                </app-form-field>
+            </div>
+
+            <div class="flex flex-col md:flex-row md:mb-5 gap-3">
+                <app-form-field 
+                    label="DN No" 
+                    [control]="dnForm.get('dnNo')" 
+                    [isSubmitted]="isSubmitting()" 
+                    class="w-full" 
+                    [readonly]="true">
+                </app-form-field>
+
+                <app-form-field 
+                    label="DN Date" 
+                    [control]="dnForm.get('dnDate')" 
+                    [isSubmitted]="isSubmitting()" 
+                    type="date"
+                    class="w-full">
+                </app-form-field>
+
+                <app-form-field 
+                    label="Subject" 
+                    [control]="dnForm.get('subject')" 
+                    [isSubmitted]="isSubmitting()" 
+                    class="w-full">
+                </app-form-field>
+            </div>
+
+            <hr class="my-6 border-gray-200">
+
+            <!-- Materials Section -->
+            <div class="mb-5">
+                <div class="flex justify-between items-center mb-4">
+                    <h4 class="text-sm font-bold uppercase text-gray-700">Materials</h4>
+                    <app-btn theme="secondary" (click)="openInventoryModal()">
+                        <div class="flex items-center gap-2">
+                            <ng-icon name="heroPlus"></ng-icon>
+                            Inventory List
+                        </div>
+                    </app-btn>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left border">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 border text-center w-16">Sl No</th>
+                                <th class="px-4 py-2 border text-center">Part No</th>
+                                <th class="px-4 py-2 border text-center">Description</th>
+                                <th class="px-4 py-2 border text-center w-24">Ord QTY</th>
+                                <th class="px-4 py-2 border text-center w-24">Delivered</th>
+                                <th class="px-4 py-2 border text-center w-32">Current Delivery</th>
+                                <th class="px-4 py-2 border text-center">Serial Nos</th>
+                                <th class="px-4 py-2 border text-center w-24">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody formArrayName="items">
+                            <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
+                                <tr class="border-b hover:bg-gray-50/50" [ngClass]="{'bg-gray-100': item.get('status')?.value === 'Delivered'}">
+                                    <td class="px-4 py-2 border text-center">
+                                        {{ item.get('slNo')?.value }}
+                                    </td>
+                                    <td class="px-4 py-2 border text-center">
+                                        {{ item.get('partNo')?.value || '-' }}
+                                    </td>
+                                    <td class="px-4 py-2 border text-center">
+                                        {{ item.get('description')?.value || '-' }}
+                                    </td>
+                                    <td class="px-4 py-2 border text-center font-medium">
+                                        {{ item.get('orderedQty')?.value }}
+                                    </td>
+                                    <td class="px-4 py-2 border text-center text-gray-600">
+                                        {{ item.get('deliveredQty')?.value }}
+                                    </td>
+                                    <td class="px-4 py-2 border text-center">
+                                        <div *ngIf="item.get('status')?.value !== 'Delivered'">
+                                            <app-form-field 
+                                                [control]="item.get('currentDeliveryQty')" 
+                                                [isSubmitted]="isSubmitting()" 
+                                                type="number" 
+                                                class="w-full">
+                                            </app-form-field>
+                                        </div>
+                                        <div *ngIf="item.get('status')?.value === 'Delivered'" class="text-gray-400">
+                                            -
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-2 border text-center">
+                                         <div *ngIf="item.get('status')?.value !== 'Delivered'">
+                                            <app-form-field 
+                                                [control]="item.get('serialNos')" 
+                                                [isSubmitted]="isSubmitting()" 
+                                                placeholder="S/N"
+                                                class="w-full">
+                                            </app-form-field>
+                                        </div>
+                                         <div *ngIf="item.get('status')?.value === 'Delivered'" class="text-gray-400">
+                                            -
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-2 border text-center">
+                                        <span class="px-2 py-1 rounded text-xs font-semibold"
+                                            [ngClass]="{
+                                                'bg-green-100 text-green-800': item.get('status')?.value === 'Delivered',
+                                                'bg-yellow-100 text-yellow-800': item.get('status')?.value === 'Pending' || item.get('status')?.value === 'Partially Delivered'
+                                            }">
+                                            {{ item.get('status')?.value }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </ng-container>
+                            <tr *ngIf="items.length === 0">
+                                <td colspan="8" class="text-center py-8 text-gray-500">
+                                    No materials found. Select a Job ID or add from Inventory.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="w-full flex justify-between mb-3 px-8 py-3 border-t bg-gray-50 rounded-b-lg">
+            <div class="flex gap-3">
+                 <!-- Left side buttons like Back -->
+                 <app-btn theme="secondary-outline" (click)="onCancel()">Back to Summary</app-btn>
+            </div>
+            <div class="flex gap-3">
+                <app-btn theme="cancel" type="button" (click)="onCancel()">Cancel DN</app-btn>
+                <app-btn theme="secondary" type="button" (click)="onPreview()">Preview DN</app-btn>
+                <app-btn theme="primary" type="button" [loading]="isSubmitting()" (buttonClick)="onSave()">Generate DN</app-btn>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Inventory Modal -->
+<ng-template #inventoryModal>
+    <div class="p-6">
+        <h3 class="text-lg font-medium mb-4">Add Item from Inventory</h3>
+        
+        <div class="flex flex-col gap-2">
+            <app-select-dropdown
+                label="Select Stock Entry"
+                [options]="stockEntries"
+                optionLabel="displayLabel"
+                optionValue="_id"
+                [(ngModel)]="selectedInventoryItem"
+                placeholder="Search stock entry..."
+                class="w-full">
+            </app-select-dropdown>
+
+            <div class="me-5">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <input 
+                    type="number" 
+                    [(ngModel)]="inventoryQty" 
+                    class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    min="1"
+                    placeholder="Enter quantity">
+            </div>
+
+            <div class="flex justify-end gap-3 mt-4">
+                 <app-btn theme="cancel" (click)="close()">Cancel</app-btn>
+                 <app-btn theme="primary" (click)="addInventoryItem()">Add Item</app-btn>
+            </div>
+        </div>
+    </div>
+</ng-template>

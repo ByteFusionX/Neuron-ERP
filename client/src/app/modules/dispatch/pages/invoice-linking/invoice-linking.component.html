@@ -1,0 +1,26 @@
+<data-table
+[data]="tableData()"
+[columns]="tableColumns"
+[defaultColumns]="defaultColumns"
+[isLoading]="isLoading()"
+[isEmpty]="isEmpty()"
+[totalItems]="totalItems()"
+[tableId]="'invoice-linking-report-table'"
+[enableExport]="true"
+[exportFileName]="'invoice-linked-delivery-report.xlsx'"
+(filterChange)="onFilterChange($event)"
+(paginationChange)="onPaginationChange($event)"
+(rowClick)="onRowClick($event)"
+(actionClick)="onActionClick($event)"
+(exportRequest)="onExportRequest()"
+[title]="'Invoice Linked Report'"
+>
+<ng-template #sideColumn>
+    <div class="flex items-center gap-3">
+        <data-search 
+            placeholder="Search report..."
+            (searchSubmitted)="onGlobalSearch($event)"
+        ></data-search>
+    </div>
+</ng-template>
+</data-table>

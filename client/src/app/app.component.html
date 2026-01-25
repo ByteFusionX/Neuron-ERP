@@ -1,25 +1,35 @@
-<ngx-loading-bar color="#6D28D9" [includeSpinner]='false'  height="3px"></ngx-loading-bar>
+<ngx-loading-bar color="#6D28D9" [includeSpinner]='false'
+    height="3px"></ngx-loading-bar>
 <div class="w-full" *ngIf="isLoginRoute()">
-    <router-outlet></router-outlet> 
+    <router-outlet></router-outlet>
 </div>
 
 <div class="w-full h-screen flex" *ngIf="!isLoginRoute()">
-    <div class="h-screen" (click)="closeSidenav()">
+    <div class="h-full overflow-auto overflow-x-hidden 
+        [&::-webkit-scrollbar]:w-2
+        [&::-webkit-scrollbar-track]:rounded-full
+        [&::-webkit-scrollbar-track]:bg-gray-100
+        [&::-webkit-scrollbar-thumb]:rounded-full
+        [&::-webkit-scrollbar-thumb]:bg-gray-300"
+        (click)="closeSidenav()">
         <app-side-bar [showFullBar]="reduceState"></app-side-bar>
     </div>
 
     <div class="w-full h-screen overflow-y-auto flex flex-col">
         <mat-drawer-container class="example-container" [hasBackdrop]="false">
-            <mat-drawer #drawer mode="over" position="end" class="w-[600px] h-full bg-red-400 z-50">
-                <app-notification (closeSidenav)="closeSidenav()"></app-notification>
+            <mat-drawer #drawer mode="over" position="end"
+                class="w-[600px] h-full bg-red-400 z-50">
+                <app-notification
+                    (closeSidenav)="closeSidenav()"></app-notification>
             </mat-drawer>
-            <mat-drawer-content >
-                <app-nav-bar (reduce)="reduceSideBar($event)" (toggleDrawer)="drawer.toggle()"></app-nav-bar>
+            <mat-drawer-content>
+                <app-nav-bar (reduce)="reduceSideBar($event)"
+                    (toggleDrawer)="drawer.toggle()"></app-nav-bar>
                 <div class="h-[calc(100vh-85px)]" (click)="closeSidenav()">
                     <router-outlet></router-outlet>
                 </div>
             </mat-drawer-content>
         </mat-drawer-container>
     </div>
-    
+
 </div>

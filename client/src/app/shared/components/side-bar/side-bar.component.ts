@@ -251,7 +251,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           label: 'Pending Projects',
           route: '/technical/project',
           notificationKey: 'purchaseCount'
-        },       
+        },
         {
           id: 'amc',
           label: 'Pending AMC',
@@ -332,7 +332,38 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
         },
 
       ]
-    }
+    },
+    {
+      id: 'dispatch',
+      label: 'Dispatch',
+      icon: 'heroTruck',
+      route: '/dispatch',
+      privilegeKey: 'jobSheet',
+      hasDropdown: true,
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'delivery-note-register',
+          label: 'Delivery Note',
+          route: '/dispatch/delivery-note-register',
+        },
+        {
+          id: 'pending-delivery-reports',
+          label: 'Pending Delivery',
+          route: '/dispatch/pending-delivery-reports',
+        },
+        {
+          id: 'invoice-linking-report',
+          label: 'Invoice Linking',
+          route: '/dispatch/invoice-linking-report',
+        },
+        {
+          id: 'inventory-deduction-report',
+          label: 'Inventory Deduction',
+          route: '/dispatch/inventory-deduction-report',
+        },
+      ]
+    },
   ];
 
   constructor(
@@ -399,7 +430,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:click', ['$event.target'])
-  onClick(event: HTMLElement) {
+  onClick(event: HTMLElement | EventTarget | null) {
     if (!(this.eref.nativeElement.contains(event)) && !this.showFullBar) {
       // Close all dropdowns when clicking outside sidebar in mobile view
       Object.keys(this.expandedMenus).forEach(key => {
