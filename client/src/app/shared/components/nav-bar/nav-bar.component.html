@@ -50,10 +50,10 @@
                         <p class="mx-2 text-sm font-medium">{{employeeData.firstName}} {{employeeData.lastName}}</p>
                         <div class="mt-1">
                             <div *ngIf="menuState; else menuElseBlock">
-                                <ng-icon name="heroChevronDown"></ng-icon>
+                                <ng-icon name="heroChevronUp"></ng-icon>
                             </div>
                             <ng-template #menuElseBlock>
-                                <ng-icon name="heroChevronUp"></ng-icon>
+                                <ng-icon name="heroChevronDown"></ng-icon>
                             </ng-template>
                         </div>
                     </div>
