@@ -48,6 +48,7 @@ import warehouseRouter from './routes/warehouse.router';
 import stockEntryRouter from './routes/stockEntry.router';
 import grnRouter from './routes/grn.router';
 import deliveryNoteRouter from './routes/deliveryNote.router';
+import invoiceRouter from './routes/invoice.router';
 
 const app = express();
 const server = http.createServer(app);
@@ -118,6 +119,7 @@ app.use('/warehouse', warehouseRouter);
 app.use('/stock-entry', stockEntryRouter);
 app.use('/grn', grnRouter);
 app.use('/delivery-note', deliveryNoteRouter);
+app.use('/invoice', invoiceRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');
