@@ -1,22 +1,12 @@
-<div class="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-  <div class="border-b p-4 px-6 flex justify-between items-center flex-shrink-0">
-    <div>
-      <h3 class="text-lg font-medium text-gray-800">Blocked Items</h3>
-      <p class="text-sm text-gray-500 mt-1">
-        Part No: <span class="font-medium">{{ stockEntry?.partNo?.partNo || 'N/A' }}</span>
-        | Total Blocked: <span class="font-medium text-orange-600">{{ getTotalBlockedQuantity() }}</span>
-        | Available: <span class="font-medium text-green-600">{{ availableQuantity }}</span>
-      </p>
-    </div>
-    <button
-      type="button"
-      class="text-gray-400 hover:text-gray-600 transition-colors"
-      (click)="onClose()">
-      <ng-icon name="heroXMark" class="w-5 h-5"></ng-icon>
-    </button>
-  </div>
-
-  <div class="flex-1 overflow-y-auto p-6">
+<app-modal-layout
+  title="Blocked Items"
+  [subtitle]="getSubtitle()"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="[
+    { label: 'Close', onClick: onClose.bind(this), theme: 'primary' }
+  ]"
+  contentClass="p-6 flex-1 overflow-y-auto"
+  contentMaxHeight="90vh">
     <div *ngIf="blockedItems.length === 0" class="text-center py-12">
       <ng-icon name="heroLockOpen" class="w-16 h-16 text-gray-300 mx-auto mb-4"></ng-icon>
       <p class="text-gray-500 text-lg">No items are currently blocked</p>
@@ -70,9 +60,4 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="border-t border-gray-200 p-4 px-6 flex justify-end flex-shrink-0">
-    <app-btn theme="primary" (buttonClick)="onClose()">Close</app-btn>
-  </div>
-</div>
+</app-modal-layout>

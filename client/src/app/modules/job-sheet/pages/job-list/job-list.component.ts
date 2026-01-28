@@ -20,7 +20,8 @@ import { getCreators } from 'src/app/shared/interfaces/employee.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import * as pdfMake from 'pdfmake/build/pdfmake';
 import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { NgIf, NgFor, AsyncPipe, DatePipe } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
@@ -34,6 +35,7 @@ import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared
 import { AllocateTypeModalComponent } from '../allocate-type-modal/allocate-type-modal.component';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MrRequestComponent } from 'src/app/modules/purchase/pages/mr-request/mr-request.component';
+import { JobHistoryModalComponent } from 'src/app/shared/components/job-history-modal/job-history-modal.component';
 
 @Component({
   selector: 'app-job-list',
@@ -74,6 +76,7 @@ export class JobListComponent {
   isEmpty: boolean = false;
   isDeleteOption: boolean = false;
   loader = this.loadingBar.useRef();
+  canAllocateJobs = false;
 
   private subscriptions = new Subscription();
 
@@ -91,8 +94,16 @@ export class JobListComponent {
     private purchaseService: PurchaseService,
   ) { }
 
+  checkPrivileges(): void {
+    this._employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canAllocateJobs = data.category.privileges.jobSheet?.allocateJobs || false;
+      }
+    });
+  }
 
   ngOnInit() {
+    this.checkPrivileges();
     this.employees$ = this._jobService.getJobSalesPerson();
     this.currentYear = new Date().getFullYear().toString();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -117,6 +128,17 @@ export class JobListComponent {
         this.isEnter = true;
       }
     });
+
+    // Reload data when route path changes (e.g., from /pending to /completed)
+    this.subscriptions.add(
+      this.router.events.pipe(
+        filter(event => event instanceof NavigationEnd)
+      ).subscribe(() => {
+        if (this.router.url.includes('/job-sheet/pending') || this.router.url.includes('/job-sheet/completed')) {
+          this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
+        }
+      })
+    );
 
     this.subscriptions.add(
       this.subject.subscribe((data) => {
@@ -195,7 +217,7 @@ export class JobListComponent {
     this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
   }
 
-  displayedColumns: string[] = ['updatedDate', 'jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'lpo', 'lpoValue', 'status', 'action'];
+  displayedColumns: string[] = ['updatedDate', 'jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'lpo', 'lpoValue', 'action'];
 
   getAllJobs(selectedMonth?: number, selectedYear?: string) {
     this.isLoading = true;
@@ -207,6 +229,10 @@ export class JobListComponent {
       userId = employee?._id;
     });
 
+    const currentRoute = this.router.url;
+    const isCompletedRoute = currentRoute.includes('/completed');
+    const allocateStatusFilter = isCompletedRoute ? allocateStatus.Completed : allocateStatus.Pending;
+
     let filterData = {
       search: this.searchQuery,
       page: this.page,
@@ -217,7 +243,7 @@ export class JobListComponent {
       selectedYear: selectedYear as unknown as number,
       access: access,
       userId: userId,
-      allocateStatus: allocateStatus.Pending
+      allocateStatus: allocateStatusFilter
     };
 
     this.subscriptions.add(
@@ -542,6 +568,16 @@ export class JobListComponent {
 
   onPageNumberClick(event: { page: number, row: number }) {
     this.subject.next(event);
+  }
+
+  openJobHistory(job: getJob) {
+    this._dialog.open(JobHistoryModalComponent, {
+      data: { jobId: job._id, jobIdString: job.jobId },
+      width: '900px',
+      maxWidth: '95vw',
+      maxHeight: '95vh',
+      disableClose: false
+    });
   }
 
   openAllocateTypeSelecter(data: getJob) {

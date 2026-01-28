@@ -78,6 +78,7 @@ export const routes: Routes = [
       { path: '', component: DashboardComponent },
       { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
       { path: 'employees/view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
+      { path: 'employees/category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
       { path: 'announcements', canActivate: [RoleGuard], component: AnnouncementsComponent },
     ],
   },
@@ -155,6 +156,16 @@ export const routes: Routes = [
     path: 'settings',
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/settings/settings.component').then((c) => c.SettingsComponnet)
+  },
+  {
+    path: 'settings/category/create',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent)
+  },
+  {
+    path: 'settings/category/edit/:id',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/settings/pages/edit-category/edit-category.component').then((c) => c.EditCategoryComponent)
   },
   {
     path: 'feedback-requests',
@@ -250,6 +261,7 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/inventory/inventory.component').then((c) => c.InventoryComponent),
     children: [
       { path: 'products', component: AllProductsComponent },
+      { path: 'products/category/add', loadComponent: () => import('./modules/inventory/pages/all-products/modals/add-category/add-category.component').then((c) => c.AddCategoryComponent) },
       { path: 'stock-entries', component: StockEntriesComponent },
       { path: 'stock-entries/create', component: CreateStockEntryComponent }
     ]

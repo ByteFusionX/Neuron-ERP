@@ -1,21 +1,23 @@
 
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { MatDialogRef } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
 import { NgIcon } from '@ng-icons/core';
 import { appNoLeadingSpace } from '../../../../../shared/directives/trim-validator.directive';
 import { NgIf } from '@angular/common';
+import { ToastrService } from 'ngx-toastr';
+import { PageLayoutComponent } from 'src/app/shared/components/page-layout/page-layout.component';
 
 @Component({
     selector: 'app-create-category',
     templateUrl: './create-category.component.html',
     styleUrls: ['./create-category.component.css'],
-    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf]
+    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, PageLayoutComponent]
 })
 
-export class CreateCategoryComponent {
+export class CreateCategoryComponent implements OnInit {
   isSaving: boolean = false;
   error!: string;
 
@@ -27,12 +29,19 @@ export class CreateCategoryComponent {
   assignedJobsChecked: boolean = false;
   quotationChecked: boolean = false;
   jobSheetChecked: boolean = false;
+  purchaseChecked: boolean = false;
+  purchaseOrderChecked: boolean = false;
+  technicalChecked: boolean = false;
+  supplierChecked: boolean = false;
+  inventoryChecked: boolean = false;
+  claimsChecked: boolean = false;
   portalChecked: boolean = false;
 
   constructor(
-    public dialogRef: MatDialogRef<CreateCategoryComponent>,
+    private router: Router,
     private _fb: FormBuilder,
     private _employeeService: EmployeeService,
+    private _toast: ToastrService
   ) { }
 
   categoryForm = this._fb.group({
@@ -73,6 +82,41 @@ export class CreateCategoryComponent {
       dealSheet: [false],
       jobSheet: this._fb.group({
         viewReport: 'none',
+        allocateJobs: [false],
+        convertToPurchase: [false],
+        transferProcurementPerson: [false],
+      }),
+      purchase: this._fb.group({
+        viewReport: 'none',
+        canApprovePR: [false],
+      }),
+      purchaseOrder: this._fb.group({
+        viewReport: 'none',
+        canInitiateLPO: [false],
+        canApprovePOs: [false],
+        canReissueAndRevoke: [false],
+      }),
+      technical: this._fb.group({
+        canViewOpenToWorkAndAssign: [false],
+        canTransferToEngineer: [false],
+        viewReport: 'none',
+        canApproveMRRequests: [false],
+      }),
+      supplier: this._fb.group({
+        viewReport: 'none',
+        canApproveSupplier: [false],
+      }),
+      inventory: this._fb.group({
+        products: this._fb.group({
+          viewReport: 'none',
+        }),
+        stockEntries: this._fb.group({
+          viewReport: 'none',
+        }),
+      }),
+      claims: this._fb.group({
+        viewReport: 'none',
+        canApprove: [false],
       }),
       portalManagement: this._fb.group({
         department: [false],
@@ -98,20 +142,65 @@ export class CreateCategoryComponent {
   }
 
   onClose(): void {
-    this.dialogRef.close();
+    if (window.opener) {
+      window.close();
+    } else {
+      const currentUrl = this.router.url;
+      if (currentUrl.includes('/settings')) {
+        this.router.navigate(['/settings']);
+      } else {
+        this.router.navigate(['/home/employees']);
+      }
+    }
   }
 
-  onCheckboxChange(event: Event, formControlName: string, checkedVariable: keyof CreateCategoryComponent): void {
+  get footerButtons() {
+    return [
+      {
+        label: 'Cancel',
+        onClick: this.onClose.bind(this),
+        theme: 'cancel' as const
+      },
+      {
+        label: 'Create',
+        onClick: this.onSubmit.bind(this),
+        theme: 'primary' as const,
+        type: 'submit' as const,
+        loading: this.isSaving,
+        disabled: !this.categoryForm.valid
+      }
+    ];
+  }
+
+  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'claimsChecked' | 'portalChecked'): void {
     const eventTarget = event.target as HTMLInputElement;
     const checked = eventTarget.checked;
 
-    if (checked) {
+    if (formControlName === 'purchaseOrder') {
+      if (checked) {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canInitiateLPO: false, canApprovePOs: false, canReissueAndRevoke: false } } });
+      } else {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canInitiateLPO: false, canApprovePOs: false, canReissueAndRevoke: false } } });
+      }
+    } else if (formControlName === 'purchase') {
+      if (checked) {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canApprovePR: false } } });
+      } else {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false } } });
+      }
+    } else if (formControlName === 'inventory') {
+      if (checked) {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'all' }, stockEntries: { viewReport: 'all' } } } });
+      } else {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'none' }, stockEntries: { viewReport: 'none' } } } });
+      }
+    } else if (checked) {
       this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', create: false } } });
     } else {
       this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', create: false } } });
     }
 
-    this[checkedVariable] = checked as never;
+    (this as any)[checkedVariable] = checked;
 
   }
 
@@ -124,7 +213,18 @@ export class CreateCategoryComponent {
       this._employeeService.createCategory(categoryData as unknown as GetCategory).subscribe({
         next: (data) => {
           this.isSaving = false;
-          this.dialogRef.close(data)
+          this._toast.success('Category Created Successfully');
+          if (window.opener) {
+            window.opener.postMessage({ type: 'categoryCreated', data: data }, '*');
+            window.close();
+          } else {
+            const currentUrl = this.router.url;
+            if (currentUrl.includes('/settings')) {
+              this.router.navigate(['/settings']);
+            } else {
+              this.router.navigate(['/home/employees']);
+            }
+          }
         },
         error: ((error) => {
           this.isSaving = false;

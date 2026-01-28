@@ -8,6 +8,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { FormsModule } from '@angular/forms';
 import { NgSelectModule } from '@ng-select/ng-select';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 export enum allocateType {
   SupplyOnly = 'Supply Only',
@@ -18,7 +19,7 @@ export enum allocateType {
 
 @Component({
   selector: 'app-allocate-type-modal',
-  imports: [CommonModule, NgIconComponent, IconsModule, FormsModule, NgSelectModule],
+  imports: [CommonModule, NgIconComponent, IconsModule, FormsModule, NgSelectModule, ModalLayoutComponent],
   templateUrl: './allocate-type-modal.component.html',
   styleUrl: './allocate-type-modal.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -113,5 +114,17 @@ export class AllocateTypeModalComponent implements OnInit {
 
   onCancel() {
     this.dialogRef.close();
+  }
+
+  getFooterButtons(): any[] {
+    return [
+      { label: 'Cancel', onClick: this.onCancel.bind(this), theme: 'cancel' },
+      { 
+        label: 'Confirm Selection', 
+        onClick: this.onConfirm.bind(this), 
+        theme: 'primary', 
+        disabled: !this.selectedAllocationType || (this.shouldShowProcurementPerson() && !this.selectedProcurementPerson)
+      }
+    ];
   }
 }

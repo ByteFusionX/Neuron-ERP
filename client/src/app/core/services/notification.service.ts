@@ -3,16 +3,14 @@ import { BehaviorSubject, filter, Observable, Subject, switchMap, take } from 'r
 import { Socket } from 'ngx-socket-io';
 import { environment } from 'src/environments/environment';
 import { HttpClient } from '@angular/common/http';
-import { NotificationCounts, TextNotification } from 'src/app/shared/interfaces/notification.interface';
+import { TextNotification } from 'src/app/shared/interfaces/notification.interface';
 import { EmployeeService } from './employee/employee.service';
+import { Router, NavigationExtras } from '@angular/router';
 
 @Injectable({
     providedIn: 'root'
 })
 export class NotificationService {
-    private notificationsSubject = new BehaviorSubject<NotificationCounts>({ announcementCount: 0, assignedJobCount: 0, reAssignedJobCount: 0, dealSheetCount: 0, feedbackCount: 0, quotationCount: 0, enquiryCount: 0, purchaseCount: 0 });
-    notificationCounts$ = this.notificationsSubject.asObservable();
-
     textNotificationsSubject = new BehaviorSubject<{ viewed: TextNotification[], unviewed: TextNotification[] }>({ viewed: [], unviewed: [] });
     textNotificationsSubject$ = this.textNotificationsSubject.asObservable();
     api: string = environment.api
@@ -20,26 +18,75 @@ export class NotificationService {
     constructor(
         private http: HttpClient,
         private socket: Socket,
-        private employeeService: EmployeeService
+        private employeeService: EmployeeService,
+        private router: Router
     ) { }
 
-    initializeNotifications() {
-        this.socket.fromEvent('notifications').subscribe(
-            {
-                next: (notificationType) => {
-                    this.incrementNotificationCount(notificationType);
-                },
-                error: (error) => {
-                    console.error('Error receiving notifications:', error);
-                }
-            }
-        );
+    private calculateRoutePath(notification: any): { routePath: string; routeData?: any } {
+        const type = notification.type;
+        const referenceId = notification.referenceId;
+        const additionalData = notification.additionalData;
 
+        switch (type) {
+            case 'Announcement':
+                return { routePath: '/home/announcements' };
+            
+            case 'AssignedJob':
+                return { routePath: '/assigned-jobs' };
+            case 'ReAssignedJob':
+                return { routePath: '/assigned-jobs/reassigned' };
+
+            case 'FeedbackRequest':
+            case 'Enquiry':
+                const enquiryId = additionalData?.enquiryId || referenceId?._id?.toString() || referenceId?.toString();
+                return { 
+                    routePath: '/enquiry',
+                    routeData: { enquiryId }
+                };
+            
+            case 'DealSheet':
+            case 'Quotation':
+                return {
+                    routePath: '/quotations/view',
+                    routeData: referenceId
+                };
+            
+            case 'Event':
+                if (referenceId?.collectionId) {
+                    const from = referenceId.from;
+                    if (from === 'Enquiry') {
+                        return {
+                            routePath: '/enquiry',
+                            routeData: { enquiryId: referenceId.collectionId._id?.toString() || referenceId.collectionId.toString() }
+                        };
+                    } else if (from === 'Quotation') {
+                        return {
+                            routePath: '/quotations/view',
+                            routeData: referenceId.collectionId
+                        };
+                    }
+                }
+                return { routePath: '/home' };
+            
+            default:
+                return { routePath: '/home' };
+        }
+    }
+
+    initializeNotifications() {
+        console.log('initializeNotifications');
         this.socket.fromEvent('recieveNotifications').subscribe(
             {
                 next: (notification) => {
+                    console.log('notification', notification);
+                    const routeInfo = this.calculateRoutePath(notification);
+                    const notificationWithRoute = {
+                        ...notification,
+                        routePath: routeInfo.routePath,
+                        routeData: routeInfo.routeData
+                    };
                     const notifications = this.textNotificationsSubject.value
-                    notifications.unviewed.unshift(notification)
+                    notifications.unviewed.unshift(notificationWithRoute)
                     this.textNotificationsSubject.next(notifications)
                 },
                 error: (error) => {
@@ -49,89 +96,6 @@ export class NotificationService {
         );
     }
 
-    private incrementNotificationCount(notificationType: string) {
-        const currentCounts = this.notificationsSubject.value;
-
-        const updatedCounts = { ...currentCounts };
-
-        switch (notificationType) {
-            case 'announcement':
-                updatedCounts.announcementCount += 1;
-                break;
-            case 'assignedJob':
-                updatedCounts.assignedJobCount += 1;
-                break;
-            case 'reAssignedJob':
-                updatedCounts.reAssignedJobCount += 1;
-                break;
-            case 'dealSheet':
-                updatedCounts.dealSheetCount += 1;
-                break;
-            case 'feedbackRequest':
-                updatedCounts.feedbackCount += 1;
-                break;
-            case 'quotation':
-                updatedCounts.quotationCount += 1;
-                break;
-            case 'enquiry':
-                updatedCounts.enquiryCount += 1;
-                break;
-        }
-
-        this.notificationsSubject.next(updatedCounts);
-    }
-
-    decrementNotificationCount(notificationType: string, value: number) {
-        const currentCounts = this.notificationsSubject.value;
-
-        const updatedCounts = { ...currentCounts };
-
-        switch (notificationType) {
-            case 'announcement':
-                if (updatedCounts.announcementCount) {
-                    updatedCounts.announcementCount -= value;
-                }
-                break;
-            case 'assignedJob':
-                if (updatedCounts.assignedJobCount) {
-                    updatedCounts.assignedJobCount -= value;
-                }
-                break;
-            case 'reAssignedJob':
-                if (updatedCounts.reAssignedJobCount) {
-                    updatedCounts.reAssignedJobCount -= value;
-                }
-                break;
-            case 'dealSheet':
-                if (updatedCounts.dealSheetCount) {
-                    updatedCounts.dealSheetCount -= value;
-                }
-                break;
-            case 'feedbackRequest':
-                if (updatedCounts.feedbackCount) {
-                    updatedCounts.feedbackCount -= value;
-                }
-                break;
-            case 'quotation':
-                if (updatedCounts.quotationCount) {
-                    updatedCounts.quotationCount -= value;
-                }
-                break;
-            case 'enquiry':
-                if (updatedCounts.enquiryCount) {
-                    updatedCounts.enquiryCount -= value;
-                }
-                break;
-        }
-
-        this.notificationsSubject.next(updatedCounts);
-    }
-
-    getEmployeeNotifications() {
-        this.http.get<NotificationCounts>(`${this.api}/employee/notifications`).subscribe((data) => {
-            this.notificationsSubject.next(data);
-        })
-    }
 
     getEmployeeTextNotifications() {
         this.http.get<{ viewed: TextNotification[], unviewed: TextNotification[] }>(`${this.api}/notification`).subscribe((data) => {
@@ -156,6 +120,33 @@ export class NotificationService {
                 }
             })
         );
+    }
+
+    navigateToNotification(notification: TextNotification): void {
+        let routePath = notification.routePath;
+        let routeData = notification.routeData;
+
+        if (!routePath) {
+            const routeInfo = this.calculateRoutePath(notification);
+            routePath = routeInfo.routePath;
+            routeData = routeInfo.routeData;
+        }
+
+        console.log('routePath', routePath);
+
+        if (routePath === '/quotations/view' && routeData) {
+            const navigationExtras: NavigationExtras = {
+                state: routeData
+            };
+            this.router.navigate([routePath], navigationExtras);
+        } else if (routePath === '/enquiry' && routeData?.enquiryId) {
+            const navigationExtras: NavigationExtras = {
+                queryParams: { enquiryId: routeData.enquiryId }
+            };
+            this.router.navigate([routePath], navigationExtras);
+        } else {
+            this.router.navigate([routePath]);
+        }
     }
 }
 

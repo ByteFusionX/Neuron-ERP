@@ -49,7 +49,6 @@ export class ViewPresaleComponent {
         if (this.data.preSale.seenbySalesPerson === false && this.data.salesPerson._id == data._id) {
           this._enquiryService.markAsSeenEstimation(this.data._id).subscribe((res: any) => {
             if (res.success) {
-              this._notificationService.decrementNotificationCount('enquiry', 1)
             }
           })
         }

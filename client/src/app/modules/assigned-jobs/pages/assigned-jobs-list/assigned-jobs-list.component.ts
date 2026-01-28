@@ -154,7 +154,6 @@ export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewIn
 
   markJobAsViewed(jobId: string) {
     this._enquiryService.markJobAsViewed(jobId).pipe(takeUntil(this.destroy$)).subscribe();
-    this._notificationService.decrementNotificationCount('assignedJob', 1)
   }
   
   ngOnDestroy(): void {

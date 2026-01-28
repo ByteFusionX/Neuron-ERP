@@ -1,29 +1,22 @@
-<div class="bg-white mx-5 mt-5 rounded-2xl max-h-[calc(100vh-70px)]">
-  <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
-    <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-      <h3 class="font-semibold">Material Request</h3>
-      <div class="flex items-center gap-3">
-        <app-btn 
-          theme="secondary-outline" 
-          (click)="openPurchaseRequestModal()"
-          [disabled]="!hasPurchaseRequests">
-          <ng-icon name="heroShoppingCart" class="w-4 h-4 mr-1"></ng-icon>
-          @if(hasPurchaseRequests){
-            View Request from Purchase
-          }@else{
-            No Requests from Purchase
-          }
-        </app-btn>
-        <button 
-          (click)="onCancel()"
-          class="text-gray-500 hover:text-gray-700">
-          <ng-icon name="heroArrowLeft" class="w-5 h-5"></ng-icon>
-          Back
-        </button>
-      </div>
-    </div>
+<app-modal-layout
+  title="Material Request"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="getFooterButtons()"
+  contentClass="m-8 p-6"
+  contentMaxHeight="calc(100vh-70px)">
+  <div class="mb-4 flex items-center gap-3">
+    <app-btn 
+      theme="secondary-outline" 
+      (click)="openPurchaseRequestModal()"
+      [disabled]="!hasPurchaseRequests">
+      <ng-icon name="heroShoppingCart" class="w-4 h-4 mr-1"></ng-icon>
+      @if(hasPurchaseRequests){
+        View Request from Purchase
+      }@else{
+        No Requests from Purchase
+      }
+    </app-btn>
   </div>
-
   <form [formGroup]="materialForm" (ngSubmit)="onSubmit()">
     <div class="m-8 p-6">
       <div *ngIf="isLoading" class="flex flex-col items-center justify-center py-12">
@@ -234,20 +227,5 @@
       </div>
     </div>
 
-    <div class="border-t py-6 px-9 flex justify-end gap-2">
-      <button 
-        type="button"
-        (click)="onCancel()"
-        class="bg-orange-600 hover:bg-orange-500 text-white font-medium py-2 px-4 rounded text-sm">
-        Cancel
-      </button>
-      <button 
-        type="submit"
-        [disabled]="materialForm.invalid || isSaving"
-        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm disabled:bg-gray-400 disabled:cursor-not-allowed">
-        <span *ngIf="!isSaving">Save Material Request</span>
-        <span *ngIf="isSaving">Saving...</span>
-      </button>
-    </div>
   </form>
-</div> 
+</app-modal-layout> 

@@ -11,6 +11,7 @@ import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/f
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 
 @Component({
@@ -22,7 +23,8 @@ import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
     FormFieldComponent,
     SelectDropdownComponent,
     ButtonComponent,
-    IconsModule
+    IconsModule,
+    ModalLayoutComponent
   ],
   templateUrl: './block-item.component.html',
   styleUrl: './block-item.component.css'

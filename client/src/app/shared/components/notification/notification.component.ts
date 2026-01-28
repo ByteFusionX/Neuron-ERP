@@ -73,4 +73,12 @@ export class NotificationComponent {
       }
     });
   }
+
+  onNotificationClick(notification: TextNotification) {
+    if (notification._id) {
+      this.onMarkAsRead(notification._id);
+    }
+    this._notificationService.navigateToNotification(notification);
+    this.closeSidenav.emit();
+  }
 }

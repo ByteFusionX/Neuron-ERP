@@ -6,6 +6,7 @@ import { NgIconsModule } from '@ng-icons/core';
 import { FormsModule } from '@angular/forms';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from '../button/button.component';
+import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
 
 export interface GrnListModalData {
   lpoId: string;
@@ -18,7 +19,7 @@ export interface GrnListModalData {
 @Component({
   selector: 'app-grn-list-modal',
   standalone: true,
-  imports: [CommonModule, NgIconsModule, FormsModule, IconsModule, ButtonComponent],
+  imports: [CommonModule, NgIconsModule, FormsModule, IconsModule, ButtonComponent, ModalLayoutComponent],
   templateUrl: './grn-list-modal.component.html',
   styleUrls: ['./grn-list-modal.component.css']
 })

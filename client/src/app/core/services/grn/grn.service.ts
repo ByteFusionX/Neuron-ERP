@@ -125,6 +125,7 @@ export class GrnService {
               [{ style: 'infoLabel', text: 'Supplier Invoice No.:' }, { style: 'infoValue', text: grnData.supplierInvoiceNo || 'N/A' }],
               [{ style: 'infoLabel', text: 'Invoice Date:' }, { style: 'infoValue', text: invoiceDate }],
               [{ style: 'infoLabel', text: 'Linked LPO No.:' }, { style: 'infoValue', text: grnData.purchaseOrderId?.poNo || 'N/A' }],
+              [{ style: 'infoLabel', text: 'Job ID:' }, { style: 'infoValue', text: grnData.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' }],
               [{ style: 'infoLabel', text: 'Delivery Note No.:' }, { style: 'infoValue', text: grnData.supplierDeliveryNoteNo || 'N/A' }],
               [{ style: 'infoLabel', text: 'Received By:' }, { style: 'infoValue', text: this.formatEmployeeName(grnData.receivedBy) || 'N/A' }],
               [{ style: 'infoLabel', text: 'Warehouse / Location:' }, { style: 'infoValue', text: grnData.warehouse?.wareHouseName || 'N/A' }],

@@ -1,17 +1,9 @@
-<div class="p-6 max-h-[90vh] flex flex-col">
-  <div class="flex items-center justify-between mb-6">
-    <div>
-      <h2 class="text-xl font-semibold text-gray-900">GRN List - {{ data.lpoNo }}</h2>
-      <p class="text-sm text-gray-500 mt-1">Select a GRN to view details</p>
-    </div>
-    <button
-      (click)="onClose()"
-      class="text-gray-400 hover:text-gray-600 transition-colors"
-      type="button">
-      <ng-icon name="heroXMark" class="w-6 h-6"></ng-icon>
-    </button>
-  </div>
-
+<app-modal-layout
+  [title]="'GRN List - ' + data.lpoNo"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-5 flex flex-col"
+  contentMaxHeight="90vh">
   <div class="flex-1 overflow-hidden flex flex-col">
     <div class="mb-4 flex items-center justify-between gap-4">
       <div class="flex-1 relative">
@@ -19,7 +11,7 @@
           type="text"
           [value]="searchTerm()"
           (input)="onSearchChange($any($event.target).value)"
-          placeholder="Search by GRN No, Warehouse, or Date..."
+          placeholder="Search by GRN No, Warehouse"
           class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
         <ng-icon
           name="heroMagnifyingGlass"
@@ -112,11 +104,5 @@
         </table>
       }
     </div>
-
-    @if (filteredGrns().length > 0 && !isLoading()) {
-      <div class="mt-4 text-sm text-gray-500 text-center">
-        Showing {{ filteredGrns().length }} of {{ data.grns?.length || 0 }} GRN(s)
-      </div>
-    }
   </div>
-</div>
+</app-modal-layout>

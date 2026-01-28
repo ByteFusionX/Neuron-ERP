@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import DeliveryNote from '../models/deliveryNote.model';
 import StockEntry from '../models/stockEntry.model';
 import Product from '../models/products.model';
+import { checkAndUpdateJobCompletionStatus } from './job.controller';
 
 export const generateDnNumber = async (req: Request, res: Response) => {
     try {
@@ -32,7 +33,9 @@ export const createDn = async (req: Request, res: Response) => {
         });
         const savedDn = await newDn.save();
 
-        // 2. Update Job Status if needed (logic: check if all items delivered)?
+        if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
+            await checkAndUpdateJobCompletionStatus(jobId);
+        }
 
         res.status(201).json({ success: true, data: savedDn });
     } catch (error) {

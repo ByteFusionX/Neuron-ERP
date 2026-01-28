@@ -9,6 +9,7 @@ import { HttpEventType } from '@angular/common/http';
 import { saveAs } from 'file-saver';
 import { EnquiryService } from '../../../core/services/enquiry/enquiry.service';
 import { appFileValidator } from '../../directives/file-validator.directive';
+import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
 
 export interface FileItem {
   fileName: string;
@@ -36,7 +37,7 @@ export interface FileUploadModalData {
   templateUrl: './file-upload-modal.component.html',
   styleUrls: ['./file-upload-modal.component.css'],
   standalone: true,
-  imports: [CommonModule, NgIconsModule, MatTooltipModule, FormsModule],
+  imports: [CommonModule, NgIconsModule, MatTooltipModule, FormsModule, ModalLayoutComponent],
   providers: [appFileValidator]
 })
 export class FileUploadModalComponent implements OnInit {

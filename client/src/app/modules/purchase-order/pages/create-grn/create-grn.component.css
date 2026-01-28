@@ -1,1 +1,11 @@
+::ng-deep app-form-field input[readonly],
+::ng-deep app-form-field textarea[readonly] {
+  background-color: transparent !important;
+  border: 1px solid #d1d5db !important;
+}
 
+::ng-deep app-form-field input[readonly]:focus,
+::ng-deep app-form-field textarea[readonly]:focus {
+  background-color: transparent !important;
+  border-color: #3b82f6 !important;
+}

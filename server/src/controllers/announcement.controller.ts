@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import { connectedSockets } from "../services/socket-io.service";
 import employeeModel from "../models/employee.model";
 import { Types } from "mongoose";
+import { createNotificationWithPrivileges } from "./notification.controller";
 
 export const createAnnouncement = async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -33,29 +34,45 @@ export const createAnnouncement = async (req: any, res: Response, next: NextFunc
       saveAnnouncement = await announcementModel.create(announcementDoc);
     }
 
-    const userData = await employeeModel.find();
-  
-
     if (saveAnnouncement) {
       const socket = req.app.get('io') as Server;
       
-      // Filter users based on category
+      const userData = await employeeModel.find();
+      const announcementCategory = category.length > 0 ? category : ['all'];
+      
       const eligibleUsers = userData.filter(user => 
-        // If announcement is for 'all' or user's category matches announcement category
-        category.includes('all') || category.some(cat => user.category?.toString() === cat)
+        announcementCategory.includes('all') || announcementCategory.some(cat => user.category?.toString() === cat)
       );
 
-      // Get eligible user IDs and filter out the creator
       const eligibleUserIds = eligibleUsers
         .map(user => user._id.toString())
         .filter(id => id !== userId);
 
-      // Emit notifications only to eligible users who are connected
-      eligibleUserIds.forEach(userId => {
-        if (connectedSockets[userId]) {
-          socket.to(userId).emit("notifications", 'announcement');
-        }
-      });
+      if (eligibleUserIds.length > 0) {
+        await createNotificationWithPrivileges(
+          {
+            type: 'Announcement',
+            referenceModel: 'Announcement',
+            title: title,
+            message: description,
+            sentBy: userId,
+            referenceId: saveAnnouncement._id,
+            additionalData: { announcementId: saveAnnouncement._id.toString() }
+          },
+          {
+            privilegeKey: 'announcement',
+            checkFunction: (privileges, employeeId) => {
+              if (!employeeId) return false;
+              const user = eligibleUsers.find(u => u._id.toString() === employeeId);
+              if (!user) return false;
+              const userCategory = announcementCategory.includes('all') || 
+                announcementCategory.some(cat => user.category?.toString() === cat);
+              return userCategory && privileges.announcement?.viewReport !== 'none';
+            }
+          },
+          socket
+        );
+      }
 
       return res.status(200).json({ success: true, message: isEdit ? 'Announcement updated' : 'Announcement created' });
     }

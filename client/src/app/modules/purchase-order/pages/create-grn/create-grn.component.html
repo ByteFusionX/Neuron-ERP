@@ -53,6 +53,8 @@
                         formControlName="warehouse"
                         placeholder="Select warehouse"
                         [isSubmitted]="isSubmitting()"
+                        footerLabel="+ Add warehouse"
+                        (footerAction)="onAddWarehouse()"
                         class="w-full">
                     </app-select-dropdown>
                 </div>
@@ -133,10 +135,10 @@
                 </div>
             }
         </div>
-        <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
+        <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
-                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled()" (buttonClick)="onSave()">Save & Exit</app-btn>
                 <app-btn theme="cancel" type="button" (buttonClick)="onDiscard()">Discard</app-btn>
+                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled()" (buttonClick)="onSave()">Save & Exit</app-btn>
             </div>
         </div>
     </form>

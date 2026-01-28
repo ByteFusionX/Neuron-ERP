@@ -1,6 +1,7 @@
 import { Component, Inject, inject, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { ProductService } from 'src/app/core/services/product/product.service';
@@ -10,10 +11,10 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { AddCategoryComponent } from '../add-category/add-category.component';
 import { AddWarehouseComponent } from '../add-warehouse/add-warehouse.component';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
   selector: 'app-create-product',
@@ -24,7 +25,8 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
     FormFieldComponent,
     SelectDropdownComponent,
     ButtonComponent,
-    IconsModule
+    IconsModule,
+    ModalLayoutComponent
   ],
   templateUrl: './create-product.component.html',
   styleUrl: './create-product.component.css'
@@ -37,6 +39,7 @@ export class CreateProductComponent implements OnInit {
   private profileService = inject(ProfileService);
   private toastr = inject(ToastrService);
   private dialog = inject(MatDialog);
+  private router = inject(Router);
   isSubmitting = false;
 
   departments: getDepartment[] = [];
@@ -103,16 +106,7 @@ export class CreateProductComponent implements OnInit {
   }
 
   onAddCategory(): void {
-    const dialogRef = this.dialog.open(AddCategoryComponent, {
-      width: '500px',
-      disableClose: true
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadCategories(result._id);
-      }
-    });
+    this.router.navigate(['/inventory/products/category/add']);
   }
 
   onAddWarehouse(): void {

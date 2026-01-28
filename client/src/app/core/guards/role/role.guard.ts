@@ -147,6 +147,38 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 break;
 
             default:
+                if (url.startsWith('/purchase') && !url.startsWith('/purchase-order')) {
+                    if (privileges?.purchase?.viewReport == 'none') {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/purchase-order')) {
+                    if (!privileges?.purchaseOrder?.viewReport || privileges?.purchaseOrder?.viewReport == 'none') {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/technical')) {
+                    if (privileges?.technical?.viewReport == 'none' && !privileges?.technical?.canViewOpenToWorkAndAssign && 
+                        !privileges?.technical?.canTransferToEngineer && !privileges?.technical?.canApproveMRRequests) {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/suppliers')) {
+                    if (privileges?.supplier?.viewReport == 'none') {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/inventory')) {
+                    if (privileges?.inventory?.products?.viewReport == 'none' && privileges?.inventory?.stockEntries?.viewReport == 'none') {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/claims')) {
+                    if (privileges?.claims?.viewReport == 'none') {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                }
                 break;
         }
         if (!privileges) {

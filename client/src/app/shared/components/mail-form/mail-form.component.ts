@@ -8,6 +8,7 @@ import { UploadFileComponent } from '../upload-file/upload-file.component';
 import { ButtonComponent } from '../button/button.component';
 import { NgIconsModule } from '@ng-icons/core';
 import { MsalService } from '@azure/msal-angular';
+import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
 
 export interface ProjectUpdate {
   _id?: string;
@@ -36,7 +37,8 @@ export interface MailFormData {
     EmailTagInputComponent,
     UploadFileComponent,
     ButtonComponent,
-    NgIconsModule
+    NgIconsModule,
+    ModalLayoutComponent
   ],
   templateUrl: './mail-form.component.html',
   styleUrl: './mail-form.component.css',
@@ -158,6 +160,33 @@ export class MailFormComponent implements OnInit {
 
   onCancel(): void {
     this.dialogRef.close();
+  }
+
+  getFooterButtons(): any[] {
+    const buttons: any[] = [
+      { label: 'Cancel', onClick: this.onCancel.bind(this), theme: 'cancel' }
+    ];
+    
+    if (!this.data.mailData) {
+      buttons.push({
+        label: 'Save Draft',
+        onClick: this.onDraft.bind(this),
+        theme: 'secondary',
+        disabled: this.isSaving(),
+        icon: 'heroCloudArrowUp'
+      });
+    }
+    
+    buttons.push({
+      label: this.data.mailData ? 'Edit & Send' : 'Send',
+      onClick: this.onSend.bind(this),
+      theme: 'primary',
+      loading: this.isSaving(),
+      disabled: this.isSaving(),
+      icon: 'heroPaperAirplane'
+    });
+    
+    return buttons;
   }
 
   get f() {

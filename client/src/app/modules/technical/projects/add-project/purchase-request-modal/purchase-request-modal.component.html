@@ -1,12 +1,10 @@
-<div class="p-6 max-w-4xl mx-auto">
-  <div class="flex justify-between items-center mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">Purchase Requests</h2>
-    <button 
-      (click)="onClose()"
-      class="text-gray-400 hover:text-gray-600">
-      <ng-icon name="heroXMark" class="w-6 h-6"></ng-icon>
-    </button>
-  </div>
+<app-modal-layout
+  title="Purchase Requests"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="[
+    { label: 'Close', onClick: onClose.bind(this), theme: 'primary' }
+  ]"
+  contentClass="p-6 max-w-4xl mx-auto">
 
   @if(purchaseRequests.length === 0){
     <div class="text-center py-8">
@@ -57,11 +55,4 @@
     </div>
   }
 
-  <div class="mt-6 flex justify-end">
-    <app-btn 
-      theme="primary"
-      (click)="onClose()">
-      Close
-    </app-btn>
-  </div>
-</div> 
+</app-modal-layout> 

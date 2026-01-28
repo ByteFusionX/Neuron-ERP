@@ -4,7 +4,7 @@ import PurchaseRequest from '../models/purchaseRequest.model'
 import jobModel, { allocateStatus } from "../models/job.model";
 import supplierModel from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
-import { getEmployeeData, calculateDiscountPricePipe, calculateCostPricePipe, getUSDRated } from "../common/utils/util";
+import { getEmployeeData, calculateDiscountPricePipe, calculateCostPricePipe, getUSDRated, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
@@ -21,6 +21,23 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
     try {
         const tokenData = req.user;
         const employee = await getEmployeeData(tokenData);
+        
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+                status: 401
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        if (!privileges?.jobSheet?.convertToPurchase) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission to convert jobs to purchase",
+                status: 403
+            });
+        }
 
         const {
             jobId,
@@ -112,6 +129,13 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
         const savedPurchaseRequest = await newPurchaseRequest.save();
         await jobModel.updateOne({ _id: jobId }, { $set: { status: `Purchase ${savedPurchaseRequest.status !== 'Drafted' ? 'Requested' : savedPurchaseRequest.status}` } })
 
+        await jobModel.findByIdAndUpdate(jobId, {
+            $set: {
+                allocateStatus: allocateStatus.WorkInProgress,
+                updatedDate: new Date()
+            }
+        });
+
         return res.status(201).json({
             success: true,
             data: savedPurchaseRequest,
@@ -127,8 +151,24 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
         const pageNumber = Number(page) || 1;
         const pageSize = Number(row) || 10;
 
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+                status: 401
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        const accessFilter = privileges?.purchase?.viewReport 
+            ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
+            : {};
+
         const matchStage: any = {
-            isDeleted: false
+            isDeleted: false,
+            ...accessFilter
         };
 
         if (Array.isArray(status)) {
@@ -476,9 +516,28 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
             });
         }
 
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+                status: 401
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        const accessFilter = privileges?.purchase?.viewReport 
+            ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
+            : {};
+
         const purchaseRequests = await PurchaseRequest.aggregate([
             {
-                $match: { status: status }
+                $match: { 
+                    status: status,
+                    isDeleted: false,
+                    ...accessFilter
+                }
             },
             {
                 $lookup: {
@@ -1784,6 +1843,23 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
         const { status, comment } = req.body;
         const tokenData = req.user;
         const employee = await getEmployeeData(tokenData);
+        
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+                status: 401
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        if (status === 'approved' && !privileges?.purchase?.canApprovePR) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission to approve purchase requisitions",
+                status: 403
+            });
+        }
 
         if (!['approved', 'rejected'].includes(status)) {
             return res.status(400).json({
@@ -2178,6 +2254,15 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
+        if (isStatusChangingFromDraft) {
+            await jobModel.findByIdAndUpdate(existingPurchaseRequest.jobId, {
+                $set: {
+                    allocateStatus: allocateStatus.WorkInProgress,
+                    updatedDate: new Date()
+                }
+            });
+        }
+
         return res.status(200).json({
             success: true,
             message: "Purchase request updated successfully",
@@ -2320,11 +2405,27 @@ export const getPurchaseRequestsByJobId = async (req: Request, res: Response, ne
             });
         }
 
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+                status: 401
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        const accessFilter = privileges?.purchase?.viewReport 
+            ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
+            : {};
+
         const purchaseRequests = await PurchaseRequest.aggregate([
             {
                 $match: {
                     jobId: new ObjectId(jobId),
-                    isDeleted: false
+                    isDeleted: false,
+                    ...accessFilter
                 }
             },
             {

@@ -1,13 +1,8 @@
-<div class="p-6">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">{{ data.title }}</h2>
-    <button 
-      (click)="onClose()" 
-      class="text-gray-400 hover:text-gray-600 transition-colors">
-      <ng-icon name="heroXMark" class="w-6 h-6"></ng-icon>
-    </button>
-  </div>
-
+<app-modal-layout
+  [title]="data.title"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6">
   <div class="space-y-4">
     <div *ngFor="let item of data.history; let i = index" 
          class="border border-gray-200 rounded-lg p-4 bg-gray-50">
@@ -53,10 +48,4 @@
       <p>No status history available</p>
     </div>
   </div>
-
-  <div class="flex justify-end mt-6 pt-4 border-t">
-    <app-btn theme="secondary" (click)="onClose()">
-      Close
-    </app-btn>
-  </div>
-</div>
+</app-modal-layout>

@@ -523,3 +523,32 @@ export const updateIssuedQuantities = async (
 
     await purchaseRequestDoc.save();
 }
+
+export const buildPrivilegeAccessFilter = async (
+    userId: ObjectId,
+    viewReport: string,
+    createdByField: string = 'createdBy'
+): Promise<any> => {
+    let accessFilter: any = {};
+    
+    switch (viewReport) {
+        case 'created':
+            accessFilter[createdByField] = userId;
+            break;
+        case 'reported':
+            const reportedIds = await getAllReportedEmployees(userId);
+            accessFilter[createdByField] = { $in: reportedIds };
+            break;
+        case 'createdAndReported':
+            const reportedIds2 = await getAllReportedEmployees(userId);
+            reportedIds2.push(userId);
+            accessFilter[createdByField] = { $in: reportedIds2 };
+            break;
+        case 'all':
+        default:
+            accessFilter = {};
+            break;
+    }
+    
+    return accessFilter;
+}

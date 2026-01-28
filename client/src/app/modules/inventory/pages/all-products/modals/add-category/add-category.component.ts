@@ -1,11 +1,12 @@
-import { Component, Inject, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { NgIcon } from '@ng-icons/core';
 
 @Component({
   selector: 'app-add-category',
@@ -14,7 +15,8 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
     CommonModule,
     ReactiveFormsModule,
     FormFieldComponent,
-    ButtonComponent
+    ButtonComponent,
+    NgIcon
   ],
   templateUrl: './add-category.component.html',
   styleUrl: './add-category.component.css'
@@ -23,17 +25,13 @@ export class AddCategoryComponent {
   private fb = inject(FormBuilder);
   private productCategoryService = inject(ProductCategoryService);
   private toastr = inject(ToastrService);
+  private router = inject(Router);
   isSubmitting = false;
 
   categoryForm: FormGroup = this.fb.group({
     categoryName: ['', [Validators.required]],
     createdDate: [new Date(), [Validators.required]]
   });
-
-  constructor(
-    public dialogRef: MatDialogRef<AddCategoryComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: any
-  ) {}
 
   onSubmit(): void {
     if (this.categoryForm.invalid) {
@@ -45,7 +43,7 @@ export class AddCategoryComponent {
     this.productCategoryService.createProductCategory(this.categoryForm.value).subscribe({
       next: (category) => {
         this.toastr.success('Category created successfully');
-        this.dialogRef.close(category);
+        this.router.navigate(['/inventory/products']);
       },
       error: (error) => {
         this.toastr.error(error.error?.message || 'Failed to create category');
@@ -55,7 +53,7 @@ export class AddCategoryComponent {
   }
 
   onCancel(): void {
-    this.dialogRef.close();
+    this.router.navigate(['/inventory/products']);
   }
 }
 

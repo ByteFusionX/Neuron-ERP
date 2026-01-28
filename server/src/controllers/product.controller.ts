@@ -3,7 +3,7 @@ import Product from "../models/products.model";
 import Department from "../models/department.model";
 import ProductCategory from "../models/productCategory.model";
 import Warehouse from "../models/warehouse.model";
-import { getEmployeeData } from "../common/utils/util";
+import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
 
@@ -82,11 +82,28 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             createdBy
         } = req.query;
 
+        const tokenData = (req as any).user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        const accessFilter = privileges?.inventory?.products?.viewReport 
+            ? await buildPrivilegeAccessFilter(employee._id, privileges.inventory.products.viewReport, 'createdBy')
+            : {};
+
         const pageNum = Math.max(parseInt(page as string, 10) || 1, 1);
         const rowNum = Math.max(parseInt(row as string, 10) || 10, 1);
         const skip = (pageNum - 1) * rowNum;
 
-        const filter: any = { isDeleted: { $ne: true } };
+        const filter: any = { 
+            isDeleted: { $ne: true },
+            ...accessFilter
+        };
 
         if (partNo) {
             filter.partNo = { $regex: partNo as string, $options: 'i' };

@@ -2,8 +2,12 @@ import { NextFunction, Request, Response } from "express"
 import jobModel, { allocateStatus, allocateType } from "../models/job.model"
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller';
-import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated } from "../common/utils/util";
+import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated, getEmployeeData } from "../common/utils/util";
 import technicalModel from '../models/technical.model';
+import PurchaseRequest from '../models/purchaseRequest.model';
+import PurchaseOrder from '../models/purchaseOrder.model';
+import DeliveryNote from '../models/deliveryNote.model';
+import GRN from '../models/grn.model';
 
 
 const { ObjectId } = require('mongodb')
@@ -715,6 +719,23 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
     try {
         const { jobId, procurementPersonId } = req.body;
 
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        if (!privileges?.jobSheet?.transferProcurementPerson) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission to transfer procurement person",
+            });
+        }
+
         // Validate required fields
         if (!jobId || !procurementPersonId) {
             return res.status(400).json({
@@ -834,6 +855,24 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
     try {
         const { jobId, companyName, subject, salesPersonDetails, departmentDetails, quoteId, dealId, page = 1, row = 10 } = req.body;
         const allocateTypeFilter = req.body.allocateType
+        
+        const tokenData = req.user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        if (!privileges?.technical?.canViewOpenToWorkAndAssign) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission to view open to work jobs",
+            });
+        }
+        
         let matchFilters: any = {
             isDeleted: { $ne: true }
         };
@@ -930,3 +969,611 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
         next(error);
     }
 }
+
+export const checkAndUpdateJobCompletionStatus = async (jobId: string) => {
+    try {
+        if (!jobId || !ObjectId.isValid(jobId)) {
+            return;
+        }
+
+        const job = await jobModel.findById(jobId);
+        if (!job || job.isDeleted) {
+            return;
+        }
+
+        const purchaseRequests = await PurchaseRequest.find({
+            jobId: new ObjectId(jobId),
+            isDeleted: { $ne: true }
+        });
+
+        if (purchaseRequests.length === 0) {
+            return;
+        }
+
+        const purchaseRequestIds = purchaseRequests.map(pr => pr._id);
+        const purchaseOrders = await PurchaseOrder.find({
+            purchaseId: { $in: purchaseRequestIds }
+        });
+
+        if (purchaseOrders.length === 0) {
+            return;
+        }
+
+        let allConditionsMet = true;
+
+        for (const po of purchaseOrders) {
+            if (po.poStatus !== 'Closed') {
+                allConditionsMet = false;
+                break;
+            }
+
+            if (!po.supplierInvoices || !Array.isArray(po.supplierInvoices) || po.supplierInvoices.length === 0) {
+                allConditionsMet = false;
+                break;
+            }
+        }
+
+        if (!allConditionsMet) {
+            return;
+        }
+
+        const deliveryNotes = await DeliveryNote.find({
+            jobId: new ObjectId(jobId)
+        });
+
+        if (deliveryNotes.length === 0) {
+            return;
+        }
+
+        await jobModel.findByIdAndUpdate(jobId, {
+            $set: {
+                allocateStatus: allocateStatus.Completed,
+                updatedDate: new Date()
+            }
+        });
+    } catch (error) {
+        console.error('Error checking job completion status:', error);
+    }
+};
+
+export const getJobHistory = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { jobId } = req.params;
+
+        if (!jobId || !ObjectId.isValid(jobId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid job ID",
+                status: 400
+            });
+        }
+
+        const job = await jobModel.findById(jobId);
+        if (!job || job.isDeleted) {
+            return res.status(404).json({
+                success: false,
+                message: "Job not found",
+                status: 404
+            });
+        }
+
+        const timeline: any[] = [];
+        let latestPRTimestamp: Date | null = null;
+        let latestPOTimestamp: Date | null = null;
+        const currentStatus: any = {
+            purchaseRequest: null,
+            purchaseOrder: null,
+            technical: null,
+            deliveryNote: 0
+        };
+        const summary: any = {
+            totalPRs: 0,
+            approvedPRs: 0,
+            rejectedPRs: 0,
+            totalPOs: 0,
+            approvedPOs: 0,
+            closedPOs: 0,
+            totalGRNs: 0,
+            totalDNs: 0,
+            hasTechnical: false
+        };
+
+        const purchaseRequests = await PurchaseRequest.find({
+            jobId: new ObjectId(jobId),
+            isDeleted: { $ne: true }
+        })
+        .populate('createdBy', 'firstName lastName')
+        .populate('approvalStatus.updatedBy', 'firstName lastName')
+        .populate('approvalStatus.role', 'categoryName')
+        .populate('rejectedReason.rejectedBy', 'firstName lastName')
+        .populate('revokedHistory.revokedBy', 'firstName lastName')
+        .populate('updatedBy', 'firstName lastName')
+        .sort({ createdAt: 1 });
+
+        summary.totalPRs = purchaseRequests.length;
+
+        for (const pr of purchaseRequests) {
+            if (pr.status === 'Approved') summary.approvedPRs++;
+            if (pr.status === 'Rejected') summary.rejectedPRs++;
+
+            const prTimestamp = new Date(pr.updatedAt || pr.createdAt);
+            if (!latestPRTimestamp || prTimestamp > latestPRTimestamp) {
+                latestPRTimestamp = prTimestamp;
+                currentStatus.purchaseRequest = pr.status;
+            }
+
+            timeline.push({
+                id: `pr-created-${pr._id}`,
+                timestamp: pr.createdAt,
+                pipeline: 'purchaseRequest',
+                eventType: pr.status === 'Drafted' ? 'drafted' : 'created',
+                title: `Purchase Request ${pr.purchaseNo} ${pr.status === 'Drafted' ? 'Drafted' : 'Created'}`,
+                description: `Purchase Request ${pr.purchaseNo} was ${pr.status === 'Drafted' ? 'drafted' : 'created'}`,
+                performedBy: pr.createdBy ? {
+                    _id: (pr.createdBy as any)._id,
+                    firstName: (pr.createdBy as any).firstName,
+                    lastName: (pr.createdBy as any).lastName
+                } : null,
+                metadata: {
+                    prNo: pr.purchaseNo,
+                    status: pr.status
+                },
+                status: pr.status === 'Drafted' ? 'info' : 'info'
+            });
+
+            if (pr.status !== 'Drafted' && pr.approvalStatus && pr.approvalStatus.length > 0) {
+                timeline.push({
+                    id: `pr-sent-approval-${pr._id}`,
+                    timestamp: pr.createdAt,
+                    pipeline: 'purchaseRequest',
+                    eventType: 'sent_for_approval',
+                    title: `Purchase Request ${pr.purchaseNo} Sent for Approval`,
+                    description: `Purchase Request ${pr.purchaseNo} was sent for approval`,
+                    performedBy: pr.createdBy ? {
+                        _id: (pr.createdBy as any)._id,
+                        firstName: (pr.createdBy as any).firstName,
+                        lastName: (pr.createdBy as any).lastName
+                    } : null,
+                    metadata: {
+                        prNo: pr.purchaseNo
+                    },
+                    status: 'warning'
+                });
+            }
+
+            if (pr.approvalStatus && pr.approvalStatus.length > 0) {
+                for (const approval of pr.approvalStatus) {
+                    if (approval.status === 'approved' && approval.updatedDate) {
+                        timeline.push({
+                            id: `pr-approved-${pr._id}-${approval.step}`,
+                            timestamp: approval.updatedDate,
+                            pipeline: 'purchaseRequest',
+                            eventType: 'approved',
+                            title: `Purchase Request ${pr.purchaseNo} Approved at Step ${approval.step}`,
+                            description: `Purchase Request ${pr.purchaseNo} was approved${approval.role ? ` by ${(approval.role as any).categoryName}` : ''}`,
+                            performedBy: approval.updatedBy ? {
+                                _id: (approval.updatedBy as any)._id,
+                                firstName: (approval.updatedBy as any).firstName,
+                                lastName: (approval.updatedBy as any).lastName
+                            } : null,
+                            metadata: {
+                                prNo: pr.purchaseNo,
+                                step: approval.step,
+                                role: approval.role ? (approval.role as any).categoryName : null,
+                                comment: approval.comment
+                            },
+                            status: 'success'
+                        });
+                    } else if (approval.status === 'rejected' && approval.updatedDate) {
+                        timeline.push({
+                            id: `pr-rejected-${pr._id}-${approval.step}`,
+                            timestamp: approval.updatedDate,
+                            pipeline: 'purchaseRequest',
+                            eventType: 'rejected',
+                            title: `Purchase Request ${pr.purchaseNo} Rejected at Step ${approval.step}`,
+                            description: `Purchase Request ${pr.purchaseNo} was rejected${approval.role ? ` by ${(approval.role as any).categoryName}` : ''}`,
+                            performedBy: approval.updatedBy ? {
+                                _id: (approval.updatedBy as any)._id,
+                                firstName: (approval.updatedBy as any).firstName,
+                                lastName: (approval.updatedBy as any).lastName
+                            } : null,
+                            metadata: {
+                                prNo: pr.purchaseNo,
+                                step: approval.step,
+                                role: approval.role ? (approval.role as any).categoryName : null,
+                                comment: approval.comment
+                            },
+                            status: 'error'
+                        });
+                    }
+                }
+            }
+
+            if (pr.rejectedReason && pr.rejectedReason.length > 0) {
+                for (const rejection of pr.rejectedReason) {
+                    timeline.push({
+                        id: `pr-rejected-reason-${pr._id}-${rejection.rejectedAt}`,
+                        timestamp: rejection.rejectedAt,
+                        pipeline: 'purchaseRequest',
+                        eventType: 'rejected',
+                        title: `Purchase Request ${pr.purchaseNo} Rejected`,
+                        description: `Purchase Request ${pr.purchaseNo} was rejected`,
+                        performedBy: rejection.rejectedBy ? {
+                            _id: (rejection.rejectedBy as any)._id,
+                            firstName: (rejection.rejectedBy as any).firstName,
+                            lastName: (rejection.rejectedBy as any).lastName
+                        } : null,
+                        metadata: {
+                            prNo: pr.purchaseNo,
+                            comment: rejection.comment
+                        },
+                        status: 'error'
+                    });
+                }
+            }
+
+            if (pr.status === 'Rejected' && pr.updatedAt && pr.updatedAt > pr.createdAt) {
+                const hasResubmission = pr.approvalStatus && pr.approvalStatus.some((a: any, idx: number) => 
+                    idx > 0 && a.status === 'pending' && pr.approvalStatus[idx - 1].status === 'rejected'
+                );
+                if (hasResubmission) {
+                    timeline.push({
+                        id: `pr-resubmitted-${pr._id}`,
+                        timestamp: pr.updatedAt,
+                        pipeline: 'purchaseRequest',
+                        eventType: 'resubmitted',
+                        title: `Purchase Request ${pr.purchaseNo} Resubmitted`,
+                        description: `Purchase Request ${pr.purchaseNo} was resubmitted for approval`,
+                        performedBy: pr.updatedBy ? {
+                            _id: (pr.updatedBy as any)._id,
+                            firstName: (pr.updatedBy as any).firstName,
+                            lastName: (pr.updatedBy as any).lastName
+                        } : null,
+                        metadata: {
+                            prNo: pr.purchaseNo
+                        },
+                        status: 'warning'
+                    });
+                }
+            }
+
+            if (pr.revokedHistory && pr.revokedHistory.length > 0) {
+                for (const revoked of pr.revokedHistory) {
+                    timeline.push({
+                        id: `pr-revoked-${pr._id}-${revoked.date}`,
+                        timestamp: revoked.date,
+                        pipeline: 'purchaseRequest',
+                        eventType: 'revoked',
+                        title: `Purchase Request ${pr.purchaseNo} Revoked`,
+                        description: `Purchase Request ${pr.purchaseNo} was revoked`,
+                        performedBy: revoked.revokedBy ? {
+                            _id: (revoked.revokedBy as any)._id,
+                            firstName: (revoked.revokedBy as any).firstName,
+                            lastName: (revoked.revokedBy as any).lastName
+                        } : null,
+                        metadata: {
+                            prNo: pr.purchaseNo,
+                            reason: revoked.reason
+                        },
+                        status: 'error'
+                    });
+                }
+            }
+
+            const purchaseOrders = await PurchaseOrder.find({
+                purchaseId: pr._id
+            })
+            .populate('createdBy', 'firstName lastName')
+            .populate('approvedHistory.approvedBy', 'firstName lastName')
+            .populate('rejectedHistory.rejectedBy', 'firstName lastName')
+            .populate('supplierId', 'supplierName')
+            .sort({ createdAt: 1 });
+
+            summary.totalPOs += purchaseOrders.length;
+
+            for (const po of purchaseOrders) {
+                if (po.poStatus === 'Approved') summary.approvedPOs++;
+                if (po.poStatus === 'Closed') summary.closedPOs++;
+
+                const poTimestamp = new Date(po.updatedAt || po.createdAt);
+                if (!latestPOTimestamp || poTimestamp > latestPOTimestamp) {
+                    latestPOTimestamp = poTimestamp;
+                    currentStatus.purchaseOrder = po.poStatus;
+                }
+
+                timeline.push({
+                    id: `po-created-${po._id}`,
+                    timestamp: po.createdAt,
+                    pipeline: 'purchaseOrder',
+                    eventType: po.poStatus === 'Draft' ? 'drafted' : 'created',
+                    title: `Purchase Order ${po.poNo} ${po.poStatus === 'Draft' ? 'Drafted' : 'Created'}`,
+                    description: `Purchase Order ${po.poNo} was ${po.poStatus === 'Draft' ? 'drafted' : 'created'}${po.supplierId ? ` for ${(po.supplierId as any).supplierName}` : ''}`,
+                    performedBy: po.createdBy ? {
+                        _id: (po.createdBy as any)._id,
+                        firstName: (po.createdBy as any).firstName,
+                        lastName: (po.createdBy as any).lastName
+                    } : null,
+                    metadata: {
+                        poNo: po.poNo,
+                        status: po.poStatus,
+                        supplierName: po.supplierId ? (po.supplierId as any).supplierName : null
+                    },
+                    status: 'info'
+                });
+
+                if (po.poStatus === 'Pending for Approval') {
+                    timeline.push({
+                        id: `po-sent-approval-${po._id}`,
+                        timestamp: po.createdAt,
+                        pipeline: 'purchaseOrder',
+                        eventType: 'sent_for_approval',
+                        title: `Purchase Order ${po.poNo} Sent for Approval`,
+                        description: `Purchase Order ${po.poNo} was sent for approval`,
+                        performedBy: po.createdBy ? {
+                            _id: (po.createdBy as any)._id,
+                            firstName: (po.createdBy as any).firstName,
+                            lastName: (po.createdBy as any).lastName
+                        } : null,
+                        metadata: {
+                            poNo: po.poNo
+                        },
+                        status: 'warning'
+                    });
+                }
+
+                if (po.approvedHistory && po.approvedHistory.length > 0) {
+                    for (const approval of po.approvedHistory) {
+                        timeline.push({
+                            id: `po-approved-${po._id}-${approval.date}`,
+                            timestamp: approval.date,
+                            pipeline: 'purchaseOrder',
+                            eventType: 'approved',
+                            title: `Purchase Order ${po.poNo} Approved`,
+                            description: `Purchase Order ${po.poNo} was approved`,
+                            performedBy: approval.approvedBy ? {
+                                _id: (approval.approvedBy as any)._id,
+                                firstName: (approval.approvedBy as any).firstName,
+                                lastName: (approval.approvedBy as any).lastName
+                            } : null,
+                            metadata: {
+                                poNo: po.poNo,
+                                reason: approval.reason
+                            },
+                            status: 'success'
+                        });
+                    }
+                }
+
+                if (po.rejectedHistory && po.rejectedHistory.length > 0) {
+                    for (const rejection of po.rejectedHistory) {
+                        timeline.push({
+                            id: `po-rejected-${po._id}-${rejection.date}`,
+                            timestamp: rejection.date,
+                            pipeline: 'purchaseOrder',
+                            eventType: 'rejected',
+                            title: `Purchase Order ${po.poNo} Rejected`,
+                            description: `Purchase Order ${po.poNo} was rejected`,
+                            performedBy: rejection.rejectedBy ? {
+                                _id: (rejection.rejectedBy as any)._id,
+                                firstName: (rejection.rejectedBy as any).firstName,
+                                lastName: (rejection.rejectedBy as any).lastName
+                            } : null,
+                            metadata: {
+                                poNo: po.poNo,
+                                reason: rejection.reason
+                            },
+                            status: 'error'
+                        });
+                    }
+                }
+
+                if (po.poStatus === 'Closed') {
+                    timeline.push({
+                        id: `po-closed-${po._id}`,
+                        timestamp: po.updatedAt || po.createdAt,
+                        pipeline: 'purchaseOrder',
+                        eventType: 'closed',
+                        title: `Purchase Order ${po.poNo} Closed`,
+                        description: `Purchase Order ${po.poNo} was closed (all items received)`,
+                        performedBy: null,
+                        metadata: {
+                            poNo: po.poNo
+                        },
+                        status: 'success'
+                    });
+                }
+
+                const grns = await GRN.find({
+                    purchaseOrderId: po._id,
+                    isDeleted: { $ne: true }
+                })
+                .populate('createdBy', 'firstName lastName')
+                .sort({ createdAt: 1 });
+
+                summary.totalGRNs += grns.length;
+
+                for (const grn of grns) {
+                    timeline.push({
+                        id: `grn-created-${grn._id}`,
+                        timestamp: grn.createdAt,
+                        pipeline: 'grn',
+                        eventType: 'created',
+                        title: `GRN ${grn.grnNo} Created for PO ${po.poNo}`,
+                        description: `GRN ${grn.grnNo} was created for Purchase Order ${po.poNo}`,
+                        performedBy: grn.createdBy ? {
+                            _id: (grn.createdBy as any)._id,
+                            firstName: (grn.createdBy as any).firstName,
+                            lastName: (grn.createdBy as any).lastName
+                        } : null,
+                        metadata: {
+                            grnNo: grn.grnNo,
+                            poNo: po.poNo,
+                            itemsCount: grn.items ? grn.items.length : 0
+                        },
+                        status: 'success'
+                    });
+                }
+            }
+        }
+
+        const technical = await technicalModel.findOne({
+            jobId: new ObjectId(jobId)
+        })
+        .populate('assignedBy', 'firstName lastName')
+        .populate('assignedTo', 'firstName lastName')
+        .populate('materialRequest.statusHistory.changedBy', 'firstName lastName')
+        .populate('materialRequestAttachements.statusHistory.changedBy', 'firstName lastName')
+        .populate('issues.closedBy', 'firstName lastName');
+
+        if (technical) {
+            summary.hasTechnical = true;
+            currentStatus.technical = technical.status;
+
+            timeline.push({
+                id: `technical-assigned-${technical._id}`,
+                timestamp: technical.assignedAt,
+                pipeline: 'technical',
+                eventType: 'assigned',
+                title: `Technical ${technical.projectType === 'project' ? 'Project' : 'AMC'} Assigned`,
+                description: `Technical ${technical.projectType === 'project' ? 'Project' : 'AMC'} was assigned`,
+                performedBy: technical.assignedBy ? {
+                    _id: (technical.assignedBy as any)._id,
+                    firstName: (technical.assignedBy as any).firstName,
+                    lastName: (technical.assignedBy as any).lastName
+                } : null,
+                metadata: {
+                    projectType: technical.projectType,
+                    assignedTo: technical.assignedTo ? {
+                        _id: (technical.assignedTo as any)._id,
+                        firstName: (technical.assignedTo as any).firstName,
+                        lastName: (technical.assignedTo as any).lastName
+                    } : null
+                },
+                status: 'info'
+            });
+
+            if (technical.materialRequest && technical.materialRequest.length > 0) {
+                for (const mr of technical.materialRequest) {
+                    if (mr.statusHistory && mr.statusHistory.length > 0) {
+                        for (const history of mr.statusHistory) {
+                            timeline.push({
+                                id: `mr-${history.status}-${technical._id}-${mr.itemName}`,
+                                timestamp: history.changedDate,
+                                pipeline: 'technical',
+                                eventType: history.status === 'approved' ? 'approved' : 'rejected',
+                                title: `Material Request "${mr.itemName}" ${history.status === 'approved' ? 'Approved' : 'Rejected'}`,
+                                description: `Material Request "${mr.itemName}" was ${history.status}`,
+                                performedBy: history.changedBy ? {
+                                    _id: (history.changedBy as any)._id,
+                                    firstName: (history.changedBy as any).firstName,
+                                    lastName: (history.changedBy as any).lastName
+                                } : null,
+                                metadata: {
+                                    itemName: mr.itemName,
+                                    comment: history.comment
+                                },
+                                status: history.status === 'approved' ? 'success' : 'error'
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (technical.tasks && technical.tasks.length > 0) {
+                for (const task of technical.tasks) {
+                    if (task.status && task.status !== 'Pending') {
+                        timeline.push({
+                            id: `task-${task.status}-${technical._id}-${task.taskName}`,
+                            timestamp: (task as any).updatedAt || (task as any).createdAt || technical.assignedAt,
+                            pipeline: 'technical',
+                            eventType: task.status.toLowerCase().replace(' ', '_'),
+                            title: `Task "${task.taskName}" ${task.status}`,
+                            description: `Task "${task.taskName}" status changed to ${task.status}`,
+                            performedBy: null,
+                            metadata: {
+                                taskName: task.taskName,
+                                status: task.status
+                            },
+                            status: task.status === 'Completed' ? 'success' : task.status === 'Cancelled' ? 'error' : 'warning'
+                        });
+                    }
+                }
+            }
+
+            if (technical.issues && technical.issues.length > 0) {
+                for (const issue of technical.issues) {
+                    if (issue.closedOn) {
+                        timeline.push({
+                            id: `issue-closed-${technical._id}-${issue.subject}`,
+                            timestamp: issue.closedOn,
+                            pipeline: 'technical',
+                            eventType: 'closed',
+                            title: `Issue "${issue.subject}" Closed`,
+                            description: `Issue "${issue.subject}" was closed`,
+                            performedBy: issue.closedBy ? {
+                                _id: (issue.closedBy as any)._id,
+                                firstName: (issue.closedBy as any).firstName,
+                                lastName: (issue.closedBy as any).lastName
+                            } : null,
+                            metadata: {
+                                subject: issue.subject,
+                                comments: issue.comments
+                            },
+                            status: 'success'
+                        });
+                    }
+                }
+            }
+        }
+
+        const deliveryNotes = await DeliveryNote.find({
+            jobId: new ObjectId(jobId)
+        })
+        .populate('createdBy', 'firstName lastName')
+        .sort({ createdDate: 1 });
+
+        summary.totalDNs = deliveryNotes.length;
+        currentStatus.deliveryNote = deliveryNotes.length;
+
+        for (const dn of deliveryNotes) {
+            timeline.push({
+                id: `dn-created-${dn._id}`,
+                timestamp: dn.createdDate,
+                pipeline: 'deliveryNote',
+                eventType: 'created',
+                title: `Delivery Note ${dn.dnNo} Created`,
+                description: `Delivery Note ${dn.dnNo} was created`,
+                performedBy: dn.createdBy ? {
+                    _id: (dn.createdBy as any)._id,
+                    firstName: (dn.createdBy as any).firstName,
+                    lastName: (dn.createdBy as any).lastName
+                } : null,
+                metadata: {
+                    dnNo: dn.dnNo,
+                    itemsCount: dn.items ? dn.items.length : 0
+                },
+                status: 'success'
+            });
+        }
+
+        timeline.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                jobId: jobId,
+                currentStatus: {
+                    purchaseRequest: currentStatus.purchaseRequest,
+                    purchaseOrder: currentStatus.purchaseOrder,
+                    technical: currentStatus.technical,
+                    deliveryNote: currentStatus.deliveryNote
+                },
+                timeline: timeline,
+                summary: summary
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching job history:', error);
+        next(error);
+    }
+};

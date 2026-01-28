@@ -4,6 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { TechnicalService, MaterialRequest, MaterialRequestAttachment } from 'src/app/core/services/technical.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
@@ -28,8 +30,10 @@ export class ViewMaterialRequestComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private technicalService = inject(TechnicalService);
+  private employeeService = inject(EmployeeService);
   private toaster = inject(ToastrService);
   private dialog = inject(MatDialog);
+  canApproveMRRequests = false;
 
   technicalId: string = '';
   jobId: string = '';
@@ -41,10 +45,19 @@ export class ViewMaterialRequestComponent implements OnInit {
   jobIdDisplay: string = '';
 
   ngOnInit(): void {
+    this.checkPrivileges();
     this.route.params.subscribe(params => {
       this.technicalId = params['id'];
       if (this.technicalId) {
         this.loadMaterialRequests();
+      }
+    });
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data: getEmployee | undefined) => {
+      if (data?.category?.privileges) {
+        this.canApproveMRRequests = data.category.privileges.technical?.canApproveMRRequests || false;
       }
     });
   }

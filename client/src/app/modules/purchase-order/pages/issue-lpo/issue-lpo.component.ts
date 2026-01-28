@@ -61,6 +61,8 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   isCreatingPO = signal<boolean>(false);
   isSavingDraft = signal<boolean>(false);
   currency = signal<string>('QAR');
+  canInitiateLPO = signal<boolean>(false);
+  canReissueAndRevoke = signal<boolean>(false);
   
   currencyOptions = [
     { label: 'QAR', value: 'QAR' },
@@ -77,6 +79,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.checkPrivileges();
     this.initializeForm();
     this.loadTermsAndConditions();
     this.loadPlacesOfDelivery();
@@ -1058,6 +1061,15 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
         })
       );
     }
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canInitiateLPO.set(data.category.privileges.purchaseOrder?.canInitiateLPO || false);
+        this.canReissueAndRevoke.set(data.category.privileges.purchaseOrder?.canReissueAndRevoke || false);
+      }
+    });
   }
 
   onDiscardClicks() {

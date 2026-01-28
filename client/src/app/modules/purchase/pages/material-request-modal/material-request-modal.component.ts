@@ -9,6 +9,7 @@ import { ToastrService } from 'ngx-toastr';
 import { v4 as uuidv4 } from 'uuid';
 import { FileService } from 'src/app/core/services/file.service';
 import { HttpEventType } from '@angular/common/http';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 interface MaterialRequest {
   itemName: string;
@@ -24,7 +25,8 @@ interface MaterialRequest {
   imports: [
     CommonModule,
     NgIcon,
-    NumberFormatterPipe
+    NumberFormatterPipe,
+    ModalLayoutComponent
   ],
   templateUrl: './material-request-modal.component.html',
   styleUrl: './material-request-modal.component.css'

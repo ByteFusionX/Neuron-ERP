@@ -3,12 +3,26 @@ import Supplier, { supplierStatus } from '../models/supplier.model';
 import { Types } from 'mongoose';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
-import { getEmployeeData } from '../common/utils/util';
+import { getEmployeeData, buildPrivilegeAccessFilter } from '../common/utils/util';
 
 
 export const getSuppliers = async (req: Request, res: Response) => {
    try {
       let { page = 1, row = 10, toDate, fromDate, status, category, supplierType, supplierName, search, location, productName } = req.body;
+
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.supplier?.viewReport 
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.supplier.viewReport, 'createdBy')
+         : {};
 
       // Convert string page and row to numbers
       page = parseInt(page.toString());
@@ -18,7 +32,10 @@ export const getSuppliers = async (req: Request, res: Response) => {
       const skip = (page - 1) * row;
 
       // Build filter object
-      const filter: Record<string, any> = { isDeleted: false };
+      const filter: Record<string, any> = { 
+         isDeleted: false,
+         ...accessFilter
+      };
 
       // Add date range filter if provided
       if (fromDate || toDate) {
@@ -344,6 +361,14 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
             return res.status(400).json({
                success: false,
                message: 'approvedBy is required for approval',
+            });
+         }
+
+         const privileges = employee.category?.privileges;
+         if (!privileges?.supplier?.canApproveSupplier) {
+            return res.status(403).json({
+               success: false,
+               message: "You do not have permission to approve suppliers",
             });
          }
 

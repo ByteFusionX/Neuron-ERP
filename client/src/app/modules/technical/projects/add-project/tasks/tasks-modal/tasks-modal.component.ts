@@ -6,11 +6,12 @@ import { TechnicalService } from 'src/app/core/services/technical.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { NgIconComponent } from '@ng-icons/core';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
   selector: 'app-tasks-modal',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, NgIconComponent],
+  imports: [CommonModule, ReactiveFormsModule, NgIconComponent, ModalLayoutComponent],
   templateUrl: './tasks-modal.component.html',
   styleUrl: './tasks-modal.component.css',
 })

@@ -5,6 +5,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from '../button/button.component';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
 
 export interface PurchaseViewModalData {
   purchase: PurchaseData;
@@ -13,7 +14,7 @@ export interface PurchaseViewModalData {
 @Component({
   selector: 'app-purchase-view-modal',
   standalone: true,
-  imports: [CommonModule, IconsModule, ButtonComponent],
+  imports: [CommonModule, IconsModule, ButtonComponent, ModalLayoutComponent],
   templateUrl: './purchase-view-modal.component.html',
   styleUrls: ['./purchase-view-modal.component.css']
 })

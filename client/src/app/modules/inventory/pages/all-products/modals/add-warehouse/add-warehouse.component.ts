@@ -6,6 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
   selector: 'app-add-warehouse',
@@ -14,7 +15,8 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
     CommonModule,
     ReactiveFormsModule,
     FormFieldComponent,
-    ButtonComponent
+    ButtonComponent,
+    ModalLayoutComponent
   ],
   templateUrl: './add-warehouse.component.html',
   styleUrl: './add-warehouse.component.css'

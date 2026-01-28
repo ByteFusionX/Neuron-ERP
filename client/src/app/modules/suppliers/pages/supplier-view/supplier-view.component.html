@@ -196,7 +196,7 @@
           <ng-icon name="heroXCircle" class="mr-2"></ng-icon>
           Reject
         </app-btn>
-        <app-btn theme="success" (click)="onApprove()" [loading]="isApproving">
+        <app-btn *ngIf="canApproveSupplier" theme="success" (click)="onApprove()" [loading]="isApproving">
           <ng-icon name="heroCheckCircle" class="mr-2"></ng-icon>
           Approve
         </app-btn>

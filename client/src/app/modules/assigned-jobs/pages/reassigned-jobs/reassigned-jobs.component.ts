@@ -151,7 +151,6 @@ export class ReassignedJobsComponent implements OnInit, OnDestroy, AfterViewInit
 
   markJobAsViewed(jobId: string) {
     this._enquiryService.markReassignJobAsViewed(jobId).pipe(takeUntil(this.destroy$)).subscribe();
-    this._notificationService.decrementNotificationCount('reAssignedJob', 1)
   }
 
 

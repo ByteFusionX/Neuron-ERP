@@ -3,6 +3,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
+import { MatDialog } from '@angular/material/dialog';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
@@ -10,6 +11,7 @@ import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { AddWarehouseComponent } from 'src/app/modules/inventory/pages/all-products/modals/add-warehouse/add-warehouse.component';
 
 @Component({
   selector: 'app-create-grn',
@@ -33,6 +35,7 @@ export class CreateGrnComponent implements OnInit {
   private grnService = inject(GrnService);
   private warehouseService = inject(WarehouseService);
   private employeeService = inject(EmployeeService);
+  private dialog = inject(MatDialog);
 
   lpoId!: string;
   purchaseId!: string;
@@ -66,7 +69,7 @@ export class CreateGrnComponent implements OnInit {
       if (purchaseIdFromRoute) {
         this.router.navigate(['/purchase/initiate-lpo', purchaseIdFromRoute]);
       } else {
-        this.router.navigate(['/purchase-order/pending-approval']);
+        this.router.navigate(['/purchase/approves']);
       }
       return;
     }
@@ -102,7 +105,7 @@ export class CreateGrnComponent implements OnInit {
           if (this.purchaseId) {
             this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
           } else {
-            this.router.navigate(['/purchase-order/pending-approval']);
+            this.router.navigate(['/purchase/approves']);
           }
         }
         this.isLoading.set(false);
@@ -114,7 +117,7 @@ export class CreateGrnComponent implements OnInit {
         if (this.purchaseId) {
           this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
         } else {
-          this.router.navigate(['/purchase-order/pending-approval']);
+          this.router.navigate(['/purchase/approves']);
         }
       }
     });
@@ -179,12 +182,26 @@ export class CreateGrnComponent implements OnInit {
 
       const receivedQtyControl = itemGroup.get('receivedQty');
       if (receivedQtyControl) {
+        receivedQtyControl.setValue(balanceQty, { emitEvent: false });
         receivedQtyControl.setValidators([
           Validators.required,
           Validators.min(0),
           Validators.max(balanceQty)
         ]);
         receivedQtyControl.updateValueAndValidity({ emitEvent: false });
+      }
+
+      const acceptedQtyControl = itemGroup.get('acceptedQty');
+      if (acceptedQtyControl) {
+        acceptedQtyControl.setValue(balanceQty, { emitEvent: false });
+        const currentReceivedQty = itemGroup.get('receivedQty')?.value || balanceQty;
+        const maxAcceptedQty = Math.min(balanceQty, currentReceivedQty);
+        acceptedQtyControl.setValidators([
+          Validators.required,
+          Validators.min(0),
+          Validators.max(maxAcceptedQty)
+        ]);
+        acceptedQtyControl.updateValueAndValidity({ emitEvent: false });
       }
     });
 
@@ -230,8 +247,8 @@ export class CreateGrnComponent implements OnInit {
         uom: [''],
         orderedQty: [orderedQty],
         balanceQty: [orderedQty],
-        receivedQty: [0, [Validators.required, Validators.min(0)]],
-        acceptedQty: [0, [Validators.required, Validators.min(0)]],
+        receivedQty: [orderedQty, [Validators.required, Validators.min(0)]],
+        acceptedQty: [orderedQty, [Validators.required, Validators.min(0)]],
         rejectedQty: [0],
         remarks: [''],
         date: ['']
@@ -350,13 +367,29 @@ export class CreateGrnComponent implements OnInit {
     });
   }
 
-  loadWarehouses(): void {
+  loadWarehouses(selectedId?: string): void {
     this.warehouseService.getWarehouses().subscribe({
       next: (warehouses) => {
         this.warehouses = warehouses;
+        if (selectedId) {
+          this.grnForm.patchValue({ warehouse: selectedId });
+        }
       },
       error: () => {
         this.toastr.error('Failed to load warehouses');
+      }
+    });
+  }
+
+  onAddWarehouse(): void {
+    const dialogRef = this.dialog.open(AddWarehouseComponent, {
+      width: '500px',
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.loadWarehouses(result._id);
       }
     });
   }
@@ -448,10 +481,15 @@ export class CreateGrnComponent implements OnInit {
       next: (response: any) => {
         if (response.success) {
           this.toastr.success('GRN saved successfully');
+          if (response.warnings && response.warnings.length > 0) {
+            response.warnings.forEach((warning: string) => {
+              this.toastr.warning(warning, '', { timeOut: 5000 });
+            });
+          }
           if (this.purchaseId) {
             this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
           } else {
-            this.router.navigate(['/purchase-order/pending-approval']);
+            this.router.navigate(['/purchase/approves']);
           }
         } else {
           this.toastr.error('Failed to save GRN');
@@ -470,7 +508,7 @@ export class CreateGrnComponent implements OnInit {
     if (this.purchaseId) {
       this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
     } else {
-      this.router.navigate(['/purchase-order/pending-approval']);
+      this.router.navigate(['/purchase/approves']);
     }
   }
 }

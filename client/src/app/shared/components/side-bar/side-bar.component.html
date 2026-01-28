@@ -57,11 +57,6 @@
                         class="text-gray-600"></ng-icon>
                     </ng-template>
 
-                    <!-- Notification indicator dot -->
-                    <ng-container *ngIf="hasAnyNotification(item)">
-                      <span
-                        class="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-orange-500 text-white text-xs font-bold h-2 w-2 flex items-center justify-center rounded-full"></span>
-                    </ng-container>
                   </div>
                 </div>
               </div>
@@ -74,12 +69,6 @@
                   routerLinkActive="active">
                   <div
                     class="w-full p-2 rounded-md hover:text-violet-800 flex items-center relative">
-                    <!-- Notification dot for mobile view -->
-                    <div
-                      *ngIf="item.notificationKey && getNotificationCount(item.notificationKey) && !showFullBar">
-                      <span
-                        class="w-2 h-2 rounded-full bg-orange-500 absolute left-6 top-2"></span>
-                    </div>
 
                     <ng-icon [name]="item.icon" class="text-xl text-gray-600"
                       [matTooltip]="showFullBar ? '' : item.label"
@@ -92,15 +81,6 @@
                       <p class="mt-0.5">{{item.label}}</p>
 
                       <div class="flex items-center justify-center gap-1">
-                        <!-- Notification count badge -->
-                        <div
-                          *ngIf="item.notificationKey && getNotificationCount(item.notificationKey)">
-                          <div
-                            class="bg-orange-500 my-auto text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                            <p>{{getNotificationCount(item.notificationKey)}}</p>
-                          </div>
-                        </div>
-
                         <ng-icon name="heroChevronRight"
                           class="text-gray-600"></ng-icon>
                       </div>
@@ -124,15 +104,6 @@
                         <button class="mx-6 relative">
                           {{getSubMenuLabel(subItem)}}
                         </button>
-
-                        <!-- Notification count for submenu items -->
-                        <div
-                          *ngIf="subItem.notificationKey && getNotificationCount(subItem.notificationKey)">
-                          <div
-                            class="bg-orange-500 my-auto text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full">
-                            <p>{{getNotificationCount(subItem.notificationKey)}}</p>
-                          </div>
-                        </div>
                       </li>
                     </ng-container>
                   </ul>

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 export interface BlockedItem {
   _id?: string;
@@ -22,7 +23,8 @@ export interface BlockedItem {
   imports: [
     CommonModule,
     IconsModule,
-    ButtonComponent
+    ButtonComponent,
+    ModalLayoutComponent
   ],
   templateUrl: './view-blocked-items.component.html',
   styleUrl: './view-blocked-items.component.css'
@@ -53,5 +55,9 @@ export class ViewBlockedItemsComponent {
 
   onClose(): void {
     this.dialogRef.close();
+  }
+
+  getSubtitle(): string {
+    return `Part No: ${this.stockEntry?.partNo?.partNo || 'N/A'} | Total Blocked: ${this.getTotalBlockedQuantity()} | Available: ${this.availableQuantity}`;
   }
 }

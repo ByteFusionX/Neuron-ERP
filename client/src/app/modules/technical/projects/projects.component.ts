@@ -18,6 +18,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { MatDialog } from '@angular/material/dialog';
 import { CreateProjectComponent } from '../create-project/create-project.component';
 import { TransferEngineerComponent } from './transfer-engineer/transfer-engineer.component';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 interface FilterParams {
   [key: string]: any;
@@ -53,6 +54,7 @@ export class ProjectsComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private paginationService = inject(PaginationService);
+  private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
 
 
@@ -72,10 +74,20 @@ export class ProjectsComponent implements OnInit, OnDestroy {
   
   selectedProjectType = this.router.url.split('?')[0].split('/').pop();
   selectedStatus = signal<Array<ProjectStatus>>([]);
+  canTransferToEngineer = signal<boolean>(false);
 
   ngOnInit(): void {
+    this.checkPrivileges();
     this.setupTableColumns();
     this.initializeFromUrlParams();
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canTransferToEngineer.set(data.category.privileges.technical?.canTransferToEngineer || false);
+      }
+    });
   }
 
   ngOnDestroy(): void {
@@ -135,7 +147,7 @@ export class ProjectsComponent implements OnInit, OnDestroy {
           icon: 'heroUserPlus',
           tooltip: 'Transfer Engineer',
           buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-1 px-1 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-full font-medium transition-colors',
-          condition: (item: any) => !!item?.assignedTo,
+          condition: (item: any) => !!item?.assignedTo && this.canTransferToEngineer(),
           onClick: (item: any, event: Event) => {
             this.onTransferEngineer(item);
           }
