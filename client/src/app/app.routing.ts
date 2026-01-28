@@ -64,6 +64,8 @@ import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-deliv
 import { InvoiceLinkingComponent } from './modules/dispatch/pages/invoice-linking/invoice-linking.component';
 import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-deduction/inventory-deduction.component';
 import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
+import { InvoiceRegisterComponent } from './modules/invoice/pages/invoice-register/invoice-register.component';
+import { CreateInvoiceComponent } from './modules/invoice/pages/create-invoice/create-invoice.component';
 
 
 export const routes: Routes = [
@@ -263,6 +265,15 @@ export const routes: Routes = [
       { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
       { path: 'invoice-linking-report', component: InvoiceLinkingComponent },
       { path: 'inventory-deduction-report', component: InventoryDeductionComponent },
+    ]
+  },
+  {
+    path: 'invoice',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/invoice/invoice.component').then((c) => c.InvoiceComponent),
+    children: [
+      { path: 'invoice-register', component: InvoiceRegisterComponent },
+      { path: 'invoice-register/create', component: CreateInvoiceComponent },
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

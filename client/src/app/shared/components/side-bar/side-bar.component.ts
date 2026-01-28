@@ -338,13 +338,11 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Dispatch',
       icon: 'heroTruck',
       route: '/dispatch',
-      privilegeKey: 'jobSheet',
       hasDropdown: true,
-      privilegeValue: 'none',
       children: [
         {
           id: 'delivery-note-register',
-          label: 'Delivery Note',
+          label: 'Delivery Notes',
           route: '/dispatch/delivery-note-register',
         },
         {
@@ -361,6 +359,20 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'inventory-deduction-report',
           label: 'Inventory Deduction',
           route: '/dispatch/inventory-deduction-report',
+        },
+      ]
+    },
+    {
+      id: 'invoice',
+      label: 'Invoice',
+      icon: 'heroDocumentText',
+      route: '/invoice',
+      hasDropdown: true,
+      children: [
+        {
+          id: 'invoice-register',
+          label: 'Invoices',
+          route: '/invoice/invoice-register',
         },
       ]
     },

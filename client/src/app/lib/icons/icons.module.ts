@@ -93,7 +93,7 @@ import {
   heroArrowRightCircle,
   heroArrowLeftCircle,
   heroTableCells,
-  heroLockClosed
+  heroLockClosed,
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'

@@ -1,0 +1,149 @@
+<div class="bg-white m-6 min-h-screen pb-10">
+    <!-- Header -->
+    <div class="border-b px-9 py-5">
+      <h3 class="text-xl font-bold text-slate-800">Create Invoice</h3>
+    </div>
+  
+    <div class="px-9 py-6">
+      <form [formGroup]="invoiceForm" (ngSubmit)="onSubmit()">
+        
+        <!-- Top Section: Date & Job & DN -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <app-form-field 
+                label="Date" 
+                [control]="f['date']" 
+                type="date"
+                [isSubmitted]="isSubmitted()">
+            </app-form-field>
+            
+            <app-select-dropdown
+                label="Job ID"
+                [options]="jobs()"
+                optionLabel="jobId"
+                optionValue="_id"
+                formControlName="jobId"
+                placeholder="Select Job ID"
+                (onSelected)="onJobSelect($event)"
+                [isSubmitted]="isSubmitted()">
+            </app-select-dropdown>
+
+            <app-select-dropdown
+                label="Delivery Note (DN) No"
+                [options]="deliveryNotes()"
+                optionLabel="dnNo"
+                optionValue="_id"
+                formControlName="dnNos"
+                placeholder="Select Delivery Notes"
+                [multiple]="true"
+                (onSelected)="onDnSelect(mapDnIdsToObjects($event))"
+                [isSubmitted]="isSubmitted()">
+            </app-select-dropdown>
+        </div>
+
+        <!-- Auto-Generated & Readonly Info -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 pt-4 border-t border-slate-100">
+             <app-form-field 
+                label="Invoice No" 
+                [control]="f['invoiceNo']" 
+                [readonly]="true">
+            </app-form-field>
+
+             <app-form-field 
+                label="Customer Name" 
+                [control]="f['customerName']" 
+                [readonly]="true">
+            </app-form-field>
+
+             <app-form-field 
+                label="Customer LPO No" 
+                [control]="f['customerLpo']" 
+                [readonly]="true">
+            </app-form-field>
+        </div>
+
+         <!-- Payment Terms -->
+         <div class="mb-8">
+            <app-form-field 
+                label="Payment Terms" 
+                [control]="f['paymentTerms']" 
+                placeholder="Enter Payment Terms"
+                [isSubmitted]="isSubmitted()">
+            </app-form-field>
+         </div>
+
+         <!-- Items Table -->
+         <div class="mb-8">
+             <h4 class="text-lg font-semibold text-slate-700 mb-4">Invoice Items</h4>
+             <div class="border rounded-lg overflow-hidden">
+                 <table class="w-full text-sm text-left text-slate-700">
+                     <thead class="bg-slate-50 text-slate-500 uppercase font-medium border-b">
+                         <tr>
+                             <th class="px-4 py-3 w-16">Sl No</th>
+                             <th class="px-4 py-3">Description</th>
+                             <th class="px-4 py-3 w-32 text-right">QTY</th>
+                             <th class="px-4 py-3 w-40 text-right">Unit Price</th>
+                             <th class="px-4 py-3 w-40 text-right">Total Price</th>
+                             <th class="px-4 py-3 w-16 text-center">Act</th>
+                         </tr>
+                     </thead>
+                     <tbody formArrayName="items" class="divide-y divide-slate-100">
+                         <tr *ngFor="let item of itemsFormArray.controls; let i = index" [formGroupName]="i" class="hover:bg-slate-50">
+                             <td class="px-4 py-3 text-center text-slate-500">{{ i + 1 }}</td>
+                             <td class="px-4 py-3">
+                                 <input type="text" formControlName="description" class="w-full bg-transparent border-none focus:ring-0 p-0 text-slate-800 placeholder-slate-400" placeholder="Item description">
+                             </td>
+                             <td class="px-4 py-3">
+                                 <input type="number" formControlName="quantity" class="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-right focus:border-blue-500 focus:outline-none" min="0">
+                             </td>
+                             <td class="px-4 py-3">
+                                 <input type="number" formControlName="unitPrice" class="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-right focus:border-blue-500 focus:outline-none" min="0">
+                             </td>
+                             <td class="px-4 py-3 text-right font-bold text-slate-800">
+                                 {{ item.get('totalPrice')?.value | number:'1.2-2' }}
+                             </td>
+                             <td class="px-4 py-3 text-center">
+                                 <button type="button" class="text-red-500 hover:text-red-700" (click)="removeItem(i)">
+                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mx-auto">
+                                         <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clip-rule="evenodd" />
+                                     </svg>
+                                 </button>
+                             </td>
+                         </tr>
+                         <tr *ngIf="itemsFormArray.length === 0">
+                             <td colspan="6" class="text-center py-6 text-slate-400 italic">No items selected. Select Delivery Notes to populate items.</td>
+                         </tr>
+                     </tbody>
+                 </table>
+             </div>
+         </div>
+
+         <!-- Bottom Section: Totals & Actions -->
+         <div class="flex flex-col md:flex-row justify-between items-end gap-6 pt-6 border-t border-slate-200">
+             <div class="w-full md:w-2/3">
+                 <label class="block uppercase tracking-wide text-gray-500 text-xs font-bold mb-2">
+                     Total Amount (In Words)
+                 </label>
+                 <div class="bg-slate-50 p-3 rounded text-slate-700 font-medium border border-slate-200 uppercase">
+                     {{ f['amountWords'].value || 'Zero QAR Only' }}
+                 </div>
+             </div>
+             
+             <div class="w-full md:w-1/3">
+                 <label class="block uppercase tracking-wide text-gray-500 text-xs font-bold mb-2 text-right">
+                     Total Amount (In Figures)
+                 </label>
+                 <div class="bg-slate-100 p-3 rounded text-xl font-bold text-slate-800 text-right border border-slate-200">
+                     {{ f['amountFigures'].value | number:'1.2-2' }} QAR
+                 </div>
+             </div>
+         </div>
+
+         <div class="flex justify-end mt-12 gap-4">
+             <app-btn theme="secondary" routerLink="/invoice" type="button">Cancel</app-btn>
+             <app-btn theme="primary" type="submit" [loading]="isLoading()" [disabled]="isLoading()">
+                 Generate Invoice
+             </app-btn>
+         </div>
+      </form>
+    </div>
+  </div>
