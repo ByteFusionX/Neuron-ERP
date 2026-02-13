@@ -61,6 +61,7 @@ import { CreateStockEntryComponent } from './modules/inventory/pages/stock-entri
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
 import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
 import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
+import { PendingDeliveryDetailComponent } from './modules/dispatch/pages/pending-delivery-detail/pending-delivery-detail.component';
 import { InvoiceLinkingComponent } from './modules/dispatch/pages/invoice-linking/invoice-linking.component';
 import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-deduction/inventory-deduction.component';
 import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
@@ -275,6 +276,7 @@ export const routes: Routes = [
       { path: 'delivery-note-register/create', component: CreateDnComponent },
       { path: 'delivery-note-register/view/:id', component: DeliveryNoteViewComponent },
       { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
+      { path: 'pending-delivery-reports/:jobId', component: PendingDeliveryDetailComponent },
       { path: 'invoice-linking-report', component: InvoiceLinkingComponent },
       { path: 'inventory-deduction-report', component: InventoryDeductionComponent },
     ]

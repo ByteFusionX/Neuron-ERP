@@ -8,19 +8,21 @@
         Back
       </app-btn>
       
-      @if(deliveryNote?.status !== 'Cancelled' && deliveryNote?.status !== 'Delivered'){
-        <app-btn theme="primary" (click)="onEdit()">
-          <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
-          Edit
-        </app-btn>
-      }
+      <app-btn theme="secondary" (click)="onPreview()">
+        <ng-icon name="heroDocumentArrowDown" class="mr-2"></ng-icon>
+        Preview DN
+      </app-btn>
       
-      @if(deliveryNote?.status !== 'Cancelled'){
+      <app-btn theme="primary" (click)="onEdit()">
+        <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
+        Edit
+      </app-btn>
+      
         <app-btn theme="danger" (click)="onCancel()" [loading]="isCancelling">
           <ng-icon name="heroXCircle" class="mr-2"></ng-icon>
           Cancel DN
         </app-btn>
-      }
+      
     </div>
   </div>
 
@@ -82,11 +84,18 @@
               <th class="px-4 py-3 border text-center">Delivered Qty</th>
               <th class="px-4 py-3 border text-center">Current Delivery</th>
               <th class="px-4 py-3 border">Serial Numbers</th>
-              <th class="px-4 py-3 border text-center">Status</th>
             </tr>
           </thead>
           <tbody>
-            <tr class="border-b hover:bg-gray-50" *ngFor="let item of deliveryNote.items">
+            @if(deliveryItems.length === 0){
+              <tr>
+                <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                  No items in this delivery note.
+                </td>
+              </tr>
+            }
+            @for(item of deliveryItems; track item.itemId || $index){
+              <tr class="border-b hover:bg-gray-50">
               <td class="px-4 py-3 border text-center">{{item.slNo}}</td>
               <td class="px-4 py-3 border">{{item.partNo || '-'}}</td>
               <td class="px-4 py-3 border">{{item.description}}</td>
@@ -104,12 +113,8 @@
                   <span class="text-gray-400">-</span>
                 }
               </td>
-              <td class="px-4 py-3 border text-center">
-                <span class="px-2 py-1 rounded text-xs font-semibold" [ngClass]="getItemStatusClass(item.status)">
-                  {{item.status}}
-                </span>
-              </td>
             </tr>
+            }
           </tbody>
         </table>
       </div>

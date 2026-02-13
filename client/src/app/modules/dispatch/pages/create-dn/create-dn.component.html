@@ -5,6 +5,12 @@
     <form [formGroup]="dnForm">
         <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
             
+            <div *ngIf="draftLoaded()" class="mb-4 px-4 py-3 border rounded bg-yellow-50 text-sm">
+                <div>
+                    Draft DN loaded<span *ngIf="loadedDraftNo()"> - {{ loadedDraftNo() }}</span>
+                </div>
+            </div>
+            
             <!-- Job Details Section -->
             <div class="flex flex-col md:flex-row md:mb-5 gap-3">
                 <app-select-dropdown
@@ -77,19 +83,29 @@
                     <table class="w-full text-sm text-left border">
                         <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
+                                <th class="px-4 py-2 border text-center w-12"></th>
                                 <th class="px-4 py-2 border text-center w-16">Sl No</th>
                                 <th class="px-4 py-2 border text-center">Part No</th>
                                 <th class="px-4 py-2 border text-center">Description</th>
                                 <th class="px-4 py-2 border text-center w-24">Ord QTY</th>
                                 <th class="px-4 py-2 border text-center w-24">Delivered</th>
+                                <th class="px-4 py-2 border text-center w-24">Balance</th>
                                 <th class="px-4 py-2 border text-center w-32">Current Delivery</th>
-                                <th class="px-4 py-2 border text-center">Serial Nos</th>
-                                <th class="px-4 py-2 border text-center w-24">Status</th>
+                                <th class="px-4 py-2 border text-center min-w-[180px]">Serial No(s)</th>
+                                <th class="px-4 py-2 border text-center min-w-8">Status</th>
                             </tr>
                         </thead>
                         <tbody formArrayName="items">
                             <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
-                                <tr class="border-b hover:bg-gray-50/50" [ngClass]="{'bg-gray-100': item.get('status')?.value === 'Delivered'}">
+                                <tr class="border-b hover:bg-gray-50/50" [ngClass]="{'bg-gray-100 text-gray-400': item.get('status')?.value === 'Delivered' || !isItemSelected(i)}">
+                                    <td class="px-4 py-2 border text-center">
+                                        <input 
+                                            type="checkbox"
+                                            [checked]="isItemSelected(i)"
+                                            (change)="toggleItemSelection(i)"
+                                            [disabled]="item.get('status')?.value === 'Delivered'"
+                                            class="cursor-pointer">
+                                    </td>
                                     <td class="px-4 py-2 border text-center">
                                         {{ item.get('slNo')?.value }}
                                     </td>
@@ -105,29 +121,71 @@
                                     <td class="px-4 py-2 border text-center text-gray-600">
                                         {{ item.get('deliveredQty')?.value }}
                                     </td>
+                                    <td class="px-4 py-2 border text-center text-gray-600">
+                                        {{ getBalanceQty(item) }}
+                                    </td>
                                     <td class="px-4 py-2 border text-center">
-                                        <div *ngIf="item.get('status')?.value !== 'Delivered'">
-                                            <app-form-field 
-                                                [control]="item.get('currentDeliveryQty')" 
-                                                [isSubmitted]="isSubmitting()" 
+                                        <div *ngIf="item.get('status')?.value !== 'Delivered'" class="flex flex-col">
+                                            <input 
                                                 type="number" 
-                                                class="w-full">
-                                            </app-form-field>
+                                                [formControl]="$any(item.get('currentDeliveryQty'))"
+                                                class="w-full border rounded px-3 py-2 text-center focus:outline-none focus:ring-1"
+                                                [class.border-gray-300]="!item.get('currentDeliveryQty')?.errors"
+                                                [class.focus:ring-violet-500]="!item.get('currentDeliveryQty')?.errors"
+                                                [class.border-red-500]="item.get('currentDeliveryQty')?.errors"
+                                                [class.focus:ring-red-500]="item.get('currentDeliveryQty')?.errors"
+                                                [class.bg-gray-100]="!isItemSelected(i) || item.get('currentDeliveryQty')?.disabled"
+                                                [class.cursor-not-allowed]="!isItemSelected(i) || item.get('currentDeliveryQty')?.disabled"
+                                                min="0"
+                                                [max]="getBalanceQty(item)"
+                                                placeholder="0">
+                                            <span *ngIf="item.get('currentDeliveryQty')?.errors?.['max']" class="text-xs text-red-600 mt-1">
+                                                Max: {{ getBalanceQty(item) }}
+                                            </span>
+                                            <span *ngIf="item.get('currentDeliveryQty')?.errors?.['required'] && isItemSelected(i)" class="text-xs text-red-600 mt-1">
+                                                Required
+                                            </span>
                                         </div>
                                         <div *ngIf="item.get('status')?.value === 'Delivered'" class="text-gray-400">
                                             -
                                         </div>
                                     </td>
-                                    <td class="px-4 py-2 border text-center">
-                                         <div *ngIf="item.get('status')?.value !== 'Delivered'">
-                                            <app-form-field 
-                                                [control]="item.get('serialNos')" 
-                                                [isSubmitted]="isSubmitting()" 
-                                                placeholder="S/N"
-                                                class="w-full">
-                                            </app-form-field>
+                                    <td class="px-4 py-2 border min-w-[200px]">
+                                         <div *ngIf="item.get('status')?.value !== 'Delivered'" class="flex flex-col gap-2">
+                                            <div class="flex items-center gap-1">
+                                                <input 
+                                                    type="text"
+                                                    [value]="getSerialNoInput(i)"
+                                                    (input)="setSerialNoInput(i, $any($event.target).value)"
+                                                    (keydown)="onSerialNoKeydown($event, i)"
+                                                    [disabled]="!isItemSelected(i)"
+                                                    class="flex-1 min-w-0 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                                    [class.bg-gray-100]="!isItemSelected(i)"
+                                                    [class.cursor-not-allowed]="!isItemSelected(i)"
+                                                    placeholder="Enter S/N">
+                                                <button 
+                                                    type="button"
+                                                    (click)="addSerialNo(i)"
+                                                    [disabled]="!isItemSelected(i)"
+                                                    class="px-2 py-1.5 bg-violet-600 text-white rounded text-xs font-medium hover:bg-violet-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                    Add
+                                                </button>
+                                            </div>
+                                            <div *ngIf="getSerialNos(i).length > 0" class="flex flex-wrap gap-1">
+                                                <span *ngFor="let sn of getSerialNos(i)" 
+                                                    class="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 border border-gray-300 rounded-full text-xs">
+                                                    {{ sn }}
+                                                    <button 
+                                                        type="button" 
+                                                        (click)="removeSerialNo(i, sn)"
+                                                        [disabled]="!isItemSelected(i)"
+                                                        class="text-gray-400 hover:text-red-500 text-sm leading-none disabled:opacity-50">
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            </div>
                                         </div>
-                                         <div *ngIf="item.get('status')?.value === 'Delivered'" class="text-gray-400">
+                                         <div *ngIf="item.get('status')?.value === 'Delivered'" class="text-gray-400 text-center">
                                             -
                                         </div>
                                     </td>
@@ -143,7 +201,7 @@
                                 </tr>
                             </ng-container>
                             <tr *ngIf="items.length === 0">
-                                <td colspan="8" class="text-center py-8 text-gray-500">
+                                <td colspan="10" class="text-center py-8 text-gray-500">
                                     No materials found. Select a Job ID or add from Inventory.
                                 </td>
                             </tr>
@@ -162,8 +220,9 @@
             </div>
             <div class="flex gap-3">
                 <app-btn theme="cancel" type="button" (click)="onCancel()">Cancel DN</app-btn>
-                <app-btn theme="secondary" type="button" (click)="onPreview()">Preview DN</app-btn>
-                <app-btn theme="primary" type="button" [loading]="isSubmitting()" (buttonClick)="onSave()">Generate DN</app-btn>
+                <app-btn theme="secondary-outline" type="button" [loading]="isSavingDraft()" (buttonClick)="onSaveDraft()">Save as Draft</app-btn>
+                <app-btn theme="secondary" type="button" (click)="onPreview()" [disabled]="isAllDelivered()">Preview DN</app-btn>
+                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isAllDelivered()" (buttonClick)="onPostDn()">POST DN</app-btn>
             </div>
         </div>
     </form>

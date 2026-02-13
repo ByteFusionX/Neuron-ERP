@@ -2,9 +2,9 @@
   <!-- Header Bar -->
   <div class=" top-0 left-0 right-0 bg-gray-100 flex justify-between items-center p-4 border-b">
     <h3 class="text-lg font-semibold text-gray-700">
-      {{data.type === 'purchase' ? 'Purchase Order Preview' : data.type === 'grn' ? 'GRN Preview' : 'Quotation Preview'}}
+      {{data.type === 'purchase' ? 'Purchase Order Preview' : data.type === 'grn' ? 'GRN Preview' : data.type === 'delivery-note' ? 'Delivery Note Preview' : 'Quotation Preview'}}
     </h3>
-    <div class="flex items-center space-x-4" *ngIf="data.type !== 'grn'">
+    <div class="flex items-center space-x-4" *ngIf="data.type !== 'grn' && data.type !== 'delivery-note'">
       <!-- Toggle Switch -->
       <label class="flex items-center cursor-pointer">
         <span class="mr-2 text-gray-700">Include Stamp:</span>
