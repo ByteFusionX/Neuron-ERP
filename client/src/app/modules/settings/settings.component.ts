@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
@@ -9,9 +10,7 @@ import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDe
 import { BehaviorSubject, Subscription } from 'rxjs';
 import { NoteFormComponent } from './pages/note-form/note-form.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { CreateCategoryComponent } from 'src/app/modules/home/pages/employees/create-category/create-category.component';
 import { ToastrService } from 'ngx-toastr';
-import { EditCategoryComponent } from './pages/edit-category/edit-category.component';
 import { GetCategory, Privileges, Target } from 'src/app/shared/interfaces/employee.interface';
 import { Workflow, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
@@ -72,7 +71,8 @@ export class SettingsComponnet {
     private _workflowService: WorkflowService,
     public dialog: MatDialog,
     private _employeeService: EmployeeService,
-    private _toast: ToastrService
+    private _toast: ToastrService,
+    private router: Router
   ) { }
 
 
@@ -355,32 +355,11 @@ export class SettingsComponnet {
   }
 
   createCategory() {
-    const dialogRef = this.dialog.open(CreateCategoryComponent, {
-      width: '100vh'
-    });
-    dialogRef.afterClosed().subscribe((data) => {
-      if (data) {
-        this.categoryDataSource.data.push(data)
-        this.categoryDataSource._updateChangeSubscription();
-
-        this._toast.success('Category Created Successfully')
-      }
-    });
+    this.router.navigate(['/settings/category/create']);
   }
 
   editCategory(data: GetCategory, index: number) {
-    const dialogRef = this.dialog.open(EditCategoryComponent, {
-      width: '100vh',
-      data: data
-    });
-    dialogRef.afterClosed().subscribe((data) => {
-      if (data) {
-        this.categoryDataSource.data[index] = data;
-        this.categoryDataSource._updateChangeSubscription();
-
-        this._toast.success('Category Updated Successfully')
-      }
-    });
+    this.router.navigate(['/settings/category/edit', data._id]);
   }
 
   addCompanyTarget() {

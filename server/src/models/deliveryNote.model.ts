@@ -44,7 +44,11 @@ const DeliveryNoteSchema: Schema = new Schema({
         itemId: String,
         isInventoryItem: Boolean
     }],
-    status: { type: String, default: 'Generated' },
+    status: { 
+        type: String, 
+        enum: ['Draft', 'Delivered', 'Cancelled'],
+        default: 'Draft' 
+    },
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     createdDate: { type: Date, default: Date.now },
     updatedDate: { type: Date }

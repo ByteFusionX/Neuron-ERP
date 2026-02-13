@@ -13,7 +13,7 @@
   
 >
 <ng-template #sideColumn>
-  <app-btn theme="primary" (buttonClick)="addProject()">
+  <app-btn *ngIf="canViewOpenToWorkAndAssign()" theme="primary" (buttonClick)="addProject()">
     <ng-icon name="heroPlus"></ng-icon>
     Add Project
   </app-btn>

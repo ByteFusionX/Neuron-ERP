@@ -1,4 +1,4 @@
-<div class="w-[500px]  max-h-[95vh]"></div>
+<div class="w-full max-h-[95vh]">
     <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between">
         <h3 class="text-md font-medium">New Event</h3>
         <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
@@ -23,10 +23,14 @@
                     <p class="text-sm mt-1 text-red-500" *ngIf="eventError">Select Event</p>
                 </div>
                 <div class="w-1/2">
-                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="date">Date
-                        *</label>
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="date">
+                        Date *
+                    </label>
                     <input type="datetime-local" id="date" name="date" [(ngModel)]="selectedDate"
-                        class="w-full border px-2 py-2 bg-gray-200 placeholder:text-gray-300 outline-none">
+                        (ngModelChange)="validateDate()"
+                        [ngClass]="{'border-red-500': dateError}"
+                        class="w-full border px-2 py-2 bg-gray-200 placeholder:text-gray-300 outline-none rounded">
+                    <p class="text-sm mt-1 text-red-500" *ngIf="dateError">Select Date</p>
                 </div>
             </div>
             <div class="w-full px-5 py-2">
@@ -56,7 +60,6 @@
 
             <div class="w-full mb-5 -mt-3">
                 <app-upload-file (fileUpload)="onFileUpload($event)" [selectedFiles]="selectedFiles"></app-upload-file>
-                <p class="text-red-500 text-sm pl-5" *ngIf="fileError">Select atleast one file</p>
             </div>
 
         </form>
@@ -80,3 +83,4 @@
             </button>
         </div>
     </div>
+</div>

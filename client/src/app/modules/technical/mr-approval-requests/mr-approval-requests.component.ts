@@ -8,6 +8,7 @@ import { NgSelectModule } from '@ng-select/ng-select';
 import { ToastrService } from 'ngx-toastr';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { TechnicalService } from 'src/app/core/services/technical.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
@@ -39,12 +40,14 @@ interface FilterParams {
 })
 export class MrApprovalRequestsComponent implements OnInit, OnDestroy {
   private technicalService = inject(TechnicalService);
+  private employeeService = inject(EmployeeService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private paginationService = inject(PaginationService);
   private subscriptions = new Subscription();
+  canApproveMRRequests = signal<boolean>(false);
 
   tableData = signal<any[]>([]);
   tableColumns: TableColumn[] = [];
@@ -57,8 +60,17 @@ export class MrApprovalRequestsComponent implements OnInit, OnDestroy {
   totalItems = signal<number>(0);
 
   ngOnInit(): void {
+    this.checkPrivileges();
     this.setupTableColumns();
     this.initializeFromUrlParams();
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canApproveMRRequests.set(data.category.privileges.technical?.canApproveMRRequests || false);
+      }
+    });
   }
 
   ngOnDestroy(): void {

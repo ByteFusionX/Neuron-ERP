@@ -95,7 +95,7 @@
               </td>
               
               <td class="px-6 py-3 border text-center">
-                <div class="flex items-center justify-center gap-2" *ngIf="item.status === 'pending'">
+                <div class="flex items-center justify-center gap-2" *ngIf="item.status === 'pending' && canApproveMRRequests">
                   <button
                     (click)="approveItem(item, i)"
                     [disabled]="isApproving"
@@ -111,7 +111,7 @@
                     Reject
                   </button>
                 </div>
-                <span *ngIf="item.status !== 'pending'" class="text-gray-500 text-xs">-</span>
+                <span *ngIf="item.status !== 'pending' || !canApproveMRRequests" class="text-gray-500 text-xs">-</span>
               </td>
             </tr>
           </tbody>
@@ -152,7 +152,7 @@
                   {{ getStatusLabel(attachment.status) }}
                 </span>
               </div>
-              <div class="flex items-center gap-2 ml-2" *ngIf="attachment.status === 'pending'">
+              <div class="flex items-center gap-2 ml-2" *ngIf="attachment.status === 'pending' && canApproveMRRequests">
                 <button
                   (click)="approveFile(attachment, i)"
                   [disabled]="isApproving"
@@ -177,7 +177,7 @@
       <div class="mt-4 w-full flex justify-between items-end mb-6">
         <div></div>
         <button
-          *ngIf="hasAnyPending()"
+          *ngIf="hasAnyPending() && canApproveMRRequests"
           (click)="approveAllPending()"
           [disabled]="isApproving"
           class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">

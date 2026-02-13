@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Supplier, SupplierStatus } from 'src/app/shared/interfaces/suppliers.interface';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
@@ -19,11 +20,13 @@ import { FileService } from 'src/app/core/services/file.service';
 })
 export class SupplierViewComponent implements OnInit {
   private supplierService = inject(SupplierService);
+  private employeeService = inject(EmployeeService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private fileService = inject(FileService);
+  canApproveSupplier = false;
 
   supplier: Supplier | null = null;
   isLoading = true;
@@ -33,10 +36,19 @@ export class SupplierViewComponent implements OnInit {
   isDownloading: boolean = false;
 
   constructor() {
+    this.checkPrivileges();
     this.loadSupplier();
   }
 
   ngOnInit(): void {
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canApproveSupplier = data.category.privileges.supplier?.canApproveSupplier || false;
+      }
+    });
   }
 
   loadSupplier() {

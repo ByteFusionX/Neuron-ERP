@@ -1,14 +1,12 @@
-<div>
-    <!-- Header -->
-    <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between">
-        <h3 class="text-md font-medium">{{ data.title }}</h3>
-        <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
-            <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-        </button>
-    </div>
-
-    <!-- Content -->
-    <div class="flex flex-col mx-auto text-gray-900 bg-white rounded-lg shadow px-6 overflow-y-scroll max-h-[70vh]">
+<app-modal-layout
+  [title]="data.title"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="[
+    { label: 'Close', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Save Changes', onClick: onSave.bind(this), theme: 'primary' }
+  ]"
+  contentMaxHeight="70vh"
+  contentClass="px-6">
         
         <!-- Upload Area -->
         <div class="mt-5 space-y-3" *ngIf="data.showActions?.upload">
@@ -137,20 +135,4 @@
             <p class="text-gray-500">No files uploaded yet</p>
             <p class="text-sm text-gray-400">Upload files using the area above</p>
         </div>
-    </div>
-
-    <!-- Footer Actions -->
-    <div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2">
-        <!-- Close/Save Buttons -->
-        <div class="flex gap-2">
-            <button class="border text-black font-medium py-2 px-4 rounded text-sm" 
-                    (click)="onCancel()">
-                Close
-            </button>
-            <button class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded text-sm"
-                    (click)="onSave()">
-                Save Changes
-            </button>
-        </div>
-    </div>
-</div>
+</app-modal-layout>

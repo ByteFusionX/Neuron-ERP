@@ -13,11 +13,11 @@ import { JobService } from 'src/app/core/services/job/job.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { AddCategoryComponent } from '../../../all-products/modals/add-category/add-category.component';
 import { AddWarehouseComponent } from '../../../all-products/modals/add-warehouse/add-warehouse.component';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatDialog } from '@angular/material/dialog';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
   selector: 'app-create-stock-entry',
@@ -28,7 +28,8 @@ import { MatDialog } from '@angular/material/dialog';
     FormFieldComponent,
     SelectDropdownComponent,
     ButtonComponent,
-    IconsModule
+    IconsModule,
+    ModalLayoutComponent
   ],
   templateUrl: './create-stock-entry.component.html',
   styleUrl: './create-stock-entry.component.css'
@@ -215,16 +216,7 @@ export class CreateStockEntryComponent implements OnInit {
   }
 
   onAddCategory(): void {
-    const dialogRef = this.dialog.open(AddCategoryComponent, {
-      width: '500px',
-      disableClose: true
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadCategories(result._id);
-      }
-    });
+    this.router.navigate(['/inventory/products/category/add']);
   }
 
   onAddWarehouse(): void {

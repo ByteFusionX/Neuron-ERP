@@ -17,32 +17,6 @@
 >
   <ng-template #sideColumn>
     <div class="flex items-center gap-3">
-      <data-search 
-        placeholder="Search by DN No..."
-        (searchSubmitted)="onSearchSubmit($event)"
-      ></data-search>
-      
-      <!-- Generate Reports Menu -->
-      <div class="relative">
-        <button 
-          mat-button 
-          [matMenuTriggerFor]="generateMenu"
-          class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2.5 px-4 rounded text-sm flex justify-center items-center gap-2">
-          Generate
-          <ng-icon name="heroChevronDown"></ng-icon>
-        </button>
-        <mat-menu #generateMenu="matMenu">
-          <button mat-menu-item (click)="generateJobReport()">
-            <ng-icon name="heroChartBar"></ng-icon>
-            <span class="ml-2">Job Report</span>
-          </button>
-          <button mat-menu-item (click)="generateCustomerReport()">
-            <ng-icon name="heroDocumentText"></ng-icon>
-            <span class="ml-2">Customer Report</span>
-          </button>
-        </mat-menu>
-      </div>
-
       <app-btn theme="primary" routerLink="/dispatch/delivery-note-register/create">
         + Create DN
       </app-btn>

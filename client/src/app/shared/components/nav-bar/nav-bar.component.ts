@@ -7,7 +7,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { Observable } from 'rxjs';
 import { getEmployee } from '../../interfaces/employee.interface';
 import { Router, RouterModule } from '@angular/router';
-import { NotificationCounts, TextNotification } from '../../interfaces/notification.interface';
+import { TextNotification } from '../../interfaces/notification.interface';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { ButtonComponent } from '../button/button.component';
 import { MsalService } from '@azure/msal-angular';
@@ -19,7 +19,6 @@ import { MsalService } from '@azure/msal-angular';
     imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent]
 })
 export class NavBarComponent {
-  notificationCounts$!: Observable<NotificationCounts>;
   textNotificationCount$!: Observable<{viewed:TextNotification[],unviewed:TextNotification[]}>;
   @Output() reduce = new EventEmitter<boolean>()
   showFullBar: boolean = true
@@ -37,7 +36,6 @@ export class NavBarComponent {
   ) { }
 
   ngOnInit() {
-    this.notificationCounts$ = this._notificationService.notificationCounts$;
     this.textNotificationCount$ = this._notificationService.textNotificationsSubject$;
     this.getEmployeeData()
   }

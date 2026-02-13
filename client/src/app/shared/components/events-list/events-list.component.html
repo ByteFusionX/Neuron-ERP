@@ -21,7 +21,7 @@
                                             (click)="onCheckboxClick($event, event._id)" [checked]="event.status === 'completed'">
                                     </div>
                                 </div>
-                                <div *ngIf="isCreatedEmployee(event.createdBy._id)">
+                                <div *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)">
                                     <button class="text-red-600 hover:text-red-800 px-2" matTooltip="Delete Event"
                                         matTooltipPosition="above" (click)="onDeleteEvent(event._id)">
                                         <ng-icon name="heroTrash" class="text-md"></ng-icon>

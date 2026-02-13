@@ -8,7 +8,6 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { Privileges } from '../../interfaces/employee.interface';
 import { Observable, Subscription } from 'rxjs';
 import { NotificationService } from 'src/app/core/services/notification.service';
-import { NotificationCounts } from '../../interfaces/notification.interface';
 
 interface MenuItem {
   id: string;
@@ -18,7 +17,7 @@ interface MenuItem {
   privilegeKey?: keyof Privileges;
   privilegeValue?: string;
   hasDropdown?: boolean;
-  notificationKey?: keyof NotificationCounts;
+  notificationKey?: string;
   children?: SubMenuItem[];
 }
 
@@ -28,7 +27,7 @@ interface SubMenuItem {
   route: string;
   privilegeKey?: keyof Privileges;
   privilegeValue?: string;
-  notificationKey?: keyof NotificationCounts;
+  notificationKey?: string;
   condition?: (privileges: Privileges) => boolean;
   alternateLabel?: string;
   alternateCondition?: (privileges: Privileges) => boolean;
@@ -43,7 +42,6 @@ interface SubMenuItem {
   standalone: true
 })
 export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
-  notificationCounts$!: Observable<NotificationCounts>;
   @Input() showFullBar: boolean = true;
   activeLink: string = '';
   showTabs: boolean = false;
@@ -197,7 +195,8 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Purchase',
       icon: 'heroShoppingCart',
       hasDropdown: true,
-      // privilegeKey: 'purchase',
+      privilegeKey: 'purchase',
+      privilegeValue: 'none',
       notificationKey: 'purchaseCount',
       children: [
         {
@@ -219,16 +218,22 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Supplier LPO',
       icon: 'heroClipboardDocumentList',
       hasDropdown: true,
+      privilegeKey: 'purchaseOrder',
+      privilegeValue: 'none',
       children: [
         {
           id: 'pendingLpoApproval',
           label: 'LPO Approval Requests',
           route: '/purchase-order/pending-approval',
+          privilegeKey: 'purchaseOrder',
+          privilegeValue: 'none',
         },
         {
           id: 'approvedLpos',
           label: 'Approved LPOs',
           route: '/purchase-order/approved',
+          privilegeKey: 'purchaseOrder',
+          privilegeValue: 'none',
         },
       ]
     },
@@ -237,7 +242,8 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Technical',
       icon: 'heroWrenchScrewdriver',
       hasDropdown: true,
-      // privilegeKey: 'purchase',
+      privilegeKey: 'technical',
+      privilegeValue: 'none',
       notificationKey: 'purchaseCount',
       children: [
         {
@@ -271,7 +277,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Suppliers',
       icon: 'heroTruck',
       route: '/suppliers',
-      privilegeKey: 'jobSheet',
+      privilegeKey: 'supplier',
       hasDropdown: true,
       privilegeValue: 'none',
       children: [
@@ -293,7 +299,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Claims',
       icon: 'heroDocumentPlus',
       route: '/claims',
-      privilegeKey: 'jobSheet',
+      privilegeKey: 'claims',
       hasDropdown: true,
       privilegeValue: 'none',
       children: [
@@ -315,7 +321,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Inventory',
       icon: 'heroCube',
       route: '/inventory',
-      privilegeKey: 'jobSheet',
+      privilegeKey: 'inventory',
       hasDropdown: true,
       privilegeValue: 'none',
       children: [
@@ -393,7 +399,6 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit() {
     this.checkPermission();
-    this.notificationCounts$ = this._notificationService.notificationCounts$;
 
     // Initialize expandedMenus with all menus collapsed
     this.menuItems.forEach(item => {
@@ -472,47 +477,27 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       return privilegeObj; // If it's true, access is granted
     }
 
+    // Handle inventory with nested structure
+    if (item.privilegeKey === 'inventory' && typeof privilegeObj === 'object' && 'products' in privilegeObj) {
+      const inventoryPrivilege = privilegeObj as any;
+      return item.privilegeValue === 'none'
+        ? (inventoryPrivilege.products?.viewReport !== 'none' || inventoryPrivilege.stockEntries?.viewReport !== 'none')
+        : (inventoryPrivilege.products?.viewReport === item.privilegeValue || inventoryPrivilege.stockEntries?.viewReport === item.privilegeValue);
+    }
+
     // Handle when privilegeObj is an object with viewReport property
     if (typeof privilegeObj === 'object' && 'viewReport' in privilegeObj) {
+      const viewReport = (privilegeObj as any)?.viewReport ?? 'none';
       // If privilegeValue is 'none', it means user should NOT have 'none' permission
       return item.privilegeValue === 'none'
-        ? privilegeObj.viewReport !== 'none'
-        : privilegeObj.viewReport === item.privilegeValue;
+        ? viewReport !== 'none'
+        : viewReport === item.privilegeValue;
     }
 
     // Default fallback if structure doesn't match expected patterns
     return false;
   }
 
-  getNotificationCount(key: keyof NotificationCounts | undefined): number {
-    if (!key) return 0;
-    let count = 0;
-    this.notificationCounts$.subscribe(counts => {
-      count = counts[key] || 0;
-    });
-    return count;
-  }
-
-  hasAnyNotification(item: MenuItem): boolean {
-    if (!item.notificationKey && !item.children) return false;
-
-    let hasNotification = false;
-    if (item.notificationKey) {
-      this.notificationCounts$.subscribe(counts => {
-        hasNotification = !!counts[item.notificationKey as keyof NotificationCounts];
-      });
-    }
-
-    if (!hasNotification && item.children) {
-      this.notificationCounts$.subscribe(counts => {
-        hasNotification = item.children?.some(child =>
-          child.notificationKey && counts[child.notificationKey as keyof NotificationCounts]
-        ) || false;
-      });
-    }
-
-    return hasNotification;
-  }
 
   getSubMenuLabel(subItem: SubMenuItem): string {
     if (subItem.alternateLabel && subItem.alternateCondition && this.privileges) {

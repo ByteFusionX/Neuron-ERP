@@ -66,6 +66,7 @@ export class OpenToWorkProjectComponent implements OnInit, OnDestroy {
   private technicalService = inject(TechnicalService);
   private _employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
+  canViewOpenToWorkAndAssign = signal<boolean>(false);
 
   tableData = signal<job_interface.getJob[]>([]);
   tableColumns: TableColumn[] = [

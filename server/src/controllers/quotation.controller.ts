@@ -11,6 +11,7 @@ import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import Event from '../models/events.model'
+import { createNotificationWithPrivileges } from "./notification.controller";
 
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -996,10 +997,30 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
 
         const socket = req.app.get('io') as Server;
-        socket.emit("notifications", 'dealSheet')
-
         const { quoteId } = req.params;
         const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, updateQuoteData, { new: true });
+        const userData = await getEmployeeData(req.user);
+        
+        if (quoteUpdated) {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'DealSheet',
+                    referenceModel: 'Quotation',
+                    title: 'New Deal Sheet Pending Approval',
+                    message: `A new deal sheet has been submitted for quotation ${quoteUpdated.quoteId}`,
+                    sentBy: userData?._id?.toString() || quoteUpdated.createdBy.toString(),
+                    referenceId: quoteUpdated._id,
+                    additionalData: { quotationId: quoteUpdated._id.toString() }
+                },
+                {
+                    privilegeKey: 'dealSheet',
+                    checkFunction: (privileges) => {
+                        return privileges.dealSheet === true;
+                    }
+                },
+                socket
+            );
+        }
 
         if (quoteUpdated) {
             return res.status(200).json(quoteUpdated)
@@ -1027,7 +1048,28 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
             const quoteUpdate = await Quotation.updateOne({ _id: jobData.quoteId }, { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(req.body.userId) })
             if (quoteUpdate) {
                 const socket = req.app.get('io') as Server;
-                socket.emit("notifications", 'quotation')
+                const quotation = await Quotation.findById(jobData.quoteId);
+                if (quotation) {
+                    await createNotificationWithPrivileges(
+                        {
+                            type: 'Quotation',
+                            referenceModel: 'Quotation',
+                            title: 'Deal Sheet Approved',
+                            message: `Deal sheet has been approved for quotation ${quotation.quoteId}`,
+                            sentBy: req.body.userId,
+                            referenceId: quotation._id,
+                            additionalData: { quotationId: quotation._id.toString() }
+                        },
+                        {
+                            privilegeKey: 'quotation',
+                            checkFunction: (privileges, employeeId) => {
+                                return employeeId === quotation.createdBy.toString() && 
+                                       privileges.quotation?.viewReport !== 'none';
+                            }
+                        },
+                        socket
+                    );
+                }
                 return res.status(200).json({ success: true });
             }
         }
@@ -1053,7 +1095,26 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         const savedDeal = await deal.save();
 
         const socket = req.app.get('io') as Server;
-        socket.to(savedDeal.createdBy.toString()).emit("notifications", 'quotation')
+        const userData = await getEmployeeData(req.user);
+        await createNotificationWithPrivileges(
+            {
+                type: 'Quotation',
+                referenceModel: 'Quotation',
+                title: 'Deal Sheet Rejected',
+                message: `Deal sheet has been rejected for quotation ${savedDeal.quoteId}`,
+                sentBy: userData?._id?.toString() || savedDeal.createdBy.toString(),
+                referenceId: savedDeal._id,
+                additionalData: { quotationId: savedDeal._id.toString() }
+            },
+            {
+                privilegeKey: 'quotation',
+                checkFunction: (privileges, employeeId) => {
+                    return employeeId === savedDeal.createdBy.toString() && 
+                           privileges.quotation?.viewReport !== 'none';
+                }
+            },
+            socket
+        );
 
         return res.status(200).json({ success: true })
 
@@ -1078,7 +1139,25 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
 
         if (jobDelete.deletedCount) {
             const socket = req.app.get('io') as Server;
-            socket.emit("notifications", 'dealSheet')
+            const userData = await getEmployeeData(req.user);
+            await createNotificationWithPrivileges(
+                {
+                    type: 'DealSheet',
+                    referenceModel: 'Quotation',
+                    title: 'Deal Sheet Revoked',
+                    message: `Deal sheet has been revoked for quotation ${deal.quoteId}`,
+                    sentBy: userData?._id?.toString() || deal.createdBy.toString(),
+                    referenceId: deal._id,
+                    additionalData: { quotationId: deal._id.toString() }
+                },
+                {
+                    privilegeKey: 'dealSheet',
+                    checkFunction: (privileges) => {
+                        return privileges.dealSheet === true;
+                    }
+                },
+                socket
+            );
         }
 
         return res.status(200).json({ success: true })

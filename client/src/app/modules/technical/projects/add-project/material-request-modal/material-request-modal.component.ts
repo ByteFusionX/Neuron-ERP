@@ -15,6 +15,7 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
 import { MaterialRequest, MaterialRequestAttachment } from 'src/app/core/services/technical.service';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 interface MaterialRequestFormItem {
   _id?: string;
@@ -39,6 +40,7 @@ interface MaterialRequestFormItem {
     appFileSizeValidator,
     ButtonComponent,
     NumberFormatterPipe,
+    ModalLayoutComponent
   ],
   templateUrl: './material-request-modal.component.html',
   styleUrl: './material-request-modal.component.css'
@@ -396,6 +398,20 @@ export class MaterialRequestModalComponent implements OnInit {
 
   onCancel(): void {
     this.router.navigate(['/technical/project/edit', this.technicalId]);
+  }
+
+  getFooterButtons(): any[] {
+    return [
+      { label: 'Cancel', onClick: this.onCancel.bind(this), theme: 'cancel' },
+      { 
+        label: 'Save Material Request', 
+        onClick: this.onSubmit.bind(this), 
+        theme: 'primary', 
+        loading: this.isSaving, 
+        type: 'submit', 
+        disabled: this.materialForm.invalid || this.isSaving
+      }
+    ];
   }
 
   getFieldError(control: any, fieldName: string): string {

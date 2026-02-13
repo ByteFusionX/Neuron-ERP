@@ -1,15 +1,12 @@
-<div class="bg-white rounded-lg w-full max-w-2xl">
-  <div class="border-b p-4 px-6 flex justify-between items-center">
-    <h3 class="text-lg font-medium text-gray-800">Block Item</h3>
-    <button
-      type="button"
-      class="text-gray-400 hover:text-gray-600"
-      (click)="onCancel()">
-      <ng-icon name="heroXMark" class="w-5 h-5"></ng-icon>
-    </button>
-  </div>
-  <div class="p-6">
-    <form [formGroup]="blockForm" (ngSubmit)="onSubmit()">
+<app-modal-layout
+  title="Block Item"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Save & Exit', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+  ]"
+  contentClass="p-6">
+  <form [formGroup]="blockForm" (ngSubmit)="onSubmit()">
       <div class="space-y-4">
         <app-form-field
           label="Salesperson Name"
@@ -68,10 +65,5 @@
         </div>
       </div>
 
-      <div class="border-t border-gray-200 mt-6 pt-4 flex justify-end gap-3">
-        <app-btn theme="cancel" type="button" (buttonClick)="onCancel()">Discard</app-btn>
-        <app-btn theme="primary" type="submit" [loading]="isSubmitting">Save & Exit</app-btn>
-      </div>
     </form>
-  </div>
-</div>
+</app-modal-layout>

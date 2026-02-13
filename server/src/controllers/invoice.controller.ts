@@ -78,8 +78,12 @@ export const createInvoice = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Invoice Number already exists' });
         }
 
-        const tokenData = req.user;
-        const createdBy = await getEmployeeData(tokenData);
+        const token = req.user;
+        const employee = await getEmployeeData(token);
+
+        if (!employee) {
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        }
 
         const newInvoice = new Invoice({
             invoiceNo,
@@ -90,7 +94,7 @@ export const createInvoice = async (req: Request, res: Response) => {
             amount,
             status,
             items,
-            createdBy: createdBy._id
+            createdBy: employee._id
         });
 
         await newInvoice.save();

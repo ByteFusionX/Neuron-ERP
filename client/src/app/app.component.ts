@@ -81,7 +81,6 @@ export class AppComponent implements OnDestroy, OnInit {
         if (data) {
           this.token = data.accessToken
           this._notificationService.authSocketIo(data.accessToken)
-          this._notificationService.getEmployeeNotifications()
           this._notificationService.getEmployeeTextNotifications()
           this._notificationService.initializeNotifications()
         }

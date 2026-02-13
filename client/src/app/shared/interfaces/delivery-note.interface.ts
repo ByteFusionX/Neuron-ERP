@@ -38,8 +38,7 @@ export interface GetDeliveryNoteResponse {
 }
 
 export const DnStatus = {
-    GENERATED: 'Generated',
+    DRAFT: 'Draft',
     DELIVERED: 'Delivered',
-    PARTIALLY_DELIVERED: 'Partially Delivered',
     CANCELLED: 'Cancelled'
 };

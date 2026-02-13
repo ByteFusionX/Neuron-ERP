@@ -61,6 +61,7 @@ import { CreateStockEntryComponent } from './modules/inventory/pages/stock-entri
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
 import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
 import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
+import { PendingDeliveryDetailComponent } from './modules/dispatch/pages/pending-delivery-detail/pending-delivery-detail.component';
 import { InvoiceLinkingComponent } from './modules/dispatch/pages/invoice-linking/invoice-linking.component';
 import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-deduction/inventory-deduction.component';
 import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
@@ -78,6 +79,7 @@ export const routes: Routes = [
       { path: '', component: DashboardComponent },
       { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
       { path: 'employees/view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
+      { path: 'employees/category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
       { path: 'announcements', canActivate: [RoleGuard], component: AnnouncementsComponent },
     ],
   },
@@ -155,6 +157,16 @@ export const routes: Routes = [
     path: 'settings',
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/settings/settings.component').then((c) => c.SettingsComponnet)
+  },
+  {
+    path: 'settings/category/create',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent)
+  },
+  {
+    path: 'settings/category/edit/:id',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/settings/pages/edit-category/edit-category.component').then((c) => c.EditCategoryComponent)
   },
   {
     path: 'feedback-requests',
@@ -250,6 +262,7 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/inventory/inventory.component').then((c) => c.InventoryComponent),
     children: [
       { path: 'products', component: AllProductsComponent },
+      { path: 'products/category/add', loadComponent: () => import('./modules/inventory/pages/all-products/modals/add-category/add-category.component').then((c) => c.AddCategoryComponent) },
       { path: 'stock-entries', component: StockEntriesComponent },
       { path: 'stock-entries/create', component: CreateStockEntryComponent }
     ]
@@ -263,6 +276,7 @@ export const routes: Routes = [
       { path: 'delivery-note-register/create', component: CreateDnComponent },
       { path: 'delivery-note-register/view/:id', component: DeliveryNoteViewComponent },
       { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
+      { path: 'pending-delivery-reports/:jobId', component: PendingDeliveryDetailComponent },
       { path: 'invoice-linking-report', component: InvoiceLinkingComponent },
       { path: 'inventory-deduction-report', component: InventoryDeductionComponent },
     ]

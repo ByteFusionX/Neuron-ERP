@@ -3,7 +3,7 @@ import Claim from '../models/claim.model';
 import Job from '../models/job.model';
 import Workflow from '../models/workflow.model';
 import { ObjectId } from "mongodb";
-import { getEmployeeData, getDateRangeByDay } from "../common/utils/util";
+import { getEmployeeData, getDateRangeByDay, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
 import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
 
@@ -87,11 +87,27 @@ export const getClaims = async (req: Request, res: Response, next: NextFunction)
     try {
         const { reason, raisedDate, fromDate, toDate, raisedBy, status, page = 1, row = 10, technicalId } = req.query;
 
+        const tokenData = (req as any).user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        const accessFilter = privileges?.claims?.viewReport 
+            ? await buildPrivilegeAccessFilter(employee._id, privileges.claims.viewReport, 'raisedBy')
+            : {};
+
         const pageNum = parseInt(page as string);
         const rowNum = parseInt(row as string);
         const skip = (pageNum - 1) * rowNum;
 
-        const matchConditions: any = {};
+        const matchConditions: any = {
+            ...accessFilter
+        };
 
         if (reason) {
             matchConditions.reason = { $regex: reason, $options: 'i' };
@@ -467,6 +483,16 @@ export const updateClaimStatus = async (req: Request, res: Response, next: NextF
                 success: false,
                 message: "Employee not found"
             });
+        }
+
+        if (status === 'approved' || status === 'rejected') {
+            const privileges = employee.category?.privileges;
+            if (!privileges?.claims?.canApprove) {
+                return res.status(403).json({
+                    success: false,
+                    message: "You do not have permission to approve claims",
+                });
+            }
         }
 
         const claim = await Claim.findById(id).populate('approvalStatus.role').populate('raisedBy');

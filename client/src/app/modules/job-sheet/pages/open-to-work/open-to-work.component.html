@@ -204,7 +204,7 @@
                         <div class="flex items-center gap-2">
                             <span>{{element.procurementPerson ? (element.procurementPerson.firstName + ' ' + element.procurementPerson.lastName) : '-'}}</span>
                             <button 
-                                *ngIf="element.procurementPerson"
+                                *ngIf="element.procurementPerson && canTransferProcurementPerson"
                                 class="cursor-pointer text-center flex justify-center items-center gap-1 px-1 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-full font-medium transition-colors"
                                 (click)="onTransferProcurementPerson(element); $event.stopPropagation()" 
                                 matTooltip="Transfer Procurement Person" 
@@ -222,41 +222,6 @@
                     <td mat-cell *matCellDef="let element"> {{element.lpoValue | numberFormatter}} QAR </td>
                 </ng-container>
 
-                <ng-container matColumnDef="status">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 text-center  px-[4px] py-[16px]  text-dark  text-[15px] font-medium border-none before:hidden">
-                        Status </th>
-                    <td mat-cell *matCellDef="let element;let i= index" class="">
-                        <div (click)="onStatus($event,element.status)"
-                            *ngIf="element.status !== 'Won' && element.status !== 'Lost'"
-                            class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
-                            [matMenuTriggerFor]="beforeMenu" mat-button>
-                            <p class="mx-2 text-sm whitespace-nowrap">{{element.status}}</p>
-                            <div class="mt-1">
-                                <ng-icon name="heroChevronDown"></ng-icon>
-                            </div>
-                        </div>
-                        <mat-menu #beforeMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
-                            <div class="">
-                                <div *ngFor="let status of jobStatuses">
-                                    <p class="p-2 hover:bg-violet-200 cursor-pointer   px-[12px]  text-dark  text-[15px] "
-                                        *ngIf="status !== element.status" (click)="updateStatus(i,element._id,status)">
-                                        {{status}}</p>
-                                </div>
-
-                            </div>
-                        </mat-menu>
-                        <div class="w-full flex justify-center items-center">
-                            <p *ngIf="element.status === 'Won'"
-                                class="w-fit text-center bg-green-100 rounded-full px-5 text-green-600  py-1">
-                                {{element.status}}</p>
-                            <p *ngIf="element.status === 'Lost'"
-                                class="w-fit text-center bg-red-100 rounded-full px-5 text-red-600  py-1">
-                                {{element.status}}</p>
-                        </div>
-                    </td>
-                </ng-container>
-
                 <ng-container matColumnDef="action">
                     <th *matHeaderCellDef
                         class="bg-gray-100 text-center px-[4px] py-[16px] text-dark text-[15px] font-medium border-none before:hidden">
@@ -265,12 +230,18 @@
                     <td mat-cell *matCellDef="let element" class="text-center">
                         <div class="flex justify-center items-center gap-3">
                             <div class="inline-flex items-center gap-3 justify-center">
+                                <button class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 text-violet-600 hover:text-violet-800  text-sm rounded-full font-medium border-gray-400 border"
+                                    (click)="openJobHistory(element)" matTooltip="View Workflow Timeline" matTooltipPosition="above">
+                                    <ng-icon name="heroClock" size="18"></ng-icon>
+                                </button>
+                            </div>
+                            <div class="inline-flex items-center gap-3 justify-center">
                                 <button class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 text-red-600 hover:text-red-800  text-sm rounded-full font-medium border-gray-400 border" *ngIf="isDeleteOption"
                                     (click)="onDeleteJob(element._id)" matTooltip="Delete Job" matTooltipPosition="above">
                                     <ng-icon name="heroTrash" size="18"></ng-icon>
                                 </button>
                             </div>
-                            <div class="inline-flex items-center gap-3 justify-center" *ngIf="shouldShowConvertButton(element)">
+                            <div class="inline-flex items-center gap-3 justify-center" *ngIf="shouldShowConvertButton(element) && canConvertToPurchase">
                                 <button class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium"
                                     (click)="onConvertToPurchase(element._id)" matTooltip="Convert to Purchase" matTooltipPosition="above">
                                     <ng-icon name="heroArrowUturnLeft" size="18"></ng-icon>

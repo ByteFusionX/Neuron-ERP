@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 import DeliveryNote from '../models/deliveryNote.model';
 import StockEntry from '../models/stockEntry.model';
 import Product from '../models/products.model';
+import Job from '../models/job.model';
+import Quotation from '../models/quotation.model';
+import { checkAndUpdateJobCompletionStatus } from './job.controller';
 
 export const generateDnNumber = async (req: Request, res: Response) => {
     try {
@@ -21,18 +24,101 @@ export const generateDnNumber = async (req: Request, res: Response) => {
     }
 };
 
+const calculateDnStatus = async (jobId: string, currentDnItems: any[], excludeDnId?: string): Promise<string> => {
+    if (!jobId || !mongoose.Types.ObjectId.isValid(jobId) || !currentDnItems || currentDnItems.length === 0) {
+        return 'Draft';
+    }
+
+    const query: any = { 
+        jobId: new mongoose.Types.ObjectId(jobId),
+        status: { $nin: ['Cancelled', 'Draft'] }
+    };
+
+    if (excludeDnId && mongoose.Types.ObjectId.isValid(excludeDnId)) {
+        query._id = { $ne: new mongoose.Types.ObjectId(excludeDnId) };
+    }
+
+    const allDns = await DeliveryNote.find(query);
+
+    let allItemsFullyDelivered = true;
+    let anyItemDelivered = false;
+
+    for (const currentItem of currentDnItems) {
+        const itemId = currentItem.itemId;
+        const orderedQty = currentItem.orderedQty || 0;
+        const currentDeliveryQty = currentItem.currentDeliveryQty || 0;
+
+        let totalDelivered = 0;
+
+        for (const dn of allDns) {
+            if (dn.items && Array.isArray(dn.items)) {
+                const matchingItem = dn.items.find((i: any) => i.itemId === itemId);
+                if (matchingItem) {
+                    totalDelivered += matchingItem.currentDeliveryQty || 0;
+                }
+            }
+        }
+
+        totalDelivered += currentDeliveryQty;
+
+        if (totalDelivered >= orderedQty) {
+            anyItemDelivered = true;
+        } else if (totalDelivered > 0) {
+            allItemsFullyDelivered = false;
+            anyItemDelivered = true;
+        } else {
+            allItemsFullyDelivered = false;
+        }
+    }
+
+    if (anyItemDelivered) {
+        return 'Delivered';
+    }
+
+    return 'Draft';
+};
+
 export const createDn = async (req: Request, res: Response) => {
     try {
-        const { dnNo, dnDate, jobId, items } = req.body;
+        const { dnNo, dnDate, jobId, items, status } = req.body;
 
-        // 1. Create DN
+        if (items && Array.isArray(items)) {
+            items.forEach((item: any, index: number) => {
+                if (item.serialNos) {
+                    if (typeof item.serialNos === 'string') {
+                        item.serialNos = item.serialNos.split(/[\n,;]+/).map((s: string) => s.trim()).filter(Boolean);
+                    } else if (!Array.isArray(item.serialNos)) {
+                        item.serialNos = [];
+                    }
+                } else {
+                    item.serialNos = [];
+                }
+            });
+        }
+
+        console.log('Creating DN with items:', JSON.stringify(items, null, 2));
+
+        let finalStatus = status || 'Draft';
+
+        if (status !== 'Draft' && jobId && items && items.length > 0) {
+            finalStatus = await calculateDnStatus(jobId, items);
+        }
+
         const newDn = new DeliveryNote({
             ...req.body,
+            status: finalStatus,
             createdBy: (req as any).user?._id
         });
         const savedDn = await newDn.save();
+        
+        console.log('DN Created Successfully. Serial Numbers:', savedDn.items.map((item: any) => ({
+            partNo: item.partNo,
+            serialNos: item.serialNos
+        })));
 
-        // 2. Update Job Status if needed (logic: check if all items delivered)?
+        if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
+            await checkAndUpdateJobCompletionStatus(jobId);
+        }
 
         res.status(201).json({ success: true, data: savedDn });
     } catch (error) {
@@ -90,7 +176,7 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
 
         let dns = await DeliveryNote.aggregate([
             { $match: matchFilters },
-            { $sort: { dnDate: -1 } },
+            { $sort: { dnNo : -1 } },
             { $skip: skipNum },
             { $limit: row },
             {
@@ -142,6 +228,82 @@ export const getDnById = async (req: Request, res: Response) => {
     }
 };
 
+export const getDraftDnByJobId = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+
+        const draftDn = await DeliveryNote.findOne({ 
+            jobId: new mongoose.Types.ObjectId(jobId),
+            status: 'Draft'
+        })
+        .populate('jobId', 'jobId projectName')
+        .populate('createdBy', 'firstName lastName');
+
+        if (!draftDn) {
+            return res.status(200).json(null);
+        }
+
+        return res.status(200).json(draftDn);
+    } catch (error) {
+        console.error("Get Draft DN Error:", error);
+        res.status(500).json({ message: 'Error fetching draft DN', error });
+    }
+};
+
+export const updateDn = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { items, status } = req.body;
+
+        const dn = await DeliveryNote.findById(id);
+
+        if (!dn) {
+            return res.status(404).json({ message: 'Delivery Note not found' });
+        }
+
+        if (dn.status !== 'Draft') {
+            return res.status(400).json({ message: 'Only draft DNs can be updated' });
+        }
+
+        if (items && Array.isArray(items)) {
+            items.forEach((item: any) => {
+                if (item.serialNos) {
+                    if (typeof item.serialNos === 'string') {
+                        item.serialNos = item.serialNos.split(/[\n,;]+/).map((s: string) => s.trim()).filter(Boolean);
+                    } else if (!Array.isArray(item.serialNos)) {
+                        item.serialNos = [];
+                    }
+                } else {
+                    item.serialNos = [];
+                }
+            });
+        }
+
+        let finalStatus = status || 'Draft';
+
+        if (status !== 'Draft' && dn.jobId && items && items.length > 0) {
+            finalStatus = await calculateDnStatus(dn.jobId.toString(), items, id);
+        }
+
+        Object.assign(dn, {
+            ...req.body,
+            status: finalStatus,
+            updatedDate: new Date()
+        });
+
+        const updatedDn = await dn.save();
+
+        if (dn.jobId && mongoose.Types.ObjectId.isValid(dn.jobId.toString())) {
+            await checkAndUpdateJobCompletionStatus(dn.jobId.toString());
+        }
+
+        return res.status(200).json({ success: true, data: updatedDn });
+    } catch (error) {
+        console.error("Update DN Error:", error);
+        res.status(500).json({ message: 'Error updating Delivery Note', error });
+    }
+};
+
 export const cancelDn = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -156,11 +318,8 @@ export const cancelDn = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Delivery Note is already cancelled' });
         }
 
-        if (dn.status === 'Delivered') {
-            return res.status(400).json({ message: 'Cannot cancel a delivered DN' });
-        }
-
         dn.status = 'Cancelled';
+        dn.updatedDate = new Date();
         await dn.save();
 
         return res.status(200).json({ message: 'Delivery Note cancelled successfully', dn });
@@ -357,5 +516,221 @@ export const getInventoryDeductionReport = async (req: Request, res: Response) =
     } catch (error) {
         console.error("Inventory Deduction Report Error:", error);
         res.status(500).json({ message: 'Error generating report', error });
+    }
+};
+
+export const getPendingDeliveriesSummary = async (req: Request, res: Response) => {
+    try {
+        let { page, row } = req.body;
+        page = page || 1;
+        row = row || 10;
+
+        const jobs = await Job.find({ isDeleted: { $ne: true } }).lean();
+        if (!jobs || jobs.length === 0) {
+            return res.status(200).json({ total: 0, jobs: [] });
+        }
+
+        const jobIds = jobs.map(j => j._id);
+        const dns = await DeliveryNote.find({
+            jobId: { $in: jobIds },
+            status: { $nin: ['Cancelled', 'Draft'] }
+        }).lean();
+
+        const dnsByJob = new Map<string, any[]>();
+        dns.forEach(dn => {
+            const key = String(dn.jobId);
+            if (!dnsByJob.has(key)) {
+                dnsByJob.set(key, []);
+            }
+            dnsByJob.get(key)!.push(dn);
+        });
+
+        const quoteIds = Array.from(new Set(jobs.map(j => j.quoteId).filter(Boolean).map((id: any) => String(id))));
+        const quotations = await Quotation.find({ _id: { $in: quoteIds } }).lean();
+        const quoteMap = new Map<string, any>();
+        quotations.forEach(q => {
+            quoteMap.set(String(q._id), q);
+        });
+
+        const pendingJobs: any[] = [];
+
+        for (const job of jobs) {
+            const quoteId = job.quoteId ? String(job.quoteId) : null;
+            const quotation = quoteId ? quoteMap.get(quoteId) : null;
+            if (!quotation || !quotation.optionalItems || quotation.optionalItems.length === 0) {
+                continue;
+            }
+
+            let allItems: any[] = [];
+            quotation.optionalItems.forEach((opt: any) => {
+                if (opt.items) {
+                    opt.items.forEach((item: any) => {
+                        if (item.itemDetails) {
+                            allItems.push(...item.itemDetails.map((detail: any) => ({
+                                ...detail,
+                                itemName: item.itemName
+                            })));
+                        }
+                    });
+                }
+            });
+
+            if (allItems.length === 0) {
+                continue;
+            }
+
+            const jobDns = dnsByJob.get(String(job._id)) || [];
+
+            let hasPendingItem = false;
+            let hasDeliveredItem = false;
+
+            for (const item of allItems) {
+                const orderedQty = item.quantity || 0;
+                let deliveredQty = 0;
+
+                for (const dn of jobDns) {
+                    if (dn.items && Array.isArray(dn.items)) {
+                        dn.items.forEach((dnItem: any) => {
+                            if (dnItem.itemId === String(item._id)) {
+                                deliveredQty += dnItem.currentDeliveryQty || 0;
+                            }
+                        });
+                    }
+                }
+
+                if (deliveredQty > 0) {
+                    hasDeliveredItem = true;
+                }
+
+                if (orderedQty > deliveredQty) {
+                    hasPendingItem = true;
+                }
+            }
+
+            if (!hasPendingItem) {
+                continue;
+            }
+
+            const status = hasDeliveredItem ? 'Partially Delivered' : 'To be Delivered';
+            const customerName = (job as any).clientDetails?.companyName || (job as any).client?.companyName || '';
+
+            pendingJobs.push({
+                jobMongoId: job._id,
+                jobId: job.jobId,
+                customer: customerName,
+                status
+            });
+        }
+
+        const total = pendingJobs.length;
+        const start = (page - 1) * row;
+        const paged = pendingJobs.slice(start, start + row);
+
+        return res.status(200).json({ total, jobs: paged });
+    } catch (error) {
+        console.error('Get Pending Deliveries Summary Error:', error);
+        res.status(500).json({ message: 'Error fetching pending deliveries summary', error });
+    }
+};
+
+export const getPendingDeliveryDetails = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+
+        if (!jobId || !mongoose.Types.ObjectId.isValid(jobId)) {
+            return res.status(400).json({ message: 'Invalid Job ID' });
+        }
+
+        const job = await Job.findById(jobId).lean();
+        if (!job) {
+            return res.status(404).json({ message: 'Job not found' });
+        }
+
+        const quotation = job.quoteId ? await Quotation.findById(job.quoteId).lean() : null;
+        if (!quotation || !quotation.optionalItems || quotation.optionalItems.length === 0) {
+            return res.status(200).json({
+                job: {
+                    _id: job._id,
+                    jobId: job.jobId,
+                    customer: (job as any).clientDetails?.companyName || (job as any).client?.companyName || '',
+                    projectName: (job as any).projectName || ''
+                },
+                items: []
+            });
+        }
+
+        let allItems: any[] = [];
+        quotation.optionalItems.forEach((opt: any) => {
+            if (opt.items) {
+                opt.items.forEach((item: any) => {
+                    if (item.itemDetails) {
+                        allItems.push(...item.itemDetails.map((detail: any) => ({
+                            ...detail,
+                            itemName: item.itemName
+                        })));
+                    }
+                });
+            }
+        });
+
+        const dns = await DeliveryNote.find({
+            jobId: new mongoose.Types.ObjectId(jobId),
+            status: { $nin: ['Cancelled', 'Draft'] }
+        }).lean();
+
+        const itemsResult: any[] = [];
+
+        allItems.forEach((item: any, index: number) => {
+            const orderedQty = item.quantity || 0;
+            let deliveredQty = 0;
+            const deliveryNotes: any[] = [];
+
+            dns.forEach(dn => {
+                if (dn.items && Array.isArray(dn.items)) {
+                    dn.items.forEach((dnItem: any) => {
+                        if (dnItem.itemId === String(item._id)) {
+                            const qty = dnItem.currentDeliveryQty || 0;
+                            if (qty > 0) {
+                                deliveredQty += qty;
+                                deliveryNotes.push({
+                                    dnId: dn._id,
+                                    dnNo: dn.dnNo,
+                                    dnDate: dn.dnDate,
+                                    currentDeliveryQty: qty
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+
+            const balanceQty = Math.max(0, orderedQty - deliveredQty);
+
+            itemsResult.push({
+                slNo: index + 1,
+                itemId: item._id,
+                partNo: item.partNo || item.itemName || '',
+                description: item.detail || item.itemDescription || '',
+                orderedQty,
+                deliveredQty,
+                balanceQty,
+                deliveryNotes
+            });
+        });
+
+        const customerName = (job as any).clientDetails?.companyName || (job as any).client?.companyName || '';
+
+        return res.status(200).json({
+            job: {
+                _id: job._id,
+                jobId: job.jobId,
+                customer: customerName,
+                projectName: (job as any).projectName || ''
+            },
+            items: itemsResult
+        });
+    } catch (error) {
+        console.error('Get Pending Delivery Details Error:', error);
+        res.status(500).json({ message: 'Error fetching pending delivery details', error });
     }
 };

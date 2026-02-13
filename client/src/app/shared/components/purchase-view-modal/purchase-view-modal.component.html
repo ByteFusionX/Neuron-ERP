@@ -1,16 +1,9 @@
-<div class="p-6 max-h-[90vh] overflow-y-auto">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">
-      Purchase Details - 
-      <span class="uppercase">{{ purchase?.purchaseNo }}</span>
-    </h2>
-    <button 
-      (click)="onClose()" 
-      class="text-gray-400 hover:text-gray-600 transition-colors">
-      <ng-icon name="heroXMark" class="w-6 h-6"></ng-icon>
-    </button>
-  </div>
-
+<app-modal-layout
+  [title]="'Purchase Details - ' + (purchase?.purchaseNo || 'N/A')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6"
+  contentMaxHeight="90vh">
   <div *ngIf="purchase" class="flex flex-col w-full text-gray-900">
     <!-- Status Badge -->
     <div *ngIf="purchase.status" class="mb-4 flex items-center gap-2">
@@ -191,5 +184,5 @@
       </app-btn>
     </div>
   </div>
-</div>
+</app-modal-layout>
 

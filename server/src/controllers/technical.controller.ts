@@ -5,18 +5,35 @@ import technicalModel from "../models/technical.model";
 import { ObjectId } from "mongodb";
 import mongoose from "mongoose";
 import { uploadFileToAws } from "../common/aws-connect";
-import { calculateCostPricePipe, calculateDiscountPricePipe, getDateRangeByDay, getEmployeeData, getUSDRated } from "../common/utils/util";
+import { calculateCostPricePipe, calculateDiscountPricePipe, getDateRangeByDay, getEmployeeData, getUSDRated, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { emailQueue } from "../common/queues/email.queue";
 import purchaseRequestModel from "../models/purchaseRequest.model";
 
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
    try {
-      const jobs = await jobModel.find({
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.technical?.viewReport && privileges.technical.viewReport !== 'none'
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.technical.viewReport, 'createdBy')
+         : {};
+
+      const filter: any = {
          allocateType: {
             $in: [allocateType.ProjectWithSupply, allocateType.AMC]
          },
-         isDeleted: false
-      });
+         isDeleted: false,
+         ...accessFilter
+      };
+
+      const jobs = await jobModel.find(filter);
 
       return res.status(200).json({
          success: true,
@@ -140,6 +157,23 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
    try {
       const { jobId, engineerId, comment, assignedBy, projectType, customerId, priority } = req.body;
       
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.jobSheet?.allocateJobs) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to allocate jobs",
+         });
+      }
+      
       // Validate required fields (comment is optional)
       if (!jobId || !engineerId || !assignedBy || !projectType || !customerId || !priority) {
          return res.status(400).json({
@@ -206,7 +240,22 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
    try {
       const token = req.user;
       const userData = await getEmployeeData(token);
-      const assignedBy = userData?._id;
+      if (!userData) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = userData.category?.privileges;
+      if (!privileges?.technical?.canViewOpenToWorkAndAssign) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to assign projects to engineers",
+         });
+      }
+
+      const assignedBy = userData._id;
       const { engineerId, comment, projectType, customerId, priority } = req.body;
 
       const technicalProject = await technicalModel.create({
@@ -244,6 +293,20 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { companyName, jobId, assignedTo, assignedBy, priority, row, page, projectType, status } = req.body;
+
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.technical?.viewReport && privileges.technical.viewReport !== 'none'
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.technical.viewReport, 'assignedBy')
+         : {};
 
       const pipeline: any[] = [
          {
@@ -363,6 +426,10 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
 
       if (Object.keys(matchConditions).length > 0) {
          pipeline.push({ $match: matchConditions });
+      }
+
+      if (Object.keys(accessFilter).length > 0) {
+         pipeline.push({ $match: accessFilter });
       }
 
       pipeline.push({
@@ -725,6 +792,23 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
 export const transferEngineer = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { projectId, engineerId } = req.body;
+
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canTransferToEngineer) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to transfer engineers",
+         });
+      }
 
       if (!projectId || !engineerId) {
          return res.status(400).json({
@@ -2707,6 +2791,14 @@ export const approveMaterialRequest = async (req: Request, res: Response, next: 
          });
       }
 
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
       const technical = await technicalModel.findById(id);
       if (!technical) {
          return res.status(404).json({
@@ -2867,6 +2959,22 @@ export const approveMaterialRequestItem = async (req: Request, res: Response, ne
       const { id, itemIndex } = req.params;
       const { comment = '' } = req.body;
 
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
       if (!mongoose.Types.ObjectId.isValid(id)) {
          return res.status(400).json({
             success: false,
@@ -2879,14 +2987,6 @@ export const approveMaterialRequestItem = async (req: Request, res: Response, ne
          return res.status(400).json({
             success: false,
             message: "Invalid item index"
-         });
-      }
-
-      const employee = await getEmployeeData(req.user);
-      if (!employee) {
-         return res.status(401).json({
-            success: false,
-            message: "Unauthorized"
          });
       }
 
@@ -2955,6 +3055,22 @@ export const rejectMaterialRequestItem = async (req: Request, res: Response, nex
       const { id, itemIndex } = req.params;
       const { comment = '' } = req.body;
 
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
       if (!mongoose.Types.ObjectId.isValid(id)) {
          return res.status(400).json({
             success: false,
@@ -2974,14 +3090,6 @@ export const rejectMaterialRequestItem = async (req: Request, res: Response, nex
          return res.status(400).json({
             success: false,
             message: "Invalid item index"
-         });
-      }
-
-      const employee = await getEmployeeData(req.user);
-      if (!employee) {
-         return res.status(401).json({
-            success: false,
-            message: "Unauthorized"
          });
       }
 
@@ -3050,6 +3158,22 @@ export const approveMaterialRequestFile = async (req: Request, res: Response, ne
       const { id, fileIndex } = req.params;
       const { comment = '' } = req.body;
 
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
       if (!mongoose.Types.ObjectId.isValid(id)) {
          return res.status(400).json({
             success: false,
@@ -3062,14 +3186,6 @@ export const approveMaterialRequestFile = async (req: Request, res: Response, ne
          return res.status(400).json({
             success: false,
             message: "Invalid file index"
-         });
-      }
-
-      const employee = await getEmployeeData(req.user);
-      if (!employee) {
-         return res.status(401).json({
-            success: false,
-            message: "Unauthorized"
          });
       }
 

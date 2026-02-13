@@ -4,6 +4,7 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { DropdownModule } from 'primeng/dropdown';
 import { NgIconsModule } from '@ng-icons/core';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 export interface AssignEngineerDialogData {
   engineerOptions: { label: string; value: string }[];
@@ -27,7 +28,8 @@ export interface AssignEngineerDialogResult {
     ReactiveFormsModule,
     MatDialogModule,
     DropdownModule,
-    NgIconsModule
+    NgIconsModule,
+    ModalLayoutComponent
   ],
   templateUrl: './assign-engineer-dialog.component.html',
   styleUrls: ['./assign-engineer-dialog.component.css']

@@ -11,6 +11,7 @@ import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { GetCategory } from 'src/app/shared/interfaces/employee.interface';
 import { WorkflowFeature, ApprovalStep, CreateWorkflowRequest, UpdateWorkflowRequest, ApprovalStepUI } from 'src/app/shared/interfaces/workflow.interface';
 import { ToastrService } from 'ngx-toastr';
+import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
     selector: 'app-workflow-steps-dialog',
@@ -23,7 +24,8 @@ import { ToastrService } from 'ngx-toastr';
         ReactiveFormsModule,
         NgSelectComponent,
         NgOptionComponent,
-        DragDropModule
+        DragDropModule,
+        ModalLayoutComponent
     ]
 })
 export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
@@ -123,6 +125,20 @@ export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
     private getNextOrder(): number {
         if (this.steps.length === 0) return 1;
         return Math.max(...this.steps.map(step => step.order)) + 1;
+    }
+
+    getFooterButtons(): any[] {
+        return [
+            { label: 'Cancel', onClick: this.onCloseClicked.bind(this), theme: 'cancel' },
+            { 
+                label: this.saveButtonText, 
+                onClick: this.onSave.bind(this), 
+                theme: 'primary',
+                loading: this.isSaving,
+                disabled: this.isSaving || this.steps.length === 0,
+                icon: this.isSaving ? 'heroArrowPath' : undefined
+            }
+        ];
     }
 
     onSave(): void {

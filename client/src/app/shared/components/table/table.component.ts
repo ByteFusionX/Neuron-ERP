@@ -208,16 +208,13 @@ export class TableComponent implements OnInit, OnChanges {
     const statusLower = String(status).toLowerCase().trim();
     
     switch (statusLower) {
-      case 'approved':
-      case 'won':
+      case 'delivered':
         return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-      case 'rejected':
-      case 'lost':
+      case 'cancelled':
         return 'bg-red-100 text-red-700 border border-red-200';
-      case 'pending':
-        return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'draft':
       case 'drafted':
-        return 'bg-blue-100 text-blue-700 border border-blue-200';
+        return 'bg-amber-100 text-amber-700 border border-amber-200';
       default:
         return 'bg-slate-100 text-slate-700 border border-slate-200';
     }

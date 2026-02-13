@@ -8,6 +8,7 @@ import { TableComponent } from 'src/app/shared/components/table/table.component'
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ToastrService } from 'ngx-toastr';
 import { Router, ActivatedRoute } from '@angular/router';
 import { PaginationService } from 'src/app/core/services/pagination.service';
@@ -40,6 +41,7 @@ export class LpoApprovalComponent implements OnInit {
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private purchaseOrderService = inject(PurchaseOrderService);
+  private employeeService = inject(EmployeeService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -56,11 +58,21 @@ export class LpoApprovalComponent implements OnInit {
 
   selectedStatus = signal<Array<string>>(['Pending for Approval']);
   currency = signal<string>('QAR');
+  canApprovePOs = signal<boolean>(false);
 
   ngOnInit(): void {
+    this.checkPrivileges();
     this.checkCurrentRoute();
     this.setupTableColumns();
     this.loadData();
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canApprovePOs.set(data.category.privileges.purchaseOrder?.canApprovePOs || false);
+      }
+    });
   }
 
   checkCurrentRoute(): void {

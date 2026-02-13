@@ -1,12 +1,10 @@
-<div class="p-6 min-w-[400px]">
-<!-- Header -->
-<div class="flex flex-col space-y-4 text-center sm:text-left">
-  <div class="flex items-center gap-2 justify-center sm:justify-start border-b border-gray-300 pb-2">
-    <h2 class="text-lg font-medium text-orange-600">Job ID: {{data.jobId}}</h2>
-  </div>
-  
-  <div class="text-lg font-medium text-gray-800">Select Allocation Type</div>
-</div>
+<app-modal-layout
+  [title]="'Job ID: ' + data.jobId"
+  subtitle="Select Allocation Type"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="getFooterButtons()"
+  contentClass="p-6 min-w-[400px]"
+  headerClass="text-center sm:text-left">
 
 
   <!-- Allocation Type Options -->
@@ -77,18 +75,4 @@
     </div>
   </div>
 
-  <!-- Action Buttons -->
-  <div class="mt-8 flex gap-3 justify-end">
-    <button 
-      class="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors duration-200"
-      (click)="onCancel()">
-      Cancel
-    </button>
-    <button 
-      class="px-6 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200"
-      [disabled]="!selectedAllocationType || (shouldShowProcurementPerson() && !selectedProcurementPerson)"
-      (click)="onConfirm()">
-      Confirm Selection
-    </button>
-  </div>
-</div>
+</app-modal-layout>

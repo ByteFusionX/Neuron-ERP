@@ -130,10 +130,42 @@ export interface Privileges {
   };
   jobSheet: {
     viewReport: string;
+    allocateJobs: boolean;
+    convertToPurchase: boolean;
+    transferProcurementPerson: boolean;
   };
   dealSheet: boolean;
   purchase: {
     viewReport: string;
+    canApprovePR: boolean;
+  };
+  purchaseOrder: {
+    viewReport: string;
+    canInitiateLPO: boolean;
+    canApprovePOs: boolean;
+    canReissueAndRevoke: boolean;
+  };
+  technical: {
+    canViewOpenToWorkAndAssign: boolean;
+    canTransferToEngineer: boolean;
+    viewReport: string;
+    canApproveMRRequests: boolean;
+  };
+  supplier: {
+    viewReport: string;
+    canApproveSupplier: boolean;
+  };
+  inventory: {
+    products: {
+      viewReport: string;
+    };
+    stockEntries: {
+      viewReport: string;
+    };
+  };
+  claims: {
+    viewReport: string;
+    canApprove: boolean;
   };
   portalManagement: {
     department: boolean;

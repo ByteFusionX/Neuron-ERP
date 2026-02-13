@@ -1,19 +1,20 @@
-<div class="bg-white p-6">
-  <h3 class="text-lg font-medium text-gray-800 mb-4">Add Warehouse</h3>
-  
-  <form [formGroup]="warehouseForm" (ngSubmit)="onSubmit()">
+<app-modal-layout
+  title="Add Warehouse"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Save', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+  ]"
+  [simpleMode]="true"
+  contentClass="p-6">
+  <form [formGroup]="warehouseForm" (ngSubmit)="onSubmit()" #warehouseFormRef="ngForm">
     <app-form-field
       label="Warehouse Name"
       [control]="warehouseForm.get('wareHouseName')"
       [isSubmitted]="isSubmitting"
       placeholder="Enter warehouse name">
     </app-form-field>
-
-    <div class="flex justify-end gap-3 mt-6">
-      <app-btn theme="cancel" type="button" (buttonClick)="onCancel()">Cancel</app-btn>
-      <app-btn theme="primary" type="submit" [loading]="isSubmitting">Save</app-btn>
-    </div>
   </form>
-</div>
+</app-modal-layout>
 
 

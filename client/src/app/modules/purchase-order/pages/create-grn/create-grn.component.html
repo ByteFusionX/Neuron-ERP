@@ -53,6 +53,8 @@
                         formControlName="warehouse"
                         placeholder="Select warehouse"
                         [isSubmitted]="isSubmitting()"
+                        footerLabel="+ Add warehouse"
+                        (footerAction)="onAddWarehouse()"
                         class="w-full">
                     </app-select-dropdown>
                 </div>
@@ -66,9 +68,10 @@
                                 <th class="px-4 py-2 border text-center">Item Description</th>
                                 <th class="px-4 py-2 border text-center">UOM</th>
                                 <th class="px-4 py-2 border text-center">Ordered Qty</th>
+                                <th class="px-4 py-2 border text-center">Balance Qty to be Received</th>
                                 <th class="px-4 py-2 border text-center">Received Qty</th>
                                 <th class="px-4 py-2 border text-center">Accepted Qty</th>
-                                    <th class="px-4 py-2 border text-center">Rejected Qty</th>
+                                <th class="px-4 py-2 border text-center">Rejected Qty</th>
                                 <th class="px-4 py-2 border text-center">Remarks</th>
                                 <th class="px-4 py-2 border text-center">Date</th>
                             </tr>
@@ -86,29 +89,43 @@
                                         {{ item.get('itemDescription')?.value || '-' }}
                                     </td>
                                     <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('uom')" [isSubmitted]="isSubmitting()" placeholder="Enter UOM" class="w-full">
+                                        <app-form-field [control]="item.get('uom')" [isSubmitted]="isSubmitting()" placeholder="Enter UOM" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                         </app-form-field>
                                     </td>
                                     <td class="px-4 py-2 border text-center">
                                         {{ item.get('orderedQty')?.value || 0 }}
                                     </td>
                                     <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('receivedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full">
-                                        </app-form-field>
+                                        <span [class.text-red-600]="(item.get('balanceQty')?.value || 0) === 0" [class.font-semibold]="(item.get('balanceQty')?.value || 0) === 0">
+                                            {{ item.get('balanceQty')?.value || 0 }}
+                                        </span>
                                     </td>
                                     <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('acceptedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full">
+                                        <app-form-field [control]="item.get('receivedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                         </app-form-field>
+                                        @if(item.get('receivedQty')?.errors?.['max']) {
+                                            <span class="text-xs text-red-600">Cannot exceed balance</span>
+                                        }
+                                    </td>
+                                    <td class="px-4 py-2 border text-center">
+                                        <app-form-field [control]="item.get('acceptedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                        </app-form-field>
+                                        @if(item.get('acceptedQty')?.errors?.['max']) {
+                                            <span class="text-xs text-red-600">Cannot exceed received</span>
+                                        }
+                                        @if(item.get('acceptedQty')?.errors?.['maxBalance']) {
+                                            <span class="text-xs text-red-600">Cannot exceed balance</span>
+                                        }
                                     </td>
                                     <td class="px-4 py-2 border text-center">
                                         {{ item.get('rejectedQty')?.value || 0 }}
                                     </td>
                                     <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('remarks')" [isSubmitted]="isSubmitting()" placeholder="Enter remarks" class="w-full">
+                                        <app-form-field [control]="item.get('remarks')" [isSubmitted]="isSubmitting()" placeholder="Enter remarks" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                         </app-form-field>
                                     </td>
                                     <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('date')" [isSubmitted]="isSubmitting()" type="date" class="w-full">
+                                        <app-form-field [control]="item.get('date')" [isSubmitted]="isSubmitting()" type="date" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                         </app-form-field>
                                     </td>
                                 </tr>
@@ -118,10 +135,10 @@
                 </div>
             }
         </div>
-        <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
+        <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
-                <app-btn theme="primary" type="button" [loading]="isSubmitting()" (buttonClick)="onSave()">Save & Exit</app-btn>
                 <app-btn theme="cancel" type="button" (buttonClick)="onDiscard()">Discard</app-btn>
+                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled()" (buttonClick)="onSave()">Save & Exit</app-btn>
             </div>
         </div>
     </form>

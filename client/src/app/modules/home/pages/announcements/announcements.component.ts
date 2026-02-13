@@ -122,7 +122,6 @@ export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit 
   markAsViewed(announcementId: string | null) {
     if (announcementId && this.userId) {
       this._service.markAsViewed(announcementId, this.userId).pipe(takeUntil(this.destroy$)).subscribe()
-      this._notificationService.decrementNotificationCount('announcement', 1)
     }
   }
 

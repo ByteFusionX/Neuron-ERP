@@ -14,13 +14,14 @@ import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.p
 import { SupplierService } from '../../../../core/services/supplier.service';
 import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
 import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { ModalLayoutComponent } from '../../../../shared/components/modal-layout/modal-layout.component';
 
 @Component({
     selector: 'app-deal-form',
     templateUrl: './deal-form.component.html',
     styleUrls: ['./deal-form.component.css'],
     animations: [fileEnterState],
-    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, NgFor, NgClass, appFileValidator, appFileSizeValidator, MatTooltip, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe, NgSelectComponent, NgOptionComponent]
+    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, NgFor, NgClass, appFileValidator, appFileSizeValidator, MatTooltip, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe, NgSelectComponent, NgOptionComponent, ModalLayoutComponent]
 })
 export class DealFormComponent {
   @ViewChild('fileInput') fileInput!: ElementRef;
@@ -379,6 +380,19 @@ export class DealFormComponent {
 
   onClose() {
     this.dialogRef.close()
+  }
+
+  getFooterButtons(): any[] {
+    return [
+      { label: 'Close', onClick: this.onClose.bind(this), theme: 'cancel' },
+      { 
+        label: 'Submit', 
+        onClick: this.onSubmit.bind(this), 
+        theme: 'primary', 
+        loading: this.isSaving,
+        icon: this.isSaving ? 'heroArrowPath' : undefined
+      }
+    ];
   }
 
   getSupplierById(supplierId: string): Supplier | undefined {

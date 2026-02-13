@@ -67,9 +67,13 @@ export class EventsListComponent implements OnInit, OnDestroy {
   }
 
   onNewEventClicks() {
-    const dialog = this.dialog.open(EventsComponent, { data: this.data })
+    const dialog = this.dialog.open(EventsComponent, { 
+      data: this.data,
+      width: '600px',
+      maxWidth: '90vw'
+    })
     dialog.afterClosed().subscribe((res) => {
-      if (res) {
+      if (res && res.event) {
         this.fetchEvents()
         this.toaster.success(res.message || 'Event created successfully');
       }
@@ -139,8 +143,15 @@ export class EventsListComponent implements OnInit, OnDestroy {
     this.eventsSubject.next(updatedEvents);
   }
 
-  isCreatedEmployee(employeeId: string): boolean {
-    if (this.employeeToken.id == employeeId) {
+  isCreatedEmployee(employeeId: string | any): boolean {
+    if (!this.employeeToken || !this.employeeToken.id) {
+      return false;
+    }
+    if (!employeeId) {
+      return false;
+    }
+    const idToCompare = typeof employeeId === 'string' ? employeeId : employeeId._id || employeeId;
+    if (this.employeeToken.id == idToCompare) {
       return true;
     }
     return false;

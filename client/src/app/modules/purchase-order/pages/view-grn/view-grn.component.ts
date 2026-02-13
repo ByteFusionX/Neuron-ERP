@@ -37,7 +37,12 @@ export class ViewGrnComponent implements OnInit {
     this.grnId = <string>this.route.snapshot.paramMap.get('id');
     if (!this.grnId) {
       this.toastr.error('Invalid GRN ID');
-      this.router.navigate(['/purchase-order/pending-approval']);
+      const purchaseIdFromRoute = this.route.snapshot.queryParams['purchaseId'] || this.route.snapshot.paramMap.get('purchaseId');
+      if (purchaseIdFromRoute) {
+        this.router.navigate(['/purchase/initiate-lpo', purchaseIdFromRoute]);
+      } else {
+        this.router.navigate(['/purchase/approves']);
+      }
       return;
     }
     this.loadGRN();
@@ -54,14 +59,29 @@ export class ViewGrnComponent implements OnInit {
         } else {
           this.toastr.error('GRN not found');
           this.isLoading.set(false);
-          this.router.navigate(['/purchase-order/pending-approval']);
+          const purchaseIdFromRoute = this.route.snapshot.queryParams['purchaseId'] || this.route.snapshot.paramMap.get('purchaseId');
+          const purchaseIdFromGrn = response.data?.purchaseOrderId?._id || response.data?.purchaseOrderId || '';
+          const finalPurchaseId = this.purchaseId || purchaseIdFromRoute || purchaseIdFromGrn;
+          if (finalPurchaseId) {
+            this.router.navigate(['/purchase/initiate-lpo', finalPurchaseId]);
+          } else {
+            this.router.navigate(['/purchase/approves']);
+          }
         }
       },
       error: (error) => {
         this.toastr.error('Failed to load GRN details');
         console.error('Error loading GRN:', error);
         this.isLoading.set(false);
-        this.router.navigate(['/purchase-order/pending-approval']);
+        const purchaseIdFromRoute = this.route.snapshot.queryParams['purchaseId'] || this.route.snapshot.paramMap.get('purchaseId');
+        const purchaseIdFromGrn = this.grn?.purchaseOrderId?._id || this.grn?.purchaseOrderId || '';
+        const purchaseIdFromError = error?.error?.data?.purchaseOrderId?._id || error?.error?.data?.purchaseOrderId || '';
+        const finalPurchaseId = this.purchaseId || purchaseIdFromRoute || purchaseIdFromGrn || purchaseIdFromError;
+        if (finalPurchaseId) {
+          this.router.navigate(['/purchase/initiate-lpo', finalPurchaseId]);
+        } else {
+          this.router.navigate(['/purchase/approves']);
+        }
       }
     });
   }
@@ -71,7 +91,7 @@ export class ViewGrnComponent implements OnInit {
     if (this.purchaseId) {
       this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
     } else {
-      this.router.navigate(['/purchase-order/pending-approval']);
+      this.router.navigate(['/purchase/approves']);
     }
   }
 

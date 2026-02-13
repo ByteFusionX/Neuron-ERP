@@ -1,24 +1,9 @@
-<div class="bg-white rounded-lg overflow-hidden ">
-  <!-- Header -->
-  <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-    <div class="flex items-center gap-3">
-      <ng-icon name="heroDocumentDuplicate" class="text-xl text-violet-700"></ng-icon>
-      <h2 class="text-lg font-medium text-gray-900">{{ data.title }}</h2>
-      <span class="bg-violet-100 text-violet-700 text-xs font-medium px-2 py-1 rounded-full">
-        {{ data.attachments.length }} file{{ data.attachments.length !== 1 ? 's' : '' }}
-      </span>
-    </div>
-    <button
-      type="button"
-      (click)="onClose()"
-      class="text-gray-400 hover:text-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 rounded-lg p-1"
-    >
-      <ng-icon name="heroXMark" class="text-xl"></ng-icon>
-    </button>
-  </div>
-
-  <!-- Content -->
-  <div class="px-6 py-4 max-h-96 overflow-y-auto">
+<app-modal-layout
+  [title]="data.title + ' (' + data.attachments.length + ' file' + (data.attachments.length !== 1 ? 's' : '') + ')'"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="px-6 py-4"
+  contentMaxHeight="96">
     <div *ngIf="data.attachments.length === 0" class="text-center py-8">
       <ng-icon name="heroArchiveBoxXMark" class="text-4xl text-gray-300 mx-auto mb-3"></ng-icon>
       <p class="text-gray-500 text-sm">No attachments available</p>
@@ -82,18 +67,4 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- Footer -->
-  <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
-    <div class="flex justify-end">
-      <button
-        type="button"
-        (click)="onClose()"
-        class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition-colors"
-      >
-        Close
-      </button>
-    </div>
-  </div>
-</div>
+</app-modal-layout>

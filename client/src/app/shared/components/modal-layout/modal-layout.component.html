@@ -1,0 +1,53 @@
+<div class="max-h-[95vh]">
+  @if (showHeader) {
+    <div 
+      class="border border-white border-b-gray-300 p-3 px-6 flex justify-between items-center cursor-move"
+      [class]="headerClass"
+      cdkDrag 
+      cdkDragRootElement=".cdk-overlay-pane" 
+      cdkDragHandle>
+      <div>
+        <h3 class="text-md font-medium">{{ title }}</h3>
+        @if (subtitle) {
+          <p class="text-sm text-gray-500 mt-1">{{ subtitle }}</p>
+        }
+      </div>
+      <button 
+        (click)="onClose()" 
+        (mousedown)="$event.stopPropagation()"
+        class="bg-gray-200 rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center hover:bg-gray-300 transition-colors flex-shrink-0"
+        type="button">
+        <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+      </button>
+    </div>
+  }
+
+  <div 
+    class="flex flex-col mx-auto text-gray-900 bg-white rounded-lg shadow overflow-y-scroll"
+    [style.max-height]="contentMaxHeight"
+    [class]="contentClass">
+    <ng-content></ng-content>
+  </div>
+
+  @if (showFooter && footerButtons.length > 0) {
+    <div 
+      class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2"
+      [class]="footerClass">
+      <div class="flex gap-2">
+        @for (button of footerButtons; track button.label) {
+          <app-btn
+            [theme]="button.theme || 'primary'"
+            [type]="button.type || 'button'"
+            [loading]="button.loading || false"
+            [disabled]="button.disabled || false"
+            (buttonClick)="button.onClick()">
+            @if (button.icon) {
+              <ng-icon [name]="button.icon" class="w-4 h-4 mr-1"></ng-icon>
+            }
+            {{ button.label }}
+          </app-btn>
+        }
+      </div>
+    </div>
+  }
+</div>

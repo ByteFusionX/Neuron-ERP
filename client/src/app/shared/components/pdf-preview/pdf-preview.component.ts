@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { CommonModule } from '@angular/common';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 
 @Component({
     selector: 'app-pdf-preview',
@@ -22,13 +23,20 @@ export class PdfPreviewComponent {
 
   constructor(
     public dialogRef: MatDialogRef<PdfPreviewComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { url: string, formatedQuote: any, type?: 'quotation' | 'purchase' | 'grn' },
+    @Inject(MAT_DIALOG_DATA) public data: { url: string, formatedQuote: any, type?: 'quotation' | 'purchase' | 'grn' | 'delivery-note' },
     private _quoteService: QuotationService,
-    private _purchaseService: PurchaseService
+    private _purchaseService: PurchaseService,
+    private _dnService: DeliveryNoteService
   ) {
-    this.url = data.url;
+    if (data.url) {
+      this.url = data.url;
+    } else if (data.type === 'delivery-note') {
+      this.previewQuote();
+    }
     dialogRef.beforeClosed().subscribe((result) => {
-      this.pdfViewer.ngOnDestroy();
+      if (this.pdfViewer) {
+        this.pdfViewer.ngOnDestroy();
+      }
     });
   }
 
@@ -48,13 +56,21 @@ export class PdfPreviewComponent {
         this.url = url;
       });
     }
-    else {
-    const pdfDoc = await this._quoteService.generatePDF(this.data.formatedQuote, this.includeStamp);
+    else if(this.data.type === 'delivery-note') {
+      const pdfDoc = await this._dnService.generatePDF(this.data.formatedQuote, this.includeStamp);
       pdfDoc.getBlob((blob: Blob) => {
-      let url = window.URL.createObjectURL(blob);
-      this.isPreviewing = false;
+        let url = window.URL.createObjectURL(blob);
+        this.isPreviewing = false;
         this.url = url;
       });
-    };
+    }
+    else {
+      const pdfDoc = await this._quoteService.generatePDF(this.data.formatedQuote, this.includeStamp);
+      pdfDoc.getBlob((blob: Blob) => {
+        let url = window.URL.createObjectURL(blob);
+        this.isPreviewing = false;
+        this.url = url;
+      });
+    }
   }
 }

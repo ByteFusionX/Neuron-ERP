@@ -1,4 +1,4 @@
-<div class="w-full">
+<div class="w-full min-w-96">
   <!-- Header Section -->
   <div class="flex items-center justify-between p-6 border-b">
     <div class="flex items-center">
@@ -34,10 +34,9 @@
       <ng-container *ngIf="(notifications$ | async) as notifications">
         <ng-container *ngIf="notifications.unviewed.length > 0; else noUnread">
           <div *ngFor="let notification of notifications.unviewed">
-            <!-- Notification Card -->
             <div
-              class="flex items-center bg-white hover:bg-gray-50 transition duration-200 border-b px-6 py-3 rounded-lg">
-              <!-- Icon -->
+              (click)="onNotificationClick(notification)"
+              class="flex items-center bg-white hover:bg-gray-50 transition duration-200 border-b px-6 py-3 rounded-lg cursor-pointer">
               <div  [ngClass]="{
                 'bg-blue-100': notification.type === 'Event'
               }" class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full text-white">
@@ -50,11 +49,20 @@
               <!-- Notification Content -->
               <div class="ml-4 w-full">
                 <div class="flex justify-between items-center gap-2 relative">
-                  <!-- Notification Details -->
                   <div>
-                    <h3 class="text-lg font-semibold text-gray-800">{{ notification.title }}
-                    </h3>
-                    <p class="text-gray-600 mt-1">{{ notification.message }}</p>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h3 class="text-lg font-semibold text-gray-800">
+                        {{ notification.title }}
+                      </h3>
+                      <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                        {{ notification.type | titlecase }}
+                      </span>
+                      <span *ngIf="notification.type === 'Event' && notification.referenceId?.event"
+                        class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                        {{ notification.referenceId.event }}
+                      </span>
+                    </div>
+                    <p class="text-gray-600 mt-1 break-words whitespace-normal max-w-sm leading-relaxed">{{ notification.message }}</p>
                     <p class="text-sm text-gray-500 mt-2 flex items-center gap-2">
                       <span *ngIf="notification.sentBy.avatar"
                         class="flex-shrink-0 w-6 h-6 rounded-full overflow-hidden">
@@ -78,7 +86,7 @@
                   <div class="flex flex-col items-end gap-2 h-full justify-between">
                     <button
                       class="text-sm text-blue-600 hover:text-blue-400 hover:bg-blue-50 px-3 py-1 rounded-lg border border-blue-400"
-                      (click)="onMarkAsRead(notification._id)">
+                      (click)="onMarkAsRead(notification._id); $event.stopPropagation()">
                       Mark as Read
                     </button>
                   </div>
@@ -109,10 +117,9 @@
       <ng-container *ngIf="(notifications$ | async) as notifications">
         <ng-container *ngIf="notifications.viewed.length > 0; else noRead">
           <div *ngFor="let notification of notifications.viewed">
-            <!-- Notification Card -->
             <div
-              class="flex items-center bg-white hover:bg-gray-50 transition duration-200 border-b px-6 py-3 rounded-lg">
-              <!-- Icon -->
+              (click)="onNotificationClick(notification)"
+              class="flex items-center bg-white hover:bg-gray-50 transition duration-200 border-b px-6 py-3 rounded-lg cursor-pointer">
               <div  [ngClass]="{
                 'bg-blue-100': notification.type === 'Event'
               }" class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full text-white">
@@ -121,14 +128,23 @@
                 class="text-2xl text-blue-600">
                 </ng-icon>
               </div>
-              <!-- Notification Content -->
               <div class="ml-4 w-full">
                 <div class="flex justify-between items-center gap-2 relative">
-                  <!-- Notification Details -->
                   <div>
-                    <h3 class="text-lg font-semibold text-gray-800">{{ notification.title }}</h3>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h3 class="text-lg font-semibold text-gray-800">
+                        {{ notification.title }}
+                      </h3>
+                      <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                        {{ notification.type | titlecase }}
+                      </span>
+                      <span *ngIf="notification.type === 'Event' && notification.referenceId?.event"
+                        class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                        {{ notification.referenceId.event }}
+                      </span>
+                    </div>
 
-                    <p class="text-gray-600 mt-1">{{ notification.message }}</p>
+                    <p class="text-gray-600 mt-1 break-words whitespace-normal max-w-sm leading-relaxed">{{ notification.message }}</p>
                     <p class="text-sm text-gray-500 mt-2 flex items-center gap-2">
                       <span *ngIf="notification.sentBy.avatar"
                         class="flex-shrink-0 w-6 h-6 rounded-full overflow-hidden">
@@ -165,5 +181,4 @@
     </ng-container>
 
   </div>
-
 </div>

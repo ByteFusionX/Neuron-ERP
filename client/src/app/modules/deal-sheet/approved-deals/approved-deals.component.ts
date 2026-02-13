@@ -219,7 +219,6 @@ export class ApprovedDealsComponent {
 
   markQuoteAsViewed(quoteIds: string) {
     this._quoteService.markDealAsViewed(quoteIds).pipe(takeUntil(this.destroy$)).subscribe();
-    this._notificationService.decrementNotificationCount('dealSheet', 1)
   }
 
   onPreviewDeal(approval: boolean, quoteData: Quotatation, index: number) {

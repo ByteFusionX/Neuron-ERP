@@ -134,6 +134,7 @@ const checkTodayEventsAndSendNotifications = async () => {
             // Create and send notifications for each event
             const saveNewNotification = await createNotification({
                 type: 'Event',
+                referenceModel: 'Event',
                 title: `You have ${event.event} Assigned Today!`,
                 message: `${event.summary}`,
                 date: new Date(),

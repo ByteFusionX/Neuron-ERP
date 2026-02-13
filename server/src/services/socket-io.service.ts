@@ -27,7 +27,7 @@ export const socketConnection = async (socketIo:Server) => {
             socket.on('auth', async (token) => {
                 const microsoftPayload = jwt.decode(token)
                 const employeeData = await getEmployeeData(microsoftPayload)
-                const userId = employeeData._id;
+                const userId = employeeData._id.toString();
                 connectedSockets[userId] = socket.id;
                 socket.join(userId)
             })

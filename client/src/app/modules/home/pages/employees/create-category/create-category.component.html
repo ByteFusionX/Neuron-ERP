@@ -1,394 +1,721 @@
-<div class="  border border-white border-b-gray-300 p-3 px-6 flex justify-between">
-    <h3 class="text-md font-medium">Create Category</h3>
-    <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
-        <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-    </button>
-</div>
-
-<form [formGroup]="categoryForm" (ngSubmit)="onSubmit()">
-    <div class="flex flex-col p-6 mx-auto max-w-3xl  text-gray-900 bg-white rounded-lg  shadow px-9">
-        <div class="w-full max-w-6xl">
-            <div class="flex flex-wrap -mx-3 mb-6">
-
-                <div class="w-full md:w-1/2 px-3">
-                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-                        for="categoryName">
-                        Category Name
-                    </label>
-                    <input formControlName="categoryName" id="categoryName" appNoLeadingSpace
-                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                        type="text" placeholder="Sales">
-                    <div class="text-red-700 text-xs mt-1 absolute mb-1"
-                        *ngIf="categoryForm.get('categoryName')?.hasError('required') && categoryForm.get('categoryName')?.touched">
-                        This field is Required
-                    </div>
-                </div>
-                <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0 ">
-                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="role">
-                        User Role
-                    </label>
-                    <div class="relative">
-                        <select formControlName="role" id="role"
-                            class="block appearance-none w-full bg-gray-200 border border-gray-200 text-gray-700 py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500">
-                            <option value="superAdmin">Super Admin</option>
-                            <option value="admin">Admin</option>
-                            <option value="user">User</option>
-                        </select>
-                        <div
-                            class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                            <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                            </svg>
-                        </div>
-                    </div>
-                    <div class="text-red-700 text-xs mt-1 absolute mb-1"
-                        *ngIf="categoryForm.get('role')?.hasError('required') && categoryForm.get('role')?.touched">
-                        This field is Required
-                    </div>
-                </div>
-                <div class="ml-3 mt-2">
-                    <input type="checkbox" id="targetCheck" class="mr-2" formControlName="isSalespersonWithTarget">
-                    <label for="targetCheck">Salesperson with assigned target</label>
-                </div>
+<app-page-layout
+  title="Create Category"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="footerButtons"
+  contentClass="p-8">
+  <form [formGroup]="categoryForm" (ngSubmit)="onSubmit()" class="w-full">
+    <div class="w-full max-w-6xl mx-auto space-y-8">
+      <div class="bg-gray-50 rounded-lg p-6 border border-gray-200 w-full">
+        <h2 class="text-lg font-semibold text-gray-800 mb-6">Basic Information</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700" for="categoryName">
+              Category Name <span class="text-red-500">*</span>
+            </label>
+            <input formControlName="categoryName" id="categoryName" appNoLeadingSpace
+              class="w-full bg-white text-gray-900 border border-gray-300 rounded-lg py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
+              type="text" placeholder="Enter category name">
+            <div class="text-red-600 text-xs mt-1 min-h-[16px]"
+              *ngIf="categoryForm.get('categoryName')?.hasError('required') && categoryForm.get('categoryName')?.touched">
+              This field is required
             </div>
-            
-
-            <div class="max-h-[50vh] overflow-y-scroll">
-                <h3 class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">Access</h3>
-                <div class="flex flex-col" formGroupName="privileges">
-
-                    <!--- Dashboard -->
-                    <div formGroupName="dashboard">
-                        <div>
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="dashboardView">Dashobard</label>
-                        </div>
-                        <div class="ml-1.5 border-l">
-                            <div class="ml-3">
-                                <label><input type="checkbox" class="mr-2" checked disabled>Comparison of Revenue and Gross Profit</label>
-                            </div>
-                            <div class="ml-4 border-l">
-                                <div class="ml-3">
-                                    <input type="radio" value="company" id="companyTarget" class="mr-2"
-                                        formControlName="compareAgainst">
-                                    <label for="companyTarget">against company targets</label>
-                                </div>
-                                <div class="ml-3">
-                                    <input type="radio" value="personal" id="personalTarget" class="mr-2" formControlName="compareAgainst">
-                                    <label for="personalTarget">against personal targets</label>
-                                </div>
-                                <div class="ml-3">
-                                    <input type="radio" value="both" id="bothPersonalAndCompany" class="mr-2" formControlName="compareAgainst">
-                                    <label for="bothPersonalAndCompany">against both company and personal targets</label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!--- Employee -->
-                    <div>
-                        <input type="checkbox" id="employee" class="mr-2"
-                            (change)="onCheckboxChange($event,'employee','employeeChecked')">
-                        <label for="employee">Employees</label>
-                    </div>
-                    <div class="ml-1.5 border-l" *ngIf="employeeChecked" formGroupName="employee">
-                        <div class="ml-3">
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="employeeView">View Employee Datas</label>
-                        </div>
-                        <div class="ml-[1.125rem] border-l">
-                            <div class="ml-3">
-                                <input type="radio" id="employeeAllData" class="mr-2" value="all"
-                                    formControlName="viewReport">
-                                <label for="employeeAllData">View All Employees</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="employeeAllReportedData" class="mr-2" value="reported"
-                                    formControlName="viewReport">
-                                <label for="employeeAllReportedData">View All Employees that is reported to the
-                                    User</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="employeeAllCreatedData" class="mr-2" value="created"
-                                    formControlName="viewReport">
-                                <label for="employeeAllCreatedData">View All Employees that User Created</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="employeeAllCreatedAndReportedData" class="mr-2"
-                                    value="createdAndReported" formControlName="viewReport">
-                                <label for="employeeAllCreatedAndReportedData">View All Employees that User Created and
-                                    Reported to the User</label>
-                            </div>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="employeeCreate" class="mr-2" formControlName="create">
-                            <label for="employeeCreate">Create Employees</label>
-                        </div>
-                    </div>
-
-                    <!--- Announcement -->
-                    <div>
-                        <input type="checkbox" id="announcements" class="mr-2"
-                            (change)="onCheckboxChange($event,'announcement','announcementChecked')">
-                        <label for="announcements">Announcements</label>
-                    </div>
-                    <div *ngIf="announcementChecked" formGroupName="announcement">
-                        <div class="ml-4">
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="customerView">View All Announcements</label>
-                        </div>
-                        <div class="ml-4">
-                            <input type="checkbox" id="createAnnouncement" class="mr-2" formControlName="create">
-                            <label for="createAnnouncement">Create Announcement</label>
-                        </div>
-                        <div class="ml-4">
-                            <input type="checkbox" id="deleteOrEditAnnouncement" class="mr-2" formControlName="deleteOrEdit">
-                            <label for="deleteOrEditAnnouncement">Delete or Edit Announcement</label>
-                        </div>
-                    </div>
-
-                    <!--- Customer -->
-                    <div>
-                        <input type="checkbox" id="customer" class="mr-2"
-                            (change)="onCheckboxChange($event,'customer','customerChecked')">
-                        <label for="customer">Customer</label>
-                    </div>
-                    <div class="ml-1.5 border-l" *ngIf="customerChecked" formGroupName="customer">
-                        <div class="ml-3">
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="customerView">View Customer Datas</label>
-                        </div>
-                        <div class="ml-[1.125rem] border-l">
-                            <div class="ml-3">
-                                <input type="radio" id="customerAllData" class="mr-2" formControlName="viewReport"
-                                    value="all">
-                                <label for="customerAllData">View All Customers</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="customerPersonalData" class="mr-2" formControlName="viewReport"
-                                    value="created">
-                                <label for="customerPersonalData">View Customers that user Created</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="customerReportedData" class="mr-2" formControlName="viewReport"
-                                    value="reported">
-                                <label for="customerReportedData">View Customers that reported to User
-                                </label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="customerPersonalReportedData" class="mr-2"
-                                    formControlName="viewReport" value="createdAndReported">
-                                <label for="customerPersonalReportedData">View Customers that user Created and reported
-                                    to User
-                                    Created</label>
-                            </div>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="customerCreate" class="mr-2" formControlName="create">
-                            <label for="customerCreate">Create Customer</label>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="customerShare" class="mr-2" formControlName="share">
-                            <label for="customerShare">Share Customer to other employees</label>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="customerTransfer" class="mr-2" formControlName="transfer">
-                            <label for="customerTransfer">Transfer Customer to other employees</label>
-                        </div>
-                    </div>
-
-                    <!--- Enquiry -->
-                    <div>
-                        <input type="checkbox" id="enquiry" class="mr-2"
-                            (change)="onCheckboxChange($event,'enquiry','enquiryChecked')">
-                        <label for="enquiry">Enquiry</label>
-                    </div>
-                    <div *ngIf="enquiryChecked" class="ml-1.5 border-l" formGroupName="enquiry">
-                        <div class="ml-3">
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="enquiryData">View Enquiry Datas</label>
-                        </div>
-                        <div class="ml-[1.125rem] border-l">
-                            <div class="ml-3">
-                                <input type="radio" id="enquiryAllData" class="mr-2" formControlName="viewReport"
-                                    value="all">
-                                <label for="enquiryAllData">View All Enquiries</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="enquiryPersonalData" class="mr-2" formControlName="viewReport"
-                                    value="created">
-                                <label for="enquiryPersonalData">View Enquiries that user Created</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="enquiryReportedData" class="mr-2" formControlName="viewReport"
-                                    value="reported">
-                                <label for="enquiryReportedData">View Customers that reported to User
-                                </label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="enquiryPersonalReportedData" class="mr-2"
-                                    formControlName="viewReport" value="createdAndReported">
-                                <label for="enquiryPersonalReportedData">View Enquiries that user Created and reported
-                                    User
-                                    Created</label>
-                            </div>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="enquiryCreate" class="mr-2" formControlName="create">
-                            <label for="enquiryCreate">Create/Delete Enquiry</label>
-                        </div>
-                    </div>
-
-                    <!--- Assigned Jobs -->
-                    <div>
-                        <input type="checkbox" id="assignedJobs" class="mr-2"
-                            (change)="onCheckboxChange($event,'assignedJob','assignedJobsChecked')">
-                        <label for="assignedJobs">Assigned Jobs</label>
-                    </div>
-                    <div *ngIf="assignedJobsChecked" class="ml-1.5 border-l" formGroupName="assignedJob">
-                        <div class="ml-4">
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="assignedJobsData">View Assigned Jobs</label>
-                        </div>
-                        <div class="ml-[1.125rem] border-l">
-                            <div class="ml-3">
-                                <input type="radio" id="AllAssignedJobs" class="mr-2" formControlName="viewReport"
-                                    value="all">
-                                <label for="AllAssignedJobs">View All Presale Jobs (Presale Manger / Super Admin)</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="AssignedJobUser" class="mr-2" formControlName="viewReport"
-                                    value="assigned">
-                                <label for="AssignedJobUser">View Presale Jobs that Assigned to the user (Presale Engineer)</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!--- Quotations -->
-                    <div>
-                        <input type="checkbox" id="quotations" class="mr-2"
-                            (change)="onCheckboxChange($event,'quotation','quotationChecked')">
-                        <label for="quotations">Quotation</label>
-                    </div>
-                    <div *ngIf="quotationChecked" class="ml-1.5 border-l" formGroupName="quotation">
-                        <div class="ml-3">
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="quotationData">View Quotation Datas</label>
-                        </div>
-                        <div class="ml-[1.125rem] border-l">
-                            <div class="ml-3">
-                                <input type="radio" id="quotationAllData" class="mr-2" formControlName="viewReport"
-                                    value="all">
-                                <label for="quotationAllData">View All Quotations</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="quotationPersonalData" class="mr-2" formControlName="viewReport"
-                                    value="created">
-                                <label for="quotationPersonalData">View Quotations that user Created</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="quotationReportedData" class="mr-2" formControlName="viewReport"
-                                    value="reported">
-                                <label for="quotationReportedData">View Quotations that reported to User
-                                    Created</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="quotationPersonalReportedData" class="mr-2"
-                                    formControlName="viewReport" value="createdAndReported">
-                                <label for="quotationPersonalReportedData">View Quotations that user Created and
-                                    reported to User
-                                    Created</label>
-                            </div>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="quotationCreate" class="mr-2" formControlName="create">
-                            <label for="quotationCreate">Create Quotations</label>
-                        </div>
-                    </div>
-
-                    <!--- Deal Sheet -->
-                    <div>
-                        <input type="checkbox" id="dealSheet" class="mr-2" formControlName="dealSheet">
-                        <label for="dealSheet">Deal Sheet Approval</label>
-                    </div>
-
-                    <!--- Job Sheet -->
-                    <div>
-                        <input type="checkbox" id="jobSheet" class="mr-2"
-                            (change)="onCheckboxChange($event,'jobSheet','jobSheetChecked')">
-                        <label for="jobSheet">Job Sheet</label>
-                    </div>
-                    <div *ngIf="jobSheetChecked" class="ml-1.5 border-l" formGroupName="jobSheet">
-                        <div class="ml-4">
-                            <input type="checkbox" checked disabled class="mr-2">
-                            <label for="jobSheetData">View Job Sheet</label>
-                        </div>
-                        <div class="ml-[1.125rem] border-l">
-                            <div class="ml-3">
-                                <input type="radio" id="jobSheetAllData" class="mr-2" formControlName="viewReport"
-                                    value="all">
-                                <label for="jobSheetAllData">View All Job Sheet</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="jobSheetPersonalData" class="mr-2" formControlName="viewReport"
-                                    value="created">
-                                <label for="jobSheetPersonalData">View Jobs that user Created</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="jobSheetReportedData" class="mr-2" formControlName="viewReport"
-                                    value="reported">
-                                <label for="jobSheetReportedData">View Quotations that reported to User Created</label>
-                            </div>
-                            <div class="ml-3">
-                                <input type="radio" id="jobSheetPersonalReportedData" class="mr-2"
-                                    formControlName="viewReport" value="createdAndReported">
-                                <label for="jobSheetPersonalReportedData">View Jobs that user Created and reported User
-                                    Created</label>
-                            </div>
-                        </div>
-                    </div>
-                    <!--- Portal -->
-                    <div>
-                        <input type="checkbox" id="portal" class="mr-2"
-                            (change)="onCheckboxChange($event,'portal','portalChecked')">
-                        <label for="portal">Portal Management</label>
-                    </div>
-                    <div class="ml-1.5 border-l" *ngIf="portalChecked" formGroupName="portalManagement">
-
-                        <div class="ml-3">
-                            <input type="checkbox" id="department" class="mr-2" formControlName="department">
-                            <label for="department">Department (Create/edit/delete)</label>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="notesAndTerms" class="mr-2" formControlName="notesAndTerms">
-                            <label for="notesAndTerms">Customer Note & Terms and Condition (Create/edit/delete)</label>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="companyTarget" class="mr-2" formControlName="companyTarget">
-                            <label for="companyTarget">Company Target (Create/edit)</label>
-                        </div>
-                        <div class="ml-3">
-                            <input type="checkbox" id="customerType" class="mr-2" formControlName="customerType">
-                            <label for="customerType">Customer Type (Create/edit)</label>
-                        </div>
-                    </div>
-                </div>
+          </div>
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700" for="role">
+              User Role <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+              <select formControlName="role" id="role"
+                class="w-full bg-white border border-gray-300 text-gray-900 py-2.5 px-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent appearance-none transition-all">
+                <option value="">Select a role</option>
+                <option value="superAdmin">Super Admin</option>
+                <option value="admin">Admin</option>
+                <option value="user">User</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
             </div>
+            <div class="text-red-600 text-xs mt-1 min-h-[16px]"
+              *ngIf="categoryForm.get('role')?.hasError('required') && categoryForm.get('role')?.touched">
+              This field is required
+            </div>
+          </div>
         </div>
-        <p class="text-red-600 text-sm mt-2" *ngIf="error">{{error}}</p>
-    </div>
+        <div class="mt-6 pt-6 border-t border-gray-200">
+          <label class="flex items-center space-x-3 cursor-pointer group">
+            <input type="checkbox" id="targetCheck" formControlName="isSalespersonWithTarget"
+              class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 focus:ring-2 cursor-pointer">
+            <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Salesperson with assigned target</span>
+          </label>
+        </div>
+      </div>
 
-    <div class="  border border-white border-t-gray-300 p-3 px-6 flex justify-end gap-2">
-        <button (click)="onClose()" type="button"
-            class="bg-violet-200 hover:bg-violet-300 text-black font-medium py-2 px-4 rounded text-sm">
-            Cancel
-        </button>
-        <button type="submit"
-            class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm  flex justify-center items-center gap-2 disabled:bg-violet-400 disabled:cursor-not-allowed"
-            [disabled]="!categoryForm.valid">
-            <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
+      <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-800 mb-6">Access Privileges</h2>
+        <div class=" pr-2 space-y-4">
+          <div class="flex flex-col space-y-4" formGroupName="privileges">
+            <div formGroupName="dashboard" class="bg-white rounded-lg p-4 border border-gray-200">
+              <div class="flex items-center space-x-3 mb-4">
+                <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                <label class="text-base font-semibold text-gray-800">Dashboard</label>
+              </div>
+              <div class="ml-7 space-y-3 border-l-2 border-violet-200 pl-4">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">Comparison of Revenue and Gross Profit</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" value="company" id="companyTarget" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="compareAgainst">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">Against company targets</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" value="personal" id="personalTarget" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="compareAgainst">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">Against personal targets</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" value="both" id="bothPersonalAndCompany" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="compareAgainst">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">Against both company and personal targets</span>
+                  </label>
+                </div>
+              </div>
+            </div>
 
-            Create
-        </button>
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="employee">
+                <input type="checkbox" id="employee" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'employee','employeeChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Employees</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="employeeChecked" formGroupName="employee">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Employee Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="employeeAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      value="all" formControlName="viewReport">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Employees</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="employeeAllReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      value="reported" formControlName="viewReport">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Employees reported to the User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="employeeAllCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      value="created" formControlName="viewReport">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Employees that User Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="employeeAllCreatedAndReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      value="createdAndReported" formControlName="viewReport">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Employees that User Created and Reported to</span>
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="employeeCreate" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="create">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Create Employees</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="announcements">
+                <input type="checkbox" id="announcements" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'announcement','announcementChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Announcements</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3" *ngIf="announcementChecked" formGroupName="announcement">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View All Announcements</label>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" id="createAnnouncement" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="create">
+                  <label for="createAnnouncement" class="text-sm font-medium text-gray-700 cursor-pointer">Create Announcement</label>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" id="deleteOrEditAnnouncement" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="deleteOrEdit">
+                  <label for="deleteOrEditAnnouncement" class="text-sm font-medium text-gray-700 cursor-pointer">Delete or Edit Announcement</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="customer">
+                <input type="checkbox" id="customer" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'customer','customerChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Customer</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="customerChecked" formGroupName="customer">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Customer Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="customerAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Customers</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="customerPersonalData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Customers that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="customerReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Customers that reported to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="customerPersonalReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Customers that user Created and reported to</span>
+                  </label>
+                </div>
+                <div class="mt-3 space-y-2">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="customerCreate" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="create">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Create Customer</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="customerShare" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="share">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Share Customer to other employees</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="customerTransfer" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="transfer">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Transfer Customer to other employees</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="enquiry">
+                <input type="checkbox" id="enquiry" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'enquiry','enquiryChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Enquiry</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="enquiryChecked" formGroupName="enquiry">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Enquiry Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="enquiryAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Enquiries</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="enquiryPersonalData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Enquiries that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="enquiryReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Enquiries that reported to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="enquiryPersonalReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Enquiries that user Created and reported to</span>
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="enquiryCreate" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="create">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Create/Delete Enquiry</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="assignedJobs">
+                <input type="checkbox" id="assignedJobs" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'assignedJob','assignedJobsChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Assigned Jobs</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="assignedJobsChecked" formGroupName="assignedJob">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Assigned Jobs</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="AllAssignedJobs" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Presale Jobs (Presale Manager / Super Admin)</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="AssignedJobUser" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="assigned">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Presale Jobs Assigned to the user (Presale Engineer)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="quotations">
+                <input type="checkbox" id="quotations" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'quotation','quotationChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Quotation</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="quotationChecked" formGroupName="quotation">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Quotation Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="quotationAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Quotations</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="quotationPersonalData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Quotations that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="quotationReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Quotations that reported to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="quotationPersonalReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Quotations that user Created and reported to</span>
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="quotationCreate" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="create">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Create Quotations</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group">
+                <input type="checkbox" id="dealSheet" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  formControlName="dealSheet">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Deal Sheet Approval</span>
+              </label>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="jobSheet">
+                <input type="checkbox" id="jobSheet" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'jobSheet','jobSheetChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Job Sheet</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="jobSheetChecked" formGroupName="jobSheet">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Job Sheet</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="jobSheetAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Job Sheets</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="jobSheetPersonalData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Jobs that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="jobSheetReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Jobs that reported to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="jobSheetPersonalReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Jobs that user Created and reported to User</span>
+                  </label>
+                </div>
+                <div class="mt-3 space-y-2">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="jobSheetAllocateJobs" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="allocateJobs">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Allocate Jobs</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="jobSheetConvertToPurchase" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="convertToPurchase">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Convert Jobs to Purchase</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="jobSheetTransferProcurement" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="transferProcurementPerson">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Transfer Procurement Person</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="purchase">
+                <input type="checkbox" id="purchase" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'purchase','purchaseChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Purchase</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="purchaseChecked" formGroupName="purchase">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Purchase Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="purchaseAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Purchases</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="purchaseReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Purchases that report to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="purchaseCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Purchases that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="purchaseCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Purchases that user Created and report to User</span>
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="purchaseCanApprovePR" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="canApprovePR">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Approve Purchase Requisitions</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="purchaseOrder">
+                <input type="checkbox" id="purchaseOrder" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'purchaseOrder','purchaseOrderChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Purchase Order</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="purchaseOrderChecked" formGroupName="purchaseOrder">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Purchase Order Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="poAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Purchase Orders</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="poReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Purchase Orders that report to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="poCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Purchase Orders that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="poCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Purchase Orders that user Created and report to User</span>
+                  </label>
+                </div>
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="poInitiateLPO" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="canInitiateLPO">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Initiate LPO and Issue PO</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="poApprovePOs" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="canApprovePOs">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Approve Purchase Orders</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="poReissueRevoke" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="canReissueAndRevoke">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Re-issue and Revoke Purchase Orders</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="technical">
+                <input type="checkbox" id="technical" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'technical','technicalChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Technical</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="technicalChecked" formGroupName="technical">
+                <div class="space-y-2">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="techViewOpenToWork" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="canViewOpenToWorkAndAssign">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can View Open to Works and Assign to Engineer</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="techTransferEngineer" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="canTransferToEngineer">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Transfer to Another Engineer</span>
+                  </label>
+                </div>
+                <div class="flex items-center space-x-2 mt-3">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Pending Projects/AMC Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="techAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Pending Projects/AMC</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="techReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Pending Projects/AMC that report to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="techCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Pending Projects/AMC that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="techCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Pending Projects/AMC that user Created and report to User</span>
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="techApproveMR" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="canApproveMRRequests">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Approve MR Requests</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="supplier">
+                <input type="checkbox" id="supplier" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'supplier','supplierChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Supplier</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="supplierChecked" formGroupName="supplier">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Supplier Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="supplierAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Suppliers</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="supplierReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Suppliers that report to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="supplierCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Suppliers that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="supplierCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Suppliers that user Created and report to User</span>
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="supplierCanApprove" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="canApproveSupplier">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Approve Suppliers</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="inventory">
+                <input type="checkbox" id="inventory" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'inventory','inventoryChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Inventory</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="inventoryChecked" formGroupName="inventory">
+                <div class="space-y-4">
+                  <div formGroupName="products">
+                    <div class="flex items-center space-x-2 mb-2">
+                      <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                      <label class="text-sm font-medium text-gray-700">View Products Data</label>
+                    </div>
+                    <div class="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryProductsAll" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="all">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Products</span>
+                      </label>
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryProductsReported" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="reported">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View Products that report to User</span>
+                      </label>
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryProductsCreated" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="created">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View Products that user Created</span>
+                      </label>
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryProductsCreatedReported" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="createdAndReported">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View Products that user Created and report to User</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div formGroupName="stockEntries">
+                    <div class="flex items-center space-x-2 mb-2">
+                      <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                      <label class="text-sm font-medium text-gray-700">View Stock Entries Data</label>
+                    </div>
+                    <div class="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryStockAll" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="all">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Stock Entries</span>
+                      </label>
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryStockReported" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="reported">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View Stock Entries that report to User</span>
+                      </label>
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryStockCreated" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="created">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View Stock Entries that user Created</span>
+                      </label>
+                      <label class="flex items-center space-x-2 cursor-pointer group">
+                        <input type="radio" id="inventoryStockCreatedReported" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                          formControlName="viewReport" value="createdAndReported">
+                        <span class="text-sm text-gray-700 group-hover:text-gray-900">View Stock Entries that user Created and report to User</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="claims">
+                <input type="checkbox" id="claims" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'claims','claimsChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Claims</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="claimsChecked" formGroupName="claims">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View Claims Data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="claimsAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Claims</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="claimsReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Claims that report to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="claimsCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Claims that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="claimsCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Claims that user Created and report to User</span>
+                  </label>
+                </div>
+                <div class="mt-3">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="claimsCanApprove" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="canApprove">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Approve Claims</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="portal">
+                <input type="checkbox" id="portal" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'portal','portalChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Portal Management</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="portalChecked" formGroupName="portalManagement">
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="department" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="department">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Department (Create/edit/delete)</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="notesAndTerms" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="notesAndTerms">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Customer Note & Terms and Condition (Create/edit/delete)</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="companyTarget" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="companyTarget">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Company Target (Create/edit)</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="customerType" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="customerType">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Customer Type (Create/edit)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="text-red-600 text-sm mt-4 text-center" *ngIf="error">{{error}}</p>
     </div>
-</form>
+  </form>
+</app-page-layout>

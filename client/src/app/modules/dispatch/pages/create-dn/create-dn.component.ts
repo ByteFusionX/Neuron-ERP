@@ -1,5 +1,5 @@
 import { Component, Inject, OnInit, TemplateRef, ViewChild, inject, signal } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule, AbstractControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
@@ -13,6 +13,7 @@ import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { NgIconComponent } from '@ng-icons/core';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 
 @Component({
   selector: 'app-create-dn',
@@ -48,32 +49,187 @@ export class CreateDnComponent implements OnInit {
   stockEntries: StockEntry[] = [];
   isLoading = signal<boolean>(false);
   isSubmitting = signal<boolean>(false);
+  isSavingDraft = signal<boolean>(false);
+  draftLoaded = signal<boolean>(false);
+  loadedDraftNo = signal<string | null>(null);
   selectedJob: any = null;
   previousDns: any[] = [];
+  isEditMode: boolean = false;
+  draftDnId: string | null = null;
 
   dnForm: FormGroup = this.fb.group({
     jobId: ['', [Validators.required]],
     clientName: ['', [Validators.required]],
-    customerLpoNumber: [''],
+    customerLpoNumber: ['', [Validators.required]],
     dnNo: ['', [Validators.required]],
     dnDate: [new Date().toISOString().split('T')[0], [Validators.required]],
     subject: [''],
     items: this.fb.array([])
   });
 
-  // Inventory Modal Controls
   selectedInventoryItem: any = null;
   inventoryQty: number = 0;
 
+  serialNoInputs: Map<number, string> = new Map();
+  itemSerialNos: Map<number, string[]> = new Map();
+  selectedItems: Set<number> = new Set();
+
   ngOnInit(): void {
     this.loadJobIds();
-    this.generateDnNumber();
     this.loadStockEntries();
+
+    const editId = this.route.snapshot.queryParams['id'];
+    if (editId) {
+      this.loadDraftForEdit(editId);
+    } else {
+      this.generateDnNumber();
+    }
 
     // Watch for Job ID changes
     this.dnForm.get('jobId')?.valueChanges.subscribe(jobId => {
-      if (jobId) {
+      if (jobId && !this.isEditMode) {
         this.onJobSelect(jobId);
+      }
+    });
+
+    // Reset isSubmitting when form becomes valid
+    this.dnForm.statusChanges.subscribe(status => {
+      if (status === 'VALID' && this.isSubmitting()) {
+        this.isSubmitting.set(false);
+      }
+    });
+  }
+
+  loadDraftForEdit(dnId: string): void {
+    this.isLoading.set(true);
+    this.deliveryNoteService.getDnById(dnId).subscribe({
+      next: (dn) => {
+        this.isEditMode = true;
+        this.draftDnId = dn._id;
+        this.setDraftLoaded(dn);
+        this.loadDraftData(dn);
+        this.isLoading.set(false);
+      },
+      error: () => {
+        this.toastr.error('Failed to load draft DN');
+        this.router.navigate(['/dispatch/delivery-note-register']);
+        this.isLoading.set(false);
+      }
+    });
+  }
+
+  setDraftLoaded(dn: any): void {
+    this.draftLoaded.set(true);
+    this.loadedDraftNo.set(dn?.dnNo || null);
+    if (dn?.dnNo) {
+      this.toastr.info(`Draft loaded - ${dn.dnNo}`);
+    } else {
+      this.toastr.info('Draft loaded');
+    }
+  }
+
+  clearDraftLoaded(): void {
+    this.draftLoaded.set(false);
+    this.loadedDraftNo.set(null);
+  }
+
+  loadDraftData(dn: any): void {
+    this.dnForm.patchValue({
+      jobId: dn.jobId?._id || dn.jobId,
+      clientName: dn.clientName,
+      customerLpoNumber: dn.customerLpoNumber,
+      dnNo: dn.dnNo,
+      dnDate: dn.dnDate ? new Date(dn.dnDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      subject: dn.subject || ''
+    });
+
+    if (dn.jobId) {
+      const jobId = dn.jobId._id || dn.jobId;
+      this.jobService.getOneJob(jobId).subscribe({
+        next: (jobData: any) => {
+          const job = Array.isArray(jobData) ? jobData[0] : jobData;
+          this.selectedJob = job;
+          this.deliveryNoteService.getDnsByJobId(jobId).subscribe({
+            next: (dns) => {
+              this.previousDns = (dns || []).filter((d: any) => d._id !== dn._id);
+              this.populateItemsFromDraft(dn, job);
+            },
+            error: () => {
+              this.previousDns = [];
+              this.populateItemsFromDraft(dn, job);
+            }
+          });
+        }
+      });
+    }
+  }
+
+  populateItemsFromDraft(dn: any, job: any): void {
+    const itemsArray = this.items;
+    itemsArray.clear();
+    this.selectedItems.clear();
+    this.itemSerialNos.clear();
+    this.serialNoInputs.clear();
+
+    const quoteItems = job.quotation?.optionalItems?.flatMap((opt: any) => opt.items) || [];
+    let allItems: any[] = [];
+    if (job.quotation?.optionalItems) {
+      job.quotation.optionalItems.forEach((opt: any) => {
+        if (opt.items) {
+          opt.items.forEach((item: any) => {
+            if (item.itemDetails) {
+              allItems.push(...item.itemDetails.map((detail: any) => ({
+                ...detail,
+                itemName: item.itemName
+              })));
+            }
+          });
+        }
+      });
+    }
+
+    allItems.forEach((item: any, index: number) => {
+      const prevDelivered = this.getDeliveredQty(item._id);
+      const remaining = Math.max(0, item.quantity - prevDelivered);
+      const isFulfilled = remaining === 0;
+
+      let initialStatus = 'Pending';
+      if (isFulfilled) {
+        initialStatus = 'Delivered';
+      } else if (prevDelivered > 0) {
+        initialStatus = 'Partially Delivered';
+      }
+
+      const draftItem = dn.items?.find((di: any) => di.itemId === item._id);
+      const currentDeliveryQty = draftItem?.currentDeliveryQty || 0;
+      const serialNos = draftItem?.serialNos || [];
+
+      const group = this.fb.group({
+        slNo: [index + 1],
+        partNo: [item.partNo || item.itemName || ''],
+        description: [item.detail || item.itemDescription || ''],
+        orderedQty: [item.quantity],
+        deliveredQty: [prevDelivered],
+        currentDeliveryQty: [{ value: currentDeliveryQty, disabled: true }, [Validators.min(0), Validators.max(remaining)]],
+        serialNos: [''],
+        status: [initialStatus],
+        itemId: [item._id],
+        isInventoryItem: [draftItem?.isInventoryItem || false]
+      });
+
+      itemsArray.push(group);
+
+      if (currentDeliveryQty > 0) {
+        this.selectedItems.add(index);
+        const currentDeliveryControl = group.get('currentDeliveryQty');
+        currentDeliveryControl?.enable();
+        const balance = this.getBalanceQty(group);
+        currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
+        currentDeliveryControl?.updateValueAndValidity();
+      }
+
+      if (serialNos.length > 0) {
+        this.itemSerialNos.set(index, Array.isArray(serialNos) ? serialNos : [serialNos]);
       }
     });
   }
@@ -108,21 +264,45 @@ export class CreateDnComponent implements OnInit {
 
   onJobSelect(jobId: string): void {
     this.isLoading.set(true);
+    this.isEditMode = false;
+    this.draftDnId = null;
+    this.clearDraftLoaded();
 
-    // 1. Get Job Details and Materials
+    // Check for existing draft
+    this.deliveryNoteService.getDraftDnByJobId(jobId).subscribe({
+      next: (draftDn) => {
+        if (draftDn) {
+          this.isEditMode = true;
+          this.draftDnId = draftDn._id;
+          this.setDraftLoaded(draftDn);
+          this.loadDraftData(draftDn);
+          this.isLoading.set(false);
+        } else {
+          this.loadJobData(jobId);
+        }
+      },
+      error: () => {
+        this.loadJobData(jobId);
+      }
+    });
+  }
+
+  loadJobData(jobId: string): void {
     this.jobService.getOneJob(jobId).subscribe({
       next: (jobData: any) => {
         const job = Array.isArray(jobData) ? jobData[0] : jobData;
         this.selectedJob = job;
 
-        // Populate Header Info
         this.dnForm.patchValue({
           clientName: job.clientDetails?.companyName || job.client?.companyName || '',
           customerLpoNumber: job.purchaseNo || job.lpoNumber || '',
           subject: job.quotation?.subject || ''
         });
 
-        // 2. Get Previous DNs to calculate delivery status
+        if (!this.dnForm.get('dnNo')?.value) {
+          this.generateDnNumber();
+        }
+
         this.deliveryNoteService.getDnsByJobId(jobId).subscribe({
           next: (dns) => {
             this.previousDns = dns || [];
@@ -131,7 +311,8 @@ export class CreateDnComponent implements OnInit {
           },
           error: () => {
             this.toastr.error('Failed to load previous DNs');
-            this.populateItems(job); // Still populate even if history fails, assume 0 delivered? 
+            this.previousDns = [];
+            this.populateItems(job);
             this.isLoading.set(false);
           }
         });
@@ -146,6 +327,9 @@ export class CreateDnComponent implements OnInit {
   populateItems(job: any): void {
     const itemsArray = this.items;
     itemsArray.clear();
+    this.selectedItems.clear();
+    this.itemSerialNos.clear();
+    this.serialNoInputs.clear();
 
     const quoteItems = job.quotation?.optionalItems?.flatMap((opt: any) => opt.items) || [];
 
@@ -176,23 +360,24 @@ export class CreateDnComponent implements OnInit {
 
       const isFulfilled = remaining === 0;
 
+      let initialStatus = 'Pending';
+      if (isFulfilled) {
+        initialStatus = 'Delivered';
+      } else if (prevDelivered > 0) {
+        initialStatus = 'Partially Delivered';
+      }
+
       const group = this.fb.group({
         slNo: [index + 1],
-        partNo: [item.partNo || item.itemName || ''], // Quotation might not have partNo field directly in detailed items sometimes, checking interface
+        partNo: [item.partNo || item.itemName || ''],
         description: [item.detail || item.itemDescription || ''],
         orderedQty: [item.quantity],
         deliveredQty: [prevDelivered],
-        currentDeliveryQty: [{ value: 0, disabled: isFulfilled }, [Validators.required, Validators.min(0), Validators.max(remaining)]],
-        serialNos: [''], // Text field for comma separated or single
-        status: [isFulfilled ? 'Delivered' : 'Pending'],
-        itemId: [item._id], // To link back
+        currentDeliveryQty: [{ value: 0, disabled: true }, [Validators.min(0), Validators.max(remaining)]],
+        serialNos: [''],
+        status: [initialStatus],
+        itemId: [item._id],
         isInventoryItem: [false]
-      });
-
-      // Update total on change
-      group.get('currentDeliveryQty')?.valueChanges.subscribe(val => {
-        // Logic to update status dynamically if needed?
-        // But status is mostly for display of initial state or final state.
       });
 
       itemsArray.push(group);
@@ -200,12 +385,12 @@ export class CreateDnComponent implements OnInit {
   }
 
   getDeliveredQty(itemId: string): number {
-    // Sum up delivered qtys from previous DNs for this item
     let total = 0;
     this.previousDns.forEach(dn => {
+      if (dn.status === 'Cancelled' || dn.status === 'Draft') return;
       const matchedItem = dn.items?.find((i: any) => i.itemId === itemId);
       if (matchedItem) {
-        total += matchedItem.deliveredQty || 0;
+        total += matchedItem.currentDeliveryQty || 0;
       }
     });
     return total;
@@ -213,6 +398,90 @@ export class CreateDnComponent implements OnInit {
 
   get items(): FormArray {
     return this.dnForm.get('items') as FormArray;
+  }
+
+  getBalanceQty(itemControl: AbstractControl): number {
+    const orderedQty = itemControl.get('orderedQty')?.value || 0;
+    const deliveredQty = itemControl.get('deliveredQty')?.value || 0;
+    const balance = orderedQty - deliveredQty;
+    return balance > 0 ? balance : 0;
+  }
+
+  getSerialNos(index: number): string[] {
+    return this.itemSerialNos.get(index) || [];
+  }
+
+  getSerialNoInput(index: number): string {
+    return this.serialNoInputs.get(index) || '';
+  }
+
+  setSerialNoInput(index: number, value: string): void {
+    this.serialNoInputs.set(index, value);
+  }
+
+  addSerialNo(index: number): void {
+    const input = this.serialNoInputs.get(index)?.trim();
+    if (!input) return;
+
+    const currentList = this.itemSerialNos.get(index) || [];
+    if (currentList.includes(input)) {
+      this.toastr.warning('Serial number already added');
+      return;
+    }
+    currentList.push(input);
+    this.itemSerialNos.set(index, currentList);
+    this.serialNoInputs.set(index, '');
+  }
+
+  removeSerialNo(index: number, serialNo: string): void {
+    const currentList = this.itemSerialNos.get(index) || [];
+    const filtered = currentList.filter(s => s !== serialNo);
+    this.itemSerialNos.set(index, filtered);
+  }
+
+  onSerialNoKeydown(event: KeyboardEvent, index: number): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.addSerialNo(index);
+    }
+  }
+
+  isItemSelected(index: number): boolean {
+    return this.selectedItems.has(index);
+  }
+
+  toggleItemSelection(index: number): void {
+    const itemControl = this.items.at(index);
+    const status = itemControl?.get('status')?.value;
+    
+    if (status === 'Delivered') {
+      return;
+    }
+
+    const currentDeliveryControl = itemControl?.get('currentDeliveryQty');
+    
+    if (this.selectedItems.has(index)) {
+      this.selectedItems.delete(index);
+      currentDeliveryControl?.disable();
+      currentDeliveryControl?.clearValidators();
+      currentDeliveryControl?.setValue(0, { emitEvent: false });
+      currentDeliveryControl?.updateValueAndValidity();
+    } else {
+      this.selectedItems.add(index);
+      const balance = this.getBalanceQty(itemControl!);
+      currentDeliveryControl?.enable();
+      currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
+      currentDeliveryControl?.updateValueAndValidity();
+    }
+  }
+
+  isAllDelivered(): boolean {
+    if (this.items.length === 0) return false;
+    return this.items.controls.every(item => item.get('status')?.value === 'Delivered');
+  }
+
+  hasSelectedItems(): boolean {
+    return this.selectedItems.size > 0;
   }
 
   // Inventory Modal Logic
@@ -243,12 +512,12 @@ export class CreateDnComponent implements OnInit {
         description: [stockEntry.productDescription],
         orderedQty: [this.inventoryQty],
         deliveredQty: [0],
-        currentDeliveryQty: [this.inventoryQty, [Validators.required, Validators.min(0), Validators.max(this.inventoryQty)]],
+        currentDeliveryQty: [{ value: 0, disabled: true }, [Validators.min(0), Validators.max(this.inventoryQty)]],
         serialNos: [''],
         status: ['Pending'],
         itemId: [stockEntry._id],
         isInventoryItem: [true],
-        stockEntryId: [stockEntry._id] // Track stock entry for inventory deduction
+        stockEntryId: [stockEntry._id]
       });
       this.items.push(group);
       this.dialog.closeAll();
@@ -256,50 +525,237 @@ export class CreateDnComponent implements OnInit {
     }
   }
 
-  onPreview(): void {
-    this.toastr.info('Preview logic not implemented yet');
-  }
-
-  onSave(): void {
+  async onPreview(): Promise<void> {
     if (this.dnForm.invalid) {
       this.dnForm.markAllAsTouched();
+      this.isSubmitting.set(true);
+      setTimeout(() => {
+        if (this.dnForm.invalid) {
+          this.isSubmitting.set(false);
+        }
+      }, 100);
       this.toastr.warning('Please fill all required fields correctly');
       return;
     }
 
-    const formValue = this.dnForm.getRawValue(); // Get raw value to include disabled fields
-    // Filter out items with 0 delivery ? "users can deliver only part...". 
-    // Usually invalid to deliver 0 unless it's just skipping? 
-    // But we should probably send all items with their status.
-
-    // Construct payload
-    const payload = {
-      ...formValue,
-      items: formValue.items.map((item: any) => ({
-        ...item,
-        // Ensure we send serial numbers as array if needed, or string
-        serialNos: item.serialNos ? item.serialNos.split(',').map((s: string) => s.trim()) : []
-      }))
-    };
-
-    // Validations
-    const hasDelivery = payload.items.some((i: any) => i.currentDeliveryQty > 0);
-    if (!hasDelivery) {
-      this.toastr.warning('Please deliver at least one item');
+    if (!this.hasSelectedItems()) {
+      this.toastr.warning('Please select at least one item to preview');
       return;
     }
 
+    const formValue = this.dnForm.getRawValue();
+    const selectedIndices = Array.from(this.selectedItems);
+
+    const selectedItemsData = selectedIndices.map(index => {
+      const item = formValue.items[index];
+      const itemControl = this.items.at(index);
+      
+      if (!itemControl) {
+        return null;
+      }
+
+      const currentDeliveryQty = itemControl.get('currentDeliveryQty')?.value || 0;
+      
+      if (currentDeliveryQty <= 0) {
+        return null;
+      }
+
+      return {
+        ...item,
+        currentDeliveryQty: currentDeliveryQty,
+        serialNos: this.itemSerialNos.get(index) || []
+      };
+    }).filter(item => item !== null);
+
+    if (selectedItemsData.length === 0) {
+      this.toastr.warning('Please enter delivery quantity for selected items');
+      return;
+    }
+
+    const previewData = {
+      ...formValue,
+      items: selectedItemsData
+    };
+
+    try {
+      const pdfDoc = await this.deliveryNoteService.generatePDF(previewData, true);
+      pdfDoc.getBlob((blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        this.dialog.open(PdfPreviewComponent, {
+          height: '90vh',
+          maxWidth: '1200px',
+          data: {
+            url: url,
+            formatedQuote: previewData,
+            type: 'delivery-note'
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      this.toastr.error('Failed to generate PDF preview');
+    }
+  }
+
+  onSaveDraft(): void {
+    const formValue = this.dnForm.getRawValue();
+    const selectedIndices = Array.from(this.selectedItems);
+
+    const selectedItemsData = selectedIndices.map(index => {
+      const item = formValue.items[index];
+      const itemControl = this.items.at(index);
+      
+      if (!itemControl) {
+        return null;
+      }
+
+      const currentDeliveryQty = itemControl.get('currentDeliveryQty')?.value || 0;
+      
+      if (currentDeliveryQty <= 0) {
+        return null;
+      }
+
+      return {
+        ...item,
+        currentDeliveryQty: currentDeliveryQty,
+        serialNos: this.itemSerialNos.get(index) || []
+      };
+    }).filter(item => item !== null);
+
+    const payload = {
+      ...formValue,
+      items: selectedItemsData,
+      status: 'Draft'
+    };
+
+    this.isSavingDraft.set(true);
+
+    if (this.isEditMode && this.draftDnId) {
+      this.deliveryNoteService.updateDn(this.draftDnId, payload).subscribe({
+        next: () => {
+          this.toastr.success('Draft saved successfully');
+          this.isSavingDraft.set(false);
+          this.router.navigate(['/dispatch/delivery-note-register']);
+        },
+        error: (err) => {
+          this.toastr.error(err.error?.message || 'Failed to save draft');
+          this.isSavingDraft.set(false);
+        }
+      });
+    } else {
+      this.deliveryNoteService.createDn(payload).subscribe({
+        next: () => {
+          this.toastr.success('Draft saved successfully');
+          this.isSavingDraft.set(false);
+          this.router.navigate(['/dispatch/delivery-note-register']);
+        },
+        error: (err) => {
+          this.toastr.error(err.error?.message || 'Failed to save draft');
+          this.isSavingDraft.set(false);
+        }
+      });
+    }
+  }
+
+  onPostDn(): void {
+    if (this.dnForm.invalid) {
+      this.dnForm.markAllAsTouched();
+      this.isSubmitting.set(true);
+      setTimeout(() => {
+        if (this.dnForm.invalid) {
+          this.isSubmitting.set(false);
+        }
+      }, 100);
+      this.toastr.warning('Please fill all required fields correctly');
+      return;
+    }
+
+    if (this.isAllDelivered()) {
+      this.toastr.warning('All items are already delivered');
+      return;
+    }
+
+    if (!this.hasSelectedItems()) {
+      this.toastr.warning('Please select at least one item to deliver');
+      return;
+    }
+
+    const formValue = this.dnForm.getRawValue();
+    const selectedIndices = Array.from(this.selectedItems);
+
+    const selectedItemsData = selectedIndices.map(index => {
+      const item = formValue.items[index];
+      const itemControl = this.items.at(index);
+      
+      if (!itemControl) {
+        return null;
+      }
+
+      const currentDeliveryQty = itemControl.get('currentDeliveryQty')?.value || 0;
+      
+      if (currentDeliveryQty <= 0) {
+        itemControl.get('currentDeliveryQty')?.markAsTouched();
+        return null;
+      }
+
+      return {
+        ...item,
+        currentDeliveryQty: currentDeliveryQty,
+        serialNos: this.itemSerialNos.get(index) || []
+      };
+    }).filter(item => item !== null);
+
+    if (selectedItemsData.length === 0) {
+      this.toastr.warning('Please enter delivery quantity for selected items');
+      return;
+    }
+
+    const invalidItems = selectedIndices.filter(index => {
+      const itemControl = this.items.at(index);
+      return itemControl?.get('currentDeliveryQty')?.invalid;
+    });
+
+    if (invalidItems.length > 0) {
+      invalidItems.forEach(index => {
+        this.items.at(index)?.get('currentDeliveryQty')?.markAsTouched();
+      });
+      this.toastr.warning('Please fix validation errors for selected items');
+      return;
+    }
+
+    const payload = {
+      ...formValue,
+      items: selectedItemsData
+    };
+
+    console.log('DN Payload:', JSON.stringify(payload, null, 2));
+    console.log('Serial Numbers by Item:', Array.from(this.itemSerialNos.entries()));
+
     this.isSubmitting.set(true);
+
+    if (this.isEditMode && this.draftDnId) {
+      this.deliveryNoteService.updateDn(this.draftDnId, payload).subscribe({
+        next: () => {
+          this.toastr.success('DN Posted Successfully');
+          this.router.navigate(['/dispatch/delivery-note-register']);
+        },
+        error: (err) => {
+          this.toastr.error(err.error?.message || 'Failed to post DN');
+          this.isSubmitting.set(false);
+        }
+      });
+    } else {
     this.deliveryNoteService.createDn(payload).subscribe({
       next: () => {
-        this.toastr.success('DN Generated Successfully');
+          this.toastr.success('DN Posted Successfully');
         this.router.navigate(['/dispatch/delivery-note-register']);
       },
       error: (err) => {
-        this.toastr.error(err.error?.message || 'Failed to create DN');
+          this.toastr.error(err.error?.message || 'Failed to post DN');
         this.isSubmitting.set(false);
       }
     });
+    }
   }
 
   onCancel(): void {

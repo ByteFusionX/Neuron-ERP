@@ -6,6 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { PurchaseData, QuoteItem } from 'src/app/shared/interfaces/purchase.interface';
 import { LpoListComponent } from '../lpo-list/lpo-list.component';
 
@@ -21,6 +22,7 @@ import { LpoListComponent } from '../lpo-list/lpo-list.component';
 })
 export class InitiateLpoComponent implements OnInit {
   private purchaseService = inject(PurchaseService);
+  private employeeService = inject(EmployeeService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -32,9 +34,11 @@ export class InitiateLpoComponent implements OnInit {
   isLoading = true;
   suppliersList = signal<any[]>([])
   canIssueLpo = signal<boolean>(false);
+  canInitiateLPO = signal<boolean>(false);
   currency = signal<string>('');
 
   ngOnInit(): void {
+    this.checkPrivileges();
     this.loadPurchase()
     this.supplierService.supplierList().subscribe({
       next: (res) => {
@@ -43,6 +47,18 @@ export class InitiateLpoComponent implements OnInit {
         console.log(error);
       }
     })
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canInitiateLPO.set(data.category.privileges.purchaseOrder?.canInitiateLPO || false);
+        if (!this.canInitiateLPO()) {
+          this.notificationService.warning('You do not have permission to initiate LPO');
+          this.router.navigate(['/purchase/approves']);
+        }
+      }
+    });
   }
 
   loadPurchase() {

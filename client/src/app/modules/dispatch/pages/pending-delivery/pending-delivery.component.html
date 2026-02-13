@@ -1,1 +1,15 @@
-<p>pending-delivery works!</p>
+<data-table
+[title]="'Pending Deliveries'"
+[data]="tableData()"
+[columns]="tableColumns"
+[defaultColumns]="defaultColumns"
+[isLoading]="isLoading()"
+[isEmpty]="isEmpty()"
+[totalItems]="totalItems()"
+[tableId]="'pending-delivery-reports'"
+[enableExport]="true"
+(rowClick)="onRowClick($event)"
+(actionClick)="onActionClick($event)"
+(paginationChange)="onPaginationChange($event)"
+(exportRequest)="onExportRequest()"
+></data-table>

@@ -5,8 +5,9 @@ import Supplier from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
 import jobModel from "../models/job.model";
 import mongoose from "mongoose";
-import { getEmployeeData, updateIssuedQuantities } from "../common/utils/util";
+import { getEmployeeData, updateIssuedQuantities, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
+import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
@@ -30,6 +31,21 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     } = req.body;
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
+    
+    if (!employee) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const privileges = employee.category?.privileges;
+    if (!privileges?.purchaseOrder?.canInitiateLPO) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to initiate LPO and issue PO",
+      });
+    }
 
     // Validate required fields
     if (!poNo || !supplierId || !purchaseId || !items || !Array.isArray(items) || items.length === 0) {
@@ -222,6 +238,23 @@ export const reissuePurchaseOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { items, supplierId, originalItems, ...updateData } = req.body;
+
+    const tokenData = req.user;
+    const employee = await getEmployeeData(tokenData);
+    if (!employee) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const privileges = employee.category?.privileges;
+    if (!privileges?.purchaseOrder?.canReissueAndRevoke) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to re-issue purchase orders",
+      });
+    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -709,6 +742,19 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
 
+    const tokenData = req.user;
+    const employee = await getEmployeeData(tokenData);
+    if (!employee) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const privileges = employee.category?.privileges;
+    const accessFilter = privileges?.purchase?.viewReport 
+      ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
+      : {};
 
     const initialMatchStage: any = {};
     const finalMatchStage: any = {};
@@ -753,6 +799,11 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
         }
       },
       { $unwind: { path: "$purchaseId.customerId", preserveNullAndEmptyArrays: true } },
+      ...(Object.keys(accessFilter).length > 0 ? [{
+        $match: {
+          "purchaseId.createdBy": accessFilter.createdBy
+        }
+      }] : []),
       {
         $lookup: {
           from: "jobs",
@@ -969,6 +1020,21 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
     const { comment } = req.body;
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
+    
+    if (!employee) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const privileges = employee.category?.privileges;
+    if (!privileges?.purchaseOrder?.canApprovePOs) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to approve purchase orders",
+      });
+    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -1036,6 +1102,21 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
     const { comment } = req.body;
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
+    
+    if (!employee) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const privileges = employee.category?.privileges;
+    if (!privileges?.purchaseOrder?.canApprovePOs) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to reject purchase orders",
+      });
+    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -1144,13 +1225,19 @@ export const updateSupplierInvoices = async (req: any, res: Response) => {
         new: true,
         runValidators: true,
       }
-    );
+    ).populate('purchaseId', 'jobId');
 
     if (!updatedPurchaseOrder) {
       return res.status(404).json({
         success: false,
         message: "Purchase order not found",
       });
+    }
+
+    const jobId = (updatedPurchaseOrder as any).jobId?._id || (updatedPurchaseOrder as any).jobId || 
+                  (updatedPurchaseOrder as any).purchaseId?.jobId?._id || (updatedPurchaseOrder as any).purchaseId?.jobId;
+    if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
+      await checkAndUpdateJobCompletionStatus(jobId.toString());
     }
 
     return res.status(200).json({
@@ -1317,6 +1404,23 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
 export const revokePurchaseOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    
+    const tokenData = req.user;
+    const employee = await getEmployeeData(tokenData);
+    if (!employee) {
+      return res.status(401).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const privileges = employee.category?.privileges;
+    if (!privileges?.purchaseOrder?.canReissueAndRevoke) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to revoke purchase orders",
+      });
+    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({

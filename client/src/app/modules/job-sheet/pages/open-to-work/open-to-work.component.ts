@@ -20,7 +20,8 @@ import { getCreators } from 'src/app/shared/interfaces/employee.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import * as pdfMake from 'pdfmake/build/pdfmake';
 import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { NgIf, NgFor, AsyncPipe, DatePipe } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
@@ -33,6 +34,7 @@ import { PaginationComponent } from '../../../../shared/components/pagination/pa
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
 import { allocateType, AllocateTypeModalComponent } from '../allocate-type-modal/allocate-type-modal.component';
 import { TransferProcurementPersonComponent } from '../transfer-procurement-person/transfer-procurement-person.component';
+import { JobHistoryModalComponent } from 'src/app/shared/components/job-history-modal/job-history-modal.component';
 
 
 @Component({
@@ -75,6 +77,9 @@ export class OpenToWorckComponent {
   isEmpty: boolean = false;
   isDeleteOption: boolean = false;
   loader = this.loadingBar.useRef();
+  canAllocateJobs = false;
+  canConvertToPurchase = false;
+  canTransferProcurementPerson = false;
 
   private subscriptions = new Subscription();
 
@@ -92,7 +97,18 @@ export class OpenToWorckComponent {
   ) { }
 
 
+  checkPrivileges(): void {
+    this._employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canAllocateJobs = data.category.privileges.jobSheet?.allocateJobs || false;
+        this.canConvertToPurchase = data.category.privileges.jobSheet?.convertToPurchase || false;
+        this.canTransferProcurementPerson = data.category.privileges.jobSheet?.transferProcurementPerson || false;
+      }
+    });
+  }
+
   ngOnInit() {
+    this.checkPrivileges();
     this.employees$ = this._jobService.getJobSalesPerson();
     this.currentYear = new Date().getFullYear().toString();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -117,6 +133,17 @@ export class OpenToWorckComponent {
         this.isEnter = true;
       }
     });
+
+    // Reload data when route path changes (e.g., from /open-to-work to /in-progress)
+    this.subscriptions.add(
+      this.router.events.pipe(
+        filter(event => event instanceof NavigationEnd)
+      ).subscribe(() => {
+        if (this.router.url.includes('/job-sheet/open-to-work') || this.router.url.includes('/job-sheet/in-progress')) {
+          this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
+        }
+      })
+    );
 
     this.subscriptions.add(
       this.subject.subscribe((data) => {
@@ -195,7 +222,7 @@ export class OpenToWorckComponent {
     this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
   }
 
-  displayedColumns: string[] = ['updatedDate', 'jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'procurementPerson', 'lpo', 'lpoValue', 'status', 'action'];
+  displayedColumns: string[] = ['updatedDate', 'jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'procurementPerson', 'lpo', 'lpoValue', 'action'];
 
   getAllJobs(selectedMonth?: number, selectedYear?: string) {
     this.isLoading = true;
@@ -207,6 +234,10 @@ export class OpenToWorckComponent {
       userId = employee?._id;
     });
 
+    const currentRoute = this.router.url;
+    const isInProgressRoute = currentRoute.includes('/in-progress');
+    const allocateStatusFilter = isInProgressRoute ? allocateStatus.WorkInProgress : allocateStatus.OpenToWork;
+
     let filterData = {
       search: this.searchQuery,
       page: this.page,
@@ -217,7 +248,7 @@ export class OpenToWorckComponent {
       selectedYear: selectedYear as unknown as number,
       access: access,
       userId: userId,
-      allocateStatus: allocateStatus.OpenToWork
+      allocateStatus: allocateStatusFilter
     };
 
     this.subscriptions.add(
@@ -386,6 +417,16 @@ export class OpenToWorckComponent {
 
   shouldShowConvertButton(job: getJob): boolean {
     return !job.hasPurchaseRequest;
+  }
+
+  openJobHistory(job: getJob) {
+    this._dialog.open(JobHistoryModalComponent, {
+      data: { jobId: job._id, jobIdString: job.jobId },
+      width: '900px',
+      maxWidth: '95vw',
+      maxHeight: '95vh',
+      disableClose: false
+    });
   }
 
   onConvertToPurchase(jobId: string) {
@@ -557,6 +598,10 @@ export class OpenToWorckComponent {
   }
 
   openAllocateTypeSelecter(data: getJob) {
+    if (!this.canAllocateJobs) {
+      this.toast.warning('You do not have permission to allocate jobs');
+      return;
+    }
     const dialogRef = this._dialog.open(AllocateTypeModalComponent, {
       data: data,
       width: '500px',
@@ -617,6 +662,10 @@ export class OpenToWorckComponent {
   }
 
   onTransferProcurementPerson(job: getJob) {
+    if (!this.canTransferProcurementPerson) {
+      this.toast.warning('You do not have permission to transfer procurement person');
+      return;
+    }
     const dialogRef = this._dialog.open(TransferProcurementPersonComponent, {
       data: {
         jobId: job._id,
