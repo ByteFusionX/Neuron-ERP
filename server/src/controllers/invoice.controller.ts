@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Invoice } from '../models/invoice.model';
+import { getEmployeeData } from '../common/utils/util';
 
 export const getInvoices = async (req: Request, res: Response) => {
     try {
@@ -77,6 +78,9 @@ export const createInvoice = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Invoice Number already exists' });
         }
 
+        const tokenData = req.user;
+        const createdBy = await getEmployeeData(tokenData);
+
         const newInvoice = new Invoice({
             invoiceNo,
             date,
@@ -86,7 +90,7 @@ export const createInvoice = async (req: Request, res: Response) => {
             amount,
             status,
             items,
-            createdBy: req.user // Assuming middleware adds user to req
+            createdBy: createdBy._id
         });
 
         await newInvoice.save();

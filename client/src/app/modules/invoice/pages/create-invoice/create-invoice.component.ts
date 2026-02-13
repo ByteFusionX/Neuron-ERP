@@ -268,23 +268,13 @@ export class CreateInvoiceComponent implements OnInit {
       invoiceNo: formVal.invoiceNo,
       date: formVal.date,
       jobId: formVal.jobId, // Assuming this is IDs
-      customer: this.customerData?._id || this.jobs().find(j => j._id === formVal.jobId)?._id, // Need Customer ID. Assuming Job has ref.
-      // Wait, 'customer' logic in onJobSelect was just name. We need ID.
-      // Let's refine payload construction.
-      // We need to extract selected Job object to get customer ID.
+      customer: this.customerData?._id || this.jobs().find(j => j._id === formVal.jobId)?._id,
       amount: formVal.amountFigures,
       status: 'Unpaid',
       items: formVal.items.map((item: any) => ({
         dnId: item.dnId,
         description: item.description,
-        amount: item.totalPrice // Or unit price/qty? Model has 'amount'.
-        // Model items: { dnId, description, amount }. It seems 'amount' is row total?
-        // The requirement says "Quantity and unit price edits... Total selling price read-only".
-        // But backend model `items` structure I defined earlier was `{ dnId, description, amount }`.
-        // It lacks QTY and UnitPrice. I should have added them. 
-        // However, user said "Patching must be done...".
-        // For now, I will map `totalPrice` to `amount` as per current model.
-        // In a real app I'd update the model to store Qty/Rate.
+        amount: item.totalPrice
       })),
       paymentTerms: formVal.paymentTerms
     };

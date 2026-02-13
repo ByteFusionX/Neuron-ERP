@@ -3,7 +3,7 @@ import { Schema, model } from 'mongoose';
 const invoiceSchema = new Schema({
     invoiceNo: { type: String, required: true },
     date: { type: Date, required: true },
-    customer: { type: Schema.Types.ObjectId, ref: 'Customer', required: true },
+    customer: { type: Schema.Types.ObjectId, ref: 'Customer' },
     jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: true },
     salesperson: { type: Schema.Types.ObjectId, ref: 'Employee' }, // Assuming Employee model for salesperson
     amount: { type: Number, required: true },
@@ -17,7 +17,7 @@ const invoiceSchema = new Schema({
         description: String,
         amount: Number
     }],
-    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     isDeleted: { type: Boolean, default: false }
 }, {
     timestamps: true
