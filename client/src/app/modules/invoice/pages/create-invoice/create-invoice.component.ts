@@ -201,12 +201,15 @@ export class CreateInvoiceComponent implements OnInit {
           // But also "DN selection must dynamically control which quantities and items are available".
           // So we map DN items -> Invoice Items.
 
+          const unitSellingPrice = (item as any).unitSellingPrice ?? 0;
+          const qty = item.currentDeliveryQty || 0;
+
           const formGroup = this.fb.group({
             dnId: [dn._id], // Track source DN
             description: [item.description || '', Validators.required],
-            quantity: [item.currentDeliveryQty || 0, [Validators.required, Validators.min(0)]],
-            unitPrice: [0, [Validators.required, Validators.min(0)]],
-            totalPrice: [{ value: 0, disabled: true }]
+            quantity: [qty, [Validators.required, Validators.min(0)]],
+            unitPrice: [unitSellingPrice, [Validators.required, Validators.min(0)]],
+            totalPrice: [{ value: qty * unitSellingPrice, disabled: true }]
           });
 
           // Listen to changes for calculation
@@ -219,6 +222,9 @@ export class CreateInvoiceComponent implements OnInit {
         });
       }
     });
+
+    // Initialize grand total immediately after loading items
+    this.calculateTotals();
   }
 
   updateRowTotal(group: FormGroup) {
@@ -263,30 +269,29 @@ export class CreateInvoiceComponent implements OnInit {
     this.isLoading.set(true);
     const formVal = this.invoiceForm.getRawValue();
 
+    // Extract Customer ID
+    const selectedJob = this.jobs().find(j => j._id === formVal.jobId);
+    let customerId = this.customerData?._id;
+    if (!customerId && selectedJob) {
+      customerId = (selectedJob as any).client || (selectedJob as any).quoteId?.client;
+    }
+
     // Construct Payload
     const payload = {
       invoiceNo: formVal.invoiceNo,
       date: formVal.date,
       jobId: formVal.jobId, // Assuming this is IDs
-      customer: this.customerData?._id || this.jobs().find(j => j._id === formVal.jobId)?._id,
+      customer: customerId,
       amount: formVal.amountFigures,
       status: 'Unpaid',
       items: formVal.items.map((item: any) => ({
         dnId: item.dnId,
         description: item.description,
-        amount: item.totalPrice
+        amount: item.totalPrice,
+        quantity: item.quantity
       })),
       paymentTerms: formVal.paymentTerms
     };
-
-    // Fix Customer ID extraction
-    const selectedJob = this.jobs().find(j => j._id === formVal.jobId);
-    if (selectedJob) {
-      payload.customer = (selectedJob as any).quoteId?.clientId || (selectedJob as any).clientId;
-      // We need precise field. Assuming 'clientId' or 'quoteId.clientId' exists.
-      // If not avaiable, backend references might fail. 
-      // Using a placeholder or passing what we have.
-    }
 
     this.invoiceService.createInvoice(payload).subscribe({
       next: () => {

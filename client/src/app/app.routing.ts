@@ -67,6 +67,7 @@ import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-
 import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
 import { InvoiceRegisterComponent } from './modules/invoice/pages/invoice-register/invoice-register.component';
 import { CreateInvoiceComponent } from './modules/invoice/pages/create-invoice/create-invoice.component';
+import { InvoiceDnLinkingComponent } from './modules/invoice/pages/invoice-dn-linking/invoice-dn-linking.component';
 
 
 export const routes: Routes = [
@@ -235,14 +236,14 @@ export const routes: Routes = [
       { path: 'amc', component: ProjectsComponent },
       { path: 'project/add', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/edit/:id', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
-      { path: 'project/activity-plan/:id', component: ActivityPlanComponent},
-      { path: 'project/material-request/:id', component: MaterialRequestModalComponent},
-      { path: 'project/updates/:id', component: ProjectUpdatesComponent},
-      { path: 'project/updates/:technicalId/:updateId', component: ViewProjectUpdateComponent},
-      { path: 'project/tasks/:id', component: TasksComponent},
-      { path: 'project/issues/:id', component: IssuesListComponent},
-      { path: 'project/claims/:id', component: ClaimsComponent},
-      { path: 'project/billing-summary/:id', component: BillingSummaryComponent},
+      { path: 'project/activity-plan/:id', component: ActivityPlanComponent },
+      { path: 'project/material-request/:id', component: MaterialRequestModalComponent },
+      { path: 'project/updates/:id', component: ProjectUpdatesComponent },
+      { path: 'project/updates/:technicalId/:updateId', component: ViewProjectUpdateComponent },
+      { path: 'project/tasks/:id', component: TasksComponent },
+      { path: 'project/issues/:id', component: IssuesListComponent },
+      { path: 'project/claims/:id', component: ClaimsComponent },
+      { path: 'project/billing-summary/:id', component: BillingSummaryComponent },
       { path: 'open-to-work-project', component: OpenToWorkProjectComponent },
       { path: 'mr-approval-requests', component: MrApprovalRequestsComponent },
       { path: 'mr-approval-requests/view/:id', component: ViewMaterialRequestComponent }
@@ -288,6 +289,7 @@ export const routes: Routes = [
     children: [
       { path: 'invoice-register', component: InvoiceRegisterComponent },
       { path: 'invoice-register/create', component: CreateInvoiceComponent },
+      { path: 'invoice-dn-linking', component: InvoiceDnLinkingComponent },
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }
