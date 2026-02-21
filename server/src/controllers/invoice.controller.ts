@@ -300,3 +300,130 @@ export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => 
         res.status(500).json({ success: false, message: 'Failed to fetch tracking report' });
     }
 };
+
+export const getCancelledAdjustedInvoices = async (req: Request, res: Response) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+
+        const matchStage: any = { isDeleted: false };
+
+        if (req.query.search) {
+            matchStage['$or'] = [
+                { invoiceNo: { $regex: req.query.search, $options: 'i' } }
+            ];
+        }
+
+        if (req.query.invoiceNo) {
+            matchStage.invoiceNo = { $regex: req.query.invoiceNo, $options: 'i' };
+        }
+
+        if (req.query.status) {
+            matchStage.status = { $in: Array.isArray(req.query.status) ? req.query.status : [req.query.status] };
+        }
+
+        if (req.query.fromDate && req.query.toDate) {
+            matchStage.actionDate = {
+                $gte: new Date(req.query.fromDate as string),
+                $lte: new Date(req.query.toDate as string)
+            };
+        }
+
+        const pipeline: any[] = [
+            { $match: matchStage },
+            // Lookup Customer
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customer',
+                    foreignField: '_id',
+                    as: 'customerDoc'
+                }
+            },
+            { $unwind: { path: '$customerDoc', preserveNullAndEmptyArrays: true } },
+            // Lookup Job
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobDoc'
+                }
+            },
+            { $unwind: { path: '$jobDoc', preserveNullAndEmptyArrays: true } },
+            // Lookup Employee (action by)
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'actionBy',
+                    foreignField: '_id',
+                    as: 'employeeDoc'
+                }
+            },
+            { $unwind: { path: '$employeeDoc', preserveNullAndEmptyArrays: true } },
+
+            // Apply customer filter if present
+            ...(req.query.customer ? [{
+                $match: { 'customerDoc.companyName': { $regex: req.query.customer, $options: 'i' } }
+            }] : []),
+            // Apply Job ID filter if present
+            ...(req.query.jobId ? [{
+                $match: { 'jobDoc.jobId': { $regex: req.query.jobId, $options: 'i' } }
+            }] : []),
+
+            // Re-shape the properties
+            {
+                $project: {
+                    _id: 1,
+                    invoiceNo: 1,
+                    invoiceDate: 1,
+                    customerName: '$customerDoc.companyName',
+                    jobId: '$jobDoc.jobId',
+                    originalAmount: 1,
+                    adjustedAmount: 1,
+                    reason: 1,
+                    actionBy: { $concat: ['$employeeDoc.firstName', ' ', '$employeeDoc.lastName'] },
+                    actionById: '$employeeDoc.employeeId',
+                    actionDate: 1,
+                    status: 1
+                }
+            }
+        ];
+
+        pipeline.push({ $sort: { actionDate: -1 } });
+
+        const facetPipeline = [
+            ...pipeline,
+            {
+                $facet: {
+                    metadata: [{ $count: 'total' }],
+                    data: [{ $skip: skip }, { $limit: limit }]
+                }
+            }
+        ];
+
+        const mongoose = require('mongoose');
+        const InvoiceAudit = mongoose.model('InvoiceAudit');
+
+        // const result = await InvoiceAudit.aggregate(facetPipeline);
+        // const data = result[0].data;
+        // const total = result[0].metadata[0]?.total || 0;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                // report: data,
+                pagination: {
+                    // total,
+                    page,
+                    limit,
+                    // pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching cancelled/adjusted invoices:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch report' });
+    }
+};

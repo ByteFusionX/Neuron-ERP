@@ -68,7 +68,7 @@ import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-not
 import { InvoiceRegisterComponent } from './modules/invoice/pages/invoice-register/invoice-register.component';
 import { CreateInvoiceComponent } from './modules/invoice/pages/create-invoice/create-invoice.component';
 import { InvoiceDnLinkingComponent } from './modules/invoice/pages/invoice-dn-linking/invoice-dn-linking.component';
-
+import { CancelledInvoicesComponent } from './modules/invoice/pages/cancelled-invoices/cancelled-invoices.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -290,6 +290,7 @@ export const routes: Routes = [
       { path: 'invoice-register', component: InvoiceRegisterComponent },
       { path: 'invoice-register/create', component: CreateInvoiceComponent },
       { path: 'invoice-dn-linking', component: InvoiceDnLinkingComponent },
+      { path: 'cancelled-invoices', component: CancelledInvoicesComponent },
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

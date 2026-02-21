@@ -28,4 +28,8 @@ export class InvoiceService {
     generateInvoiceNumber(): Observable<{ success: boolean, invoiceNo: string }> {
         return this.http.get<{ success: boolean, invoiceNo: string }>(`${this.api}/invoice/generate-number`);
     }
+
+    getCancelledAdjustedInvoices(params: any): Observable<any> {
+        return this.http.get<any>(`${this.api}/invoice/audit`, { params });
+    }
 }
