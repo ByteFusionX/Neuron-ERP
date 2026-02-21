@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, TemplateRef, ViewChild, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule, AbstractControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -6,13 +6,11 @@ import { ToastrService } from 'ngx-toastr';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { JobService } from 'src/app/core/services/job/job.service';
-import { StockEntryService, StockEntry } from 'src/app/core/services/stock-entry/stock-entry.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { NgIconComponent } from '@ng-icons/core';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 
 @Component({
@@ -26,8 +24,7 @@ import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-p
     SelectDropdownComponent,
     ButtonComponent,
     IconsModule,
-    MatDialogModule,
-    NgIconComponent
+    MatDialogModule
   ],
   templateUrl: './create-dn.component.html',
   styleUrl: './create-dn.component.css'
@@ -40,13 +37,9 @@ export class CreateDnComponent implements OnInit {
   private dialog = inject(MatDialog);
   private deliveryNoteService = inject(DeliveryNoteService);
   private jobService = inject(JobService);
-  private stockEntryService = inject(StockEntryService);
   private employeeService = inject(EmployeeService);
 
-  @ViewChild('inventoryModal') inventoryModal!: TemplateRef<any>;
-
   jobIds: any[] = [];
-  stockEntries: StockEntry[] = [];
   isLoading = signal<boolean>(false);
   isSubmitting = signal<boolean>(false);
   isSavingDraft = signal<boolean>(false);
@@ -67,16 +60,12 @@ export class CreateDnComponent implements OnInit {
     items: this.fb.array([])
   });
 
-  selectedInventoryItem: any = null;
-  inventoryQty: number = 0;
-
   serialNoInputs: Map<number, string> = new Map();
   itemSerialNos: Map<number, string[]> = new Map();
   selectedItems: Set<number> = new Set();
 
   ngOnInit(): void {
     this.loadJobIds();
-    this.loadStockEntries();
 
     const editId = this.route.snapshot.queryParams['id'];
     if (editId) {
@@ -171,88 +160,71 @@ export class CreateDnComponent implements OnInit {
     this.itemSerialNos.clear();
     this.serialNoInputs.clear();
 
-    const quoteItems = job.quotation?.optionalItems?.flatMap((opt: any) => opt.items) || [];
-    let allItems: any[] = [];
-    if (job.quotation?.optionalItems) {
-      job.quotation.optionalItems.forEach((opt: any) => {
-        if (opt.items) {
-          opt.items.forEach((item: any) => {
-            if (item.itemDetails) {
-              allItems.push(...item.itemDetails.map((detail: any) => ({
-                ...detail,
-                itemName: item.itemName
-              })));
-            }
+    const jobId = job._id || dn.jobId?._id || dn.jobId;
+
+    this.deliveryNoteService.getDnItemsForJob(jobId).subscribe({
+      next: (response: any) => {
+        const allItems = response?.data || [];
+
+        allItems.forEach((item: any, index: number) => {
+          const prevDelivered = this.getDeliveredQty(item._id);
+          const remaining = Math.max(0, (item.orderedQty || 0) - prevDelivered);
+          const isFulfilled = remaining === 0 && (item.orderedQty || 0) > 0;
+          const isAvailable = item.isAvailable === true;
+
+          let initialStatus = isAvailable ? 'Pending' : 'No PO / Not in Inventory';
+          if (isFulfilled) {
+            initialStatus = 'Delivered';
+          } else if (prevDelivered > 0) {
+            initialStatus = 'Partially Delivered';
+          }
+
+          const draftItem = dn.items?.find((di: any) => di.itemId === item._id);
+          const currentDeliveryQty = draftItem?.currentDeliveryQty || 0;
+          const serialNos = draftItem?.serialNos || [];
+
+          const group = this.fb.group({
+            slNo: [index + 1],
+            partNo: [item.partNo?.partNo || item.partNo || ''],
+            description: [item.detail || ''],
+            totalQuantity: [item.totalQuantity || 0],
+            orderedQty: [item.orderedQty || 0],
+            deliveredQty: [prevDelivered],
+            currentDeliveryQty: [{ value: currentDeliveryQty, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
+            serialNos: [''],
+            status: [initialStatus],
+            itemId: [item._id],
+            isInventoryItem: [draftItem?.isInventoryItem ?? isAvailable]
           });
-        }
-      });
-    }
 
-    allItems.forEach((item: any, index: number) => {
-      const prevDelivered = this.getDeliveredQty(item._id);
-      const remaining = Math.max(0, item.quantity - prevDelivered);
-      const isFulfilled = remaining === 0;
+          itemsArray.push(group);
 
-      let initialStatus = 'Pending';
-      if (isFulfilled) {
-        initialStatus = 'Delivered';
-      } else if (prevDelivered > 0) {
-        initialStatus = 'Partially Delivered';
-      }
+          if (currentDeliveryQty > 0 && isAvailable) {
+            this.selectedItems.add(index);
+            const currentDeliveryControl = group.get('currentDeliveryQty');
+            currentDeliveryControl?.enable();
+            const balance = this.getBalanceQty(group);
+            currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
+            currentDeliveryControl?.updateValueAndValidity();
+          }
 
-      const draftItem = dn.items?.find((di: any) => di.itemId === item._id);
-      const currentDeliveryQty = draftItem?.currentDeliveryQty || 0;
-      const serialNos = draftItem?.serialNos || [];
-
-      const group = this.fb.group({
-        slNo: [index + 1],
-        partNo: [item.partNo || item.itemName || ''],
-        description: [item.detail || item.itemDescription || ''],
-        orderedQty: [item.quantity],
-        deliveredQty: [prevDelivered],
-        currentDeliveryQty: [{ value: currentDeliveryQty, disabled: true }, [Validators.min(0), Validators.max(remaining)]],
-        serialNos: [''],
-        status: [initialStatus],
-        itemId: [item._id],
-        isInventoryItem: [draftItem?.isInventoryItem || false],
-        unitSellingPrice: [draftItem?.unitSellingPrice || item.unitSellingPrice || 0]
-      });
-
-      itemsArray.push(group);
-
-      if (currentDeliveryQty > 0) {
-        this.selectedItems.add(index);
-        const currentDeliveryControl = group.get('currentDeliveryQty');
-        currentDeliveryControl?.enable();
-        const balance = this.getBalanceQty(group);
-        currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
-        currentDeliveryControl?.updateValueAndValidity();
-      }
-
-      if (serialNos.length > 0) {
-        this.itemSerialNos.set(index, Array.isArray(serialNos) ? serialNos : [serialNos]);
+          if (serialNos.length > 0) {
+            this.itemSerialNos.set(index, Array.isArray(serialNos) ? serialNos : [serialNos]);
+          }
+        });
+      },
+      error: () => {
+        this.toastr.error('Failed to load items for job');
       }
     });
   }
 
   loadJobIds(): void {
-    this.jobService.getJobids().subscribe({
+    this.jobService.getJobIdsWithApprovedPR().subscribe({
       next: (response: any) => {
         this.jobIds = Array.isArray(response) ? response : response.jobs || [];
       },
       error: () => this.toastr.error('Failed to load Job IDs')
-    });
-  }
-
-  loadStockEntries(): void {
-    this.stockEntryService.getStockEntries({ page: 1, row: 1000 }).subscribe({
-      next: (response) => {
-        this.stockEntries = response.data?.stockEntries?.map(entry => ({
-          ...entry,
-          displayLabel: `${entry.partNo.partNo} - ${entry.partNo.productDescription} (Available: ${entry.quantity})`
-        })) || [];
-      },
-      error: () => this.toastr.error('Failed to load stock entries')
     });
   }
 
@@ -307,13 +279,13 @@ export class CreateDnComponent implements OnInit {
         this.deliveryNoteService.getDnsByJobId(jobId).subscribe({
           next: (dns) => {
             this.previousDns = dns || [];
-            this.populateItems(job);
+            this.populateItems(jobId);
             this.isLoading.set(false);
           },
           error: () => {
             this.toastr.error('Failed to load previous DNs');
             this.previousDns = [];
-            this.populateItems(job);
+            this.populateItems(jobId);
             this.isLoading.set(false);
           }
         });
@@ -325,64 +297,50 @@ export class CreateDnComponent implements OnInit {
     });
   }
 
-  populateItems(job: any): void {
+  populateItems(jobId: string): void {
     const itemsArray = this.items;
     itemsArray.clear();
     this.selectedItems.clear();
     this.itemSerialNos.clear();
     this.serialNoInputs.clear();
 
-    const quoteItems = job.quotation?.optionalItems?.flatMap((opt: any) => opt.items) || [];
+    this.deliveryNoteService.getDnItemsForJob(jobId).subscribe({
+      next: (response: any) => {
+        const allItems = response?.data || [];
 
-    // Flatten nested items from quotation structure
-    // Structure: OptionalItems -> items -> itemDetails? 
-    // Checking quotation interface: OptionalItems -> items(QuoteItem[]) -> itemDetails(QuoteItemDetail[])
+        allItems.forEach((item: any, index: number) => {
+          const prevDelivered = this.getDeliveredQty(item._id);
+          const remaining = Math.max(0, (item.orderedQty || 0) - prevDelivered);
+          const isFulfilled = remaining === 0 && (item.orderedQty || 0) > 0;
+          const isAvailable = item.isAvailable === true;
 
-    let allItems: any[] = [];
-    if (job.quotation?.optionalItems) {
-      job.quotation.optionalItems.forEach((opt: any) => {
-        if (opt.items) {
-          opt.items.forEach((item: any) => {
-            if (item.itemDetails) {
-              allItems.push(...item.itemDetails.map((detail: any) => ({
-                ...detail,
-                itemName: item.itemName // Carry over parent name if needed
-              })));
-            }
+          let initialStatus = isAvailable ? 'Pending' : 'No PO / Not in Inventory';
+          if (isFulfilled) {
+            initialStatus = 'Delivered';
+          } else if (prevDelivered > 0) {
+            initialStatus = 'Partially Delivered';
+          }
+
+          const group = this.fb.group({
+            slNo: [index + 1],
+            partNo: [item.partNo?.partNo || item.partNo || ''],
+            description: [item.detail || ''],
+            totalQuantity: [item.totalQuantity || 0],
+            orderedQty: [item.orderedQty || 0],
+            deliveredQty: [prevDelivered],
+            currentDeliveryQty: [{ value: 0, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
+            serialNos: [''],
+            status: [initialStatus],
+            itemId: [item._id],
+            isInventoryItem: [isAvailable]
           });
-        }
-      });
-    }
 
-    allItems.forEach((item: any, index: number) => {
-      // Calculate already delivered qty
-      const prevDelivered = this.getDeliveredQty(item._id);
-      const remaining = Math.max(0, item.quantity - prevDelivered);
-
-      const isFulfilled = remaining === 0;
-
-      let initialStatus = 'Pending';
-      if (isFulfilled) {
-        initialStatus = 'Delivered';
-      } else if (prevDelivered > 0) {
-        initialStatus = 'Partially Delivered';
+          itemsArray.push(group);
+        });
+      },
+      error: () => {
+        this.toastr.error('Failed to load items for job');
       }
-
-      const group = this.fb.group({
-        slNo: [index + 1],
-        partNo: [item.partNo || item.itemName || ''],
-        description: [item.detail || item.itemDescription || ''],
-        orderedQty: [item.quantity],
-        deliveredQty: [prevDelivered],
-        currentDeliveryQty: [{ value: 0, disabled: true }, [Validators.min(0), Validators.max(remaining)]],
-        serialNos: [''],
-        status: [initialStatus],
-        itemId: [item._id],
-        isInventoryItem: [false],
-        unitSellingPrice: [item.unitSellingPrice || 0]
-      });
-
-      itemsArray.push(group);
     });
   }
 
@@ -455,8 +413,8 @@ export class CreateDnComponent implements OnInit {
   toggleItemSelection(index: number): void {
     const itemControl = this.items.at(index);
     const status = itemControl?.get('status')?.value;
-
-    if (status === 'Delivered') {
+    
+    if (status === 'Delivered' || status === 'No PO / Not in Inventory') {
       return;
     }
 
@@ -472,6 +430,7 @@ export class CreateDnComponent implements OnInit {
       this.selectedItems.add(index);
       const balance = this.getBalanceQty(itemControl!);
       currentDeliveryControl?.enable();
+      currentDeliveryControl?.setValue(balance, { emitEvent: false });
       currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
       currentDeliveryControl?.updateValueAndValidity();
     }
@@ -484,48 +443,6 @@ export class CreateDnComponent implements OnInit {
 
   hasSelectedItems(): boolean {
     return this.selectedItems.size > 0;
-  }
-
-  // Inventory Modal Logic
-  openInventoryModal(): void {
-    this.selectedInventoryItem = null;
-    this.inventoryQty = 0;
-    this.dialog.open(this.inventoryModal, { width: '500px' });
-  }
-
-  addInventoryItem(): void {
-    if (!this.selectedInventoryItem || this.inventoryQty <= 0) {
-      this.toastr.warning('Please select an item and quantity');
-      return;
-    }
-
-    const stockEntry = this.stockEntries.find(entry => entry._id === this.selectedInventoryItem);
-    if (stockEntry) {
-      // Check available quantity
-      const availableQty = stockEntry.availableQuantity || stockEntry.quantity;
-      if (this.inventoryQty > availableQty) {
-        this.toastr.warning(`Only ${availableQty} units available in stock`);
-        return;
-      }
-
-      const group = this.fb.group({
-        slNo: [this.items.length + 1],
-        partNo: [stockEntry.partNo],
-        description: [stockEntry.productDescription],
-        orderedQty: [this.inventoryQty],
-        deliveredQty: [0],
-        currentDeliveryQty: [{ value: 0, disabled: true }, [Validators.min(0), Validators.max(this.inventoryQty)]],
-        serialNos: [''],
-        status: ['Pending'],
-        itemId: [stockEntry._id],
-        isInventoryItem: [true],
-        stockEntryId: [stockEntry._id],
-        unitSellingPrice: [stockEntry.sellingPrice || 0]
-      });
-      this.items.push(group);
-      this.dialog.closeAll();
-      this.toastr.success('Stock entry added to delivery note');
-    }
   }
 
   async onPreview(): Promise<void> {

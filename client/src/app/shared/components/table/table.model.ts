@@ -18,6 +18,7 @@ export interface TableColumn {
     tooltip?: boolean;
     list?: ApprovalRejectionList[]; // List data for tooltip modal
     cellRenderer?: (item: any) => any;
+    truncateText?: boolean;
     clickable?: boolean;
     clickFunction?: (item: any) => void;
     clickableValue?: (item: any) => any;

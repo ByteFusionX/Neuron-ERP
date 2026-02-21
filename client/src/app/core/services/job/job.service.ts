@@ -47,6 +47,14 @@ export class JobService {
     return this.http.get<getJob[]>(`${this.apiUrl}/job/jobIds`)
   }
 
+  getJobidsWithCompletedPo(): Observable<getJob[]> {
+    return this.http.get<getJob[]>(`${this.apiUrl}/job/jobIdsWithCompletedPO`)
+  }
+
+  getJobIdsWithApprovedPR(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/job/jobIdsWithApprovedPR`)
+  }
+
   getOneJob(jobId: string): Observable<getJob[]> {
     return this.http.get<getJob[]>(`${this.apiUrl}/job/jobIdDatas/${jobId}`)
   }

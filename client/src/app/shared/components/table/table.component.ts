@@ -108,21 +108,26 @@ export class TableComponent implements OnInit, OnChanges {
   initializeColumns(): void {
     this.availableColumns = [...this.columns];
 
-    // Try to load saved columns from localStorage if tableId is provided
+    const currentKeys = this.defaultColumns && this.defaultColumns.length > 0
+      ? [...this.defaultColumns]
+      : this.columns.map(col => col.key);
+
     if (this.tableId) {
       const savedColumns = localStorage.getItem(`table_columns_${this.tableId}`);
       if (savedColumns) {
-        this.displayedColumns = JSON.parse(savedColumns);
+        const saved: string[] = JSON.parse(savedColumns);
+        const newKeys = currentKeys.filter(k => !saved.includes(k));
+        if (newKeys.length > 0) {
+          this.displayedColumns = [...saved, ...newKeys];
+          localStorage.setItem(`table_columns_${this.tableId}`, JSON.stringify(this.displayedColumns));
+        } else {
+          this.displayedColumns = saved;
+        }
         return;
       }
     }
 
-    // If no saved columns or no tableId, use default columns or all columns
-    if (this.defaultColumns && this.defaultColumns.length > 0) {
-      this.displayedColumns = [...this.defaultColumns];
-    } else {
-      this.displayedColumns = this.columns.map(col => col.key);
-    }
+    this.displayedColumns = currentKeys;
   }
 
   onRowClick(row: any): void {
@@ -215,6 +220,18 @@ export class TableComponent implements OnInit, OnChanges {
       case 'draft':
       case 'drafted':
         return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'deducted':
+        return 'bg-blue-100 text-blue-700 border border-blue-200';
+      case 'reversed':
+        return 'bg-orange-100 text-orange-700 border border-orange-200';
+      case 'not ordered':
+        return 'bg-rose-100 text-rose-700 border border-rose-200';
+      case 'ordered':
+        return 'bg-sky-100 text-sky-700 border border-sky-200';
+      case 'partially received':
+        return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'received':
+        return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
       default:
         return 'bg-slate-100 text-slate-700 border border-slate-200';
     }

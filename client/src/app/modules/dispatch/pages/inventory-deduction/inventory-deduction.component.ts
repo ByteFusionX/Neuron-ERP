@@ -62,7 +62,7 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
 
-  statusOptions: string[] = ['Delivered', 'Pending', 'Partial'];
+  statusOptions: string[] = ['Deducted', 'Reversed'];
 
   ngOnInit(): void {
     this.setupTableColumns();
@@ -94,7 +94,7 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
   setupTableColumns(): void {
     const columns: TableColumn[] = [
       {
-        key: 'dnNumber', // Assuming dnNo comes as dnNumber
+        key: 'dnNumber',
         label: 'DN No',
         type: 'text',
         sortable: true,
@@ -103,7 +103,7 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
         filterPlaceholder: 'Search DN...'
       },
       {
-        key: 'date', // Assuming dnDate comes as date
+        key: 'date',
         label: 'DN Date',
         type: 'date',
         pipeParams: 'dd/MM/yyyy',
@@ -124,12 +124,11 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
         label: 'Customer Name',
         type: 'text',
         filterable: true,
-        filterType: 'text', // Or select if we had a customer list, using text for now as per "same lookup/dropdown" usually implies select, but text search is safer if no list is loaded. 
-        // PendingSuppliers used 'text' for supplierName.
+        filterType: 'text',
         filterPlaceholder: 'Search Customer...'
       },
       {
-        key: 'item.partNo', // Assuming nested structure for items
+        key: 'partNo',
         label: 'Part No',
         type: 'text',
         filterable: true,
@@ -137,20 +136,20 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
         filterPlaceholder: 'Search Part No...'
       },
       {
-        key: 'item.description',
+        key: 'description',
         label: 'Item Description',
         type: 'text',
         filterable: true,
         filterType: 'text'
       },
       {
-        key: 'item.uom',
+        key: 'uom',
         label: 'UOM',
         type: 'text',
         filterable: false
       },
       {
-        key: 'item.quantityDeducted',
+        key: 'quantityDeducted',
         label: 'Quantity Deducted',
         type: 'number',
         filterable: false
@@ -247,10 +246,15 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
         }
       } else if (filter.column === 'status') {
         filterParams.status = Array.isArray(filter.value) ? filter.value : [filter.value];
+      } else if (filter.column === 'dnNumber') {
+        filterParams.dnNumber = filter.value;
+      } else if (filter.column === 'jobId') {
+        filterParams.jobId = filter.value;
+      } else if (filter.column === 'customerName') {
+        filterParams.customerName = filter.value;
+      } else if (filter.column === 'partNo') {
+        filterParams.partNo = filter.value;
       } else {
-        // Map other columns directly
-        // keys might be nested like 'item.partNo', we should probably send them as is or map them
-        // Backend usually expects specific keys. I'll pass the key as is for now.
         filterParams[filter.column] = filter.value;
       }
     });

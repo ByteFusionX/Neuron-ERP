@@ -229,7 +229,11 @@
                   <!-- Text, Number, Boolean -->
                   <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
                     <div class="flex items-center gap-2">
-                      <span *ngIf="!column.clickable || !isClickableValue(column, item)" >{{ getCellValue(item, column) }}</span>
+                      <span *ngIf="(!column.clickable || !isClickableValue(column, item)) && !column.truncateText">{{ getCellValue(item, column) }}</span>
+                      <span *ngIf="(!column.clickable || !isClickableValue(column, item)) && column.truncateText"
+                        class="block truncate max-w-[250px]"
+                        [matTooltip]="getCellValue(item, column) || ''"
+                        matTooltipPosition="above">{{ getCellValue(item, column) }}</span>
                       <span *ngIf="column.clickable && isClickableValue(column, item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
                       <button 
                         *ngIf="column.inlineButton && (!column.inlineButton.condition || column.inlineButton.condition(item))"

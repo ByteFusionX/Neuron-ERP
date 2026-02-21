@@ -74,7 +74,7 @@ const stockEntrySchema = new Schema<StockEntry>({
     quantity: {
         type: Number,
         required: true,
-        min: 1,
+        min: 0,
     },
     uom: {
         type: String,
