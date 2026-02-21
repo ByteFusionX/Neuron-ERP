@@ -485,6 +485,80 @@ export const jobSheets = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+export const jobSheetsWithCompletedPO = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const jobs = await jobModel.find({
+            status: { $nin: ["Purchase Requested"] },
+            isDeleted: { $ne: true }
+        }).select("_id jobId").sort({ createdDate: -1 });
+
+        if (!jobs.length) {
+            return res.status(200).json({ jobs: [] });
+        }
+
+        const jobIds = jobs.map(j => j._id);
+
+        const purchaseOrders = await PurchaseOrder.find({
+            jobId: { $in: jobIds }
+        }).select('jobId poStatus supplierInvoices');
+        console.log(purchaseOrders);
+        const jobIdToOrders = new Map<string, any[]>();
+        purchaseOrders.forEach((po: any) => {
+            const key = po.jobId.toString();
+            if (!jobIdToOrders.has(key)) {
+                jobIdToOrders.set(key, []);
+            }
+            jobIdToOrders.get(key)!.push(po);
+        });
+
+        console.log(jobIdToOrders);
+        console.log(jobs);
+
+        const filteredJobs = jobs.filter(job => {
+            const orders = jobIdToOrders.get(job._id.toString()) || [];
+            if (!orders.length) return false;
+
+            for (const po of orders) {
+                if (po.poStatus !== 'Closed') {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        console.log(filteredJobs);
+
+        return res.status(200).json({ jobs: filteredJobs });
+    } catch (error) {
+        next(error);
+        console.error(error);
+    }
+}
+
+export const jobSheetsWithApprovedPR = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const approvedPRs = await PurchaseRequest.find({
+            status: 'Approved',
+            isDeleted: { $ne: true }
+        }).distinct('jobId');
+
+        if (!approvedPRs.length) {
+            return res.status(200).json({ jobs: [] });
+        }
+
+        const jobs = await jobModel.find({
+            _id: { $in: approvedPRs },
+            isDeleted: { $ne: true }
+        }).select('_id jobId').sort({ createdDate: -1 });
+
+        return res.status(200).json({ jobs });
+    } catch (error) {
+        next(error);
+        console.error(error);
+    }
+}
+
 export const oneJobSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
