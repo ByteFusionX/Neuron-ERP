@@ -1,0 +1,25 @@
+<data-table
+  [data]="tableData()"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading()"
+  [isEmpty]="isEmpty()"
+  [totalItems]="totalItems()"
+  [tableId]="'cancelled-invoices-register'"
+  [enableExport]="true"
+  exportFileName="cancelled_adjusted_invoices.xlsx"
+  (filterChange)="onFilterChange($event)"
+  (paginationChange)="onPaginationChange($event)"
+  (rowClick)="onRowClick($event)"
+  (exportRequest)="onExportRequest()"
+  title="Invoice Cancellation & Adjustment Register"
+>
+  <ng-template #sideColumn>
+      <div class="flex items-center gap-3">
+          <data-search 
+              placeholder="Search by invoice no..."
+              (searchSubmitted)="onSearchTerm($event)"
+          ></data-search>
+      </div>
+  </ng-template>
+</data-table>

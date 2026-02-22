@@ -419,7 +419,7 @@ export class CreateDnComponent implements OnInit {
     }
 
     const currentDeliveryControl = itemControl?.get('currentDeliveryQty');
-    
+
     if (this.selectedItems.has(index)) {
       this.selectedItems.delete(index);
       currentDeliveryControl?.disable();
@@ -469,13 +469,13 @@ export class CreateDnComponent implements OnInit {
     const selectedItemsData = selectedIndices.map(index => {
       const item = formValue.items[index];
       const itemControl = this.items.at(index);
-      
+
       if (!itemControl) {
         return null;
       }
 
       const currentDeliveryQty = itemControl.get('currentDeliveryQty')?.value || 0;
-      
+
       if (currentDeliveryQty <= 0) {
         return null;
       }
@@ -524,13 +524,13 @@ export class CreateDnComponent implements OnInit {
     const selectedItemsData = selectedIndices.map(index => {
       const item = formValue.items[index];
       const itemControl = this.items.at(index);
-      
+
       if (!itemControl) {
         return null;
       }
 
       const currentDeliveryQty = itemControl.get('currentDeliveryQty')?.value || 0;
-      
+
       if (currentDeliveryQty <= 0) {
         return null;
       }
@@ -606,13 +606,13 @@ export class CreateDnComponent implements OnInit {
     const selectedItemsData = selectedIndices.map(index => {
       const item = formValue.items[index];
       const itemControl = this.items.at(index);
-      
+
       if (!itemControl) {
         return null;
       }
 
       const currentDeliveryQty = itemControl.get('currentDeliveryQty')?.value || 0;
-      
+
       if (currentDeliveryQty <= 0) {
         itemControl.get('currentDeliveryQty')?.markAsTouched();
         return null;
@@ -665,16 +665,16 @@ export class CreateDnComponent implements OnInit {
         }
       });
     } else {
-    this.deliveryNoteService.createDn(payload).subscribe({
-      next: () => {
+      this.deliveryNoteService.createDn(payload).subscribe({
+        next: () => {
           this.toastr.success('DN Posted Successfully');
-        this.router.navigate(['/dispatch/delivery-note-register']);
-      },
-      error: (err) => {
+          this.router.navigate(['/dispatch/delivery-note-register']);
+        },
+        error: (err) => {
           this.toastr.error(err.error?.message || 'Failed to post DN');
-        this.isSubmitting.set(false);
-      }
-    });
+          this.isSubmitting.set(false);
+        }
+      });
     }
   }
 

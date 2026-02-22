@@ -18,6 +18,7 @@ export interface IDeliveryNote extends Document {
         status: string;
         itemId: string; // Ref to original Item ID in Job/Quote
         isInventoryItem: boolean;
+        unitSellingPrice: number;
     }[];
     status: string;
     createdBy: mongoose.Types.ObjectId;
@@ -42,12 +43,13 @@ const DeliveryNoteSchema: Schema = new Schema({
         serialNos: [String],
         status: String,
         itemId: String,
-        isInventoryItem: Boolean
+        isInventoryItem: Boolean,
+        unitSellingPrice: Number
     }],
-    status: { 
-        type: String, 
+    status: {
+        type: String,
         enum: ['Draft', 'Delivered', 'Cancelled'],
-        default: 'Draft' 
+        default: 'Draft'
     },
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     createdDate: { type: Date, default: Date.now },

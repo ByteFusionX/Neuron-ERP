@@ -130,7 +130,7 @@ const calculateDnStatus = async (jobId: string, currentDnItems: any[], excludeDn
         return 'Draft';
     }
 
-    const query: any = { 
+    const query: any = {
         jobId: new mongoose.Types.ObjectId(jobId),
         status: { $nin: ['Cancelled', 'Draft'] }
     };
@@ -211,7 +211,7 @@ export const createDn = async (req: Request, res: Response) => {
             createdBy: (req as any).user?._id
         });
         const savedDn = await newDn.save();
-        
+
         console.log('DN Created Successfully. Serial Numbers:', savedDn.items.map((item: any) => ({
             partNo: item.partNo,
             serialNos: item.serialNos
@@ -282,7 +282,7 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
 
         let dns = await DeliveryNote.aggregate([
             { $match: matchFilters },
-            { $sort: { dnNo : -1 } },
+            { $sort: { dnNo: -1 } },
             { $skip: skipNum },
             { $limit: row },
             {
@@ -294,6 +294,20 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
                 }
             },
             { $unwind: '$job' },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'job.quoteId',
+                    foreignField: '_id',
+                    as: 'quote'
+                }
+            },
+            { $unwind: { path: '$quote', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    'job.client': '$quote.client'
+                }
+            },
 
             {
                 $lookup: {
@@ -338,12 +352,12 @@ export const getDraftDnByJobId = async (req: Request, res: Response) => {
     try {
         const { jobId } = req.params;
 
-        const draftDn = await DeliveryNote.findOne({ 
+        const draftDn = await DeliveryNote.findOne({
             jobId: new mongoose.Types.ObjectId(jobId),
             status: 'Draft'
         })
-        .populate('jobId', 'jobId projectName')
-        .populate('createdBy', 'firstName lastName');
+            .populate('jobId', 'jobId projectName')
+            .populate('createdBy', 'firstName lastName');
 
         if (!draftDn) {
             return res.status(200).json(null);

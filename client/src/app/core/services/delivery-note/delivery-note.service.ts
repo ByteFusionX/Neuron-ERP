@@ -85,7 +85,7 @@ export class DeliveryNoteService {
 
   async generatePDF(dnData: any, includeStamp: boolean = true) {
     pdfMake.vfs = pdfFonts.vfs;
-    
+
     (pdfMake as any).fonts = {
       EBGaramond: {
         normal: `${window.location.origin}/assets/font/EBGaramond-Regular.ttf`,
@@ -96,7 +96,7 @@ export class DeliveryNoteService {
 
     const items = dnData.items || [];
     const tableBody: any[] = [];
-    
+
     items.forEach((item: any, index: number) => {
       tableBody.push([
         { text: String(index + 1).padStart(2, '0'), style: 'tableText', alignment: 'center' },
@@ -191,7 +191,7 @@ export class DeliveryNoteService {
                 { text: 'For Neuron Technologies W.L.L.', style: 'text' }
               ]
             },
-            
+
           ]
         },
         {

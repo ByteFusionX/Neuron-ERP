@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Invoice } from '../models/invoice.model';
+import mongoose from 'mongoose';
 import { getEmployeeData } from '../common/utils/util';
 
 export const getInvoices = async (req: Request, res: Response) => {
@@ -131,5 +132,298 @@ export const generateInvoiceNumber = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error generating invoice number:', error);
         res.status(500).json({ success: false, message: 'Failed to generate invoice number' });
+    }
+};
+
+export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+
+        const matchStage: any = { isDeleted: false, status: { $ne: 'Cancelled' } };
+
+        // Filters matching Invoice fields directly
+        if (req.query.search) {
+            matchStage['$or'] = [
+                { invoiceNo: { $regex: req.query.search, $options: 'i' } }
+            ];
+        }
+        if (req.query.invoiceNo) matchStage.invoiceNo = { $regex: req.query.invoiceNo, $options: 'i' };
+
+        if (req.query.fromDate && req.query.toDate) {
+            matchStage.date = {
+                $gte: new Date(req.query.fromDate as string),
+                $lte: new Date(req.query.toDate as string)
+            };
+        }
+
+        const pipeline: any[] = [
+            { $match: matchStage },
+            // Lookup corresponding Job for Job ID
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'job'
+                }
+            },
+            { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
+            // Lookup Customer
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customer',
+                    foreignField: '_id',
+                    as: 'customerDoc'
+                }
+            },
+            { $unwind: { path: '$customerDoc', preserveNullAndEmptyArrays: true } },
+            // If Job ID filter is given, apply it
+            ...(req.query.jobId ? [{
+                $match: {
+                    $or: [
+                        { 'job.jobId': { $regex: req.query.jobId, $options: 'i' } }
+                    ]
+                }
+            }] : []),
+            ...(req.query.customer ? [{
+                $match: { 'customerDoc.companyName': { $regex: req.query.customer, $options: 'i' } }
+            }] : []),
+            // Unwind items to join with Delivery Notes
+            { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
+            // Lookup corresponding Delivery Notes
+            {
+                $lookup: {
+                    from: 'deliverynotes',
+                    localField: 'items.dnId',
+                    foreignField: '_id',
+                    as: 'dn'
+                }
+            },
+            { $unwind: { path: '$dn', preserveNullAndEmptyArrays: true } },
+            // Apply DN filter if present
+            ...(req.query.dnNo ? [{
+                $match: { 'dn.dnNo': { $regex: req.query.dnNo, $options: 'i' } }
+            }] : []),
+            // Group by Invoice + DN mapping
+            {
+                $group: {
+                    _id: { invoiceId: '$_id', dnId: '$dn._id' },
+                    invoiceId: { $first: '$_id' },
+                    invoiceNos: { $first: '$invoiceNo' },
+                    invoiceDates: { $first: '$date' },
+                    job: { $first: '$job' },
+                    clientName: { $first: '$customerDoc.companyName' },
+                    totalInvoicedQty: { $sum: { $ifNull: ['$items.quantity', 0] } },
+                    dnId: { $first: '$dn._id' },
+                    dnNo: { $first: '$dn.dnNo' },
+                    dnDate: { $first: '$dn.dnDate' },
+                    dnItems: { $first: '$dn.items' }
+                }
+            },
+            // Re-shape the properties
+            {
+                $project: {
+                    _id: '$invoiceId',
+                    invoiceNos: 1,
+                    invoiceDates: 1,
+                    job: 1,
+                    clientName: 1,
+                    dnNo: 1,
+                    dnDate: 1,
+                    totalDeliveredQty: { $sum: '$dnItems.currentDeliveryQty' },
+                    totalInvoicedQty: { $ifNull: ['$totalInvoicedQty', 0] }
+                }
+            },
+            // Calculate Balance Qty and Linking Status
+            {
+                $addFields: {
+                    balanceQty: { $subtract: ['$totalDeliveredQty', '$totalInvoicedQty'] }
+                }
+            },
+            {
+                $addFields: {
+                    linkingStatus: {
+                        $switch: {
+                            branches: [
+                                { case: { $eq: ['$totalInvoicedQty', 0] }, then: 'Pending Invoice' },
+                                { case: { $gte: ['$totalInvoicedQty', '$totalDeliveredQty'] }, then: 'Fully Invoiced' }
+                            ],
+                            default: 'Partially Invoiced'
+                        }
+                    }
+                }
+            },
+            // Process Status Filter from frontend after all logic
+            ...(req.query.status ? [{
+                $match: { 'linkingStatus': { $in: Array.isArray(req.query.status) ? req.query.status : [req.query.status] } }
+            }] : [])
+        ];
+
+        // Ensure we load paginated results plus totally counted data
+        // We use $facet to run data and count query in one request
+        pipeline.push({ $sort: { invoiceDate: -1 } });
+
+        const facetPipeline = [
+            ...pipeline,
+            {
+                $facet: {
+                    metadata: [{ $count: 'total' }],
+                    data: [{ $skip: skip }, { $limit: limit }]
+                }
+            }
+        ];
+
+        const mongoose = require('mongoose');
+        const Invoice = mongoose.model('Invoice');
+
+        const result = await Invoice.aggregate(facetPipeline);
+        const data = result[0].data;
+        const total = result[0].metadata[0]?.total || 0;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                report: data,
+                pagination: {
+                    total,
+                    page,
+                    limit,
+                    pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching Invoice DN linking report:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch tracking report' });
+    }
+};
+
+export const getCancelledAdjustedInvoices = async (req: Request, res: Response) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+
+        const matchStage: any = { isDeleted: false };
+
+        if (req.query.search) {
+            matchStage['$or'] = [
+                { invoiceNo: { $regex: req.query.search, $options: 'i' } }
+            ];
+        }
+
+        if (req.query.invoiceNo) {
+            matchStage.invoiceNo = { $regex: req.query.invoiceNo, $options: 'i' };
+        }
+
+        if (req.query.status) {
+            matchStage.status = { $in: Array.isArray(req.query.status) ? req.query.status : [req.query.status] };
+        }
+
+        if (req.query.fromDate && req.query.toDate) {
+            matchStage.actionDate = {
+                $gte: new Date(req.query.fromDate as string),
+                $lte: new Date(req.query.toDate as string)
+            };
+        }
+
+        const pipeline: any[] = [
+            { $match: matchStage },
+            // Lookup Customer
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customer',
+                    foreignField: '_id',
+                    as: 'customerDoc'
+                }
+            },
+            { $unwind: { path: '$customerDoc', preserveNullAndEmptyArrays: true } },
+            // Lookup Job
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobDoc'
+                }
+            },
+            { $unwind: { path: '$jobDoc', preserveNullAndEmptyArrays: true } },
+            // Lookup Employee (action by)
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'actionBy',
+                    foreignField: '_id',
+                    as: 'employeeDoc'
+                }
+            },
+            { $unwind: { path: '$employeeDoc', preserveNullAndEmptyArrays: true } },
+
+            // Apply customer filter if present
+            ...(req.query.customer ? [{
+                $match: { 'customerDoc.companyName': { $regex: req.query.customer, $options: 'i' } }
+            }] : []),
+            // Apply Job ID filter if present
+            ...(req.query.jobId ? [{
+                $match: { 'jobDoc.jobId': { $regex: req.query.jobId, $options: 'i' } }
+            }] : []),
+
+            // Re-shape the properties
+            {
+                $project: {
+                    _id: 1,
+                    invoiceNo: 1,
+                    invoiceDate: 1,
+                    customerName: '$customerDoc.companyName',
+                    jobId: '$jobDoc.jobId',
+                    originalAmount: 1,
+                    adjustedAmount: 1,
+                    reason: 1,
+                    actionBy: { $concat: ['$employeeDoc.firstName', ' ', '$employeeDoc.lastName'] },
+                    actionById: '$employeeDoc.employeeId',
+                    actionDate: 1,
+                    status: 1
+                }
+            }
+        ];
+
+        pipeline.push({ $sort: { actionDate: -1 } });
+
+        const facetPipeline = [
+            ...pipeline,
+            {
+                $facet: {
+                    metadata: [{ $count: 'total' }],
+                    data: [{ $skip: skip }, { $limit: limit }]
+                }
+            }
+        ];
+
+        const mongoose = require('mongoose');
+        const InvoiceAudit = mongoose.model('InvoiceAudit');
+
+        // const result = await InvoiceAudit.aggregate(facetPipeline);
+        // const data = result[0].data;
+        // const total = result[0].metadata[0]?.total || 0;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                // report: data,
+                pagination: {
+                    // total,
+                    page,
+                    limit,
+                    // pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching cancelled/adjusted invoices:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch report' });
     }
 };
