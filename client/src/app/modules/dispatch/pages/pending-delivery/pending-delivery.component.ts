@@ -1,13 +1,23 @@
 import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterModule } from '@angular/router';
+import { RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { TableColumn } from 'src/app/shared/components/table/table.model';
+import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { PaginationService } from 'src/app/core/services/pagination.service';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
+
+interface FilterParams {
+  [key: string]: any;
+  page: number;
+  row: number;
+  customerName?: string;
+  jobId?: string;
+  supplierName?: string;
+  supplierLpoNo?: string;
+  status?: string[];
+}
 
 @Component({
   selector: 'app-pending-delivery',
@@ -16,7 +26,6 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
     CommonModule,
     RouterModule,
     TableComponent,
-    ButtonComponent,
     IconsModule
   ],
   templateUrl: './pending-delivery.component.html',
@@ -27,7 +36,6 @@ export class PendingDeliveryComponent implements OnInit {
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private dnService = inject(DeliveryNoteService);
-  private router = inject(Router);
   private toaster = inject(ToastrService);
   private paginationService = inject(PaginationService);
 
@@ -39,6 +47,8 @@ export class PendingDeliveryComponent implements OnInit {
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
 
+  statusOptions: string[] = ['Not Ordered', 'Ordered', 'Partially Received', 'Received'];
+
   ngOnInit(): void {
     this.setupTableColumns();
     this.loadData();
@@ -47,18 +57,68 @@ export class PendingDeliveryComponent implements OnInit {
   setupTableColumns(): void {
     this.tableColumns = [
       {
-        key: 'jobId',
-        label: 'Job ID',
-        type: 'text',
-        filterable: true,
-        filterType: 'text'
+        key: 'slNo',
+        label: 'Sl No',
+        type: 'number',
+        filterable: false
       },
       {
-        key: 'customer',
-        label: 'Customer',
+        key: 'customerName',
+        label: 'Customer Name',
         type: 'text',
         filterable: true,
-        filterType: 'text'
+        filterType: 'text',
+        filterPlaceholder: 'Search Customer...'
+      },
+      {
+        key: 'jobId',
+        label: 'Job Id',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search Job...'
+      },
+            {
+        key: 'description',
+        label: 'Item Description',
+        type: 'text',
+        truncateText: true,
+        filterable: false
+      },
+      {
+        key: 'supplierName',
+        label: 'Supplier Name',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search Supplier...'
+      },
+      {
+        key: 'supplierLpoNo',
+        label: 'Supplier LPO No',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search LPO...'
+      },
+
+      {
+        key: 'orderedQty',
+        label: 'Ordered Qty',
+        type: 'number',
+        filterable: false
+      },
+      {
+        key: 'receivedQty',
+        label: 'Received Qty',
+        type: 'number',
+        filterable: false
+      },
+      {
+        key: 'balanceQty',
+        label: 'Balance QTY',
+        type: 'number',
+        filterable: false
       },
       {
         key: 'status',
@@ -67,42 +127,26 @@ export class PendingDeliveryComponent implements OnInit {
         headerClass: 'text-center',
         filterable: true,
         filterType: 'select',
-        filterOptions: [
-          { label: 'To be Delivered', value: 'To be Delivered' },
-          { label: 'Partially Delivered', value: 'Partially Delivered' }
-        ]
-      },
-      {
-        key: 'actions',
-        label: 'Action',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: [
-          {
-            icon: 'heroEye',
-            tooltip: 'View Pending Items',
-            action: 'viewJob',
-            buttonClass: 'cursor-pointer w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'
-          }
-        ]
+        filterOptions: this.statusOptions.map(s => ({ label: s, value: s }))
       }
     ];
 
-    this.defaultColumns = ['jobId', 'customer', 'status', 'actions'];
+    this.defaultColumns = this.tableColumns.map(c => c.key);
   }
 
-  loadData(): void {
+  loadData(filters?: Partial<FilterParams>): void {
     this.isLoading.set(true);
     const paginationState = this.paginationService.paginationState();
 
-    const payload = {
+    const payload: FilterParams = {
       page: paginationState.page,
-      row: paginationState.row
+      row: paginationState.row,
+      ...filters
     };
 
     this.dnService.getPendingDeliveries(payload).subscribe({
       next: (res) => {
-        this.tableData.set(res.jobs || []);
+        this.tableData.set(res.items || []);
         this.totalItems.set(res.total || 0);
 
         this.paginationService.updatePaginationState({
@@ -132,19 +176,34 @@ export class PendingDeliveryComponent implements OnInit {
     this.loadData();
   }
 
-  onActionClick(event: { action: string; item: any }): void {
-    const { action, item } = event;
-    if (action === 'viewJob') {
-      this.viewJob(item);
-    }
-  }
+  onFilterChange(filters: TableFilter[]): void {
+    this.isLoading.set(true);
+    const currentState = this.paginationService.paginationState();
+    this.paginationService.updatePaginationState({
+      page: 1,
+      row: currentState.row,
+      total: currentState.total
+    });
 
-  onRowClick(row: any): void {
-    this.viewJob(row);
-  }
+    const filterParams: any = {};
 
-  viewJob(row: any): void {
-    this.router.navigate(['/dispatch/pending-delivery-reports', row.jobMongoId]);
+    filters.forEach(filter => {
+      if (filter.column === 'customerName') {
+        filterParams.customerName = filter.value;
+      } else if (filter.column === 'jobId') {
+        filterParams.jobId = filter.value;
+      } else if (filter.column === 'supplierName') {
+        filterParams.supplierName = filter.value;
+      } else if (filter.column === 'supplierLpoNo') {
+        filterParams.supplierLpoNo = filter.value;
+      } else if (filter.column === 'status') {
+        filterParams.status = Array.isArray(filter.value) ? filter.value : [filter.value];
+      } else {
+        filterParams[filter.column] = filter.value;
+      }
+    });
+
+    this.loadData(filterParams);
   }
 
   onExportRequest(): void {
@@ -161,8 +220,8 @@ export class PendingDeliveryComponent implements OnInit {
 
     this.dnService.getPendingDeliveries(payload).subscribe({
       next: (res) => {
-        if (this.tableComponent && res.jobs && res.jobs.length > 0) {
-          this.tableComponent.exportAllData(res.jobs);
+        if (this.tableComponent && res.items && res.items.length > 0) {
+          this.tableComponent.exportAllData(res.items);
         }
       },
       error: (error) => {

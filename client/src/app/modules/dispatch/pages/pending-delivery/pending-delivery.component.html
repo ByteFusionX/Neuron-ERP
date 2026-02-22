@@ -8,8 +8,7 @@
 [totalItems]="totalItems()"
 [tableId]="'pending-delivery-reports'"
 [enableExport]="true"
-(rowClick)="onRowClick($event)"
-(actionClick)="onActionClick($event)"
+(filterChange)="onFilterChange($event)"
 (paginationChange)="onPaginationChange($event)"
 (exportRequest)="onExportRequest()"
 ></data-table>

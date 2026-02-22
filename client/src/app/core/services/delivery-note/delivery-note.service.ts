@@ -33,6 +33,10 @@ export class DeliveryNoteService {
     return this.http.get<any>(`${this.apiUrl}/draft/${jobId}`);
   }
 
+  getDnItemsForJob(jobId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/items-for-job/${jobId}`);
+  }
+
   getAllDeliveryNotes(filter: any): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/get`, filter);
   }
