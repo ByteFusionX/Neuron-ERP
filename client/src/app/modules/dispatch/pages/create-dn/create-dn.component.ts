@@ -415,7 +415,7 @@ export class CreateDnComponent implements OnInit {
   toggleItemSelection(index: number): void {
     const itemControl = this.items.at(index);
     const status = itemControl?.get('status')?.value;
-
+    
     if (status === 'Delivered' || status === 'No PO / Not in Inventory') {
       return;
     }
