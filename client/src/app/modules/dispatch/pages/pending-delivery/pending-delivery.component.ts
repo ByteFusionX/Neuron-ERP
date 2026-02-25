@@ -47,7 +47,7 @@ export class PendingDeliveryComponent implements OnInit {
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
 
-  statusOptions: string[] = ['Not Ordered', 'Ordered', 'Partially Received', 'Received'];
+  statusOptions: string[] = ['Not Delivered', 'Partially Delivered'];
 
   ngOnInit(): void {
     this.setupTableColumns();
@@ -117,6 +117,12 @@ export class PendingDeliveryComponent implements OnInit {
       {
         key: 'balanceQty',
         label: 'Balance QTY',
+        type: 'number',
+        filterable: false
+      },
+      {
+        key: 'deliveredQty',
+        label: 'Delivered Qty',
         type: 'number',
         filterable: false
       },

@@ -166,51 +166,51 @@ export class CreateDnComponent implements OnInit {
       next: (response: any) => {
         const allItems = response?.data || [];
 
-        allItems.forEach((item: any, index: number) => {
-          const prevDelivered = this.getDeliveredQty(item._id);
+    allItems.forEach((item: any, index: number) => {
+      const prevDelivered = this.getDeliveredQty(item._id);
           const remaining = Math.max(0, (item.orderedQty || 0) - prevDelivered);
           const isFulfilled = remaining === 0 && (item.orderedQty || 0) > 0;
           const isAvailable = item.isAvailable === true;
 
           let initialStatus = isAvailable ? 'Pending' : 'No PO / Not in Inventory';
-          if (isFulfilled) {
-            initialStatus = 'Delivered';
-          } else if (prevDelivered > 0) {
-            initialStatus = 'Partially Delivered';
-          }
+      if (isFulfilled) {
+        initialStatus = 'Delivered';
+      } else if (prevDelivered > 0) {
+        initialStatus = 'Partially Delivered';
+      }
 
-          const draftItem = dn.items?.find((di: any) => di.itemId === item._id);
-          const currentDeliveryQty = draftItem?.currentDeliveryQty || 0;
-          const serialNos = draftItem?.serialNos || [];
+      const draftItem = dn.items?.find((di: any) => di.itemId === item._id);
+      const currentDeliveryQty = draftItem?.currentDeliveryQty || 0;
+      const serialNos = draftItem?.serialNos || [];
 
-          const group = this.fb.group({
-            slNo: [index + 1],
+      const group = this.fb.group({
+        slNo: [index + 1],
             partNo: [item.partNo?.partNo || item.partNo || ''],
             description: [item.detail || ''],
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],
-            deliveredQty: [prevDelivered],
+        deliveredQty: [prevDelivered],
             currentDeliveryQty: [{ value: currentDeliveryQty, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
             serialNos: [''],
             status: [initialStatus],
             itemId: [item._id],
             unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [draftItem?.isInventoryItem ?? isAvailable]
-          });
+      });
 
-          itemsArray.push(group);
+      itemsArray.push(group);
 
           if (currentDeliveryQty > 0 && isAvailable) {
-            this.selectedItems.add(index);
-            const currentDeliveryControl = group.get('currentDeliveryQty');
-            currentDeliveryControl?.enable();
-            const balance = this.getBalanceQty(group);
-            currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
-            currentDeliveryControl?.updateValueAndValidity();
-          }
+        this.selectedItems.add(index);
+        const currentDeliveryControl = group.get('currentDeliveryQty');
+        currentDeliveryControl?.enable();
+        const balance = this.getBalanceQty(group);
+        currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
+        currentDeliveryControl?.updateValueAndValidity();
+      }
 
-          if (serialNos.length > 0) {
-            this.itemSerialNos.set(index, Array.isArray(serialNos) ? serialNos : [serialNos]);
+      if (serialNos.length > 0) {
+        this.itemSerialNos.set(index, Array.isArray(serialNos) ? serialNos : [serialNos]);
           }
         });
       },
@@ -309,35 +309,35 @@ export class CreateDnComponent implements OnInit {
       next: (response: any) => {
         const allItems = response?.data || [];
 
-        allItems.forEach((item: any, index: number) => {
-          const prevDelivered = this.getDeliveredQty(item._id);
+    allItems.forEach((item: any, index: number) => {
+      const prevDelivered = this.getDeliveredQty(item._id);
           const remaining = Math.max(0, (item.orderedQty || 0) - prevDelivered);
           const isFulfilled = remaining === 0 && (item.orderedQty || 0) > 0;
           const isAvailable = item.isAvailable === true;
 
           let initialStatus = isAvailable ? 'Pending' : 'No PO / Not in Inventory';
-          if (isFulfilled) {
-            initialStatus = 'Delivered';
-          } else if (prevDelivered > 0) {
-            initialStatus = 'Partially Delivered';
-          }
+      if (isFulfilled) {
+        initialStatus = 'Delivered';
+      } else if (prevDelivered > 0) {
+        initialStatus = 'Partially Delivered';
+      }
 
-          const group = this.fb.group({
-            slNo: [index + 1],
+      const group = this.fb.group({
+        slNo: [index + 1],
             partNo: [item.partNo?.partNo || item.partNo || ''],
             description: [item.detail || ''],
             totalQuantity: [item.totalQuantity || 0],
             orderedQty: [item.orderedQty || 0],
-            deliveredQty: [prevDelivered],
+        deliveredQty: [prevDelivered],
             currentDeliveryQty: [{ value: 0, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
             serialNos: [''],
             status: [initialStatus],
             itemId: [item._id],
             unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [isAvailable]
-          });
+      });
 
-          itemsArray.push(group);
+      itemsArray.push(group);
         });
       },
       error: () => {

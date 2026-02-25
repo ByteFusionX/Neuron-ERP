@@ -225,12 +225,21 @@ export class TableComponent implements OnInit, OnChanges {
       case 'reversed':
         return 'bg-orange-100 text-orange-700 border border-orange-200';
       case 'not ordered':
+      case 'not delivered':
         return 'bg-rose-100 text-rose-700 border border-rose-200';
       case 'ordered':
         return 'bg-sky-100 text-sky-700 border border-sky-200';
       case 'partially received':
         return 'bg-amber-100 text-amber-700 border border-amber-200';
       case 'received':
+        return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+      case 'partially delivered':
+        return 'bg-violet-100 text-violet-700 border border-violet-200';
+      case 'pending invoice':
+        return 'bg-rose-100 text-rose-700 border border-rose-200';
+      case 'partially invoiced':
+        return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'fully invoiced':
         return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
       default:
         return 'bg-slate-100 text-slate-700 border border-slate-200';
