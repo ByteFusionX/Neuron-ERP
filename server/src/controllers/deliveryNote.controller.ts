@@ -9,6 +9,7 @@ import PurchaseRequest from '../models/purchaseRequest.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import InventoryDeduction from '../models/inventoryDeduction.model';
 import GRN from '../models/grn.model';
+import { Invoice } from '../models/invoice.model';
 import { checkAndUpdateJobCompletionStatus } from './job.controller';
 
 /**
@@ -573,186 +574,278 @@ export const getPendingDeliveriesSummary = async (req: Request, res: Response) =
         page = page || 1;
         row = row || 10;
 
-        const prs = await PurchaseRequest.find({ isDeleted: { $ne: true } }).lean();
-        if (!prs || prs.length === 0) {
-            return res.status(200).json({ total: 0, items: [] });
-        }
-
-        const prJobIds = [...new Set(prs.map(pr => String(pr.jobId)))];
-        const jobs = await Job.find({
-            _id: { $in: prJobIds.map(id => new mongoose.Types.ObjectId(id)) },
-            isDeleted: { $ne: true }
-        }).lean();
-        const jobMap = new Map<string, any>();
-        jobs.forEach(j => jobMap.set(String(j._id), j));
-
-        const quoteIds = [...new Set(jobs.map(j => j.quoteId).filter(Boolean).map((id: any) => String(id)))];
-        const quotations = await Quotation.find({ _id: { $in: quoteIds } }).populate('client').lean();
-        const quoteMap = new Map<string, any>();
-        quotations.forEach(q => quoteMap.set(String(q._id), q));
-
-        const prIds = prs.map(pr => pr._id);
-        const pos = await PurchaseOrder.find({ purchaseId: { $in: prIds } }).populate('supplierId').lean();
-        const posByPr = new Map<string, any[]>();
-        pos.forEach(po => {
-            const key = String(po.purchaseId);
-            if (!posByPr.has(key)) posByPr.set(key, []);
-            posByPr.get(key)!.push(po);
-        });
-
-        const poIds = pos.map(po => po._id);
-        const grns = await GRN.find({
-            purchaseOrderId: { $in: poIds },
-            isDeleted: { $ne: true }
-        }).lean();
-        const grnsByPo = new Map<string, any[]>();
-        grns.forEach(grn => {
-            const key = String(grn.purchaseOrderId);
-            if (!grnsByPo.has(key)) grnsByPo.set(key, []);
-            grnsByPo.get(key)!.push(grn);
-        });
-
-        const jobIdsList = jobs.map(j => j._id);
-        const dns = await DeliveryNote.find({
-            jobId: { $in: jobIdsList },
-            status: { $nin: ['Cancelled', 'Draft'] }
-        }).lean();
-        const dnsByJob = new Map<string, any[]>();
-        dns.forEach(dn => {
-            const key = String(dn.jobId);
-            if (!dnsByJob.has(key)) dnsByJob.set(key, []);
-            dnsByJob.get(key)!.push(dn);
-        });
-
-        const allRows: any[] = [];
-
-        for (const pr of prs) {
-            const job = jobMap.get(String(pr.jobId));
-            if (!job) continue;
-
-            const quotation = job.quoteId ? quoteMap.get(String(job.quoteId)) : null;
-            const customer = quotation?.client as any;
-            const customerNameVal = customer?.companyName || '';
-
-            const prPOs = posByPr.get(String(pr._id)) || [];
-            const jobDns = dnsByJob.get(String(job._id)) || [];
-
-            if (!pr.items || !Array.isArray(pr.items)) continue;
-
-            for (const item of pr.items) {
-                if (!(item as any).itemDetails || !Array.isArray((item as any).itemDetails)) continue;
-
-                for (const itemDetail of (item as any).itemDetails) {
-                    const orderedQty = itemDetail.quantity || 0;
-                    const itemDetailId = String(itemDetail._id);
-
-                    let deliveredViaDn = 0;
-                    for (const dn of jobDns) {
-                        if (dn.items && Array.isArray(dn.items)) {
-                            for (const dnItem of dn.items) {
-                                if (dnItem.itemId === itemDetailId) {
-                                    deliveredViaDn += dnItem.currentDeliveryQty || 0;
+        const pipeline: any[] = [
+            { $match: { isDeleted: { $ne: true }, status: 'Approved' } },
+            { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
+            { $unwind: { path: '$items.itemDetails', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    pipeline: [
+                        { $match: { isDeleted: { $ne: true } } },
+                        { $project: { jobId: 1, quoteId: 1 } }
+                    ],
+                    as: 'job'
+                }
+            },
+            { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'job.quoteId',
+                    foreignField: '_id',
+                    pipeline: [{ $project: { client: 1 } }],
+                    as: 'quotation'
+                }
+            },
+            { $unwind: { path: '$quotation', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'quotation.client',
+                    foreignField: '_id',
+                    pipeline: [{ $project: { companyName: 1 } }],
+                    as: 'customer'
+                }
+            },
+            { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'deliverynotes',
+                    let: {
+                        jobObjId: '$job._id',
+                        itemDetailId: { $convert: { input: '$items.itemDetails._id', to: 'string', onError: '', onNull: '' } }
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$jobId', '$$jobObjId'] },
+                                status: { $nin: ['Cancelled', 'Draft'] }
+                            }
+                        },
+                        { $unwind: '$items' },
+                        { $match: { $expr: { $eq: ['$items.itemId', '$$itemDetailId'] } } },
+                        { $group: { _id: null, total: { $sum: '$items.currentDeliveryQty' } } }
+                    ],
+                    as: 'dnData'
+                }
+            },
+            {
+                $addFields: {
+                    _deliveredQty: { $ifNull: [{ $arrayElemAt: ['$dnData.total', 0] }, 0] },
+                    _prQty: { $ifNull: ['$items.itemDetails.quantity', 0] }
+                }
+            },
+            {
+                $match: {
+                    $expr: {
+                        $or: [
+                            { $lte: ['$_prQty', 0] },
+                            { $lt: ['$_deliveredQty', '$_prQty'] }
+                        ]
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'purchaseorders',
+                    let: {
+                        prId: '$_id',
+                        itemPartNo: '$items.itemDetails.partNo',
+                        itemDetail: { $toLower: { $trim: { input: { $ifNull: ['$items.itemDetails.detail', ''] } } } }
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$purchaseId', '$$prId'] },
+                                        { $eq: ['$poStatus', 'Closed'] }
+                                    ]
                                 }
                             }
-                        }
-                    }
-
-                    if (deliveredViaDn >= orderedQty && orderedQty > 0) continue;
-
-                    let supplierNameVal = '';
-                    let supplierLpoNoVal = '';
-                    let receivedQty = 0;
-                    let hasPO = false;
-
-                    for (const po of prPOs) {
-                        if (!po.items || !Array.isArray(po.items)) continue;
-
-                        for (const poItem of po.items) {
-                            const partNoMatch = itemDetail.partNo && poItem.partNo &&
-                                String(itemDetail.partNo) === String(poItem.partNo);
-                            const detailMatch = itemDetail.detail && poItem.detail &&
-                                itemDetail.detail.trim().toLowerCase() === poItem.detail.trim().toLowerCase();
-
-                            if (partNoMatch || detailMatch) {
-                                hasPO = true;
-                                supplierNameVal = (po.supplierId as any)?.supplierName || '';
-                                supplierLpoNoVal = po.poNo || '';
-
-                                const poGrns = grnsByPo.get(String(po._id)) || [];
-                                for (const grn of poGrns) {
-                                    if (!grn.items || !Array.isArray(grn.items)) continue;
-                                    for (const grnItem of grn.items) {
-                                        const grnDetailMatch = grnItem.itemDescription && poItem.detail &&
-                                            grnItem.itemDescription.trim().toLowerCase() === poItem.detail.trim().toLowerCase();
-                                        if (grnDetailMatch) {
-                                            receivedQty += grnItem.acceptedQty || 0;
+                        },
+                        { $unwind: '$items' },
+                        {
+                            $match: {
+                                $expr: {
+                                    $or: [
+                                        {
+                                            $and: [
+                                                { $ne: ['$$itemPartNo', null] },
+                                                { $ne: ['$items.partNo', null] },
+                                                { $eq: [
+                                                    { $convert: { input: '$items.partNo', to: 'string', onError: '', onNull: '' } },
+                                                    { $convert: { input: '$$itemPartNo', to: 'string', onError: '', onNull: '' } }
+                                                ] }
+                                            ]
+                                        },
+                                        {
+                                            $and: [
+                                                { $ne: ['$$itemDetail', ''] },
+                                                { $ne: ['$items.detail', null] },
+                                                { $eq: [{ $toLower: { $trim: { input: '$items.detail' } } }, '$$itemDetail'] }
+                                            ]
                                         }
-                                    }
+                                    ]
                                 }
-                                break;
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: 'suppliers',
+                                localField: 'supplierId',
+                                foreignField: '_id',
+                                pipeline: [{ $project: { supplierName: 1 } }],
+                                as: 'supplier'
+                            }
+                        },
+                        { $unwind: { path: '$supplier', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'grns',
+                                let: {
+                                    poId: '$_id',
+                                    poItemDetail: { $toLower: { $trim: { input: '$items.detail' } } }
+                                },
+                                pipeline: [
+                                    {
+                                        $match: {
+                                            $expr: { $eq: ['$purchaseOrderId', '$$poId'] },
+                                            isDeleted: { $ne: true }
+                                        }
+                                    },
+                                    { $unwind: '$items' },
+                                    {
+                                        $match: {
+                                            $expr: {
+                                                $eq: [
+                                                    { $toLower: { $trim: { input: '$items.itemDescription' } } },
+                                                    '$$poItemDetail'
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    { $group: { _id: null, total: { $sum: '$items.acceptedQty' } } }
+                                ],
+                                as: 'grnData'
+                            }
+                        },
+                        {
+                            $project: {
+                                orderedQty: '$items.quantity',
+                                receivedQty: { $ifNull: [{ $arrayElemAt: ['$grnData.total', 0] }, 0] },
+                                supplierName: { $ifNull: ['$supplier.supplierName', ''] },
+                                poNo: 1
                             }
                         }
-                        if (hasPO) break;
-                    }
-
-                    const balanceQty = Math.max(0, orderedQty - receivedQty);
-
-                    let statusVal = 'Not Ordered';
-                    if (hasPO) {
-                        if (receivedQty >= orderedQty && orderedQty > 0) {
-                            statusVal = 'Received';
-                        } else if (receivedQty > 0) {
-                            statusVal = 'Partially Received';
-                        } else {
-                            statusVal = 'Ordered';
+                    ],
+                    as: 'poData'
+                }
+            },
+            {
+                $addFields: {
+                    _hasPO: { $gt: [{ $size: '$poData' }, 0] },
+                    _firstPO: { $arrayElemAt: ['$poData', 0] }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    customerName: { $ifNull: ['$customer.companyName', ''] },
+                    jobId: '$job.jobId',
+                    description: { $ifNull: ['$items.itemDetails.detail', ''] },
+                    supplierName: {
+                        $cond: {
+                            if: '$_hasPO',
+                            then: { $ifNull: ['$_firstPO.supplierName', ''] },
+                            else: ''
+                        }
+                    },
+                    supplierLpoNo: {
+                        $cond: {
+                            if: '$_hasPO',
+                            then: { $ifNull: ['$_firstPO.poNo', ''] },
+                            else: ''
+                        }
+                    },
+                    orderedQty: {
+                        $cond: { if: '$_hasPO', then: { $ifNull: ['$_firstPO.orderedQty', 0] }, else: null }
+                    },
+                    receivedQty: {
+                        $cond: { if: '$_hasPO', then: { $ifNull: ['$_firstPO.receivedQty', 0] }, else: null }
+                    },
+                    deliveredQty: {
+                        $cond: { if: '$_hasPO', then: '$_deliveredQty', else: null }
+                    },
+                    balanceQty: {
+                        $cond: {
+                            if: '$_hasPO',
+                            then: { $max: [0, { $subtract: [{ $ifNull: ['$_firstPO.orderedQty', 0] }, { $ifNull: ['$_firstPO.receivedQty', 0] }] }] },
+                            else: null
+                        }
+                    },
+                    status: {
+                        $cond: {
+                            if: { $gt: ['$_deliveredQty', 0] },
+                            then: 'Partially Delivered',
+                            else: 'Not Delivered'
                         }
                     }
-
-                    allRows.push({
-                        customerName: customerNameVal,
-                        jobId: job.jobId,
-                        supplierName: supplierNameVal,
-                        supplierLpoNo: supplierLpoNoVal,
-                        orderedQty,
-                        receivedQty,
-                        balanceQty,
-                        status: statusVal,
-                        description: itemDetail.detail || '',
-                    });
                 }
             }
-        }
+        ];
 
-        let filteredRows = allRows;
+        pipeline.push({
+            $match: {
+                $expr: {
+                    $not: {
+                        $and: [
+                            { $ne: ['$orderedQty', null] },
+                            { $gt: ['$orderedQty', 0] },
+                            { $gte: ['$deliveredQty', '$orderedQty'] }
+                        ]
+                    }
+                }
+            }
+        });
 
-        if (customerName) {
-            const regex = new RegExp(customerName, 'i');
-            filteredRows = filteredRows.filter(r => regex.test(r.customerName));
-        }
-        if (jobId) {
-            const regex = new RegExp(jobId, 'i');
-            filteredRows = filteredRows.filter(r => regex.test(r.jobId));
-        }
-        if (supplierName) {
-            const regex = new RegExp(supplierName, 'i');
-            filteredRows = filteredRows.filter(r => regex.test(r.supplierName));
-        }
-        if (supplierLpoNo) {
-            const regex = new RegExp(supplierLpoNo, 'i');
-            filteredRows = filteredRows.filter(r => regex.test(r.supplierLpoNo));
-        }
+        const filterMatch: any = {};
+        if (customerName) filterMatch.customerName = { $regex: customerName, $options: 'i' };
+        if (jobId) filterMatch.jobId = { $regex: jobId, $options: 'i' };
+        if (supplierName) filterMatch.supplierName = { $regex: supplierName, $options: 'i' };
+        if (supplierLpoNo) filterMatch.supplierLpoNo = { $regex: supplierLpoNo, $options: 'i' };
         if (status) {
             const statusArr = Array.isArray(status) ? status : [status];
-            filteredRows = filteredRows.filter(r => statusArr.includes(r.status));
+            filterMatch.status = { $in: statusArr };
+        }
+        if (Object.keys(filterMatch).length > 0) {
+            pipeline.push({ $match: filterMatch });
         }
 
-        filteredRows.forEach((r, i) => r.slNo = i + 1);
+        pipeline.push({
+            $facet: {
+                metadata: [{ $count: 'total' }],
+                data: [
+                    { $skip: (page - 1) * row },
+                    { $limit: row }
+                ]
+            }
+        });
 
-        const total = filteredRows.length;
-        const start = (page - 1) * row;
-        const paged = filteredRows.slice(start, start + row);
+        const result = await PurchaseRequest.aggregate(pipeline).allowDiskUse(true);
 
-        return res.status(200).json({ total, items: paged });
+        
+
+        const total = result[0]?.metadata[0]?.total || 0;
+        const items = (result[0]?.data || []).map((r: any, i: number) => ({
+            ...r,
+            slNo: (page - 1) * row + i + 1
+        }));
+
+        return res.status(200).json({ total, items });
     } catch (error) {
         console.error('Get Pending Deliveries Summary Error:', error);
         res.status(500).json({ message: 'Error fetching pending deliveries summary', error });
@@ -971,5 +1064,156 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Get DN Items For Job Error:', error);
         res.status(500).json({ success: false, message: 'Error fetching DN items', error });
+    }
+};
+
+export const getInvoiceLinkingSummary = async (req: Request, res: Response) => {
+    try {
+        let { page, row, customerName, jobId, dnNo, invoiceNo, status } = req.body;
+        page = page || 1;
+        row = row || 10;
+
+        const pipeline: any[] = [
+            { $match: { status: 'Delivered' } },
+            {
+                $addFields: {
+                    deliveredQty: { $sum: '$items.currentDeliveryQty' }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    pipeline: [
+                        { $match: { isDeleted: { $ne: true } } },
+                        { $project: { jobId: 1, quoteId: 1 } }
+                    ],
+                    as: 'job'
+                }
+            },
+            { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'job.quoteId',
+                    foreignField: '_id',
+                    pipeline: [{ $project: { client: 1 } }],
+                    as: 'quotation'
+                }
+            },
+            { $unwind: { path: '$quotation', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'quotation.client',
+                    foreignField: '_id',
+                    pipeline: [{ $project: { companyName: 1 } }],
+                    as: 'customer'
+                }
+            },
+            { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'invoices',
+                    let: { dnObjId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                isDeleted: { $ne: true }
+                            }
+                        },
+                        { $unwind: '$items' },
+                        {
+                            $match: {
+                                $expr: { $eq: ['$items.dnId', '$$dnObjId'] }
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: null,
+                                totalQty: { $sum: { $ifNull: ['$items.quantity', 0] } },
+                                invoiceNo: { $first: '$invoiceNo' },
+                                invoiceDate: { $first: '$date' }
+                            }
+                        }
+                    ],
+                    as: 'invoiceData'
+                }
+            },
+            {
+                $addFields: {
+                    _invoiceInfo: { $arrayElemAt: ['$invoiceData', 0] },
+                    invoicedQty: { $ifNull: [{ $arrayElemAt: ['$invoiceData.totalQty', 0] }, 0] }
+                }
+            },
+            {
+                $addFields: {
+                    balanceQty: { $max: [0, { $subtract: ['$deliveredQty', '$invoicedQty'] }] }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    dnNo: 1,
+                    dnDate: 1,
+                    customerName: { $ifNull: ['$customer.companyName', ''] },
+                    jobId: '$job.jobId',
+                    deliveredQty: 1,
+                    invoicedQty: 1,
+                    balanceQty: 1,
+                    invoiceNo: { $ifNull: ['$_invoiceInfo.invoiceNo', ''] },
+                    invoiceDate: { $ifNull: ['$_invoiceInfo.invoiceDate', null] },
+                    status: {
+                        $cond: {
+                            if: { $lte: ['$invoicedQty', 0] },
+                            then: 'Pending Invoice',
+                            else: {
+                                $cond: {
+                                    if: { $gte: ['$invoicedQty', '$deliveredQty'] },
+                                    then: 'Fully Invoiced',
+                                    else: 'Partially Invoiced'
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ];
+
+        const filterMatch: any = {};
+        if (customerName) filterMatch.customerName = { $regex: customerName, $options: 'i' };
+        if (jobId) filterMatch.jobId = { $regex: jobId, $options: 'i' };
+        if (dnNo) filterMatch.dnNo = { $regex: dnNo, $options: 'i' };
+        if (invoiceNo) filterMatch.invoiceNo = { $regex: invoiceNo, $options: 'i' };
+        if (status) {
+            const statusArr = Array.isArray(status) ? status : [status];
+            filterMatch.status = { $in: statusArr };
+        }
+        if (Object.keys(filterMatch).length > 0) {
+            pipeline.push({ $match: filterMatch });
+        }
+
+        pipeline.push({
+            $facet: {
+                metadata: [{ $count: 'total' }],
+                data: [
+                    { $sort: { dnDate: -1 } },
+                    { $skip: (page - 1) * row },
+                    { $limit: row }
+                ]
+            }
+        });
+
+        const result = await DeliveryNote.aggregate(pipeline).allowDiskUse(true);
+
+        const metadata = result[0]?.metadata[0];
+        const total = metadata?.total || 0;
+        const items = result[0]?.data || [];
+
+        return res.status(200).json({ success: true, items, total, page, row });
+    } catch (error) {
+        console.error('Invoice Linking Summary Error:', error);
+        res.status(500).json({ success: false, message: 'Error fetching invoice linking summary', error });
     }
 };

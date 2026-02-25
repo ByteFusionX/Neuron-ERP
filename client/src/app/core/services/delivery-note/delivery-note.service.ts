@@ -45,6 +45,10 @@ export class DeliveryNoteService {
     return this.http.post<any>(`${this.apiUrl}/pending`, filter);
   }
 
+  getInvoiceLinking(filter: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/invoice-linking`, filter);
+  }
+
   getPendingDeliveryDetails(jobId: string): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/pending/${jobId}`);
   }
