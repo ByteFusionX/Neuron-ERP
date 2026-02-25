@@ -1,0 +1,134 @@
+<div class="bg-slate-50 min-h-screen pb-10">
+    <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Loading State -->
+        <div *ngIf="isLoading()" class="flex justify-center items-center h-64">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+
+        <!-- Invoice Details -->
+        <div *ngIf="!isLoading() && invoice()" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <!-- Header Section -->
+            <div class="px-8 py-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50/50">
+                <div>
+                    <div class="flex items-center gap-3 mb-1">
+                        <h2 class="text-2xl font-bold text-slate-800">Invoice: {{ invoice().invoiceNo }}</h2>
+                        <span class="px-3 py-1 text-xs font-semibold rounded-full"
+                              [ngClass]="{
+                                  'bg-green-100 text-green-700': invoice().status === 'Paid',
+                                  'bg-red-100 text-red-700': invoice().status === 'Unpaid',
+                                  'bg-yellow-100 text-yellow-700': invoice().status === 'Partially Paid'
+                              }">
+                            {{ invoice().status || 'N/A' }}
+                        </span>
+                    </div>
+                    <p class="text-sm text-slate-500 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        Date: <span class="font-medium text-slate-700">{{ invoice().date | date:'mediumDate' }}</span>
+                    </p>
+                </div>
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <app-btn *ngIf="invoice().status !== 'Cancelled'" theme="danger" (click)="onCancelInvoice()" class="w-full sm:w-auto">
+                        <span class="flex items-center gap-2 justify-center">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            Cancel Invoice
+                        </span>
+                    </app-btn>
+                    <app-btn theme="secondary" (click)="onBack()" class="w-full sm:w-auto">
+                        <span class="flex items-center gap-2 justify-center">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                            Back
+                        </span>
+                    </app-btn>
+                    <app-btn theme="primary" (click)="onEdit()" class="w-full sm:w-auto">
+                        <span class="flex items-center gap-2 justify-center">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                            Edit
+                        </span>
+                    </app-btn>
+                </div>
+            </div>
+
+            <div class="p-8">
+                <!-- Info Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8 pb-8 border-b border-slate-100">
+                    <!-- Customer Details -->
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Customer Details</h3>
+                        <div class="space-y-1">
+                            <p class="text-base font-semibold text-slate-800">{{ invoice().customer?.companyName || 'N/A' }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Job Details -->
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Job Info</h3>
+                        <div class="space-y-1">
+                            <p class="text-sm text-slate-600"><span class="text-slate-400">Job ID:</span> <span class="font-medium text-slate-800">{{ invoice().jobId?.jobId || 'N/A' }}</span></p>
+                        </div>
+                    </div>
+
+                    <!-- Additional Details -->
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Additional Info</h3>
+                        <div class="space-y-1">
+                            <p class="text-sm text-slate-600"><span class="text-slate-400">Payment Terms:</span> <span class="font-medium text-slate-800">{{ invoice().paymentTerms || 'N/A' }}</span></p>
+                            <p class="text-sm text-slate-600" *ngIf="invoice().salesperson"><span class="text-slate-400">Salesperson:</span> <span class="font-medium text-slate-800">{{ invoice().salesperson?.firstName }} {{ invoice().salesperson?.lastName }}</span></p>
+                            <p class="text-sm text-slate-600" *ngIf="invoice().createdBy"><span class="text-slate-400">Created By:</span> <span class="font-medium text-slate-800">{{ invoice().createdBy?.firstName }} {{ invoice().createdBy?.lastName }}</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Items Table -->
+                <div class="mb-8">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4">Invoice Items</h3>
+                    <div class="overflow-x-auto rounded-lg border border-slate-200">
+                        <table class="w-full text-sm text-left text-slate-600">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                    <th scope="col" class="px-6 py-4 font-semibold">Sl No</th>
+                                    <th scope="col" class="px-6 py-4 font-semibold">Description</th>
+                                    <th scope="col" class="px-6 py-4 font-semibold text-center mt-2">Qty</th>
+                                    <th scope="col" class="px-6 py-4 font-semibold text-right">Amount (QAR)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <tr *ngFor="let item of invoice().items; let i = index" class="hover:bg-slate-50/50 transition-colors">
+                                    <td class="px-6 py-4 text-slate-500">{{ i + 1 }}</td>
+                                    <td class="px-6 py-4 font-medium text-slate-800">{{ item.description }}</td>
+                                    <td class="px-6 py-4 text-center">{{ item.quantity || '-' }}</td>
+                                    <td class="px-6 py-4 text-right font-medium text-slate-800">{{ item.amount | number:'1.2-2' }}</td>
+                                </tr>
+                                <tr *ngIf="!invoice().items?.length">
+                                    <td colspan="4" class="px-6 py-8 text-center text-slate-500 italic">No items found for this invoice.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Footer Totals -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 pt-6 border-t border-slate-200">
+                    <div class="w-full md:w-2/3">
+                        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Total Amount (In Words)</h3>
+                        <div class="bg-slate-50 px-4 py-3 rounded-lg text-slate-700 font-medium border border-slate-200 uppercase inline-block">
+                            {{ amountInWords() || 'N/A' }}
+                        </div>
+                    </div>
+                    
+                    <div class="w-full md:w-1/3">
+                        <div class="bg-blue-50/50 p-6 rounded-xl border border-blue-100">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-slate-500 font-medium">Subtotal</span>
+                                <span class="text-slate-500 font-semibold">{{ invoice().amount | number:'1.2-2' }}</span>
+                            </div>
+                            <div class="flex justify-between items-center pt-4 border-t border-slate-200/60 mt-4">
+                                <span class="text-slate-500 font-bold text-lg">Total</span>
+                                <span class="text-slate-700 font-bold text-2xl tracking-tight">{{ invoice().amount | number:'1.2-2' }} <span class="text-base font-semibold text-slate-600/80">QAR</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

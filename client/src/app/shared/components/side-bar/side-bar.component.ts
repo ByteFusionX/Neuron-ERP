@@ -389,6 +389,11 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'cancelled-adjusted-invoices',
           label: 'Cancelled/Adjusted',
           route: '/invoice/cancelled-invoices',
+        },
+        {
+          id: 'cancelled-reissued-invoices',
+          label: 'Reissued',
+          route: '/invoice/reissued',
         }
       ]
     },

@@ -1036,6 +1036,7 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
                         }
                     },
                     unitCost: '$items.itemDetails.unitCost',
+                    unitSellingPrice: '$items.itemDetails.unitSellingPrice',
                     isAvailable: { $gt: ['$closedQty', 0] },
                     poStatus: {
                         $cond: {

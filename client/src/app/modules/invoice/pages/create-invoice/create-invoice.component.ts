@@ -1,7 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { NgSelectModule } from '@ng-select/ng-select';
 
@@ -11,6 +11,7 @@ import { DeliveryNoteService } from 'src/app/core/services/delivery-note/deliver
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
+import { Invoice } from 'src/app/shared/interfaces/invoice.interface';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { DeliveryNote } from 'src/app/shared/interfaces/delivery-note.interface';
 import { convertNumberToWords } from 'src/app/shared/utils/number.utils';
@@ -36,10 +37,14 @@ export class CreateInvoiceComponent implements OnInit {
   private jobService = inject(JobService);
   private dnService = inject(DeliveryNoteService);
   private notificationService = inject(ToastrService);
+  private route = inject(ActivatedRoute);
 
   // Signals
   isLoading = signal<boolean>(false);
   isSubmitted = signal<boolean>(false);
+  isEditMode = signal<boolean>(false);
+  editInvoiceId = signal<string | null>(null);
+  editInvoiceCustomerId = signal<string | null>(null);
   jobs = signal<getJob[]>([]);
   deliveryNotes = signal<DeliveryNote[]>([]);
 
@@ -62,8 +67,120 @@ export class CreateInvoiceComponent implements OnInit {
   allDeliveryNotes = signal<DeliveryNote[]>([]);
 
   ngOnInit(): void {
-    this.generateInvoiceNumber();
-    this.loadDeliveryNotes();
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.isEditMode.set(true);
+      this.editInvoiceId.set(id);
+      this.loadInvoiceForEdit(id);
+    } else {
+      this.generateInvoiceNumber();
+      this.loadDeliveryNotes();
+    }
+  }
+
+  loadInvoiceForEdit(id: string) {
+    this.isLoading.set(true);
+    // ensure DNs are loaded to populate dropdowns correctly first
+    this.dnService.getAllDeliveryNotes({ page: 1, row: 1000 }).subscribe({
+      next: (res) => {
+        const dns = res.dns || [];
+        this.allDeliveryNotes.set(dns);
+
+        const uniqueJobsMap = new Map<string, any>();
+        dns.forEach((dn: DeliveryNote) => {
+          if (dn.job && typeof dn.job === 'object') {
+            uniqueJobsMap.set(dn.job._id, dn.job);
+          } else if (dn.jobId && typeof dn.jobId === 'object') {
+            uniqueJobsMap.set((dn.jobId as any)._id, dn.jobId);
+          }
+        });
+        this.jobs.set(Array.from(uniqueJobsMap.values()));
+
+        this.invoiceService.getInvoiceById(id).subscribe({
+          next: (invRes) => {
+            const invoice = invRes.data;
+            const jobId = (invoice.jobId as any)?._id || invoice.jobId;
+            const customerObj = invoice.customer as any;
+            const customerName = customerObj?.companyName || customerObj?.clientName || '';
+
+            if (customerObj && customerObj._id) {
+              this.editInvoiceCustomerId.set(customerObj._id);
+            }
+
+            // Filter DNs for this Job to populate the DN dropdown
+            const jobDns = this.allDeliveryNotes().filter(dn => {
+              const dnJobId = (dn.job as any)?._id || (dn.jobId as any)?._id || dn.jobId;
+              return dnJobId === jobId;
+            });
+            this.deliveryNotes.set(jobDns);
+
+            // Assuming invoice.items contains dnId to reselect DNs
+            const selectedDnIds = [...new Set(invoice.items.map((i: any) => i.dnId).filter(Boolean))];
+
+            this.invoiceForm.patchValue({
+              date: new Date(invoice.date).toISOString().split('T')[0],
+              invoiceNo: invoice.invoiceNo,
+              jobId: jobId,
+              dnNos: selectedDnIds,
+              customerName: customerName,
+              paymentTerms: invoice.paymentTerms || '',
+              amountFigures: invoice.amount,
+              amountWords: convertNumberToWords(invoice.amount) + ' QAR Only'
+            });
+
+            // Populate items
+            this.itemsFormArray.clear();
+            invoice.items.forEach((item: any) => {
+              const qty = item.quantity || 0;
+              const total = item.amount || 0;
+              const unitPrice = qty ? total / qty : 0; // Reverse engineer unit price if not explicitly stored
+
+              let orderedQty = 0;
+              let deliveredQty = 0;
+              if (item.dnId) {
+                const dn = this.allDeliveryNotes().find((d: any) => d._id === item.dnId);
+                if (dn && dn.items) {
+                  const dnItem = dn.items.find(di => di.description === item.description);
+                  if (dnItem) {
+                    orderedQty = dnItem.orderedQty || 0;
+                    deliveredQty = dnItem.deliveredQty || 0;
+                  }
+                }
+              }
+
+              const formGroup = this.fb.group({
+                dnId: [item.dnId], // Track source DN
+                description: [item.description || '', Validators.required],
+                totalQuantity: [{ value: orderedQty, disabled: true }],
+                balanceQuantity: [{ value: orderedQty - deliveredQty, disabled: true }],
+                quantity: [qty, [Validators.required, Validators.min(0)]],
+                unitPrice: [unitPrice, [Validators.required, Validators.min(0)]],
+                totalPrice: [{ value: total, disabled: true }]
+              });
+
+              formGroup.valueChanges.subscribe(() => {
+                this.updateRowTotal(formGroup);
+                this.calculateTotals();
+              });
+
+              this.itemsFormArray.push(formGroup);
+            });
+
+            this.isLoading.set(false);
+          },
+          error: () => {
+            this.notificationService.error('Failed to load invoice for editing');
+            this.isLoading.set(false);
+            this.router.navigate(['/invoice/invoice-register']);
+          }
+        });
+      },
+      error: () => {
+        this.notificationService.error('Failed to load requisite data');
+        this.isLoading.set(false);
+      }
+    });
+
   }
 
   get f() { return this.invoiceForm.controls; }
@@ -142,7 +259,7 @@ export class CreateInvoiceComponent implements OnInit {
     if (jobDns.length > 0) {
       const firstDn = jobDns[0];
       this.invoiceForm.patchValue({
-        customerName: firstDn.clientName || '',
+        customerName: (firstDn as any)?.companyName || firstDn?.clientName || '',
         customerLpo: firstDn.customerLpoNumber || '',
         dnNos: [], // Reset selection
         items: []
@@ -192,21 +309,17 @@ export class CreateInvoiceComponent implements OnInit {
     selectedDns.forEach(dn => {
       if (dn.items) {
         dn.items.forEach(item => {
-          // Determine unit price from somewhere? 
-          // DN usually doesn't have price. Price is in Quotation/Deal Sheet. 
-          // We need to fetch the Price from the Job's Quote/Deal Sheet.
-          // Since this might be complex (matching items), 
-          // for this implementation I will initialize price to 0 or try to find it if present in item.
-          // Requirement says: "Items must be populated from the Deal Sheet linked to the selected Job ID"
-          // But also "DN selection must dynamically control which quantities and items are available".
-          // So we map DN items -> Invoice Items.
 
           const unitSellingPrice = (item as any).unitSellingPrice ?? 0;
           const qty = item.currentDeliveryQty || 0;
+          const orderedQty = item.orderedQty || 0;
+          const deliveredQty = item.deliveredQty || 0;
 
           const formGroup = this.fb.group({
             dnId: [dn._id], // Track source DN
             description: [item.description || '', Validators.required],
+            totalQuantity: [{ value: orderedQty, disabled: true }],
+            balanceQuantity: [{ value: orderedQty - deliveredQty, disabled: true }],
             quantity: [qty, [Validators.required, Validators.min(0)]],
             unitPrice: [unitSellingPrice, [Validators.required, Validators.min(0)]],
             totalPrice: [{ value: qty * unitSellingPrice, disabled: true }]
@@ -276,6 +389,11 @@ export class CreateInvoiceComponent implements OnInit {
       customerId = (selectedJob as any).client || (selectedJob as any).quoteId?.client;
     }
 
+    // Fallback to original customer ID if editing and no new job selection was processed
+    if (!customerId && this.isEditMode()) {
+      customerId = this.editInvoiceCustomerId();
+    }
+
     // Construct Payload
     const payload = {
       invoiceNo: formVal.invoiceNo,
@@ -283,24 +401,28 @@ export class CreateInvoiceComponent implements OnInit {
       jobId: formVal.jobId, // Assuming this is IDs
       customer: customerId,
       amount: formVal.amountFigures,
-      status: 'Unpaid',
+      status: this.isEditMode() ? undefined : 'Unpaid',
       items: formVal.items.map((item: any) => ({
         dnId: item.dnId,
         description: item.description,
         amount: item.totalPrice,
         quantity: item.quantity
       })),
-      paymentTerms: formVal.paymentTerms
-    };
+      paymentTerms: this.invoiceForm.get('paymentTerms')?.value
+    } as Partial<Invoice>;
 
-    this.invoiceService.createInvoice(payload).subscribe({
+    const request$ = this.isEditMode()
+      ? this.invoiceService.updateInvoice(this.editInvoiceId()!, payload)
+      : this.invoiceService.createInvoice(payload);
+
+    request$.subscribe({
       next: () => {
-        this.notificationService.success('Invoice created successfully');
+        this.notificationService.success(`Invoice ${this.isEditMode() ? 'updated' : 'created'} successfully`);
         this.router.navigate(['/invoice/invoice-register']);
       },
       error: (err) => {
         console.error(err);
-        this.notificationService.error(err.error?.message || 'Failed to create invoice');
+        this.notificationService.error(err.error?.message || `Failed to ${this.isEditMode() ? 'update' : 'create'} invoice`);
         this.isLoading.set(false);
       }
     });

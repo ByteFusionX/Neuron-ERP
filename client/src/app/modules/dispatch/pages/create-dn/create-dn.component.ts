@@ -191,9 +191,10 @@ export class CreateDnComponent implements OnInit {
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
             currentDeliveryQty: [{ value: currentDeliveryQty, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
-        serialNos: [''],
-        status: [initialStatus],
-        itemId: [item._id],
+            serialNos: [''],
+            status: [initialStatus],
+            itemId: [item._id],
+            unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [draftItem?.isInventoryItem ?? isAvailable]
       });
 
@@ -329,9 +330,10 @@ export class CreateDnComponent implements OnInit {
             orderedQty: [item.orderedQty || 0],
         deliveredQty: [prevDelivered],
             currentDeliveryQty: [{ value: 0, disabled: !isAvailable || isFulfilled }, [Validators.min(0), Validators.max(remaining)]],
-        serialNos: [''],
-        status: [initialStatus],
-        itemId: [item._id],
+            serialNos: [''],
+            status: [initialStatus],
+            itemId: [item._id],
+            unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [isAvailable]
       });
 
