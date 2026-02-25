@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Invoice } from '../models/invoice.model';
+import { InvoiceAudit } from '../models/invoiceAudit.model';
 import mongoose from 'mongoose';
 import { getEmployeeData } from '../common/utils/util';
 
@@ -41,7 +42,7 @@ export const getInvoices = async (req: Request, res: Response) => {
         }
 
         const invoices = await Invoice.find(query)
-            .populate('customer', 'clientName') // Assuming Customer has clientName
+            .populate('customer', 'companyName') // Assuming Customer has companyName
             .populate('jobId', 'jobId') // Assuming Job has jobId
             .populate('salesperson', 'firstName lastName')
             .sort({ date: -1 })
@@ -109,6 +110,94 @@ export const createInvoice = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error creating invoice:', error);
         res.status(500).json({ success: false, message: 'Failed to create invoice' });
+    }
+};
+
+export const getInvoiceById = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid invoice ID' });
+        }
+
+        const invoice = await Invoice.findById(id)
+            .populate('customer', 'companyName address contactDetails')
+            .populate('jobId', 'jobId')
+            .populate('salesperson', 'firstName lastName')
+            .populate('createdBy', 'firstName lastName')
+            .lean();
+
+        if (!invoice || invoice.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: invoice
+        });
+    } catch (error) {
+        console.error('Error fetching invoice by ID:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch invoice' });
+    }
+};
+
+export const updateInvoice = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid invoice ID' });
+        }
+
+        const token = req.user;
+        const employee = await getEmployeeData(token);
+
+        if (!employee) {
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const existingInvoice = await Invoice.findById(id);
+
+        if (!existingInvoice || existingInvoice.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
+        }
+
+        // Logic for Invoice Audit on adjustment (if amount changed)
+        if (updateData.amount !== undefined && updateData.amount !== existingInvoice.amount) {
+            const auditEntry = new InvoiceAudit({
+                invoiceId: existingInvoice._id,
+                invoiceNo: existingInvoice.invoiceNo,
+                invoiceDate: existingInvoice.date,
+                customer: existingInvoice.customer,
+                jobId: existingInvoice.jobId,
+                originalAmount: existingInvoice.amount,
+                adjustedAmount: updateData.amount,
+                reason: updateData.reason || 'Manual Adjustment', // Fallback if no reason provided
+                actionBy: employee._id,
+                status: 'Adjusted'
+            });
+            await auditEntry.save();
+        }
+
+        // Only allow certain fields to be updated securely or update all provided fields from the frontend
+        const updatedInvoice = await Invoice.findByIdAndUpdate(
+            id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        ).populate('customer', 'companyName')
+            .populate('jobId', 'jobId')
+            .populate('salesperson', 'firstName lastName');
+
+        res.status(200).json({
+            success: true,
+            message: 'Invoice updated successfully',
+            data: updatedInvoice
+        });
+    } catch (error) {
+        console.error('Error updating invoice:', error);
+        res.status(500).json({ success: false, message: 'Failed to update invoice' });
     }
 };
 
@@ -425,5 +514,144 @@ export const getCancelledAdjustedInvoices = async (req: Request, res: Response) 
     } catch (error) {
         console.error('Error fetching cancelled/adjusted invoices:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch report' });
+    }
+};
+
+export const getCancelledAndReissuedInvoices = async (req: Request, res: Response) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+
+        const matchStage: any = { isDeleted: false, status: { $in: ['Cancelled', 'Reissued'] } };
+
+        if (req.query.status) {
+            matchStage.status = req.query.status;
+        }
+
+        if (req.query.search) {
+            matchStage.invoiceNo = { $regex: req.query.search, $options: 'i' };
+        }
+
+        if (req.query.fromDate && req.query.toDate) {
+            matchStage.cancelledAt = {
+                $gte: new Date(req.query.fromDate as string),
+                $lte: new Date(req.query.toDate as string)
+            };
+        }
+
+        const pipeline: any[] = [
+            { $match: matchStage },
+            // Lookup Customer
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'customer',
+                    foreignField: '_id',
+                    as: 'customerDoc'
+                }
+            },
+            { $unwind: { path: '$customerDoc', preserveNullAndEmptyArrays: true } },
+            // Lookup Job
+            {
+                $lookup: {
+                    from: 'jobs',
+                    localField: 'jobId',
+                    foreignField: '_id',
+                    as: 'jobDoc'
+                }
+            },
+            { $unwind: { path: '$jobDoc', preserveNullAndEmptyArrays: true } },
+            // Lookup Cancelled By Employee
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'cancelledBy',
+                    foreignField: '_id',
+                    as: 'cancelledByDoc'
+                }
+            },
+            { $unwind: { path: '$cancelledByDoc', preserveNullAndEmptyArrays: true } },
+            // Lookup Reissued Invoice
+            {
+                $lookup: {
+                    from: 'invoices',
+                    localField: 'reissuedInvoiceId',
+                    foreignField: '_id',
+                    as: 'reissuedInvoiceDoc'
+                }
+            },
+            { $unwind: { path: '$reissuedInvoiceDoc', preserveNullAndEmptyArrays: true } },
+
+            // External filters on populated fields
+            ...(req.query.customer ? [{
+                $match: { 'customerDoc.companyName': { $regex: req.query.customer, $options: 'i' } }
+            }] : []),
+            ...(req.query.jobId ? [{
+                $match: {
+                    $or: [
+                        { 'jobDoc.jobId': { $regex: req.query.jobId, $options: 'i' } }
+                    ]
+                }
+            }] : []),
+
+            {
+                $project: {
+                    _id: 1,
+                    oldInvoiceNo: '$invoiceNo',
+                    oldInvoiceDate: '$date',
+                    customerName: '$customerDoc.companyName',
+                    jobId: '$jobDoc.jobId',
+                    originalAmount: '$amount',
+                    cancellationReason: 1,
+                    cancelledBy: { $concat: ['$cancelledByDoc.firstName', ' ', '$cancelledByDoc.lastName'] },
+                    cancelledByRole: '$cancelledByDoc.role', // Assuming role field exists
+                    cancelledAt: 1,
+                    newInvoiceNo: { $ifNull: ['$reissuedInvoiceDoc.invoiceNo', '—'] },
+                    newInvoiceDate: { $ifNull: ['$reissuedInvoiceDoc.date', '—'] },
+                    reissuedAmount: { $ifNull: ['$reissuedInvoiceDoc.amount', '—'] },
+                    status: 1,
+                    reissuedInvoiceId: 1
+                }
+            }
+        ];
+
+        // Apply sort, default to cancelledAtdescending
+        const sortStage: any = { $sort: { cancelledAt: -1 } };
+        // We can dynamically sort by Date, Customer, Status if needed, but going with default for now as table handles logic
+        pipeline.push(sortStage);
+
+        const facetPipeline = [
+            ...pipeline,
+            {
+                $facet: {
+                    metadata: [{ $count: 'total' }],
+                    data: [{ $skip: skip }, { $limit: limit }]
+                }
+            }
+        ];
+
+        const mongoose = require('mongoose');
+        const Invoice = mongoose.model('Invoice');
+
+        const result = await Invoice.aggregate(facetPipeline);
+        const data = result[0].data;
+        const total = result[0].metadata[0]?.total || 0;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                invoices: data,
+                pagination: {
+                    total,
+                    page,
+                    limit,
+                    pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching cancelled/reissued invoices report:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch report data' });
     }
 };

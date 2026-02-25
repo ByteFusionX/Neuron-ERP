@@ -4,7 +4,7 @@ export interface Invoice {
     date: Date;
     customer: {
         _id: string;
-        clientName: string;
+        companyName: string;
     };
     jobId: {
         _id: string;
@@ -16,8 +16,19 @@ export interface Invoice {
         lastName: string;
     };
     amount: number;
-    status: 'Paid' | 'Unpaid' | 'Partially Paid';
+    status: 'Paid' | 'Unpaid' | 'Partially Paid' | 'Cancelled' | 'Reissued';
     items: InvoiceItem[];
+    parentInvoiceId?: string;
+    referenceInvoiceId?: string;
+    cancellationReason?: string;
+    cancelledBy?: {
+        _id: string;
+        firstName: string;
+        lastName: string;
+        role: string;
+    };
+    cancelledAt?: Date;
+    reissuedInvoiceId?: string;
 }
 
 export interface InvoiceItem {

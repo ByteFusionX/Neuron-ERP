@@ -194,6 +194,7 @@ export class CreateDnComponent implements OnInit {
             serialNos: [''],
             status: [initialStatus],
             itemId: [item._id],
+            unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [draftItem?.isInventoryItem ?? isAvailable]
           });
 
@@ -332,6 +333,7 @@ export class CreateDnComponent implements OnInit {
             serialNos: [''],
             status: [initialStatus],
             itemId: [item._id],
+            unitSellingPrice: [item.unitSellingPrice || 0],
             isInventoryItem: [isAvailable]
           });
 
@@ -413,7 +415,7 @@ export class CreateDnComponent implements OnInit {
   toggleItemSelection(index: number): void {
     const itemControl = this.items.at(index);
     const status = itemControl?.get('status')?.value;
-    
+
     if (status === 'Delivered' || status === 'No PO / Not in Inventory') {
       return;
     }

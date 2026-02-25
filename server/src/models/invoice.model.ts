@@ -9,7 +9,7 @@ const invoiceSchema = new Schema({
     amount: { type: Number, required: true },
     status: {
         type: String,
-        enum: ['Paid', 'Unpaid', 'Partially Paid'],
+        enum: ['Paid', 'Unpaid', 'Partially Paid', 'Cancelled', 'Reissued'],
         default: 'Unpaid'
     },
     items: [{
@@ -18,6 +18,12 @@ const invoiceSchema = new Schema({
         amount: Number,
         quantity: Number
     }],
+    parentInvoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' }, // For reissued invoice referencing original
+    referenceInvoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' }, // For original invoice referencing reissued
+    cancellationReason: { type: String },
+    cancelledBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    cancelledAt: { type: Date },
+    reissuedInvoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' }, // To track which invoice replaced this one
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     isDeleted: { type: Boolean, default: false }
 }, {
@@ -25,3 +31,4 @@ const invoiceSchema = new Schema({
 });
 
 export const Invoice = model('Invoice', invoiceSchema);
+

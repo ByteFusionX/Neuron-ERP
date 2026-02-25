@@ -97,7 +97,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
         filterType: 'date'
       },
       {
-        key: 'customer.clientName',
+        key: 'customer.companyName',
         label: 'Customer Name',
         type: 'text',
         filterable: true,
@@ -140,7 +140,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.defaultColumns = ['invoiceNo', 'date', 'customer.clientName', 'jobId.jobId', 'amount', 'salesperson.firstName', 'status'];
+    this.defaultColumns = ['invoiceNo', 'date', 'customer.companyName', 'jobId.jobId', 'amount', 'salesperson.firstName', 'status'];
   }
 
   loadData(filters?: Partial<InvoiceFilterParams>): void {
@@ -212,7 +212,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
 
   groupDataByCustomer(data: Invoice[]) {
     const grouped = data.reduce((acc, curr) => {
-      const customerName = curr.customer?.clientName || 'Unknown';
+      const customerName = curr.customer?.companyName || 'Unknown';
       if (!acc[customerName]) {
         acc[customerName] = [];
       }
@@ -270,9 +270,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
   }
 
   onRowClick(row: Invoice) {
-    // Navigate to details
-    // this.router.navigate(['/invoice/view', row._id]); 
-    // Existing pattern usually navigates to some view
+    this.router.navigate(['/invoice/invoice-register/view', row._id]);
   }
 
   getTotalInvoiceValue(): number {
@@ -283,7 +281,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
     const data = this.salespersonReportData().map((inv, index) => ({
       'Sl No': index + 1,
       'Job ID': inv.jobId?.jobId,
-      'Customer Name': inv.customer?.clientName,
+      'Customer Name': inv.customer?.companyName,
       'Invoice No': inv.invoiceNo,
       'DN No': inv.items?.[0]?.dnId || '-', // Simplification
       'Invoice Value': inv.amount

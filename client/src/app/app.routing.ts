@@ -287,8 +287,11 @@ export const routes: Routes = [
     children: [
       { path: 'invoice-register', component: InvoiceRegisterComponent },
       { path: 'invoice-register/create', component: CreateInvoiceComponent },
+      { path: 'invoice-register/edit/:id', component: CreateInvoiceComponent },
+      { path: 'invoice-register/view/:id', loadComponent: () => import('./modules/invoice/pages/invoice-view/invoice-view.component').then(m => m.InvoiceViewComponent) },
       { path: 'invoice-dn-linking', component: InvoiceDnLinkingComponent },
       { path: 'cancelled-invoices', component: CancelledInvoicesComponent },
+      { path: 'reissued', loadComponent: () => import('./modules/invoice/pages/cancelled-reissued-report/cancelled-reissued-report.component').then(c => c.CancelledReissuedReportComponent) },
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }
