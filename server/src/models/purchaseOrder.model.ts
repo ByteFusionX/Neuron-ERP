@@ -76,7 +76,7 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         },
         poStatus: {
             type: String,
-            enum: ["Draft", "Pending for Approval", "Approved", "Closed"],
+            enum: ["Draft", "Pending for Approval", "Approved", "Closed", "Rejected"],
             default: "Pending for Approval",
         },
         approvedHistory: {

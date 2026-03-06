@@ -4,9 +4,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
 import { ToastrService } from 'ngx-toastr';
@@ -36,9 +34,7 @@ interface FilterParams {
     NgSelectModule,
     MatMenuModule,
     IconsModule,
-    ButtonComponent,
-    FormsModule,
-    SearchComponent
+    FormsModule
   ],
   templateUrl: './cancelled-reissued-report.component.html',
   styleUrl: './cancelled-reissued-report.component.css',
@@ -146,7 +142,20 @@ export class CancelledReissuedReportComponent implements OnInit, OnDestroy {
         key: 'originalAmount',
         label: 'Original Amount',
         type: 'text',
-        pipeParams: { currency: 'QAR', format: '1.2-2' },
+        cellRenderer: (item: any) => {
+          const currency = item?.currency || 'QAR';
+          const amount = item?.originalAmount ?? 0;
+          try {
+            return new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(amount);
+          } catch {
+            return `${currency} ${amount}`;
+          }
+        },
         filterable: false,
       },
       {
@@ -202,12 +211,21 @@ export class CancelledReissuedReportComponent implements OnInit, OnDestroy {
         key: 'reissuedAmount',
         label: 'Reissued Amount',
         type: 'text',
-        pipeParams: { currency: 'QAR', format: '1.2-2' },
         filterable: false,
         cellRenderer: (item: any) => {
           if (item.reissuedAmount === '—') return '—';
-          // Ideally currency pipe handles this, but since it's dynamic '—', we might need a custom pipe or rely on table component gracefully handling it.
-          return item.reissuedAmount;
+          const currency = item?.currency || 'QAR';
+          const amount = item?.reissuedAmount ?? 0;
+          try {
+            return new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(amount);
+          } catch {
+            return `${currency} ${amount}`;
+          }
         }
       },
       {
@@ -236,99 +254,42 @@ export class CancelledReissuedReportComponent implements OnInit, OnDestroy {
     this.isLoading.set(true);
     const paginationState = this.paginationService.paginationState();
 
-    const filterParams: FilterParams = {
+    const selected = this.selectedStatus();
+    const normalizedStatus = Array.isArray(selected) ? selected : [selected];
+    const apiParams: any = {
       page: paginationState.page,
-      row: paginationState.row, // note: pending-suppliers uses 'row' internally but api expects 'limit' if using standard list response, or adjust service logic
-      status: this.selectedStatus(),
+      limit: paginationState.row,
+      status: normalizedStatus,
       ...filters
-    };
-
-    // Note: invoice API uses page and limit
-    const { row, ...restParams } = filterParams;
-    const apiParams = {
-      ...restParams,
-      limit: row
     };
 
     this.subscriptions.add(
       this.invoiceService.getCancelledReissuedInvoices(apiParams).subscribe({
         next: (response) => {
-          let invoices = response.data?.invoices || [];
-          if (invoices.length === 0) {
-            this.setMockData();
-          } else {
-            this.tableData.set(invoices);
-            const pagination = response.data.pagination;
-            this.totalItems.set(pagination.total);
+          const invoices = response.data?.invoices || [];
+          this.tableData.set(invoices);
+          const pagination = response.data.pagination;
+          this.totalItems.set(pagination?.total || 0);
 
-            this.paginationService.updatePaginationState({
-              page: pagination.page,
-              row: pagination.limit,
-              total: pagination.total
-            });
+          this.paginationService.updatePaginationState({
+            page: pagination?.page || 1,
+            row: pagination?.limit || paginationState.row,
+            total: pagination?.total || 0
+          });
 
-            this.isEmpty.set(this.tableData().length === 0);
-          }
+          this.isEmpty.set(this.tableData().length === 0);
           this.isLoading.set(false);
           this.updateUrlParams(filters);
         },
         error: (error) => {
-          this.notificationService.warning('Backend connection failed or no data. Loading sample data.');
           console.error('Error loading report:', error);
-          this.setMockData();
+          this.tableData.set([]);
+          this.totalItems.set(0);
+          this.isEmpty.set(true);
           this.isLoading.set(false);
         }
       })
     );
-  }
-
-  setMockData(): void {
-    const mockData = [
-      {
-        _id: 'mock1',
-        oldInvoiceNo: 'INV-2023-001',
-        oldInvoiceDate: '2023-10-01T10:00:00Z',
-        customerName: 'Tech Corp Ltd',
-        jobId: 'JOB-9912',
-        originalAmount: 5000.00,
-        cancellationReason: 'Client requested changes to items',
-        cancelledBy: 'Admin User',
-        cancelledByRole: 'Admin',
-        cancelledAt: '2023-10-05T14:30:00Z',
-        newInvoiceNo: 'INV-2023-001-R',
-        newInvoiceDate: '2023-10-06T09:00:00Z',
-        reissuedAmount: 5200.00,
-        status: 'Reissued',
-        reissuedInvoiceId: 'mock-reissued-1'
-      },
-      {
-        _id: 'mock2',
-        oldInvoiceNo: 'INV-2023-045',
-        oldInvoiceDate: '2023-11-15T11:00:00Z',
-        customerName: 'Global Logistics',
-        jobId: 'JOB-8821',
-        originalAmount: 12500.50,
-        cancellationReason: 'Duplicate invoice created by mistake',
-        cancelledBy: 'System',
-        cancelledByRole: 'Automated',
-        cancelledAt: '2023-11-15T11:15:00Z',
-        newInvoiceNo: '—',
-        newInvoiceDate: '—',
-        reissuedAmount: '—',
-        status: 'Cancelled',
-        reissuedInvoiceId: null
-      }
-    ];
-
-    this.tableData.set(mockData);
-    this.totalItems.set(mockData.length);
-    this.isEmpty.set(false);
-
-    this.paginationService.updatePaginationState({
-      page: 1,
-      row: 10,
-      total: mockData.length
-    });
   }
 
   onPaginationChange(event: { page: number, row: number }): void {

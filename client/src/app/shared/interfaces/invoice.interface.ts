@@ -16,7 +16,9 @@ export interface Invoice {
         lastName: string;
     };
     amount: number;
-    status: 'Paid' | 'Unpaid' | 'Partially Paid' | 'Cancelled' | 'Reissued';
+    currency?: string;
+    status: 'Pending to submit' | 'PI Submitted' | 'Partial invoicing' | 'Submitted' | 'Hold' | 'Rejected by customer' | 'Cancelled' | 'Reissued';
+    paymentStatus?: 'Paid' | 'Partially paid' | 'Advance received' | 'Pending';
     items: InvoiceItem[];
     parentInvoiceId?: string;
     referenceInvoiceId?: string;
@@ -29,12 +31,19 @@ export interface Invoice {
     };
     cancelledAt?: Date;
     reissuedInvoiceId?: string;
+    paymentTerms?: string;
 }
 
 export interface InvoiceItem {
     dnId?: string;
+    dnRefs?: {
+        dnId: string;
+        quantity: number;
+    }[];
+    itemId?: string;
     description: string;
     amount: number;
+    quantity?: number;
 }
 
 export interface InvoiceListResponse {

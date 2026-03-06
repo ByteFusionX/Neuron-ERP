@@ -1126,14 +1126,44 @@ export const getInvoiceLinkingSummary = async (req: Request, res: Response) => {
                         },
                         { $unwind: '$items' },
                         {
+                            $addFields: {
+                                hasDnRefs: {
+                                    $gt: [
+                                        { $size: { $ifNull: ['$items.dnRefs', []] } },
+                                        0
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            $unwind: {
+                                path: '$items.dnRefs',
+                                preserveNullAndEmptyArrays: true
+                            }
+                        },
+                        {
                             $match: {
-                                $expr: { $eq: ['$items.dnId', '$$dnObjId'] }
+                                $expr: {
+                                    $cond: [
+                                        '$hasDnRefs',
+                                        { $eq: ['$items.dnRefs.dnId', '$$dnObjId'] },
+                                        { $eq: ['$items.dnId', '$$dnObjId'] }
+                                    ]
+                                }
                             }
                         },
                         {
                             $group: {
                                 _id: null,
-                                totalQty: { $sum: { $ifNull: ['$items.quantity', 0] } },
+                                totalQty: {
+                                    $sum: {
+                                        $cond: [
+                                            '$hasDnRefs',
+                                            { $ifNull: ['$items.dnRefs.quantity', 0] },
+                                            { $ifNull: ['$items.quantity', 0] }
+                                        ]
+                                    }
+                                },
                                 invoiceNo: { $first: '$invoiceNo' },
                                 invoiceDate: { $first: '$date' }
                             }

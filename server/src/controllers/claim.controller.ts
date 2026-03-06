@@ -6,6 +6,78 @@ import { ObjectId } from "mongodb";
 import { getEmployeeData, getDateRangeByDay, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
 import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
+import { Server } from "socket.io";
+import { createNotificationWithPrivileges } from "./notification.controller";
+import Employee from '../models/employee.model';
+
+const notifyNextClaimApprovers = async (claim: any, app: any, sentBy: string) => {
+    try {
+        const pendingStatuses = claim.approvalStatus
+            .filter((a: any) => a.status === 'pending')
+            .sort((a: any, b: any) => a.step - b.step);
+
+        const nextApproval = pendingStatuses[0];
+        if (!nextApproval) return;
+
+        const nextApproverIds = new Set<string>();
+
+        if (nextApproval.managerApproval) {
+            const requesterId = (claim.raisedBy as any)?._id || claim.raisedBy;
+            const requester = await Employee.findById(requesterId)
+                .populate('reportingTo')
+                .lean();
+            const manager: any = (requester as any)?.reportingTo;
+            if (manager?._id) {
+                nextApproverIds.add(manager._id.toString());
+            }
+        } else if (nextApproval.role) {
+            const nextRoleId = nextApproval.role?._id?.toString() || nextApproval.role?.toString();
+            if (nextRoleId) {
+                const approverEmployees = await Employee.find({
+                    category: nextRoleId,
+                    isDeleted: { $ne: true },
+                    isBlocked: { $ne: true }
+                }).lean();
+                for (const approver of approverEmployees) {
+                    nextApproverIds.add(approver._id.toString());
+                }
+            }
+        }
+
+        if (nextApproverIds.size > 0) {
+            const socket = app.get('io') as Server;
+            const additionalData = { claimId: claim._id.toString(), technicalId: claim.technicalId?.toString() };
+
+            let raiserName = 'Someone';
+            if (claim.raisedBy && typeof claim.raisedBy === 'object' && claim.raisedBy.firstName) {
+                raiserName = `${claim.raisedBy.firstName} ${claim.raisedBy.lastName || ''}`.trim();
+            }
+
+            await createNotificationWithPrivileges(
+                {
+                    type: 'ClaimApprovalRequest',
+                    referenceModel: 'Claim',
+                    title: 'Claim awaiting your approval',
+                    message: `A claim is raised by ${raiserName} of ${claim.amount} QAR for ${claim.reason}.`,
+                    sentBy: sentBy,
+                    referenceId: claim._id,
+                    additionalData,
+                },
+                {
+                    privilegeKey: 'claims',
+                    checkFunction: (privileges: any, employeeId?: string) => {
+                        if (!employeeId || !nextApproverIds.has(employeeId)) return false;
+                        if (nextApproval.managerApproval) return true;
+                        return privileges.claims?.canApprove === true;
+                    }
+                },
+                socket
+            );
+        }
+    } catch (err) {
+        console.error('Error notifying next approvers:', err);
+    }
+};
 
 export const createClaim = async (req: any, res: Response, next: NextFunction) => {
     try {
@@ -62,6 +134,8 @@ export const createClaim = async (req: any, res: Response, next: NextFunction) =
 
         const claim = await Claim.create(claimData);
 
+        await notifyNextClaimApprovers(claim, req.app, employee._id?.toString());
+
         const populatedClaim = await Claim.findById(claim._id)
             .populate('raisedBy')
             .populate('approvalStatus.role')
@@ -97,7 +171,7 @@ export const getClaims = async (req: Request, res: Response, next: NextFunction)
         }
 
         const privileges = employee.category?.privileges;
-        const accessFilter = privileges?.claims?.viewReport 
+        const accessFilter = privileges?.claims?.viewReport
             ? await buildPrivilegeAccessFilter(employee._id, privileges.claims.viewReport, 'raisedBy')
             : {};
 
@@ -425,11 +499,11 @@ export const updateClaimAndSubmit = async (req: any, res: Response, next: NextFu
 
         const rejectedIndex = claim.approvalStatus.findIndex(status => status.status === 'rejected');
         if (rejectedIndex !== -1) {
-            
-                const workflowFeature = claim.type === 'project' ? 'projectClaim' : 'claim';
-                const newApprovalStatus = await getWorkflowSteps(workflowFeature, claim.raisedBy.toString());
 
-                updateData.approvalStatus = [...claim.approvalStatus, ...newApprovalStatus];
+            const workflowFeature = claim.type === 'project' ? 'projectClaim' : 'claim';
+            const newApprovalStatus = await getWorkflowSteps(workflowFeature, claim.raisedBy.toString());
+
+            updateData.approvalStatus = [...claim.approvalStatus, ...newApprovalStatus];
         }
 
         const updatedClaim = await Claim.findByIdAndUpdate(
@@ -440,6 +514,10 @@ export const updateClaimAndSubmit = async (req: any, res: Response, next: NextFu
             .populate('raisedBy')
             .populate('approvalStatus.role')
             .populate('approvalStatus.updatedBy');
+
+        if (rejectedIndex !== -1) {
+            await notifyNextClaimApprovers(updatedClaim, req.app, employee._id?.toString());
+        }
 
         return res.status(200).json({
             success: true,
@@ -507,6 +585,49 @@ export const updateClaimStatus = async (req: Request, res: Response, next: NextF
         claim.approvalStatus = updatedApprovalStatus;
 
         await claim.save();
+
+        const socket = req.app.get('io') as Server;
+        const additionalData = { claimId: claim._id.toString(), technicalId: claim.technicalId?.toString() };
+        const raiserId = (claim.raisedBy as any)?._id?.toString() || claim.raisedBy?.toString();
+        const raiserFilter = {
+            privilegeKey: 'claims' as const,
+            checkFunction: (p: any, employeeId?: string) => employeeId === raiserId && p.claims?.viewReport !== 'none'
+        };
+
+        if (status === 'rejected') {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'ClaimRejected',
+                    referenceModel: 'Claim',
+                    title: 'Claim rejected',
+                    message: `Your claim of ${claim.amount} QAR for ${claim.reason} has been rejected.`,
+                    sentBy: employee._id?.toString(),
+                    referenceId: claim._id,
+                    additionalData
+                },
+                raiserFilter,
+                socket
+            );
+        } else if (status === 'approved') {
+            const hasPending = claim.approvalStatus.some((s: any) => s.status === 'pending');
+            if (hasPending) {
+                await notifyNextClaimApprovers(claim, req.app, employee._id?.toString());
+            } else {
+                await createNotificationWithPrivileges(
+                    {
+                        type: 'ClaimApproved',
+                        referenceModel: 'Claim',
+                        title: 'Claim approved',
+                        message: `Your claim of ${claim.amount} QAR for ${claim.reason} has been approved.`,
+                        sentBy: employee._id?.toString(),
+                        referenceId: claim._id,
+                        additionalData
+                    },
+                    raiserFilter,
+                    socket
+                );
+            }
+        }
 
         const updatedClaim = await Claim.findById(id)
             .populate('raisedBy')

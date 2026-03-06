@@ -8,6 +8,8 @@ import PurchaseRequest from '../models/purchaseRequest.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import DeliveryNote from '../models/deliveryNote.model';
 import GRN from '../models/grn.model';
+import { Server } from "socket.io";
+import { createNotificationWithPrivileges } from "./notification.controller";
 
 
 const { ObjectId } = require('mongodb')
@@ -776,6 +778,30 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
                 success: false,
                 message: 'Job not found'
             });
+        }
+
+        if (procurementPerson) {
+            const socket = req.app.get('io') as Server;
+            const userData = await getEmployeeData(req.user);
+            await createNotificationWithPrivileges(
+                {
+                    type: 'JobAllocated',
+                    referenceModel: 'Job',
+                    title: 'New Job Allocated',
+                    message: `Job ${req.body.jobId || updateJob._id} has been allocated to you for procurement`,
+                    sentBy: userData?._id?.toString(),
+                    referenceId: updateJob._id,
+                    additionalData: { jobId: updateJob._id.toString() }
+                },
+                {
+                    privilegeKey: 'purchase',
+                    checkFunction: (privileges, employeeId) => {
+                        return employeeId === procurementPerson.toString() &&
+                               privileges.purchase?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
         }
 
         res.status(200).json({

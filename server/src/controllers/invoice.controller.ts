@@ -42,19 +42,43 @@ export const getInvoices = async (req: Request, res: Response) => {
         }
 
         const invoices = await Invoice.find(query)
-            .populate('customer', 'companyName') // Assuming Customer has companyName
-            .populate('jobId', 'jobId') // Assuming Job has jobId
+            .populate('customer', 'companyName')
+            .populate({
+                path: 'jobId',
+                select: 'jobId quoteId',
+                populate: {
+                    path: 'quoteId',
+                    select: 'createdBy currency',
+                    populate: { path: 'createdBy', select: 'firstName lastName' }
+                }
+            })
             .populate('salesperson', 'firstName lastName')
-            .sort({ date: -1 })
+            .sort({ createdAt: -1 })
             .skip(skip)
-            .limit(limit);
+            .limit(limit)
+            .lean();
 
         const total = await Invoice.countDocuments(query);
+
+        const invoicesWithSalesperson = (invoices as any[]).map((inv) => {
+            const job = inv.jobId;
+            const salesperson = job?.quoteId?.createdBy || inv.salesperson;
+            const currency = job?.quoteId?.currency || 'QAR';
+            const legacyPaymentStatusMap: Record<string, string> = {
+                Paid: 'Paid',
+                Unpaid: 'Pending',
+                'Partially Paid': 'Partially paid'
+            };
+            const legacyPayment = legacyPaymentStatusMap[inv.status];
+            const status = legacyPayment ? 'Pending to submit' : inv.status;
+            const paymentStatus = inv.paymentStatus || legacyPayment || 'Pending';
+            return { ...inv, salesperson, status, paymentStatus, currency };
+        });
 
         res.status(200).json({
             success: true,
             data: {
-                invoices,
+                invoices: invoicesWithSalesperson,
                 pagination: {
                     total,
                     page,
@@ -72,7 +96,16 @@ export const getInvoices = async (req: Request, res: Response) => {
 
 export const createInvoice = async (req: Request, res: Response) => {
     try {
-        const { invoiceNo, date, customer, jobId, salesperson, amount, status, items } = req.body;
+        const { invoiceNo, date, customer, jobId, salesperson, amount, status, items, paymentTerms, parentInvoiceId, paymentStatus } = req.body;
+
+        const legacyPaymentStatusMap: Record<string, string> = {
+            Paid: 'Paid',
+            Unpaid: 'Pending',
+            'Partially Paid': 'Partially paid'
+        };
+
+        const normalizedPaymentStatus = paymentStatus || legacyPaymentStatusMap[status];
+        const normalizedStatus = legacyPaymentStatusMap[status] ? undefined : status;
 
         // Verify if Invoice Number already exists
         const existingInvoice = await Invoice.findOne({ invoiceNo, isDeleted: false });
@@ -94,12 +127,27 @@ export const createInvoice = async (req: Request, res: Response) => {
             jobId,
             salesperson,
             amount,
-            status,
+            status: normalizedStatus,
+            paymentStatus: normalizedPaymentStatus,
             items,
+            paymentTerms,
             createdBy: employee._id
         });
 
         await newInvoice.save();
+
+        if (parentInvoiceId && mongoose.Types.ObjectId.isValid(parentInvoiceId)) {
+            await Invoice.findByIdAndUpdate(
+                parentInvoiceId,
+                {
+                    $set: {
+                        status: 'Reissued',
+                        reissuedInvoiceId: newInvoice._id,
+                        referenceInvoiceId: newInvoice._id
+                    }
+                }
+            );
+        }
 
         res.status(201).json({
             success: true,
@@ -123,7 +171,15 @@ export const getInvoiceById = async (req: Request, res: Response) => {
 
         const invoice = await Invoice.findById(id)
             .populate('customer', 'companyName address contactDetails')
-            .populate('jobId', 'jobId')
+            .populate({
+                path: 'jobId',
+                select: 'jobId quoteId',
+                populate: {
+                    path: 'quoteId',
+                    select: 'createdBy currency',
+                    populate: { path: 'createdBy', select: 'firstName lastName' }
+                }
+            })
             .populate('salesperson', 'firstName lastName')
             .populate('createdBy', 'firstName lastName')
             .lean();
@@ -132,9 +188,22 @@ export const getInvoiceById = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: 'Invoice not found' });
         }
 
+        const inv = invoice as any;
+        const salesperson = inv.jobId?.quoteId?.createdBy || inv.salesperson;
+        const currency = inv.jobId?.quoteId?.currency || 'QAR';
+        const legacyPaymentStatusMap: Record<string, string> = {
+            Paid: 'Paid',
+            Unpaid: 'Pending',
+            'Partially Paid': 'Partially paid'
+        };
+        const legacyPayment = legacyPaymentStatusMap[inv.status];
+        const status = legacyPayment ? 'Pending to submit' : inv.status;
+        const paymentStatus = inv.paymentStatus || legacyPayment || 'Pending';
+        const data = { ...inv, salesperson, status, paymentStatus, currency };
+
         res.status(200).json({
             success: true,
-            data: invoice
+            data
         });
     } catch (error) {
         console.error('Error fetching invoice by ID:', error);
@@ -146,6 +215,17 @@ export const updateInvoice = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const updateData = req.body;
+
+        const legacyPaymentStatusMap: Record<string, string> = {
+            Paid: 'Paid',
+            Unpaid: 'Pending',
+            'Partially Paid': 'Partially paid'
+        };
+
+        if (updateData?.status && legacyPaymentStatusMap[updateData.status]) {
+            updateData.paymentStatus = updateData.paymentStatus || legacyPaymentStatusMap[updateData.status];
+            delete updateData.status;
+        }
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ success: false, message: 'Invalid invoice ID' });
@@ -190,6 +270,20 @@ export const updateInvoice = async (req: Request, res: Response) => {
             .populate('jobId', 'jobId')
             .populate('salesperson', 'firstName lastName');
 
+        // If this invoice is a reissued invoice (has a parent), mark the original as Reissued once update succeeds
+        if (existingInvoice.parentInvoiceId && updatedInvoice) {
+            await Invoice.findByIdAndUpdate(
+                existingInvoice.parentInvoiceId,
+                {
+                    $set: {
+                        status: 'Reissued',
+                        reissuedInvoiceId: updatedInvoice._id,
+                        referenceInvoiceId: updatedInvoice._id
+                    }
+                }
+            );
+        }
+
         res.status(200).json({
             success: true,
             message: 'Invoice updated successfully',
@@ -203,24 +297,154 @@ export const updateInvoice = async (req: Request, res: Response) => {
 
 export const generateInvoiceNumber = async (req: Request, res: Response) => {
     try {
-        const lastInvoice = await Invoice.findOne({}).sort({ createdAt: -1 });
-        let nextNumber = 1;
-        if (lastInvoice && lastInvoice.invoiceNo) {
-            // Assuming format INV-0001
-            const parts = lastInvoice.invoiceNo.split('-');
-            if (parts.length > 1) {
-                const numInfo = parseInt(parts[1]);
-                if (!isNaN(numInfo)) {
-                    nextNumber = numInfo + 1;
-                }
+        const invoices = await Invoice.find({ isDeleted: false }).select('invoiceNo').lean();
+        const numbers: number[] = [];
+        for (const inv of invoices) {
+            const no = inv.invoiceNo || '';
+            const match = no.match(/^INV-(\d+)/);
+            if (match) {
+                numbers.push(parseInt(match[1], 10));
             }
         }
-
+        const maxNum = numbers.length ? Math.max(...numbers) : 0;
+        const nextNumber = maxNum + 1;
         const invoiceNo = `INV-${nextNumber.toString().padStart(4, '0')}`;
         res.status(200).json({ success: true, invoiceNo });
     } catch (error) {
         console.error('Error generating invoice number:', error);
         res.status(500).json({ success: false, message: 'Failed to generate invoice number' });
+    }
+};
+
+export const cancelInvoice = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid invoice ID' });
+        }
+
+        const token = req.user;
+        const employee = await getEmployeeData(token);
+
+        if (!employee) {
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const invoice = await Invoice.findById(id);
+
+        if (!invoice || invoice.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
+        }
+
+        if (invoice.status === 'Cancelled') {
+            return res.status(400).json({ success: false, message: 'Invoice is already cancelled' });
+        }
+
+        invoice.status = 'Cancelled';
+        invoice.cancellationReason = reason || invoice.cancellationReason || '';
+        invoice.cancelledBy = new mongoose.Types.ObjectId(employee._id);
+        invoice.cancelledAt = new Date();
+
+        await invoice.save();
+
+        await new InvoiceAudit({
+            invoiceId: invoice._id,
+            invoiceNo: invoice.invoiceNo,
+            invoiceDate: invoice.date,
+            customer: invoice.customer,
+            jobId: invoice.jobId,
+            originalAmount: invoice.amount,
+            adjustedAmount: invoice.amount,
+            reason: invoice.cancellationReason || '',
+            actionBy: employee._id,
+            status: 'Cancelled'
+        }).save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Invoice cancelled successfully',
+            data: invoice
+        });
+    } catch (error) {
+        console.error('Error cancelling invoice:', error);
+        res.status(500).json({ success: false, message: 'Failed to cancel invoice' });
+    }
+};
+
+export const cancelAndReissueInvoice = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid invoice ID' });
+        }
+
+        const token = req.user;
+        const employee = await getEmployeeData(token);
+
+        if (!employee) {
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const existingInvoice = await Invoice.findById(id);
+
+        if (!existingInvoice || existingInvoice.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
+        }
+
+        if (existingInvoice.reissuedInvoiceId) {
+            return res.status(400).json({ success: false, message: 'Invoice is already reissued' });
+        }
+
+        const baseInvoiceNo = existingInvoice.invoiceNo || '';
+        const reissueInvoiceNo = `${baseInvoiceNo}R`;
+
+        const reissueConflict = await Invoice.findOne({
+            invoiceNo: reissueInvoiceNo,
+            isDeleted: false
+        });
+
+        if (reissueConflict) {
+            return res.status(400).json({
+                success: false,
+                message: 'Reissued invoice number already exists'
+            });
+        }
+
+        existingInvoice.status = 'Cancelled';
+        existingInvoice.cancellationReason = reason || existingInvoice.cancellationReason || '';
+        existingInvoice.cancelledBy = new mongoose.Types.ObjectId(employee._id);
+        existingInvoice.cancelledAt = new Date();
+
+        await existingInvoice.save();
+
+        await new InvoiceAudit({
+            invoiceId: existingInvoice._id,
+            invoiceNo: existingInvoice.invoiceNo,
+            invoiceDate: existingInvoice.date,
+            customer: existingInvoice.customer,
+            jobId: existingInvoice.jobId,
+            originalAmount: existingInvoice.amount,
+            adjustedAmount: existingInvoice.amount,
+            reason: existingInvoice.cancellationReason || '',
+            actionBy: employee._id,
+            status: 'Cancelled'
+        }).save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Invoice marked for reissue successfully',
+            data: {
+                originalInvoice: existingInvoice,
+                reissueInvoiceNo
+            }
+        });
+    } catch (error) {
+        console.error('Error cancelling and reissuing invoice:', error);
+        res.status(500).json({ success: false, message: 'Failed to cancel and reissue invoice' });
     }
 };
 
@@ -233,7 +457,7 @@ export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => 
         const matchStage: any = { isDeleted: false, status: { $ne: 'Cancelled' } };
 
         // Filters matching Invoice fields directly
-        if (req.query.search) {
+        if (req.query.search && req.query.search !== 'undefined') {
             matchStage['$or'] = [
                 { invoiceNo: { $regex: req.query.search, $options: 'i' } }
             ];
@@ -282,12 +506,42 @@ export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => 
             }] : []),
             // Unwind items to join with Delivery Notes
             { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    hasDnRefs: {
+                        $gt: [
+                            { $size: { $ifNull: ['$items.dnRefs', []] } },
+                            0
+                        ]
+                    }
+                }
+            },
+            {
+                $unwind: {
+                    path: '$items.dnRefs',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
             // Lookup corresponding Delivery Notes
             {
                 $lookup: {
                     from: 'deliverynotes',
-                    localField: 'items.dnId',
-                    foreignField: '_id',
+                    let: {
+                        refDnId: {
+                            $cond: [
+                                '$hasDnRefs',
+                                '$items.dnRefs.dnId',
+                                '$items.dnId'
+                            ]
+                        }
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$_id', '$$refDnId'] }
+                            }
+                        }
+                    ],
                     as: 'dn'
                 }
             },
@@ -305,7 +559,15 @@ export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => 
                     invoiceDates: { $first: '$date' },
                     job: { $first: '$job' },
                     clientName: { $first: '$customerDoc.companyName' },
-                    totalInvoicedQty: { $sum: { $ifNull: ['$items.quantity', 0] } },
+                    totalInvoicedQty: {
+                        $sum: {
+                            $cond: [
+                                '$hasDnRefs',
+                                { $ifNull: ['$items.dnRefs.quantity', 0] },
+                                { $ifNull: ['$items.quantity', 0] }
+                            ]
+                        }
+                    },
                     dnId: { $first: '$dn._id' },
                     dnNo: { $first: '$dn.dnNo' },
                     dnDate: { $first: '$dn.dnDate' },
@@ -390,6 +652,85 @@ export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => 
     }
 };
 
+export const getJobItemInvoicedQty = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+        const { excludeInvoiceId } = req.query;
+
+        if (!jobId || !mongoose.Types.ObjectId.isValid(jobId)) {
+            return res.status(400).json({ success: false, message: 'Invalid job ID' });
+        }
+
+        const matchStage: any = {
+            isDeleted: false,
+            status: { $nin: ['Cancelled', 'Reissued'] },
+            jobId: new mongoose.Types.ObjectId(jobId)
+        };
+
+        if (excludeInvoiceId && typeof excludeInvoiceId === 'string' && mongoose.Types.ObjectId.isValid(excludeInvoiceId)) {
+            matchStage._id = { $ne: new mongoose.Types.ObjectId(excludeInvoiceId) };
+        }
+
+        const pipeline: any[] = [
+            { $match: matchStage },
+            { $unwind: '$items' },
+            {
+                $addFields: {
+                    hasDnRefs: {
+                        $gt: [
+                            { $size: { $ifNull: ['$items.dnRefs', []] } },
+                            0
+                        ]
+                    }
+                }
+            },
+            {
+                $unwind: {
+                    path: '$items.dnRefs',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $addFields: {
+                    _itemKey: {
+                        $cond: [
+                            { $ifNull: ['$items.itemId', false] },
+                            '$items.itemId',
+                            '$items.description'
+                        ]
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: '$_itemKey',
+                    itemId: { $first: '$items.itemId' },
+                    description: { $first: '$items.description' },
+                    totalInvoicedQty: {
+                        $sum: {
+                            $cond: [
+                                '$hasDnRefs',
+                                { $ifNull: ['$items.dnRefs.quantity', 0] },
+                                { $ifNull: ['$items.quantity', 0] }
+                            ]
+                        }
+                    }
+                }
+            }
+        ];
+
+        const results = await Invoice.aggregate(pipeline);
+
+        return res.status(200).json({
+            success: true,
+            data: results
+        });
+    } catch (error) {
+        console.error('Error fetching job item invoiced qty:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch job item invoiced qty' });
+    }
+};
+
 export const getCancelledAdjustedInvoices = async (req: Request, res: Response) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
@@ -398,7 +739,7 @@ export const getCancelledAdjustedInvoices = async (req: Request, res: Response) 
 
         const matchStage: any = { isDeleted: false };
 
-        if (req.query.search) {
+        if (req.query.search && req.query.search !== 'undefined') {
             matchStage['$or'] = [
                 { invoiceNo: { $regex: req.query.search, $options: 'i' } }
             ];
@@ -441,6 +782,24 @@ export const getCancelledAdjustedInvoices = async (req: Request, res: Response) 
                 }
             },
             { $unwind: { path: '$jobDoc', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'jobDoc.quoteId',
+                    foreignField: '_id',
+                    as: 'quoteDoc'
+                }
+            },
+            { $unwind: { path: '$quoteDoc', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: 'quotations',
+                    localField: 'jobDoc.quoteId',
+                    foreignField: '_id',
+                    as: 'quoteDoc'
+                }
+            },
+            { $unwind: { path: '$quoteDoc', preserveNullAndEmptyArrays: true } },
             // Lookup Employee (action by)
             {
                 $lookup: {
@@ -465,10 +824,12 @@ export const getCancelledAdjustedInvoices = async (req: Request, res: Response) 
             {
                 $project: {
                     _id: 1,
+                    invoiceId: 1,
                     invoiceNo: 1,
                     invoiceDate: 1,
                     customerName: '$customerDoc.companyName',
                     jobId: '$jobDoc.jobId',
+                    currency: '$quoteDoc.currency',
                     originalAmount: 1,
                     adjustedAmount: 1,
                     reason: 1,
@@ -492,22 +853,19 @@ export const getCancelledAdjustedInvoices = async (req: Request, res: Response) 
             }
         ];
 
-        const mongoose = require('mongoose');
-        const InvoiceAudit = mongoose.model('InvoiceAudit');
-
-        // const result = await InvoiceAudit.aggregate(facetPipeline);
-        // const data = result[0].data;
-        // const total = result[0].metadata[0]?.total || 0;
+        const result = await InvoiceAudit.aggregate(facetPipeline);
+        const data = result[0]?.data || [];
+        const total = result[0]?.metadata[0]?.total || 0;
 
         res.status(200).json({
             success: true,
             data: {
-                // report: data,
+                report: data,
                 pagination: {
-                    // total,
+                    total,
                     page,
                     limit,
-                    // pages: Math.ceil(total / limit)
+                    pages: Math.ceil(total / limit)
                 }
             }
         });
@@ -526,15 +884,20 @@ export const getCancelledAndReissuedInvoices = async (req: Request, res: Respons
         const matchStage: any = { isDeleted: false, status: { $in: ['Cancelled', 'Reissued'] } };
 
         if (req.query.status) {
-            matchStage.status = req.query.status;
+            const status = req.query.status;
+            if (Array.isArray(status)) {
+                matchStage.status = { $in: status };
+            } else {
+                matchStage.status = status;
+            }
         }
 
-        if (req.query.search) {
+        if (req.query.search && req.query.search !== 'undefined') {
             matchStage.invoiceNo = { $regex: req.query.search, $options: 'i' };
         }
 
         if (req.query.fromDate && req.query.toDate) {
-            matchStage.cancelledAt = {
+            matchStage.date = {
                 $gte: new Date(req.query.fromDate as string),
                 $lte: new Date(req.query.toDate as string)
             };
@@ -602,6 +965,7 @@ export const getCancelledAndReissuedInvoices = async (req: Request, res: Respons
                     oldInvoiceDate: '$date',
                     customerName: '$customerDoc.companyName',
                     jobId: '$jobDoc.jobId',
+                    currency: '$quoteDoc.currency',
                     originalAmount: '$amount',
                     cancellationReason: 1,
                     cancelledBy: { $concat: ['$cancelledByDoc.firstName', ' ', '$cancelledByDoc.lastName'] },

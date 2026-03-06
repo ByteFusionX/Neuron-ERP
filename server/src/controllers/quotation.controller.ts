@@ -1052,7 +1052,7 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 if (quotation) {
                     await createNotificationWithPrivileges(
                         {
-                            type: 'Quotation',
+                            type: 'DealSheetResponse',
                             referenceModel: 'Quotation',
                             title: 'Deal Sheet Approved',
                             message: `Deal sheet has been approved for quotation ${quotation.quoteId}`,
@@ -1098,7 +1098,7 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         const userData = await getEmployeeData(req.user);
         await createNotificationWithPrivileges(
             {
-                type: 'Quotation',
+                type: 'DealSheetResponse',
                 referenceModel: 'Quotation',
                 title: 'Deal Sheet Rejected',
                 message: `Deal sheet has been rejected for quotation ${savedDeal.quoteId}`,

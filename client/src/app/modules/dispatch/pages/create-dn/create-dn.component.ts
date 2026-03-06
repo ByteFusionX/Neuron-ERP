@@ -65,6 +65,16 @@ export class CreateDnComponent implements OnInit {
   selectedItems: Set<number> = new Set();
 
   ngOnInit(): void {
+    this.employeeService.employeeData$.subscribe(emp => {
+      if (emp && emp.category && emp.category.privileges) {
+        if (!emp.category.privileges.dispatch?.createDeliveryNote) {
+          this.toastr.error('You do not have permission to create or edit Delivery Notes');
+          this.router.navigate(['/dispatch/delivery-note-register']);
+          return;
+        }
+      }
+    });
+
     this.loadJobIds();
 
     const editId = this.route.snapshot.queryParams['id'];
@@ -496,7 +506,9 @@ export class CreateDnComponent implements OnInit {
 
     const previewData = {
       ...formValue,
-      items: selectedItemsData
+      items: selectedItemsData,
+      jobId: this.selectedJob ? { jobId: this.selectedJob.jobId } : { jobId: formValue.jobId || '' },
+      paymentTerms: this.selectedJob?.quotation?.paymentTerms ?? ''
     };
 
     try {

@@ -8,6 +8,8 @@ import mongoose from "mongoose";
 import { getEmployeeData, updateIssuedQuantities, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
+import { Server } from "socket.io";
+import { createNotificationWithPrivileges } from "./notification.controller";
 
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
@@ -130,6 +132,23 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
           'add'
         );
       }
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+        {
+          type: 'LpoApprovalRequest',
+          referenceModel: 'PurchaseOrder',
+          title: 'LPO sent for approval',
+          message: `LPO ${purchaseOrder.poNo} has been sent for approval`,
+          sentBy: employee._id?.toString(),
+          referenceId: purchaseOrder._id,
+          additionalData: { purchaseId: purchaseId.toString() }
+        },
+        {
+          privilegeKey: 'purchaseOrder',
+          checkFunction: (p) => p.purchaseOrder?.canApprovePOs === true
+        },
+        socket
+      );
     }
 
     return res.status(201).json({
@@ -207,7 +226,7 @@ export const updatePurchaseOrder = async (req: Request, res: Response) => {
     const oldStatus = existingOrder.poStatus;
     const newStatus = poStatus || updateData.poStatus;
 
-    if (oldStatus === 'Draft' && newStatus === 'Pending for Approval' && items && supplierId) {
+    if ((oldStatus === 'Draft' || oldStatus === 'Rejected') && newStatus === 'Pending for Approval' && items && supplierId) {
       const purchaseRequestDoc = await purchaseRequest.findById(updatedOrder.purchaseId);
       if (purchaseRequestDoc) {
         await updateIssuedQuantities(
@@ -970,7 +989,7 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
     }
 
     // Validate status
-    const validStatuses = ["Draft", "Pending for Approval", "Approved"];
+    const validStatuses = ["Draft", "Pending for Approval", "Approved", "Rejected"];
     if (!poStatus || !validStatuses.includes(poStatus)) {
       return res.status(400).json({
         success: false,
@@ -997,6 +1016,28 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
         success: false,
         message: "Purchase order not found",
       });
+    }
+
+    if (poStatus === 'Pending for Approval') {
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+        {
+          type: 'LpoApprovalRequest',
+          referenceModel: 'PurchaseOrder',
+          title: 'LPO sent for approval',
+          message: `LPO ${updatedPurchaseOrder.poNo} has been sent for approval`,
+          sentBy: employee?._id?.toString(),
+          referenceId: updatedPurchaseOrder._id,
+          additionalData: { purchaseId: updatedPurchaseOrder.purchaseId?.toString() }
+        },
+        {
+          privilegeKey: 'purchaseOrder',
+          checkFunction: (p) => p.purchaseOrder?.canApprovePOs === true
+        },
+        socket
+      );
     }
 
     return res.status(200).json({
@@ -1081,6 +1122,24 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
       }
     ).populate('approvedHistory.approvedBy', 'firstName lastName');
 
+    const socket = req.app.get('io') as Server;
+    await createNotificationWithPrivileges(
+      {
+        type: 'LpoApproved',
+        referenceModel: 'PurchaseOrder',
+        title: 'LPO approved',
+        message: `LPO ${purchaseOrder.poNo} has been approved. It is ready to create GRN and upload supplier invoice.`,
+        sentBy: employee._id?.toString(),
+        referenceId: purchaseOrder._id,
+        additionalData: { purchaseId: purchaseOrder.purchaseId?.toString() }
+      },
+      {
+        privilegeKey: 'purchaseOrder',
+        checkFunction: (p, employeeId) => employeeId === purchaseOrder.createdBy?.toString() && (p.purchaseOrder?.viewReport !== 'none' || p.purchaseOrder?.canInitiateLPO === true)
+      },
+      socket
+    );
+
     return res.status(200).json({
       success: true,
       message: "Purchase order approved successfully",
@@ -1150,7 +1209,7 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       id,
       {
         $set: {
-          poStatus: 'Draft',
+          poStatus: 'Rejected',
           updatedAt: new Date()
         },
         $push: {
@@ -1162,6 +1221,34 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
         runValidators: true,
       }
     ).populate('rejectedHistory.rejectedBy', 'firstName lastName');
+
+    const purchaseRequestDoc = await purchaseRequest.findById(purchaseOrder.purchaseId);
+    if (purchaseRequestDoc && purchaseOrder.items && purchaseOrder.items.length > 0) {
+      await updateIssuedQuantities(
+        purchaseRequestDoc,
+        purchaseOrder.supplierId,
+        purchaseOrder.items.map((item: any) => ({ detail: item.detail, quantity: item.quantity })),
+        'subtract'
+      );
+    }
+
+    const socket = req.app.get('io') as Server;
+    await createNotificationWithPrivileges(
+      {
+        type: 'LpoRejected',
+        referenceModel: 'PurchaseOrder',
+        title: 'LPO rejected',
+        message: `LPO ${purchaseOrder.poNo} has been rejected.`,
+        sentBy: employee._id?.toString(),
+        referenceId: purchaseOrder._id,
+        additionalData: { purchaseId: purchaseOrder.purchaseId?.toString() }
+      },
+      {
+        privilegeKey: 'purchaseOrder',
+        checkFunction: (p, employeeId) => employeeId === purchaseOrder.createdBy?.toString() && (p.purchaseOrder?.viewReport !== 'none' || p.purchaseOrder?.canInitiateLPO === true)
+      },
+      socket
+    );
 
     return res.status(200).json({
       success: true,
@@ -1310,7 +1397,7 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
     const existingPurchaseOrders = await PurchaseOrder.find({
       purchaseId: new mongoose.Types.ObjectId(purchaseId),
       supplierId: { $in: supplierIds },
-      poStatus: { $nin: ['Draft', 'Pending for Approval'] } // Exclude drafts and pending from issued quantity calculations
+      poStatus: { $nin: ['Draft', 'Pending for Approval', 'Rejected'] }
     });
 
     const issuedItemsMap = new Map();
@@ -1444,7 +1531,7 @@ export const revokePurchaseOrder = async (req: Request, res: Response) => {
     // Hard delete the purchase order
     await PurchaseOrder.findByIdAndDelete(id);
 
-    if (purchaseOrder.poStatus !== 'Draft') {
+    if (purchaseOrder.poStatus !== 'Draft' && purchaseOrder.poStatus !== 'Rejected') {
       const purchaseRequestDoc = await purchaseRequest.findById(purchaseId);
       if (purchaseRequestDoc && items.length > 0) {
         await updateIssuedQuantities(
@@ -1501,7 +1588,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
     const query: any = {
       purchaseId: new mongoose.Types.ObjectId(purchaseId),
       supplierId: new mongoose.Types.ObjectId(supplierId),
-      poStatus: { $nin: ['Draft', 'Pending for Approval'] } // Exclude drafts and pending from issued quantity calculations
+      poStatus: { $nin: ['Draft', 'Pending for Approval', 'Rejected'] }
     };
     
     // If excludeLpoId is provided, exclude that LPO from calculations (for reissue)

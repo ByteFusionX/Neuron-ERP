@@ -506,19 +506,13 @@ export const updateEnquiryStatus = async (req: Request, res: Response, next: Nex
                 {
                     type: 'Enquiry',
                     referenceModel: 'Enquiry',
-                    title: 'Enquiry Status Updated',
-                    message: `Enquiry ${update.enquiryId} status has been updated`,
+                    title: 'Estimation sent back to enquiry',
+                    message: `Presale estimation has been sent back for enquiry ${update.enquiryId}`,
                     sentBy: userData?._id?.toString() || update.salesPerson._id.toString(),
                     referenceId: update._id,
                     additionalData: { enquiryId: update._id.toString() }
                 },
-                {
-                    privilegeKey: 'enquiry',
-                    checkFunction: (privileges, employeeId) => {
-                        return employeeId === update.salesPerson._id.toString() && 
-                               privileges.enquiry?.viewReport !== 'none';
-                    }
-                },
+                { privilegeKey: 'enquiry' },
                 socket
             );
             return res.status(200).json({ update })
@@ -808,8 +802,8 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
             {
                 type: 'AssignedJob',
                 referenceModel: 'Enquiry',
-                title: 'Revision Requested',
-                message: `A revision has been requested for enquiry ${result.enquiryId}`,
+                title: 'Estimation sent back for revision',
+                message: `Presale estimation has been sent back for revision for enquiry ${result.enquiryId}`,
                 sentBy: userData?._id?.toString() || presalePerson,
                 referenceId: result._id,
                 additionalData: { enquiryId: result._id.toString() }
@@ -860,8 +854,8 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
             {
                 type: 'AssignedJob',
                 referenceModel: 'Enquiry',
-                title: 'Quote Estimation Revised',
-                message: `Quote estimation has been revised for enquiry ${result.enquiryId}`,
+                title: 'Estimation sent back for revision',
+                message: `Presale estimation has been sent back for revision for enquiry ${result.enquiryId}`,
                 sentBy: userData?._id?.toString() || presalePerson,
                 referenceId: result._id,
                 additionalData: { enquiryId: result._id.toString() }
@@ -1203,25 +1197,42 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
         const socket = req.app.get('io') as Server;
         const presalePerson = result.preSale.presalePerson.toString();
         const userData = await getEmployeeData(req.user);
-        await createNotificationWithPrivileges(
-            {
-                type: 'AssignedJob',
-                referenceModel: 'Enquiry',
-                title: 'Presale Job Rejected',
-                message: `Presale job has been rejected for enquiry ${result.enquiryId}`,
-                sentBy: userData?._id?.toString() || presalePerson,
-                referenceId: result._id,
-                additionalData: { enquiryId: result._id.toString() }
-            },
-            {
-                privilegeKey: 'assignedJob',
-                checkFunction: (privileges, employeeId) => {
-                    return employeeId === presalePerson && 
-                           privileges.assignedJob?.viewReport !== 'none';
-                }
-            },
-            socket
-        );
+
+        if (role === 'Engineer') {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'AssignedJob',
+                    referenceModel: 'Enquiry',
+                    title: 'Presale Job Rejected by Engineer',
+                    message: `Presale job has been rejected by engineer for enquiry ${result.enquiryId}`,
+                    sentBy: userData?._id?.toString() || presalePerson,
+                    referenceId: result._id,
+                    additionalData: { enquiryId: result._id.toString() }
+                },
+                {
+                    privilegeKey: 'assignedJob',
+                    checkFunction: (privileges, employeeId) => {
+                        return employeeId === presalePerson &&
+                               privileges.assignedJob?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
+        } else {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'Enquiry',
+                    referenceModel: 'Enquiry',
+                    title: 'Presale Job Rejected by Manager',
+                    message: `Presale job has been rejected by manager for enquiry ${result.enquiryId}`,
+                    sentBy: userData?._id?.toString() || presalePerson,
+                    referenceId: result._id,
+                    additionalData: { enquiryId: result._id.toString() }
+                },
+                { privilegeKey: 'enquiry' },
+                socket
+            );
+        }
 
         res.status(200).json({ success: true });
     } catch (error) {

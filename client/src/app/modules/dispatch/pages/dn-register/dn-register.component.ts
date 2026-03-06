@@ -11,6 +11,7 @@ import { SearchComponent } from 'src/app/shared/components/search/search.compone
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { DeliveryNote, DnStatus } from 'src/app/shared/interfaces/delivery-note.interface';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
@@ -55,7 +56,10 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   private _dialog = inject(MatDialog);
   private toaster = inject(ToastrService);
   private paginationService = inject(PaginationService);
+  private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
+
+  canCreateDn = signal<boolean>(false);
 
   tableData = signal<DeliveryNote[]>([]);
   tableColumns: TableColumn[] = [];
@@ -69,6 +73,13 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   searchQuery = signal<string>('');
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe(emp => {
+        if (emp?.category?.privileges?.dispatch?.createDeliveryNote) {
+          this.canCreateDn.set(true);
+        }
+      })
+    );
     this.setupTableColumns();
     this.initializeFromUrlParams();
   }

@@ -28,7 +28,6 @@ interface SubMenuItem {
   privilegeKey?: keyof Privileges;
   privilegeValue?: string;
   notificationKey?: string;
-  condition?: (privileges: Privileges) => boolean;
   alternateLabel?: string;
   alternateCondition?: (privileges: Privileges) => boolean;
 }
@@ -147,12 +146,14 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'pendingDeals',
           label: 'Pending',
           route: '/deal-sheet/pendings',
+          privilegeKey: 'dealSheet',
           notificationKey: 'dealSheetCount'
         },
         {
           id: 'approvedDeals',
           label: 'Approved',
-          route: '/deal-sheet/approved'
+          route: '/deal-sheet/approved',
+          privilegeKey: 'dealSheet'
         }
       ]
     },
@@ -168,25 +169,29 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'pendingJobSheet',
           label: 'Pending',
           route: '/job-sheet/pending',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         },
         {
           id: 'openToWorkJobSheet',
           label: 'Open to work',
           route: '/job-sheet/open-to-work',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         },
         {
           id: 'inProgressJobSheet',
           label: 'In progress',
           route: '/job-sheet/in-progress',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         },
         {
           id: 'completedJobSheet',
           label: 'Completed',
           route: '/job-sheet/completed',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         }
       ]
     },
@@ -250,24 +255,32 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'pendingJobs',
           label: 'Open To Work',
           route: '/technical/open-to-work-project',
+          privilegeKey: 'technical',
+          privilegeValue: 'canViewOpenToWorkAndAssign',
           notificationKey: 'purchaseCount'
         },
         {
           id: 'projects',
           label: 'Pending Projects',
           route: '/technical/project',
+          privilegeKey: 'technical',
+          privilegeValue: 'none',
           notificationKey: 'purchaseCount'
         },
         {
           id: 'amc',
           label: 'Pending AMC',
           route: '/technical/amc',
+          privilegeKey: 'technical',
+          privilegeValue: 'none',
           notificationKey: 'purchaseCount'
         },
         {
           id: 'mrApprovalRequests',
           label: 'MR Approval Requests',
           route: '/technical/mr-approval-requests',
+          privilegeKey: 'technical',
+          privilegeValue: 'canApproveMRRequests',
           notificationKey: 'purchaseCount'
         },
       ]
@@ -285,12 +298,14 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'pendingSuppliers',
           label: 'Pending',
           route: '/suppliers/pendings',
+          privilegeKey: 'supplier',
           notificationKey: 'dealSheetCount'
         },
         {
           id: 'approvedSuppliers',
           label: 'Approved',
-          route: '/suppliers/approved'
+          route: '/suppliers/approved',
+          privilegeKey: 'supplier'
         }
       ]
     },
@@ -307,12 +322,16 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'myClaims',
           label: 'My Claims',
           route: '/claims/my-claims',
+          privilegeKey: 'claims',
+          privilegeValue: 'none',
           notificationKey: 'dealSheetCount'
         },
         {
           id: 'approvalRequests',
           label: 'Approval Requests',
-          route: '/claims/approval-requests'
+          route: '/claims/approval-requests',
+          privilegeKey: 'claims',
+          privilegeValue: 'canApprove'
         }
       ]
     },
@@ -345,26 +364,36 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       icon: 'heroTruck',
       route: '/dispatch',
       hasDropdown: true,
+      privilegeKey: 'dispatch',
+      privilegeValue: 'none',
       children: [
         {
           id: 'delivery-note-register',
           label: 'Delivery Notes',
           route: '/dispatch/delivery-note-register',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'none'
         },
         {
           id: 'pending-delivery-reports',
           label: 'Pending Delivery',
           route: '/dispatch/pending-delivery-reports',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'viewPendingDelivery'
         },
         {
           id: 'invoice-linking-report',
           label: 'Invoice Linking',
           route: '/dispatch/invoice-linking-report',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'viewInvoiceLinking'
         },
         {
           id: 'inventory-deduction-report',
           label: 'Inventory Deduction',
           route: '/dispatch/inventory-deduction-report',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'viewInventoryDeduction'
         },
       ]
     },
@@ -374,26 +403,36 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       icon: 'heroDocumentText',
       route: '/invoice',
       hasDropdown: true,
+      privilegeKey: 'invoice',
+      privilegeValue: 'none',
       children: [
         {
           id: 'invoice-register',
           label: 'Invoices',
           route: '/invoice/invoice-register',
+          privilegeKey: 'invoice',
+          privilegeValue: 'none'
         },
         {
           id: 'invoice-dn-linking',
           label: 'Invoice vs DN',
           route: '/invoice/invoice-dn-linking',
+          privilegeKey: 'invoice',
+          privilegeValue: 'viewInvoicesVsDn'
         },
         {
           id: 'cancelled-adjusted-invoices',
           label: 'Cancelled/Adjusted',
           route: '/invoice/cancelled-invoices',
+          privilegeKey: 'invoice',
+          privilegeValue: 'viewCancelledAdjusted'
         },
         {
           id: 'cancelled-reissued-invoices',
           label: 'Reissued',
           route: '/invoice/reissued',
+          privilegeKey: 'invoice',
+          privilegeValue: 'viewReissued'
         }
       ]
     },
@@ -500,13 +539,31 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
         : (inventoryPrivilege.products?.viewReport === item.privilegeValue || inventoryPrivilege.stockEntries?.viewReport === item.privilegeValue);
     }
 
-    // Handle when privilegeObj is an object with viewReport property
-    if (typeof privilegeObj === 'object' && 'viewReport' in privilegeObj) {
-      const viewReport = (privilegeObj as any)?.viewReport ?? 'none';
-      // If privilegeValue is 'none', it means user should NOT have 'none' permission
-      return item.privilegeValue === 'none'
-        ? viewReport !== 'none'
-        : viewReport === item.privilegeValue;
+    // Handle when privilegeObj is an object
+    if (typeof privilegeObj === 'object') {
+      const obj = privilegeObj as any;
+
+      // Direct boolean property check based on privilegeValue matching an exact boolean key
+      if (item.privilegeValue && typeof obj[item.privilegeValue] === 'boolean') {
+        return obj[item.privilegeValue];
+      }
+
+      // Existing viewReport logic
+      if ('viewReport' in obj) {
+        const viewReport = obj.viewReport ?? 'none';
+        
+        // When privilegeValue is 'none', user access is granted if viewReport != 'none' 
+        // OR if it's a dropdown container and ANY nested boolean flag is true.
+        if (item.privilegeValue === 'none') {
+           if (viewReport !== 'none') return true;
+           if ('hasDropdown' in item && item.hasDropdown) {
+             return Object.values(obj).some(val => val === true);
+           }
+           return false;
+        }
+        
+        return viewReport === item.privilegeValue;
+      }
     }
 
     // Default fallback if structure doesn't match expected patterns

@@ -101,7 +101,7 @@ export class OpenToWorckComponent {
     this._employeeService.employeeData$.subscribe((data) => {
       if (data?.category?.privileges) {
         this.canAllocateJobs = data.category.privileges.jobSheet?.allocateJobs || false;
-        this.canConvertToPurchase = data.category.privileges.jobSheet?.convertToPurchase || false;
+        this.canConvertToPurchase = data.category.privileges.purchase?.create || false;
         this.canTransferProcurementPerson = data.category.privileges.jobSheet?.transferProcurementPerson || false;
       }
     });
