@@ -8,6 +8,7 @@ import { NgSelectModule } from '@ng-select/ng-select';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
@@ -38,21 +39,27 @@ export class CreateInvoiceComponent implements OnInit {
   private dnService = inject(DeliveryNoteService);
   private notificationService = inject(ToastrService);
   private route = inject(ActivatedRoute);
+  private employeeService = inject(EmployeeService);
 
   // Signals
   isLoading = signal<boolean>(false);
   isSubmitted = signal<boolean>(false);
   isEditMode = signal<boolean>(false);
+  isReissueMode = signal<boolean>(false);
   editInvoiceId = signal<string | null>(null);
   editInvoiceCustomerId = signal<string | null>(null);
   jobs = signal<getJob[]>([]);
   deliveryNotes = signal<DeliveryNote[]>([]);
+  selectedJob: any = null;
+  pendingDeliveryItems: any[] = [];
+  dnInvoiceSummary: Record<string, { deliveredQty: number; invoicedQty: number; balanceQty: number }> = {};
 
   invoiceForm: FormGroup = this.fb.group({
     date: [new Date().toISOString().split('T')[0], [Validators.required]],
     invoiceNo: [{ value: '', disabled: true }, [Validators.required]],
     jobId: [null, [Validators.required]],
-    dnNos: [[], [Validators.required]], // Multi-select
+    dnNos: [[], [Validators.required]],
+    itemSource: ['delivery-note', [Validators.required]],
     customerName: [{ value: '', disabled: true }, [Validators.required]],
     customerLpo: [{ value: '', disabled: true }],
     paymentTerms: ['', [Validators.required]],
@@ -65,12 +72,36 @@ export class CreateInvoiceComponent implements OnInit {
 
   // Store all fetched DNs to filter locally
   allDeliveryNotes = signal<DeliveryNote[]>([]);
+  itemInvoicedTotals: Record<string, number> = {};
+  reissueInvoiceNo: string | null = null;
+  currency = signal<string>('QAR');
 
   ngOnInit(): void {
+    this.employeeService.employeeData$.subscribe(emp => {
+      if (emp && emp.category && emp.category.privileges) {
+        if (!emp.category.privileges.invoice?.createInvoice) {
+          this.notificationService.error('You do not have permission to create or edit Invoices');
+          this.router.navigate(['/invoice/invoice-register']);
+          return;
+        }
+      }
+    });
+
+    const routePath = this.route.snapshot.routeConfig?.path || '';
     const id = this.route.snapshot.paramMap.get('id');
-    if (id) {
+
+    if (routePath.includes('edit') && id) {
       this.isEditMode.set(true);
       this.editInvoiceId.set(id);
+      this.loadInvoiceForEdit(id);
+    } else if (routePath.includes('reissue') && id) {
+      this.isReissueMode.set(true);
+      this.editInvoiceId.set(id);
+      const nav = this.router.getCurrentNavigation();
+      const reissueNo = nav?.extras?.state?.['reissueInvoiceNo'];
+      if (reissueNo) {
+        this.reissueInvoiceNo = reissueNo;
+      }
       this.loadInvoiceForEdit(id);
     } else {
       this.generateInvoiceNumber();
@@ -114,59 +145,132 @@ export class CreateInvoiceComponent implements OnInit {
             });
             this.deliveryNotes.set(jobDns);
 
-            // Assuming invoice.items contains dnId to reselect DNs
-            const selectedDnIds = [...new Set(invoice.items.map((i: any) => i.dnId).filter(Boolean))];
+            const job = this.jobs().find(j => j._id === jobId);
+            let customerLpo = '';
+            if (jobDns.length > 0) {
+              customerLpo = jobDns[0].customerLpoNumber || '';
+            }
+            if (!customerLpo && job) {
+              customerLpo = (job as any).purchaseNo || (job as any).lpoNumber || '';
+            }
+
+            const selectedDnIds = [
+              ...new Set(
+                invoice.items
+                  .flatMap((i: any) => {
+                    if (Array.isArray(i.dnRefs) && i.dnRefs.length > 0) {
+                      return i.dnRefs.map((r: any) => r.dnId).filter(Boolean);
+                    }
+                    return i.dnId ? [i.dnId] : [];
+                  })
+                  .filter(Boolean)
+              )
+            ];
 
             this.invoiceForm.patchValue({
               date: new Date(invoice.date).toISOString().split('T')[0],
               invoiceNo: invoice.invoiceNo,
               jobId: jobId,
               dnNos: selectedDnIds,
+              itemSource: 'delivery-note',
               customerName: customerName,
+              customerLpo: customerLpo,
               paymentTerms: invoice.paymentTerms || '',
               amountFigures: invoice.amount,
-              amountWords: convertNumberToWords(invoice.amount) + ' QAR Only'
+              amountWords: convertNumberToWords(invoice.amount) + ` ${this.currency()} Only`
             });
 
-            // Populate items
-            this.itemsFormArray.clear();
-            invoice.items.forEach((item: any) => {
-              const qty = item.quantity || 0;
-              const total = item.amount || 0;
-              const unitPrice = qty ? total / qty : 0; // Reverse engineer unit price if not explicitly stored
+            this.jobService.getOneJob(jobId as string).subscribe({
+              next: (jobData: any) => {
+                const fullJob = Array.isArray(jobData) ? jobData[0] : jobData;
+                const c = fullJob?.quotation?.currency;
+                this.currency.set(c || 'QAR');
+              },
+              error: () => this.currency.set('QAR')
+            });
 
-              let orderedQty = 0;
-              let deliveredQty = 0;
-              if (item.dnId) {
-                const dn = this.allDeliveryNotes().find((d: any) => d._id === item.dnId);
-                if (dn && dn.items) {
-                  const dnItem = dn.items.find(di => di.description === item.description);
-                  if (dnItem) {
-                    orderedQty = dnItem.orderedQty || 0;
-                    deliveredQty = dnItem.deliveredQty || 0;
+            if (this.isReissueMode()) {
+              const newNo = this.reissueInvoiceNo || `${invoice.invoiceNo}R`;
+              this.invoiceForm.patchValue({ invoiceNo: newNo });
+            }
+
+            this.loadItemInvoicedTotals(jobId as string, invoice._id).then(() => {
+              this.itemsFormArray.clear();
+              invoice.items.forEach((item: any) => {
+                const qty = item.quantity || 0;
+                const total = item.amount || 0;
+                const unitPrice = qty ? total / qty : 0;
+
+                const dnRefs = Array.isArray(item.dnRefs) && item.dnRefs.length > 0
+                  ? item.dnRefs
+                  : (item.dnId
+                    ? [{ dnId: item.dnId, quantity: qty }]
+                    : []);
+
+                let orderedQty = 0;
+                const dnInfoParts: string[] = [];
+
+                dnRefs.forEach((ref: any) => {
+                  const dn = this.allDeliveryNotes().find((d: any) => d._id === ref.dnId);
+                  if (!dn || !dn.items) {
+                    return;
                   }
-                }
-              }
+                  const dnItem = dn.items.find((di: any) => {
+                    if (item.itemId && di.itemId) {
+                      return di.itemId === item.itemId;
+                    }
+                    return di.description === item.description;
+                  });
+                  if (!dnItem) {
+                    return;
+                  }
+                  const dnOrdered = dnItem.orderedQty || 0;
+                  if (dnOrdered > orderedQty) {
+                    orderedQty = dnOrdered;
+                  }
+                  const dnNo = dn.dnNo || '';
+                  const slNo = dnItem.slNo || '';
+                  const refQty = ref.quantity || 0;
+                  const partLabel = [dnNo, slNo ? `(Sl ${slNo}` : '', refQty ? (slNo ? `, Qty ${refQty})` : `(Qty ${refQty})`) : (slNo ? ')' : '')]
+                    .filter(p => p)
+                    .join(' ');
+                  dnInfoParts.push(partLabel);
+                });
+
+              const key = item.itemId || item.description;
+              const alreadyInvoiced = this.itemInvoicedTotals[key] || 0;
+              const balanceQty = Math.max(0, orderedQty - alreadyInvoiced);
+              const isSelectable = balanceQty > 0;
+              const safeQty = isSelectable ? Math.min(qty, balanceQty) : 0;
+              const safeTotal = safeQty * unitPrice;
+              const dnInfo = dnInfoParts.join(', ');
 
               const formGroup = this.fb.group({
-                dnId: [item.dnId], // Track source DN
+                selected: [{ value: isSelectable, disabled: !isSelectable }],
+                dnId: [dnRefs.length === 1 ? dnRefs[0].dnId : item.dnId || null],
+                dnRefs: [dnRefs],
+                itemId: [item.itemId || null],
                 description: [item.description || '', Validators.required],
                 totalQuantity: [{ value: orderedQty, disabled: true }],
-                balanceQuantity: [{ value: orderedQty - deliveredQty, disabled: true }],
-                quantity: [qty, [Validators.required, Validators.min(0)]],
+                invoicedQuantity: [{ value: alreadyInvoiced, disabled: true }],
+                balanceQuantity: [{ value: balanceQty, disabled: true }],
+                quantity: [safeQty, [Validators.required, Validators.min(0), Validators.max(balanceQty)]],
                 unitPrice: [unitPrice, [Validators.required, Validators.min(0)]],
-                totalPrice: [{ value: total, disabled: true }]
+                totalPrice: [{ value: safeTotal, disabled: true }],
+                dnInfo: [{ value: dnInfo, disabled: true }]
               });
 
-              formGroup.valueChanges.subscribe(() => {
-                this.updateRowTotal(formGroup);
-                this.calculateTotals();
+                formGroup.valueChanges.subscribe(() => {
+                  this.updateRowTotal(formGroup);
+                  this.calculateTotals();
+                });
+
+                this.itemsFormArray.push(formGroup);
               });
 
-              this.itemsFormArray.push(formGroup);
+              this.isLoading.set(false);
             });
 
-            this.isLoading.set(false);
           },
           error: () => {
             this.notificationService.error('Failed to load invoice for editing');
@@ -185,6 +289,7 @@ export class CreateInvoiceComponent implements OnInit {
 
   get f() { return this.invoiceForm.controls; }
   get itemsFormArray() { return this.invoiceForm.get('items') as FormArray; }
+  get itemSource() { return this.invoiceForm.get('itemSource')?.value; }
 
   generateInvoiceNumber() {
     this.invoiceService.generateInvoiceNumber().subscribe({
@@ -275,6 +380,15 @@ export class CreateInvoiceComponent implements OnInit {
     }
 
     this.itemsFormArray.clear();
+    this.loadItemInvoicedTotals(job._id as string, this.isEditMode() ? this.editInvoiceId() || undefined : undefined);
+    this.jobService.getOneJob(job._id as string).subscribe({
+      next: (jobData: any) => {
+        const fullJob = Array.isArray(jobData) ? jobData[0] : jobData;
+        const c = fullJob?.quotation?.currency;
+        this.currency.set(c || 'QAR');
+      },
+      error: () => this.currency.set('QAR')
+    });
   }
 
   mapDnIdsToObjects(dnIds: string | string[]): DeliveryNote[] {
@@ -297,6 +411,26 @@ export class CreateInvoiceComponent implements OnInit {
     this.deliveryNotes.set([]);
   }
 
+  private loadItemInvoicedTotals(jobId: string, excludeInvoiceId?: string): Promise<void> {
+    return new Promise(resolve => {
+      this.invoiceService.getJobItemInvoicedQty(jobId, excludeInvoiceId).subscribe({
+        next: (res) => {
+          const map: Record<string, number> = {};
+          (res.data || []).forEach((row: any) => {
+            const key = row.itemId || row.description;
+            map[key] = row.totalInvoicedQty || 0;
+          });
+          this.itemInvoicedTotals = map;
+          resolve();
+        },
+        error: () => {
+          this.itemInvoicedTotals = {};
+          resolve();
+        }
+      });
+    });
+  }
+
   onDnSelect(selectedDns: DeliveryNote[]) {
     this.itemsFormArray.clear();
 
@@ -305,38 +439,108 @@ export class CreateInvoiceComponent implements OnInit {
       return;
     }
 
-    // Aggregate items from selected DNs
+    const aggregated = new Map<string, {
+      description: string;
+      orderedQty: number;
+      deliveredQty: number;
+      totalCurrentDeliveryQty: number;
+      unitSellingPrice: number;
+      itemId?: string;
+      dnRefs: { dnId: string; dnNo?: string; slNo?: number; quantity: number }[];
+    }>();
+
     selectedDns.forEach(dn => {
-      if (dn.items) {
-        dn.items.forEach(item => {
-
-          const unitSellingPrice = (item as any).unitSellingPrice ?? 0;
-          const qty = item.currentDeliveryQty || 0;
-          const orderedQty = item.orderedQty || 0;
-          const deliveredQty = item.deliveredQty || 0;
-
-          const formGroup = this.fb.group({
-            dnId: [dn._id], // Track source DN
-            description: [item.description || '', Validators.required],
-            totalQuantity: [{ value: orderedQty, disabled: true }],
-            balanceQuantity: [{ value: orderedQty - deliveredQty, disabled: true }],
-            quantity: [qty, [Validators.required, Validators.min(0)]],
-            unitPrice: [unitSellingPrice, [Validators.required, Validators.min(0)]],
-            totalPrice: [{ value: qty * unitSellingPrice, disabled: true }]
-          });
-
-          // Listen to changes for calculation
-          formGroup.valueChanges.subscribe(() => {
-            this.updateRowTotal(formGroup);
-            this.calculateTotals();
-          });
-
-          this.itemsFormArray.push(formGroup);
-        });
+      if (!dn.items) {
+        return;
       }
+      dn.items.forEach(item => {
+        const currentQty = item.currentDeliveryQty || 0;
+        if (!currentQty) {
+          return;
+        }
+        const key = item.itemId || `${item.partNo || ''}__${item.description || ''}`;
+        const existing = aggregated.get(key);
+        const unitSellingPrice = (item as any).unitSellingPrice ?? 0;
+        const orderedQty = item.orderedQty || 0;
+        const deliveredQty = item.deliveredQty || 0;
+        if (!existing) {
+          aggregated.set(key, {
+            description: item.description || '',
+            orderedQty,
+            deliveredQty,
+            totalCurrentDeliveryQty: currentQty,
+            unitSellingPrice,
+            itemId: item.itemId,
+            dnRefs: [{
+              dnId: dn._id,
+              dnNo: dn.dnNo,
+              slNo: item.slNo,
+              quantity: currentQty
+            }]
+          });
+        } else {
+          if (orderedQty > existing.orderedQty) {
+            existing.orderedQty = orderedQty;
+          }
+          if (deliveredQty > existing.deliveredQty) {
+            existing.deliveredQty = deliveredQty;
+          }
+          existing.totalCurrentDeliveryQty += currentQty;
+          if (unitSellingPrice) {
+            existing.unitSellingPrice = unitSellingPrice;
+          }
+          existing.dnRefs.push({
+            dnId: dn._id,
+            dnNo: dn.dnNo,
+            slNo: item.slNo,
+            quantity: currentQty
+          });
+        }
+      });
     });
 
-    // Initialize grand total immediately after loading items
+    aggregated.forEach(value => {
+      const qty = value.totalCurrentDeliveryQty;
+      const key = value.itemId || value.description;
+      const alreadyInvoiced = this.itemInvoicedTotals[key] || 0;
+      const balance = Math.max(0, value.orderedQty - alreadyInvoiced);
+      const isSelectable = balance > 0;
+      const safeQty = isSelectable ? Math.min(qty, balance) : 0;
+      const total = safeQty * value.unitSellingPrice;
+      const dnInfo = value.dnRefs
+        .map(ref => {
+          const dnNo = ref.dnNo || '';
+          const slNo = ref.slNo ? `Sl ${ref.slNo}` : '';
+          const qtyLabel = ref.quantity ? `Qty ${ref.quantity}` : '';
+          const details = [slNo, qtyLabel].filter(p => p).join(', ');
+          return details ? `${dnNo} (${details})` : dnNo;
+        })
+        .filter(p => p)
+        .join(', ');
+
+      const formGroup = this.fb.group({
+        selected: [{ value: isSelectable, disabled: !isSelectable }],
+        dnId: [value.dnRefs.length === 1 ? value.dnRefs[0].dnId : null],
+        dnRefs: [value.dnRefs.map(r => ({ dnId: r.dnId, quantity: r.quantity }))],
+        itemId: [value.itemId || null],
+        description: [value.description || '', Validators.required],
+        totalQuantity: [{ value: value.orderedQty, disabled: true }],
+        invoicedQuantity: [{ value: alreadyInvoiced, disabled: true }],
+        balanceQuantity: [{ value: balance, disabled: true }],
+        quantity: [safeQty, [Validators.required, Validators.min(0), Validators.max(balance)]],
+        unitPrice: [value.unitSellingPrice, [Validators.required, Validators.min(0)]],
+        totalPrice: [{ value: total, disabled: true }],
+        dnInfo: [{ value: dnInfo, disabled: true }]
+      });
+
+      formGroup.valueChanges.subscribe(() => {
+        this.updateRowTotal(formGroup);
+        this.calculateTotals();
+      });
+
+      this.itemsFormArray.push(formGroup);
+    });
+
     this.calculateTotals();
   }
 
@@ -353,12 +557,14 @@ export class CreateInvoiceComponent implements OnInit {
   calculateTotals() {
     let grandTotal = 0;
     this.itemsFormArray.controls.forEach(control => {
-      grandTotal += control.get('totalPrice')?.value || 0;
+      if (control.get('selected')?.value) {
+        grandTotal += control.get('totalPrice')?.value || 0;
+      }
     });
 
     this.invoiceForm.patchValue({
       amountFigures: grandTotal,
-      amountWords: convertNumberToWords(grandTotal) + ' QAR Only'
+      amountWords: convertNumberToWords(grandTotal) + ` ${this.currency()} Only`
     }, { emitEvent: false });
   }
 
@@ -381,6 +587,13 @@ export class CreateInvoiceComponent implements OnInit {
 
     this.isLoading.set(true);
     const formVal = this.invoiceForm.getRawValue();
+    const selectedItems = (formVal.items || []).filter((item: any) => item.selected);
+
+    if (selectedItems.length === 0) {
+      this.notificationService.error('Please select at least one item to invoice');
+      this.isLoading.set(false);
+      return;
+    }
 
     // Extract Customer ID
     const selectedJob = this.jobs().find(j => j._id === formVal.jobId);
@@ -401,14 +614,24 @@ export class CreateInvoiceComponent implements OnInit {
       jobId: formVal.jobId, // Assuming this is IDs
       customer: customerId,
       amount: formVal.amountFigures,
-      status: this.isEditMode() ? undefined : 'Unpaid',
-      items: formVal.items.map((item: any) => ({
-        dnId: item.dnId,
-        description: item.description,
-        amount: item.totalPrice,
-        quantity: item.quantity
-      })),
-      paymentTerms: this.invoiceForm.get('paymentTerms')?.value
+      items: selectedItems.map((item: any) => {
+        const dnRefs = Array.isArray(item.dnRefs) ? item.dnRefs : [];
+        const normalizedDnRefs = dnRefs.map((r: any) => ({
+          dnId: r.dnId,
+          quantity: r.quantity
+        }));
+        const singleDnId = item.dnId || (normalizedDnRefs.length === 1 ? normalizedDnRefs[0].dnId : undefined);
+        return {
+          dnId: singleDnId,
+          dnRefs: normalizedDnRefs,
+          itemId: item.itemId,
+          description: item.description,
+          amount: item.totalPrice,
+          quantity: item.quantity
+        };
+      }),
+      paymentTerms: this.invoiceForm.get('paymentTerms')?.value,
+      parentInvoiceId: this.isReissueMode() ? this.editInvoiceId() || undefined : undefined
     } as Partial<Invoice>;
 
     const request$ = this.isEditMode()

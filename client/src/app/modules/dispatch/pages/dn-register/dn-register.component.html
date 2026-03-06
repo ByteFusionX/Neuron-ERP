@@ -17,9 +17,11 @@
 >
   <ng-template #sideColumn>
     <div class="flex items-center gap-3">
-      <app-btn theme="primary" routerLink="/dispatch/delivery-note-register/create">
-        + Create DN
-      </app-btn>
+      <ng-container *ngIf="canCreateDn()">
+        <app-btn theme="primary" routerLink="/dispatch/delivery-note-register/create">
+          + Create DN
+        </app-btn>
+      </ng-container>
     </div>
   </ng-template>
 </data-table>

@@ -35,6 +35,8 @@ export class CreateCategoryComponent implements OnInit {
   supplierChecked: boolean = false;
   inventoryChecked: boolean = false;
   claimsChecked: boolean = false;
+  dispatchChecked: boolean = false;
+  invoiceChecked: boolean = false;
   portalChecked: boolean = false;
 
   constructor(
@@ -83,11 +85,11 @@ export class CreateCategoryComponent implements OnInit {
       jobSheet: this._fb.group({
         viewReport: 'none',
         allocateJobs: [false],
-        convertToPurchase: [false],
         transferProcurementPerson: [false],
       }),
       purchase: this._fb.group({
         viewReport: 'none',
+        create: [false],
         canApprovePR: [false],
       }),
       purchaseOrder: this._fb.group({
@@ -117,6 +119,21 @@ export class CreateCategoryComponent implements OnInit {
       claims: this._fb.group({
         viewReport: 'none',
         canApprove: [false],
+      }),
+      dispatch: this._fb.group({
+        viewReport: 'none',
+        viewPendingDelivery: [false],
+        viewInvoiceLinking: [false],
+        viewInventoryDeduction: [false],
+        createDeliveryNote: [false],
+      }),
+      invoice: this._fb.group({
+        viewReport: 'none',
+        viewInvoicesVsDn: [false],
+        viewCancelledAdjusted: [false],
+        viewReissued: [false],
+        createInvoice: [false],
+        updateQuantities: [false],
       }),
       portalManagement: this._fb.group({
         department: [false],
@@ -172,7 +189,7 @@ export class CreateCategoryComponent implements OnInit {
     ];
   }
 
-  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'claimsChecked' | 'portalChecked'): void {
+  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'claimsChecked' | 'dispatchChecked' | 'invoiceChecked' | 'portalChecked'): void {
     const eventTarget = event.target as HTMLInputElement;
     const checked = eventTarget.checked;
 

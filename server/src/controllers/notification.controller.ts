@@ -123,10 +123,43 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                         return privileges.assignedJob?.viewReport !== 'none';
                     case 'DealSheet':
                         return privileges.dealSheet === true;
+                    case 'DealSheetResponse':
                     case 'Quotation':
                         return privileges.quotation?.viewReport !== 'none';
                     case 'Enquiry':
                         return privileges.enquiry?.viewReport !== 'none';
+                    case 'JobAllocated':
+                        return privileges.purchase?.viewReport !== 'none';
+                    case 'MrRequest':
+                    case 'TechnicalAssigned':
+                        return privileges.technical?.viewReport !== 'none';
+                    case 'MrApprovalRequest':
+                        return privileges.technical?.canApproveMRRequests === true;
+                    case 'MrRejected':
+                        return privileges.technical?.viewReport !== 'none';
+                    case 'MrApproved':
+                        return privileges.purchase?.create === true;
+                    case 'PurchaseApprovalRequest':
+                        return privileges.purchase?.canApprovePR === true;
+                    case 'PurchaseApproved':
+                        return privileges.purchaseOrder?.canInitiateLPO === true;
+                    case 'PurchaseRejected':
+                        return privileges.purchase?.viewReport !== 'none';
+                    case 'LpoApprovalRequest':
+                        return privileges.purchaseOrder?.canApprovePOs === true;
+                    case 'LpoApproved':
+                    case 'LpoRejected':
+                        return privileges.purchaseOrder?.viewReport !== 'none' || privileges.purchaseOrder?.canInitiateLPO === true;
+                    case 'SupplierApprovalRequest':
+                        return privileges.supplier?.canApproveSupplier === true;
+                    case 'SupplierApproved':
+                    case 'SupplierRejected':
+                        return privileges.supplier?.viewReport !== 'none';
+                    case 'ClaimApprovalRequest':
+                        return privileges.claims?.canApprove === true;
+                    case 'ClaimApproved':
+                    case 'ClaimRejected':
+                        return privileges.claims?.viewReport !== 'none';
                     case 'Event':
                         return true;
                     default:
@@ -231,10 +264,9 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             return { routePath: '/home/announcements' };
         
         case 'AssignedJob':
+            return { routePath: '/assigned-jobs' };
         case 'ReAssignedJob':
-            return {
-                routePath: '/assigned-jobs/reassigned'
-            };
+            return { routePath: '/assigned-jobs/reassigned' };
 
         case 'FeedbackRequest':
         case 'Enquiry':
@@ -245,11 +277,124 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             };
         
         case 'DealSheet':
+            return { routePath: '/deal-sheet/pendings' };
+        case 'DealSheetResponse':
+            return { routePath: '/quotations' };
         case 'Quotation':
             return {
                 routePath: '/quotations/view',
                 routeData: referenceId
             };
+
+        case 'JobAllocated':
+            return {
+                routePath: '/purchase/create',
+                routeData: { jobId: additionalData?.jobId || referenceId?._id?.toString() }
+            };
+
+        case 'MrRequest': {
+            const technicalId = additionalData?.technicalId;
+            if (technicalId) {
+                return {
+                    routePath: '/technical/project/material-request',
+                    routeData: { technicalId }
+                };
+            }
+            return { routePath: '/technical/project' };
+        }
+
+        case 'MrApprovalRequest': {
+            const technicalId = additionalData?.technicalId || referenceId?._id?.toString() || referenceId?.toString();
+            return {
+                routePath: '/technical/mr-approval-requests/view',
+                routeData: { technicalId }
+            };
+        }
+
+        case 'MrRejected': {
+            const technicalId = additionalData?.technicalId || referenceId?._id?.toString() || referenceId?.toString();
+            return {
+                routePath: '/technical/project/material-request',
+                routeData: { technicalId }
+            };
+        }
+
+        case 'MrApproved': {
+            const jobId = additionalData?.jobId;
+            return {
+                routePath: '/purchase/create',
+                routeData: { jobId }
+            };
+        }
+
+        case 'TechnicalAssigned': {
+            const projectId = additionalData?.projectId || referenceId?._id?.toString() || referenceId?.toString();
+            return {
+                routePath: '/technical/project/edit',
+                routeData: { projectId }
+            };
+        }
+
+        case 'PurchaseApprovalRequest': {
+            const purchaseId = additionalData?.purchaseId || referenceId?._id?.toString() || referenceId?.toString();
+            return {
+                routePath: '/purchase/view-purchase',
+                routeData: { purchaseId }
+            };
+        }
+
+        case 'PurchaseApproved': {
+            const purchaseId = additionalData?.purchaseId || referenceId?._id?.toString() || referenceId?.toString();
+            return {
+                routePath: '/purchase/initiate-lpo',
+                routeData: { purchaseId }
+            };
+        }
+
+        case 'PurchaseRejected': {
+            const purchaseId = additionalData?.purchaseId || referenceId?._id?.toString() || referenceId?.toString();
+            return {
+                routePath: '/purchase/view-purchase',
+                routeData: { purchaseId }
+            };
+        }
+
+        case 'LpoApprovalRequest':
+            return { routePath: '/purchase-order/pending-approval' };
+
+        case 'LpoApproved':
+        case 'LpoRejected': {
+            const purchaseId = additionalData?.purchaseId || referenceId?.purchaseId?.toString?.();
+            return {
+                routePath: '/purchase/initiate-lpo',
+                routeData: { purchaseId }
+            };
+        }
+
+        case 'SupplierApprovalRequest':
+        case 'SupplierApproved':
+        case 'SupplierRejected': {
+            const supplierId = additionalData?.supplierId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+            return {
+                routePath: '/suppliers',
+                routeData: { supplierId }
+            };
+        }
+
+        case 'ClaimApprovalRequest':
+            return { routePath: '/claims/approval-requests' };
+
+        case 'ClaimApproved':
+        case 'ClaimRejected': {
+            const technicalId = additionalData?.technicalId || referenceId?.technicalId?.toString?.();
+            if (technicalId) {
+                return {
+                    routePath: '/technical/project/claims',
+                    routeData: { technicalId }
+                };
+            }
+            return { routePath: '/claims/my-claims' };
+        }
         
         case 'Event':
             if (referenceId?.collectionId) {

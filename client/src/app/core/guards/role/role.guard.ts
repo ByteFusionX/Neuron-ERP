@@ -174,9 +174,72 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                         return false;
                     }
                 } else if (url.startsWith('/claims')) {
-                    if (privileges?.claims?.viewReport == 'none') {
-                        router.navigate(['/home']);
-                        return false;
+                    if (url.includes('/approval-requests')) {
+                        if (!privileges?.claims?.canApprove) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    } else {
+                        if (privileges?.claims?.viewReport == 'none' || privileges?.claims?.viewReport == undefined) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    }
+                } else if (url.startsWith('/dispatch')) {
+                    if (url.includes('/create') || url.includes('/edit')) {
+                        if (!privileges?.dispatch?.createDeliveryNote) {
+                            router.navigate(['/dispatch/delivery-note-register']);
+                            return false;
+                        }
+                    } else if (url.includes('/pending-delivery-reports')) {
+                        if (!privileges?.dispatch?.viewPendingDelivery) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    } else if (url.includes('/invoice-linking-report')) {
+                        if (!privileges?.dispatch?.viewInvoiceLinking) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    } else if (url.includes('/inventory-deduction-report')) {
+                        if (!privileges?.dispatch?.viewInventoryDeduction) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    } else {
+                        // General dispatch view report check
+                        if (privileges?.dispatch?.viewReport == 'none' || privileges?.dispatch?.viewReport == undefined) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    }
+                } else if (url.startsWith('/invoice')) {
+                    if (url.includes('/create') || url.includes('/edit') || url.includes('/reissue/')) {
+                        if (!privileges?.invoice?.createInvoice) {
+                            router.navigate(['/invoice/invoice-register']);
+                            return false;
+                        }
+                    } else if (url.includes('/invoice-dn-linking')) {
+                        if (!privileges?.invoice?.viewInvoicesVsDn) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    } else if (url.includes('/cancelled-invoices')) {
+                        if (!privileges?.invoice?.viewCancelledAdjusted) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    } else if (url.includes('/reissued')) {
+                        if (!privileges?.invoice?.viewReissued) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
+                    } else {
+                        // General invoice view check
+                        if (privileges?.invoice?.viewReport == 'none' || privileges?.invoice?.viewReport == undefined) {
+                            router.navigate(['/home']);
+                            return false;
+                        }
                     }
                 }
                 break;

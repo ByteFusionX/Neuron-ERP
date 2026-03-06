@@ -36,6 +36,8 @@ export class EditCategoryComponent implements OnInit {
   supplierChecked: boolean = false;
   inventoryChecked: boolean = false;
   claimsChecked: boolean = false;
+  dispatchChecked: boolean = false;
+  invoiceChecked: boolean = false;
   portalChecked: boolean = false;
 
   constructor(
@@ -85,11 +87,11 @@ export class EditCategoryComponent implements OnInit {
       jobSheet: this._fb.group({
         viewReport: 'none',
         allocateJobs: [false],
-        convertToPurchase: [false],
         transferProcurementPerson: [false],
       }),
       purchase: this._fb.group({
         viewReport: 'none',
+        create: [false],
         canApprovePR: [false],
       }),
       purchaseOrder: this._fb.group({
@@ -119,6 +121,21 @@ export class EditCategoryComponent implements OnInit {
       claims: this._fb.group({
         viewReport: 'none',
         canApprove: [false],
+      }),
+      dispatch: this._fb.group({
+        viewReport: 'none',
+        viewPendingDelivery: [false],
+        viewInvoiceLinking: [false],
+        viewInventoryDeduction: [false],
+        createDeliveryNote: [false],
+      }),
+      invoice: this._fb.group({
+        viewReport: 'none',
+        viewInvoicesVsDn: [false],
+        viewCancelledAdjusted: [false],
+        viewReissued: [false],
+        createInvoice: [false],
+        updateQuantities: [false],
       }),
       portalManagement: this._fb.group({
         department: [false],
@@ -186,7 +203,9 @@ export class EditCategoryComponent implements OnInit {
       this.supplierChecked = privileges.supplier?.viewReport !== 'none',
       this.inventoryChecked = privileges.inventory ? 
         (privileges.inventory.products?.viewReport !== 'none' || privileges.inventory.stockEntries?.viewReport !== 'none') : false,
-      this.claimsChecked = privileges.claims?.viewReport !== 'none',
+      this.claimsChecked = privileges.claims?.viewReport !== undefined && privileges.claims?.viewReport !== 'none' || privileges.claims?.canApprove === true,
+      this.dispatchChecked = privileges.dispatch?.viewReport !== undefined && privileges.dispatch?.viewReport !== 'none' || privileges.dispatch?.viewPendingDelivery === true || privileges.dispatch?.viewInvoiceLinking === true || privileges.dispatch?.viewInventoryDeduction === true || privileges.dispatch?.createDeliveryNote === true,
+      this.invoiceChecked = privileges.invoice?.viewReport !== undefined && privileges.invoice?.viewReport !== 'none' || privileges.invoice?.viewInvoicesVsDn === true || privileges.invoice?.viewCancelledAdjusted === true || privileges.invoice?.viewReissued === true || privileges.invoice?.createInvoice === true || privileges.invoice?.updateQuantities === true,
       this.portalChecked = privileges.portalManagement
         ? Object.values(privileges.portalManagement).some(value => value)
         : false;
@@ -196,7 +215,7 @@ export class EditCategoryComponent implements OnInit {
     this.router.navigate(['/settings']);
   }
 
-  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'claimsChecked' | 'portalChecked'): void {
+  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'claimsChecked' | 'dispatchChecked' | 'invoiceChecked' | 'portalChecked'): void {
     const eventTarget = event.target as HTMLInputElement;
     const checked = eventTarget.checked;
 

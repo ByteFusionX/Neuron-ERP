@@ -4,6 +4,8 @@ import { Types } from 'mongoose';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
 import { getEmployeeData, buildPrivilegeAccessFilter } from '../common/utils/util';
+import { Server } from 'socket.io';
+import { createNotificationWithPrivileges } from './notification.controller';
 
 
 export const getSuppliers = async (req: Request, res: Response) => {
@@ -234,6 +236,8 @@ export const getSuppliers = async (req: Request, res: Response) => {
 
 export const createSupplier = async (req: Request, res: Response) => {
    try {
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
       const {
          supplierName,
          address,
@@ -291,6 +295,24 @@ export const createSupplier = async (req: Request, res: Response) => {
 
       // Save the supplier to database
       const savedSupplier = await newSupplier.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'SupplierApprovalRequest',
+            referenceModel: 'Supplier',
+            title: 'Supplier sent for approval',
+            message: `Supplier ${savedSupplier.supplierName} has been sent for approval`,
+            sentBy: employee?._id?.toString(),
+            referenceId: savedSupplier._id,
+            additionalData: { supplierId: savedSupplier._id.toString() }
+         },
+         {
+            privilegeKey: 'supplier',
+            checkFunction: (p) => p.supplier?.canApproveSupplier === true
+         },
+         socket
+      );
 
       // Populate the createdBy field before returning
       const populatedSupplier = await Supplier.findById(savedSupplier._id)
@@ -418,6 +440,44 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
 
       // Save the updated supplier
       const updatedSupplier = await supplier.save();
+
+      const socket = req.app.get('io') as Server;
+      const supplierIdStr = updatedSupplier._id.toString();
+      if (statusToUpdate === supplierStatus.approved) {
+         await createNotificationWithPrivileges(
+            {
+               type: 'SupplierApproved',
+               referenceModel: 'Supplier',
+               title: 'Supplier approved',
+               message: `Supplier ${updatedSupplier.supplierName} has been approved`,
+               sentBy: userId?.toString?.(),
+               referenceId: updatedSupplier._id,
+               additionalData: { supplierId: supplierIdStr }
+            },
+            {
+               privilegeKey: 'supplier',
+               checkFunction: (p) => p.supplier?.viewReport !== 'none'
+            },
+            socket
+         );
+      } else if (statusToUpdate === supplierStatus.rejected) {
+         await createNotificationWithPrivileges(
+            {
+               type: 'SupplierRejected',
+               referenceModel: 'Supplier',
+               title: 'Supplier rejected',
+               message: `Supplier ${updatedSupplier.supplierName} has been rejected`,
+               sentBy: userId?.toString?.(),
+               referenceId: updatedSupplier._id,
+               additionalData: { supplierId: supplierIdStr }
+            },
+            {
+               privilegeKey: 'supplier',
+               checkFunction: (p) => p.supplier?.viewReport !== 'none'
+            },
+            socket
+         );
+      }
 
       // Populate both createdBy, approvedBy, and rejection history fields before returning
       const populatedSupplier = await Supplier.findById(updatedSupplier._id)

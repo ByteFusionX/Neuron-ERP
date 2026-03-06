@@ -7,13 +7,24 @@ const invoiceSchema = new Schema({
     jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: true },
     salesperson: { type: Schema.Types.ObjectId, ref: 'Employee' }, // Assuming Employee model for salesperson
     amount: { type: Number, required: true },
+    paymentTerms: { type: String },
     status: {
         type: String,
-        enum: ['Paid', 'Unpaid', 'Partially Paid', 'Cancelled', 'Reissued'],
-        default: 'Unpaid'
+        enum: ['Pending to submit', 'PI Submitted', 'Partial invoicing', 'Submitted', 'Hold', 'Rejected by customer', 'Cancelled', 'Reissued'],
+        default: 'Pending to submit'
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['Paid', 'Partially paid', 'Advance received', 'Pending'],
+        default: 'Pending'
     },
     items: [{
         dnId: { type: Schema.Types.ObjectId, ref: 'DeliveryNote' },
+        dnRefs: [{
+            dnId: { type: Schema.Types.ObjectId, ref: 'DeliveryNote' },
+            quantity: { type: Number }
+        }],
+        itemId: { type: String },
         description: String,
         amount: Number,
         quantity: Number

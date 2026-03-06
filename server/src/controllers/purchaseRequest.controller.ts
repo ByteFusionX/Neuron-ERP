@@ -6,6 +6,10 @@ import supplierModel from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
 import { getEmployeeData, calculateDiscountPricePipe, calculateCostPricePipe, getUSDRated, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
+import { Server } from "socket.io";
+import { createNotificationWithPrivileges } from "./notification.controller";
+import technicalModel from "../models/technical.model";
+import Employee from "../models/employee.model";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -31,7 +35,7 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
         }
 
         const privileges = employee.category?.privileges;
-        if (!privileges?.jobSheet?.convertToPurchase) {
+        if (!privileges?.purchase?.create) {
             return res.status(403).json({
                 success: false,
                 message: "You do not have permission to convert jobs to purchase",
@@ -135,6 +139,30 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
                 updatedDate: new Date()
             }
         });
+
+        console.log(savedPurchaseRequest.status);
+
+        if (savedPurchaseRequest.status && savedPurchaseRequest.status !== PurchaseRequestStatus.Drafted) {
+            const socket = req.app.get('io') as Server;
+            await createNotificationWithPrivileges(
+                {
+                    type: 'PurchaseApprovalRequest',
+                    referenceModel: 'Purchase',
+                    title: 'Purchase submitted for approval',
+                    message: `Purchase ${savedPurchaseRequest.purchaseNo} has been submitted for approval`,
+                    sentBy: employee._id?.toString(),
+                    referenceId: savedPurchaseRequest._id,
+                    additionalData: { purchaseId: savedPurchaseRequest._id.toString() }
+                },
+                {
+                    privilegeKey: 'purchase',
+                    checkFunction: (privileges) => {
+                        return privileges.purchase?.canApprovePR === true;
+                    }
+                },
+                socket
+            );
+        }
 
         return res.status(201).json({
             success: true,
@@ -1293,6 +1321,33 @@ export const updatePurchaseMrRequest = async (req: Request, res: Response, next:
             { new: true, runValidators: true }
         );
 
+        if (mrRequest.engineer) {
+            const technicalProject = await technicalModel.findOne({ jobId: purchaseRequest.jobId }).select('_id');
+            const socket = req.app.get('io') as Server;
+            await createNotificationWithPrivileges(
+                {
+                    type: 'MrRequest',
+                    referenceModel: 'Purchase',
+                    title: 'New MR Request',
+                    message: `You have received a new material request for purchase ${updatedPurchaseRequest?.purchaseNo || id}`,
+                    sentBy: employee._id?.toString(),
+                    referenceId: updatedPurchaseRequest?._id || id,
+                    additionalData: { 
+                        purchaseId: id,
+                        technicalId: technicalProject?._id?.toString() || null
+                    }
+                },
+                {
+                    privilegeKey: 'technical',
+                    checkFunction: (privileges, employeeId) => {
+                        return employeeId === mrRequest.engineer.toString() &&
+                               privileges.technical?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
+        }
+
         return res.status(200).json({
             success: true,
             message: "MR request updated successfully",
@@ -1919,6 +1974,121 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             .populate('approvalStatus.role')
             .populate('approvalStatus.updatedBy');
 
+        const socket = req.app.get('io') as Server;
+
+        if (!isAllApproved && !hasRejected && hasPending && status === 'approved') {
+            const pendingStatuses = updatedApprovalStatus
+                .filter((approval: any) => approval.status === 'pending')
+                .sort((a: any, b: any) => a.step - b.step);
+
+            const nextApproval = pendingStatuses[0];
+
+            if (nextApproval) {
+                const nextApproverIds = new Set<string>();
+                const isManagerStep = !!nextApproval.managerApproval;
+
+                if (isManagerStep) {
+                    const requester = await Employee.findById(purchaseRequest.createdBy)
+                        .populate('reportingTo')
+                        .lean();
+                    const manager: any = (requester as any)?.reportingTo;
+                    if (manager?._id) {
+                        nextApproverIds.add(manager._id.toString());
+                    }
+                } else if (nextApproval.role) {
+                    const nextRoleId =
+                        (nextApproval.role as any)?._id?.toString() ||
+                        nextApproval.role?.toString();
+
+                    if (nextRoleId) {
+                        const approverEmployees = await Employee.find({
+                            category: nextRoleId,
+                            isDeleted: { $ne: true },
+                            isBlocked: { $ne: true },
+                        }).lean();
+
+                        for (const approver of approverEmployees) {
+                            nextApproverIds.add(approver._id.toString());
+                        }
+                    }
+                }
+
+                if (nextApproverIds.size > 0) {
+                    const purchaseId = purchaseRequest._id.toString();
+
+                    await createNotificationWithPrivileges(
+                        {
+                            type: 'PurchaseApprovalRequest',
+                            referenceModel: 'Purchase',
+                            title: 'Purchase awaiting your approval',
+                            message: `Purchase ${purchaseRequest.purchaseNo} is awaiting your approval.`,
+                            sentBy: employee._id?.toString(),
+                            referenceId: purchaseRequest._id,
+                            additionalData: { purchaseId }
+                        },
+                        {
+                            privilegeKey: 'purchase',
+                            checkFunction: (privileges, employeeId) => {
+                                if (!employeeId || !nextApproverIds.has(employeeId)) {
+                                    return false;
+                                }
+
+                                if (isManagerStep) {
+                                    return true;
+                                }
+
+                                return privileges.purchase?.canApprovePR === true;
+                            }
+                        },
+                        socket
+                    );
+                }
+            }
+        }
+
+        if (isAllApproved) {
+            const purchaseId = purchaseRequest._id.toString();
+            await createNotificationWithPrivileges(
+                {
+                    type: 'PurchaseApproved',
+                    referenceModel: 'Purchase',
+                    title: 'Purchase ready for PO',
+                    message: `Purchase ${purchaseRequest.purchaseNo} has been approved and is ready for PO.`,
+                    sentBy: employee._id?.toString(),
+                    referenceId: purchaseRequest._id,
+                    additionalData: { purchaseId }
+                },
+                {
+                    privilegeKey: 'purchaseOrder',
+                    checkFunction: (privileges) => {
+                        return privileges.purchaseOrder?.canInitiateLPO === true;
+                    }
+                },
+                socket
+            );
+        } else if (hasRejected) {
+            const purchaseId = purchaseRequest._id.toString();
+            await createNotificationWithPrivileges(
+                {
+                    type: 'PurchaseRejected',
+                    referenceModel: 'Purchase',
+                    title: 'Purchase rejected',
+                    message: `Purchase ${purchaseRequest.purchaseNo} has been rejected.`,
+                    sentBy: employee._id?.toString(),
+                    referenceId: purchaseRequest._id,
+                    additionalData: { purchaseId }
+                },
+                {
+                    privilegeKey: 'purchase',
+                    checkFunction: (privileges, employeeId) => {
+                        const createdById = (purchaseRequest.createdBy as any)?._id?.toString() || purchaseRequest.createdBy.toString();
+                        return employeeId === createdById && privileges.purchase?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
+        }
+
         return res.status(200).json({
             success: true,
             message: `Purchase request ${status} successfully`,
@@ -2175,6 +2345,7 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
                                           updateData.status && 
                                           updateData.status !== PurchaseRequestStatus.Drafted;
 
+
         const isStatusChangingFromRejected = existingPurchaseRequest.status === PurchaseRequestStatus.Rejected && 
                                             updateData.status && 
                                             updateData.status === PurchaseRequestStatus.Pending;
@@ -2254,13 +2425,33 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
-        if (isStatusChangingFromDraft) {
+        if (updateData.status === PurchaseRequestStatus.Pending) {
             await jobModel.findByIdAndUpdate(existingPurchaseRequest.jobId, {
                 $set: {
                     allocateStatus: allocateStatus.WorkInProgress,
                     updatedDate: new Date()
                 }
             });
+
+            const socket = req.app.get('io') as Server;
+            await createNotificationWithPrivileges(
+                {
+                    type: 'PurchaseApprovalRequest',
+                    referenceModel: 'Purchase',
+                    title: 'Purchase submitted for approval',
+                    message: `Purchase ${updatedPurchaseRequest.purchaseNo} has been submitted for approval`,
+                    sentBy: employee._id?.toString(),
+                    referenceId: updatedPurchaseRequest._id,
+                    additionalData: { purchaseId: updatedPurchaseRequest._id.toString() }
+                },
+                {
+                    privilegeKey: 'purchase',
+                    checkFunction: (privileges) => {
+                        return privileges.purchase?.canApprovePR === true;
+                    }
+                },
+                socket
+            );
         }
 
         return res.status(200).json({

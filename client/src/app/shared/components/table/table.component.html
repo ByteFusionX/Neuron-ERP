@@ -285,24 +285,32 @@
 
                   <!-- Status Dropdown -->
                   <ng-container *ngIf="column.type === 'statusDropdown'">
-                    <div (click)="preventClick($event)" class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
-                         [matMenuTriggerFor]="statusMenu" mat-button>
-                      <p class="mx-2 text-sm whitespace-nowrap">{{ getCellValue(item, column) }}</p>
-                      <div class="mt-1">
-                        <ng-icon name="heroChevronDown"></ng-icon>
-                      </div>
-                    </div>
-                    <mat-menu #statusMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
-                      <div class="">
-                        <div *ngFor="let status of column.statusOptions">
-                          <p class="p-2 hover:bg-violet-200 cursor-pointer px-[12px] text-dark text-[15px]"
-                             *ngIf="status !== getCellValue(item, column)"
-                             (click)="onStatusChange(item, column, getCellValue(item, column), status)">
-                            {{ status }}
-                          </p>
+                    <ng-container *ngIf="(column.key === 'status' || column.key === 'paymentStatus') && (item.status === 'Cancelled' || item.status === 'Reissued'); else editableStatusDropdown">
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                        {{ getCellValue(item, column) || '-' }}
+                      </span>
+                    </ng-container>
+
+                    <ng-template #editableStatusDropdown>
+                      <div (click)="preventClick($event)" class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
+                           [matMenuTriggerFor]="statusMenu" mat-button>
+                        <p class="mx-2 text-sm whitespace-nowrap">{{ getCellValue(item, column) }}</p>
+                        <div class="mt-1">
+                          <ng-icon name="heroChevronDown"></ng-icon>
                         </div>
                       </div>
-                    </mat-menu>
+                      <mat-menu #statusMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
+                        <div class="">
+                          <div *ngFor="let status of column.statusOptions">
+                            <p class="p-2 hover:bg-violet-200 cursor-pointer px-[12px] text-dark text-[15px]"
+                               *ngIf="status !== getCellValue(item, column)"
+                               (click)="onStatusChange(item, column, getCellValue(item, column), status)">
+                              {{ status }}
+                            </p>
+                          </div>
+                        </div>
+                      </mat-menu>
+                    </ng-template>
                   </ng-container>
 
                   <!-- Action Buttons -->

@@ -11,6 +11,7 @@ import { SearchComponent } from 'src/app/shared/components/search/search.compone
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Invoice, InvoiceFilterParams } from 'src/app/shared/interfaces/invoice.interface';
 import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
@@ -42,6 +43,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   public paginationService = inject(PaginationService);
   private notificationService = inject(ToastrService);
+  private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
 
   // State
@@ -50,6 +52,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
   tableData = signal<Invoice[]>([]);
   groupedData = signal<{ customerName: string, invoices: Invoice[] }[]>([]);
   salespersonReportData = signal<Invoice[]>([]);
+  canCreateInvoice = signal<boolean>(false);
 
   // Register Columns
   registerColumns: TableColumn[] = [];
@@ -68,6 +71,13 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe(emp => {
+        if (emp?.category?.privileges?.invoice?.createInvoice) {
+          this.canCreateInvoice.set(true);
+        }
+      })
+    );
     // Check query params to restore state if needed
     this.loadData();
     // this.loadSalespeople(); // To be implemented if API available
@@ -111,36 +121,84 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
         filterType: 'text'
       },
       {
+        key: 'salesperson',
+        label: 'Salesperson Name',
+        type: 'text',
+        filterable: true,
+        filterType: 'text',
+        cellRenderer: (item: Invoice) => {
+          const sp = item.salesperson as any;
+          if (!sp) return '-';
+          return [sp.firstName, sp.lastName].filter(Boolean).join(' ') || '-';
+        }
+      },
+      {
         key: 'amount',
         label: 'Invoice Amount',
-        type: 'currency',
-        pipeParams: { currency: 'QAR', format: '1.2-2' },
+        type: 'text',
+        cellRenderer: (item: any) => {
+          const currency = item?.currency || 'QAR';
+          const amount = item?.amount ?? 0;
+          try {
+            return new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(amount);
+          } catch {
+            return `${currency} ${amount}`;
+          }
+        },
         sortable: true,
         filterable: false
       },
       {
-        key: 'salesperson.firstName', // Assuming structure
-        label: 'Salesperson Name',
-        type: 'text',
-        filterable: true,
-        filterType: 'text'
-      },
-      {
         key: 'status',
         label: 'Status',
-        type: 'status',
-        statusOptions: ['Paid', 'Unpaid', 'Partially Paid'],
+        type: 'statusDropdown',
+        statusOptions: [
+          'Pending to submit',
+          'PI Submitted',
+          'Partial invoicing',
+          'Submitted',
+          'Hold',
+          'Rejected by customer'
+        ],
+        filterable: true,
+        filterType: 'select',
+        filterOptions: [
+          { label: 'Pending to submit', value: 'Pending to submit' },
+          { label: 'PI Submitted', value: 'PI Submitted' },
+          { label: 'Partial invoicing', value: 'Partial invoicing' },
+          { label: 'Submitted', value: 'Submitted' },
+          { label: 'Hold', value: 'Hold' },
+          { label: 'Rejected by customer', value: 'Rejected by customer' }
+        ]
+      },
+      {
+        key: 'paymentStatus',
+        label: 'Payment Status',
+        type: 'statusDropdown',
+        statusOptions: [
+          'Paid',
+          'Partially paid',
+          'Advance received',
+          'Pending'
+        ],
         filterable: true,
         filterType: 'select',
         filterOptions: [
           { label: 'Paid', value: 'Paid' },
-          { label: 'Unpaid', value: 'Unpaid' },
-          { label: 'Partially Paid', value: 'Partially Paid' }
+          { label: 'Partially paid', value: 'Partially paid' },
+          { label: 'Advance received', value: 'Advance received' },
+          { label: 'Pending', value: 'Pending' }
         ]
-      }
+      },
+
     ];
 
-    this.defaultColumns = ['invoiceNo', 'date', 'customer.companyName', 'jobId.jobId', 'amount', 'salesperson.firstName', 'status'];
+    this.defaultColumns = ['invoiceNo', 'date', 'customer.companyName', 'jobId.jobId', 'amount', 'salesperson', 'status', 'paymentStatus'];
   }
 
   loadData(filters?: Partial<InvoiceFilterParams>): void {
@@ -273,6 +331,34 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
     this.router.navigate(['/invoice/invoice-register/view', row._id]);
   }
 
+  onStatusChange(event: { item: Invoice; column: string; oldValue: string; newValue: string }) {
+    const invoice = event.item;
+    const update: any = {};
+    if (event.column === 'status') {
+      if (invoice.status === 'Cancelled' || invoice.status === 'Reissued') {
+        this.notificationService.warning('Status cannot be changed for cancelled or reissued invoices');
+        return;
+      }
+      update.status = event.newValue;
+    } else if (event.column === 'paymentStatus') {
+      update.paymentStatus = event.newValue;
+    }
+
+    if (!Object.keys(update).length) {
+      return;
+    }
+
+    this.invoiceService.updateInvoice(invoice._id, update).subscribe({
+      next: () => {
+        this.notificationService.success('Invoice updated successfully');
+        this.loadData();
+      },
+      error: () => {
+        this.notificationService.error('Failed to update invoice');
+      }
+    });
+  }
+
   getTotalInvoiceValue(): number {
     return this.salespersonReportData().reduce((sum, inv) => sum + (inv.amount || 0), 0);
   }
@@ -283,7 +369,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
       'Job ID': inv.jobId?.jobId,
       'Customer Name': inv.customer?.companyName,
       'Invoice No': inv.invoiceNo,
-      'DN No': inv.items?.[0]?.dnId || '-', // Simplification
+      'DN No': (inv.items?.[0]?.dnRefs && inv.items[0].dnRefs[0]?.dnId) || inv.items?.[0]?.dnId || '-', // Simplification
       'Invoice Value': inv.amount
     }));
 

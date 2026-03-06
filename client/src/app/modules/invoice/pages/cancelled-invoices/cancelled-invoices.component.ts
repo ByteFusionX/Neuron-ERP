@@ -4,7 +4,6 @@ import { MatMenuModule } from '@angular/material/menu';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
@@ -36,7 +35,6 @@ interface FilterParams {
     NgSelectModule,
     MatMenuModule,
     IconsModule,
-    ButtonComponent,
     FormsModule,
     SearchComponent
   ],
@@ -145,14 +143,40 @@ export class CancelledInvoicesComponent implements OnInit, OnDestroy {
         key: 'originalAmount',
         label: 'Original Amount',
         type: 'text',
-        pipeParams: { currency: 'AED', format: '1.2-2' },
+        cellRenderer: (item: any) => {
+          const currency = item?.currency || 'QAR';
+          const amount = item?.originalAmount ?? 0;
+          try {
+            return new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(amount);
+          } catch {
+            return `${currency} ${amount}`;
+          }
+        },
         filterable: false,
       },
       {
         key: 'adjustedAmount',
         label: 'Adjusted Amount',
         type: 'text',
-        pipeParams: { currency: 'AED', format: '1.2-2' },
+        cellRenderer: (item: any) => {
+          const currency = item?.currency || 'QAR';
+          const amount = item?.adjustedAmount ?? 0;
+          try {
+            return new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(amount);
+          } catch {
+            return `${currency} ${amount}`;
+          }
+        },
         filterable: false,
       },
       {
@@ -318,8 +342,9 @@ export class CancelledInvoicesComponent implements OnInit, OnDestroy {
   }
 
   onRowClick(row: any): void {
-    // Implement navigation behavior exactly like other reports. Let's assume opening invoice detailing.
-    this.router.navigate(['/invoice/view', row._id]);
+    if (row?.invoiceId) {
+      this.router.navigate(['/invoice/invoice-register/view', row.invoiceId]);
+    }
   }
 
   onSearchTerm(searchTerm: string): void {

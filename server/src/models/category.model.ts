@@ -42,12 +42,12 @@ export interface Privileges {
   jobSheet: {
     viewReport: string;
     allocateJobs: boolean;
-    convertToPurchase: boolean;
     transferProcurementPerson: boolean;
   };
   dealSheet: boolean,
   purchase: {
     viewReport: string;
+    create: boolean;
     canApprovePR: boolean;
   };
   purchaseOrder: {
@@ -77,6 +77,21 @@ export interface Privileges {
   claims: {
     viewReport: string;
     canApprove: boolean;
+  };
+  dispatch: {
+    viewReport: string;
+    viewPendingDelivery: boolean;
+    viewInvoiceLinking: boolean;
+    viewInventoryDeduction: boolean;
+    createDeliveryNote: boolean;
+  };
+  invoice: {
+    viewReport: string;
+    viewInvoicesVsDn: boolean;
+    viewCancelledAdjusted: boolean;
+    viewReissued: boolean;
+    createInvoice: boolean;
+    updateQuantities: boolean;
   };
   portalManagement: {
     department: boolean;

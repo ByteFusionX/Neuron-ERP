@@ -250,6 +250,7 @@ export const routes: Routes = [
   },
   {
     path: 'claims',
+    canActivate: [AuthGuard, RoleGuard],
     // loadComponent: () => import('./modules/claims/claims.component').then((c) => c.ClaimsComponent),
     children: [
       { path: 'my-claims', component: ClaimsComponent },
@@ -269,7 +270,7 @@ export const routes: Routes = [
   },
   {
     path: 'dispatch',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/dispatch/dispatch.component').then((c) => c.DispatchComponent),
     children: [
       { path: 'delivery-note-register', component: DnRegisterComponent },
@@ -282,12 +283,13 @@ export const routes: Routes = [
   },
   {
     path: 'invoice',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/invoice/invoice.component').then((c) => c.InvoiceComponent),
     children: [
       { path: 'invoice-register', component: InvoiceRegisterComponent },
       { path: 'invoice-register/create', component: CreateInvoiceComponent },
       { path: 'invoice-register/edit/:id', component: CreateInvoiceComponent },
+      { path: 'invoice-register/reissue/:id', component: CreateInvoiceComponent },
       { path: 'invoice-register/view/:id', loadComponent: () => import('./modules/invoice/pages/invoice-view/invoice-view.component').then(m => m.InvoiceViewComponent) },
       { path: 'invoice-dn-linking', component: InvoiceDnLinkingComponent },
       { path: 'cancelled-invoices', component: CancelledInvoicesComponent },

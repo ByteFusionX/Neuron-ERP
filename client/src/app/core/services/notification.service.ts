@@ -45,11 +45,102 @@ export class NotificationService {
                 };
             
             case 'DealSheet':
+                return { routePath: '/deal-sheet/pendings' };
+            case 'DealSheetResponse':
+                return { routePath: '/quotations' };
             case 'Quotation':
                 return {
                     routePath: '/quotations/view',
                     routeData: referenceId
                 };
+
+            case 'JobAllocated':
+                const jobId = additionalData?.jobId || referenceId?._id?.toString();
+                return {
+                    routePath: '/purchase/create',
+                    routeData: { jobId }
+                };
+
+            case 'MrRequest':
+                const technicalId = additionalData?.technicalId;
+                if (technicalId) {
+                    return {
+                        routePath: '/technical/project/material-request',
+                        routeData: { technicalId }
+                    };
+                }
+                return { routePath: '/technical/project' };
+            case 'MrApprovalRequest':
+                const approvalTechnicalId = additionalData?.technicalId || referenceId?._id?.toString();
+                return {
+                    routePath: '/technical/mr-approval-requests/view',
+                    routeData: { technicalId: approvalTechnicalId }
+                };
+            case 'MrRejected':
+                const rejectedTechnicalId = additionalData?.technicalId || referenceId?._id?.toString();
+                return {
+                    routePath: '/technical/project/material-request',
+                    routeData: { technicalId: rejectedTechnicalId }
+                };
+            case 'MrApproved':
+                const approvedJobId = additionalData?.jobId;
+                return {
+                    routePath: '/purchase/create',
+                    routeData: { jobId: approvedJobId }
+                };
+            case 'TechnicalAssigned':
+                const projectId = additionalData?.projectId || referenceId?._id?.toString();
+                return {
+                    routePath: '/technical/project/edit',
+                    routeData: { projectId }
+                };
+            case 'PurchaseApprovalRequest':
+                const approvalPurchaseId = additionalData?.purchaseId || referenceId?._id?.toString();
+                return {
+                    routePath: '/purchase/view-purchase',
+                    routeData: { purchaseId: approvalPurchaseId }
+                };
+            case 'PurchaseApproved':
+                const approvedPurchaseId = additionalData?.purchaseId || referenceId?._id?.toString();
+                return {
+                    routePath: '/purchase/initiate-lpo',
+                    routeData: { purchaseId: approvedPurchaseId }
+                };
+            case 'PurchaseRejected':
+                const rejectedPurchaseId = additionalData?.purchaseId || referenceId?._id?.toString();
+                return {
+                    routePath: '/purchase/view-purchase',
+                    routeData: { purchaseId: rejectedPurchaseId }
+                };
+            case 'LpoApprovalRequest':
+                return { routePath: '/purchase-order/pending-approval' };
+            case 'LpoApproved':
+            case 'LpoRejected':
+                const lpoPurchaseId = additionalData?.purchaseId || referenceId?.purchaseId?.toString?.();
+                return {
+                    routePath: '/purchase/initiate-lpo',
+                    routeData: { purchaseId: lpoPurchaseId }
+                };
+            case 'SupplierApprovalRequest':
+            case 'SupplierApproved':
+            case 'SupplierRejected':
+                const supplierId = additionalData?.supplierId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+                return {
+                    routePath: '/suppliers',
+                    routeData: { supplierId }
+                };
+            case 'ClaimApprovalRequest':
+                return { routePath: '/claims/approval-requests' };
+            case 'ClaimApproved':
+            case 'ClaimRejected':
+                const claimTechnicalId = additionalData?.technicalId || referenceId?.technicalId?.toString?.();
+                if (claimTechnicalId) {
+                    return {
+                        routePath: '/technical/project/claims',
+                        routeData: { technicalId: claimTechnicalId }
+                    };
+                }
+                return { routePath: '/claims/my-claims' };
             
             case 'Event':
                 if (referenceId?.collectionId) {
@@ -144,6 +235,28 @@ export class NotificationService {
                 queryParams: { enquiryId: routeData.enquiryId }
             };
             this.router.navigate([routePath], navigationExtras);
+        } else if (routePath === '/purchase/create' && routeData?.jobId) {
+            this.router.navigate([routePath], { queryParams: { jobId: routeData.jobId } });
+        } else if (routePath === '/purchase/view-purchase' && routeData?.purchaseId) {
+            this.router.navigate([routePath, routeData.purchaseId]);
+        } else if (routePath === '/purchase/initiate-lpo' && routeData?.purchaseId) {
+            this.router.navigate([routePath, routeData.purchaseId]);
+        } else if (routePath === '/purchase-order/pending-approval') {
+            this.router.navigate([routePath]);
+        } else if (routePath === '/technical/mr-approval-requests/view' && routeData?.technicalId) {
+            this.router.navigate([routePath, routeData.technicalId]);
+        } else if (routePath === '/technical/project/edit' && routeData?.projectId) {
+            this.router.navigate([routePath, routeData.projectId]);
+        } else if (routePath === '/technical/project/material-request' && routeData?.technicalId) {
+            this.router.navigate([routePath, routeData.technicalId]);
+        } else if (routePath === '/suppliers' && routeData?.supplierId) {
+            this.router.navigate([routePath, routeData.supplierId]);
+        } else if (routePath === '/claims/approval-requests') {
+            this.router.navigate([routePath]);
+        } else if (routePath === '/technical/project/claims' && routeData?.technicalId) {
+            this.router.navigate([routePath, routeData.technicalId]);
+        } else if (routePath === '/claims/my-claims') {
+            this.router.navigate([routePath]);
         } else {
             this.router.navigate([routePath]);
         }

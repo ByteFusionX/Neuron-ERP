@@ -8,6 +8,8 @@ import { uploadFileToAws } from "../common/aws-connect";
 import { calculateCostPricePipe, calculateDiscountPricePipe, getDateRangeByDay, getEmployeeData, getUSDRated, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { emailQueue } from "../common/queues/email.queue";
 import purchaseRequestModel from "../models/purchaseRequest.model";
+import { Server } from "socket.io";
+import { createNotificationWithPrivileges } from "./notification.controller";
 
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
    try {
@@ -165,14 +167,6 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
             message: "Employee not found",
          });
       }
-
-      const privileges = employee.category?.privileges;
-      if (!privileges?.jobSheet?.allocateJobs) {
-         return res.status(403).json({
-            success: false,
-            message: "You do not have permission to allocate jobs",
-         });
-      }
       
       // Validate required fields (comment is optional)
       if (!jobId || !engineerId || !assignedBy || !projectType || !customerId || !priority) {
@@ -221,6 +215,28 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
          .populate('assignedBy', 'firstName lastName')
          .populate('customer', 'companyName')
          .populate('jobId', 'jobId');
+
+      const jobNumber = (populatedProject as any)?.jobId?.jobId || jobId;
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'TechnicalAssigned',
+            referenceModel: 'Technical',
+            title: 'Technical Project Assigned',
+            message: `You have been assigned to technical project of job ${jobNumber}`,
+            sentBy: employee._id?.toString(),
+            referenceId: technicalProject._id,
+            additionalData: { projectId: technicalProject._id.toString() }
+         },
+         {
+            privilegeKey: 'technical',
+            checkFunction: (privileges, empId) => {
+               return empId === engineerId.toString() &&
+                      privileges.technical?.viewReport !== 'none';
+            }
+         },
+         socket
+      );
 
       return res.status(201).json({
          success: true,
@@ -845,6 +861,28 @@ export const transferEngineer = async (req: Request, res: Response, next: NextFu
             message: 'Project not found'
          });
       }
+
+      const jobNumber = (project as any)?.jobId?.jobId || '';
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'TechnicalAssigned',
+            referenceModel: 'Technical',
+            title: 'Technical Project Transferred',
+            message: `Technical project of job ${jobNumber} has been transferred to you`,
+            sentBy: employee._id?.toString(),
+            referenceId: project._id,
+            additionalData: { projectId: project._id.toString() }
+         },
+         {
+            privilegeKey: 'technical',
+            checkFunction: (privileges, empId) => {
+               return empId === engineerId.toString() &&
+                      privileges.technical?.viewReport !== 'none';
+            }
+         },
+         socket
+      );
 
       return res.status(200).json({
          success: true,
@@ -2111,6 +2149,29 @@ export const updateMaterialRequest = async (req: any, res: Response, next: NextF
       technical.updatedAt = new Date();
       await technical.save();
 
+      const employee = await getEmployeeData(req.user);
+      if (employee) {
+         const socket = req.app.get('io') as Server;
+         await createNotificationWithPrivileges(
+            {
+               type: 'MrApprovalRequest',
+               referenceModel: 'Technical',
+               title: 'Material Request Submitted For Approval',
+               message: 'A material request has been submitted for approval',
+               sentBy: employee._id?.toString(),
+               referenceId: technical._id,
+               additionalData: { technicalId: technical._id.toString() }
+            },
+            {
+               privilegeKey: 'technical',
+               checkFunction: (privileges) => {
+                  return privileges.technical?.canApproveMRRequests === true;
+               }
+            },
+            socket
+         );
+      }
+
       return res.status(200).json({
          success: true,
          message: "Material request updated successfully",
@@ -2839,6 +2900,26 @@ export const approveMaterialRequest = async (req: Request, res: Response, next: 
       technical.updatedAt = new Date();
       await technical.save();
 
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrApproved',
+            referenceModel: 'Technical',
+            title: 'Material Request Approved',
+            message: 'Material request has been approved and is ready for purchase processing',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { jobId: technical.jobId?.toString() }
+         },
+         {
+            privilegeKey: 'purchase',
+            checkFunction: (privileges) => {
+               return privileges.purchase?.create === true;
+            }
+         },
+         socket
+      );
+
       return res.status(200).json({
          success: true,
          message: "Material request approved successfully",
@@ -2939,6 +3020,27 @@ export const rejectMaterialRequest = async (req: Request, res: Response, next: N
       technical.updatedAt = new Date();
       await technical.save();
 
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrRejected',
+            referenceModel: 'Technical',
+            title: 'Material Request Rejected',
+            message: 'Your material request has been rejected',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { technicalId: technical._id.toString() }
+         },
+         {
+            privilegeKey: 'technical',
+            checkFunction: (privileges, employeeId) => {
+               return employeeId === technical.assignedTo?.toString() &&
+                      privileges.technical?.viewReport !== 'none';
+            }
+         },
+         socket
+      );
+
       return res.status(200).json({
          success: true,
          message: "Material request rejected successfully",
@@ -3034,6 +3136,26 @@ export const approveMaterialRequestItem = async (req: Request, res: Response, ne
 
       technical.updatedAt = new Date();
       await technical.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrApproved',
+            referenceModel: 'Technical',
+            title: 'Material Request Approved',
+            message: 'Material request item has been approved and is ready for purchase processing',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { jobId: technical.jobId?.toString() }
+         },
+         {
+            privilegeKey: 'purchase',
+            checkFunction: (privileges) => {
+               return privileges.purchase?.create === true;
+            }
+         },
+         socket
+      );
 
       return res.status(200).json({
          success: true,
@@ -3429,6 +3551,26 @@ export const approveAllPendingMaterialRequests = async (req: Request, res: Respo
 
       technical.updatedAt = new Date();
       await technical.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrApproved',
+            referenceModel: 'Technical',
+            title: 'Material Request Approved',
+            message: 'Material request has been approved and is ready for purchase processing',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { jobId: technical.jobId?.toString() }
+         },
+         {
+            privilegeKey: 'purchase',
+            checkFunction: (privileges) => {
+               return privileges.purchase?.create === true;
+            }
+         },
+         socket
+      );
 
       return res.status(200).json({
          success: true,
