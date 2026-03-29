@@ -163,24 +163,23 @@ export interface Privileges {
       viewReport: string;
     };
   };
-  claims: {
-    viewReport: string;
-    canApprove: boolean;
-  };
   dispatch: {
     viewReport: string;
+    createDeliveryNote: boolean;
     viewPendingDelivery: boolean;
     viewInvoiceLinking: boolean;
     viewInventoryDeduction: boolean;
-    createDeliveryNote: boolean;
   };
   invoice: {
     viewReport: string;
+    createInvoice: boolean;
     viewInvoicesVsDn: boolean;
     viewCancelledAdjusted: boolean;
     viewReissued: boolean;
-    createInvoice: boolean;
-    updateQuantities: boolean;
+  };
+  claims: {
+    viewReport: string;
+    canApprove: boolean;
   };
   portalManagement: {
     department: boolean;

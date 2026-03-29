@@ -256,8 +256,12 @@ export class ViewPurchaseComponent {
           'approved',
           result.comment,
         ).subscribe({
-          next: () => {
+          next: (res) => {
             this.notificationService.success('Purchase approved successfully');
+            this.isApproving = false;
+            if (res?.data) {
+              this.purchase = res.data;
+            }
             this.router.navigate(['/purchase/pendings']);
           },
           error: (error) => {
@@ -298,8 +302,12 @@ export class ViewPurchaseComponent {
           'rejected',
           result.comment,
         ).subscribe({
-          next: () => {
+          next: (res) => {
             this.notificationService.success('Purchase rejected successfully');
+            this.isRejecting = false;
+            if (res?.data) {
+              this.purchase = res.data;
+            }
             this.router.navigate(['/purchase/pendings']);
           },
           error: (error) => {

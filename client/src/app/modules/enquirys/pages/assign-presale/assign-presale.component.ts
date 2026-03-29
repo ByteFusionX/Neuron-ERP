@@ -11,6 +11,7 @@ import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
 import { NgFor, NgIf, NgClass, AsyncPipe } from '@angular/common';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 import { UploadFileComponent } from '../../../../shared/components/upload-file/upload-file.component';
+import { ModalLayoutComponent, ModalFooterButton } from '../../../../shared/components/modal-layout/modal-layout.component';
 
 @Component({
     selector: 'app-assign-presale',
@@ -18,7 +19,7 @@ import { UploadFileComponent } from '../../../../shared/components/upload-file/u
     styleUrls: ['./assign-presale.component.css'],
     animations: [fileEnterState],
     encapsulation: ViewEncapsulation.None,
-    imports: [NgIcon, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgIf, appNoLeadingSpace, NgClass, UploadFileComponent, AsyncPipe]
+    imports: [NgIcon, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgIf, appNoLeadingSpace, NgClass, UploadFileComponent, AsyncPipe, ModalLayoutComponent]
 })
 export class AssignPresaleComponent implements OnInit {
 
@@ -31,6 +32,8 @@ export class AssignPresaleComponent implements OnInit {
   commentError: boolean = false;
   isClear: boolean = false;
   isSaving: boolean = false;
+
+  footerButtons: ModalFooterButton[] = [];
 
   constructor(
     public dialogRef: MatDialogRef<AssignPresaleComponent>,
@@ -46,6 +49,29 @@ export class AssignPresaleComponent implements OnInit {
       this.selectedFiles = this.data.presaleFiles
       this.isClear = true
     }
+    this.updateFooterButtons();
+  }
+
+  updateFooterButtons() {
+    this.footerButtons = [];
+    if (this.isClear) {
+      this.footerButtons.push({
+        label: 'Clear',
+        onClick: () => this.onClear(),
+        theme: 'secondary'
+      });
+    }
+    this.footerButtons.push({
+      label: 'Close',
+      onClick: () => this.onClose(),
+      theme: 'cancel'
+    });
+    this.footerButtons.push({
+      label: 'Submit',
+      onClick: () => this.onSubmit(),
+      theme: 'primary',
+      loading: this.isSaving
+    });
   }
 
   onClose() {
@@ -84,9 +110,11 @@ export class AssignPresaleComponent implements OnInit {
         })
         let presale = { presalePerson: this.selectedEmployee, newPresaleFile: newFiles, existingPresaleFiles: existingFile, presalePersonName: presalePersonName, comment: this.comment }
         this.isSaving = false;
+        this.updateFooterButtons();
         this.dialogRef.close(presale)
       } else {
         this.isSaving = false;
+        this.updateFooterButtons();
         this.validateComment();
         this.validateFile();
         this.validateSalesPerson();

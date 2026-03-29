@@ -191,21 +191,9 @@ export class QuotationEditComponent {
 
   onCustomerNote(event: Note, noteType: string) {
     if (noteType == 'customerNotes') {
-      const customerNote = this.quoteForm.value.customerNote;
-      let nextLine = ''
-      if (customerNote) {
-        nextLine = '\n'
-      }
-      const note = this.quoteForm.value.customerNote + nextLine + event.note;
-      this.quoteForm.patchValue({ customerNote: note })
+      this.quoteForm.patchValue({ customerNote: event.note ?? '' })
     } else if (noteType == 'termsAndConditions') {
-      const customerNote = this.quoteForm.value.termsAndCondition;
-      let nextLine = ''
-      if (customerNote) {
-        nextLine = '\n'
-      }
-      const note = this.quoteForm.value.termsAndCondition + nextLine + event.note;
-      this.quoteForm.patchValue({ termsAndCondition: note })
+      this.quoteForm.patchValue({ termsAndCondition: event.note ?? '' })
     }
   }
 
