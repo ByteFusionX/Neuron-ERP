@@ -43,7 +43,7 @@ export function MSALInstanceFactory(): IPublicClientApplication {
     auth: {
       clientId: environment.microsoftClientId,
       authority: `https://login.microsoftonline.com/${environment.microsoftTenantId}`,
-      redirectUri: 'https://localhost:4200',
+      redirectUri: environment.redirectUri,
     },
     cache: {
       cacheLocation: BrowserCacheLocation.LocalStorage,
