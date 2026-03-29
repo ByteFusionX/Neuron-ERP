@@ -1,14 +1,36 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import { Project } from 'src/app/shared/interfaces/project.interface';
 
+export interface MaterialRequestStatusHistory {
+  status: 'pending' | 'approved' | 'rejected';
+  comment: string;
+  changedBy?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+  };
+  changedDate: Date;
+}
+
 export interface MaterialRequest {
+  _id?: string;
   itemName: string;
   quantity: number;
   estimatedCost: number;
   requiredOn: Date;
+  remarks?: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  statusHistory?: MaterialRequestStatusHistory[];
+}
+
+export interface MaterialRequestAttachment {
+  fileName: string;
+  originalname: string;
+  status?: 'pending' | 'approved' | 'rejected';
+  statusHistory?: MaterialRequestStatusHistory[];
 }
 
 export interface BillingSummary {
@@ -29,6 +51,7 @@ export interface TechnicalProject {
   estimations:{type:string,value:string}[];
   priority: string;
   jobId?: string;
+  estimatedCostForProject?: number;
 }
 
 export interface AssignEngineer {
@@ -73,8 +96,8 @@ export class TechnicalService {
     return this.http.get<any>(`${this.apiUrl}/technical/material-request/${jobId}`);
   }
 
-  updateMaterialRequest(technicalId: string, materialRequest: MaterialRequest[]): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/material-request/${technicalId}`, { materialRequest });
+  updateMaterialRequest(technicalId: string, formData: FormData): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-request/${technicalId}`, formData);
   }
 
   createTechnicalProject(projectData: TechnicalProject): Observable<any> {
@@ -106,8 +129,56 @@ export class TechnicalService {
   }
 
   // Activity Plan CRUD
-  getActivityPlans(technicalId: string): Observable<any> {
-    return this.http.get<any>(`${this.apiUrl}/technical/activity-plan/${technicalId}`);
+  getActivityPlans(technicalId: string, filters?: { 
+    activityName?: string; 
+    status?: string | string[]; 
+    expectedStartDateFrom?: string; 
+    expectedStartDateTo?: string;
+    expectedEndDateFrom?: string;
+    expectedEndDateTo?: string;
+    actualStartDateFrom?: string;
+    actualStartDateTo?: string;
+    actualEndDateFrom?: string;
+    actualEndDateTo?: string;
+  }): Observable<any> {
+    let params = new HttpParams();
+    if (filters) {
+      if (filters.activityName) {
+        params = params.set('activityName', filters.activityName);
+      }
+      if (filters.status) {
+        if (Array.isArray(filters.status)) {
+          filters.status.forEach(s => params = params.append('status', s));
+        } else {
+          params = params.set('status', filters.status);
+        }
+      }
+      if (filters.expectedStartDateFrom) {
+        params = params.set('expectedStartDateFrom', filters.expectedStartDateFrom);
+      }
+      if (filters.expectedStartDateTo) {
+        params = params.set('expectedStartDateTo', filters.expectedStartDateTo);
+      }
+      if (filters.expectedEndDateFrom) {
+        params = params.set('expectedEndDateFrom', filters.expectedEndDateFrom);
+      }
+      if (filters.expectedEndDateTo) {
+        params = params.set('expectedEndDateTo', filters.expectedEndDateTo);
+      }
+      if (filters.actualStartDateFrom) {
+        params = params.set('actualStartDateFrom', filters.actualStartDateFrom);
+      }
+      if (filters.actualStartDateTo) {
+        params = params.set('actualStartDateTo', filters.actualStartDateTo);
+      }
+      if (filters.actualEndDateFrom) {
+        params = params.set('actualEndDateFrom', filters.actualEndDateFrom);
+      }
+      if (filters.actualEndDateTo) {
+        params = params.set('actualEndDateTo', filters.actualEndDateTo);
+      }
+    }
+    return this.http.get<any>(`${this.apiUrl}/technical/activity-plan/${technicalId}`, { params });
   }
 
   createActivityPlan(technicalId: string, activityPlan: any): Observable<any> {
@@ -216,4 +287,36 @@ export class TechnicalService {
    getMrRequests(filterParams: any): Observable<any> {
       return this.http.post<any>(`${this.apiUrl}/technical/getMrRequests`, filterParams);
     }
+
+  getPendingMaterialRequestProjects(filterParams: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/pending`, filterParams);
+  }
+
+  approveMaterialRequest(technicalId: string, comment: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/approve`, { comment });
+  }
+
+  rejectMaterialRequest(technicalId: string, comment: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/reject`, { comment });
+  }
+
+  approveMaterialRequestItem(technicalId: string, itemIndex: number, comment: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/item/${itemIndex}/approve`, { comment });
+  }
+
+  rejectMaterialRequestItem(technicalId: string, itemIndex: number, comment: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/item/${itemIndex}/reject`, { comment });
+  }
+
+  approveMaterialRequestFile(technicalId: string, fileIndex: number, comment: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/file/${fileIndex}/approve`, { comment });
+  }
+
+  rejectMaterialRequestFile(technicalId: string, fileIndex: number, comment: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/file/${fileIndex}/reject`, { comment });
+  }
+
+  approveAllPendingMaterialRequests(technicalId: string, comment: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/approve-all-pending`, { comment });
+  }
 } 

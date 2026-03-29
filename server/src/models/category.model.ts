@@ -41,8 +41,57 @@ export interface Privileges {
   };
   jobSheet: {
     viewReport: string;
+    allocateJobs: boolean;
+    transferProcurementPerson: boolean;
   };
   dealSheet: boolean,
+  purchase: {
+    viewReport: string;
+    create: boolean;
+    canApprovePR: boolean;
+  };
+  purchaseOrder: {
+    viewReport: string;
+    canInitiateLPO: boolean;
+    canApprovePOs: boolean;
+    canReissueAndRevoke: boolean;
+  };
+  technical: {
+    canViewOpenToWorkAndAssign: boolean;
+    canTransferToEngineer: boolean;
+    viewReport: string;
+    canApproveMRRequests: boolean;
+  };
+  supplier: {
+    viewReport: string;
+    canApproveSupplier: boolean;
+  };
+  inventory: {
+    products: {
+      viewReport: string;
+    };
+    stockEntries: {
+      viewReport: string;
+    };
+  };
+  dispatch: {
+    viewReport: string;
+    createDeliveryNote: boolean;
+    viewPendingDelivery: boolean;
+    viewInvoiceLinking: boolean;
+    viewInventoryDeduction: boolean;
+  };
+  invoice: {
+    viewReport: string;
+    createInvoice: boolean;
+    viewInvoicesVsDn: boolean;
+    viewCancelledAdjusted: boolean;
+    viewReissued: boolean;
+  };
+  claims: {
+    viewReport: string;
+    canApprove: boolean;
+  };
   portalManagement: {
     department: boolean;
     notesAndTerms: boolean;

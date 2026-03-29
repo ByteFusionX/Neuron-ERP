@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal, HostListener } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
@@ -11,14 +11,21 @@ import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/f
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { MaterialRequestModalComponent } from './material-request-modal/material-request-modal.component';
-import { PurchaseRequestModalComponent } from './purchase-request-modal/purchase-request-modal.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CanDeactivate } from '@angular/router';
-import { Observable } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { getProject } from 'src/app/shared/interfaces/project.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { AccordionModule } from 'primeng/accordion';
+import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
+import { LoadingBarService } from '@ngx-loading-bar/core';
+import { HttpEventType } from '@angular/common/http';
+import { saveAs } from 'file-saver';
+import { MatTooltip } from '@angular/material/tooltip';
+import { MatProgressBar } from '@angular/material/progress-bar';
+import { getQuotatation } from 'src/app/shared/interfaces/quotation.interface';
+import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 
 @Component({
   selector: 'app-add-project',
@@ -26,11 +33,15 @@ import { AccordionModule } from 'primeng/accordion';
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    FormsModule,
     IconsModule,
     ButtonComponent,
     SelectDropdownComponent,
     FormFieldComponent,
     AccordionModule,
+    MatTooltip,
+    MatProgressBar,
+    NumberFormatterPipe,
   ],
   templateUrl: './add-project.component.html',
   styleUrl: './add-project.component.css'
@@ -44,6 +55,13 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
   private purchaseService = inject(PurchaseService);
   private dialog = inject(MatDialog);
   private employeeService = inject(EmployeeService);
+  private quotationService = inject(QuotationService);
+  private loadingBar = inject(LoadingBarService);
+  loader = inject(LoadingBarService).useRef();
+
+  selectedFile!: string | undefined;
+  progress: number = 0;
+  private subscriptions = new Subscription();
 
   projectId: string = '';
   selectedJobId = signal<any>(null);
@@ -123,8 +141,16 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     this.technicalService.getCostingDetails(this.projectId).subscribe({
       next: (response) => {
         if(response && response.data){
-          this.costingDetails = response.data;
+          this.costingDetails = {
+            estimatedCostForProject: response.data.estimatedCostForProject || 0,
+            totalLPOValue: response.data.totalLPOValue || 0,
+            professionalServiceCharge: response.data.professionalServiceCharge || 0,
+            totalAmountClaimedForManpower: response.data.totalAmountClaimedForManpower || 0
+          };
         }
+      },
+      error: (error) => {
+        console.error('Error fetching costing details:', error);
       }
     });
   }
@@ -167,7 +193,6 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       persons.forEach((p: any) => array.push(this.createPersonGroup(p.name, p.designation)));
     }
 
-    // Handle estimations
     const estimations = Array.isArray(project.estimations) ? project.estimations : [];
     const estimationsArray = this.estimationsArray;
     while (estimationsArray.length) {
@@ -179,53 +204,28 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       estimationsArray.push(this.createEstimationGroup('manpower', 0));
     }
 
+    if (project.estimatedCostForProject !== undefined && project.estimatedCostForProject !== null) {
+      this.costingDetails.estimatedCostForProject = parseFloat(project.estimatedCostForProject.toString()) || 0;
+    }
+
     this.originalFormData = {
       ...this.projectForm.value,
       materialRequest: [...this.materialRequests]
     };
     
-    if(this.projectDetails()?.jobId._id){
-      this.loadCostingDetails();
-    }
+    this.loadCostingDetails();
   }
 
 
 
   openMaterialRequestModal(): void {
-    const dialogRef = this.dialog.open(MaterialRequestModalComponent, {
-      data: { materialRequests: this.materialRequests }
-    });
-
-    dialogRef.afterClosed().subscribe((result: MaterialRequest[]) => {
-      if (result) {
-        this.materialRequests = result;
-        this.technicalService.updateMaterialRequest(this.projectId, result).subscribe((response) => {
-          if(response.success){
-            this.notificationService.success(response.message);
-            this.projectForm.patchValue({ materialRequest: result });
-          }else{
-            this.notificationService.error(response.message);
-          }
-        });
-        this.originalFormData.materialRequest = result;
-        this.checkForUnsavedChanges();
-      }
-    });
+    this.router.navigate([`/technical/project/material-request`, this.projectId]);
   }
 
   openPage(route: string): void {
     this.router.navigate([`/technical/project/${route}`, this.projectId]);
   }
 
-  openPurchaseRequestModal(): void {
-    const dialogRef = this.dialog.open(PurchaseRequestModalComponent, {
-      width: '800px',
-      data: { purchaseRequests: this.purchaseRequests }
-    });
-
-    dialogRef.afterClosed().subscribe(() => {
-    });
-  }
 
   checkPurchaseRequests(jobId: string): void {
     if (jobId) {
@@ -264,6 +264,16 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
 
     this.isSaving.set(true);
 
+    console.log('Costing Details:', this.costingDetails);
+    console.log('Estimated Cost Value:', this.costingDetails.estimatedCostForProject);
+    console.log('Type:', typeof this.costingDetails.estimatedCostForProject);
+
+    const estimatedCost = this.costingDetails.estimatedCostForProject !== undefined && this.costingDetails.estimatedCostForProject !== null
+      ? Number(this.costingDetails.estimatedCostForProject) || 0
+      : 0;
+
+    console.log('Parsed Estimated Cost:', estimatedCost);
+
     const technicalData: TechnicalProject = {
       status: this.projectForm.value.status,
       supervisors: this.projectForm.value.supervisors,
@@ -271,9 +281,9 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       involvedPersons: this.projectForm.value.involvedPersons,
       estimations: this.projectForm.value.estimations,
       priority: this.projectForm.value.priority,
-      jobId: this.projectForm.value.jobId
+      jobId: this.projectForm.value.jobId,
+      estimatedCostForProject: estimatedCost
     };
-
 
     if(this.projectId){
       this.updateTechnicalProject(this.projectId, technicalData);
@@ -615,6 +625,11 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     return  Number(totalClaimed) - Number(totalEstimated);
   }
 
+  onEstimatedCostChange(value: any): void {
+    const numValue = value === null || value === undefined || value === '' ? 0 : parseFloat(value);
+    this.costingDetails.estimatedCostForProject = isNaN(numValue) ? 0 : numValue;
+  }
+
   getManpowerEstimation(): number {
     const manpowerControl = this.estimationsArray.controls.find(control => 
       control.get('type')?.value === 'manpower'
@@ -648,5 +663,107 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       this.estimationsArray.removeAt(index);
       this.checkForUnsavedChanges();
     }
+  }
+
+  onPreviewPdf(quotedData: getQuotatation, salesPerson: any, customer: any, attention: any) {
+    this.loader.start();
+    quotedData.createdBy = salesPerson;
+    quotedData.client = customer;
+    quotedData.attention = attention;
+    let quoteData: getQuotatation = quotedData;
+    const pdfDoc = this.quotationService.generatePDF(quoteData, true);
+    pdfDoc.then((pdf) => {
+      pdf.getBlob((blob: Blob) => {
+        let url = window.URL.createObjectURL(blob);
+
+        let dialogRef = this.dialog.open(PdfPreviewComponent,
+          { data: { url: url, formatedQuote: quoteData } });
+        this.loader.complete();
+      });
+    });
+  }
+
+  onViewPDF(file: any) {
+    if (file.fileName && file.fileName.toLowerCase().endsWith('.pdf')) {
+      this.subscriptions.add(
+        this.jobService.downloadFile(file.fileName)
+          .subscribe({
+            next: (event) => {
+              if (event.type === HttpEventType.Response) {
+                const fileContent: Blob = new Blob([event['body']], { type: 'application/pdf' });
+                const fileURL = URL.createObjectURL(fileContent);
+                window.open(fileURL, '_blank');
+                setTimeout(() => {
+                  URL.revokeObjectURL(fileURL);
+                }, 10000);
+              }
+            },
+            error: (error) => {
+              if (error.status === 404) {
+                this.notificationService.warning('Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.');
+              } else {
+                this.notificationService.error('An error occurred while trying to view the PDF. Please try again later.');
+              }
+            }
+          })
+      );
+    } else {
+      this.notificationService.warning('This file type is not supported for viewing. Please download and view the file.');
+    }
+  }
+
+  onDownloadClicks(file: any) {
+    this.selectedFile = file.fileName;
+    this.subscriptions.add(
+      this.jobService.downloadFile(file.fileName)
+        .subscribe({
+          next: (event) => {
+            if (event.type === HttpEventType.DownloadProgress) {
+              this.progress = Math.round(100 * event.loaded / event.total);
+            } else if (event.type === HttpEventType.Response) {
+              const fileContent: Blob = new Blob([event['body']]);
+              saveAs(fileContent, file.originalname);
+              this.clearProgress();
+            }
+          },
+          error: (error) => {
+            if (error.status == 404) {
+              this.selectedFile = undefined;
+              this.notificationService.warning('Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.');
+            }
+          }
+        })
+    );
+  }
+
+  clearProgress() {
+    setTimeout(() => {
+      this.selectedFile = undefined;
+      this.progress = 0;
+    }, 1000);
+  }
+
+  getQuotationData(): any {
+    return this.projectDetails()?.jobId?.quotation || null;
+  }
+
+  getLpoFiles(): any[] {
+    return this.projectDetails()?.jobId?.quotation?.lpoFiles || [];
+  }
+
+  getQuotationId(): string {
+    return this.projectDetails()?.jobId?.quotation?.quoteId || '';
+  }
+
+  getSalesPersonData(): any {
+    return this.projectDetails()?.jobId?.quotation?.createdBy || null;
+  }
+
+  getCustomerData(): any {
+    return this.projectDetails()?.customer || null;
+  }
+
+  getAttentionData(): any {
+    return this.projectDetails()?.jobId?.quotation?.attention || null;
   }
 } 

@@ -8,6 +8,8 @@ interface Note {
 interface NotesDocument extends Document {
     customerNotes: Note[];
     termsAndConditions: Note[];
+    placeOfDelivery: Note[];
+    shippingTerms: Note[];
 }
 
 const NoteSchema = new Schema<Note>({
@@ -23,6 +25,14 @@ const NotesSchema = new Schema<NotesDocument>({
         required: true,
     },
     termsAndConditions: {
+        type: [NoteSchema],
+        required: true,
+    },
+    placeOfDelivery: {
+        type: [NoteSchema],
+        required: true,
+    },
+    shippingTerms: {
         type: [NoteSchema],
         required: true,
     },

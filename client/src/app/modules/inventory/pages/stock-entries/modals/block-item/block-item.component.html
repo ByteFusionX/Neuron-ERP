@@ -1,0 +1,69 @@
+<app-modal-layout
+  title="Block Item"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Save & Exit', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+  ]"
+  contentClass="p-6">
+  <form [formGroup]="blockForm" (ngSubmit)="onSubmit()">
+      <div class="space-y-4">
+        <app-form-field
+          label="Salesperson Name"
+          [control]="blockForm.get('salesPersonName')"
+          [isSubmitted]="isSubmitting"
+          placeholder="Salesperson name"
+          [readonly]="true">
+        </app-form-field>
+
+        <app-select-dropdown
+          label="Blocked For (Customer)"
+          [options]="customers"
+          optionLabel="companyName"
+          optionValue="_id"
+          formControlName="customerId"
+          placeholder="Select customer"
+          [isSubmitted]="isSubmitting"
+          footerLabel="+ Create Customer"
+          (footerAction)="createCustomer()">
+        </app-select-dropdown>
+
+        <app-form-field
+          label="Available qty"
+          [control]="blockForm.get('availableQuantity')"
+          [isSubmitted]="isSubmitting"
+          type="number"
+          placeholder="Available quantity"
+          [readonly]="true">
+        </app-form-field>
+
+        <app-form-field
+          label="QTY required"
+          [control]="blockForm.get('quantity')"
+          [isSubmitted]="isSubmitting"
+          type="number"
+          placeholder="Enter quantity required"
+          (input)="onQuantityChange()">
+        </app-form-field>
+
+        <div class="grid grid-cols-2 gap-4">
+          <app-form-field
+            label="From Date"
+            [control]="blockForm.get('fromDate')"
+            [isSubmitted]="isSubmitting"
+            type="date"
+            placeholder="Select from date">
+          </app-form-field>
+
+          <app-form-field
+            label="To Date"
+            [control]="blockForm.get('toDate')"
+            [isSubmitted]="isSubmitting"
+            type="date"
+            placeholder="Select to date">
+          </app-form-field>
+        </div>
+      </div>
+
+    </form>
+</app-modal-layout>

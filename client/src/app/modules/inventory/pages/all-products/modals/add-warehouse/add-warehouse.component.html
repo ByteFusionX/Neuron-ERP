@@ -1,0 +1,20 @@
+<app-modal-layout
+  title="Add Warehouse"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Save', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+  ]"
+  [simpleMode]="true"
+  contentClass="p-6">
+  <form [formGroup]="warehouseForm" (ngSubmit)="onSubmit()" #warehouseFormRef="ngForm">
+    <app-form-field
+      label="Warehouse Name"
+      [control]="warehouseForm.get('wareHouseName')"
+      [isSubmitted]="isSubmitting"
+      placeholder="Enter warehouse name">
+    </app-form-field>
+  </form>
+</app-modal-layout>
+
+

@@ -26,7 +26,6 @@ export class ViewFeedbackComponent {
       if (!feedback.seenByFeedbackRequester && feedback.feedback) {
         this._enquiryService.markFeedbackResponseAsViewed(this.data.enqId, feedback._id).subscribe((res) => {
           if (res) {
-            this._notificationService.decrementNotificationCount('assignedJob', 1)
           }
         })
       }

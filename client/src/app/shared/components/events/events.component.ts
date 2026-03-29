@@ -22,12 +22,13 @@ export class EventsComponent implements OnInit, OnDestroy {
   employees$!: Observable<getEmployee[]>
   selectedEmployee!: string | undefined;
   selectedEvent!: string;
-  selectedDate!: Date;
+  selectedDate!: string;
   summary!: string;
   employeeError: boolean = false;
   fileError: boolean = false;
   commentError: boolean = false;
   eventError: boolean = false;
+  dateError: boolean = false;
   isClear: boolean = false;
   isSaving: boolean = false;
   availabiltyInput$ = new Subject<string>();
@@ -63,12 +64,20 @@ export class EventsComponent implements OnInit, OnDestroy {
   }
 
   onFileUpload(event: File[]) {
-    this.validateFile()
     this.selectedFiles = event
   }
 
   onSubmit() {
-    const token = this._employeeService.employeeToken()
+    this.validateEvent();
+    this.validateSalesPerson();
+    this.validateComment();
+    this.validateDate();
+    
+    if (this.eventError || this.employeeError || this.commentError || this.dateError) {
+      this.isSaving = false;
+      return;
+    }
+    
     this.isSaving = true;
     const eventData = {
       from: this.data.from,
@@ -77,8 +86,7 @@ export class EventsComponent implements OnInit, OnDestroy {
       date: this.selectedDate,
       employee: this.selectedEmployee,
       summary: this.summary,
-      eventFiles: this.selectedFiles,
-      createdBy: token.id
+      eventFiles: this.selectedFiles
     }
 
     let formData = new FormData();
@@ -91,11 +99,17 @@ export class EventsComponent implements OnInit, OnDestroy {
     }
 
     this.subscriptions.add(
-      this._eventService.newEvent(formData).subscribe((res => {
-        if (res) {
-          this.dialogRef.close(res)
+      this._eventService.newEvent(formData).subscribe({
+        next: (res) => {
+          if (res) {
+            this.dialogRef.close(res)
+          }
+          this.isSaving = false;
+        },
+        error: (error) => {
+          this.isSaving = false;
         }
-      }))
+      })
     )
   }
 
@@ -135,6 +149,18 @@ export class EventsComponent implements OnInit, OnDestroy {
       this.eventError = true
     } else {
       this.eventError = false
+    }
+  }
+
+  validateDate() {
+    const dateValue = this.selectedDate;
+    if (!dateValue || 
+        (typeof dateValue === 'string' && dateValue.trim() === '') ||
+        dateValue === null ||
+        dateValue === undefined) {
+      this.dateError = true
+    } else {
+      this.dateError = false
     }
   }
 }

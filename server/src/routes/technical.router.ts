@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getProjectAndAMCJobs, getEngineers, getUnassignedJobsByCustomer, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan, getProjectUpdates, getProjectUpdateById, createProjectUpdate, updateProjectUpdate, deleteProjectUpdate, removeProjectUpdateAttachment, updateMaterialRequest, getBillingSummaries, getBillingSummaryById, createBillingSummary, updateBillingSummary, deleteBillingSummary, getCostingDetails, getMrRequests, createProject, getMaterialRequestByJobId } from "../controllers/technical.controller";
+import { getProjectAndAMCJobs, getEngineers, getUnassignedJobsByCustomer, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan, getProjectUpdates, getProjectUpdateById, createProjectUpdate, updateProjectUpdate, deleteProjectUpdate, removeProjectUpdateAttachment, updateMaterialRequest, getBillingSummaries, getBillingSummaryById, createBillingSummary, updateBillingSummary, deleteBillingSummary, getCostingDetails, getMrRequests, createProject, getMaterialRequestByJobId, transferEngineer, getPendingMaterialRequestProjects, approveMaterialRequest, rejectMaterialRequest, approveMaterialRequestItem, rejectMaterialRequestItem, approveMaterialRequestFile, rejectMaterialRequestFile, approveAllPendingMaterialRequests } from "../controllers/technical.controller";
 const upload = require("../common/multer.storage")
 
 const technicalRouter = Router()
@@ -8,6 +8,7 @@ technicalRouter.get('/getProjectAndAMCJobs', getProjectAndAMCJobs)
 technicalRouter.get('/getEngineers', getEngineers)
 technicalRouter.get('/unassigned-jobs/:customerId', getUnassignedJobsByCustomer)
 technicalRouter.post('/assignEngineer', assignEngineer)
+technicalRouter.post('/transferEngineer', transferEngineer)
 technicalRouter.post('/getProjects', getProjects)
 technicalRouter.post('/createProject', createProject)
 technicalRouter.post('/getMrRequests', getMrRequests)
@@ -16,7 +17,7 @@ technicalRouter.put('/:id', updateProject)
 technicalRouter.get('/costing-details/:id', getCostingDetails)
 technicalRouter.get('/material-request/:jobId', getMaterialRequestByJobId)
 
-technicalRouter.post('/material-request/:id', updateMaterialRequest)
+technicalRouter.post('/material-request/:id', upload.fields([{ name: 'attachments' }]), updateMaterialRequest)
 
 technicalRouter.get('/tasks/:id', getTasks)
 technicalRouter.post('/tasks/:id', createTask)
@@ -45,5 +46,14 @@ technicalRouter.get('/billing-summary/:id/:billingSummaryId', getBillingSummaryB
 technicalRouter.post('/billing-summary/:id', createBillingSummary)
 technicalRouter.put('/billing-summary/:id/:billingSummaryId', updateBillingSummary)
 technicalRouter.delete('/billing-summary/:id/:billingSummaryId', deleteBillingSummary)
+
+technicalRouter.post('/material-requests/pending', getPendingMaterialRequestProjects)
+technicalRouter.post('/material-requests/:id/approve', approveMaterialRequest)
+technicalRouter.post('/material-requests/:id/reject', rejectMaterialRequest)
+technicalRouter.post('/material-requests/:id/approve-all-pending', approveAllPendingMaterialRequests)
+technicalRouter.post('/material-requests/:id/item/:itemIndex/approve', approveMaterialRequestItem)
+technicalRouter.post('/material-requests/:id/item/:itemIndex/reject', rejectMaterialRequestItem)
+technicalRouter.post('/material-requests/:id/file/:fileIndex/approve', approveMaterialRequestFile)
+technicalRouter.post('/material-requests/:id/file/:fileIndex/reject', rejectMaterialRequestFile)
 
 export default technicalRouter

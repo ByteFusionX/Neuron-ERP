@@ -5,6 +5,7 @@ import { NgIconsModule } from '@ng-icons/core';
 import { FileService } from '../../../core/services/file.service';
 import { HttpEventType } from '@angular/common/http';
 import { ToastrService } from 'ngx-toastr';
+import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
 
 export interface AttachmentData {
   fileName: string;
@@ -18,7 +19,7 @@ export interface AttachmentDialogData {
 
 @Component({
   selector: 'app-attachements-dialog',
-  imports: [CommonModule, NgIconsModule],
+  imports: [CommonModule, NgIconsModule, ModalLayoutComponent],
   templateUrl: './attachements-dialog.component.html',
   styleUrl: './attachements-dialog.component.css',
 })

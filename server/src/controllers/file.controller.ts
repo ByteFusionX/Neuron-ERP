@@ -4,49 +4,86 @@ import Enquiry from "../models/enquiry.model";
 import fs from "fs";
 import path from "path";
 import { File } from "../interface/enquiry.interface";
-import { deleteFileFromAws, isFileAvailableInAwsBucket, getFileUrlFromAws } from "../common/aws-connect";
-import fetch from 'node-fetch';
-const { ObjectId } = require('mongodb')
+import {
+    deleteFileFromAws,
+    isFileAvailableInAwsBucket,
+    getFileUrlFromAws,
+} from "../common/aws-connect";
+import fetch from "node-fetch";
+const { ObjectId } = require("mongodb");
 
-export const DownloadFile = async (req: Request, res: Response, next: NextFunction) => {
+export const DownloadFile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
     try {
         const fileName = req.query.file as string;
-        const url = await getFileUrlFromAws(fileName);
 
-        // Stream the file from S3 to the response
-        const response = await fetch(url);
-        if (!response) {
-            return res.status(404).json({ message: 'File not found' });
+        if (!fileName) {
+            return res.status(400).json({ message: "File name is required" });
         }
 
-        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        const url = await getFileUrlFromAws(fileName);
+
+        // If S3 helper could not generate a signed URL, return 404 instead of
+        // passing an invalid/relative URL to node-fetch
+        if (!url || url === "error") {
+            return res.status(404).json({ message: "File not found" });
+        }
+
+        const response = await fetch(url);
+
+        if (!response || !response.ok || !response.body) {
+            return res.status(404).json({ message: "File not found" });
+        }
+
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${fileName}"`
+        );
+        // Stream the file from S3 to the client
         response.body.pipe(res);
     } catch (error) {
-        console.error('An error occurred while processing the request:', error);
-        console.log(error)
-next(error);
+        console.error("An error occurred while processing the request:", error);
+        next(error);
     }
 };
 
-export const fetchFile = async (req: Request, res: Response, next: NextFunction) => {
+export const fetchFile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
     try {
         const filename = req.params.filename;
-        const url = await getFileUrlFromAws(filename);
 
-        // Stream the file from S3 to the response
-        const response = await fetch(url);
-        if (!response) {
-            return res.status(404).json({ message: 'File not found' });
+        if (!filename) {
+            return res.status(400).json({ message: "File name is required" });
         }
 
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        const url = await getFileUrlFromAws(filename);
+
+        if (!url || url === "error") {
+            return res.status(404).json({ message: "File not found" });
+        }
+
+        const response = await fetch(url);
+
+        if (!response || !response.ok || !response.body) {
+            return res.status(404).json({ message: "File not found" });
+        }
+
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${filename}"`
+        );
         response.body.pipe(res);
     } catch (error) {
-        console.error('An error occurred while processing the request:', error);
-        console.log(error)
-next(error);
+        console.error("An error occurred while processing the request:", error);
+        next(error);
     }
-}
+};
 
 
 export const deleteFile = async (req: Request, res: Response, next: NextFunction) => {

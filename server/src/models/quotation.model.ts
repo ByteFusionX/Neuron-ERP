@@ -11,6 +11,7 @@ interface QuoteItemDetail {
     phoneNo?: string;
     supplierId?: Types.ObjectId;
     dealSelected?: boolean;
+    purchaseItemDetailId?: Types.ObjectId;
 }
 
 interface QuoteItem {
@@ -97,7 +98,7 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     },
     availability: {
         type: String,
-        required: true,
+        required: false,
     },
     supplierName: {
         type: String,
@@ -118,6 +119,10 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     },
     dealSelected: {
         type: Boolean,
+        required: false,
+    },
+    purchaseItemDetailId: {
+        type: Schema.Types.ObjectId,
         required: false,
     }
 });

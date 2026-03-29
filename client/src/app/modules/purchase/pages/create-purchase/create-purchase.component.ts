@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, OnDestroy, OnInit, signal, Type } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
-import { NgOptionComponent, NgSelectComponent } from '@ng-select/ng-select';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -17,10 +16,15 @@ import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { NgIcon } from '@ng-icons/core';
 import { MatTooltip } from '@angular/material/tooltip';
-import { MrDetails, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
-import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { TechnicalService } from 'src/app/core/services/technical.service';
-import { e } from '@angular/cdk/portal-directives.d-BoG39gYN';
+import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
+import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
+import { CreateProductComponent } from 'src/app/modules/inventory/pages/all-products/modals/create-product/create-product.component';
+
+interface PartNumberDropdownOption {
+  label: string;
+  value: string;
+  data: PartNumberOption;
+}
 
 @Component({
   selector: 'app-create-purchase',
@@ -29,8 +33,6 @@ import { e } from '@angular/cdk/portal-directives.d-BoG39gYN';
     FormsModule,
     CommonModule,
     ResizableComponent,
-    NgSelectComponent,
-    NgOptionComponent,
     FormFieldComponent,
     SelectDropdownComponent,
     NumberFormatterPipe,
@@ -48,7 +50,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   private toaster = inject(ToastrService)
   private purchaseService = inject(PurchaseService)
   private jobService = inject(JobService)
-  private technicalService = inject(TechnicalService)
+  private productService = inject(ProductService)
   private subscriptions = new Subscription()
 
   generatedPRId: string = '';
@@ -56,6 +58,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   purchaseJobData!: any;
   purchaseNo!: string;
   isAddingItem: boolean = false;
+  purchaseId: string | null = null;
 
   itemsList = signal<any[]>([])
   isSubmitted = signal<boolean>(false);
@@ -63,6 +66,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   selectedJobSheet!: getJob;
   requestedJobId = signal<string>('')
   isEditing: boolean = false;
+  partNumberOptions = signal<PartNumberDropdownOption[]>([])
+  currency = signal<string>('')
 
   purchaseForm: FormGroup = this.fb.group({
     customerId: ['', [Validators.required]],
@@ -81,81 +86,114 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const url = this.route.snapshot.routeConfig?.path || '';
     this.isEditing = url.includes('edit');
+    
     if (this.isEditing) {
-      const purchaseId = <string>this.route.snapshot.paramMap.get('id');
-      this.purchaseService.setEditingorNot(this.isEditing, purchaseId);
-
-      this.checkPurchaseData()
+      this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
+      this.loadPurchaseData();
+    } else {
+      this.purchaseForm.reset();
+      this.getPurchaseNo();
+      
+      const jobId = this.route.snapshot.queryParamMap.get('jobId');
+      if (jobId) {
+        this.requestedJobId.set(jobId);
+      }
+      
+      this.deelSheets();
+      
+      if (jobId) {
+        this.selectJobById(jobId);
+      }
     }
 
-    this.deelSheets()
-    this.purchaseForm.reset()
-    if (!this.isEditing) {
-      this.getPurchaseNo()
-    }
+    this.generatedPRId = this.generateId();
+    this.loadPartNumbers();
 
-    this.getMaterialRequests()
+    (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
+      this.updateTotalLpo();
+    });
+  }
 
-    this.generatedPRId = this.generateId()
-    this.subscriptions.add(
-      this.purchaseService.selectedJob$.subscribe((job) => {
-        if (job) {
-          this.requestedJobId.set(job._id)
-          this.patchValues(job)
+  selectJobById(jobId: string): void {
+    this.jobService.getOneJob(jobId).subscribe({
+      next: (res) => {
+        if (res && res.length > 0) {
+          const job = res[0];
+          const currentJobSheets = this.jobSheets();
+          const jobExists = currentJobSheets.some(j => j._id === job._id);
+          
+          if (!jobExists) {
+            this.jobSheets.set([...currentJobSheets, job]);
+          }
+          
+          this.patchValues(job);
         }
-      })
-    )
+      },
+      error: (error) => {
+        console.error(error);
+        this.toaster.error('Failed to load job details');
+      }
+    });
+  }
+
+  loadPurchaseData(): void {
+    if (!this.purchaseId) return;
 
     this.subscriptions.add(
-      this.purchaseService.purchaseFormData$.subscribe((data) => {
-        if (data) {
-          this.purchaseForm.patchValue(data)
-          this.purchaseForm.get('dealSheetId')?.setValue(data.dealSheetId)
-          if (data.jobId.jobId) {
-            this.purchaseForm.get('jobId')?.setValue(data.jobId.jobId)
-          }
+      this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
+        next: (res) => {
+          if (res.data) {
+            const purchase = res.data;
+            this.purchaseForm.patchValue({
+              customerId: purchase.customerId?._id || purchase.customerId,
+              salesManager: `${purchase.createdBy?.firstName || ''} ${purchase.createdBy?.lastName || ''}`.trim(),
+              purchaseNo: purchase.purchaseNo,
+              jobId: purchase.jobId?.jobId || purchase.jobId,
+              dealSheetId: purchase.jobId?.quoteId?.dealData?.dealId || purchase.dealSheetId,
+              customer: purchase.customerId?.companyName || purchase.customer,
+              status: purchase.status,
+              totalLpo: purchase.totalLpo,
+              job: purchase.jobId?._id || purchase.jobId
+            });
 
-          if (this.isEditing) {
-            this.patchEditValues(data)
-          }
-          if (data.items) {
-            this.itemsList.set(data.items)
-            this.patchItemsValues(data.items)
-            this.updateTotalLpo()
-          }
-          if (data.mrRequest) this.patchMrValues(data.mrRequest)
-          if (data.supplierDiscounts) this.patchSupplierDiscounts(data.supplierDiscounts)
-        }
-      })
-    )
+            if (purchase.items) {
+              this.itemsList.set(purchase.items);
+              this.patchItemsValuesWithPartNoIds(purchase.items);
+              this.updateTotalLpo();
+            }
 
-    this.subscriptions.add(
-      this.purchaseService.supplierDiscount$.subscribe((data) => {
-        if (data?.suppliers) {
-          if (this.purchaseForm.get('supplierDiscounts')) {
-            this.purchaseForm.removeControl('supplierDiscounts');
+            if (purchase.currency) {
+              this.currency.set(purchase.currency);
+            }
+
+            if (purchase.mrRequest?.engineer) {
+              this.patchMrValues(purchase.mrRequest);
+            }
+
+            if (purchase.supplierDiscounts?.suppliers) {
+              this.patchSupplierDiscounts(purchase.supplierDiscounts);
+            }
+
+            if (purchase.jobId) {
+              this.jobService.getOneJob(purchase.jobId._id).subscribe({
+                next: (jobRes) => {
+                  if (jobRes && jobRes.length > 0) {
+                    this.selectedJobSheet = jobRes[0];
+                  }
+                },
+                error: (error) => {
+                  console.error(error);
+                }
+              });
+            }
           }
-
-          this.purchaseForm.addControl('supplierDiscounts', this.createSupplierGroup());
-          const supplierForm = this.purchaseForm.get('supplierDiscounts') as FormGroup;
-          const supplierArray = supplierForm.get('suppliers') as FormArray;
-
-          data.suppliers.forEach((supplier: any) => {
-            supplierArray.push(this.fb.group({
-              supplierId: [supplier.supplierId._id],
-              discount: [supplier.discount],
-            }));
-          });
-          supplierForm.patchValue({
-            totalDiscount: data.totalDiscount
-          });
+        },
+        error: (error) => {
+          console.error('Error loading purchase data:', error);
+          this.toaster.error('Failed to load purchase data');
         }
       })
     );
-
-    (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
-      this.updateTotalLpo()
-    });
   }
 
   onSubmit(): void {
@@ -168,77 +206,117 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onDraftClicks() {
-    this.purchaseForm.get('status')?.setValue('Drafted')
-    this.sendToService()
+    if (this.purchaseId) {
+      this.updatePurchaseDraft();
+    } else {
+      this.createPurchaseDraft();
+    }
+  }
+
+  createPurchaseDraft(): void {
+    const formValue = this.getFormValueForSave();
+    formValue.status = 'Drafted';
+
+    this.subscriptions.add(
+      this.purchaseService.createPurchaseDraft(formValue).subscribe({
+        next: (res) => {
+          if (res.success && res.data?._id) {
+            this.purchaseId = res.data._id;
+            this.toaster.success('Purchase saved as draft');
+            this.router.navigate(['/purchase/pendings']);
+          }
+        },
+        error: (error) => {
+          console.error(error);
+          this.toaster.error('Failed to save draft');
+        }
+      })
+    );
+  }
+
+  updatePurchaseDraft(): void {
+    const formValue = this.getFormValueForSave();
+    formValue.status = 'Drafted';
+
+    this.subscriptions.add(
+      this.purchaseService.updatePurchase(this.purchaseId!, formValue).subscribe({
+        next: (res) => {
+          if (res.success) {
+            this.toaster.success('Purchase updated successfully');
+            this.router.navigate(['/purchase/pendings']);
+          }
+        },
+        error: (error) => {
+          console.error(error);
+          this.toaster.error('Failed to update purchase');
+        }
+      })
+    );
   }
 
   sendToService() {
-    const job = this.purchaseForm.get('job')?.value;
-    this.purchaseForm.get('jobId')?.setValue(job);
-    this.purchaseForm.removeControl('job')
-    this.purchaseService.createPurchase(this.purchaseForm.value).subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.toaster.success('Purchase Uploaded SuccessFully')
-          this.purchaseForm.reset()
-          this.itemsList.set([])
-          this.deelSheets()
-          this.router.navigate(['/purchase/pendings'])
-        }
-      },
-      error: (error) => {
-        console.log(error)
-      }
-    })
-  }
-
-  checkPurchaseData() {
-    const purchaseId = <string>this.route.snapshot.paramMap.get('id');
-    this.subscriptions.add(
-      this.purchaseService.purchaseFormData$.subscribe((existingData) => {
-        if (!existingData) {
-          this.subscriptions.add(
-            this.purchaseService.getPurchaseById(purchaseId).subscribe({
-              next: (res) => {
-                if (res.data) {
-                  this.jobService.getOneJob(res.data.jobId._id as string).subscribe({
-                    next: (res) => {
-                      if (res) {
-                        this.selectedJobSheet = res[0];
-                        this.patchValues(this.selectedJobSheet)
-                        this.purchaseService.setPurchaseJob(this.selectedJobSheet)
-                      }
-                    }
-                  })
-                  this.purchaseService.setPurchaseFormData(res.data)
-                }
-              },
-              error: (error) => {
-                console.error('Error fetching purchase data:', error)
-                this.toaster.error('Failed to load purchase data')
-              }
-            })
-          )
-        }
-      })
-    )
-  }
-
-  getMaterialRequests() {
-    const jobId = this.purchaseForm.get('jobId')?.value;
-    if(jobId) {
-    this.subscriptions.add(
-      this.technicalService.getMaterialRequestByJobId(jobId).subscribe({
-        next: (res) => {
-          console.log(res, 'res')
-        },
-        error: (error) => {
-          console.error('Error fetching material requests:', error)
-          }
-        })
-      )
+    if (this.purchaseId) {
+      this.updatePurchase();
+    } else {
+      this.createPurchase();
     }
   }
+
+  createPurchase(): void {
+    const formValue = this.getFormValueForSave();
+    formValue.status = 'Pending';
+
+    this.subscriptions.add(
+      this.purchaseService.createPurchase(formValue).subscribe({
+        next: (res) => {
+          if (res.success) {
+            this.toaster.success('Purchase uploaded successfully');
+            this.router.navigate(['/purchase/pendings']);
+          }
+        },
+        error: (error) => {
+          console.error(error);
+          this.toaster.error('Failed to create purchase');
+        }
+      })
+    );
+  }
+
+  updatePurchase(): void {
+    const formValue = this.getFormValueForSave();
+    formValue.status = 'Pending';
+
+    this.subscriptions.add(
+      this.purchaseService.updatePurchase(this.purchaseId!, formValue).subscribe({
+        next: (res) => {
+          if (res.success) {
+            this.toaster.success('Purchase updated successfully');
+            this.router.navigate(['/purchase/pendings']);
+          }
+        },
+        error: (error) => {
+          console.error(error);
+          this.toaster.error('Failed to update purchase');
+        }
+      })
+    );
+  }
+
+  getFormValueForSave(): any {
+    const job = this.purchaseForm.get('job')?.value;
+    const formValue = { ...this.purchaseForm.value };
+    
+    if (job) {
+      formValue.jobId = job;
+    }
+    const itemsWithPartNoObjects = this.convertPartNoIdsToObjects(this.itemsList());
+    formValue.items = itemsWithPartNoObjects;
+    delete formValue.job;
+
+    return formValue;
+  }
+
+
 
   onDiscardClicks() {
     this.purchaseForm.reset()
@@ -268,6 +346,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       unitCost: ['', Validators.required],
       unitSellingPrice: [''],
       availability: [''],
+      partNo: [''],
       supplierName: [''],
       email: [''],
       phoneNo: [''],
@@ -284,25 +363,32 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     });
   }
 
+
   patchValues(job: getJob) {
     this.selectedJobSheet = job
+    this.requestedJobId.set(job._id);
     this.purchaseForm.patchValue({
       customer: job?.clientDetails?.companyName,
       customerId: job?.clientDetails?._id,
       salesManager: `${job?.salesPersonDetails?.[0]?.firstName || ''} ${job?.salesPersonDetails?.[0]?.lastName || ''}`.trim(),
       dealSheetId: job?.quotation?.dealData?.dealId,
-      jobId: job.jobId,
+      jobId: job._id,
       job: job._id
     })
+
+    const currency = (job?.quotation as any)?.currency || (job?.quotation as any)?.dealData?.currency || '';
+    if (currency) {
+      this.currency.set(currency);
+    }
 
     if (!this.isEditing) {
       const updatedItems = job.quotation?.dealData?.updatedItems || [];
       const itemsWithComparisons = this.patchComparisonsData(updatedItems, job.quotation?.dealData);
-      this.itemsList.set(itemsWithComparisons)
-      this.patchItemsValues(this.itemsList())
+      this.itemsList.set(itemsWithComparisons);
+      this.patchItemsValuesWithPartNoIds(itemsWithComparisons);
 
       if (job.quotation?.dealData?.additionalCosts) {
-        this.convertAdditionalCostsToSupplierDiscounts(job.quotation.dealData.additionalCosts)
+        this.convertAdditionalCostsToSupplierDiscounts(job.quotation.dealData.additionalCosts);
       }
     }
   }
@@ -312,6 +398,10 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       ...item,
       itemDetails: (item.itemDetails || []).map((detail: any) => ({
         ...detail,
+        unitSellingPrice: detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null 
+          ? detail.unitSellingPrice 
+          : (detail.unitCost || 0),
+        unitCost: detail.unitCost || 0,
         comparison: true,
         comparisons: detail.supplierDetails || detail.supplierId ? [
           {
@@ -338,6 +428,23 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     });
   }
 
+  patchItemsValuesWithPartNoIds(items: any[]) {
+    const itemsFormArray = this.purchaseForm.get('items') as FormArray;
+    itemsFormArray.clear();
+    const updatedItems = items || [];
+    updatedItems.forEach(item => {
+      const itemGroup = this.createItemGroup(item);
+      const itemDetailsArray = itemGroup.get('itemDetails') as FormArray;
+      itemDetailsArray.controls.forEach(control => {
+        const partNo = control.get('partNo')?.value;
+        if (partNo && typeof partNo === 'object' && partNo._id) {
+          control.get('partNo')?.setValue(partNo._id);
+        }
+      });
+      itemsFormArray.push(itemGroup);
+    });
+  }
+
   patchMrValues(data: MrDetails) {
     if (!this.purchaseForm.get('mrRequest')) {
       this.purchaseForm.addControl('mrRequest', this.createMrGroup());
@@ -355,15 +462,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }
   }
 
-  patchEditValues(data: any) {
-    this.purchaseForm.patchValue({
-      dealSheetId: data.jobId?.quoteId?.dealData?.dealId || data.dealSheetId,
-      customer: data.customerId?.companyName,
-      salesManager: `${data.createdBy?.firstName || ''} ${data.createdBy?.lastName || ''}`.trim(),
-      purchaseNo: data.purchaseNo,
-      job: data.jobId?._id,
-    })
-  }
 
   createItemGroup(item: QuoteItem): FormGroup {
     return this.fb.group({
@@ -381,6 +479,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       unitSellingPrice: [item.unitSellingPrice || 0],
       unitCost: [item.unitCost || 0, Validators.required],
       availability: [item.availability || ''],
+      partNo: [typeof item.partNo === 'object' && item.partNo?._id ? item.partNo._id : (item.partNo || '')],
       supplierName: [item.supplierName || ''],
       email: [item.email || ''],
       phoneNo: [item.phoneNo || ''],
@@ -396,8 +495,39 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     });
   }
 
-  purchaseItems(items: any) {
-    return items.map((item: any) => item)
+  ensurePurchaseId(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (this.purchaseId) {
+        resolve(this.purchaseId);
+        return;
+      }
+
+      if (!this.selectedJobSheet) {
+        this.warningMessage('Please select any job from given list');
+        reject('No job selected');
+        return;
+      }
+
+      const formValue = this.getFormValueForSave();
+      formValue.status = 'Drafted';
+
+      this.purchaseService.createPurchaseDraft(formValue).subscribe({
+        next: (res) => {
+          if (res.success && res.data?._id) {
+            const newPurchaseId = res.data._id;
+            this.purchaseId = newPurchaseId;
+            resolve(newPurchaseId);
+          } else {
+            reject('Failed to create draft');
+          }
+        },
+        error: (error) => {
+          console.error(error);
+          this.toaster.error('Failed to create draft');
+          reject(error);
+        }
+      });
+    });
   }
 
   generateId(): string {
@@ -408,61 +538,71 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onSupplierClicks() {
-    if (this.selectedJobSheet) {
-      this.purchaseService.setPurchaseJob(this.purchaseForm.value)
-      this.router.navigate(['/purchase/supplier-discount'])
-    } else {
-      this.warningMessage('Please select any job from given list')
+    if (!this.selectedJobSheet) {
+      this.warningMessage('Please select any job from given list');
+      return;
     }
+
+    this.ensurePurchaseId().then((purchaseId) => {
+      this.router.navigate(['/purchase/supplier-discount', purchaseId]);
+    }).catch(() => {});
   }
 
   onMrRequestClicks() {
-    if (this.selectedJobSheet) {
+    if (!this.selectedJobSheet) {
+      this.warningMessage('Please select any job from given list');
+      return;
+    }
+
+    this.ensurePurchaseId().then((purchaseId) => {
       const dialogRef = this._dialog.open(MrRequestComponent, {
         width: '550px',
         disableClose: true,
         maxHeight: '90vh',
         autoFocus: false,
-        data: { job: this.purchaseForm.value }
-      })
+        data: { purchaseId }
+      });
 
-      dialogRef.afterClosed().subscribe((data) => {
-        if (data) {
-          !data.engineer ?
-            this.purchaseForm.removeControl('mrRequest') : this.patchMrValues(data)
+      dialogRef.afterClosed().subscribe((result) => {
+        if (result?.success) {
+          this.loadPurchaseData();
         }
-      })
-    } else {
-      this.warningMessage('Please select any job from given list')
-    }
+      });
+    }).catch(() => {});
   }
 
   onGetMaterialRequestsClicks() {
-    if (this.selectedJobSheet) {
+    if (!this.selectedJobSheet) {
+      this.warningMessage('Please select any job from given list');
+      return;
+    }
+
+    this.ensurePurchaseId().then((purchaseId) => {
       const dialogRef = this._dialog.open(MaterialRequestModalComponent, {
         width: '800px',
         disableClose: true,
         maxHeight: '90vh',
         autoFocus: false,
         data: {
+          purchaseId,
           jobId: this.purchaseForm.get('job')?.value,
-          existingItems: this.itemsList()
+          onDataChange: () => {
+            this.loadPurchaseData();
+          }
         }
-      })
+      });
 
       dialogRef.afterClosed().subscribe((result) => {
-        if (result && result.success && result.items) {
-          this.addMaterialRequestsToItems(result.items)
+        if (result?.success) {
+          this.loadPurchaseData();
         }
-      })
-    } else {
-      this.warningMessage('Please select any job from given list')
-    }
+      });
+    }).catch(() => {});
   }
 
   deelSheets() {
     this.subscriptions.add(
-      this.jobService.getJobids().subscribe({
+      this.jobService.getConvertibleJobs().subscribe({
         next: (res: any) => {
           if (res.jobs) this.jobSheets.set(res.jobs);
         }, error: (err) => {
@@ -473,44 +613,50 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onJobSelected(selected: string | string[]) {
-    this.purchaseForm.reset()
+    this.purchaseForm.reset();
     this.purchaseForm.get('purchaseNo')?.setValue(this.purchaseNo);
+    this.purchaseId = null;
+    this.itemsList.set([]);
+    
     this.jobService.getOneJob(selected as string).subscribe({
       next: (res) => {
         if (res && res.length > 0) {
-          this.patchValues(res[0])
-          this.purchaseService.setPurchaseJob(res[0])
+          this.patchValues(res[0]);
         }
-      }, error: (error) => {
-        console.error(error)
+      },
+      error: (error) => {
+        console.error(error);
       }
-    })
+    });
   }
 
   onComparisonClicks(item: QuoteItemDetails) {
-    if (this.purchaseForm.value) {
-      item.comparison = true
-      const comparisonData = {
-        jobId: this.purchaseForm.value.jobId,
-        purchaseNo: this.purchaseForm.value.purchaseNo,
-        item: this.itemsList(),
-        inventory: [],
-        selectedItem: item._id
-      }
-      this.purchaseService.setComparisonData(comparisonData)
-      this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
-      this.router.navigate(['/purchase/comparison-sheet'])
-    } else {
-      this.warningMessage('Please select any job from given list')
+    if (!this.selectedJobSheet) {
+      this.warningMessage('Please select any job from given list');
+      return;
     }
+
+    if (!item._id) {
+      this.warningMessage('Please save the item first before adding comparisons');
+      return;
+    }
+
+    item.comparison = true;
+
+    this.ensurePurchaseId().then((purchaseId) => {
+      this.router.navigate(['/purchase/comparison-sheet', purchaseId], {
+        queryParams: { selectedItem: item._id }
+      });
+    }).catch(() => {});
   }
 
   onComparisonSummaryClicks() {
     if (!this.selectedJobSheet) {
-      return this.warningMessage('Please select any job from given list')
+      this.warningMessage('Please select any job from given list');
+      return;
     }
 
-    const items = this.purchaseForm.value.items;
+    const items = this.itemsList();
     const max = Math.max(
       ...items.map((item: any) =>
         item.itemDetails.reduce((sum: any, detail: any) => {
@@ -520,11 +666,13 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     );
 
     if (max == 0 || items.length == 0) {
-      return this.warningMessage('No comparisons found!')
+      this.warningMessage('No comparisons found!');
+      return;
     }
 
-    this.purchaseService.setPurchaseFormData(this.purchaseForm.value)
-    this.router.navigate(['/purchase/comparison-summary'])
+    this.ensurePurchaseId().then((purchaseId) => {
+      this.router.navigate(['/purchase/comparison-summary', purchaseId]);
+    }).catch(() => {});
   }
 
   getPurchaseNo() {
@@ -545,16 +693,41 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   calculateTotalLpo(): number {
-    const items = this.purchaseForm.get('items') as FormArray;
-    return items.controls.reduce((total, itemGroup: AbstractControl) => {
-      const itemDetailsArray = itemGroup.get('itemDetails') as FormArray;
-      const itemTotal = itemDetailsArray.controls.reduce((subTotal, detailGroup: AbstractControl) => {
-        const quantity = +detailGroup.get('quantity')?.value || 0;
-        const unitSellingPrice = +detailGroup.get('unitCost')?.value || 0;
+    const itemsList = this.itemsList();
+    if (!itemsList || itemsList.length === 0) return 0;
+    return itemsList.reduce((total, item: any) => {
+      if (!item.itemDetails || !Array.isArray(item.itemDetails)) return total;
+      const itemTotal = item.itemDetails.reduce((subTotal: number, detail: any) => {
+        if (detail.fromMrRequest) {
+          return subTotal;
+        }
+        const quantity = +detail.quantity || 0;
+        const unitSellingPrice = +detail.unitSellingPrice || +detail.unitCost || 0;
         return subTotal + (quantity * unitSellingPrice);
       }, 0);
       return total + itemTotal;
     }, 0);
+  }
+
+  formatPartNumber(partNo: any): string {
+    if (!partNo) return '-';
+    if (typeof partNo === 'string') {
+      // Look up the part number from options to get the full object
+      const option = this.partNumberOptions().find(opt => opt.value === partNo);
+      if (option?.data) {
+        const code = option.data.partNo || '';
+        if (code) {
+          return `${code}`;
+        }
+        return code || partNo;
+      }
+      return partNo;
+    }
+    const code = partNo?.partNo || '';
+    if (code) {
+      return `${code}`;
+    }
+    return code || '-';
   }
 
 
@@ -592,10 +765,15 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   onSaveNewItem() {
     const itemsArray = this.purchaseForm.get('items') as FormArray;
     const lastItem = itemsArray.at(itemsArray.length - 1) as FormGroup;
+    if (!lastItem) {
+      this.toaster.warning('No item to save!');
+      return;
+    }
+
     const itemValue = lastItem.value;
 
     const hasRequiredValues =
-      itemValue.itemDetails[0]?.detail &&
+      itemValue.itemDetails?.[0]?.detail &&
       itemValue.itemDetails[0]?.unitCost > 0 &&
       itemValue.itemDetails[0]?.quantity > 0;
 
@@ -604,10 +782,73 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.itemsList.set([...(this.itemsList() || []), itemValue]);
-    itemsArray.push(this.fb.group(itemValue));
+    // Ensure itemName is set - use detail if itemName is empty
+    if (!itemValue.itemName || itemValue.itemName.trim() === '') {
+      itemValue.itemName = itemValue.itemDetails?.[0]?.detail || 'Item';
+    }
+
+    if (itemValue.itemDetails && itemValue.itemDetails.length > 0) {
+      itemValue.itemDetails = itemValue.itemDetails.map((detail: any) => ({
+        ...detail,
+        isNewlyAdded: true,
+        merged: false
+      }));
+    }
+
+    const updatedItemsList = [...(this.itemsList() || []), itemValue];
+    this.itemsList.set(updatedItemsList);
+    
     this.isAddingItem = false;
     this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+
+    this.saveItemsToBackend(updatedItemsList);
+  }
+
+  saveItemsToBackend(updatedItemsList: any[]): void {
+    // Convert part number IDs to objects first, then clean for backend
+    const itemsWithPartNos = this.convertPartNoIdsToObjects(updatedItemsList);
+    const itemsToSave = this.cleanItemsForBackend(itemsWithPartNos);
+    
+    const handleSaveResponse = (res: any) => {
+      if (res.success && res.data && res.data.items) {
+        // Update itemsList with the saved items that have IDs from backend
+        this.itemsList.set(res.data.items);
+        this.patchItemsValuesWithPartNoIds(res.data.items);
+        this.toaster.success('Item saved successfully');
+      } else if (res.success) {
+        this.toaster.success('Item saved successfully');
+      }
+    };
+    
+    if (this.purchaseId) {
+      this.subscriptions.add(
+        this.purchaseService.updatePurchaseItems(this.purchaseId, itemsToSave).subscribe({
+          next: handleSaveResponse,
+          error: (error) => {
+            console.error('Error saving item:', error);
+            this.toaster.error('Failed to save item');
+          }
+        })
+      );
+    } else if (this.selectedJobSheet) {
+      console.log('Creating draft first before saving items');
+      this.ensurePurchaseId().then((purchaseId) => {
+        this.subscriptions.add(
+          this.purchaseService.updatePurchaseItems(purchaseId, itemsToSave).subscribe({
+            next: handleSaveResponse,
+            error: (error) => {
+              console.error('Error saving item:', error);
+              this.toaster.error('Failed to save item');
+            }
+          })
+        );
+      }).catch((error) => {
+        console.error('Error creating draft:', error);
+        this.toaster.error('Failed to create draft purchase');
+      });
+    } else {
+      console.warn('Cannot save items: no purchaseId and no selectedJobSheet');
+    }
   }
 
   checkMRExists(): boolean {
@@ -619,48 +860,33 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onFinalDasdboardClicks() {
-    let purchaseFormValue = this.purchaseForm.value
-    console.log(purchaseFormValue, 'purchaseFormValue')
-    if (!this.isEditing) {
-      purchaseFormValue = {
-        ...this.purchaseForm.value,
-        customerId: {
-          _id: this.purchaseForm.get('customerId')?.value,
-          companyName: this.purchaseForm.get('customer')?.value
-        },
-      }
+    if (!this.purchaseId) {
+      this.warningMessage('Please save the purchase first');
+      return;
     }
-    purchaseFormValue.jobId = {
-      jobId: this.purchaseForm.get('jobId')?.value,
-      createdBy: this.selectedJobSheet.salesPersonDetails[0],
-      quoteId: {
-        dealData: {
-          dealId: this.purchaseForm.get('dealSheetId')?.value
-        }
-      }
-    }
-    this.purchaseService.setPurchaseFormData(purchaseFormValue)
-    this.router.navigate(['/purchase/view-purchase', 'none']);
+    this.router.navigate(['/purchase/view-purchase', this.purchaseId]);
   }
 
   onEditSubmits() {
-    const job = this.purchaseForm.get('job')?.value;
-    this.purchaseForm.get('jobId')?.setValue(job);
-    this.purchaseForm.removeControl('job')
-    const purchaseId = <string>this.route.snapshot.paramMap.get('id');
+    if (!this.purchaseId) return;
+    
+    const formValue = this.getFormValueForSave();
+    formValue.status = 'Pending';
+
     this.subscriptions.add(
-      this.purchaseService.updatePurchase(purchaseId, this.purchaseForm.value).subscribe({
+      this.purchaseService.updatePurchase(this.purchaseId, formValue).subscribe({
         next: (res) => {
           if (res.success) {
-            this.toaster.success('Purchase Updated Successfully')
-            this.purchaseForm.reset()
-            this.router.navigate(['/purchase/view-purchase', purchaseId]);
+            this.toaster.success('Purchase Updated Successfully');
+            this.router.navigate(['/purchase/view-purchase', this.purchaseId]);
           }
-        }, error: (error) => {
-          console.error(error)
+        },
+        error: (error) => {
+          console.error(error);
+          this.toaster.error('Failed to update purchase');
         }
       })
-    )
+    );
   }
 
   convertAdditionalCostsToSupplierDiscounts(additionalCosts: any[]) {
@@ -694,19 +920,163 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }
   }
 
-  addMaterialRequestsToItems(materialRequestItems: any[]) {
-    const currentItems = this.itemsList();
-    const newItems = [...currentItems, ...materialRequestItems];
-
-    this.itemsList.set(newItems);
-    this.patchItemsValues(newItems);
-    this.updateTotalLpo();
-
-    this.toaster.success(`${materialRequestItems.length} item(s) added from material requests`);
-  }
 
   getPurchaseStatus(): string {
     return this.purchaseForm.get('status')?.value || 'Pending';
+  }
+
+  loadPartNumbers(search?: string): void {
+    const params: { search?: string; limit?: number } = { limit: 50 };
+    if (search) {
+      params.search = search;
+    }
+
+    this.subscriptions.add(
+      this.productService.getPartNumbers(params).subscribe({
+        next: (res) => {
+          const options = (res.data || []).map((item: PartNumberOption) => ({
+            label: this.composePartNumberLabel(item),
+            value: item._id,
+            data: item
+          }));
+          this.partNumberOptions.set(options);
+        },
+        error: (error) => {
+          console.error('Error loading part numbers:', error);
+          this.partNumberOptions.set([]);
+        }
+      })
+    );
+  }
+
+  private composePartNumberLabel(option: { partNo?: string; productDescription?: string }): string {
+    const code = option.partNo || '';
+    const description = option.productDescription || '';
+    return description ? `${code} (${description})` : code;
+  }
+
+  getPartNumberValue(partNo: any): string {
+    if (!partNo) return '';
+    if (typeof partNo === 'string') return partNo;
+    return partNo._id || '';
+  }
+
+  onPartNumberSelected(event: string | string[], itemDetailControl: AbstractControl): void {
+    const value = Array.isArray(event) ? event[0] : event;
+    const normalized = (value || '').trim();
+    itemDetailControl.get('partNo')?.setValue(normalized || '', { emitEvent: false });
+  }
+
+  convertPartNoIdsToObjects(items: any[]): any[] {
+    return items.map(item => ({
+      ...item,
+      itemDetails: (item.itemDetails || []).map((detail: any) => {
+        const partNoId = typeof detail.partNo === 'string' ? detail.partNo : detail.partNo?._id;
+        if (partNoId) {
+          const option = this.partNumberOptions().find(opt => opt.value === partNoId);
+          if (option?.data) {
+            return {
+              ...detail,
+              partNo: {
+                _id: option.data._id,
+                partNo: option.data.partNo,
+                productDescription: option.data.productDescription
+              }
+            };
+          }
+        }
+        return detail;
+      })
+    }));
+  }
+
+  cleanItemsForBackend(items: any[]): any[] {
+    return items.map(item => {
+      // Ensure itemName is set - use first detail if itemName is empty
+      let itemName = item.itemName;
+      if (!itemName || itemName.trim() === '') {
+        itemName = item.itemDetails?.[0]?.detail || 'Item';
+      }
+
+      const cleanedItem: any = {
+        itemName: itemName.trim(),
+        itemDetails: (item.itemDetails || []).map((detail: any) => {
+          const cleanedDetail: any = {
+            detail: detail.detail || '',
+            quantity: typeof detail.quantity === 'number' ? detail.quantity : (detail.quantity ? parseFloat(String(detail.quantity)) : 0),
+            unitCost: typeof detail.unitCost === 'number' ? detail.unitCost : (detail.unitCost ? parseFloat(String(detail.unitCost)) : 0),
+            availability: detail.availability || '',
+            supplierName: detail.supplierName || '',
+            email: detail.email || '',
+            phoneNo: detail.phoneNo || '',
+            dealSelected: detail.dealSelected || false,
+            comparisons: detail.comparisons && Array.isArray(detail.comparisons) ? detail.comparisons : [],
+            isNewlyAdded: detail.isNewlyAdded !== undefined ? detail.isNewlyAdded : false,
+            merged: detail.merged !== undefined ? detail.merged : false,
+            fromMrRequest: detail.fromMrRequest === true
+          };
+
+          // Handle unitSellingPrice - only include if it's a valid number
+          if (detail.unitSellingPrice !== undefined && detail.unitSellingPrice !== null && detail.unitSellingPrice !== '') {
+            const sellingPrice = typeof detail.unitSellingPrice === 'number' ? detail.unitSellingPrice : parseFloat(String(detail.unitSellingPrice));
+            if (!isNaN(sellingPrice)) {
+              cleanedDetail.unitSellingPrice = sellingPrice;
+            }
+          }
+
+          // Handle partNo - convert to ObjectId string if it's an object
+          if (detail.partNo) {
+            if (typeof detail.partNo === 'object' && detail.partNo !== null && detail.partNo._id) {
+              cleanedDetail.partNo = detail.partNo._id;
+            } else if (typeof detail.partNo === 'string' && detail.partNo.trim() !== '') {
+              cleanedDetail.partNo = detail.partNo.trim();
+            }
+          }
+
+          // Only include _id if it's a valid MongoDB ObjectId (not a temporary ID)
+          // MongoDB ObjectIds are 24 hex characters
+          if (detail._id && typeof detail._id === 'string' && !detail._id.startsWith('temp-')) {
+            // Check if it's a valid ObjectId format (24 hex characters)
+            if (/^[0-9a-fA-F]{24}$/.test(detail._id)) {
+              cleanedDetail._id = detail._id;
+            }
+          }
+
+          return cleanedDetail;
+        })
+      };
+
+      return cleanedItem;
+    });
+  }
+
+  onCreatePartNumber(): void {
+    const dialogRef = this._dialog.open(CreateProductComponent, {
+      width: '650px',
+      disableClose: true,
+      maxHeight: '90vh',
+      autoFocus: false
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.partNo && result?._id) {
+        const option: PartNumberDropdownOption = {
+          label: this.composePartNumberLabel({
+            partNo: result.partNo,
+            productDescription: result.productDescription
+          }),
+          value: result._id,
+          data: {
+            _id: result._id,
+            partNo: result.partNo,
+            productDescription: result.productDescription
+          }
+        };
+        const filtered = this.partNumberOptions().filter(opt => opt.value !== option.value);
+        this.partNumberOptions.set([option, ...filtered]);
+        this.loadPartNumbers();
+      }
+    });
   }
 
   ngOnDestroy(): void {

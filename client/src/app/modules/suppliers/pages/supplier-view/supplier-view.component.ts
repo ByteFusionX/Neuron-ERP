@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Supplier, SupplierStatus } from 'src/app/shared/interfaces/suppliers.interface';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
@@ -19,11 +20,13 @@ import { FileService } from 'src/app/core/services/file.service';
 })
 export class SupplierViewComponent implements OnInit {
   private supplierService = inject(SupplierService);
+  private employeeService = inject(EmployeeService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private fileService = inject(FileService);
+  canApproveSupplier = false;
 
   supplier: Supplier | null = null;
   isLoading = true;
@@ -33,10 +36,19 @@ export class SupplierViewComponent implements OnInit {
   isDownloading: boolean = false;
 
   constructor() {
+    this.checkPrivileges();
     this.loadSupplier();
   }
 
   ngOnInit(): void {
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canApproveSupplier = data.category.privileges.supplier?.canApproveSupplier || false;
+      }
+    });
   }
 
   loadSupplier() {
@@ -117,7 +129,6 @@ export class SupplierViewComponent implements OnInit {
     });
 
     dialogRef.afterClosed().subscribe((result) => {
-      console.log(result);
       if (result?.isConfirmed && this.supplier?._id) {
         this.isRejecting = true;
         this.supplierService.updateSupplierStatus(
@@ -127,6 +138,7 @@ export class SupplierViewComponent implements OnInit {
         ).subscribe({
           next: () => {
             this.notificationService.success('Supplier rejected successfully');
+            this.router.navigate(['/suppliers/pendings']);
           },
           error: (error: any) => {
             this.notificationService.error(error.error?.message || 'Failed to reject supplier');
@@ -185,13 +197,37 @@ export class SupplierViewComponent implements OnInit {
       rejectedBy: item.rejectedBy,
       comment: item.reason,
       rejectedAt: item.date.toString(),
-      _id: Math.random().toString()
+      _id: Math.random().toString(),
+      type: 'rejection' as const
     }));
 
     this.dialog.open(StatusHistoryModalComponent, {
       data: {
         title: 'Supplier Rejection History',
-        history: historyData
+        history: historyData,
+        type: 'rejection' as const
+      },
+      width: '600px',
+      maxHeight: '80vh'
+    });
+  }
+
+  showApprovalHistory(): void {
+    if (!this.supplier?.approvedHistory?.length) return;
+
+    const historyData = this.supplier.approvedHistory.map(item => ({
+      approvedBy: item.approvedBy,
+      comment: item.reason,
+      approvedAt: item.date.toString(),
+      _id: Math.random().toString(),
+      type: 'approval' as const
+    }));
+
+    this.dialog.open(StatusHistoryModalComponent, {
+      data: {
+        title: 'Supplier Approval History',
+        history: historyData,
+        type: 'approval' as const
       },
       width: '600px',
       maxHeight: '80vh'

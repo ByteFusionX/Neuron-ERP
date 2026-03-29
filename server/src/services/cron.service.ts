@@ -97,15 +97,20 @@ const startCronJob = () => {
                 'recipients.status': 'read'
             });
     
-            notifications.forEach(async (notification) => {
-                const allRead = notification.recipients.every(recipient => recipient.status === 'read');
-                if (allRead) {
-                    await Notification.findByIdAndDelete(notification._id);
-                } else {
-                    notification.recipients = notification.recipients.filter(recipient => recipient.status !== 'read');
-                    await notification.save();
-                }
-            });
+            await Promise.all(
+                notifications.map(async (notification) => {
+                    const allRead = notification.recipients.every(recipient => recipient.status === 'read');
+                    if (allRead) {
+                        await Notification.deleteOne({ _id: notification._id });
+                        return;
+                    }
+
+                    await Notification.updateOne(
+                        { _id: notification._id },
+                        { $pull: { recipients: { status: 'read' } } }
+                    );
+                })
+            );
 
         } catch (error) {
             console.error('Cron job error:', error.message);
@@ -134,6 +139,7 @@ const checkTodayEventsAndSendNotifications = async () => {
             // Create and send notifications for each event
             const saveNewNotification = await createNotification({
                 type: 'Event',
+                referenceModel: 'Event',
                 title: `You have ${event.event} Assigned Today!`,
                 message: `${event.summary}`,
                 date: new Date(),

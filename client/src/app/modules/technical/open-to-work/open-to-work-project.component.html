@@ -7,58 +7,15 @@
   [totalItems]="totalItems()"
   [tableId]="'technical-jobs-table'"
   (actionClick)="onActionClick($event)"
+  (paginationChange)="onPaginationChange($event)"
   [title]="'Technical Jobs'"
   (filterChange)="onFilterChange($event)"
   
 >
 <ng-template #sideColumn>
-  <app-btn theme="primary" (buttonClick)="addProject()">
+  <app-btn *ngIf="canViewOpenToWorkAndAssign()" theme="primary" (buttonClick)="addProject()">
     <ng-icon name="heroPlus"></ng-icon>
     Add Project
   </app-btn>
 </ng-template>
 </data-table>
-
-
-
-<div *ngIf="showAssignEngineerModal()" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40" (click)="closeAssignEngineerModal()">
-  <div class="bg-white rounded-lg shadow-lg w-full max-w-md" (click)="$event.stopPropagation()">
-    <div class="border-b px-4 py-3 flex justify-between">
-      <h3 class="text-lg font-semibold text-gray-900">Assign To Engineer</h3>
-      <button class="bg-gray-200 rounded-lg p-1 flex items-center justify-center" (click)="closeAssignEngineerModal()">
-        <ng-icon name="heroXMark" class="text-md"></ng-icon>
-      </button>
-    </div>
-    <div class="px-4 py-5">
-      <label for="assign-engineer" class="block text-sm font-medium text-gray-700 mb-1">Assign To Engineer</label>
-      <p-dropdown
-        id="assign-engineer"
-        class="w-full"
-        [options]="engineerOptions"
-        [(ngModel)]="selectedEngineer"
-        [placeholder]="'Select Engineer'"
-      ></p-dropdown>
-      <label for="assign-customer" class="block text-sm font-medium text-gray-700 mt-4 mb-1">Priority </label>
-      <p-dropdown
-        id="assign-priority"
-        class="w-full"
-        [options]="priorityOptions"
-        [(ngModel)]="selectedPriority"
-      ></p-dropdown>
-      <label for="assign-comment" class="block text-sm font-medium text-gray-700 mt-4 mb-1">Comment</label>
-      <textarea
-        id="assign-comment"
-        [(ngModel)]="assignComment"
-        [ngClass]="{'border-red-500': isAssignSubmitted && !assignComment}"
-        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white mt-1"
-        rows="3"
-        placeholder="Enter comment..."
-      ></textarea>
-      <div *ngIf="isAssignSubmitted && !assignComment" class="text-red-500 mt-1 text-sm">Please provide a comment.</div>
-    </div>
-    <div class="border-t px-4 py-3 flex justify-end gap-2">
-      <button type="button" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400" (click)="closeAssignEngineerModal()">Cancel</button>
-      <button type="button" class="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700" (click)="submitAssignEngineer()">Submit</button>
-    </div>
-  </div>
-</div> 

@@ -3,10 +3,12 @@
     <h3 class="text-md font-medium">Supplier - <span class="uppercase">{{supplier?.supplierName}}</span></h3>
 
     <div class="flex gap-2">
+      @if(supplier?.status === 'Rejected'){
       <app-btn theme="primary" (click)="onEdit()">
         <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
         Edit
       </app-btn>
+      }
     </div>
   </div>
 
@@ -48,6 +50,13 @@
                   <app-btn theme="secondary" (click)="showStatusHistory()" size="sm">
                     <ng-icon name="heroClock" class="mr-1"></ng-icon>
                     View Reason
+                  </app-btn>
+                }
+                @if(supplier?.status === 'Approved' && supplier?.approvedHistory?.length) {
+                  <div class="h-4 w-px bg-gray-300"></div>
+                  <app-btn theme="secondary" (click)="showApprovalHistory()" size="sm">
+                    <ng-icon name="heroClock" class="mr-1"></ng-icon>
+                    View Comments
                   </app-btn>
                 }
               </td>
@@ -187,7 +196,7 @@
           <ng-icon name="heroXCircle" class="mr-2"></ng-icon>
           Reject
         </app-btn>
-        <app-btn theme="success" (click)="onApprove()" [loading]="isApproving">
+        <app-btn *ngIf="canApproveSupplier" theme="success" (click)="onApprove()" [loading]="isApproving">
           <ng-icon name="heroCheckCircle" class="mr-2"></ng-icon>
           Approve
         </app-btn>

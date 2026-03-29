@@ -1,0 +1,21 @@
+.selected-row {
+  background-color: rgb(245, 243, 255);
+  border-color: rgb(196, 181, 253);
+}
+
+.selected-row:hover {
+  background-color: rgb(237, 233, 254);
+}
+
+.comparison-table tbody tr {
+  transition: background-color 0.15s ease-in-out;
+}
+
+.comparison-table tbody tr:hover {
+  background-color: rgb(249, 250, 251);
+}
+
+.empty-state {
+  min-height: 300px;
+}
+

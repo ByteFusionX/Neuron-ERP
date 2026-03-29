@@ -1,0 +1,73 @@
+<app-modal-layout
+  title="Create Part No."
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Save & Exit', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+  ]"
+  contentClass="p-6"
+  contentMaxHeight="90vh">
+  <form [formGroup]="productForm" (ngSubmit)="onSubmit()">
+      <div class="space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <app-form-field
+            label="Part No"
+            [control]="productForm.get('partNo')"
+            [isSubmitted]="isSubmitting"
+            placeholder="Manual Entry">
+          </app-form-field>
+
+          <app-form-field
+            label="Date"
+            [control]="productForm.get('createdDate')"
+            [isSubmitted]="isSubmitting"
+            type="date">
+          </app-form-field>
+        </div>
+
+        <app-form-field
+          label="Product Description"
+          [control]="productForm.get('productDescription')"
+          [isSubmitted]="isSubmitting"
+          type="textarea"
+          placeholder="Enter product description">
+        </app-form-field>
+
+        <app-select-dropdown
+          label="Product Segment"
+          [options]="departments"
+          optionLabel="departmentName"
+          optionValue="_id"
+          formControlName="productSegment"
+          placeholder="Auto fill"
+          [isSubmitted]="isSubmitting">
+        </app-select-dropdown>
+
+        <app-select-dropdown
+          label="Product Category"
+          [options]="categories"
+          optionLabel="categoryName"
+          optionValue="_id"
+          formControlName="productCategory"
+          placeholder="Select category"
+          [isSubmitted]="isSubmitting"
+          footerLabel="+ Add category"
+          (footerAction)="onAddCategory()">
+        </app-select-dropdown>
+
+        <app-select-dropdown
+          label="Target Warehouse"
+          [options]="warehouses"
+          optionLabel="wareHouseName"
+          optionValue="_id"
+          formControlName="warehouse"
+          placeholder="Select warehouse"
+          [isSubmitted]="isSubmitting"
+          footerLabel="+ Add warehouse"
+          (footerAction)="onAddWarehouse()">
+        </app-select-dropdown>
+      </div>
+  
+    </form>
+</app-modal-layout>
+

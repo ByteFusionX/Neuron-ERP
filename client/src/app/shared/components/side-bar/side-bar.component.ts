@@ -8,7 +8,6 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { Privileges } from '../../interfaces/employee.interface';
 import { Observable, Subscription } from 'rxjs';
 import { NotificationService } from 'src/app/core/services/notification.service';
-import { NotificationCounts } from '../../interfaces/notification.interface';
 
 interface MenuItem {
   id: string;
@@ -18,7 +17,7 @@ interface MenuItem {
   privilegeKey?: keyof Privileges;
   privilegeValue?: string;
   hasDropdown?: boolean;
-  notificationKey?: keyof NotificationCounts;
+  notificationKey?: string;
   children?: SubMenuItem[];
 }
 
@@ -28,8 +27,7 @@ interface SubMenuItem {
   route: string;
   privilegeKey?: keyof Privileges;
   privilegeValue?: string;
-  notificationKey?: keyof NotificationCounts;
-  condition?: (privileges: Privileges) => boolean;
+  notificationKey?: string;
   alternateLabel?: string;
   alternateCondition?: (privileges: Privileges) => boolean;
 }
@@ -43,7 +41,6 @@ interface SubMenuItem {
   standalone: true
 })
 export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
-  notificationCounts$!: Observable<NotificationCounts>;
   @Input() showFullBar: boolean = true;
   activeLink: string = '';
   showTabs: boolean = false;
@@ -149,12 +146,14 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'pendingDeals',
           label: 'Pending',
           route: '/deal-sheet/pendings',
+          privilegeKey: 'dealSheet',
           notificationKey: 'dealSheetCount'
         },
         {
           id: 'approvedDeals',
           label: 'Approved',
-          route: '/deal-sheet/approved'
+          route: '/deal-sheet/approved',
+          privilegeKey: 'dealSheet'
         }
       ]
     },
@@ -170,25 +169,29 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'pendingJobSheet',
           label: 'Pending',
           route: '/job-sheet/pending',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         },
         {
           id: 'openToWorkJobSheet',
           label: 'Open to work',
           route: '/job-sheet/open-to-work',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         },
         {
           id: 'inProgressJobSheet',
           label: 'In progress',
           route: '/job-sheet/in-progress',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         },
         {
           id: 'completedJobSheet',
           label: 'Completed',
           route: '/job-sheet/completed',
-
+          privilegeKey: 'jobSheet',
+          privilegeValue: 'none'
         }
       ]
     },
@@ -197,7 +200,8 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Purchase',
       icon: 'heroShoppingCart',
       hasDropdown: true,
-      // privilegeKey: 'purchase',
+      privilegeKey: 'purchase',
+      privilegeValue: 'none',
       notificationKey: 'purchaseCount',
       children: [
         {
@@ -215,35 +219,68 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       ]
     },
     {
+      id: 'supplierLpo',
+      label: 'Supplier LPO',
+      icon: 'heroClipboardDocumentList',
+      hasDropdown: true,
+      privilegeKey: 'purchaseOrder',
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'pendingLpoApproval',
+          label: 'LPO Approval Requests',
+          route: '/purchase-order/pending-approval',
+          privilegeKey: 'purchaseOrder',
+          privilegeValue: 'none',
+        },
+        {
+          id: 'approvedLpos',
+          label: 'Approved LPOs',
+          route: '/purchase-order/approved',
+          privilegeKey: 'purchaseOrder',
+          privilegeValue: 'none',
+        },
+      ]
+    },
+    {
       id: 'technical',
       label: 'Technical',
       icon: 'heroWrenchScrewdriver',
       hasDropdown: true,
-      // privilegeKey: 'purchase',
+      privilegeKey: 'technical',
+      privilegeValue: 'none',
       notificationKey: 'purchaseCount',
       children: [
         {
           id: 'pendingJobs',
           label: 'Open To Work',
           route: '/technical/open-to-work-project',
+          privilegeKey: 'technical',
+          privilegeValue: 'canViewOpenToWorkAndAssign',
           notificationKey: 'purchaseCount'
         },
         {
           id: 'projects',
           label: 'Pending Projects',
           route: '/technical/project',
+          privilegeKey: 'technical',
+          privilegeValue: 'none',
           notificationKey: 'purchaseCount'
-        },       
+        },
         {
           id: 'amc',
           label: 'Pending AMC',
           route: '/technical/amc',
+          privilegeKey: 'technical',
+          privilegeValue: 'none',
           notificationKey: 'purchaseCount'
         },
         {
-          id: 'mrRequests',
-          label: 'MR Requests',
-          route: '/technical/mr-requests',
+          id: 'mrApprovalRequests',
+          label: 'MR Approval Requests',
+          route: '/technical/mr-approval-requests',
+          privilegeKey: 'technical',
+          privilegeValue: 'canApproveMRRequests',
           notificationKey: 'purchaseCount'
         },
       ]
@@ -253,7 +290,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Suppliers',
       icon: 'heroTruck',
       route: '/suppliers',
-      privilegeKey: 'jobSheet',
+      privilegeKey: 'supplier',
       hasDropdown: true,
       privilegeValue: 'none',
       children: [
@@ -266,7 +303,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
         {
           id: 'approvedSuppliers',
           label: 'Approved',
-          route: '/suppliers/approved'
+          route: '/suppliers/approved',
         }
       ]
     },
@@ -275,7 +312,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       label: 'Claims',
       icon: 'heroDocumentPlus',
       route: '/claims',
-      privilegeKey: 'jobSheet',
+      privilegeKey: 'claims',
       hasDropdown: true,
       privilegeValue: 'none',
       children: [
@@ -283,15 +320,120 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'myClaims',
           label: 'My Claims',
           route: '/claims/my-claims',
+          privilegeKey: 'claims',
+          privilegeValue: 'none',
           notificationKey: 'dealSheetCount'
         },
         {
           id: 'approvalRequests',
           label: 'Approval Requests',
-          route: '/claims/approval-requests'
+          route: '/claims/approval-requests',
+          privilegeKey: 'claims',
+          privilegeValue: 'canApprove'
         }
       ]
-    }
+    },
+    {
+      id: 'inventory',
+      label: 'Inventory',
+      icon: 'heroCube',
+      route: '/inventory',
+      privilegeKey: 'inventory',
+      hasDropdown: true,
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'Products',
+          label: 'All Products',
+          route: '/inventory/products',
+          notificationKey: 'dealSheetCount'
+        },
+        {
+          id: 'stockEntries',
+          label: 'Stock Entries',
+          route: '/inventory/stock-entries'
+        },
+
+      ]
+    },
+    {
+      id: 'dispatch',
+      label: 'Dispatch',
+      icon: 'heroTruck',
+      route: '/dispatch',
+      hasDropdown: true,
+      privilegeKey: 'dispatch',
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'delivery-note-register',
+          label: 'Delivery Notes',
+          route: '/dispatch/delivery-note-register',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'none'
+        },
+        {
+          id: 'pending-delivery-reports',
+          label: 'Pending Delivery',
+          route: '/dispatch/pending-delivery-reports',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'viewPendingDelivery'
+        },
+        {
+          id: 'invoice-linking-report',
+          label: 'Invoice Linking',
+          route: '/dispatch/invoice-linking-report',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'viewInvoiceLinking'
+        },
+        {
+          id: 'inventory-deduction-report',
+          label: 'Inventory Deduction',
+          route: '/dispatch/inventory-deduction-report',
+          privilegeKey: 'dispatch',
+          privilegeValue: 'viewInventoryDeduction'
+        },
+      ]
+    },
+    {
+      id: 'invoice',
+      label: 'Invoice',
+      icon: 'heroDocumentText',
+      route: '/invoice',
+      hasDropdown: true,
+      privilegeKey: 'invoice',
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'invoice-register',
+          label: 'Invoices',
+          route: '/invoice/invoice-register',
+          privilegeKey: 'invoice',
+          privilegeValue: 'none'
+        },
+        {
+          id: 'invoice-dn-linking',
+          label: 'Invoice vs DN',
+          route: '/invoice/invoice-dn-linking',
+          privilegeKey: 'invoice',
+          privilegeValue: 'viewInvoicesVsDn'
+        },
+        {
+          id: 'cancelled-adjusted-invoices',
+          label: 'Cancelled/Adjusted',
+          route: '/invoice/cancelled-invoices',
+          privilegeKey: 'invoice',
+          privilegeValue: 'viewCancelledAdjusted'
+        },
+        {
+          id: 'cancelled-reissued-invoices',
+          label: 'Reissued',
+          route: '/invoice/reissued',
+          privilegeKey: 'invoice',
+          privilegeValue: 'viewReissued'
+        }
+      ]
+    },
   ];
 
   constructor(
@@ -309,7 +451,6 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit() {
     this.checkPermission();
-    this.notificationCounts$ = this._notificationService.notificationCounts$;
 
     // Initialize expandedMenus with all menus collapsed
     this.menuItems.forEach(item => {
@@ -358,7 +499,7 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   @HostListener('document:click', ['$event.target'])
-  onClick(event: HTMLElement) {
+  onClick(event: HTMLElement | EventTarget | null) {
     if (!(this.eref.nativeElement.contains(event)) && !this.showFullBar) {
       // Close all dropdowns when clicking outside sidebar in mobile view
       Object.keys(this.expandedMenus).forEach(key => {
@@ -388,47 +529,45 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       return privilegeObj; // If it's true, access is granted
     }
 
-    // Handle when privilegeObj is an object with viewReport property
-    if (typeof privilegeObj === 'object' && 'viewReport' in privilegeObj) {
-      // If privilegeValue is 'none', it means user should NOT have 'none' permission
+    // Handle inventory with nested structure
+    if (item.privilegeKey === 'inventory' && typeof privilegeObj === 'object' && 'products' in privilegeObj) {
+      const inventoryPrivilege = privilegeObj as any;
       return item.privilegeValue === 'none'
-        ? privilegeObj.viewReport !== 'none'
-        : privilegeObj.viewReport === item.privilegeValue;
+        ? (inventoryPrivilege.products?.viewReport !== 'none' || inventoryPrivilege.stockEntries?.viewReport !== 'none')
+        : (inventoryPrivilege.products?.viewReport === item.privilegeValue || inventoryPrivilege.stockEntries?.viewReport === item.privilegeValue);
+    }
+
+    // Handle when privilegeObj is an object
+    if (typeof privilegeObj === 'object') {
+      const obj = privilegeObj as any;
+
+      // Direct boolean property check based on privilegeValue matching an exact boolean key
+      if (item.privilegeValue && typeof obj[item.privilegeValue] === 'boolean') {
+        return obj[item.privilegeValue];
+      }
+
+      // Existing viewReport logic
+      if ('viewReport' in obj) {
+        const viewReport = obj.viewReport ?? 'none';
+        
+        // When privilegeValue is 'none', user access is granted if viewReport != 'none' 
+        // OR if it's a dropdown container and ANY nested boolean flag is true.
+        if (item.privilegeValue === 'none') {
+           if (viewReport !== 'none') return true;
+           if ('hasDropdown' in item && item.hasDropdown) {
+             return Object.values(obj).some(val => val === true);
+           }
+           return false;
+        }
+        
+        return viewReport === item.privilegeValue;
+      }
     }
 
     // Default fallback if structure doesn't match expected patterns
     return false;
   }
 
-  getNotificationCount(key: keyof NotificationCounts | undefined): number {
-    if (!key) return 0;
-    let count = 0;
-    this.notificationCounts$.subscribe(counts => {
-      count = counts[key] || 0;
-    });
-    return count;
-  }
-
-  hasAnyNotification(item: MenuItem): boolean {
-    if (!item.notificationKey && !item.children) return false;
-
-    let hasNotification = false;
-    if (item.notificationKey) {
-      this.notificationCounts$.subscribe(counts => {
-        hasNotification = !!counts[item.notificationKey as keyof NotificationCounts];
-      });
-    }
-
-    if (!hasNotification && item.children) {
-      this.notificationCounts$.subscribe(counts => {
-        hasNotification = item.children?.some(child =>
-          child.notificationKey && counts[child.notificationKey as keyof NotificationCounts]
-        ) || false;
-      });
-    }
-
-    return hasNotification;
-  }
 
   getSubMenuLabel(subItem: SubMenuItem): string {
     if (subItem.alternateLabel && subItem.alternateCondition && this.privileges) {

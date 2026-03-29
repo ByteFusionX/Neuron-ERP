@@ -38,6 +38,7 @@
                         <tr>
                             <th class="px-4 py-2 border">SL.NO</th>
                             <th class="px-4 py-2 border">Description</th>
+                            <th class="px-4 py-2 border">Part No.</th>
                             <th class="px-4 py-2 border">Quantity</th>
                             <th class="px-4 py-2 border">Unit Price</th>
                             <th class="px-4 py-2 border">Total Price</th>
@@ -51,9 +52,10 @@
                             <tr class="border-b">
                                 <td class="px-4 py-2 border">{{i+1}}</td>
                                 <td class="px-4 py-2 border">{{item.detail}}</td>
+                                <td class="px-4 py-2 border">{{item.partNo}}</td>
                                 <td class="px-4 py-2 border">{{item.quantity}}</td>
-                                <td class="px-4 py-2 border">{{item.unitPrice}}</td>
-                                <td class="px-4 py-2 border">{{item.totalPrice}}</td>
+                                <td class="px-4 py-2 border">{{item.unitPrice | number:'1.2-2'}} {{currency()}}</td>
+                                <td class="px-4 py-2 border">{{item.totalPrice | number:'1.2-2'}} {{currency()}}</td>
                                 <td class="px-4 py-2 border">{{item.supplierName}}</td>
                                 <td class="px-4 py-2 border">{{item.etaTerms}}</td>
                                 <td class="px-4 py-2 border">{{item.paymentTerms}}</td>
@@ -64,11 +66,26 @@
             </div>
         </div>
 
-        <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
-            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded"
-                type="button" (click)="onIssueLpoClick()">Issue LPO</button>
+        <div class="w-full mb-8">
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <tbody>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50 w-1/3">Total LPO Value</td>
+                            <td class="px-2 py-2 border">{{purchase.totalPRCost | number:'1.2-2'}} {{currency()}}</td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50 w-1/3">LPO Value of Customer</td>
+                            <td class="px-2 py-2 border">{{purchase.lpoValue | number:'1.2-2'}} {{currency()}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t gap-3">
+            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                type="button" (click)="onIssueLpoClick()" [disabled]="!canIssueLpo()">Issue LPO</button>
         </div>
     </div>
 </div>
 
-<app-lpo-list [purchaseId]="purchaseId"></app-lpo-list>
+<app-lpo-list [purchaseId]="purchaseId" (lpoListUpdated)="checkSuppliersStatus()"></app-lpo-list>

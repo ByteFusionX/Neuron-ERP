@@ -20,6 +20,13 @@
       <ng-option *ngFor="let option of options" [value]="getOptionValue(option)" class="capitalize">
         {{ getOptionLabel(option) }}
       </ng-option>
+      <ng-template ng-footer-tmp>
+        <ng-container *ngIf="footerLabel">
+          <button type="button" class="w-full text-violet-700 py-2 font-medium" (click)="onFooterClick($event)">
+            {{ footerLabel }}
+          </button>
+        </ng-container>
+      </ng-template>
     </ng-select>
     <div class="mb-2 text-red-700 text-sm" *ngIf="!value && isSubmitted">
       Please select an option.

@@ -9,7 +9,8 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ClaimService } from 'src/app/core/services/claim.service';
-import { ApprovalStatusComponent } from '../approval-status/approval-status.component';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AttachementsDialogComponent } from 'src/app/shared/components/attachements-dialog/attachements-dialog.component';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
@@ -38,14 +39,25 @@ export class RequestForApprovalsComponent implements OnInit {
   currentFilters: any = {};
 
   private _claimService = inject(ClaimService);
+  private _employeeService = inject(EmployeeService);
   private _dialog = inject(MatDialog);
   private _router = inject(Router);
   private _toaster = inject(ToastrService);
   private _paginationService = inject(PaginationService);
+  canApprove = false;
 
   ngOnInit(): void {
+    this.checkPrivileges();
     this.setupTableColumns();
     this.loadApprovalRequests();
+  }
+
+  checkPrivileges(): void {
+    this._employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canApprove = data.category.privileges.claims?.canApprove || false;
+      }
+    });
   }
 
 
@@ -144,8 +156,18 @@ export class RequestForApprovalsComponent implements OnInit {
         type: 'action',
         actions: [
           { icon: 'heroListBullet', tooltip: 'View Approval Status', action: 'viewDetails' },
-          { icon: 'heroCheckCircle', tooltip: 'Apporve', action: 'approve' },
-          { icon: 'heroXCircle', tooltip: 'Reject', action: 'reject' },
+          { 
+            icon: 'heroCheckCircle', 
+            tooltip: 'Approve', 
+            action: 'approve',
+            condition: () => this.canApprove
+          },
+          { 
+            icon: 'heroXCircle', 
+            tooltip: 'Reject', 
+            action: 'reject',
+            condition: () => this.canApprove
+          },
 
         ]
       }
@@ -224,9 +246,15 @@ export class RequestForApprovalsComponent implements OnInit {
   }
 
   onViewDetails(claim: any): void {
+    const dialogData: ApprovalStatusData = {
+      entity: claim,
+      entityType: 'claim'
+    };
+    
     this._dialog.open(ApprovalStatusComponent, {
       width: '800px',
-      data: { claim }
+      maxHeight: '90vh',
+      data: dialogData
     });
   }
 

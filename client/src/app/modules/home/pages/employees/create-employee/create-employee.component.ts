@@ -1,12 +1,12 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getDepartment, getInternalDep } from 'src/app/shared/interfaces/department.interface';
 import { CreateEmployee, GetCategory, getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { CreateCategoryComponent } from '../create-category/create-category.component';
 import { ToastrService } from 'ngx-toastr';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { NgIconComponent } from '@ng-icons/core';
@@ -61,7 +61,8 @@ export class CreateEmployeeDialog implements OnInit {
     private _fb: FormBuilder,
     private _profileService: ProfileService,
     private _employeeService: EmployeeService,
-    private _toast: ToastrService
+    private _toast: ToastrService,
+    private router: Router
   ) { }
 
   ngOnInit() {
@@ -116,18 +117,19 @@ export class CreateEmployeeDialog implements OnInit {
   }
 
   createCategory() {
-    const dialogRef = this.dialog.open(CreateCategoryComponent, {
-      width: '100vh'
-    });
-    dialogRef.afterClosed().subscribe((data) => {
-      if (data) {
-        const currentCategories = this.category$.getValue();
-        const updatedCategories = [...currentCategories, data];
-        this.category$.next(updatedCategories);
-
-        this._toast.success('Category Created Successfully')
-      }
-    });
+    const url = this.router.serializeUrl(this.router.createUrlTree(['/home/employees/category/create']));
+    const newWindow = window.open(url, '_blank');
+    
+    if (newWindow) {
+      window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'categoryCreated') {
+          const currentCategories = this.category$.getValue();
+          const updatedCategories = [...currentCategories, event.data.data];
+          this.category$.next(updatedCategories);
+          this._toast.success('Category Created Successfully');
+        }
+      });
+    }
   }
 
   onClose(): void {

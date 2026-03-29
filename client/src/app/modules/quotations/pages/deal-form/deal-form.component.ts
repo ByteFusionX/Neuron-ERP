@@ -13,13 +13,15 @@ import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { SupplierService } from '../../../../core/services/supplier.service';
 import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
+import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { ModalLayoutComponent } from '../../../../shared/components/modal-layout/modal-layout.component';
 
 @Component({
     selector: 'app-deal-form',
     templateUrl: './deal-form.component.html',
     styleUrls: ['./deal-form.component.css'],
     animations: [fileEnterState],
-    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, NgFor, NgClass, appFileValidator, appFileSizeValidator, MatTooltip, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe]
+    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, NgFor, NgClass, appFileValidator, appFileSizeValidator, MatTooltip, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe, NgSelectComponent, NgOptionComponent, ModalLayoutComponent]
 })
 export class DealFormComponent {
   @ViewChild('fileInput') fileInput!: ElementRef;
@@ -287,21 +289,34 @@ export class DealFormComponent {
 
   calculateUnitSellingPriceForInput(i: number, j: number) {
     const itemDetail = this.getItemDetailsControls(i).controls[j] as FormControl;
-    const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitSellingPrice = Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0;
-    itemDetail.get('unitSellingPrice')?.setValue(Math.ceil(unitSellingPrice));
+    const unitCost = itemDetail.get('unitCost')?.value;
+    const profit = itemDetail.get('profit')?.value;
+    
+    if (unitCost && profit) {
+      const decimalMargin = profit / 100 || 0;
+      if (decimalMargin >= 1) {
+        return;
+      }
+      const unitSellingPrice = Number((unitCost / (1 - decimalMargin)).toFixed(2)) || 0;
+      itemDetail.get('unitSellingPrice')?.setValue(Math.ceil(unitSellingPrice), { emitEvent: false });
+    }
   }
 
-
   calculateProfitForInput(i: number, j: number) {
-    const unitCost = this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
-    const unitSellingPrice = this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
+    const itemDetail = this.getItemDetailsControls(i).controls[j] as FormControl;
+    const unitCost = itemDetail.get('unitCost')?.value;
+    const unitSellingPrice = itemDetail.get('unitSellingPrice')?.value;
+    
     if (unitCost && unitSellingPrice) {
       const profit = ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
-      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue(profit.toFixed(2));
+      itemDetail.get('profit')?.setValue(profit.toFixed(2), { emitEvent: false });
     } else if (unitCost) {
-      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue('');
+      itemDetail.get('profit')?.setValue('', { emitEvent: false });
     }
+  }
+
+  onUnitCostChange(i: number, j: number) {
+    this.calculateUnitSellingPriceForInput(i, j);
   }
 
   calculateSellingPrice(): number {
@@ -365,6 +380,19 @@ export class DealFormComponent {
 
   onClose() {
     this.dialogRef.close()
+  }
+
+  getFooterButtons(): any[] {
+    return [
+      { label: 'Close', onClick: this.onClose.bind(this), theme: 'cancel' },
+      { 
+        label: 'Submit', 
+        onClick: this.onSubmit.bind(this), 
+        theme: 'primary', 
+        loading: this.isSaving,
+        icon: this.isSaving ? 'heroArrowPath' : undefined
+      }
+    ];
   }
 
   getSupplierById(supplierId: string): Supplier | undefined {

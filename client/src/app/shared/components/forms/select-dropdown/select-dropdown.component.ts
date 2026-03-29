@@ -1,11 +1,11 @@
 import { Component, EventEmitter, Input, Output, forwardRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR, ReactiveFormsModule } from '@angular/forms';
-import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
+import { NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 
 @Component({
   selector: 'app-select-dropdown',
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgSelectComponent, NgOptionComponent],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective],
   templateUrl: './select-dropdown.component.html',
   styleUrl: './select-dropdown.component.css',
   providers: [
@@ -29,12 +29,14 @@ export class SelectDropdownComponent {
   @Input() selected: string = '';
   @Input() clearable = true;
   @Input() defaultClass = true;
+  @Input() footerLabel = '';
 
   @Input() value: any = '';
   disabled = false;
   onChange: any = () => { };
   onTouched: any = () => { };
   @Output() onSelected = new EventEmitter<string | string[]>()
+  @Output() footerAction = new EventEmitter<void>();
 
   ngOnInit() {
     if (!this.id) {
@@ -71,5 +73,11 @@ export class SelectDropdownComponent {
 
   setDisabledState(isDisabled: boolean): void {
     this.disabled = isDisabled;
+  }
+
+  onFooterClick(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.footerAction.emit();
   }
 }

@@ -1,77 +1,18 @@
-<div class="bg-white mx-5 mt-5 rounded-2x max-h-[calc(100vh-70px)]">
-  <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
-    <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-      <h3 class="font-semibold">Activity Plan</h3>
-
-      <div class="flex justify-end gap-4 items-center">
-        <app-btn [theme]="viewMode === 'Day' ? 'secondary-outline' : 'secondary'"
-          (click)="changeViewMode('Day')">Day</app-btn>
-        <app-btn [theme]="viewMode === 'Week' ? 'secondary-outline' : 'secondary'"
-          (click)="changeViewMode('Week')">Week</app-btn>
-
-        <app-btn theme="primary" (click)="onAddActivityPlan()">+ Add Activity Plan</app-btn>
-      </div>
-    </div>
-  </div>
-
-  <div class="m-8 overflow-hidden relative">
-    <div class="flex ">
-      <div >
-        <table class="w-full ">
-          <thead class="">
-            <tr class="h-[5.28rem] ">
-              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b border-r border-[#c7c7c7] ">Sl
-                No</th>
-              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b border-r border-[#c7c7c7]">
-                Activity Name</th>
-              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700 border-b border-r border-[#c7c7c7]">
-                Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for(plan of activityPlans; track plan._id; let i = $index) {
-            <tr class=" border-r border-[#c7c7c7] h-[3.65rem] max-h-[3.65rem] bg-[#fdfdfd]" [ngClass]="{'!h-[7.3rem] !max-h-[7.3rem]': plan.status === 'Closed'}"
-              [class.border-b]="i < activityPlans.length - 1" >
-              <td class="px-4 py-2 text-sm text-gray-600 border-r border-[#e5e7eb] hover:bg-gray-100"
-                [class.border-b]="i < activityPlans.length - 1" (click)="onSelectActivityPlan(plan)">{{ i + 1 }}</td>
-              <td class="px-4 py-2 text-sm text-gray-800 border-r border-[#e5e7eb] hover:bg-gray-100 whitespace-nowrap"
-                [class.border-b]="i < activityPlans.length - 1" (click)="onSelectActivityPlan(plan)">{{ plan.activityName }}</td>
-              <td class="px-4 py-2 text-sm text-gray-800 border-r border-[#e5e7eb]"
-                [class.border-b]="i < activityPlans.length - 1">
-                @if(plan.status !== 'Closed') {
-                <app-select-dropdown [clearable]="false" [class]="'!mb-0 mt-0 '" [defaultClass]="false" [options]="planStatus" [value]="plan.status" (onSelected)="onChangeStatus($event, plan._id)">
-                </app-select-dropdown>
-                }@else {
-                  <div class="flex items-center gap-2 flex-col">
-                    <span class="bg-green-500 text-white px-2 py-1 rounded-md">{{ plan.status }}</span>
-                    @if(plan.comment){
-                      <app-btn size="sm" theme="primary-outline" >Comment</app-btn>
-                    }
-                  </div>
-                }
-                
-              </td>
-            </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-      <div id="gantt" class=" overflow-auto"></div>
-    </div>
-
-    @if(isLoading) {
-    <div class="absolute inset-0 bg-white bg-opacity-90 flex justify-center items-center z-10">
-      <div class="text-gray-500">Loading activity plans...</div>
-    </div>
-    }
-
-    @if(activityPlans.length === 0 && !isLoading) {
-    <div class="flex flex-col justify-center items-center mt-8">
-      <div class="text-gray-500 mb-4">No activity plans found</div>
-      <button class="bg-violet-600 text-white px-4 py-2 rounded" (click)="onAddActivityPlan()">
-        Create First Activity Plan
-      </button>
-    </div>
-    }
-  </div>
-</div>
+<data-table
+  [data]="activityPlans"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading"
+  [isEmpty]="activityPlans.length === 0"
+  [totalItems]="activityPlans.length"
+  [showPagination]="false"
+  (statusChange)="onTableStatusChange($event)"
+  (filterChange)="onFilterChange($event)"
+  (actionClick)="onActionClick($event)"
+  [tableId]="'activity-plan-table'"
+  [title]="'Activity Plan'"
+>
+  <ng-template #sideColumn>
+    <app-btn theme="primary" (click)="onAddActivityPlan()">+ Add Activity Plan</app-btn>
+  </ng-template>
+</data-table>

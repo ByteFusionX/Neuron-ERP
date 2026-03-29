@@ -1,48 +1,40 @@
-import { Component, ElementRef, OnInit, inject, NgZone } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { TableColumn } from 'src/app/shared/components/table/table.model';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
+import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { TechnicalService } from 'src/app/core/services/technical.service';
-import { Project } from 'src/app/shared/interfaces/project.interface';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import Gantt from 'frappe-gantt';
 import { MatDialog } from '@angular/material/dialog';
 import { AddPlanComponent } from './add-plan/add-plan.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { ClosedPlanComponent } from './closed-plan/closed-plan.component';
+import { PaginationService } from 'src/app/core/services/pagination.service';
+import { ViewEmployeesComponent } from './view-employees/view-employees.component';
+import { ViewCommentComponent } from './view-comment/view-comment.component';
 
 @Component({
   selector: 'app-activity-plan',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ButtonComponent, SelectDropdownComponent],
+  imports: [CommonModule, TableComponent, ButtonComponent],
   templateUrl: './activity-plan.component.html',
   styleUrl: './activity-plan.component.css',
+  providers: [PaginationService]
 })
 export class ActivityPlanComponent implements OnInit {
   private technicalService = inject(TechnicalService);
-  private el = inject(ElementRef);
   private _dialog = inject(MatDialog);
   private route = inject(ActivatedRoute);
-  private ngZone = inject(NgZone);
 
   activityPlans: any[] = [];
   technicalId: string = '';
-  ganttInstance: any = null;
   isLoading = false;
-  isGanttInitialized = false;
-  isDragging = false;
-  viewMode: string = 'Day';
-  private dateChangeTimeout: any = null;
-  private lastUpdatedTask: any = null;
-  private lastUpdatedClosedTask: any = null;
-  planStatus: any[] = [
-    { name: 'Pending', id: 'Pending' },
-    { name: 'Closed', id: 'Closed' },
-  ];
+  tableColumns: TableColumn[] = [];
+  defaultColumns: string[] = [];
+
+  planStatus: string[] = ['Pending', 'Closed'];
 
   ngOnInit(): void {
+    this.setupTableColumns();
     this.route.params.subscribe(params => {
       this.technicalId = params['id'];
       if (this.technicalId) {
@@ -51,97 +43,244 @@ export class ActivityPlanComponent implements OnInit {
     });
   }
 
-  ngAfterViewInit() {
-    this.ngZone.runOutsideAngular(() => {
-      setTimeout(() => {
-        this.initializeGantt();
-      }, 100);
-    });
+  setupTableColumns(): void {
+    this.tableColumns = [
+      {
+        key: 'slNo',
+        label: 'Sl No',
+        type: 'text',
+        cellRenderer: (item: any) => {
+          const index = this.activityPlans.indexOf(item);
+          return index + 1;
+        }
+      },
+      {
+        key: 'activityName',
+        label: 'Activity Name',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text'
+      },
+      {
+        key: 'expectedStartDate',
+        label: 'Expected Start Date',
+        type: 'text',
+        filterable: true,
+        filterType: 'date',
+        cellRenderer: (item: any) => {
+          if (!item.startDate) return '-';
+          const date = new Date(item.startDate);
+          return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      },
+      {
+        key: 'expectedEndDate',
+        label: 'Expected End Date',
+        type: 'text',
+        filterable: true,
+        filterType: 'date',
+        cellRenderer: (item: any) => {
+          if (!item.endDate) return '-';
+          const date = new Date(item.endDate);
+          return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      },
+      {
+        key: 'actualStartDate',
+        label: 'Actual Start Date',
+        type: 'text',
+        filterable: true,
+        filterType: 'date',
+        cellRenderer: (item: any) => {
+          if (item.status !== 'Closed') {
+            return '-';
+          }
+          if (!item.orginalStartDate) return '-';
+          const date = new Date(item.orginalStartDate);
+          return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      },
+      {
+        key: 'actualEndDate',
+        label: 'Actual End Date',
+        type: 'text',
+        filterable: true,
+        filterType: 'date',
+        cellRenderer: (item: any) => {
+          if (item.status !== 'Closed') {
+            return '-';
+          }
+          if (!item.orginalEndDate) return '-';
+          const date = new Date(item.orginalEndDate);
+          return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+      },
+      {
+        key: 'includedEmployees',
+        label: 'Included Employees',
+        type: 'action',
+        headerClass: 'text-center',
+        actions: [
+          {
+            icon: 'heroUserGroup',
+            tooltip: 'View Employees',
+            action: 'viewEmployees',
+            buttonClass: 'w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center cursor-pointer',
+            condition: (item: any) => item.includedEmployees && item.includedEmployees.length > 0
+          }
+        ]
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        type: 'statusDropdown',
+        statusOptions: this.planStatus,
+        headerClass: 'text-center',
+        filterable: true,
+        filterType: 'select',
+        filterOptions: this.planStatus.map(s => ({ label: s, value: s }))
+      },
+      {
+        key: 'comments',
+        label: 'Comments',
+        type: 'action',
+        headerClass: 'text-center',
+        actions: [
+          {
+            icon: 'heroChatBubbleBottomCenterText',
+            tooltip: 'View Comment',
+            action: 'viewComment',
+            buttonClass: 'w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center cursor-pointer',
+            condition: (item: any) => !!item.comment
+          }
+        ]
+      },
+      {
+        key: 'actions',
+        label: 'Actions',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroPencil',
+            tooltip: 'Edit Activity Plan',
+            action: 'editActivityPlan',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-blue-300 hover:border-blue-500 text-blue-600 text-sm rounded-full font-medium'
+          }
+        ]
+      }
+    ];
+
+    this.defaultColumns = ['slNo', 'activityName', 'expectedStartDate', 'expectedEndDate', 'actualStartDate', 'actualEndDate', 'includedEmployees', 'status', 'comments', 'actions'];
   }
 
-  loadActivityPlans() {
+  loadActivityPlans(filters?: { 
+    activityName?: string; 
+    status?: string | string[]; 
+    expectedStartDateFrom?: string; 
+    expectedStartDateTo?: string;
+    expectedEndDateFrom?: string;
+    expectedEndDateTo?: string;
+    actualStartDateFrom?: string;
+    actualStartDateTo?: string;
+    actualEndDateFrom?: string;
+    actualEndDateTo?: string;
+  }) {
     if (this.technicalId) {
       this.isLoading = true;
-      this.technicalService.getActivityPlans(this.technicalId).subscribe({
+      this.technicalService.getActivityPlans(this.technicalId, filters).subscribe({
         next: (response) => {
           this.activityPlans = response.data || [];
-          this.ngZone.run(() => {
-            this.updateGanttChart();
-            this.isLoading = false;
-          });
+          this.isLoading = false;
         },
         error: (error) => {
           console.error('Error loading activity plans:', error);
-          this.ngZone.run(() => {
-            this.isLoading = false;
-          });
+          this.isLoading = false;
         }
       });
     }
   }
 
-  initializeGantt() {
-    const ganttElement = this.el.nativeElement.querySelector('#gantt');
-    if (ganttElement && !this.isGanttInitialized) {
-      this.ngZone.runOutsideAngular(() => {
-        this.ganttInstance = new Gantt(ganttElement, [], {
-          on_click: (data: any) => {
-            this.ngZone.run(() => {
-              if (!this.isDragging) {
-                this.onGanttClick(data);
+  onFilterChange(filters: TableFilter[]): void {
+    const filterParams: { 
+      activityName?: string; 
+      status?: string | string[]; 
+      expectedStartDateFrom?: string; 
+      expectedStartDateTo?: string;
+      expectedEndDateFrom?: string;
+      expectedEndDateTo?: string;
+      actualStartDateFrom?: string;
+      actualStartDateTo?: string;
+      actualEndDateFrom?: string;
+      actualEndDateTo?: string;
+    } = {};
+
+    filters.forEach(filter => {
+      switch (filter.type) {
+        case 'text':
+          if (filter.column === 'activityName') {
+            filterParams.activityName = filter.value;
+          }
+          break;
+        case 'select':
+          if (filter.column === 'status') {
+            filterParams.status = Array.isArray(filter.value) ? filter.value : [filter.value];
+          }
+          break;
+        case 'date':
+          if (filter.value && Array.isArray(filter.value) && filter.value.length === 2) {
+            const dateFrom = filter.value[0];
+            const dateTo = filter.value[1];
+            
+            const formatDate = (date: any): string => {
+              if (!date) return '';
+              if (typeof date === 'string') return date;
+              if (date instanceof Date) return date.toISOString().split('T')[0];
+              return String(date);
+            };
+            
+            if (filter.column === 'expectedStartDate') {
+              if (dateFrom) {
+                filterParams.expectedStartDateFrom = formatDate(dateFrom);
               }
-            });
-          },
-          on_date_change: (task: any, start: string, end: string) => {
-            this.ngZone.run(() => {
-              this.isDragging = true;
-              this.onDateChange(task, start, end);
-            });
-          },
-          on_progress_change: (task: any, progress: number) => {
-            this.ngZone.run(() => {
-              this.onProgressChange(task, progress);
-            });
-          },
-          bar_height: 40,
-        });
-        this.isGanttInitialized = true;
-      });
-    }
+              if (dateTo) {
+                filterParams.expectedStartDateTo = formatDate(dateTo);
+              }
+            } else if (filter.column === 'expectedEndDate') {
+              if (dateFrom) {
+                filterParams.expectedEndDateFrom = formatDate(dateFrom);
+              }
+              if (dateTo) {
+                filterParams.expectedEndDateTo = formatDate(dateTo);
+              }
+            } else if (filter.column === 'actualStartDate') {
+              if (dateFrom) {
+                filterParams.actualStartDateFrom = formatDate(dateFrom);
+              }
+              if (dateTo) {
+                filterParams.actualStartDateTo = formatDate(dateTo);
+              }
+            } else if (filter.column === 'actualEndDate') {
+              if (dateFrom) {
+                filterParams.actualEndDateFrom = formatDate(dateFrom);
+              }
+              if (dateTo) {
+                filterParams.actualEndDateTo = formatDate(dateTo);
+              }
+            }
+          }
+          break;
+      }
+    });
+
+    this.loadActivityPlans(filterParams);
   }
 
-  onDateChange(task: any, start: string, end: string) {
-    console.log(task.id.split('-')[1])
-    const activityPlanIndex = this.activityPlans.findIndex(plan => (plan._id === task.id || plan._id === task.id.split('-')[0]) || plan.activityName === task.name );
-    if (activityPlanIndex !== -1) {
-      const activityPlan = this.activityPlans[activityPlanIndex];
+  onTableStatusChange(event: any) {
+    const activityPlan = event.item;
 
-      if (task.id.includes('closed')) {
-        this.activityPlans[activityPlanIndex].orginalStartDate = new Date(start);
-        this.activityPlans[activityPlanIndex].orginalEndDate = new Date(end);
-        this.lastUpdatedClosedTask = { task, start, end, activityPlan };
-      } else {
-        this.activityPlans[activityPlanIndex].startDate = new Date(start);
-        this.activityPlans[activityPlanIndex].endDate = new Date(end);
-        this.lastUpdatedTask = { task, start, end, activityPlan };
-      }
-
-      console.log('heck')
-
-      if (this.dateChangeTimeout) {
-        clearTimeout(this.dateChangeTimeout);
-      }
-
-      this.dateChangeTimeout = setTimeout(() => {
-        this.saveDateChange();
-      }, 500);
-    }
-  }
-
-  onChangeStatus(event: any, id: string) {
-    const activityPlan = this.activityPlans.find(plan => plan._id === id);
-
-    if (event == 'Closed') {
+    if (event.newValue === 'Closed') {
       const dialogRef = this._dialog.open(ClosedPlanComponent, {
         width: '500px',
         data: { technicalId: this.technicalId, activityPlan: activityPlan }
@@ -151,140 +290,6 @@ export class ActivityPlanComponent implements OnInit {
           this.loadActivityPlans();
         }
       });
-    }
-  }
-
-  changeViewMode(view: string) {
-    this.viewMode = view;
-    this.ganttInstance.change_view_mode(view);
-    this.scrollToEarliestDate();
-  }
-
-  saveDateChange() {
-    if (this.lastUpdatedTask || this.lastUpdatedClosedTask) {
-      const { task, start, end, activityPlan } = this.lastUpdatedTask || this.lastUpdatedClosedTask;
-
-      const updatedData: any = {};
-
-      if (task.id.includes('closed')) {
-        updatedData.orginalStartDate = new Date(start).getTime() + 86400000;
-        updatedData.orginalEndDate = new Date(end).getTime() + 86400000;
-        updatedData.status = 'Closed';
-      } else {
-        updatedData.startDate = new Date(start).getTime() + 86400000;
-        updatedData.endDate = new Date(end).getTime() + 86400000;
-        updatedData.activityName = activityPlan.activityName;
-        updatedData.includedEmployees = activityPlan.includedEmployees?.map((emp: any) => emp._id || emp) || []
-      }
-      console.log(task.id.includes('closed'))
-      if (task.id.includes('closed')) {
-        this.technicalService.closeActivityPlan(this.technicalId, activityPlan._id, updatedData).subscribe({
-          next: (response) => {
-            this.lastUpdatedClosedTask = null;
-            this.isDragging = false;
-          },
-          error: (error) => {
-            console.error('Error updating activity plan dates:', error);
-            this.loadActivityPlans();
-            this.lastUpdatedClosedTask = null;
-            this.isDragging = false;
-          }
-        });
-      } else {
-        this.technicalService.updateActivityPlan(this.technicalId, activityPlan._id, updatedData).subscribe({
-          next: (response) => {
-            this.lastUpdatedTask = null;
-            this.isDragging = false;
-          },
-          error: (error) => {
-            console.error('Error updating activity plan dates:', error);
-            this.loadActivityPlans();
-            this.lastUpdatedTask = null;
-            this.isDragging = false;
-          }
-        });
-      }
-    }
-  }
-
-  onProgressChange(task: any, progress: number) {
-    console.log('Progress changed:', task, progress);
-  }
-
-  updateGanttChart() {
-    if (this.ganttInstance && this.isGanttInitialized) {
-      this.ngZone.runOutsideAngular(() => {
-        const tasks = this.activityPlans.flatMap((plan, index) => {
-          let task = [
-            {
-              id: plan._id || `task-${index}`,
-              name: 'Expected',
-              start: this.formatDateForGantt(plan.startDate),
-              end: this.formatDateForGantt(plan.endDate),
-              custom_class: "",
-            }
-          ]
-          if (plan.status === 'Closed') {
-            task.push({
-              id: plan._id + '-closed',
-              name: 'Closed',
-              start: this.formatDateForGantt(plan.orginalStartDate),
-              end: this.formatDateForGantt(plan.orginalEndDate),
-              custom_class: "closed-task",
-            })
-          }
-          return task;
-
-        });
-
-        console.log(tasks);
-
-        this.ganttInstance.refresh(tasks);
-
-        if (this.activityPlans.length > 0) {
-          this.scrollToEarliestDate();
-        }
-      });
-    } else if (!this.isGanttInitialized) {
-      setTimeout(() => {
-        this.initializeGantt();
-        this.updateGanttChart();
-      }, 200);
-    }
-  }
-
-  scrollToEarliestDate() {
-    if (this.ganttInstance && this.activityPlans.length > 0) {
-      const earliestDate = this.activityPlans.reduce((earliest, plan) => {
-        const planDate = new Date(plan.startDate);
-        const earliestDate = new Date(earliest);
-        return planDate < earliestDate ? planDate : earliestDate;
-      }, new Date(this.activityPlans[0].startDate));
-
-      const twoDaysBefore = new Date(earliestDate);
-      twoDaysBefore.setDate(twoDaysBefore.getDate() - 1);
-
-      const formattedDate = this.formatDateForGantt(twoDaysBefore.toISOString());
-      this.ganttInstance.set_scroll_position(formattedDate);
-    }
-  }
-
-  formatDateForGantt(dateString: string): string {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
-  }
-
-  onGanttClick(data: any) {
-    const activityPlan = this.activityPlans.find(plan => plan._id === data.id || plan.activityName === data.name);
-    if (activityPlan && !data.id.includes('closed')) {
-      this.editActivityPlan(activityPlan);
-    }
-  }
-
-  onSelectActivityPlan(data: any) {
-    if (data._id) {
-      this.editActivityPlan(data);
     }
   }
 
@@ -314,6 +319,44 @@ export class ActivityPlanComponent implements OnInit {
       if (result?.success) {
         this.loadActivityPlans();
       }
+    });
+  }
+
+  onActionClick(event: { action: string, item: any, event: Event }) {
+    event.event.stopPropagation();
+    
+    switch (event.action) {
+      case 'viewEmployees':
+        this.viewEmployees(event.item);
+        break;
+      case 'viewComment':
+        this.viewComment(event.item);
+        break;
+      case 'editActivityPlan':
+        this.editActivityPlan(event.item);
+        break;
+    }
+  }
+
+  viewEmployees(item: any) {
+    if (!item.includedEmployees || item.includedEmployees.length === 0) {
+      return;
+    }
+    
+    const dialogRef = this._dialog.open(ViewEmployeesComponent, {
+      width: '500px',
+      data: { employees: item.includedEmployees }
+    });
+  }
+
+  viewComment(item: any) {
+    if (!item.comment) {
+      return;
+    }
+    
+    const dialogRef = this._dialog.open(ViewCommentComponent, {
+      width: '500px',
+      data: { comment: item.comment }
     });
   }
 

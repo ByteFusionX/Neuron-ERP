@@ -1,13 +1,8 @@
-<div class=" max-h-[95vh]">
-  <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between">
-    <h3 class="text-md font-medium">Deal Sheet</h3>
-    <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
-      <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-    </button>
-  </div>
-
-  <div class="flex flex-col mx-auto text-gray-900 bg-white rounded-lg shadow  overflow-y-scroll max-h-[77vh]">
-    <form class="p-6" [formGroup]="costForm">
+<app-modal-layout
+  title="Deal Sheet"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="getFooterButtons()">
+  <form class="p-6" [formGroup]="costForm">
       <div class="w-full mb-4 flex gap-4">
         <div class="w-1/2">
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="paymentTerms">
@@ -109,7 +104,7 @@
                 class="border px-6 py-3">
                 <input appNoLeadingSpace formControlName="unitCost" *ngIf="detail.get('dealSelected')?.value"
                   class="w-24 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  type="number" placeholder="00.00">
+                  type="number" placeholder="00.00" (input)="onUnitCostChange(i, j)">
                 <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitCost')?.value.toFixed(2) }}</p>
               </td>
 
@@ -140,13 +135,12 @@
               </td>
 
               <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                <select formControlName="supplierId"
-                  class="w-[200px] p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
-                  <option value="">Select Supplier</option>
-                  <option *ngFor="let supplier of suppliers" [value]="supplier._id">
+                <ng-select [class.border-red-500]="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted" class="form border"
+                  bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
+                  <ng-option *ngFor="let supplier of suppliers" [value]="supplier._id">
                     {{ supplier.supplierName }}
-                  </option>
-                </select>
+                  </ng-option>
+                </ng-select>
                 <div *ngIf="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted"
                   class="text-red-500 text-xs">
                   Supplier is required
@@ -177,14 +171,12 @@
               </div>
             </div>
             <div *ngIf="cost.get('type')?.value === 'Supplier Discount'" class="w-4/6">
-              <select formControlName="supplierId"
-                [class.border-red-500]="cost.get('supplierId')?.invalid && isSubmitted"
-                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
-                <option value="">Select Supplier</option>
-                <option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
+              <ng-select [class.border-red-500]="cost.get('supplierId')?.invalid && isSubmitted" class="form border"
+                bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
+                <ng-option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
                   {{supplier.supplierName}}
-                </option>
-              </select>
+                </ng-option>
+              </ng-select>
               <div *ngIf="cost.get('supplierId')?.hasError('required') && isSubmitted" 
                 class="text-red-500 text-xs mt-1">
                 Supplier is required
@@ -307,19 +299,5 @@
         </div>
       </div>
 
-    </form>
-  </div>
-
-  <div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2">
-    <div class="flex gap-2 ">
-      <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onClose()">
-        Close
-      </button>
-      <button
-        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm whitespace-nowrap"
-        (click)="onSubmit()">
-        <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
-        Submit
-      </button>
-    </div>
-  </div>
+  </form>
+</app-modal-layout>

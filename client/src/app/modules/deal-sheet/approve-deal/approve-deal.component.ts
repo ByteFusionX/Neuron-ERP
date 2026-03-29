@@ -60,7 +60,6 @@ export class ApproveDealComponent implements OnInit {
     if (this.data.quoteData.dealData.seenedBySalsePerson === false) {
       this._quoteService.markAsQuotationSeen(this.data.quoteData._id, this.userId).subscribe((res: any) => {
         if (res.success) {
-          this._notificationService.decrementNotificationCount('quotation', 1)
         }
       })
     }

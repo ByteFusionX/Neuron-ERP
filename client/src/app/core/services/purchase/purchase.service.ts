@@ -1,7 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
-import { getJob } from 'src/app/shared/interfaces/job.interface';
+import { Observable } from 'rxjs';
 import { PurchaseData, PurchaseOrder, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
 import { environment } from 'src/environments/environment';
 
@@ -15,52 +14,6 @@ export class PurchaseService {
 
   api: string = environment.api
   constructor(private http: HttpClient) { }
-
-  private purchaseJob = new BehaviorSubject<getJob | null>(null);
-  selectedJob$ = this.purchaseJob.asObservable();
-
-  private supplierDiscount = new BehaviorSubject<any>(null);
-  supplierDiscount$ = this.supplierDiscount.asObservable()
-
-  private purchaseFormData = new BehaviorSubject<any>(null)
-  purchaseFormData$ = this.purchaseFormData.asObservable()
-
-  private comparisonData = new BehaviorSubject<any>(null)
-  comparisonFormData$ = this.comparisonData.asObservable()
-
-  private editMode = new BehaviorSubject<boolean>(false)
-  editMode$ = this.editMode.asObservable()
-
-  purchaseId = new BehaviorSubject<string | null>(null)
-  purchaseId$ = this.purchaseId.asObservable()
-
-  private suppliersData = new BehaviorSubject<any[]>([])
-  suppliersData$ = this.suppliersData.asObservable()
-
-  setSuppliersData(suppliers: any[]) {
-    this.suppliersData.next(suppliers)
-  }
-
-  setEditingorNot(isEdit: boolean, purchaseId: string) {
-    this.purchaseId.next(purchaseId)
-    this.editMode.next(isEdit)
-  }
-
-  setPurchaseJob(jobData: getJob) {
-    this.purchaseJob.next(jobData)
-  }
-
-  setSupplierDiscount(discounts: any) {
-    this.supplierDiscount.next(discounts)
-  }
-
-  setPurchaseFormData(formData: any) {
-    this.purchaseFormData.next(formData)
-  }
-
-  setComparisonData(data: any) {
-    this.comparisonData.next(data)
-  }
 
   getPurchaseNo(): any {
     return this.http.get<any>(`${this.api}/purchase/purchase-request/generate-purchase-no`)
@@ -85,8 +38,19 @@ export class PurchaseService {
     return this.http.get(`${this.api}/purchase/purchase-request/${purchaseId}`)
   }
 
-  updatePurchaseStatus(purchaseId: string, status: PurchaseStatus, comment?: string): Observable<any> {
+  updatePurchaseStatus(purchaseId: string, status: 'approved' | 'rejected', comment?: string): Observable<any> {
     return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, comment });
+  }
+
+  getApprovalsByEmployee(filters?: any): Observable<any> {
+    let params: any = {};
+    if (filters?.page) {
+      params.page = filters.page.toString();
+    }
+    if (filters?.row) {
+      params.row = filters.row.toString();
+    }
+    return this.http.get<any>(`${this.api}/purchase/purchase-request/approvals/employee`, { params });
   }
 
   getPurchaseRequestsByJobId(jobId: string): Observable<any> {
@@ -95,6 +59,35 @@ export class PurchaseService {
 
   updatePurchase(purchaseId: string, purchaseData: PurchaseData): Observable<any> {
     return this.http.put<any>(`${this.api}/purchase/purchase-update/${purchaseId}`, purchaseData)
+  }
+
+  createPurchaseDraft(purchaseData: PurchaseData): Observable<any> {
+    const draftData = { ...purchaseData, status: 'Drafted' };
+    return this.createPurchase(draftData);
+  }
+
+  updatePurchaseItems(purchaseId: string, items: any[]): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/items/${purchaseId}`, { items });
+  }
+
+  updatePurchaseComparisons(purchaseId: string, items: any[]): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/comparison/${purchaseId}`, { items });
+  }
+
+  updatePurchaseSupplierDiscounts(purchaseId: string, supplierDiscounts: any): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/supplier-discount/${purchaseId}`, { supplierDiscounts });
+  }
+
+  updatePurchaseMrRequest(purchaseId: string, mrRequest: any): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/mr-request/${purchaseId}`, { mrRequest });
+  }
+
+  mergeItemsToDealSheet(purchaseId: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/merge-items/${purchaseId}`, {});
+  }
+
+  revokeMergedItems(purchaseId: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/revoke-merge/${purchaseId}`, {});
   }
 
 

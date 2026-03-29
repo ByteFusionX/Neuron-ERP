@@ -1,0 +1,81 @@
+#gantt {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  height: auto;
+}
+
+#gantt .gantt-container {
+  width: 100% !important;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+#gantt .grid-container {
+  width: 100% !important;
+}
+
+#gantt .lower-text,
+#gantt .upper-text {
+  font-size: 12px;
+  fill: #666;
+}
+
+#gantt .grid-background {
+  fill: #fafafa;
+}
+
+#gantt .grid-row {
+  fill: white;
+}
+
+#gantt .grid-row:nth-child(even) {
+  fill: #f9f9f9;
+}
+
+#gantt .bar-wrapper {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+#gantt .bar-wrapper:hover {
+  opacity: 0.8;
+}
+
+#gantt .bar-wrapper.closed-task .bar {
+  fill: #4CAF50 !important;
+}
+
+#gantt .bar {
+  fill: #7c3aed !important;
+  rx: 4;
+  transition: all 0.2s;
+}
+
+#gantt .bar-progress {
+  fill: rgba(255, 255, 255, 0.3);
+}
+
+#gantt .bar-label {
+  fill: white !important;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+#gantt .bar-invalid {
+  fill: transparent;
+  stroke: #ff6b6b;
+  stroke-width: 2;
+  stroke-dasharray: 5;
+}
+
+#gantt .today-highlight {
+  fill: #ffeb3b;
+  opacity: 0.2;
+}
+
+#gantt .arrow {
+  fill: none;
+  stroke: #666;
+  stroke-width: 2;
+}

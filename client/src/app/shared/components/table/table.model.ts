@@ -18,12 +18,41 @@ export interface TableColumn {
     tooltip?: boolean;
     list?: ApprovalRejectionList[]; // List data for tooltip modal
     cellRenderer?: (item: any) => any;
+    truncateText?: boolean;
     clickable?: boolean;
     clickFunction?: (item: any) => void;
     clickableValue?: (item: any) => any;
     // For statusDropdown type
     statusOptions?: string[]; // Available status options
     confirmationMessage?: (oldValue: string, newValue: string) => string; // Custom confirmation message
+    // For inline button in text columns
+    inlineButton?: {
+        icon: string;
+        tooltip: string;
+        buttonClass?: string;
+        condition?: (item: any) => boolean;
+        onClick: (item: any, event: Event) => void;
+    };
+}
+
+export type InlineEditorType = 'text' | 'number' | 'select' | 'date' | 'textarea';
+
+export interface InlineEditColumnConfig {
+    type: InlineEditorType;
+    options?: { label: string; value: any }[];
+    placeholder?: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    disabled?: boolean;
+}
+
+export interface InlineEditConfig {
+    enabled: boolean;
+    rowIdentityKey?: string;
+    allowDelete?: boolean;
+    showActionsColumn?: boolean;
+    columns: Record<string, InlineEditColumnConfig>;
 }
 
 export interface TableAction {

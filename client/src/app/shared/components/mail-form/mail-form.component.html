@@ -1,19 +1,9 @@
-<div class="bg-white w-full max-w-4xl max-h-[95vh]">
-  <!-- Header -->
-  <div class="border-b p-3 px-6 flex justify-between items-center pt-5">
-    <h3 class="text-lg font-medium text-gray-800">
-      {{data.mailData ? 'Edit Mail' : 'Compose Mail'}}
-    </h3>
-    <button type="button" (click)="onCancel()" class="text-gray-500 hover:text-gray-700">
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-      </svg>
-    </button>
-  </div>
-
-  <!-- Mail Form -->
-  <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-6  overflow-y-scroll max-h-[77vh]">
-    <form [formGroup]="mailForm">
+<app-modal-layout
+  [title]="data.mailData ? 'Edit Mail' : 'Compose Mail'"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="getFooterButtons()"
+  contentClass="py-6 px-6">
+  <form [formGroup]="mailForm">
       
       <!-- To Field -->
       <div class="mb-6">
@@ -93,47 +83,5 @@
         </app-upload-file>
       </div>
 
-      <!-- Action Buttons -->
-      
     </form>
-  </div>
-  <div class="border-t p-4 flex justify-between items-center">
-    
-
-    <app-btn 
-      theme="cancel" 
-      type="button" 
-      variant="outline"
-      (buttonClick)="onCancel()">
-      Cancel
-    </app-btn>
-    <div class="flex gap-3">
-      
-      @if(!data.mailData) {
-      <app-btn 
-        theme="secondary"
-        type="button"
-        [disabled]="isSaving()"
-        (buttonClick)="onDraft()">
-        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-        </svg>
-        Save Draft
-      </app-btn>
-    }
-      <app-btn 
-        theme="primary"
-        type="button"
-        [loading]="isSaving()"
-        [disabled]="isSaving()"
-        (buttonClick)="onSend()">
-        <ng-icon name="heroPaperAirplane" class="text-white"></ng-icon>
-        @if(data.mailData) {
-          Edit & Send
-        } @else {
-          Send
-        }
-      </app-btn>
-    </div>
-  </div>
-</div>
+</app-modal-layout>

@@ -33,7 +33,7 @@ import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
 import technicalRouter from './routes/technical.router';
-import purchaseOrderRouter from "./routes/purchaseOrder.router"; 
+import purchaseOrderRouter from "./routes/purchaseOrder.router";
 import workflowRouter from './routes/workflow.router';
 import { bearerStrategyOptions } from './common/utils/tokenValidator';
 import passport from 'passport';
@@ -42,13 +42,21 @@ import Employee from './models/employee.model'
 import { emailWorker } from './common/workers/email.worker';
 import { emailQueue } from './common/queues/email.queue';
 import claimRouter from './routes/claim.router';
+import productRouter from './routes/product.router';
+import productCategoryRouter from './routes/productCategory.router';
+import warehouseRouter from './routes/warehouse.router';
+import stockEntryRouter from './routes/stockEntry.router';
+import grnRouter from './routes/grn.router';
+import deliveryNoteRouter from './routes/deliveryNote.router';
+import invoiceRouter from './routes/invoice.router';
 
 const app = express();
 const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 export const io = new Server(server, {
   cors: {
-    origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
+    // origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true
   }
@@ -63,7 +71,7 @@ app.use(cookieParser());
 
 
 app.use(cors({
-  origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
+  origin: process.env.ORIGIN1 ?? 'https://localhost:4200',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
@@ -106,6 +114,13 @@ app.use('/technical', technicalRouter)
 app.use('/workflow', workflowRouter)
 app.use('/claim', claimRouter)
 app.use("/purchase-orders", purchaseOrderRouter);
+app.use('/product', productRouter);
+app.use('/productCategory', productCategoryRouter);
+app.use('/warehouse', warehouseRouter);
+app.use('/stock-entry', stockEntryRouter);
+app.use('/grn', grnRouter);
+app.use('/delivery-note', deliveryNoteRouter);
+app.use('/invoice', invoiceRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');
@@ -118,7 +133,7 @@ if (!fs.existsSync(uploadFolderPath)) {
 connectToDatabase()
   .then(() => {
     const port = process.env.PORT || 3000;
-    server.listen(port, () => {
+    server.listen(port as number, '0.0.0.0', () => {
       console.log(`Server running on port ${port}`);
     });
 

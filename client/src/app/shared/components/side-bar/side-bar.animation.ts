@@ -3,7 +3,7 @@ import { moveDown, moveUp } from "../../animations/animations"
 
 export const sideBarState = trigger('sideBarTrigger', [
     state('default', style({
-        width: '15rem',
+        width: '18rem',
         opacity: 1
     })),
     state('reduce', style({

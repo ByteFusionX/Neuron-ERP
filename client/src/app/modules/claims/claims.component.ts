@@ -11,7 +11,7 @@ import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ClaimService } from 'src/app/core/services/claim.service';
 
 import { ClaimFormComponent } from './claim-form/claim-form.component';
-import { ApprovalStatusComponent } from './approval-status/approval-status.component';
+import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { NgIconComponent } from '@ng-icons/core';
 import { AttachementsDialogComponent } from 'src/app/shared/components/attachements-dialog/attachements-dialog.component';
@@ -255,9 +255,15 @@ export class ClaimsComponent implements OnInit {
   }
 
   onViewApprovalStatus(claim: any): void {
+    const dialogData: ApprovalStatusData = {
+      entity: claim,
+      entityType: 'claim'
+    };
+    
     this._dialog.open(ApprovalStatusComponent, {
       width: '800px',
-      data: { claim }
+      maxHeight: '90vh',
+      data: dialogData
     });
   }
 

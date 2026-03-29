@@ -1,5 +1,5 @@
 import { HttpEventType } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { BehaviorSubject, Observable, Subscription, catchError, tap, throwError } from 'rxjs';
 import { JobService } from 'src/app/core/services/job/job.service';
@@ -14,14 +14,15 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import { getQuotatation, Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { LoadingBarService } from '@ngx-loading-bar/core';
 import { getCreators } from 'src/app/shared/interfaces/employee.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import * as pdfMake from 'pdfmake/build/pdfmake';
 import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
-import { ActivatedRoute, Router } from '@angular/router';
-import { NgIf, NgFor, AsyncPipe } from '@angular/common';
+import { ActivatedRoute, Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
+import { NgIf, NgFor, AsyncPipe, DatePipe } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
 import { GenerateReportComponent } from '../../../../shared/components/generate-report/generate-report.component';
@@ -32,7 +33,8 @@ import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
 import { allocateType, AllocateTypeModalComponent } from '../allocate-type-modal/allocate-type-modal.component';
-import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { TransferProcurementPersonComponent } from '../transfer-procurement-person/transfer-procurement-person.component';
+import { JobHistoryModalComponent } from 'src/app/shared/components/job-history-modal/job-history-modal.component';
 
 
 @Component({
@@ -41,7 +43,7 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
   styleUrl: './open-to-work.component.css',
   // changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [NumberFormatterPipe],
-  imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, NumberFormatterPipe_1]
+  imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, DatePipe, NumberFormatterPipe_1]
 })
 export class OpenToWorckComponent {
 
@@ -61,6 +63,8 @@ export class OpenToWorckComponent {
   total: number = 0;
   page: number = 1;
   row: number = 10;
+  currentMonthIndex: number | undefined = new Date().getMonth();
+  currentYear: string | undefined = new Date().getFullYear().toString();
 
   private subject = new BehaviorSubject<{ page: number, row: number }>({ page: this.page, row: this.row });
 
@@ -73,9 +77,11 @@ export class OpenToWorckComponent {
   isEmpty: boolean = false;
   isDeleteOption: boolean = false;
   loader = this.loadingBar.useRef();
+  canAllocateJobs = false;
+  canConvertToPurchase = false;
+  canTransferProcurementPerson = false;
 
   private subscriptions = new Subscription();
-  private purchaseService = inject(PurchaseService)
 
 
   constructor(private _jobService: JobService,
@@ -91,14 +97,25 @@ export class OpenToWorckComponent {
   ) { }
 
 
-  ngOnInit() {
-    this.employees$ = this._jobService.getJobSalesPerson();
-    const currentYear = new Date().getFullYear().toString();
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const currentMonthIndex = new Date().getMonth();
-    const currentMonthName = monthNames[currentMonthIndex];
+  checkPrivileges(): void {
+    this._employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canAllocateJobs = data.category.privileges.jobSheet?.allocateJobs || false;
+        this.canConvertToPurchase = data.category.privileges.purchase?.create || false;
+        this.canTransferProcurementPerson = data.category.privileges.jobSheet?.transferProcurementPerson || false;
+      }
+    });
+  }
 
-    this.reportDate = `${currentMonthName} - ${currentYear}`;
+  ngOnInit() {
+    this.checkPrivileges();
+    this.employees$ = this._jobService.getJobSalesPerson();
+    this.currentYear = new Date().getFullYear().toString();
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    this.currentMonthIndex = new Date().getMonth();
+    const currentMonthName = monthNames[this.currentMonthIndex];
+
+    this.reportDate = `${currentMonthName} - ${this.currentYear}`;
 
     // Read URL parameters
     this.route.queryParams.subscribe(params => {
@@ -117,13 +134,24 @@ export class OpenToWorckComponent {
       }
     });
 
+    // Reload data when route path changes (e.g., from /open-to-work to /in-progress)
+    this.subscriptions.add(
+      this.router.events.pipe(
+        filter(event => event instanceof NavigationEnd)
+      ).subscribe(() => {
+        if (this.router.url.includes('/job-sheet/open-to-work') || this.router.url.includes('/job-sheet/in-progress')) {
+          this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
+        }
+      })
+    );
+
     this.subscriptions.add(
       this.subject.subscribe((data) => {
         this.page = data.page;
         this.row = data.row;
         // Update URL parameters for pagination
         this.updateUrlParams();
-        this.getAllJobs(currentMonthIndex + 1, currentYear);
+        this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
       })
     );
 
@@ -157,8 +185,8 @@ export class OpenToWorckComponent {
   updateUrlParams() {
     const queryParams: any = {};
 
-    if (this.page !== 1) queryParams.page = this.page;
-    if (this.row !== 10) queryParams.row = this.row;
+    queryParams.page = this.page !== 1 ? this.page : null;
+    queryParams.row = this.row !== 10 ? this.row : null;
     queryParams.search = this.searchQuery ? this.searchQuery : null;
     queryParams.employee = this.selectedEmployee;
     queryParams.status = this.selectedStatus;
@@ -175,7 +203,7 @@ export class OpenToWorckComponent {
   onfilterApplied() {
     this.page = 1
     this.updateUrlParams();
-    this.getAllJobs();
+    this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
   }
 
   ngModelChange() {
@@ -191,10 +219,10 @@ export class OpenToWorckComponent {
     this.isLoading = true;
     this.page = 1
     this.updateUrlParams();
-    this.getAllJobs();
+    this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
   }
 
-  displayedColumns: string[] = ['jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'lpo', 'lpoValue', 'status', 'action'];
+  displayedColumns: string[] = ['updatedDate', 'jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'procurementPerson', 'lpo', 'lpoValue', 'action'];
 
   getAllJobs(selectedMonth?: number, selectedYear?: string) {
     this.isLoading = true;
@@ -206,6 +234,10 @@ export class OpenToWorckComponent {
       userId = employee?._id;
     });
 
+    const currentRoute = this.router.url;
+    const isInProgressRoute = currentRoute.includes('/in-progress');
+    const allocateStatusFilter = isInProgressRoute ? allocateStatus.WorkInProgress : allocateStatus.OpenToWork;
+
     let filterData = {
       search: this.searchQuery,
       page: this.page,
@@ -216,7 +248,7 @@ export class OpenToWorckComponent {
       selectedYear: selectedYear as unknown as number,
       access: access,
       userId: userId,
-      allocateStatus: allocateStatus.OpenToWork
+      allocateStatus: allocateStatusFilter
     };
 
     this.subscriptions.add(
@@ -275,7 +307,7 @@ export class OpenToWorckComponent {
   }
 
   onGenerateReport() {
-    this.getAllJobs();
+    this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
   }
 
   onViewDealSheet(quoteData: Quotatation, salesPerson: any, customer: any) {
@@ -294,7 +326,7 @@ export class OpenToWorckComponent {
       item.itemDetails.map((itemDetail) => {
         if (itemDetail.dealSelected) {
           itemSelected++;
-          priceDetails.totalSellingPrice += itemDetail.unitCost / (1 - (itemDetail.profit / 100)) * itemDetail.quantity;
+          priceDetails.totalSellingPrice += itemDetail.unitSellingPrice * itemDetail.quantity;
           priceDetails.totalCost += itemDetail.quantity * itemDetail.unitCost;
           return itemDetail;
         }
@@ -376,19 +408,31 @@ export class OpenToWorckComponent {
       pdf.getBlob((blob: Blob) => {
         let url = window.URL.createObjectURL(blob);
 
-        let dialogRef = this._dialog.open(QuotationPreviewComponent,
+        let dialogRef = this._dialog.open(PdfPreviewComponent,
           { data: { url: url, formatedQuote: quoteData } });
       });
     });
     this.loader.complete();
   }
 
+  shouldShowConvertButton(job: getJob): boolean {
+    return !job.hasPurchaseRequest;
+  }
+
+  openJobHistory(job: getJob) {
+    this._dialog.open(JobHistoryModalComponent, {
+      data: { jobId: job._id, jobIdString: job.jobId },
+      width: '900px',
+      maxWidth: '95vw',
+      maxHeight: '95vh',
+      disableClose: false
+    });
+  }
+
   onConvertToPurchase(jobId: string) {
-    const jobData = this.dataSource.data.find((data) => data._id == jobId)
-    if (jobData) {
-      this.purchaseService.setPurchaseJob(jobData)
-      this.router.navigate(['/purchase/create'])
-    }
+    this.router.navigate(['/purchase/create'], {
+      queryParams: { jobId }
+    })
   }
 
   onStatus(event: Event, status: JobStatus) {
@@ -512,7 +556,9 @@ export class OpenToWorckComponent {
 
   onRemoveReport() {
     this.reportDate = '';
-    this.getAllJobs();
+    this.currentMonthIndex = undefined;
+    this.currentYear = undefined;
+    this.getAllJobs(undefined, undefined);
   }
 
   formatNumber(value: any, minimumFractionDigits: number = 2, maximumFractionDigits: number = 2): string {
@@ -552,6 +598,10 @@ export class OpenToWorckComponent {
   }
 
   openAllocateTypeSelecter(data: getJob) {
+    if (!this.canAllocateJobs) {
+      this.toast.warning('You do not have permission to allocate jobs');
+      return;
+    }
     const dialogRef = this._dialog.open(AllocateTypeModalComponent, {
       data: data,
       width: '500px',
@@ -560,7 +610,7 @@ export class OpenToWorckComponent {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result) {
-        this.handleAllocationTypeSelection(result.id, result.jobId, result.allocationType);
+        this.handleAllocationTypeSelection(result.id, result.jobId, result.allocationType, result.procurementPerson);
       } else {
         // User cancelled or closed dialog without selection
         console.log('Dialog was cancelled');
@@ -569,11 +619,12 @@ export class OpenToWorckComponent {
   }
 
   // Optional: Create a separate method to handle the selection
-  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType) {
+  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType, procurementPerson?: string) {
     const data = {
       id,
       jobId,
-      allocationType
+      allocationType,
+      procurementPerson
     }
 
     this._jobService.updateAllocateType(data as any).subscribe({
@@ -600,10 +651,42 @@ export class OpenToWorckComponent {
         this._jobService.deleteJob({ dataId: jobId, employeeId: employee.id }).subscribe({
           next: () => {
             this.toast.success('Job deleted successfully');
-            this.getAllJobs();
+            this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
           },
           error: (error) => {
             this.toast.error('Failed to delete job');
+          }
+        });
+      }
+    });
+  }
+
+  onTransferProcurementPerson(job: getJob) {
+    if (!this.canTransferProcurementPerson) {
+      this.toast.warning('You do not have permission to transfer procurement person');
+      return;
+    }
+    const dialogRef = this._dialog.open(TransferProcurementPersonComponent, {
+      data: {
+        jobId: job._id,
+        currentProcurementPerson: job.procurementPerson
+      },
+      width: '500px',
+      disableClose: true
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.procurementPersonId) {
+        this._jobService.transferProcurementPerson(job._id, result.procurementPersonId).subscribe({
+          next: (response) => {
+            if (response.success) {
+              this.toast.success('Procurement person transferred successfully');
+              this.getAllJobs(this.currentMonthIndex !== undefined ? this.currentMonthIndex + 1 : undefined, this.currentYear);
+            }
+          },
+          error: (error) => {
+            this.toast.error('Failed to transfer procurement person');
+            console.error('Transfer failed:', error);
           }
         });
       }

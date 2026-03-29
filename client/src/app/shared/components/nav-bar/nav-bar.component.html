@@ -31,10 +31,6 @@
                 <button (click)="onFeedbacks()"
                     class="relative flex items-center px-2 py-1  border border-purple-600 text-sm bg-white text-black rounded-md hover:bg-gray-100 ">
                     Feedback Requests
-                    <ng-container *ngIf="(notificationCounts$ | async) as notifications">
-                        <span *ngIf="notifications.feedbackCount > 0"
-                            class="absolute top-0 right-0 -mt-1 -mr-1 h-2 w-2 rounded-full bg-red-500"></span>
-                    </ng-container>
                 </button>
                 <div class="flex items-center cursor-pointer" [matMenuTriggerFor]="beforeMenu"
                     (menuOpened)="menuOpened()" (menuClosed)="menuClosed()">
@@ -50,10 +46,10 @@
                         <p class="mx-2 text-sm font-medium">{{employeeData.firstName}} {{employeeData.lastName}}</p>
                         <div class="mt-1">
                             <div *ngIf="menuState; else menuElseBlock">
-                                <ng-icon name="heroChevronDown"></ng-icon>
+                                <ng-icon name="heroChevronUp"></ng-icon>
                             </div>
                             <ng-template #menuElseBlock>
-                                <ng-icon name="heroChevronUp"></ng-icon>
+                                <ng-icon name="heroChevronDown"></ng-icon>
                             </ng-template>
                         </div>
                     </div>

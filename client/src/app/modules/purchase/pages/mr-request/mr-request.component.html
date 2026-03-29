@@ -16,6 +16,14 @@
                 placeholder="Select Engineer"
                 class="w-full">
             </app-select-dropdown>
+            <app-form-field 
+                label="Total Proposed Amount in Customer LPO" 
+                [control]="mrForm.get('totalPurchase')" 
+                [isSubmitted]="isSubmitted()"
+                type="number"
+                placeholder="Enter total proposed amount"
+                class="w-full">
+            </app-form-field>
             <div class="w-full pe-3 mb-3">
                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="message">
                     Message
@@ -30,7 +38,7 @@
                 <button
                     class="w-fit px-5 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 disabled:border-gray-500 disabled:ring-0"
                     type="button" (click)="onClearClicks()"
-                    [disabled]="!data.job.mr">Clear</button>
+                    [disabled]="!hasMrRequest()">Clear</button>
                 <div class="flex gap-3">
                     <button type="button" class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded"
                         (click)="onCloseClicks()">Discard</button>

@@ -1,0 +1,99 @@
+<div class="bg-white m-6 rounded-lg">
+  <div class="border-b p-3 px-9 flex justify-between items-center">
+    <h3 class="text-md font-medium">
+      Pending Deliveries
+      <span *ngIf="jobInfo" class="ml-2 text-purple-600 font-semibold">
+        {{ jobInfo.jobId }}
+      </span>
+    </h3>
+    <app-btn theme="secondary-outline" (click)="onBack()">
+      <ng-icon name="heroArrowLeft" class="mr-2"></ng-icon>
+      Back
+    </app-btn>
+  </div>
+
+  <div class="p-6" *ngIf="isLoading()">
+    <div class="flex justify-center items-center h-48">
+      <ng-icon name="heroArrowPath" class="animate-spin text-3xl"></ng-icon>
+    </div>
+  </div>
+
+  <div class="p-6" *ngIf="!isLoading() && jobInfo">
+    <div class="mb-6">
+      <h4 class="text-sm font-semibold mb-2">Job Information</h4>
+      <div class="border rounded-md overflow-hidden">
+        <table class="w-full text-sm text-left border-collapse">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-3 py-2 font-medium bg-gray-50 w-40">Job ID</td>
+              <td class="px-3 py-2">{{ jobInfo.jobId }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-3 py-2 font-medium bg-gray-50">Customer</td>
+              <td class="px-3 py-2">{{ jobInfo.customer || '-' }}</td>
+            </tr>
+            <tr>
+              <td class="px-3 py-2 font-medium bg-gray-50">Project</td>
+              <td class="px-3 py-2">{{ jobInfo.projectName || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <h4 class="text-sm font-semibold mb-2">Items and Delivery Notes</h4>
+    </div>
+
+    <div class="relative overflow-x-auto">
+      <table class="w-full text-sm text-left border">
+        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+          <tr>
+            <th class="px-3 py-2 border text-center w-16">Sl No</th>
+            <th class="px-3 py-2 border">Part No</th>
+            <th class="px-3 py-2 border">Description</th>
+            <th class="px-3 py-2 border text-center">Ordered Qty</th>
+            <th class="px-3 py-2 border text-center">Delivered Qty</th>
+            <th class="px-3 py-2 border text-center">Balance Qty</th>
+            <th class="px-3 py-2 border">Delivery Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="items.length === 0">
+            <td colspan="7" class="px-4 py-6 text-center text-gray-500">
+              No items for this job.
+            </td>
+          </tr>
+          <tr *ngFor="let item of items" class="border-b hover:bg-gray-50">
+            <td class="px-3 py-2 border text-center">{{ item.slNo }}</td>
+            <td class="px-3 py-2 border">{{ item.partNo || '-' }}</td>
+            <td class="px-3 py-2 border">{{ item.description || '-' }}</td>
+            <td class="px-3 py-2 border text-center font-medium">{{ item.orderedQty }}</td>
+            <td class="px-3 py-2 border text-center text-gray-700">{{ item.deliveredQty }}</td>
+            <td class="px-3 py-2 border text-center font-semibold" [ngClass]="item.balanceQty > 0 ? 'text-red-600' : 'text-green-600'">
+              {{ item.balanceQty }}
+            </td>
+            <td class="px-3 py-2 border">
+              <div *ngIf="item.deliveryNotes && item.deliveryNotes.length > 0; else noDn">
+                <div class="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    *ngFor="let dn of item.deliveryNotes"
+                    class="px-2 py-0.5 rounded-full text-xs border border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100"
+                    (click)="onViewDn(dn.dnId)"
+                  >
+                    {{ dn.dnNo }} ({{ dn.currentDeliveryQty }})
+                  </button>
+                </div>
+              </div>
+              <ng-template #noDn>
+                <span class="text-gray-400 text-xs">No deliveries yet</span>
+              </ng-template>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+

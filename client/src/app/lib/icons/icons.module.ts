@@ -88,7 +88,13 @@ import {
   heroPhoto,
   heroDocumentDuplicate,
   heroDocumentPlus,
-  heroBanknotes
+  heroBanknotes,
+  heroUserMinus,
+  heroArrowRightCircle,
+  heroArrowLeftCircle,
+  heroTableCells,
+  heroLockClosed,
+  heroDocumentArrowDown
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -184,7 +190,13 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroPhoto,
       heroDocumentDuplicate,
       heroDocumentPlus,
-      heroBanknotes
+      heroBanknotes,
+      heroUserMinus,
+      heroArrowRightCircle,
+      heroArrowLeftCircle,
+      heroTableCells,
+      heroLockClosed,
+      heroDocumentArrowDown
     }),
   ],
   exports: [NgIconsModule]

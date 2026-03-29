@@ -1,0 +1,27 @@
+<data-table
+  [data]="tableData()"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading()"
+  [isEmpty]="isEmpty()"
+  [totalItems]="totalItems()"
+  [tableId]="'dn-register-table'"
+  [enableExport]="true"
+  [exportFileName]="'delivery-notes.xlsx'"
+  (filterChange)="onFilterChange($event)"
+  (paginationChange)="onPaginationChange($event)"
+  (rowClick)="onRowClick($event)"
+  (actionClick)="onActionClick($event)"
+  (exportRequest)="onExportRequest()"
+  [title]="'Delivery Note Register'"
+>
+  <ng-template #sideColumn>
+    <div class="flex items-center gap-3">
+      <ng-container *ngIf="canCreateDn()">
+        <app-btn theme="primary" routerLink="/dispatch/delivery-note-register/create">
+          + Create DN
+        </app-btn>
+      </ng-container>
+    </div>
+  </ng-template>
+</data-table>

@@ -5,18 +5,37 @@ import technicalModel from "../models/technical.model";
 import { ObjectId } from "mongodb";
 import mongoose from "mongoose";
 import { uploadFileToAws } from "../common/aws-connect";
-import { calculateCostPricePipe, calculateDiscountPricePipe, getDateRangeByDay, getEmployeeData, getUSDRated } from "../common/utils/util";
+import { calculateCostPricePipe, calculateDiscountPricePipe, getDateRangeByDay, getEmployeeData, getUSDRated, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { emailQueue } from "../common/queues/email.queue";
 import purchaseRequestModel from "../models/purchaseRequest.model";
+import { Server } from "socket.io";
+import { createNotificationWithPrivileges } from "./notification.controller";
 
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
    try {
-      const jobs = await jobModel.find({
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.technical?.viewReport && privileges.technical.viewReport !== 'none'
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.technical.viewReport, 'createdBy')
+         : {};
+
+      const filter: any = {
          allocateType: {
             $in: [allocateType.ProjectWithSupply, allocateType.AMC]
          },
-         isDeleted: false
-      });
+         isDeleted: false,
+         ...accessFilter
+      };
+
+      const jobs = await jobModel.find(filter);
 
       return res.status(200).json({
          success: true,
@@ -140,11 +159,20 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
    try {
       const { jobId, engineerId, comment, assignedBy, projectType, customerId, priority } = req.body;
       
-      // Validate required fields
-      if (!jobId || !engineerId || !comment || !assignedBy || !projectType || !customerId || !priority) {
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+      
+      // Validate required fields (comment is optional)
+      if (!jobId || !engineerId || !assignedBy || !projectType || !customerId || !priority) {
          return res.status(400).json({
             success: false,
-            message: "All fields are required"
+            message: "Job ID, Engineer ID, Assigned By, Project Type, Customer ID, and Priority are required"
          });
       }
 
@@ -171,7 +199,7 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
          jobId: jobId,
          customer: customerId,
          assignedTo: engineerId,
-         comment,
+         comment: comment || '',
          assignedBy,
          assignedAt: new Date(),
          status: 'Pending',
@@ -187,6 +215,28 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
          .populate('assignedBy', 'firstName lastName')
          .populate('customer', 'companyName')
          .populate('jobId', 'jobId');
+
+      const jobNumber = (populatedProject as any)?.jobId?.jobId || jobId;
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'TechnicalAssigned',
+            referenceModel: 'Technical',
+            title: 'Technical Project Assigned',
+            message: `You have been assigned to technical project of job ${jobNumber}`,
+            sentBy: employee._id?.toString(),
+            referenceId: technicalProject._id,
+            additionalData: { projectId: technicalProject._id.toString() }
+         },
+         {
+            privilegeKey: 'technical',
+            checkFunction: (privileges, empId) => {
+               return empId === engineerId.toString() &&
+                      privileges.technical?.viewReport !== 'none';
+            }
+         },
+         socket
+      );
 
       return res.status(201).json({
          success: true,
@@ -206,7 +256,22 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
    try {
       const token = req.user;
       const userData = await getEmployeeData(token);
-      const assignedBy = userData?._id;
+      if (!userData) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = userData.category?.privileges;
+      if (!privileges?.technical?.canViewOpenToWorkAndAssign) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to assign projects to engineers",
+         });
+      }
+
+      const assignedBy = userData._id;
       const { engineerId, comment, projectType, customerId, priority } = req.body;
 
       const technicalProject = await technicalModel.create({
@@ -244,6 +309,20 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { companyName, jobId, assignedTo, assignedBy, priority, row, page, projectType, status } = req.body;
+
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.technical?.viewReport && privileges.technical.viewReport !== 'none'
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.technical.viewReport, 'assignedBy')
+         : {};
 
       const pipeline: any[] = [
          {
@@ -306,12 +385,6 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
                   $concat: ["$assignedBy.firstName", " ", "$assignedBy.lastName"]
                }
             }
-         },
-         {
-            $skip: (page - 1) * row
-         },
-         {
-            $limit: row
          }
       ];
 
@@ -371,13 +444,35 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
          pipeline.push({ $match: matchConditions });
       }
 
+      if (Object.keys(accessFilter).length > 0) {
+         pipeline.push({ $match: accessFilter });
+      }
+
+      pipeline.push({
+         $sort: { updatedAt: -1 }
+      });
+
+      const countPipeline = [...pipeline];
+      countPipeline.pop();
+      countPipeline.push({ $count: "total" });
+
+      const totalResult = await technicalModel.aggregate(countPipeline);
+      const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+      pipeline.push({
+         $skip: (page - 1) * row
+      });
+      pipeline.push({
+         $limit: row
+      });
 
       const projects = await technicalModel.aggregate(pipeline);
 
       return res.status(200).json({
          success: true,
          message: projects.length > 0 ? "Projects fetched successfully" : "No projects found",
-         data: projects
+         data: projects,
+         total: total
       });
    } catch (error) {
       return res.status(500).json({
@@ -403,10 +498,7 @@ export const getCostingDetails = async (req: Request, res: Response, next: NextF
       const technical = await technicalModel.aggregate([
          {
             $match: {
-               _id: new ObjectId(id),
-               jobId: {
-                  $exists: true
-               }
+               _id: new ObjectId(id)
             }
          },
          {
@@ -418,7 +510,10 @@ export const getCostingDetails = async (req: Request, res: Response, next: NextF
             }
          },
          {
-            $unwind: "$jobId"
+            $unwind: {
+               path: "$jobId",
+               preserveNullAndEmptyArrays: true
+            }
          },
          {
             $lookup: {
@@ -429,7 +524,10 @@ export const getCostingDetails = async (req: Request, res: Response, next: NextF
             }
          },
          {
-            $unwind: "$quotation"
+            $unwind: {
+               path: "$quotation",
+               preserveNullAndEmptyArrays: true
+            }
          },
          {
             $lookup:{
@@ -442,75 +540,60 @@ export const getCostingDetails = async (req: Request, res: Response, next: NextF
          {
             $addFields: {
                totalLPOValue: {
-                  $let: {
-                     vars: {
-                        baseLpoValue: {
-                           $sum: {
-                              $cond: [
-                                 { $eq: ['$quotation.currency', 'USD'] },
-                                 {
-                                    $multiply: [
-                                       calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
-                                       qatarUsdRate
-                                    ]
-                                 },
-                                 calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')
-                              ]
-                           }
-                        }
-                     },
-                     in: {
-                        $reduce: {
-                           input: '$quotation.dealData.additionalCosts',
-                           initialValue: '$$baseLpoValue',
-                           in: {
-                              $cond: [
-                                 { $eq: ['$$this.type', 'Customer Discount'] },
-                                 { $subtract: ['$$value', '$$this.value'] },
-                                 '$$value'
-                              ]
-                           }
-                        }
-                     }
-                  }
-               },
-               estimatedCostForProject: {
-                  $round: [
-                     {
-                        $sum: [
-                           {
-                              $cond: [
-                                 { $eq: ['$quotation.currency', 'USD'] },
-                                 {
-                                    $round: [
+                  $cond: {
+                     if: { $ne: ["$quotation", null] },
+                     then: {
+                        $let: {
+                           vars: {
+                              baseLpoValue: {
+                                 $sum: {
+                                    $cond: [
+                                       { $eq: ['$quotation.currency', 'USD'] },
                                        {
                                           $multiply: [
-                                             calculateCostPricePipe('$quotation.dealData.updatedItems'),
+                                             calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
                                              qatarUsdRate
                                           ]
                                        },
-                                       2
+                                       calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')
                                     ]
-                                 },
-                                 calculateCostPricePipe('$quotation.dealData.updatedItems')
-                              ]
+                                 }
+                              }
                            },
-
-                        ]
+                           in: {
+                              $reduce: {
+                                 input: '$quotation.dealData.additionalCosts',
+                                 initialValue: '$$baseLpoValue',
+                                 in: {
+                                    $cond: [
+                                       { $eq: ['$$this.type', 'Customer Discount'] },
+                                       { $subtract: ['$$value', '$$this.value'] },
+                                       '$$value'
+                                    ]
+                                 }
+                              }
+                           }
+                        }
                      },
-                     2
-                  ]
+                     else: 0
+                  }
                },
                professionalServiceCharge: {
-                  $round: [
-                     {
-                        $multiply: [
-                           '$estimatedCostForProject',
-                           0.2
+                  $cond: {
+                     if: { $ne: ["$estimatedCostForProject", null] },
+                     then: {
+                        $round: [
+                           {
+                              $multiply: [
+                                 { $ifNull: ["$estimatedCostForProject", 0] },
+                                 0.2
+                              ]
+                           },
+                           2
                         ]
                      },
-                     2
-                  ]
+                     else: 0
+                  }
                },
                totalAmountClaimedForManpower: {
                   $reduce: {
@@ -532,12 +615,14 @@ export const getCostingDetails = async (req: Request, res: Response, next: NextF
             $project: {
                _id: 1,
                totalLPOValue: 1,
-               estimatedCostForProject: 1,
+               estimatedCostForProject: { $ifNull: ["$estimatedCostForProject", 0] },
                professionalServiceCharge: 1,
                totalAmountClaimedForManpower: 1
             }
          }
       ])
+
+      console.log(technical);
 
       if (technical.length > 0) {
          return res.status(200).json({
@@ -693,9 +778,17 @@ export const getProjectById = async (req: Request, res: Response, next: NextFunc
 export const updateProject = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { id } = req.params;
-      const { status, priority, projectType, materialRequest, supervisors, notes, involvedPersons, estimations, jobId } = req.body;
+      const { status, priority, projectType, materialRequest, supervisors, notes, involvedPersons, estimations, jobId, estimatedCostForProject } = req.body;
 
-      const project = await technicalModel.findByIdAndUpdate(id, { status, priority, projectType, materialRequest, supervisors, notes, involvedPersons, estimations, jobId }, { new: true });
+      const updateData: any = { status, priority, projectType, materialRequest, supervisors, notes, involvedPersons, estimations, jobId };
+      
+      if (estimatedCostForProject !== undefined) {
+         updateData.estimatedCostForProject = estimatedCostForProject !== null && estimatedCostForProject !== '' 
+            ? parseFloat(estimatedCostForProject.toString()) || 0 
+            : 0;
+      }
+
+      const project = await technicalModel.findByIdAndUpdate(id, updateData, { new: true });
 
       return res.status(200).json({
          success: true,
@@ -709,6 +802,96 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
          message: "Failed to update project",
          error: error instanceof Error ? error.message : "Unknown error"
       });
+   }
+}
+
+export const transferEngineer = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { projectId, engineerId } = req.body;
+
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canTransferToEngineer) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to transfer engineers",
+         });
+      }
+
+      if (!projectId || !engineerId) {
+         return res.status(400).json({
+            success: false,
+            message: 'Project ID and engineer ID are required'
+         });
+      }
+
+      const engineer = await employeeModel.findById(engineerId);
+      if (!engineer) {
+         return res.status(404).json({
+            success: false,
+            message: 'Engineer not found'
+         });
+      }
+
+      const project = await technicalModel.findByIdAndUpdate(
+         projectId,
+         {
+            assignedTo: engineerId,
+            updatedAt: new Date()
+         },
+         {
+            new: true
+         }
+      ).populate('assignedTo', 'firstName lastName employeeId')
+       .populate('assignedBy', 'firstName lastName')
+       .populate('customer', 'companyName')
+       .populate('jobId', 'jobId');
+
+      if (!project) {
+         return res.status(404).json({
+            success: false,
+            message: 'Project not found'
+         });
+      }
+
+      const jobNumber = (project as any)?.jobId?.jobId || '';
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'TechnicalAssigned',
+            referenceModel: 'Technical',
+            title: 'Technical Project Transferred',
+            message: `Technical project of job ${jobNumber} has been transferred to you`,
+            sentBy: employee._id?.toString(),
+            referenceId: project._id,
+            additionalData: { projectId: project._id.toString() }
+         },
+         {
+            privilegeKey: 'technical',
+            checkFunction: (privileges, empId) => {
+               return empId === engineerId.toString() &&
+                      privileges.technical?.viewReport !== 'none';
+            }
+         },
+         socket
+      );
+
+      return res.status(200).json({
+         success: true,
+         message: 'Engineer transferred successfully',
+         data: project
+      });
+
+   } catch (error) {
+      next(error);
    }
 }
 
@@ -1022,12 +1205,145 @@ export const deleteIssue = async (req: Request, res: Response, next: NextFunctio
 export const getActivityPlans = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { id } = req.params;
+      const { 
+         activityName, 
+         status, 
+         expectedStartDateFrom, 
+         expectedStartDateTo,
+         expectedEndDateFrom,
+         expectedEndDateTo,
+         actualStartDateFrom,
+         actualStartDateTo,
+         actualEndDateFrom,
+         actualEndDateTo
+      } = req.query;
+      
       const technical = await technicalModel.findById(id, { activityPlan: 1 }).populate('activityPlan.includedEmployees');
       if (technical) {
+         let filteredPlans = technical.activityPlan || [];
+
+         if (activityName) {
+            const searchRegex = new RegExp(activityName as string, 'i');
+            filteredPlans = filteredPlans.filter((plan: any) => 
+               plan.activityName && searchRegex.test(plan.activityName)
+            );
+         }
+
+         if (status) {
+            const statusArray = Array.isArray(status) ? status : [status];
+            filteredPlans = filteredPlans.filter((plan: any) => 
+               plan.status && statusArray.includes(plan.status)
+            );
+         }
+
+         if (expectedStartDateFrom || expectedStartDateTo) {
+            filteredPlans = filteredPlans.filter((plan: any) => {
+               if (!plan.startDate) return false;
+               
+               const planStartDate = new Date(plan.startDate);
+               planStartDate.setHours(0, 0, 0, 0);
+               
+               if (expectedStartDateFrom && expectedStartDateTo) {
+                  const from = new Date(expectedStartDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  const to = new Date(expectedStartDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planStartDate >= from && planStartDate <= to;
+               } else if (expectedStartDateFrom) {
+                  const from = new Date(expectedStartDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  return planStartDate >= from;
+               } else if (expectedStartDateTo) {
+                  const to = new Date(expectedStartDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planStartDate <= to;
+               }
+               return true;
+            });
+         }
+
+         if (expectedEndDateFrom || expectedEndDateTo) {
+            filteredPlans = filteredPlans.filter((plan: any) => {
+               if (!plan.endDate) return false;
+               
+               const planEndDate = new Date(plan.endDate);
+               planEndDate.setHours(0, 0, 0, 0);
+               
+               if (expectedEndDateFrom && expectedEndDateTo) {
+                  const from = new Date(expectedEndDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  const to = new Date(expectedEndDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planEndDate >= from && planEndDate <= to;
+               } else if (expectedEndDateFrom) {
+                  const from = new Date(expectedEndDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  return planEndDate >= from;
+               } else if (expectedEndDateTo) {
+                  const to = new Date(expectedEndDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planEndDate <= to;
+               }
+               return true;
+            });
+         }
+
+         if (actualStartDateFrom || actualStartDateTo) {
+            filteredPlans = filteredPlans.filter((plan: any) => {
+               if (!plan.orginalStartDate) return false;
+               
+               const planActualStartDate = new Date(plan.orginalStartDate);
+               planActualStartDate.setHours(0, 0, 0, 0);
+               
+               if (actualStartDateFrom && actualStartDateTo) {
+                  const from = new Date(actualStartDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  const to = new Date(actualStartDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planActualStartDate >= from && planActualStartDate <= to;
+               } else if (actualStartDateFrom) {
+                  const from = new Date(actualStartDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  return planActualStartDate >= from;
+               } else if (actualStartDateTo) {
+                  const to = new Date(actualStartDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planActualStartDate <= to;
+               }
+               return true;
+            });
+         }
+
+         if (actualEndDateFrom || actualEndDateTo) {
+            filteredPlans = filteredPlans.filter((plan: any) => {
+               if (!plan.orginalEndDate) return false;
+               
+               const planActualEndDate = new Date(plan.orginalEndDate);
+               planActualEndDate.setHours(0, 0, 0, 0);
+               
+               if (actualEndDateFrom && actualEndDateTo) {
+                  const from = new Date(actualEndDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  const to = new Date(actualEndDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planActualEndDate >= from && planActualEndDate <= to;
+               } else if (actualEndDateFrom) {
+                  const from = new Date(actualEndDateFrom as string);
+                  from.setHours(0, 0, 0, 0);
+                  return planActualEndDate >= from;
+               } else if (actualEndDateTo) {
+                  const to = new Date(actualEndDateTo as string);
+                  to.setHours(23, 59, 59, 999);
+                  return planActualEndDate <= to;
+               }
+               return true;
+            });
+         }
+
          return res.status(200).json({
             success: true,
             message: "Activity plans fetched successfully",
-            data: technical.activityPlan
+            data: filteredPlans
          });
       } else {
          return res.status(404).json({
@@ -1715,10 +2031,14 @@ export const removeProjectUpdateAttachment = async (req: Request, res: Response,
 }
 
 
-export const updateMaterialRequest = async (req: Request, res: Response, next: NextFunction) => {
+export const updateMaterialRequest = async (req: any, res: Response, next: NextFunction) => {
    try {
       const { id } = req.params;
-      const { materialRequest } = req.body;
+      let materialRequest = req.body.materialRequest;
+      
+      if (typeof materialRequest === 'string') {
+         materialRequest = JSON.parse(materialRequest);
+      }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
          return res.status(400).json({
@@ -1736,6 +2056,7 @@ export const updateMaterialRequest = async (req: Request, res: Response, next: N
 
       for (let i = 0; i < materialRequest.length; i++) {
          const item = materialRequest[i];
+         console.log(item)
 
          if (!item.itemName || typeof item.itemName !== 'string' || item.itemName.trim().length === 0) {
             return res.status(400).json({
@@ -1766,6 +2087,23 @@ export const updateMaterialRequest = async (req: Request, res: Response, next: N
          }
       }
 
+      let attachmentFiles = [];
+      if (req.files?.attachments) {
+         const files = Array.isArray(req.files.attachments) ? req.files.attachments : [req.files.attachments];
+         attachmentFiles = await Promise.all(files.map(async (file: any) => {
+            await uploadFileToAws(file.filename, file.path);
+            return { fileName: file.filename, originalname: file.originalname };
+         }));
+      }
+
+      let existingAttachments = [];
+      if (req.body.existingAttachments) {
+         const existingAttachmentsStr = typeof req.body.existingAttachments === 'string' 
+            ? req.body.existingAttachments 
+            : JSON.stringify(req.body.existingAttachments);
+         existingAttachments = JSON.parse(existingAttachmentsStr);
+      }
+
       const technical = await technicalModel.findById(id);
       if (!technical) {
          return res.status(404).json({
@@ -1774,17 +2112,65 @@ export const updateMaterialRequest = async (req: Request, res: Response, next: N
          });
       }
 
-      const sanitizedMaterialRequest = materialRequest.map(item => ({
-         itemName: item.itemName.trim(),
-         quantity: Number(item.quantity),
-         estimatedCost: Number(item.estimatedCost),
-         requiredOn: new Date(item.requiredOn),
-         remarks: item.remarks ? item.remarks.trim() : ''
+      const sanitizedMaterialRequest = materialRequest.map((item: any, index: number) => {
+         const existingItem = technical.materialRequest[index];
+         return {
+            itemName: item.itemName.trim(),
+            quantity: Number(item.quantity),
+            estimatedCost: Number(item.estimatedCost),
+            requiredOn: new Date(item.requiredOn),
+            remarks: item.remarks ? item.remarks.trim() : '',
+            status: existingItem?.status || item.status || 'pending',
+            statusHistory: existingItem?.statusHistory || item.statusHistory || []
+         };
+      });
+
+      const sanitizedAttachments = existingAttachments.map((attachment: any) => {
+         const existingFile = technical.materialRequestAttachements.find(
+            (f: any) => f.fileName === attachment.fileName && f.originalname === attachment.originalname
+         );
+         return {
+            fileName: attachment.fileName,
+            originalname: attachment.originalname,
+            status: existingFile?.status || attachment.status || 'pending',
+            statusHistory: existingFile?.statusHistory || attachment.statusHistory || []
+         };
+      });
+
+      const newAttachments = attachmentFiles.map((file: any) => ({
+         fileName: file.fileName || file.filename,
+         originalname: file.originalname,
+         status: 'pending' as const,
+         statusHistory: [] as any[]
       }));
 
       technical.materialRequest = sanitizedMaterialRequest;
+      technical.materialRequestAttachements = [...sanitizedAttachments, ...newAttachments];
       technical.updatedAt = new Date();
       await technical.save();
+
+      const employee = await getEmployeeData(req.user);
+      if (employee) {
+         const socket = req.app.get('io') as Server;
+         await createNotificationWithPrivileges(
+            {
+               type: 'MrApprovalRequest',
+               referenceModel: 'Technical',
+               title: 'Material Request Submitted For Approval',
+               message: 'A material request has been submitted for approval',
+               sentBy: employee._id?.toString(),
+               referenceId: technical._id,
+               additionalData: { technicalId: technical._id.toString() }
+            },
+            {
+               privilegeKey: 'technical',
+               checkFunction: (privileges) => {
+                  return privileges.technical?.canApproveMRRequests === true;
+               }
+            },
+            socket
+         );
+      }
 
       return res.status(200).json({
          success: true,
@@ -2250,12 +2636,21 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
          pipeline.push({ $match: { isDeleted: false } });
       }
 
+      const countPipeline = [...pipeline];
+      countPipeline.pop();
+      countPipeline.pop();
+      countPipeline.push({ $count: "total" });
+
+      const totalResult = await purchaseRequestModel.aggregate(countPipeline);
+      const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
       const mrRequests = await purchaseRequestModel.aggregate(pipeline);
 
       return res.status(200).json({
          success: true,
          message: mrRequests.length > 0 ? "MR Requests fetched successfully" : "No MR requests found",
-         data: mrRequests
+         data: mrRequests,
+         total: total
       });
    } catch (error) {
       console.log(error)
@@ -2279,16 +2674,914 @@ export const getMaterialRequestByJobId = async (req: Request, res: Response, nex
          });
       }
       const materialRequest = technicalProject.materialRequest;
+      const materialRequestAttachements = technicalProject.materialRequestAttachements;
       return res.status(200).json({
          success: true,
          message: "Material request fetched successfully",
-         data: materialRequest
+         data: materialRequest,
+         files: materialRequestAttachements
       });
    } catch (error) {
       console.log(error);
       return res.status(500).json({
          success: false,
          message: "Failed to get material request by job ID",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const getPendingMaterialRequestProjects = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { page = 1, row = 10, search, jobId, customerName } = req.body;
+      const pageNumber = Number(page) || 1;
+      const pageSize = Number(row) || 10;
+      const skip = (pageNumber - 1) * pageSize;
+
+      const pipeline: any[] = [
+         {
+            $lookup: {
+               from: 'jobs',
+               localField: 'jobId',
+               foreignField: '_id',
+               as: 'jobId'
+            }
+         },
+         {
+            $unwind: {
+               path: '$jobId',
+               preserveNullAndEmptyArrays: true
+            }
+         },
+         {
+            $lookup: {
+               from: 'customers',
+               localField: 'customer',
+               foreignField: '_id',
+               as: 'customer'
+            }
+         },
+         {
+            $unwind: {
+               path: '$customer',
+               preserveNullAndEmptyArrays: true
+            }
+         },
+         {
+            $addFields: {
+               hasPendingItems: {
+                  $cond: {
+                     if: { $isArray: '$materialRequest' },
+                     then: {
+                        $anyElementTrue: {
+                           $map: {
+                              input: '$materialRequest',
+                              as: 'item',
+                              in: { $eq: [{ $ifNull: ['$$item.status', 'pending'] }, 'pending'] }
+                           }
+                        }
+                     },
+                     else: false
+                  }
+               },
+               hasPendingFiles: {
+                  $cond: {
+                     if: { $isArray: '$materialRequestAttachements' },
+                     then: {
+                        $anyElementTrue: {
+                           $map: {
+                              input: '$materialRequestAttachements',
+                              as: 'file',
+                              in: { $eq: [{ $ifNull: ['$$file.status', 'pending'] }, 'pending'] }
+                           }
+                        }
+                     },
+                     else: false
+                  }
+               }
+            }
+         },
+         {
+            $match: {
+               $or: [
+                  { hasPendingItems: true },
+                  { hasPendingFiles: true }
+               ]
+            }
+         }
+      ];
+
+      if (jobId) {
+         pipeline.push({
+            $match: {
+               'jobId.jobId': { $regex: jobId, $options: 'i' }
+            }
+         });
+      }
+
+      if (customerName) {
+         pipeline.push({
+            $match: {
+               'customer.companyName': { $regex: customerName, $options: 'i' }
+            }
+         });
+      }
+
+      pipeline.push(
+         {
+            $project: {
+               _id: 1,
+               jobId: {
+                  _id: '$jobId._id',
+                  jobId: '$jobId.jobId'
+               },
+               customer: {
+                  _id: '$customer._id',
+                  companyName: '$customer.companyName'
+               },
+               materialRequest: 1,
+               materialRequestAttachements: 1,
+               projectType: 1
+            }
+         },
+         { $skip: skip },
+         { $limit: pageSize }
+      );
+
+      const projects = await technicalModel.aggregate(pipeline);
+      
+      const countPipeline = [...pipeline];
+      countPipeline.pop();
+      countPipeline.pop();
+      countPipeline.push({ $count: 'total' });
+      const totalResult = await technicalModel.aggregate(countPipeline);
+      const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+      return res.status(200).json({
+         success: true,
+         data: projects,
+         total: total
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to get pending material request projects",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const approveMaterialRequest = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id } = req.params;
+      const { comment = '' } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical project ID"
+         });
+      }
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
+      const technical = await technicalModel.findById(id);
+      if (!technical) {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+
+      const historyEntry = {
+         status: 'approved' as const,
+         comment: comment || '',
+         changedBy: employee._id,
+         changedDate: new Date()
+      };
+
+      technical.materialRequest = technical.materialRequest.map((item: any) => {
+         if (item.status === 'pending') {
+            return {
+               ...item,
+               status: 'approved',
+               statusHistory: [...(item.statusHistory || []), historyEntry]
+            };
+         }
+         return item;
+      });
+
+      technical.materialRequestAttachements = technical.materialRequestAttachements.map((file: any) => {
+         if (file.status === 'pending') {
+            return {
+               ...file,
+               status: 'approved',
+               statusHistory: [...(file.statusHistory || []), historyEntry]
+            };
+         }
+         return file;
+      });
+
+      technical.updatedAt = new Date();
+      await technical.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrApproved',
+            referenceModel: 'Technical',
+            title: 'Material Request Approved',
+            message: 'Material request has been approved and is ready for purchase processing',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { jobId: technical.jobId?.toString() }
+         },
+         {
+            privilegeKey: 'purchase',
+            checkFunction: (privileges) => {
+               return privileges.purchase?.create === true;
+            }
+         },
+         socket
+      );
+
+      return res.status(200).json({
+         success: true,
+         message: "Material request approved successfully",
+         data: technical
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to approve material request",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const rejectMaterialRequest = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id } = req.params;
+      const { comment = '' } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical project ID"
+         });
+      }
+
+      if (!comment || comment.trim().length === 0) {
+         return res.status(400).json({
+            success: false,
+            message: "Comment is required for rejection"
+         });
+      }
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const technical = await technicalModel.findById(id);
+      if (!technical) {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+
+      const historyEntry = {
+         status: 'rejected' as const,
+         comment: comment.trim(),
+         changedBy: employee._id,
+         changedDate: new Date()
+      };
+
+      technical.materialRequest = technical.materialRequest.map((item: any) => {
+         if (item.status === 'pending') {
+            return {
+               itemName: item.itemName,
+               quantity: item.quantity,
+               estimatedCost: item.estimatedCost,
+               requiredOn: item.requiredOn instanceof Date ? item.requiredOn : new Date(item.requiredOn),
+               remarks: item.remarks || '',
+               status: 'rejected' as const,
+               statusHistory: [...(item.statusHistory || []), historyEntry]
+            };
+         }
+         return {
+            itemName: item.itemName,
+            quantity: item.quantity,
+            estimatedCost: item.estimatedCost,
+            requiredOn: item.requiredOn instanceof Date ? item.requiredOn : new Date(item.requiredOn),
+            remarks: item.remarks || '',
+            status: item.status || 'pending',
+            statusHistory: item.statusHistory || []
+         };
+      });
+
+      technical.materialRequestAttachements = technical.materialRequestAttachements.map((file: any) => {
+         if (file.status === 'pending') {
+            return {
+               fileName: file.fileName,
+               originalname: file.originalname,
+               status: 'rejected' as const,
+               statusHistory: [...(file.statusHistory || []), historyEntry]
+            };
+         }
+         return {
+            fileName: file.fileName,
+            originalname: file.originalname,
+            status: file.status || 'pending',
+            statusHistory: file.statusHistory || []
+         };
+      });
+
+      technical.updatedAt = new Date();
+      await technical.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrRejected',
+            referenceModel: 'Technical',
+            title: 'Material Request Rejected',
+            message: 'Your material request has been rejected',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { technicalId: technical._id.toString() }
+         },
+         {
+            privilegeKey: 'technical',
+            checkFunction: (privileges, employeeId) => {
+               return employeeId === technical.assignedTo?.toString() &&
+                      privileges.technical?.viewReport !== 'none';
+            }
+         },
+         socket
+      );
+
+      return res.status(200).json({
+         success: true,
+         message: "Material request rejected successfully",
+         data: technical
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to reject material request",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const approveMaterialRequestItem = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id, itemIndex } = req.params;
+      const { comment = '' } = req.body;
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical project ID"
+         });
+      }
+
+      const index = parseInt(itemIndex);
+      if (isNaN(index) || index < 0) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid item index"
+         });
+      }
+
+      const technical = await technicalModel.findById(id);
+      if (!technical) {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+
+      if (!technical.materialRequest || index >= technical.materialRequest.length) {
+         return res.status(404).json({
+            success: false,
+            message: "Item not found"
+         });
+      }
+
+      const item = technical.materialRequest[index];
+      if (!item || item.status !== 'pending') {
+         return res.status(400).json({
+            success: false,
+            message: `Item is not pending. Current status: ${item?.status || 'unknown'}`
+         });
+      }
+
+      const historyEntry = {
+         status: 'approved' as const,
+         comment: comment || '',
+         changedBy: employee._id,
+         changedDate: new Date()
+      };
+
+      const itemData: any = JSON.parse(JSON.stringify(item));
+      
+      technical.materialRequest[index] = {
+         itemName: itemData.itemName,
+         quantity: itemData.quantity,
+         estimatedCost: itemData.estimatedCost,
+         requiredOn: itemData.requiredOn instanceof Date ? itemData.requiredOn : new Date(itemData.requiredOn),
+         remarks: itemData.remarks || '',
+         status: 'approved',
+         statusHistory: [...(itemData.statusHistory || []), historyEntry]
+      };
+
+      technical.updatedAt = new Date();
+      await technical.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrApproved',
+            referenceModel: 'Technical',
+            title: 'Material Request Approved',
+            message: 'Material request item has been approved and is ready for purchase processing',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { jobId: technical.jobId?.toString() }
+         },
+         {
+            privilegeKey: 'purchase',
+            checkFunction: (privileges) => {
+               return privileges.purchase?.create === true;
+            }
+         },
+         socket
+      );
+
+      return res.status(200).json({
+         success: true,
+         message: "Item approved successfully",
+         data: technical
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to approve item",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const rejectMaterialRequestItem = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id, itemIndex } = req.params;
+      const { comment = '' } = req.body;
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical project ID"
+         });
+      }
+
+      if (!comment || comment.trim().length === 0) {
+         return res.status(400).json({
+            success: false,
+            message: "Comment is required for rejection"
+         });
+      }
+
+      const index = parseInt(itemIndex);
+      if (isNaN(index) || index < 0) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid item index"
+         });
+      }
+
+      const technical = await technicalModel.findById(id);
+      if (!technical) {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+
+      if (!technical.materialRequest || index >= technical.materialRequest.length) {
+         return res.status(404).json({
+            success: false,
+            message: "Item not found"
+         });
+      }
+
+      const item = technical.materialRequest[index];
+      if (!item || item.status !== 'pending') {
+         return res.status(400).json({
+            success: false,
+            message: `Item is not pending. Current status: ${item?.status || 'unknown'}`
+         });
+      }
+
+      const historyEntry = {
+         status: 'rejected' as const,
+         comment: comment.trim(),
+         changedBy: employee._id,
+         changedDate: new Date()
+      };
+
+      const itemData: any = JSON.parse(JSON.stringify(item));
+      
+      technical.materialRequest[index] = {
+         itemName: itemData.itemName,
+         quantity: itemData.quantity,
+         estimatedCost: itemData.estimatedCost,
+         requiredOn: itemData.requiredOn instanceof Date ? itemData.requiredOn : new Date(itemData.requiredOn),
+         remarks: itemData.remarks || '',
+         status: 'rejected',
+         statusHistory: [...(itemData.statusHistory || []), historyEntry]
+      };
+
+      technical.updatedAt = new Date();
+      await technical.save();
+
+      return res.status(200).json({
+         success: true,
+         message: "Item rejected successfully",
+         data: technical
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to reject item",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const approveMaterialRequestFile = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id, fileIndex } = req.params;
+      const { comment = '' } = req.body;
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      if (!privileges?.technical?.canApproveMRRequests) {
+         return res.status(403).json({
+            success: false,
+            message: "You do not have permission to approve MR requests",
+         });
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical project ID"
+         });
+      }
+
+      const index = parseInt(fileIndex);
+      if (isNaN(index) || index < 0) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid file index"
+         });
+      }
+
+      const technical = await technicalModel.findById(id);
+      if (!technical) {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+
+      if (!technical.materialRequestAttachements || index >= technical.materialRequestAttachements.length) {
+         return res.status(404).json({
+            success: false,
+            message: "File not found"
+         });
+      }
+
+      const file = technical.materialRequestAttachements[index];
+      if (!file || file.status !== 'pending') {
+         return res.status(400).json({
+            success: false,
+            message: `File is not pending. Current status: ${file?.status || 'unknown'}`
+         });
+      }
+
+      const historyEntry = {
+         status: 'approved' as const,
+         comment: comment || '',
+         changedBy: employee._id,
+         changedDate: new Date()
+      };
+
+      const fileData: any = JSON.parse(JSON.stringify(file));
+      
+      technical.materialRequestAttachements[index] = {
+         fileName: fileData.fileName,
+         originalname: fileData.originalname,
+         status: 'approved',
+         statusHistory: [...(fileData.statusHistory || []), historyEntry]
+      };
+
+      technical.updatedAt = new Date();
+      await technical.save();
+
+      return res.status(200).json({
+         success: true,
+         message: "File approved successfully",
+         data: technical
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to approve file",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const rejectMaterialRequestFile = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id, fileIndex } = req.params;
+      const { comment = '' } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical project ID"
+         });
+      }
+
+      if (!comment || comment.trim().length === 0) {
+         return res.status(400).json({
+            success: false,
+            message: "Comment is required for rejection"
+         });
+      }
+
+      const index = parseInt(fileIndex);
+      if (isNaN(index) || index < 0) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid file index"
+         });
+      }
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const technical = await technicalModel.findById(id);
+      if (!technical) {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+
+      if (!technical.materialRequestAttachements || index >= technical.materialRequestAttachements.length) {
+         return res.status(404).json({
+            success: false,
+            message: "File not found"
+         });
+      }
+
+      const file = technical.materialRequestAttachements[index];
+      if (!file || file.status !== 'pending') {
+         return res.status(400).json({
+            success: false,
+            message: `File is not pending. Current status: ${file?.status || 'unknown'}`
+         });
+      }
+
+      const historyEntry = {
+         status: 'rejected' as const,
+         comment: comment.trim(),
+         changedBy: employee._id,
+         changedDate: new Date()
+      };
+
+      const fileData: any = JSON.parse(JSON.stringify(file));
+      
+      technical.materialRequestAttachements[index] = {
+         fileName: fileData.fileName,
+         originalname: fileData.originalname,
+         status: 'rejected',
+         statusHistory: [...(fileData.statusHistory || []), historyEntry]
+      };
+
+      technical.updatedAt = new Date();
+      await technical.save();
+
+      return res.status(200).json({
+         success: true,
+         message: "File rejected successfully",
+         data: technical
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to reject file",
+         error: error instanceof Error ? error.message : "Unknown error"
+      });
+   }
+}
+
+export const approveAllPendingMaterialRequests = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id } = req.params;
+      const { comment = '' } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid technical project ID"
+         });
+      }
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Unauthorized"
+         });
+      }
+
+      const technical = await technicalModel.findById(id);
+      if (!technical) {
+         return res.status(404).json({
+            success: false,
+            message: "Technical project not found"
+         });
+      }
+
+      const historyEntry = {
+         status: 'approved' as const,
+         comment: comment || '',
+         changedBy: employee._id,
+         changedDate: new Date()
+      };
+
+      let approvedItemsCount = 0;
+      let approvedFilesCount = 0;
+
+      technical.materialRequest = technical.materialRequest.map((item: any) => {
+         const itemData: any = JSON.parse(JSON.stringify(item));
+         if (itemData.status === 'pending') {
+            approvedItemsCount++;
+            return {
+               itemName: itemData.itemName,
+               quantity: itemData.quantity,
+               estimatedCost: itemData.estimatedCost,
+               requiredOn: itemData.requiredOn instanceof Date ? itemData.requiredOn : new Date(itemData.requiredOn),
+               remarks: itemData.remarks || '',
+               status: 'approved' as const,
+               statusHistory: [...(itemData.statusHistory || []), historyEntry]
+            };
+         }
+         return {
+            itemName: itemData.itemName,
+            quantity: itemData.quantity,
+            estimatedCost: itemData.estimatedCost,
+            requiredOn: itemData.requiredOn instanceof Date ? itemData.requiredOn : new Date(itemData.requiredOn),
+            remarks: itemData.remarks || '',
+            status: itemData.status || 'pending',
+            statusHistory: itemData.statusHistory || []
+         };
+      });
+
+      technical.materialRequestAttachements = technical.materialRequestAttachements.map((file: any) => {
+         const fileData: any = JSON.parse(JSON.stringify(file));
+         if (fileData.status === 'pending') {
+            approvedFilesCount++;
+            return {
+               fileName: fileData.fileName,
+               originalname: fileData.originalname,
+               status: 'approved' as const,
+               statusHistory: [...(fileData.statusHistory || []), historyEntry]
+            };
+         }
+         return {
+            fileName: fileData.fileName,
+            originalname: fileData.originalname,
+            status: fileData.status || 'pending',
+            statusHistory: fileData.statusHistory || []
+         };
+      });
+
+      if (approvedItemsCount === 0 && approvedFilesCount === 0) {
+         return res.status(400).json({
+            success: false,
+            message: "No pending items or files to approve"
+         });
+      }
+
+      technical.updatedAt = new Date();
+      await technical.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'MrApproved',
+            referenceModel: 'Technical',
+            title: 'Material Request Approved',
+            message: 'Material request has been approved and is ready for purchase processing',
+            sentBy: employee._id?.toString(),
+            referenceId: technical._id,
+            additionalData: { jobId: technical.jobId?.toString() }
+         },
+         {
+            privilegeKey: 'purchase',
+            checkFunction: (privileges) => {
+               return privileges.purchase?.create === true;
+            }
+         },
+         socket
+      );
+
+      return res.status(200).json({
+         success: true,
+         message: `Approved ${approvedItemsCount} item(s) and ${approvedFilesCount} file(s) successfully`,
+         data: technical
+      });
+   } catch (error) {
+      console.log(error);
+      return res.status(500).json({
+         success: false,
+         message: "Failed to approve all pending items",
          error: error instanceof Error ? error.message : "Unknown error"
       });
    }

@@ -47,6 +47,8 @@ export class BillingSummaryComponent implements OnInit {
   isLoading = signal<boolean>(false);
 
   projectId = '';
+  jobId = '';
+  jobIdDisplay = '';
 
   tableColumns: TableColumn[] = [
     {
@@ -110,22 +112,70 @@ export class BillingSummaryComponent implements OnInit {
 
   private loadBillingSummaries(): void {
     this.isLoading.set(true);
+    
+    this.technicalService.getTechnicalProjectById(this.projectId).subscribe({
+      next: (projectResponse) => {
+        const project = projectResponse.data;
+        this.jobId = project?.jobId?._id || '';
+        this.jobIdDisplay = project?.jobId?.jobId || project?.jobId || 'xxxx';
+
+        this.technicalService.getCostingDetails(this.projectId).subscribe({
+          next: (costingResponse) => {
+            const lpoValue = costingResponse?.data?.totalLPOValue || 0;
+            
+            this.technicalService.getBillingSummaries(this.projectId).subscribe({
+              next: (response) => {
+                const data = response.data || [];
+                const processedBillingSummary = data.length > 0 
+                  ? data.map((item: any, index: number) => ({
+                      ...item,
+                      balanceToBeInvoiced: this.calculateBalance(data, index, lpoValue)
+                    }))
+                  : [];
+
+                this.billingSummaryData.set({
+                  billingSummary: processedBillingSummary,
+                  lpoValue: lpoValue,
+                  projectId: this.jobIdDisplay
+                });
+
+                this.isLoading.set(false);
+              },
+              error: (error) => {
+                this.isLoading.set(false);
+                this.notificationService.error('Failed to load billing summaries');
+                console.error('Error loading billing summaries:', error);
+              }
+            });
+          },
+          error: (error) => {
+            this.loadBillingSummariesFallback();
+          }
+        });
+      },
+      error: (error) => {
+        this.loadBillingSummariesFallback();
+      }
+    });
+  }
+
+  private loadBillingSummariesFallback(): void {
     this.technicalService.getBillingSummaries(this.projectId).subscribe({
       next: (response) => {
-        const data = response.data;
-        if (data.length) {
-          const processedBillingSummary = data.map((item: any, index: number) => ({
-            ...item,
-            balanceToBeInvoiced: this.calculateBalance(data, index, response.lpoValue)
-          }));
+        const data = response.data || [];
+        const lpoValue = response.lpoValue || 0;
+        const processedBillingSummary = data.length > 0
+          ? data.map((item: any, index: number) => ({
+              ...item,
+              balanceToBeInvoiced: this.calculateBalance(data, index, lpoValue)
+            }))
+          : [];
 
-          this.billingSummaryData.set({
-            ...data,
-            billingSummary: processedBillingSummary,
-            lpoValue: response.lpoValue
-          });
-        }
-
+        this.billingSummaryData.set({
+          billingSummary: processedBillingSummary,
+          lpoValue: lpoValue,
+          projectId: this.jobIdDisplay || 'xxxx'
+        });
 
         this.isLoading.set(false);
       },

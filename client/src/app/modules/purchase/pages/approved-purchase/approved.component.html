@@ -5,6 +5,8 @@
 [isLoading]="isLoading()"
 [isEmpty]="isEmpty()"
 [totalItems]="totalItems()"
+(filterChange)="onFilterChange($event)"
+(paginationChange)="onPaginationChange($event)"
 (rowClick)="onRowClick($event)"
 (actionClick)="onActionClick($event)"
 [title]="'Approved PR'"

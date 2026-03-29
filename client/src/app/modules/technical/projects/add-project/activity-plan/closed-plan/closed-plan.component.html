@@ -17,14 +17,28 @@
           id="orginalStartDate"
           type="date">
         </app-form-field>
-        <app-form-field
-          label="End Date"
-          [control]="form.get('orginalEndDate')"
-          [isSubmitted]="isSubmitted"
-          placeholder="Select end date"
-          id="orginalEndDate"
-          type="date">
-        </app-form-field>
+        <div class="mb-6">
+          <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="orginalEndDate">
+            End Date
+          </label>
+          <input
+            id="orginalEndDate"
+            placeholder="Select end date"
+            [class.border-red-500]="orginalEndDateControl.invalid && isSubmitted"
+            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            [formControl]="orginalEndDateControl"
+            type="date"/>
+          @if(orginalEndDateControl.invalid && isSubmitted) {
+            <div class="text-red-700 text-sm mt-1">
+              @if(orginalEndDateControl.errors?.['required']) {
+                <span>This field is required.</span>
+              }
+              @if(orginalEndDateControl.errors?.['dateRange']) {
+                <span>End date must be after start date.</span>
+              }
+            </div>
+          }
+        </div>
       </div>
   
       <app-form-field

@@ -1,0 +1,15 @@
+<data-table
+[title]="'Invoice Linked Report'"
+[data]="tableData()"
+[columns]="tableColumns"
+[defaultColumns]="defaultColumns"
+[isLoading]="isLoading()"
+[isEmpty]="isEmpty()"
+[totalItems]="totalItems()"
+[tableId]="'invoice-linking-report-table'"
+[enableExport]="true"
+[exportFileName]="'invoice-linked-delivery-report.xlsx'"
+(filterChange)="onFilterChange($event)"
+(paginationChange)="onPaginationChange($event)"
+(exportRequest)="onExportRequest()"
+></data-table>

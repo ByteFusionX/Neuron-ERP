@@ -46,7 +46,35 @@ export class PurchaseOrderService {
     return this.http.patch<any>(`${this.baseUrl}/${id}/status`, { poStatus });
   }
 
-  updateSupplierInvoices(lpoId: string, data: { supplierInvoices: any[] }): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${lpoId}/supplier-invoices`, data);
+  updateSupplierInvoices(lpoId: string, formData: FormData): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${lpoId}/supplier-invoices`, formData);
+  }
+
+  getSuppliersForPurchaseRequest(purchaseId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/suppliers/${purchaseId}`);
+  }
+
+  getItemsForPurchaseRequest(purchaseId: string, supplierId: string, excludeLpoId?: string): Observable<any> {
+    const params: any = {};
+    if (excludeLpoId) {
+      params.excludeLpoId = excludeLpoId;
+    }
+    return this.http.get<any>(`${this.baseUrl}/items/${purchaseId}/${supplierId}`, { params });
+  }
+
+  reissuePurchaseOrder(lpoId: string, purchaseOrder: PurchaseOrder): Observable<PurchaseOrder> {
+    return this.http.put<PurchaseOrder>(`${this.baseUrl}/${lpoId}/reissue`, purchaseOrder);
+  }
+
+  approvePurchaseOrder(id: string, comment?: string): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}/approve`, { comment });
+  }
+
+  rejectPurchaseOrder(id: string, comment?: string): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${id}/reject`, { comment });
+  }
+
+  revokePurchaseOrder(id: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/${id}/revoke`);
   }
 }

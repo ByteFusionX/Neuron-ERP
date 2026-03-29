@@ -1,0 +1,63 @@
+<app-modal-layout
+  title="Blocked Items"
+  [subtitle]="getSubtitle()"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="[
+    { label: 'Close', onClick: onClose.bind(this), theme: 'primary' }
+  ]"
+  contentClass="p-6 flex-1 overflow-y-auto"
+  contentMaxHeight="90vh">
+    <div *ngIf="blockedItems.length === 0" class="text-center py-12">
+      <ng-icon name="heroLockOpen" class="w-16 h-16 text-gray-300 mx-auto mb-4"></ng-icon>
+      <p class="text-gray-500 text-lg">No items are currently blocked</p>
+    </div>
+
+    <div *ngIf="blockedItems.length > 0" class="space-y-2">
+      <div
+        *ngFor="let item of blockedItems; let i = index"
+        class="border border-gray-200 rounded-md p-3 hover:bg-gray-50 transition-colors"
+        [class.bg-orange-50]="isActive(item)"
+        [class.bg-gray-50]="!isActive(item)">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 flex-1">
+            <ng-icon
+              [name]="isActive(item) ? 'heroLockClosed' : 'heroLockOpen'"
+              [class.text-orange-600]="isActive(item)"
+              [class.text-gray-500]="!isActive(item)"
+              class="w-5 h-5">
+            </ng-icon>
+            <div class="flex-1 grid grid-cols-3 gap-2 text-sm">
+              <div>
+                <div>
+                  <span class="text-gray-500">Qty:</span>
+                  <span class="font-medium text-gray-900 ml-1">{{ item.quantity }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Salesperson:</span>
+                  <span class="font-medium text-gray-900 ml-1">{{ item.salesPersonName }}</span>
+                </div>
+              </div>
+              <div>
+                <span class="text-gray-500">Customer:</span>
+                <span class="font-medium text-gray-900 ml-1">{{ item.customerName }}</span>
+              </div>
+              <div>
+                <span class="text-gray-500">Period:</span>
+                <span class="font-medium text-gray-900 ml-1">{{ formatDate(item.fromDate) }} - {{ formatDate(item.toDate) }}</span>
+              </div>
+            </div>
+          </div>
+          <span
+            *ngIf="isActive(item)"
+            class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700 whitespace-nowrap">
+            Active
+          </span>
+          <span
+            *ngIf="!isActive(item)"
+            class="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600 whitespace-nowrap">
+            Expired
+          </span>
+        </div>
+      </div>
+    </div>
+</app-modal-layout>

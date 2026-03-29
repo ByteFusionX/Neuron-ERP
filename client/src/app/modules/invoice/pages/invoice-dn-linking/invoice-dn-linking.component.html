@@ -1,0 +1,17 @@
+<data-table
+[data]="tableData()"
+[columns]="tableColumns"
+[defaultColumns]="defaultColumns"
+[isLoading]="isLoading()"
+[isEmpty]="isEmpty()"
+[totalItems]="totalItems()"
+[tableId]="'invoice-dn-linking-table'"
+[enableExport]="true"
+[exportFileName]="'Invoice_vs_DN_Report.xlsx'"
+(filterChange)="onFilterChange($event)"
+(paginationChange)="onPaginationChange($event)"
+(rowClick)="onRowClick($event)"
+(exportRequest)="exportReport()"
+[title]="'Invoice vs Delivery Note Linking Report'"
+>
+</data-table>

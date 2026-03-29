@@ -3,12 +3,28 @@ import Supplier, { supplierStatus } from '../models/supplier.model';
 import { Types } from 'mongoose';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
-import { getEmployeeData } from '../common/utils/util';
+import { getEmployeeData, buildPrivilegeAccessFilter } from '../common/utils/util';
+import { Server } from 'socket.io';
+import { createNotificationWithPrivileges } from './notification.controller';
 
 
 export const getSuppliers = async (req: Request, res: Response) => {
    try {
-      let { page = 1, row = 10, toDate, fromDate, status, category, supplierType, supplierName, location } = req.body;
+      let { page = 1, row = 10, toDate, fromDate, status, category, supplierType, supplierName, search, location, productName } = req.body;
+
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
+      if (!employee) {
+         return res.status(401).json({
+            success: false,
+            message: "Employee not found",
+         });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.supplier?.viewReport 
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.supplier.viewReport, 'createdBy')
+         : {};
 
       // Convert string page and row to numbers
       page = parseInt(page.toString());
@@ -18,7 +34,10 @@ export const getSuppliers = async (req: Request, res: Response) => {
       const skip = (page - 1) * row;
 
       // Build filter object
-      const filter: Record<string, any> = { isDeleted: false };
+      const filter: Record<string, any> = { 
+         isDeleted: false,
+         ...accessFilter
+      };
 
       // Add date range filter if provided
       if (fromDate || toDate) {
@@ -50,14 +69,20 @@ export const getSuppliers = async (req: Request, res: Response) => {
          filter.supplierType = supplierType;
       }
 
-      // Add supplierName filter if provided
-      if (supplierName) {
-         filter.supplierName = { $regex: supplierName, $options: 'i' };
+      // Add supplierName filter if provided (search parameter maps to supplierName)
+      const searchTerm = search || supplierName;
+      if (searchTerm) {
+         filter.supplierName = { $regex: searchTerm, $options: 'i' };
       }
 
       // Add location filter if provided
       if (location) {
          filter['address.location'] = { $regex: location, $options: 'i' };
+      }
+
+      // Add productName filter if provided
+      if (productName) {
+         filter['products.productName'] = { $regex: productName, $options: 'i' };
       }
 
       // Use aggregation pipeline for advanced querying with lookups
@@ -211,6 +236,8 @@ export const getSuppliers = async (req: Request, res: Response) => {
 
 export const createSupplier = async (req: Request, res: Response) => {
    try {
+      const tokenData = req.user;
+      const employee = await getEmployeeData(tokenData);
       const {
          supplierName,
          address,
@@ -268,6 +295,24 @@ export const createSupplier = async (req: Request, res: Response) => {
 
       // Save the supplier to database
       const savedSupplier = await newSupplier.save();
+
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+         {
+            type: 'SupplierApprovalRequest',
+            referenceModel: 'Supplier',
+            title: 'Supplier sent for approval',
+            message: `Supplier ${savedSupplier.supplierName} has been sent for approval`,
+            sentBy: employee?._id?.toString(),
+            referenceId: savedSupplier._id,
+            additionalData: { supplierId: savedSupplier._id.toString() }
+         },
+         {
+            privilegeKey: 'supplier',
+            checkFunction: (p) => p.supplier?.canApproveSupplier === true
+         },
+         socket
+      );
 
       // Populate the createdBy field before returning
       const populatedSupplier = await Supplier.findById(savedSupplier._id)
@@ -341,6 +386,14 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
             });
          }
 
+         const privileges = employee.category?.privileges;
+         if (!privileges?.supplier?.canApproveSupplier) {
+            return res.status(403).json({
+               success: false,
+               message: "You do not have permission to approve suppliers",
+            });
+         }
+
          if (supplier.status === supplierStatus.approved) {
             return res.status(400).json({
                success: false,
@@ -387,6 +440,44 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
 
       // Save the updated supplier
       const updatedSupplier = await supplier.save();
+
+      const socket = req.app.get('io') as Server;
+      const supplierIdStr = updatedSupplier._id.toString();
+      if (statusToUpdate === supplierStatus.approved) {
+         await createNotificationWithPrivileges(
+            {
+               type: 'SupplierApproved',
+               referenceModel: 'Supplier',
+               title: 'Supplier approved',
+               message: `Supplier ${updatedSupplier.supplierName} has been approved`,
+               sentBy: userId?.toString?.(),
+               referenceId: updatedSupplier._id,
+               additionalData: { supplierId: supplierIdStr }
+            },
+            {
+               privilegeKey: 'supplier',
+               checkFunction: (p) => p.supplier?.viewReport !== 'none'
+            },
+            socket
+         );
+      } else if (statusToUpdate === supplierStatus.rejected) {
+         await createNotificationWithPrivileges(
+            {
+               type: 'SupplierRejected',
+               referenceModel: 'Supplier',
+               title: 'Supplier rejected',
+               message: `Supplier ${updatedSupplier.supplierName} has been rejected`,
+               sentBy: userId?.toString?.(),
+               referenceId: updatedSupplier._id,
+               additionalData: { supplierId: supplierIdStr }
+            },
+            {
+               privilegeKey: 'supplier',
+               checkFunction: (p) => p.supplier?.viewReport !== 'none'
+            },
+            socket
+         );
+      }
 
       // Populate both createdBy, approvedBy, and rejection history fields before returning
       const populatedSupplier = await Supplier.findById(updatedSupplier._id)

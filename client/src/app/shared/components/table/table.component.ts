@@ -12,12 +12,13 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { DropdownModule } from 'primeng/dropdown';
 import { InputNumberModule } from 'primeng/inputnumber';
 
-import { TableColumn, TableFilter, DateRange, ApprovalRejectionList } from './table.model';
+import { TableColumn, TableFilter, DateRange, ApprovalRejectionList, InlineEditConfig, InlineEditColumnConfig } from './table.model';
 import { SkeltonLoadingComponent } from '../skelton-loading/skelton-loading.component';
 import { PaginationComponent } from '../pagination/pagination.component';
 import { PaginationService } from 'src/app/core/services/pagination.service'; 
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 // import { ListModalComponent } from '../list-modal/list-modal.component';
+import * as XLSX from 'xlsx';
 
 @Component({
   selector: 'data-table',
@@ -50,12 +51,18 @@ export class TableComponent implements OnInit, OnChanges {
   @Input() isEmpty: boolean = true;
   @Input() tableId: string = '';
   @Input() showPagination: boolean = true;
+  @Input() enableExport: boolean = false;
+  @Input() exportFileName?: string;
+  @Input() inlineEditConfig?: InlineEditConfig | null = null;
 
   @Output() rowClick = new EventEmitter<any>();
   @Output() actionClick = new EventEmitter<{ action: string, item: any, event: Event }>();
   @Output() filterChange = new EventEmitter<TableFilter[]>();
   @Output() paginationChange = new EventEmitter<{ page: number, row: number }>();
   @Output() statusChange = new EventEmitter<any>();
+  @Output() inlineEditSave = new EventEmitter<{ rowId: any, updated: any, original: any }>();
+  @Output() inlineDelete = new EventEmitter<any>();
+  @Output() exportRequest = new EventEmitter<void>();
 
   @ContentChild('sideColumn') sideColumns!: TemplateRef<any>;
 
@@ -68,6 +75,9 @@ export class TableComponent implements OnInit, OnChanges {
   activeFilters: TableFilter[] = [];
   dateRanges: { [key: string]: DateRange } = {};
   filterValues: { [key: string]: any } = {};
+  editingRowId: any = null;
+  editableRowDraft: any = null;
+  originalRowReference: any = null;
 
   constructor(private dialog: MatDialog) {}
 
@@ -98,21 +108,26 @@ export class TableComponent implements OnInit, OnChanges {
   initializeColumns(): void {
     this.availableColumns = [...this.columns];
 
-    // Try to load saved columns from localStorage if tableId is provided
+    const currentKeys = this.defaultColumns && this.defaultColumns.length > 0
+      ? [...this.defaultColumns]
+      : this.columns.map(col => col.key);
+
     if (this.tableId) {
       const savedColumns = localStorage.getItem(`table_columns_${this.tableId}`);
       if (savedColumns) {
-        this.displayedColumns = JSON.parse(savedColumns);
+        const saved: string[] = JSON.parse(savedColumns);
+        const newKeys = currentKeys.filter(k => !saved.includes(k));
+        if (newKeys.length > 0) {
+          this.displayedColumns = [...saved, ...newKeys];
+          localStorage.setItem(`table_columns_${this.tableId}`, JSON.stringify(this.displayedColumns));
+        } else {
+          this.displayedColumns = saved;
+        }
         return;
       }
     }
 
-    // If no saved columns or no tableId, use default columns or all columns
-    if (this.defaultColumns && this.defaultColumns.length > 0) {
-      this.displayedColumns = [...this.defaultColumns];
-    } else {
-      this.displayedColumns = this.columns.map(col => col.key);
-    }
+    this.displayedColumns = currentKeys;
   }
 
   onRowClick(row: any): void {
@@ -190,6 +205,45 @@ export class TableComponent implements OnInit, OnChanges {
     }
     return column.key.split('.').reduce((obj, key) =>
       (obj && obj[key] !== undefined) ? obj[key] : null, item);
+  }
+
+  getStatusColorClass(status: any): string {
+    if (!status) return 'bg-slate-100 text-slate-700';
+    
+    const statusLower = String(status).toLowerCase().trim();
+    
+    switch (statusLower) {
+      case 'delivered':
+        return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+      case 'cancelled':
+        return 'bg-red-100 text-red-700 border border-red-200';
+      case 'draft':
+      case 'drafted':
+        return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'deducted':
+        return 'bg-blue-100 text-blue-700 border border-blue-200';
+      case 'reversed':
+        return 'bg-orange-100 text-orange-700 border border-orange-200';
+      case 'not ordered':
+      case 'not delivered':
+        return 'bg-rose-100 text-rose-700 border border-rose-200';
+      case 'ordered':
+        return 'bg-sky-100 text-sky-700 border border-sky-200';
+      case 'partially received':
+        return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'received':
+        return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+      case 'partially delivered':
+        return 'bg-violet-100 text-violet-700 border border-violet-200';
+      case 'pending invoice':
+        return 'bg-rose-100 text-rose-700 border border-rose-200';
+      case 'partially invoiced':
+        return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'fully invoiced':
+        return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+      default:
+        return 'bg-slate-100 text-slate-700 border border-slate-200';
+    }
   }
 
   formatCurrencyWithSpace(item: any, column: TableColumn): string {
@@ -302,5 +356,135 @@ export class TableComponent implements OnInit, OnChanges {
         });
       }
     });
+  }
+
+  exportToExcel(): void {
+    if (!this.enableExport) {
+      return;
+    }
+    this.exportRequest.emit();
+  }
+
+  exportAllData(data: any[]): void {
+    if (!data || data.length === 0) {
+      return;
+    }
+
+    const columnsToExport = this.displayedColumns.filter(colKey => colKey !== 'actions');
+    
+    const rows = data.map((item) => {
+      const row: Record<string, any> = {};
+      columnsToExport.forEach((columnKey) => {
+        const column = this.columns.find((col) => col.key === columnKey);
+        if (!column) return;
+
+        let value = this.getCellValue(item, column);
+        if (column.type === 'date' && value) {
+          value = new Date(value);
+        }
+        row[column.label] = value ?? '';
+      });
+      return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, this.title || 'Sheet1');
+    const filename = this.exportFileName || `${this.title || 'table-data'}.xlsx`;
+    XLSX.writeFile(workbook, filename);
+  }
+
+  isInlineEditEnabled(): boolean {
+    return !!this.inlineEditConfig?.enabled;
+  }
+
+  private getRowId(item: any): any {
+    if (!this.inlineEditConfig) return null;
+    const key = this.inlineEditConfig.rowIdentityKey || '_id';
+    return key.split('.').reduce((obj, part) => (obj ? obj[part] : null), item);
+  }
+
+  isRowEditing(item: any): boolean {
+    if (!this.isInlineEditEnabled()) return false;
+    return this.getRowId(item) === this.editingRowId;
+  }
+
+  isColumnInlineEditable(columnKey: string): boolean {
+    if (!this.inlineEditConfig?.columns) return false;
+    return !!this.inlineEditConfig.columns[columnKey];
+  }
+
+  getInlineColumnConfig(columnKey: string): InlineEditColumnConfig | null {
+    if (!this.inlineEditConfig?.columns) return null;
+    return this.inlineEditConfig.columns[columnKey] || null;
+  }
+
+  getInlineSelectValue(columnKey: string): any {
+    const value = this.getDraftValue(columnKey);
+    if (value && typeof value === 'object') {
+      return value._id ?? value.id ?? value.value ?? value.key ?? null;
+    }
+    return value ?? null;
+  }
+
+  startInlineEdit(item: any, event?: Event): void {
+    event?.stopPropagation();
+    this.editingRowId = this.getRowId(item);
+    this.editableRowDraft = item ? JSON.parse(JSON.stringify(item)) : null;
+    this.originalRowReference = item;
+  }
+
+  cancelInlineEdit(event?: Event): void {
+    event?.stopPropagation();
+    this.editingRowId = null;
+    this.editableRowDraft = null;
+    this.originalRowReference = null;
+  }
+
+  saveInlineEdit(event?: Event): void {
+    event?.stopPropagation();
+    if (!this.inlineEditConfig || !this.editableRowDraft) return;
+    this.inlineEditSave.emit({
+      rowId: this.editingRowId,
+      updated: this.editableRowDraft,
+      original: this.originalRowReference
+    });
+    this.cancelInlineEdit();
+  }
+
+  deleteInlineRow(item: any, event?: Event): void {
+    event?.stopPropagation();
+    this.inlineDelete.emit(item);
+  }
+
+  getDraftValue(columnKey: string): any {
+    if (!this.editableRowDraft) return null;
+    return columnKey.split('.').reduce((obj, key) => (obj ? obj[key] : null), this.editableRowDraft);
+  }
+
+  updateDraftValue(columnKey: string, value: any): void {
+    if (!this.editableRowDraft) return;
+    this.setDraftValue(columnKey, value);
+
+    if (['quantity', 'unitCost'].includes(columnKey)) {
+      const qty = Number(this.getDraftValue('quantity'));
+      const cost = Number(this.getDraftValue('unitCost'));
+      if (!isNaN(qty) && !isNaN(cost) && this.isColumnInlineEditable('totalCost')) {
+        this.setDraftValue('totalCost', Number((qty * cost).toFixed(2)));
+      }
+    }
+  }
+
+  private setDraftValue(columnKey: string, value: any): void {
+    const keys = columnKey.split('.');
+    let target = this.editableRowDraft;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (target[key] === undefined || target[key] === null) {
+        target[key] = {};
+      }
+      target = target[key];
+    }
+    target[keys[keys.length - 1]] = value;
   }
 }

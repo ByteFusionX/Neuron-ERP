@@ -17,7 +17,7 @@ import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { OptionalItems, Quotatation, QuoteItem, getQuotatation, quotatationForm } from 'src/app/shared/interfaces/quotation.interface';
 import { customerNoteValidator } from 'src/app/shared/validators/quoation.validator';
 import { Note, Notes } from 'src/app/shared/interfaces/notes.interface';
-import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
+import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { NgIf, NgFor, AsyncPipe, DecimalPipe } from '@angular/common';
@@ -160,21 +160,9 @@ export class CreateQuotatationComponent {
 
   onCustomerNote(event: Note, noteType: string) {
     if (noteType == 'customerNotes') {
-      const customerNote = this.quoteForm.value.customerNote;
-      let nextLine = ''
-      if (customerNote) {
-        nextLine = '\n'
-      }
-      const note = this.quoteForm.value.customerNote + nextLine + event.note;
-      this.quoteForm.patchValue({ customerNote: note })
+      this.quoteForm.patchValue({ customerNote: event.note ?? '' })
     } else if (noteType == 'termsAndConditions') {
-      const customerNote = this.quoteForm.value.termsAndCondition;
-      let nextLine = ''
-      if (customerNote) {
-        nextLine = '\n'
-      }
-      const note = this.quoteForm.value.termsAndCondition + nextLine + event.note;
-      this.quoteForm.patchValue({ termsAndCondition: note })
+      this.quoteForm.patchValue({ termsAndCondition: event.note ?? '' })
     }
   }
 
@@ -269,7 +257,7 @@ export class CreateQuotatationComponent {
         pdfDoc.getBlob((blob: Blob) => {
           let url = window.URL.createObjectURL(blob);
           this.isPreviewing = false;
-          this._dialog.open(QuotationPreviewComponent, { data: { url: url, formatedQuote: finalQuoteData } });
+          this._dialog.open(PdfPreviewComponent, { data: { url: url, formatedQuote: finalQuoteData } });
         });
 
       } catch (error) {

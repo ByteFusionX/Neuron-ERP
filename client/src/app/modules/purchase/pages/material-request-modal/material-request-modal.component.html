@@ -1,129 +1,143 @@
-<div class="p-6">
-  <div class="flex justify-between items-center mb-4">
-    <h2 class="text-lg font-semibold text-gray-800">Material Requests</h2>
-    <button (click)="onClose()" class="text-gray-500 hover:text-gray-700">
-      <ng-icon name="heroXMark" class="text-xl"></ng-icon>
-    </button>
+<app-modal-layout
+  title="Material Requests"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="[
+    { label: 'Close', onClick: onClose.bind(this), theme: 'cancel' }
+  ]"
+  contentClass="p-6">
+
+  <div *ngIf="loading" class="flex flex-col items-center justify-center py-12">
+    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-600"></div>
+    <p class="mt-3 text-gray-600 text-sm">Loading material requests...</p>
   </div>
 
-  <div *ngIf="loading" class="text-center py-8">
-    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
-    <p class="mt-2 text-gray-600">Loading material requests...</p>
+  <div *ngIf="!loading && materialRequests.length === 0" class="flex flex-col items-center justify-center py-12">
+    <ng-icon name="heroDocumentText" class="text-5xl text-gray-300 mb-3"></ng-icon>
+    <p class="text-gray-500">No material requests found for this job.</p>
   </div>
 
-  <div *ngIf="!loading && materialRequests.length === 0" class="text-center py-8">
-    <ng-icon name="heroDocumentText" class="text-4xl text-gray-400 mx-auto mb-2"></ng-icon>
-    <p class="text-gray-600">No material requests found for this job.</p>
-  </div>
-
-  <div *ngIf="!loading && materialRequests.length > 0 && getAvailableItemsCount() === 0" class="text-center py-8">
-    <ng-icon name="heroCheckCircle" class="text-4xl text-green-400 mx-auto mb-2"></ng-icon>
-    <p class="text-gray-600">All material requests have already been added to your purchase requisition.</p>
-  </div>
-
-  <div *ngIf="!loading && materialRequests.length > 0 && getAvailableItemsCount() > 0" class="space-y-4">
-    <div class="bg-gray-50 p-4 rounded-lg">
-      <h3 class="text-sm font-medium text-gray-700 mb-2">Available Material Requests</h3>
-      <p class="text-xs text-gray-600">Select items to add to your purchase requisition</p>
-      <div class="mt-2 flex gap-4 text-xs">
-        <span class="text-gray-600">
-          Total: {{ materialRequests.length }} items
-        </span>
-        <span class="text-green-600" *ngIf="alreadyAddedRequests.size > 0">
-          Already Added: {{ alreadyAddedRequests.size }} items
-        </span>
-        <span class="text-violet-600">
-          Available: {{ getAvailableItemsCount() }} items
-        </span>
+  <div *ngIf="!loading && materialRequests.length > 0" class="space-y-4">
+    <div class="overflow-hidden border border-gray-200 rounded-lg">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-12">
+                <input type="checkbox" 
+                       [checked]="selectedRequests.size > 0 && selectedRequests.size === getAvailableItemsCount()"
+                       (change)="toggleAllSelection()"
+                       class="rounded border-gray-300 text-violet-600 focus:ring-violet-500">
+              </th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Item Name</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Est. Cost</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Required On</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Total Cost</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <ng-container *ngFor="let request of materialRequests; let i = index">
+              <tr [ngClass]="{
+                'bg-green-50/50': isAlreadyAdded(i),
+                'hover:bg-gray-50': !isAlreadyAdded(i)
+              }">
+                <td class="px-4 py-4 whitespace-nowrap">
+                  <input type="checkbox" 
+                         [id]="'request-' + i"
+                         [checked]="selectedRequests.has(i)"
+                         [disabled]="isAlreadyAdded(i)"
+                         (change)="toggleSelection(i)"
+                         [ngClass]="{
+                           'rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer': !isAlreadyAdded(i),
+                           'rounded border-gray-300 text-gray-300 cursor-not-allowed': isAlreadyAdded(i)
+                         }">
+                </td>
+                <td class="px-4 py-4">
+                  <div class="text-sm font-medium text-gray-900">{{ request.itemName }}</div>
+                  <div *ngIf="request.remarks" class="text-xs text-gray-500 mt-1">{{ request.remarks }}</div>
+                </td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ request.quantity | numberFormatter }}
+                </td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ request.estimatedCost | numberFormatter }}
+                </td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ request.requiredOn | date:'short' }}
+                </td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {{ (request.quantity * request.estimatedCost) | numberFormatter }}
+                </td>
+                <td class="px-4 py-4 whitespace-nowrap">
+                  <div class="flex items-center gap-2">
+                    <span *ngIf="isAlreadyAdded(i)" 
+                          class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <ng-icon name="heroCheckCircle" class="w-3.5 h-3.5 mr-1.5"></ng-icon>
+                      Added
+                    </span>
+                    <span *ngIf="!isAlreadyAdded(i)" class="text-xs text-gray-400">Available</span>
+                    <button *ngIf="isAlreadyAdded(i)" 
+                            type="button"
+                            (click)="revokeMrItem(i)"
+                            class="inline-flex items-center px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors">
+                      <ng-icon name="heroTrash" class="w-3.5 h-3.5 mr-1"></ng-icon>
+                      Revoke
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <div *ngIf="alreadyAddedRequests.size > 0" class="bg-green-50 p-4 rounded-lg">
-      <h4 class="text-sm font-medium text-green-800 mb-2">Already Added Items</h4>
-      <div class="space-y-2">
-        <div *ngFor="let index of alreadyAddedRequests" class="text-sm text-green-700">
-          • {{ materialRequests[index].itemName }} (Qty: {{ materialRequests[index].quantity }}, Cost: {{ materialRequests[index].estimatedCost | numberFormatter }})
+    <div *ngIf="selectedRequests.size > 0" class="flex items-center justify-between bg-violet-50 border border-violet-200 rounded-lg p-4">
+      <div>
+        <p class="text-sm font-semibold text-violet-900">
+          {{ selectedRequests.size }} item(s) selected
+        </p>
+        <p class="text-xs text-violet-700 mt-0.5">
+          Total: {{ getTotalSelectedCost() | numberFormatter }}
+        </p>
+      </div>
+      <button (click)="addSelectedToItems()" 
+              [disabled]="saving"
+              class="bg-violet-600 text-white px-5 py-2 rounded-md hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium">
+        <span *ngIf="!saving">Add Selected Items</span>
+        <span *ngIf="saving">Adding...</span>
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="!loading && materialRequestFiles.length > 0" class="mt-6 pt-6 border-t border-gray-200">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">Attached Files</h3>
+    <div class="space-y-2">
+      <div *ngFor="let file of materialRequestFiles" 
+           class="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          <ng-icon name="heroDocument" class="w-5 h-5 text-gray-500 flex-shrink-0"></ng-icon>
+          <span class="text-sm font-medium text-gray-900 truncate">{{ file.originalname }}</span>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button 
+            type="button"
+            (click)="viewFile(file)"
+            class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-violet-600 hover:text-violet-700 hover:bg-violet-50 rounded transition-colors">
+            <ng-icon name="heroEye" class="w-4 h-4 mr-1.5"></ng-icon>
+            View
+          </button>
+          <button 
+            type="button"
+            (click)="downloadFile(file)"
+            class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors">
+            <ng-icon name="heroArrowDownTray" class="w-4 h-4 mr-1.5"></ng-icon>
+            Download
+          </button>
         </div>
       </div>
     </div>
-
-    <div class="max-h-96 overflow-y-auto space-y-3">
-      <div *ngFor="let request of materialRequests; let i = index" 
-           [ngClass]="{
-             'border border-gray-200 rounded-lg p-4 hover:border-violet-300 transition-colors': !isAlreadyAdded(i),
-             'border border-green-200 bg-green-50 rounded-lg p-4': isAlreadyAdded(i)
-           }">
-        <div class="flex items-start justify-between">
-          <div class="flex-1">
-            <div class="flex items-center gap-2 mb-2">
-              <input type="checkbox" 
-                     [id]="'request-' + i"
-                     [checked]="selectedRequests.has(i)"
-                     [disabled]="!isSelectable(i)"
-                     (change)="toggleSelection(i)"
-                     [ngClass]="{
-                       'rounded border-gray-300 text-violet-600 focus:ring-violet-500': isSelectable(i),
-                       'rounded border-gray-300 text-gray-400 cursor-not-allowed': !isSelectable(i)
-                     }">
-              <label [for]="'request-' + i" 
-                     [ngClass]="{
-                       'font-medium text-gray-800 cursor-pointer': isSelectable(i),
-                       'font-medium text-gray-500 cursor-not-allowed': !isSelectable(i)
-                     }">
-                {{ request.itemName }}
-              </label>
-              <span *ngIf="isAlreadyAdded(i)" 
-                    class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                <ng-icon name="heroCheckCircle" class="w-3 h-3 mr-1"></ng-icon>
-                Already Added
-              </span>
-            </div>
-            
-            <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
-              <div>
-                <span class="font-medium">Quantity:</span> {{ request.quantity | numberFormatter }}
-              </div>
-              <div>
-                <span class="font-medium">Estimated Cost:</span> {{ request.estimatedCost | numberFormatter }}
-              </div>
-              <div>
-                <span class="font-medium">Required On:</span> {{ request.requiredOn | date:'short' }}
-              </div>
-              <div>
-                <span class="font-medium">Total Cost:</span> {{ (request.quantity * request.estimatedCost) | numberFormatter }}
-              </div>
-            </div>
-            
-            <div *ngIf="request.remarks" class="mt-2 text-sm text-gray-600">
-              <span class="font-medium">Remarks:</span> {{ request.remarks }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div *ngIf="selectedRequests.size > 0" class="bg-violet-50 p-4 rounded-lg">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-violet-800">
-            {{ selectedRequests.size }} item(s) selected
-          </p>
-          <p class="text-xs text-violet-600">
-            Total estimated cost: {{ getTotalSelectedCost() | numberFormatter }}
-          </p>
-        </div>
-        <button (click)="addSelectedToItems()" 
-                class="bg-violet-600 text-white px-4 py-2 rounded hover:bg-violet-500 transition-colors">
-          Add to Purchase Items
-        </button>
-      </div>
-    </div>
   </div>
 
-  <div class="flex justify-end gap-3 mt-6 pt-4 border-t">
-    <button (click)="onClose()" 
-            class="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors">
-      Cancel
-    </button>
-  </div>
-</div>
+</app-modal-layout>

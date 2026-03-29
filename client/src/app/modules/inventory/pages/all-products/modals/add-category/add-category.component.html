@@ -1,0 +1,36 @@
+<div class="w-full p-6">
+  <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between mb-6">
+    <h3 class="text-md font-medium">Add Product Category</h3>
+    <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onCancel()">
+      <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+    </button>
+  </div>
+
+  <form [formGroup]="categoryForm" (ngSubmit)="onSubmit()">
+    <div class="flex flex-col p-6 mx-auto max-w-3xl text-gray-900 bg-white rounded-lg shadow px-9">
+      <div class="w-full max-w-6xl">
+        <app-form-field
+          label="Category Name"
+          [control]="categoryForm.get('categoryName')"
+          [isSubmitted]="isSubmitting"
+          placeholder="Enter category name">
+        </app-form-field>
+      </div>
+    </div>
+
+    <div class="border border-white border-t-gray-300 p-3 px-6 flex justify-end gap-2 mt-6">
+      <button type="button" (click)="onCancel()"
+        class="bg-violet-200 hover:bg-violet-300 text-black font-medium py-2 px-4 rounded text-sm">
+        Cancel
+      </button>
+      <button type="submit"
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm flex justify-center items-center gap-2 disabled:bg-violet-400 disabled:cursor-not-allowed"
+        [disabled]="!categoryForm.valid || isSubmitting">
+        <ng-icon *ngIf="isSubmitting" class="spin" name="heroArrowPath"></ng-icon>
+        Save
+      </button>
+    </div>
+  </form>
+</div>
+
+

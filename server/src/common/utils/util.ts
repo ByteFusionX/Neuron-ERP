@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import axios from "axios";
 import employeeModel from "../../models/employee.model";
+import mongoose from "mongoose";
 
 
 export const calculateDiscountPrice = (discount: any, items: any): number => {
@@ -454,4 +455,100 @@ export const getDateRangeByDay = (startDate: string, endDate?: string) => {
 
         return { startOfDay, endOfDay };
     }
+}
+
+/**
+ * Updates issuedQuantity and issued flag in purchase request items
+ * @param purchaseRequestDoc - The purchase request document to update
+ * @param supplierId - The supplier ID to match against
+ * @param items - Array of items with {detail: string, quantity: number}
+ * @param operation - 'add' to add quantities, 'subtract' to subtract, 'set' to set exact value
+ * @returns Promise<void>
+ */
+export const updateIssuedQuantities = async (
+    purchaseRequestDoc: any,
+    supplierId: string | mongoose.Types.ObjectId,
+    items: Array<{ detail: string; quantity: number }>,
+    operation: 'add' | 'subtract' = 'add'
+): Promise<void> => {
+    if (!purchaseRequestDoc || !items || items.length === 0) {
+        return;
+    }
+
+    // Build a map of quantities by item detail
+    const itemsMap = new Map<string, number>();
+    items.forEach((item: any) => {
+        const key = item.detail;
+        const currentQty = itemsMap.get(key) || 0;
+        itemsMap.set(key, currentQty + (item.quantity || 0));
+    });
+
+    const supplierIdStr = supplierId.toString();
+
+    // Update issuedQuantity for matching items
+    purchaseRequestDoc.items.forEach((item: any) => {
+        if (item.itemDetails && Array.isArray(item.itemDetails)) {
+            item.itemDetails.forEach((itemDetail: any) => {
+                if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
+                    const selectedComparison = itemDetail.comparisons.find((comp: any) => comp.selected === true);
+                    if (selectedComparison && selectedComparison.supplierId && 
+                        selectedComparison.supplierId.toString() === supplierIdStr) {
+                        const key = itemDetail.detail;
+                        const quantityToAdjust = itemsMap.get(key) || 0;
+                        
+                        if (quantityToAdjust > 0) {
+                            const currentIssuedQty = itemDetail.issuedQuantity || 0;
+                            const totalQuantity = selectedComparison.quantity || itemDetail.quantity || 0;
+                            let newIssuedQty: number;
+
+                            if (operation === 'add') {
+                                // Add the quantity and cap at totalQuantity
+                                newIssuedQty = Math.min(currentIssuedQty + quantityToAdjust, totalQuantity);
+                            } else if (operation === 'subtract') {
+                                // Subtract the quantity, ensure it doesn't go below 0
+                                newIssuedQty = Math.max(0, currentIssuedQty - quantityToAdjust);
+                            } else {
+                                // Set operation (not currently used, but available for future)
+                                newIssuedQty = Math.min(Math.max(0, quantityToAdjust), totalQuantity);
+                            }
+
+                            itemDetail.issuedQuantity = newIssuedQty;
+                            itemDetail.issued = itemDetail.issuedQuantity >= totalQuantity;
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    await purchaseRequestDoc.save();
+}
+
+export const buildPrivilegeAccessFilter = async (
+    userId: ObjectId,
+    viewReport: string,
+    createdByField: string = 'createdBy'
+): Promise<any> => {
+    let accessFilter: any = {};
+    
+    switch (viewReport) {
+        case 'created':
+            accessFilter[createdByField] = userId;
+            break;
+        case 'reported':
+            const reportedIds = await getAllReportedEmployees(userId);
+            accessFilter[createdByField] = { $in: reportedIds };
+            break;
+        case 'createdAndReported':
+            const reportedIds2 = await getAllReportedEmployees(userId);
+            reportedIds2.push(userId);
+            accessFilter[createdByField] = { $in: reportedIds2 };
+            break;
+        case 'all':
+        default:
+            accessFilter = {};
+            break;
+    }
+    
+    return accessFilter;
 }

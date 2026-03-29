@@ -3,9 +3,11 @@ import Claim from '../models/claim.model';
 import Job from '../models/job.model';
 import Workflow from '../models/workflow.model';
 import { ObjectId } from "mongodb";
-import { getEmployeeData, getDateRangeByDay } from "../common/utils/util";
+import { getEmployeeData, getDateRangeByDay, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
 import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
+import { Server } from "socket.io";
+import { createNotificationWithPrivileges } from "./notification.controller";
 
 export const createClaim = async (req: any, res: Response, next: NextFunction) => {
     try {
@@ -87,11 +89,27 @@ export const getClaims = async (req: Request, res: Response, next: NextFunction)
     try {
         const { reason, raisedDate, fromDate, toDate, raisedBy, status, page = 1, row = 10, technicalId } = req.query;
 
+        const tokenData = (req as any).user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        const accessFilter = privileges?.claims?.viewReport 
+            ? await buildPrivilegeAccessFilter(employee._id, privileges.claims.viewReport, 'raisedBy')
+            : {};
+
         const pageNum = parseInt(page as string);
         const rowNum = parseInt(row as string);
         const skip = (pageNum - 1) * rowNum;
 
-        const matchConditions: any = {};
+        const matchConditions: any = {
+            ...accessFilter
+        };
 
         if (reason) {
             matchConditions.reason = { $regex: reason, $options: 'i' };
@@ -425,6 +443,26 @@ export const updateClaimAndSubmit = async (req: any, res: Response, next: NextFu
             .populate('approvalStatus.role')
             .populate('approvalStatus.updatedBy');
 
+        if (rejectedIndex !== -1) {
+            const socket = req.app.get('io') as Server;
+            await createNotificationWithPrivileges(
+                {
+                    type: 'ClaimApprovalRequest',
+                    referenceModel: 'Claim',
+                    title: 'Claim sent for approval',
+                    message: 'A claim has been sent for approval',
+                    sentBy: employee._id?.toString(),
+                    referenceId: updatedClaim._id,
+                    additionalData: { claimId: updatedClaim._id.toString(), technicalId: (updatedClaim as any).technicalId?.toString() }
+                },
+                {
+                    privilegeKey: 'claims',
+                    checkFunction: (p) => p.claims?.canApprove === true
+                },
+                socket
+            );
+        }
+
         return res.status(200).json({
             success: true,
             message: "Claim updated and submitted successfully",
@@ -469,6 +507,16 @@ export const updateClaimStatus = async (req: Request, res: Response, next: NextF
             });
         }
 
+        if (status === 'approved' || status === 'rejected') {
+            const privileges = employee.category?.privileges;
+            if (!privileges?.claims?.canApprove) {
+                return res.status(403).json({
+                    success: false,
+                    message: "You do not have permission to approve claims",
+                });
+            }
+        }
+
         const claim = await Claim.findById(id).populate('approvalStatus.role').populate('raisedBy');
         if (!claim) {
             return res.status(404).json({
@@ -481,6 +529,46 @@ export const updateClaimStatus = async (req: Request, res: Response, next: NextF
         claim.approvalStatus = updatedApprovalStatus;
 
         await claim.save();
+
+        const socket = req.app.get('io') as Server;
+        const additionalData = { claimId: claim._id.toString(), technicalId: claim.technicalId?.toString() };
+        const raiserFilter = {
+            privilegeKey: 'claims' as const,
+            checkFunction: (p: any, employeeId?: string) => employeeId === claim.raisedBy?.toString() && p.claims?.viewReport !== 'none'
+        };
+
+        if (status === 'rejected') {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'ClaimRejected',
+                    referenceModel: 'Claim',
+                    title: 'Claim rejected',
+                    message: 'Your claim has been rejected',
+                    sentBy: employee._id?.toString(),
+                    referenceId: claim._id,
+                    additionalData
+                },
+                raiserFilter,
+                socket
+            );
+        } else if (status === 'approved') {
+            const hasPending = claim.approvalStatus.some((s: any) => s.status === 'pending');
+            if (!hasPending) {
+                await createNotificationWithPrivileges(
+                    {
+                        type: 'ClaimApproved',
+                        referenceModel: 'Claim',
+                        title: 'Claim approved',
+                        message: 'Your claim has been approved',
+                        sentBy: employee._id?.toString(),
+                        referenceId: claim._id,
+                        additionalData
+                    },
+                    raiserFilter,
+                    socket
+                );
+            }
+        }
 
         const updatedClaim = await Claim.findById(id)
             .populate('raisedBy')

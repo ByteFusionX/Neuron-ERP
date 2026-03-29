@@ -1,0 +1,20 @@
+<data-table
+  [data]="tableData()"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading()"
+  [isEmpty]="isEmpty()"
+  [totalItems]="totalItems()"
+  (rowClick)="onRowClick($event)"
+  (actionClick)="onActionClick($event)"
+  (pageChange)="onPageChange($event)"
+  (rowsPerPageChange)="onRowsPerPageChange($event)"
+  (search)="onSearch($event)"
+  [title]="isPendingView() ? 'LPO Approval Requests' : 'Approved LPOs'"
+  [enableExport]="true"
+  [exportFileName]="isPendingView() ? 'lpo-approval-requests.xlsx' : 'approved-lpos.xlsx'"
+  tableId="lpo-approval-table"
+>
+</data-table>
+
+

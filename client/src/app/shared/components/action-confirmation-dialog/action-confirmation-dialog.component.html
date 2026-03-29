@@ -7,7 +7,7 @@
             <p class="text-sm text-gray-600">{{ data.description }}</p>
         </div>
         <form [formGroup]="form" (ngSubmit)="onConfirm()">
-            <div class="mb-4">
+            <div class="mb-4" *ngIf="data.showComment">
                 <label for="comment" class="block text-sm font-medium text-gray-700">{{ data.commentLabel }}</label>
                 <textarea 
                     id="comment"

@@ -7,7 +7,8 @@ import { Server } from "socket.io";
 import quotationModel from "../models/quotation.model";
 import { uploadFileToAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees } from "../common/utils/util";
+import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
+import { createNotificationWithPrivileges } from "./notification.controller";
 const { ObjectId } = require('mongodb')
 
 export const createEnquiry = async (req: any, res: Response, next: NextFunction) => {
@@ -140,10 +141,32 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
             }
         );
 
-        // Notify the presale person via socket.io
+        // Notify the presale person via notification
         if (presale.presalePerson) {
             const socket = req.app.get('io') as Server;
-            socket.to(presale.presalePerson).emit('notifications', 'assignedJob');
+            const enquiry = await enquiryModel.findById(enquiryId);
+            const userData = await getEmployeeData(req.user);
+            if (enquiry) {
+                await createNotificationWithPrivileges(
+                    {
+                        type: 'AssignedJob',
+                        referenceModel: 'Enquiry',
+                        title: 'New Job Assigned to You',
+                        message: `A new presale job has been assigned to you for enquiry ${enquiry.enquiryId}`,
+                        sentBy: userData?._id?.toString() || enquiry.salesPerson.toString(),
+                        referenceId: enquiry._id,
+                        additionalData: { enquiryId: enquiry._id.toString() }
+                    },
+                    {
+                        privilegeKey: 'assignedJob',
+                        checkFunction: (privileges, employeeId) => {
+                            return employeeId === presale.presalePerson.toString() && 
+                                   privileges.assignedJob?.viewReport !== 'none';
+                        }
+                    },
+                    socket
+                );
+            }
         }
 
         // Respond based on update results
@@ -478,7 +501,20 @@ export const updateEnquiryStatus = async (req: Request, res: Response, next: Nex
             .populate(['client', 'department', 'salesPerson'])
         if (update && !quote) {
             const socket = req.app.get('io') as Server;
-            socket.to(update.salesPerson._id.toString()).emit("notifications", 'enquiry')
+            const userData = await getEmployeeData(req.user);
+            await createNotificationWithPrivileges(
+                {
+                    type: 'Enquiry',
+                    referenceModel: 'Enquiry',
+                    title: 'Estimation sent back to enquiry',
+                    message: `Presale estimation has been sent back for enquiry ${update.enquiryId}`,
+                    sentBy: userData?._id?.toString() || update.salesPerson._id.toString(),
+                    referenceId: update._id,
+                    additionalData: { enquiryId: update._id.toString() }
+                },
+                { privilegeKey: 'enquiry' },
+                socket
+            );
             return res.status(200).json({ update })
         } else if (update) {
             return res.status(200).json({ update, quoteId: quote.quoteId })
@@ -595,7 +631,26 @@ export const sendFeedbackRequest = async (req: any, res: Response, next: NextFun
 
         if (result) {
             const socket = req.app.get('io') as Server;
-            socket.to(employeeId).emit("notifications", 'feedbackRequest');
+            const userData = await getEmployeeData(req.user);
+            await createNotificationWithPrivileges(
+                {
+                    type: 'FeedbackRequest',
+                    referenceModel: 'Enquiry',
+                    title: 'Feedback Requested',
+                    message: `You have been requested to provide feedback for enquiry ${result.enquiryId}`,
+                    sentBy: userData?._id?.toString() || result.salesPerson.toString(),
+                    referenceId: result._id,
+                    additionalData: { enquiryId: result._id.toString() }
+                },
+                {
+                    privilegeKey: 'assignedJob',
+                    checkFunction: (privileges, empId) => {
+                        return empId === employeeId && 
+                               privileges.assignedJob?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
             return res.status(200).json(result);
         }
 
@@ -694,7 +749,26 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
         if (result) {
             const socket = req.app.get('io') as Server;
             const presalePerson = result.preSale.presalePerson.toString();
-            socket.to(presalePerson).emit("notifications", 'assignedJob');
+            const userData = await getEmployeeData(req.user);
+            await createNotificationWithPrivileges(
+                {
+                    type: 'AssignedJob',
+                    referenceModel: 'Enquiry',
+                    title: 'Feedback Received',
+                    message: `Feedback has been provided for enquiry ${result.enquiryId}`,
+                    sentBy: userData?._id?.toString() || presalePerson,
+                    referenceId: result._id,
+                    additionalData: { enquiryId: result._id.toString() }
+                },
+                {
+                    privilegeKey: 'assignedJob',
+                    checkFunction: (privileges, employeeId) => {
+                        return employeeId === presalePerson && 
+                               privileges.assignedJob?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
             return res.status(200).json({ success: true });
         }
 
@@ -722,7 +796,27 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
         );
 
         const socket = req.app.get('io') as Server;
-        socket.to(result.preSale.presalePerson.toString()).emit("notifications", 'assignedJob')
+        const presalePerson = result.preSale.presalePerson.toString();
+        const userData = await getEmployeeData(req.user);
+        await createNotificationWithPrivileges(
+            {
+                type: 'AssignedJob',
+                referenceModel: 'Enquiry',
+                title: 'Estimation sent back for revision',
+                message: `Presale estimation has been sent back for revision for enquiry ${result.enquiryId}`,
+                sentBy: userData?._id?.toString() || presalePerson,
+                referenceId: result._id,
+                additionalData: { enquiryId: result._id.toString() }
+            },
+            {
+                privilegeKey: 'assignedJob',
+                checkFunction: (privileges, employeeId) => {
+                    return employeeId === presalePerson && 
+                           privileges.assignedJob?.viewReport !== 'none';
+                }
+            },
+            socket
+        );
 
         if (!result) {
             return res.status(404).send('Enquiry not found or comment not added.');
@@ -754,7 +848,27 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
         await quotationModel.updateOne({ _id: quoteId }, { $set: { status: "revised" } })
 
         const socket = req.app.get('io') as Server;
-        socket.to(result.preSale.presalePerson.toString()).emit("notifications", 'assignedJob')
+        const presalePerson = result.preSale.presalePerson.toString();
+        const userData = await getEmployeeData(req.user);
+        await createNotificationWithPrivileges(
+            {
+                type: 'AssignedJob',
+                referenceModel: 'Enquiry',
+                title: 'Estimation sent back for revision',
+                message: `Presale estimation has been sent back for revision for enquiry ${result.enquiryId}`,
+                sentBy: userData?._id?.toString() || presalePerson,
+                referenceId: result._id,
+                additionalData: { enquiryId: result._id.toString() }
+            },
+            {
+                privilegeKey: 'assignedJob',
+                checkFunction: (privileges, employeeId) => {
+                    return employeeId === presalePerson && 
+                           privileges.assignedJob?.viewReport !== 'none';
+                }
+            },
+            socket
+        );
 
         if (!result) {
             return res.status(404).send('Enquiry not found or comment not added.');
@@ -1081,7 +1195,44 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
         }
 
         const socket = req.app.get('io') as Server;
-        socket.to(result.preSale.presalePerson.toString()).emit("notifications", 'assignedJob')
+        const presalePerson = result.preSale.presalePerson.toString();
+        const userData = await getEmployeeData(req.user);
+
+        if (role === 'Engineer') {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'AssignedJob',
+                    referenceModel: 'Enquiry',
+                    title: 'Presale Job Rejected by Engineer',
+                    message: `Presale job has been rejected by engineer for enquiry ${result.enquiryId}`,
+                    sentBy: userData?._id?.toString() || presalePerson,
+                    referenceId: result._id,
+                    additionalData: { enquiryId: result._id.toString() }
+                },
+                {
+                    privilegeKey: 'assignedJob',
+                    checkFunction: (privileges, employeeId) => {
+                        return employeeId === presalePerson &&
+                               privileges.assignedJob?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
+        } else {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'Enquiry',
+                    referenceModel: 'Enquiry',
+                    title: 'Presale Job Rejected by Manager',
+                    message: `Presale job has been rejected by manager for enquiry ${result.enquiryId}`,
+                    sentBy: userData?._id?.toString() || presalePerson,
+                    referenceId: result._id,
+                    additionalData: { enquiryId: result._id.toString() }
+                },
+                { privilegeKey: 'enquiry' },
+                socket
+            );
+        }
 
         res.status(200).json({ success: true });
     } catch (error) {
@@ -1127,7 +1278,29 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
         }
         const enquiryUpdate = await enquiryModel.findOneAndUpdate({ _id: enquiryId }, { $set: { reAssigned: employeeId, status: 'Assigned To Presale Engineer', reAssignedSeen: false } })
         const socket = req.app.get('io') as Server;
-        socket.to(employeeId.toString()).emit("notifications", 'reAssignedJob')
+        const enquiry = await enquiryModel.findById(enquiryId);
+        const userData = await getEmployeeData(req.user);
+        if (enquiry) {
+            await createNotificationWithPrivileges(
+                {
+                    type: 'ReAssignedJob',
+                    referenceModel: 'Enquiry',
+                    title: 'Job Reassigned to You',
+                    message: `Job has been reassigned to you for enquiry ${enquiry.enquiryId}`,
+                    sentBy: userData?._id?.toString() || employeeId.toString(),
+                    referenceId: enquiry._id,
+                    additionalData: { enquiryId: enquiry._id.toString() }
+                },
+                {
+                    privilegeKey: 'assignedJob',
+                    checkFunction: (privileges, empId) => {
+                        return empId === employeeId.toString() && 
+                               privileges.assignedJob?.viewReport !== 'none';
+                    }
+                },
+                socket
+            );
+        }
         return res.status(200).json({ message: 'Enquiry Reassigned successfully' })
     } catch (error) {
         next(error)
