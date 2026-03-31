@@ -844,7 +844,14 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
             });
         }
 
-        // Update the job with new procurement person
+        const existingJob = await jobModel.findById(jobId);
+        if (!existingJob) {
+            return res.status(404).json({
+                success: false,
+                message: 'Job not found'
+            });
+        }
+
         const updateJob = await jobModel.findByIdAndUpdate(
             { _id: jobId },
             {
@@ -852,7 +859,7 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
                 updatedDate: new Date()
             },
             {
-                new: true, // Return the updated document
+                new: true,
             }
         );
 
@@ -861,6 +868,44 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
                 success: false,
                 message: 'Job not found'
             });
+        }
+
+        await PurchaseRequest.updateMany(
+            { jobId: updateJob._id, isDeleted: false },
+            {
+                $set: {
+                    procurementPerson: procurementPersonId,
+                    updatedBy: employee._id,
+                    updatedAt: new Date(),
+                },
+            }
+        );
+
+        const newProcurementId = procurementPersonId.toString();
+        const previousProcurementId = existingJob.procurementPerson?.toString();
+        if (newProcurementId !== previousProcurementId) {
+            const socket = req.app.get('io') as Server;
+            await createNotificationWithPrivileges(
+                {
+                    type: 'ProcurementTransferred',
+                    referenceModel: 'Job',
+                    title: 'Purchase / procurement transferred to you',
+                    message: `Job ${updateJob.jobId}: procurement and related purchase work has been transferred to you.`,
+                    sentBy: employee._id?.toString(),
+                    referenceId: updateJob._id,
+                    additionalData: { jobId: updateJob._id.toString() },
+                },
+                {
+                    privilegeKey: 'purchase',
+                    checkFunction: (privileges, employeeId) => {
+                        return (
+                            employeeId === newProcurementId &&
+                            privileges.purchase?.viewReport !== 'none'
+                        );
+                    },
+                },
+                socket
+            );
         }
 
         res.status(200).json({

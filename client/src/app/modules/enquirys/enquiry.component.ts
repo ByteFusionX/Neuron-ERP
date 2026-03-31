@@ -194,7 +194,7 @@ export class EnquiryComponent implements OnInit, OnDestroy {
         .subscribe({
           next: (data: EnquiryTable) => {
             const filteredEnquiries = data.enquiry.filter(
-              (enq: any) => enq.status != 'Rejected by Presale Engineer' && enq.status != 'Sended by Presale Engineer'
+              (enq: any) => enq.status != 'Sended by Presale Engineer'
             );
             this.dataSource.data = filteredEnquiries;
             this.filteredData.data = data.enquiry;
@@ -295,7 +295,11 @@ export class EnquiryComponent implements OnInit, OnDestroy {
 
         this._enquiryService.assignPresale(formData, enquiryId).subscribe((res) => {
           if (res.success) {
-            // this.dataSource.data[index].preSale = presaleData as getEnquiry["preSale"];
+            let currentPreSale = this.dataSource.data[index].preSale || {};
+            this.dataSource.data[index].preSale = {
+              ...currentPreSale,
+              presalePerson: presaleData.presalePerson
+            } as any;
             this.dataSource.data[index].status = 'Assigned To Presale Manager'
             this.dataSource._updateChangeSubscription();
             this.assigningPresale = false;
@@ -376,7 +380,7 @@ export class EnquiryComponent implements OnInit, OnDestroy {
 
   deleteEnquiry(enquiryId: string, status: string) {
     this.isDeletedClicked = true
-    if (status == 'Assigned To Presale Manager' || status == 'Assigned To Presale Engineer' || status == 'Assigned To Presales') {
+    if (status == 'Assigned To Presale Manager' || status == 'Assigned To Presale Engineer' || status == 'Assigned To Presales' || status == 'Rejected by Presale Engineer') {
       this.toaster.warning('Sorry,Selected enquiry assinged to presales')
       return
     }

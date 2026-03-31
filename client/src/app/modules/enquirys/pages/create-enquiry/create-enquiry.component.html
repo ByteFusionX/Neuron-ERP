@@ -31,7 +31,14 @@
             Point of Contact
           </label>
           <ng-select [class.border-red-500]="f.contact.invalid&&submit" id="contact" class="form capitalize border"
-            placeholder="Contact" appendTo="body" notFoundText="Select Client" formControlName="contact">
+            placeholder="Contact" appendTo="body" notFoundText="Select Client" formControlName="contact"
+            [loading]="isLoadingContacts">
+            <ng-template ng-loadingspinner-tmp>
+              <div class="flex items-center text-violet-600 gap-2 font-medium text-sm">
+                 <ng-icon class="spin text-lg" name="heroArrowPath"></ng-icon>
+                 Loading contacts...
+              </div>
+            </ng-template>
             <ng-option *ngFor="let contact of contacts" [value]="contact._id" class="capitalize">{{contact.firstName}}
               {{contact.lastName}}</ng-option>
           </ng-select>

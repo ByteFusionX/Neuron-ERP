@@ -6,6 +6,7 @@ import { HttpClient } from '@angular/common/http';
 import { TextNotification } from 'src/app/shared/interfaces/notification.interface';
 import { EmployeeService } from './employee/employee.service';
 import { Router, NavigationExtras } from '@angular/router';
+import { SameRouteNavigationService } from './same-route-navigation.service';
 
 @Injectable({
     providedIn: 'root'
@@ -19,7 +20,8 @@ export class NotificationService {
         private http: HttpClient,
         private socket: Socket,
         private employeeService: EmployeeService,
-        private router: Router
+        private router: Router,
+        private sameRouteNavigation: SameRouteNavigationService
     ) { }
 
     private calculateRoutePath(notification: any): { routePath: string; routeData?: any } {
@@ -61,6 +63,9 @@ export class NotificationService {
                     routeData: { jobId }
                 };
 
+            case 'ProcurementTransferred':
+                return { routePath: '' };
+
             case 'MrRequest':
                 const technicalId = additionalData?.technicalId;
                 if (technicalId) {
@@ -99,6 +104,12 @@ export class NotificationService {
                 return {
                     routePath: '/purchase/view-purchase',
                     routeData: { purchaseId: approvalPurchaseId }
+                };
+            case 'PurchaseProcurementNotice':
+                const procurementNoticePurchaseId = additionalData?.purchaseId || referenceId?._id?.toString();
+                return {
+                    routePath: '/purchase/view-purchase',
+                    routeData: { purchaseId: procurementNoticePurchaseId }
                 };
             case 'PurchaseApproved':
                 const approvedPurchaseId = additionalData?.purchaseId || referenceId?._id?.toString();
@@ -213,6 +224,83 @@ export class NotificationService {
         );
     }
 
+    private resolveNotificationNavigation(
+        routePath: string,
+        routeData?: any
+    ): { commands: any[]; extras?: NavigationExtras } | null {
+        if (routePath === '/quotations/view' && routeData) {
+            return {
+                commands: [routePath],
+                extras: { state: routeData },
+            };
+        }
+        if (routePath === '/enquiry' && routeData?.enquiryId) {
+            return {
+                commands: [routePath],
+                extras: { queryParams: { enquiryId: routeData.enquiryId } },
+            };
+        }
+        if (routePath === '/purchase/create' && routeData?.jobId) {
+            return {
+                commands: [routePath],
+                extras: { queryParams: { jobId: routeData.jobId } },
+            };
+        }
+        if (routePath === '/purchase/view-purchase' && routeData?.purchaseId) {
+            return { commands: [routePath, routeData.purchaseId] };
+        }
+        if (routePath === '/purchase/initiate-lpo' && routeData?.purchaseId) {
+            return { commands: [routePath, routeData.purchaseId] };
+        }
+        if (routePath === '/purchase-order/pending-approval') {
+            return { commands: [routePath] };
+        }
+        if (routePath === '/technical/mr-approval-requests/view' && routeData?.technicalId) {
+            return { commands: [routePath, routeData.technicalId] };
+        }
+        if (routePath === '/technical/project/edit' && routeData?.projectId) {
+            return { commands: [routePath, routeData.projectId] };
+        }
+        if (routePath === '/technical/project/material-request' && routeData?.technicalId) {
+            return { commands: [routePath, routeData.technicalId] };
+        }
+        if (routePath === '/suppliers' && routeData?.supplierId) {
+            return { commands: [routePath, routeData.supplierId] };
+        }
+        if (routePath === '/claims/approval-requests') {
+            return { commands: [routePath] };
+        }
+        if (routePath === '/technical/project/claims' && routeData?.technicalId) {
+            return { commands: [routePath, routeData.technicalId] };
+        }
+        if (routePath === '/claims/my-claims') {
+            return { commands: [routePath] };
+        }
+        if (routePath && routePath.trim() !== '') {
+            return { commands: [routePath] };
+        }
+        return null;
+    }
+
+    private normalizeUrlForCompare(url: string): string {
+        const base = (url || '/').split('#')[0];
+        return base.startsWith('/') ? base : `/${base}`;
+    }
+
+    private isSameRouterTarget(
+        commands: any[],
+        extras?: NavigationExtras
+    ): boolean {
+        try {
+            const tree = this.router.createUrlTree(commands, extras);
+            const target = this.normalizeUrlForCompare(this.router.serializeUrl(tree));
+            const current = this.normalizeUrlForCompare(this.router.url);
+            return target === current;
+        } catch {
+            return false;
+        }
+    }
+
     navigateToNotification(notification: TextNotification): void {
         let routePath = notification.routePath;
         let routeData = notification.routeData;
@@ -223,43 +311,28 @@ export class NotificationService {
             routeData = routeInfo.routeData;
         }
 
-        console.log('routePath', routePath);
-
-        if (routePath === '/quotations/view' && routeData) {
-            const navigationExtras: NavigationExtras = {
-                state: routeData
-            };
-            this.router.navigate([routePath], navigationExtras);
-        } else if (routePath === '/enquiry' && routeData?.enquiryId) {
-            const navigationExtras: NavigationExtras = {
-                queryParams: { enquiryId: routeData.enquiryId }
-            };
-            this.router.navigate([routePath], navigationExtras);
-        } else if (routePath === '/purchase/create' && routeData?.jobId) {
-            this.router.navigate([routePath], { queryParams: { jobId: routeData.jobId } });
-        } else if (routePath === '/purchase/view-purchase' && routeData?.purchaseId) {
-            this.router.navigate([routePath, routeData.purchaseId]);
-        } else if (routePath === '/purchase/initiate-lpo' && routeData?.purchaseId) {
-            this.router.navigate([routePath, routeData.purchaseId]);
-        } else if (routePath === '/purchase-order/pending-approval') {
-            this.router.navigate([routePath]);
-        } else if (routePath === '/technical/mr-approval-requests/view' && routeData?.technicalId) {
-            this.router.navigate([routePath, routeData.technicalId]);
-        } else if (routePath === '/technical/project/edit' && routeData?.projectId) {
-            this.router.navigate([routePath, routeData.projectId]);
-        } else if (routePath === '/technical/project/material-request' && routeData?.technicalId) {
-            this.router.navigate([routePath, routeData.technicalId]);
-        } else if (routePath === '/suppliers' && routeData?.supplierId) {
-            this.router.navigate([routePath, routeData.supplierId]);
-        } else if (routePath === '/claims/approval-requests') {
-            this.router.navigate([routePath]);
-        } else if (routePath === '/technical/project/claims' && routeData?.technicalId) {
-            this.router.navigate([routePath, routeData.technicalId]);
-        } else if (routePath === '/claims/my-claims') {
-            this.router.navigate([routePath]);
-        } else {
-            this.router.navigate([routePath]);
+        if (!routePath || routePath.trim() === '') {
+            return;
         }
+
+        const target = this.resolveNotificationNavigation(routePath, routeData);
+        if (!target?.commands?.length) {
+            return;
+        }
+
+        const { commands, extras } = target;
+        if (this.isSameRouterTarget(commands, extras)) {
+            this.sameRouteNavigation.beginSameUrlTargetReload();
+        }
+
+        this.router
+            .navigate(commands, {
+                ...(extras || {}),
+                onSameUrlNavigation: 'reload',
+            })
+            .finally(() => {
+                this.sameRouteNavigation.endSameUrlNavigationCycle();
+            });
     }
 }
 

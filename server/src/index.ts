@@ -55,7 +55,8 @@ const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 export const io = new Server(server, {
   cors: {
-    origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
+    // origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true
   }
@@ -70,7 +71,7 @@ app.use(cookieParser());
 
 
 app.use(cors({
-  origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
+  origin: process.env.ORIGIN1 ?? 'https://localhost:4200',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
@@ -132,7 +133,7 @@ if (!fs.existsSync(uploadFolderPath)) {
 connectToDatabase()
   .then(() => {
     const port = process.env.PORT || 3000;
-    server.listen(port, () => {
+    server.listen(port as number, '0.0.0.0', () => {
       console.log(`Server running on port ${port}`);
     });
 
