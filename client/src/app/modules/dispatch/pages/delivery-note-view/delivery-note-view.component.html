@@ -12,16 +12,18 @@
         <ng-icon name="heroDocumentArrowDown" class="mr-2"></ng-icon>
         Preview DN
       </app-btn>
-      
-      <app-btn theme="primary" (click)="onEdit()">
-        <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
-        Edit
-      </app-btn>
-      
+
+      @if(deliveryNote?.status === 'Draft'){
+        <app-btn theme="primary" (click)="onEdit()">
+          <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
+          Edit
+        </app-btn>
+
         <app-btn theme="danger" (click)="onCancel()" [loading]="isCancelling">
           <ng-icon name="heroXCircle" class="mr-2"></ng-icon>
           Cancel DN
         </app-btn>
+      }
       
     </div>
   </div>

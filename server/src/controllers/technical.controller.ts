@@ -2035,6 +2035,7 @@ export const updateMaterialRequest = async (req: any, res: Response, next: NextF
    try {
       const { id } = req.params;
       let materialRequest = req.body.materialRequest;
+      const mode: 'draft' | 'submit' = req.body.mode === 'submit' ? 'submit' : 'draft';
       
       if (typeof materialRequest === 'string') {
          materialRequest = JSON.parse(materialRequest);
@@ -2112,15 +2113,32 @@ export const updateMaterialRequest = async (req: any, res: Response, next: NextF
          });
       }
 
-      const sanitizedMaterialRequest = materialRequest.map((item: any, index: number) => {
-         const existingItem = technical.materialRequest[index];
+      const sanitizedMaterialRequest = materialRequest.map((item: any) => {
+         const existingItem = item._id
+            ? technical.materialRequest.find((m: any) => m._id?.toString() === item._id?.toString())
+            : undefined;
+
+         const lockedStatuses = ['approved', 'rejected'];
+         const existingStatus: string | undefined = existingItem?.status;
+
+         type MrStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+         let resolvedStatus: MrStatus;
+         if (existingStatus && lockedStatuses.includes(existingStatus)) {
+            resolvedStatus = existingStatus as MrStatus;
+         } else if (mode === 'submit') {
+            resolvedStatus = 'pending';
+         } else {
+            resolvedStatus = (existingStatus && existingStatus !== 'pending' ? existingStatus : (existingStatus || 'draft')) as MrStatus;
+         }
+
          return {
+            ...(item._id ? { _id: item._id } : {}),
             itemName: item.itemName.trim(),
             quantity: Number(item.quantity),
             estimatedCost: Number(item.estimatedCost),
             requiredOn: new Date(item.requiredOn),
             remarks: item.remarks ? item.remarks.trim() : '',
-            status: existingItem?.status || item.status || 'pending',
+            status: resolvedStatus,
             statusHistory: existingItem?.statusHistory || item.statusHistory || []
          };
       });
@@ -2149,32 +2167,35 @@ export const updateMaterialRequest = async (req: any, res: Response, next: NextF
       technical.updatedAt = new Date();
       await technical.save();
 
-      const employee = await getEmployeeData(req.user);
-      if (employee) {
-         const socket = req.app.get('io') as Server;
-         await createNotificationWithPrivileges(
-            {
-               type: 'MrApprovalRequest',
-               referenceModel: 'Technical',
-               title: 'Material Request Submitted For Approval',
-               message: 'A material request has been submitted for approval',
-               sentBy: employee._id?.toString(),
-               referenceId: technical._id,
-               additionalData: { technicalId: technical._id.toString() }
-            },
-            {
-               privilegeKey: 'technical',
-               checkFunction: (privileges) => {
-                  return privileges.technical?.canApproveMRRequests === true;
-               }
-            },
-            socket
-         );
+      const hasPendingItems = sanitizedMaterialRequest.some((item: any) => item.status === 'pending');
+      if (mode === 'submit' && hasPendingItems) {
+         const employee = await getEmployeeData(req.user);
+         if (employee) {
+            const socket = req.app.get('io') as Server;
+            await createNotificationWithPrivileges(
+               {
+                  type: 'MrApprovalRequest',
+                  referenceModel: 'Technical',
+                  title: 'Material Request Submitted For Approval',
+                  message: 'A material request has been submitted for approval',
+                  sentBy: employee._id?.toString(),
+                  referenceId: technical._id,
+                  additionalData: { technicalId: technical._id.toString() }
+               },
+               {
+                  privilegeKey: 'technical',
+                  checkFunction: (privileges) => {
+                     return privileges.technical?.canApproveMRRequests === true;
+                  }
+               },
+               socket
+            );
+         }
       }
 
       return res.status(200).json({
          success: true,
-         message: "Material request updated successfully",
+         message: mode === 'submit' ? "Material request sent for approval" : "Material request saved as draft",
          data: technical.materialRequest
       });
    } catch (error) {
@@ -2666,7 +2687,9 @@ export const getMrRequests = async (req: Request, res: Response, next: NextFunct
 export const getMaterialRequestByJobId = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { jobId } = req.params;
-      const technicalProject = await technicalModel.findOne({ jobId: new ObjectId(jobId) });
+      const technicalProject = await technicalModel
+         .findOne({ jobId: new ObjectId(jobId) })
+         .populate("assignedTo", "firstName lastName employeeId email");
       if(!technicalProject){
          return res.status(404).json({
             success: false,
@@ -2679,7 +2702,9 @@ export const getMaterialRequestByJobId = async (req: Request, res: Response, nex
          success: true,
          message: "Material request fetched successfully",
          data: materialRequest,
-         files: materialRequestAttachements
+         files: materialRequestAttachements,
+         technicalProjectId: technicalProject._id,
+         assignedEngineer: technicalProject.assignedTo || null
       });
    } catch (error) {
       console.log(error);

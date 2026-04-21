@@ -9,8 +9,9 @@ import { MrRequestComponent } from '../mr-request/mr-request.component';
 import { MaterialRequestModalComponent } from '../material-request-modal/material-request-modal.component';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
-import { getJob } from 'src/app/shared/interfaces/job.interface';
+import { allocateType, getJob } from 'src/app/shared/interfaces/job.interface';
 import { JobService } from 'src/app/core/services/job/job.service';
+import { TechnicalService } from 'src/app/core/services/technical.service';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
@@ -50,6 +51,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   private toaster = inject(ToastrService)
   private purchaseService = inject(PurchaseService)
   private jobService = inject(JobService)
+  private technicalService = inject(TechnicalService)
   private productService = inject(ProductService)
   private subscriptions = new Subscription()
 
@@ -333,7 +335,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   createMrGroup(): FormGroup {
     return this.fb.group({
-      engineer: ['', Validators.required],
+      engineer: [''],
       message: ['', Validators.required],
       createdDate: [new Date()]
     });
@@ -553,19 +555,43 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       this.warningMessage('Please select any job from given list');
       return;
     }
+    if (this.selectedJobSheet.allocateType === allocateType.SupplyOnly) {
+      this.toaster.warning(
+        'This job is allocated as Supply Only (procurement without a technical project). MR request is for jobs that include engineering or a technical project. Change the job allocation if an engineer should be involved, or continue without MR.'
+      );
+      return;
+    }
 
     this.ensurePurchaseId().then((purchaseId) => {
-      const dialogRef = this._dialog.open(MrRequestComponent, {
-        width: '550px',
-        disableClose: true,
-        maxHeight: '90vh',
-        autoFocus: false,
-        data: { purchaseId }
-      });
+      this.technicalService.getMaterialRequestByJobId(this.selectedJobSheet._id).subscribe({
+        next: (res: { assignedEngineer?: unknown; technicalProjectId?: unknown }) => {
+          const dialogRef = this._dialog.open(MrRequestComponent, {
+            width: '550px',
+            disableClose: true,
+            maxHeight: '90vh',
+            autoFocus: false,
+            data: {
+              purchaseId,
+              jobMongoId: this.selectedJobSheet._id,
+              assignedEngineer: res.assignedEngineer as { _id: string; firstName?: string; lastName?: string } | null | undefined,
+              technicalProjectId: res.technicalProjectId as string | null | undefined
+            }
+          });
 
-      dialogRef.afterClosed().subscribe((result) => {
-        if (result?.success) {
-          this.loadPurchaseData();
+          dialogRef.afterClosed().subscribe((result) => {
+            if (result?.success) {
+              this.loadPurchaseData();
+            }
+          });
+        },
+        error: (err) => {
+          if (err.status === 404) {
+            this.toaster.warning(
+              'No technical project is linked to this job yet, so no engineer is assigned. Create and assign a technical project under Technical before using MR request.'
+            );
+          } else {
+            this.toaster.error('Could not load technical project for this job.');
+          }
         }
       });
     }).catch(() => {});
@@ -576,25 +602,44 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       this.warningMessage('Please select any job from given list');
       return;
     }
+    if (this.selectedJobSheet.allocateType === allocateType.SupplyOnly) {
+      this.toaster.warning(
+        'This job is allocated as Supply Only. Material requests from Technical are only available when the job has a technical project and engineering scope.'
+      );
+      return;
+    }
 
     this.ensurePurchaseId().then((purchaseId) => {
-      const dialogRef = this._dialog.open(MaterialRequestModalComponent, {
-        width: '800px',
-        disableClose: true,
-        maxHeight: '90vh',
-        autoFocus: false,
-        data: {
-          purchaseId,
-          jobId: this.purchaseForm.get('job')?.value,
-          onDataChange: () => {
-            this.loadPurchaseData();
-          }
-        }
-      });
+      this.technicalService.getMaterialRequestByJobId(this.selectedJobSheet._id).subscribe({
+        next: () => {
+          const dialogRef = this._dialog.open(MaterialRequestModalComponent, {
+            width: '800px',
+            disableClose: true,
+            maxHeight: '90vh',
+            autoFocus: false,
+            data: {
+              purchaseId,
+              jobId: this.purchaseForm.get('job')?.value,
+              onDataChange: () => {
+                this.loadPurchaseData();
+              }
+            }
+          });
 
-      dialogRef.afterClosed().subscribe((result) => {
-        if (result?.success) {
-          this.loadPurchaseData();
+          dialogRef.afterClosed().subscribe((result) => {
+            if (result?.success) {
+              this.loadPurchaseData();
+            }
+          });
+        },
+        error: (err) => {
+          if (err.status === 404) {
+            this.toaster.warning(
+              'No technical project is linked to this job yet. Create and assign a technical project under Technical before pulling material request items.'
+            );
+          } else {
+            this.toaster.error('Could not load technical project for this job.');
+          }
         }
       });
     }).catch(() => {});
