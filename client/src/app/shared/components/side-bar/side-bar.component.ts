@@ -298,14 +298,12 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           id: 'pendingSuppliers',
           label: 'Pending',
           route: '/suppliers/pendings',
-          privilegeKey: 'supplier',
           notificationKey: 'dealSheetCount'
         },
         {
           id: 'approvedSuppliers',
           label: 'Approved',
           route: '/suppliers/approved',
-          privilegeKey: 'supplier'
         }
       ]
     },

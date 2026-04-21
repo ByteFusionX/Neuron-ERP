@@ -12,10 +12,8 @@ import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { PurchaseRequestModalComponent } from '../purchase-request-modal/purchase-request-modal.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
 import { MaterialRequest, MaterialRequestAttachment } from 'src/app/core/services/technical.service';
-import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 interface MaterialRequestFormItem {
   _id?: string;
@@ -24,7 +22,7 @@ interface MaterialRequestFormItem {
   estimatedCost: number;
   requiredOn: Date;
   remarks: string;
-  status?: 'pending' | 'approved' | 'rejected';
+  status?: 'draft' | 'pending' | 'approved' | 'rejected';
   statusHistory?: any[];
 }
 
@@ -39,8 +37,6 @@ interface MaterialRequestFormItem {
     appFileValidator,
     appFileSizeValidator,
     ButtonComponent,
-    NumberFormatterPipe,
-    ModalLayoutComponent
   ],
   templateUrl: './material-request-modal.component.html',
   styleUrl: './material-request-modal.component.css'
@@ -178,7 +174,7 @@ export class MaterialRequestModalComponent implements OnInit {
       formattedDate = date.toISOString().split('T')[0];
     }
 
-    const isApproved = item?.status === 'approved';
+    const isApproved = item?.status === 'approved' || item?.status === 'rejected';
     const validators = isApproved ? [] : [Validators.required];
 
     const materialRequest = this.fb.group({
@@ -188,7 +184,7 @@ export class MaterialRequestModalComponent implements OnInit {
       estimatedCost: [{ value: item?.estimatedCost || 0, disabled: isApproved }, validators.length > 0 ? [Validators.required, Validators.min(0)] : []],
       requiredOn: [{ value: formattedDate, disabled: isApproved }, validators],
       remarks: [{ value: item?.remarks || '', disabled: isApproved }],
-      status: [item?.status || 'pending'],
+      status: [item?.status || 'draft'],
       statusHistory: [item?.statusHistory || []]
     });
 
@@ -208,7 +204,8 @@ export class MaterialRequestModalComponent implements OnInit {
 
   isItemApproved(index: number): boolean {
     const control = this.materialRequestsArray.at(index);
-    return control?.get('status')?.value === 'approved';
+    const status = control?.get('status')?.value;
+    return status === 'approved' || status === 'rejected';
   }
 
   getItemStatus(index: number): string {
@@ -223,8 +220,10 @@ export class MaterialRequestModalComponent implements OnInit {
       case 'rejected':
         return 'bg-red-100 text-red-700 border border-red-200';
       case 'pending':
-      default:
         return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'draft':
+      default:
+        return 'bg-gray-100 text-gray-600 border border-gray-200';
     }
   }
 
@@ -310,7 +309,7 @@ export class MaterialRequestModalComponent implements OnInit {
     return total;
   }
 
-  onSubmit(): void {
+  onSubmit(mode: 'draft' | 'submit'): void {
     this.isSubmitted = true;
     
     const hasInvalidPendingItems = this.materialRequestsArray.controls.some((control, index) => {
@@ -355,6 +354,19 @@ export class MaterialRequestModalComponent implements OnInit {
         const requiredOn = formGroup.get('requiredOn')?.value || '';
         const remarks = formGroup.get('remarks')?.value || '';
         
+        const baseStatus = originalItem?.status;
+        let nextStatus: MaterialRequestFormItem['status'];
+
+        if (mode === 'submit') {
+          nextStatus = 'pending';
+        } else {
+          if (baseStatus && baseStatus !== 'approved' && baseStatus !== 'rejected') {
+            nextStatus = baseStatus as MaterialRequestFormItem['status'];
+          } else {
+            nextStatus = 'draft';
+          }
+        }
+
         return {
           _id: formGroup.get('_id')?.value || originalItem?._id,
           itemName: itemName,
@@ -362,7 +374,7 @@ export class MaterialRequestModalComponent implements OnInit {
           estimatedCost: Number(estimatedCost),
           requiredOn: requiredOn ? new Date(requiredOn) : new Date(),
           remarks: remarks,
-          status: originalItem?.status || 'pending',
+          status: nextStatus,
           statusHistory: originalItem?.statusHistory || []
         };
       }
@@ -371,6 +383,7 @@ export class MaterialRequestModalComponent implements OnInit {
     const formData = new FormData();
     formData.append('materialRequest', JSON.stringify(materialRequests));
     formData.append('existingAttachments', JSON.stringify(this.existingAttachments));
+    formData.append('mode', mode);
     
     if (this.selectedFiles.length > 0) {
       this.selectedFiles.forEach((file) => {
@@ -398,20 +411,6 @@ export class MaterialRequestModalComponent implements OnInit {
 
   onCancel(): void {
     this.router.navigate(['/technical/project/edit', this.technicalId]);
-  }
-
-  getFooterButtons(): any[] {
-    return [
-      { label: 'Cancel', onClick: this.onCancel.bind(this), theme: 'cancel' },
-      { 
-        label: 'Save Material Request', 
-        onClick: this.onSubmit.bind(this), 
-        theme: 'primary', 
-        loading: this.isSaving, 
-        type: 'submit', 
-        disabled: this.materialForm.invalid || this.isSaving
-      }
-    ];
   }
 
   getFieldError(control: any, fieldName: string): string {

@@ -1944,23 +1944,23 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
         const updatedApprovalStatus = await updateApprovalStatus(status, purchaseRequest.approvalStatus, comment || '', employee);
         purchaseRequest.approvalStatus = updatedApprovalStatus;
 
-        const lastApprovalStatus = updatedApprovalStatus.length > 0 ? updatedApprovalStatus[updatedApprovalStatus.length - 1] : null;
-        const lastStatus = lastApprovalStatus?.status || 'pending';
-        
-        const hasRejected = lastStatus === 'rejected' && status === 'rejected';
+        const hasRejected = updatedApprovalStatus.some((approval: any) => approval.status === 'rejected');
         const hasPending = updatedApprovalStatus.some((approval: any) => approval.status === 'pending');
-        const isAllApproved = lastStatus === 'approved' && status === 'approved' && !hasPending;
+        const isAllApproved = !hasRejected && !hasPending && updatedApprovalStatus.length > 0;
 
-        if (hasRejected) {
-            purchaseRequest.status = PurchaseRequestStatus.Rejected;
+        if (status === 'rejected') {
             purchaseRequest.rejectedReason.push({
                 rejectedBy: employee._id,
                 comment: comment || '',
                 rejectedAt: new Date()
             });
+        }
+
+        if (hasRejected) {
+            purchaseRequest.status = PurchaseRequestStatus.Rejected;
         } else if (isAllApproved) {
             purchaseRequest.status = PurchaseRequestStatus.Approved;
-        } else if (hasPending) {
+        } else {
             purchaseRequest.status = PurchaseRequestStatus.Pending;
         }
 
@@ -2087,6 +2087,55 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
                 },
                 socket
             );
+        }
+
+        const procurementPersonId =
+            (purchaseRequest as any).procurementPerson?.toString?.() ||
+            (await jobModel.findById(purchaseRequest.jobId).select('procurementPerson').lean())?.procurementPerson?.toString?.();
+
+        if (procurementPersonId) {
+            const purchaseId = purchaseRequest._id.toString();
+            const purchaseNo = purchaseRequest.purchaseNo as string;
+            const approverName =
+                `${(employee as any).firstName || ''} ${(employee as any).lastName || ''}`.trim() || 'An approver';
+            const pendingCount = updatedApprovalStatus.filter((a: any) => a.status === 'pending').length;
+
+            let procTitle = '';
+            let procMessage = '';
+
+            if (hasRejected && status === 'rejected') {
+                procTitle = 'Purchase rejected';
+                procMessage = `Purchase ${purchaseNo} was rejected by ${approverName}.`;
+            } else if (isAllApproved && status === 'approved') {
+                procTitle = 'Purchase fully approved';
+                procMessage = `Purchase ${purchaseNo} has been fully approved and is ready for PO.`;
+            } else if (status === 'approved' && hasPending && !hasRejected) {
+                procTitle = 'Purchase approval progress';
+                const personLabel = pendingCount === 1 ? 'person' : 'people';
+                const beVerb = pendingCount === 1 ? 'is' : 'are';
+                procMessage = `Purchase ${purchaseNo}: ${approverName} approved. There ${beVerb} ${pendingCount} more ${personLabel} to approve.`;
+            }
+
+            if (procMessage) {
+                await createNotificationWithPrivileges(
+                    {
+                        type: 'PurchaseProcurementNotice',
+                        referenceModel: 'Purchase',
+                        title: procTitle,
+                        message: procMessage,
+                        sentBy: employee._id?.toString(),
+                        referenceId: purchaseRequest._id,
+                        additionalData: { purchaseId }
+                    },
+                    {
+                        privilegeKey: 'purchase',
+                        checkFunction: (privileges, employeeId) =>
+                            employeeId === procurementPersonId && privileges.purchase?.viewReport !== 'none'
+                    },
+                    socket,
+                    { excludeSentByFromRecipients: false }
+                );
+            }
         }
 
         return res.status(200).json({

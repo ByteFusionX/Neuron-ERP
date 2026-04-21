@@ -3,7 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
+import { GetCategory } from 'src/app/shared/interfaces/employee.interface';
 import { NgIcon } from '@ng-icons/core';
 import { appNoLeadingSpace } from '../../../../../shared/directives/trim-validator.directive';
 import { NgIf } from '@angular/common';
@@ -34,9 +34,9 @@ export class CreateCategoryComponent implements OnInit {
   technicalChecked: boolean = false;
   supplierChecked: boolean = false;
   inventoryChecked: boolean = false;
-  claimsChecked: boolean = false;
   dispatchChecked: boolean = false;
   invoiceChecked: boolean = false;
+  claimsChecked: boolean = false;
   portalChecked: boolean = false;
 
   constructor(
@@ -116,24 +116,23 @@ export class CreateCategoryComponent implements OnInit {
           viewReport: 'none',
         }),
       }),
-      claims: this._fb.group({
-        viewReport: 'none',
-        canApprove: [false],
-      }),
       dispatch: this._fb.group({
         viewReport: 'none',
+        createDeliveryNote: [false],
         viewPendingDelivery: [false],
         viewInvoiceLinking: [false],
         viewInventoryDeduction: [false],
-        createDeliveryNote: [false],
       }),
       invoice: this._fb.group({
         viewReport: 'none',
+        createInvoice: [false],
         viewInvoicesVsDn: [false],
         viewCancelledAdjusted: [false],
         viewReissued: [false],
-        createInvoice: [false],
-        updateQuantities: [false],
+      }),
+      claims: this._fb.group({
+        viewReport: 'none',
+        canApprove: [false],
       }),
       portalManagement: this._fb.group({
         department: [false],
@@ -189,7 +188,7 @@ export class CreateCategoryComponent implements OnInit {
     ];
   }
 
-  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'claimsChecked' | 'dispatchChecked' | 'invoiceChecked' | 'portalChecked'): void {
+  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'dispatchChecked' | 'invoiceChecked' | 'claimsChecked' | 'portalChecked'): void {
     const eventTarget = event.target as HTMLInputElement;
     const checked = eventTarget.checked;
 
@@ -210,6 +209,58 @@ export class CreateCategoryComponent implements OnInit {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'all' }, stockEntries: { viewReport: 'all' } } } });
       } else {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'none' }, stockEntries: { viewReport: 'none' } } } });
+      }
+    } else if (formControlName === 'dispatch') {
+      if (checked) {
+        this.categoryForm.patchValue({
+          privileges: {
+            dispatch: {
+              viewReport: 'all',
+              createDeliveryNote: false,
+              viewPendingDelivery: false,
+              viewInvoiceLinking: false,
+              viewInventoryDeduction: false,
+            },
+          },
+        });
+      } else {
+        this.categoryForm.patchValue({
+          privileges: {
+            dispatch: {
+              viewReport: 'none',
+              createDeliveryNote: false,
+              viewPendingDelivery: false,
+              viewInvoiceLinking: false,
+              viewInventoryDeduction: false,
+            },
+          },
+        });
+      }
+    } else if (formControlName === 'invoice') {
+      if (checked) {
+        this.categoryForm.patchValue({
+          privileges: {
+            invoice: {
+              viewReport: 'all',
+              createInvoice: false,
+              viewInvoicesVsDn: false,
+              viewCancelledAdjusted: false,
+              viewReissued: false,
+            },
+          },
+        });
+      } else {
+        this.categoryForm.patchValue({
+          privileges: {
+            invoice: {
+              viewReport: 'none',
+              createInvoice: false,
+              viewInvoicesVsDn: false,
+              viewCancelledAdjusted: false,
+              viewReissued: false,
+            },
+          },
+        });
       }
     } else if (checked) {
       this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', create: false } } });

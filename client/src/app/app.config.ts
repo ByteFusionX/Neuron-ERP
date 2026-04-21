@@ -18,7 +18,8 @@ import { SocketIoModule, SocketIoConfig } from 'ngx-socket-io';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { NgxEchartsModule } from 'ngx-echarts';
 import { importProvidersFrom } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, RouteReuseStrategy, withRouterConfig } from '@angular/router';
+import { AppRouteReuseStrategy } from './core/strategies/app-route-reuse.strategy';
 import { DatePipe } from '@angular/common';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { providePrimeNG } from 'primeng/config';
@@ -42,7 +43,7 @@ export function MSALInstanceFactory(): IPublicClientApplication {
     auth: {
       clientId: environment.microsoftClientId,
       authority: `https://login.microsoftonline.com/${environment.microsoftTenantId}`,
-      redirectUri: 'http://localhost:4200',
+      redirectUri: environment.redirectUri,
     },
     cache: {
       cacheLocation: BrowserCacheLocation.LocalStorage,
@@ -92,7 +93,11 @@ export const appConfig: ApplicationConfig = {
 
         provideHttpClient(withInterceptorsFromDi()),
         provideAnimations(),
-        provideRouter(routes),
+        provideRouter(
+            routes,
+            withRouterConfig({ onSameUrlNavigation: 'reload' })
+        ),
+        { provide: RouteReuseStrategy, useClass: AppRouteReuseStrategy },
         provideAnimationsAsync(),
         providePrimeNG({
             theme: {

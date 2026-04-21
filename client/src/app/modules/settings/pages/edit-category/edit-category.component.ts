@@ -35,9 +35,9 @@ export class EditCategoryComponent implements OnInit {
   technicalChecked: boolean = false;
   supplierChecked: boolean = false;
   inventoryChecked: boolean = false;
-  claimsChecked: boolean = false;
   dispatchChecked: boolean = false;
   invoiceChecked: boolean = false;
+  claimsChecked: boolean = false;
   portalChecked: boolean = false;
 
   constructor(
@@ -118,24 +118,23 @@ export class EditCategoryComponent implements OnInit {
           viewReport: 'none',
         }),
       }),
-      claims: this._fb.group({
-        viewReport: 'none',
-        canApprove: [false],
-      }),
       dispatch: this._fb.group({
         viewReport: 'none',
+        createDeliveryNote: [false],
         viewPendingDelivery: [false],
         viewInvoiceLinking: [false],
         viewInventoryDeduction: [false],
-        createDeliveryNote: [false],
       }),
       invoice: this._fb.group({
         viewReport: 'none',
+        createInvoice: [false],
         viewInvoicesVsDn: [false],
         viewCancelledAdjusted: [false],
         viewReissued: [false],
-        createInvoice: [false],
-        updateQuantities: [false],
+      }),
+      claims: this._fb.group({
+        viewReport: 'none',
+        canApprove: [false],
       }),
       portalManagement: this._fb.group({
         department: [false],
@@ -203,9 +202,21 @@ export class EditCategoryComponent implements OnInit {
       this.supplierChecked = privileges.supplier?.viewReport !== 'none',
       this.inventoryChecked = privileges.inventory ? 
         (privileges.inventory.products?.viewReport !== 'none' || privileges.inventory.stockEntries?.viewReport !== 'none') : false,
-      this.claimsChecked = privileges.claims?.viewReport !== undefined && privileges.claims?.viewReport !== 'none' || privileges.claims?.canApprove === true,
-      this.dispatchChecked = privileges.dispatch?.viewReport !== undefined && privileges.dispatch?.viewReport !== 'none' || privileges.dispatch?.viewPendingDelivery === true || privileges.dispatch?.viewInvoiceLinking === true || privileges.dispatch?.viewInventoryDeduction === true || privileges.dispatch?.createDeliveryNote === true,
-      this.invoiceChecked = privileges.invoice?.viewReport !== undefined && privileges.invoice?.viewReport !== 'none' || privileges.invoice?.viewInvoicesVsDn === true || privileges.invoice?.viewCancelledAdjusted === true || privileges.invoice?.viewReissued === true || privileges.invoice?.createInvoice === true || privileges.invoice?.updateQuantities === true,
+      this.dispatchChecked = privileges.dispatch
+        ? privileges.dispatch.viewReport !== 'none' ||
+          !!privileges.dispatch.createDeliveryNote ||
+          !!privileges.dispatch.viewPendingDelivery ||
+          !!privileges.dispatch.viewInvoiceLinking ||
+          !!privileges.dispatch.viewInventoryDeduction
+        : false,
+      this.invoiceChecked = privileges.invoice
+        ? privileges.invoice.viewReport !== 'none' ||
+          !!privileges.invoice.createInvoice ||
+          !!privileges.invoice.viewInvoicesVsDn ||
+          !!privileges.invoice.viewCancelledAdjusted ||
+          !!privileges.invoice.viewReissued
+        : false,
+      this.claimsChecked = privileges.claims?.viewReport !== 'none',
       this.portalChecked = privileges.portalManagement
         ? Object.values(privileges.portalManagement).some(value => value)
         : false;
@@ -215,7 +226,7 @@ export class EditCategoryComponent implements OnInit {
     this.router.navigate(['/settings']);
   }
 
-  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'claimsChecked' | 'dispatchChecked' | 'invoiceChecked' | 'portalChecked'): void {
+  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'dispatchChecked' | 'invoiceChecked' | 'claimsChecked' | 'portalChecked'): void {
     const eventTarget = event.target as HTMLInputElement;
     const checked = eventTarget.checked;
 
@@ -236,6 +247,58 @@ export class EditCategoryComponent implements OnInit {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'all' }, stockEntries: { viewReport: 'all' } } } });
       } else {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { products: { viewReport: 'none' }, stockEntries: { viewReport: 'none' } } } });
+      }
+    } else if (formControlName === 'dispatch') {
+      if (checked) {
+        this.categoryForm.patchValue({
+          privileges: {
+            dispatch: {
+              viewReport: 'all',
+              createDeliveryNote: false,
+              viewPendingDelivery: false,
+              viewInvoiceLinking: false,
+              viewInventoryDeduction: false,
+            },
+          },
+        });
+      } else {
+        this.categoryForm.patchValue({
+          privileges: {
+            dispatch: {
+              viewReport: 'none',
+              createDeliveryNote: false,
+              viewPendingDelivery: false,
+              viewInvoiceLinking: false,
+              viewInventoryDeduction: false,
+            },
+          },
+        });
+      }
+    } else if (formControlName === 'invoice') {
+      if (checked) {
+        this.categoryForm.patchValue({
+          privileges: {
+            invoice: {
+              viewReport: 'all',
+              createInvoice: false,
+              viewInvoicesVsDn: false,
+              viewCancelledAdjusted: false,
+              viewReissued: false,
+            },
+          },
+        });
+      } else {
+        this.categoryForm.patchValue({
+          privileges: {
+            invoice: {
+              viewReport: 'none',
+              createInvoice: false,
+              viewInvoicesVsDn: false,
+              viewCancelledAdjusted: false,
+              viewReissued: false,
+            },
+          },
+        });
       }
     } else if (checked) {
       this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', create: false } } });

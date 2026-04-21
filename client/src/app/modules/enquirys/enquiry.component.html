@@ -157,6 +157,8 @@
                                     name="heroInformationCircle" class="text-center text-gray-700 text-md"></ng-icon>
                             </p>
                             <p class="w-fit bg-yellow-100 rounded-full px-2 text-yellow-600 whitespace-nowrap"
+                                *ngSwitchCase="'Rejected by Presale Engineer'">Assigned To Presale Manager</p>
+                            <p class="w-fit bg-yellow-100 rounded-full px-2 text-yellow-600 whitespace-nowrap"
                                 *ngSwitchCase="'Assigned To Presale Engineer'">Assigned To Presale Manager</p>
                             <p class="w-fit bg-yellow-100 rounded-full px-2 text-yellow-600 whitespace-nowrap"
                                 *ngSwitchDefault="">{{element.status}}</p>

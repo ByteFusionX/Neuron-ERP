@@ -475,6 +475,122 @@
             </div>
 
             <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="dispatch">
+                <input type="checkbox" id="dispatch" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'dispatch','dispatchChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Dispatch (Delivery note)</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="dispatchChecked" formGroupName="dispatch">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View dispatch / delivery note data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="dispatchAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="dispatchReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View records that report to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="dispatchCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View records that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="dispatchCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View records that user Created and report to User</span>
+                  </label>
+                </div>
+                <div class="mt-3 space-y-2">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="dispatchCreateDn" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="createDeliveryNote">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Create delivery note</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="dispatchViewPending" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewPendingDelivery">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View pending delivery</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="dispatchViewInvoiceLinking" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewInvoiceLinking">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View invoice linking</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="dispatchViewInventoryDeduction" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewInventoryDeduction">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View inventory deduction</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="invoice">
+                <input type="checkbox" id="invoice" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  (change)="onCheckboxChange($event,'invoice','invoiceChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Invoice</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="invoiceChecked" formGroupName="invoice">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View invoice data</label>
+                </div>
+                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="invoiceAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="all">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="invoiceReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="reported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View records that report to User</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="invoiceCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="created">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View records that user Created</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="radio" id="invoiceCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReport" value="createdAndReported">
+                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View records that user Created and report to User</span>
+                  </label>
+                </div>
+                <div class="mt-3 space-y-2">
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="invoiceCreate" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="createInvoice">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Create invoice</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="invoiceViewVsDn" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewInvoicesVsDn">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View invoices vs DN</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="invoiceViewCancelled" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewCancelledAdjusted">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View cancelled / adjusted</span>
+                  </label>
+                  <label class="flex items-center space-x-2 cursor-pointer group">
+                    <input type="checkbox" id="invoiceViewReissued" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                      formControlName="viewReissued">
+                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View reissued</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
               <label class="flex items-center space-x-3 cursor-pointer group" for="technical">
                 <input type="checkbox" id="technical" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
                   (change)="onCheckboxChange($event,'technical','technicalChecked')">
@@ -682,66 +798,6 @@
                 </div>
               </div>
             </div>
-
-            <div class="bg-white rounded-lg p-4 border border-gray-200">
-              <label class="flex items-center space-x-3 cursor-pointer group" for="dispatch">
-                <input type="checkbox" id="dispatch" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
-                  (change)="onCheckboxChange($event,'dispatch','dispatchChecked')">
-                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">Dispatch</span>
-              </label>
-              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="dispatchChecked" formGroupName="dispatch">
-                <div class="flex items-center space-x-2">
-                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
-                  <label class="text-sm font-medium text-gray-700">View Delivery Notes Data</label>
-                </div>
-                <div class="ml-4 space-y-2 border-l-2 border-gray-200 pl-4">
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="radio" id="dispatchAllData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
-                      formControlName="viewReport" value="all">
-                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View All Delivery Notes</span>
-                  </label>
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="radio" id="dispatchReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
-                      formControlName="viewReport" value="reported">
-                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Delivery Notes that report to User</span>
-                  </label>
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="radio" id="dispatchCreatedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
-                      formControlName="viewReport" value="created">
-                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Delivery Notes that user Created</span>
-                  </label>
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="radio" id="dispatchCreatedReportedData" class="w-4 h-4 text-violet-600 border-gray-300 focus:ring-violet-500 cursor-pointer"
-                      formControlName="viewReport" value="createdAndReported">
-                    <span class="text-sm text-gray-700 group-hover:text-gray-900">View Delivery Notes that user Created and report to User</span>
-                  </label>
-                </div>
-                <div class="mt-3 space-y-2">
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="checkbox" id="dispatchPendingDelivery" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
-                      formControlName="viewPendingDelivery">
-                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View Pending Delivery</span>
-                  </label>
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="checkbox" id="dispatchInvoiceLinking" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
-                      formControlName="viewInvoiceLinking">
-                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View Invoice Linking</span>
-                  </label>
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="checkbox" id="dispatchInventoryDeduction" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
-                      formControlName="viewInventoryDeduction">
-                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">View Inventory Deduction</span>
-                  </label>
-                  <label class="flex items-center space-x-2 cursor-pointer group">
-                    <input type="checkbox" id="dispatchCreateDeliveryNote" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
-                      formControlName="createDeliveryNote">
-                    <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Create Delivery Note</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-
 
             <div class="bg-white rounded-lg p-4 border border-gray-200">
               <label class="flex items-center space-x-3 cursor-pointer group" for="portal">

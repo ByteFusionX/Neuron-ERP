@@ -7,9 +7,9 @@ interface Technical {
     materialRequestAttachements: Array<{
         fileName: string;
         originalname: string;
-        status?: 'pending' | 'approved' | 'rejected';
+        status?: 'draft' | 'pending' | 'approved' | 'rejected';
         statusHistory?: Array<{
-            status: 'pending' | 'approved' | 'rejected';
+            status: 'draft' | 'pending' | 'approved' | 'rejected';
             comment: string;
             changedBy: Types.ObjectId;
             changedDate: Date;
@@ -42,9 +42,9 @@ interface MaterialRequest {
     estimatedCost: number;
     requiredOn: Date;
     remarks: string;
-    status?: 'pending' | 'approved' | 'rejected';
+    status?: 'draft' | 'pending' | 'approved' | 'rejected';
     statusHistory?: Array<{
-        status: 'pending' | 'approved' | 'rejected';
+        status: 'draft' | 'pending' | 'approved' | 'rejected';
         comment: string;
         changedBy: Types.ObjectId;
         changedDate: Date;
@@ -118,14 +118,14 @@ const MaterialRequestSchema = new Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'approved', 'rejected'],
-        default: 'pending'
+        enum: ['draft', 'pending', 'approved', 'rejected'],
+        default: 'draft'
     },
     statusHistory: {
         type: [{
             status: {
                 type: String,
-                enum: ['pending', 'approved', 'rejected'],
+                enum: ['draft', 'pending', 'approved', 'rejected'],
                 required: true
             },
             comment: {

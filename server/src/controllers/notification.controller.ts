@@ -129,6 +129,7 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                     case 'Enquiry':
                         return privileges.enquiry?.viewReport !== 'none';
                     case 'JobAllocated':
+                    case 'ProcurementTransferred':
                         return privileges.purchase?.viewReport !== 'none';
                     case 'MrRequest':
                     case 'TechnicalAssigned':
@@ -141,6 +142,8 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                         return privileges.purchase?.create === true;
                     case 'PurchaseApprovalRequest':
                         return privileges.purchase?.canApprovePR === true;
+                    case 'PurchaseProcurementNotice':
+                        return privileges.purchase?.viewReport !== 'none';
                     case 'PurchaseApproved':
                         return privileges.purchaseOrder?.canInitiateLPO === true;
                     case 'PurchaseRejected':
@@ -292,6 +295,9 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
                 routeData: { jobId: additionalData?.jobId || referenceId?._id?.toString() }
             };
 
+        case 'ProcurementTransferred':
+            return { routePath: '' };
+
         case 'MrRequest': {
             const technicalId = additionalData?.technicalId;
             if (technicalId) {
@@ -336,6 +342,14 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
         }
 
         case 'PurchaseApprovalRequest': {
+            const purchaseId = additionalData?.purchaseId || referenceId?._id?.toString() || referenceId?.toString();
+            return {
+                routePath: '/purchase/view-purchase',
+                routeData: { purchaseId }
+            };
+        }
+
+        case 'PurchaseProcurementNotice': {
             const purchaseId = additionalData?.purchaseId || referenceId?._id?.toString() || referenceId?.toString();
             return {
                 routePath: '/purchase/view-purchase',
@@ -429,12 +443,14 @@ export const createNotificationWithPrivileges = async (
         additionalData?: Record<string, unknown>;
     },
     privilegeFilter: PrivilegeFilter,
-    socket?: Server
+    socket?: Server,
+    opts?: { excludeSentByFromRecipients?: boolean }
 ): Promise<any> => {
     try {
+        const excludeActor = opts?.excludeSentByFromRecipients !== false;
         const eligibleEmployeeIds = await filterEmployeesByPrivilege(
             privilegeFilter,
-            notificationData.sentBy
+            excludeActor ? notificationData.sentBy : undefined
         );
 
         if (eligibleEmployeeIds.length === 0) {

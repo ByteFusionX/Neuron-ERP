@@ -47,6 +47,7 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
 
   isSaving: boolean = false;
   isQuoting: boolean = false;
+  isLoadingContacts: boolean = false;
 
   today = new Date().toISOString().substring(0, 10)
   enquiryForm = this._fb.group({
@@ -96,11 +97,17 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
     this.contacts = []
     this.config.notFoundText = 'Wait a few Seconds..';
     if (change && this.customers$) {
+      this.isLoadingContacts = true;
+      this.cdr.markForCheck();
       this.subscriptions.add(this.customers$.subscribe((data) => {
         let customer = data.find((contact) => contact._id == change)
-        if (customer) {
-          this.contacts = customer.contactDetails
-        }
+        setTimeout(() => {
+            if (customer) {
+              this.contacts = customer.contactDetails
+            }
+            this.isLoadingContacts = false;
+            this.cdr.markForCheck();
+        }, 600);
       }))
     } else {
       this.config.notFoundText = 'Select a client first..';

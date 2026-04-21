@@ -58,8 +58,8 @@
                                 Sales Manager Name
                             </td>
                             <td class="px-2 py-2 border" colspan="2">
-                                {{ purchase.jobId?.createdBy?.firstName }}
-                                {{ purchase.jobId?.createdBy?.lastName }}
+                                {{ purchase.jobId?.quoteId?.createdBy?.firstName }}
+                                {{ purchase.jobId?.quoteId?.createdBy?.lastName }}
                             </td>
                         </tr>
                         <tr class="border-b">
@@ -92,6 +92,42 @@
             </div>
         </div>
 
+        <div class="w-full mb-8" *ngIf="purchase.jobId?.quoteId">
+            <h4 class="text-md font-semibold text-gray-900 mb-3">LPO Files</h4>
+            <div *ngIf="quotationLpoFiles.length; else noLpoFiles"
+                class="rounded-lg border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+                <div *ngFor="let file of quotationLpoFiles" class="px-4 py-3">
+                    <div class="flex flex-wrap items-center gap-2" *ngIf="file.originalname || file.fileName">
+                        <p class="text-sm text-gray-800 truncate max-w-[220px] sm:max-w-md flex-1 min-w-0"
+                            [matTooltip]="file.originalname || file.fileName"
+                            matTooltipPosition="above">
+                            {{ file.originalname || file.fileName }}
+                        </p>
+                        <button type="button"
+                            class="w-8 h-8 shrink-0 border border-gray-300 rounded-full flex justify-center items-center hover:border-gray-500 hover:bg-gray-50"
+                            matTooltip="View (PDF in new tab)"
+                            matTooltipPosition="above"
+                            (click)="onViewLpoFile(file)">
+                            <ng-icon class="text-gray-800" name="heroEye" size="18"></ng-icon>
+                        </button>
+                        <button type="button"
+                            class="w-8 h-8 shrink-0 border border-gray-300 rounded-full flex justify-center items-center hover:border-gray-500 hover:bg-gray-50"
+                            matTooltip="Download"
+                            matTooltipPosition="above"
+                            (click)="onDownloadLpoFile(file)">
+                            <ng-icon class="text-gray-800" name="heroInboxArrowDown" size="18"></ng-icon>
+                        </button>
+                    </div>
+                    <div class="max-w-xs mt-2" *ngIf="file.fileName && file.fileName === selectedLpoFile">
+                        <mat-progress-bar mode="determinate" [value]="lpoDownloadProgress"></mat-progress-bar>
+                    </div>
+                </div>
+            </div>
+            <ng-template #noLpoFiles>
+                <p class="text-sm text-gray-500 italic">No LPO files uploaded on this quotation.</p>
+            </ng-template>
+        </div>
+
         <div class="w-full mb-8">
             <div class="relative overflow-x-auto">
                 <table class="w-full text-md text-left border">
@@ -105,8 +141,9 @@
                             <th class="px-4 py-2 border">Unit Selling Price</th>
                             <th class="px-4 py-2 border">Total Selling
                                 Price</th>
-                            <th class="px-4 py-2 border">Aprroved Supplier</th>
+                            <th class="px-4 py-2 border">Approved Supplier</th>
                             <th class="px-4 py-2 border">ETA Terms</th>
+                            <th class="px-4 py-2 border">Payment Terms</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -142,11 +179,13 @@
                                 <td class="px-4 py-2 border">{{
                                     row.selectedSupplier.supplierName }}</td>
                                 <td class="px-4 py-2 border">{{
-                                    row.selectedSupplier.etaTerms }}</td>
+                                    row.selectedSupplier.etaTerms || '-' }}</td>
+                                <td class="px-4 py-2 border">{{
+                                    row.selectedSupplier.paymentTerms || '-' }}</td>
                             </tr>
 
                             <tr *ngIf="rows.length === 0">
-                                <td colspan="9"
+                                <td colspan="10"
                                     class="px-4 py-2 border text-center text-gray-400 italic">
                                     No supplier selected
                                 </td>
@@ -158,57 +197,61 @@
         </div>
 
         <div class="w-full mb-8">
-            <h4 class="text-lg font-semibold mb-4">Job Summary</h4>
+            <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 mb-3">
+                <h4 class="text-lg font-semibold text-gray-900">Job Summary</h4>
+                <span class="text-xs text-gray-500">Values in {{ purchase?.currency }}</span>
+            </div>
+            <div class="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
             <div class="relative overflow-x-auto">
-                <table class="w-full text-md text-left border">
+                <table class="w-full text-md text-left border-collapse">
                     <tbody>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border font-medium bg-gray-50"
-                                colspan="1">
-                                LPO Value
+                        <tr class="border-b border-gray-200 bg-gray-50/70">
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-medium text-gray-700 w-[40%] sm:w-auto">
+                                LPO value
                             </td>
-                            <td class="px-2 py-2 border">{{ purchase?.lpoValue | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                            <td class="px-3 py-2.5 font-medium text-gray-900" colspan="3">{{ purchase?.lpoValue | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border font-medium bg-gray-50"
-                                colspan="1">
-                                Total Cost as per PR
+                        <tr class="border-b border-gray-200">
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-medium bg-gray-50 text-gray-700">
+                                Total cost as per PR
                             </td>
-                            <td class="px-2 py-2 border">{{ (purchase?.totalPRCost || 0) - (purchase?.totalDiscountReceived || 0) | number : '1.2-2' }} {{ purchase?.currency }}</td>
-                            <td class="px-2 py-2 border font-medium bg-gray-50"
-                                colspan="1">
-                                Total Cost Price as per Deal sheet
-                            </td>
-                            <td class="px-2 py-2 border">{{ purchase?.totalDealCost | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                            <td class="px-3 py-2.5 text-gray-700" colspan="3">{{ (purchase?.totalPRCost || 0) | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border font-medium bg-gray-50"
-                                colspan="1">
-                                Total Discount Received
+                        <tr class="border-b border-gray-200">
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-medium bg-gray-50 text-gray-700">
+                                Total discount received
                             </td>
-                            <td class="px-2 py-2 border">{{ purchase?.totalDiscountReceived | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                            <td class="px-3 py-2.5 text-gray-700" colspan="3">{{ purchase?.totalDiscountReceived | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border font-medium bg-gray-50"
-                                colspan="1">
-                                Profit Margin
+                        <tr class="border-b border-gray-200 bg-violet-50/60">
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-semibold text-gray-800">
+                                Total cost PR after discount
                             </td>
-                            <td class="px-2 py-2 border"> {{ getProfitMargin(purchase?.lpoValue || 0, (purchase?.totalPRCost || 0) - (purchase?.totalDiscountReceived || 0)) | number : '1.2-2' }} {{ purchase?.currency }}</td>
-                            <td class="px-2 py-2 border font-medium bg-gray-50"
-                                colspan="1">
-                                Deal Profit
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-semibold text-gray-900">{{ prCostAfterDiscount() | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-semibold text-gray-800">
+                                Total cost (deal sheet)
                             </td>
-                            <td class="px-2 py-2 border">{{ (purchase?.dealProfit || 0) | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                            <td class="px-3 py-2.5 font-semibold text-gray-900">{{ (purchase?.totalDealCost || 0) | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border font-medium bg-gray-50"
-                                colspan="1">
-                                Difference In Profit
+                        <tr class="border-b border-gray-200">
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-medium bg-gray-50 text-gray-700">
+                                Profit margin
                             </td>
-                            <td class="px-2 py-2 border">{{ ((getProfitMargin(purchase?.lpoValue || 0, (purchase?.totalPRCost || 0) - (purchase?.totalDiscountReceived || 0)) || 0) - (purchase?.dealProfit || 0) ) | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                            <td class="px-3 py-2.5 border-r border-gray-200">{{ getProfitMargin(purchase?.lpoValue || 0, prCostAfterDiscount()) | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-medium bg-gray-50 text-gray-700">
+                                Deal profit
+                            </td>
+                            <td class="px-3 py-2.5">{{ (purchase?.dealProfit || 0) | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                        </tr>
+                        <tr class="bg-gray-50/50">
+                            <td class="px-3 py-2.5 border-r border-gray-200 font-medium text-gray-700">
+                                Difference in profit
+                            </td>
+                            <td class="px-3 py-2.5 font-medium text-gray-900" colspan="3">{{ ((getProfitMargin(purchase?.lpoValue || 0, prCostAfterDiscount()) || 0) - (purchase?.dealProfit || 0) ) | number : '1.2-2' }} {{ purchase?.currency }}</td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
             </div>
         </div>
 

@@ -6,16 +6,10 @@
     </div>
     <form [formGroup]="mrForm" (ngSubmit)="onSubmit()">
         <div class="m-5">
-            <app-select-dropdown 
-                label="engineer" 
-                formControlName="engineer" 
-                [isSubmitted]="isSubmitted()"
-                [options]="employees"
-                optionLabel="fullName"
-                optionValue="_id"
-                placeholder="Select Engineer"
-                class="w-full">
-            </app-select-dropdown>
+            <div class="w-full mb-4">
+                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">Engineer</label>
+                <p class="text-sm text-gray-900 bg-gray-100 border border-gray-200 rounded px-3 py-2.5">{{ engineerDisplayName }}</p>
+            </div>
             <app-form-field 
                 label="Total Proposed Amount in Customer LPO" 
                 [control]="mrForm.get('totalPurchase')" 
