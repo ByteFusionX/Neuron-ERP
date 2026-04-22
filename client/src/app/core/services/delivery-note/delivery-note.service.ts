@@ -102,10 +102,16 @@ export class DeliveryNoteService {
     const tableBody: any[] = [];
 
     items.forEach((item: any, index: number) => {
+      const serialNos: string[] = Array.isArray(item.serialNos) ? item.serialNos : [];
+      const serialCell = serialNos.length > 0
+        ? { text: serialNos.join(', '), style: 'tableText' }
+        : { text: '-', style: 'tableText', alignment: 'center' };
+
       tableBody.push([
         { text: String(index + 1).padStart(2, '0'), style: 'tableText', alignment: 'center' },
         { text: item.description || '-', style: 'tableText' },
-        { text: String(item.currentDeliveryQty || 0), style: 'tableText', alignment: 'center' }
+        { text: String(item.currentDeliveryQty || 0), style: 'tableText', alignment: 'center' },
+        serialCell
       ]);
     });
 
@@ -174,12 +180,13 @@ export class DeliveryNoteService {
         {
           table: {
             headerRows: 1,
-            widths: [40, '*', 60],
+            widths: [40, '*', 50, 100],
             body: [
               [
                 { text: 'SL.\nNo.', style: 'tableHeader', alignment: 'center' },
                 { text: 'DESCRIPTION', style: 'tableHeader' },
-                { text: 'QTY', style: 'tableHeader', alignment: 'center' }
+                { text: 'QTY', style: 'tableHeader', alignment: 'center' },
+                { text: 'SERIAL NO(S)', style: 'tableHeader', alignment: 'center' }
               ],
               ...tableBody
             ]

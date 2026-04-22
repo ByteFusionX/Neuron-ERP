@@ -103,6 +103,12 @@ export class CreateDnComponent implements OnInit {
     this.isLoading.set(true);
     this.deliveryNoteService.getDnById(dnId).subscribe({
       next: (dn) => {
+        if (dn.status !== 'Draft') {
+          this.toastr.error('Only Draft delivery notes can be edited');
+          this.router.navigate(['/dispatch/delivery-note-register/view', dnId]);
+          this.isLoading.set(false);
+          return;
+        }
         this.isEditMode = true;
         this.draftDnId = dn._id;
         this.setDraftLoaded(dn);

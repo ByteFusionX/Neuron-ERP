@@ -4,11 +4,10 @@ import { NgIcon } from '@ng-icons/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
-import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { TechnicalService } from 'src/app/core/services/technical.service';
+import { appNoLeadingSpace } from 'src/app/shared/directives/trim-validator.directive';
 
 @Component({
   selector: 'app-mr-request',
@@ -18,7 +17,7 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
     FormsModule,
     ReactiveFormsModule,
     FormFieldComponent,
-    SelectDropdownComponent,
+    appNoLeadingSpace,
   ],
   templateUrl: './mr-request.component.html',
   styleUrl: './mr-request.component.css'
@@ -27,38 +26,66 @@ export class MrRequestComponent implements OnInit {
 
   private fb = inject(FormBuilder);
   private toaster = inject(ToastrService);
-  private employeeService = inject(EmployeeService);
   private purchaseService = inject(PurchaseService);
+  private technicalService = inject(TechnicalService);
   isSubmitted = signal<boolean>(false);
-  employees: getEmployee[] = [];
   purchaseId!: string;
+  jobMongoId?: string;
   hasMrRequest = signal<boolean>(false);
 
+  engineerId: string | null = null;
+  engineerDisplayName = ''
+
   mrForm: FormGroup = this.fb.group({
-    engineer: ['', [Validators.required]],
     message: ['', [Validators.required]],
     totalPurchase: [0]
   })
 
-  constructor(@Inject(MAT_DIALOG_DATA) public data: any, private dialogRef: MatDialogRef<MrRequestComponent>) {
+  constructor(@Inject(MAT_DIALOG_DATA) public data: {
+    purchaseId?: string;
+    jobMongoId?: string;
+    assignedEngineer?: { _id: string; firstName?: string; lastName?: string } | null;
+    technicalProjectId?: string | null;
+  }, private dialogRef: MatDialogRef<MrRequestComponent>) {
     this.purchaseId = data.purchaseId || '';
+    this.jobMongoId = data.jobMongoId;
   }
 
   ngOnInit(): void {
-    this.loadEmployees();
+    if (this.data.assignedEngineer !== undefined) {
+      this.applyEngineerFromData(this.data.assignedEngineer);
+    } else if (this.jobMongoId) {
+      this.technicalService.getMaterialRequestByJobId(this.jobMongoId).subscribe({
+        next: (res: { assignedEngineer?: { _id: string; firstName?: string; lastName?: string } | null }) =>
+          this.applyEngineerFromData(res.assignedEngineer),
+        error: () => this.applyEngineerFromData(null)
+      });
+    } else {
+      this.applyEngineerFromData(null);
+    }
     if (this.purchaseId) {
       this.loadPurchaseData();
+    }
+  }
+
+  private applyEngineerFromData(engineer: { _id: string; firstName?: string; lastName?: string } | null | undefined): void {
+    if (engineer && engineer._id) {
+      this.engineerId = String(engineer._id);
+      const name = [engineer.firstName, engineer.lastName].filter(Boolean).join(' ').trim();
+      this.engineerDisplayName = name || '—';
+    } else {
+      this.engineerId = null;
+      this.engineerDisplayName = 'No engineer assigned';
     }
   }
 
   loadPurchaseData(): void {
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (res) => {
-        if (res.data?.mrRequest?.engineer) {
+        if (res.data?.mrRequest?.message != null || res.data?.mrRequest?.totalPurchase != null) {
           const mrRequest = res.data.mrRequest;
           this.hasMrRequest.set(true);
           this.mrForm.patchValue({
-            engineer: typeof mrRequest.engineer === 'object' ? mrRequest.engineer._id : mrRequest.engineer || '',
             message: mrRequest.message || '',
             totalPurchase: mrRequest.totalPurchase || 0,
           });
@@ -66,24 +93,8 @@ export class MrRequestComponent implements OnInit {
           this.hasMrRequest.set(false);
         }
       },
-      error: (error) => {
-        console.error('Error loading purchase data:', error);
+      error: () => {
         this.hasMrRequest.set(false);
-      }
-    });
-  }
-
-  loadEmployees(): void {
-    this.employeeService.getAllEmployees().subscribe({
-      next: (employees) => {
-        this.employees = employees.map(emp => ({
-          ...emp,
-          fullName: `${emp.firstName} ${emp.lastName}`
-        }));
-      },
-      error: (error) => {
-        this.toaster.error('Failed to load employees');
-        console.error('Error loading employees:', error);
       }
     });
   }
@@ -105,12 +116,12 @@ export class MrRequestComponent implements OnInit {
     }
 
     const mrRequest = {
-      engineer: this.mrForm.value.engineer,
+      engineer: this.engineerId,
       message: this.mrForm.value.message,
       totalPurchase: this.mrForm.value.totalPurchase || 0,
       createdDate: new Date()
     };
-    
+
 
     this.purchaseService.updatePurchaseMrRequest(this.purchaseId, mrRequest).subscribe({
       next: (res) => {
@@ -160,4 +171,3 @@ export class MrRequestComponent implements OnInit {
     return this.mrForm.controls;
   }
 }
-

@@ -22,14 +22,14 @@ export interface MaterialRequest {
   estimatedCost: number;
   requiredOn: Date;
   remarks?: string;
-  status?: 'pending' | 'approved' | 'rejected';
+  status?: 'draft' | 'pending' | 'approved' | 'rejected';
   statusHistory?: MaterialRequestStatusHistory[];
 }
 
 export interface MaterialRequestAttachment {
   fileName: string;
   originalname: string;
-  status?: 'pending' | 'approved' | 'rejected';
+  status?: 'draft' | 'pending' | 'approved' | 'rejected';
   statusHistory?: MaterialRequestStatusHistory[];
 }
 

@@ -1,231 +1,228 @@
-<app-modal-layout
-  title="Material Request"
-  [onClose]="onCancel.bind(this)"
-  [footerButtons]="getFooterButtons()"
-  contentClass="m-8 p-6"
-  contentMaxHeight="calc(100vh-70px)">
-  <div class="mb-4 flex items-center gap-3">
-    <app-btn 
-      theme="secondary-outline" 
-      (click)="openPurchaseRequestModal()"
-      [disabled]="!hasPurchaseRequests">
-      <ng-icon name="heroShoppingCart" class="w-4 h-4 mr-1"></ng-icon>
-      @if(hasPurchaseRequests){
-        View Request from Purchase
-      }@else{
-        No Requests from Purchase
-      }
-    </app-btn>
-  </div>
-  <form [formGroup]="materialForm" (ngSubmit)="onSubmit()">
-    <div class="m-8 p-6">
-      <div *ngIf="isLoading" class="flex flex-col items-center justify-center py-12">
-        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-600"></div>
-        <p class="mt-3 text-gray-600 text-sm">Loading material requests...</p>
-      </div>
-      <div *ngIf="!isLoading" class="relative overflow-x-auto">
-        <table class="w-full text-sm text-left rtl:text-right text-gray-500 border">
-          <thead class="text-xs text-gray-700 uppercase bg-violet-50">
-            <tr>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t">
-                Item Name
-              </th>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t text-center">
-                Quantity
-              </th>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t text-center">
-                Estimated Cost
-              </th>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t text-center">
-                Total Cost
-              </th>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t text-center">
-                Required On
-              </th>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t text-center">
-                Remarks
-              </th>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t text-center">
-                Status
-              </th>
-              <th scope="col" class="px-6 py-3 border-l border-r border-t text-center">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <ng-container formArrayName="materialRequests">
-              <tr 
-                *ngFor="let materialRequest of materialRequestsArray.controls; let i = index" 
-                [formGroupName]="i"
-                class="bg-white border-b text-gray-800">
-                
-                <td class="px-6 py-3 border">
-                  <input 
-                    type="text"
-                    formControlName="itemName"
-                    [class.border-red-500]="materialRequest.get('itemName')?.invalid && (materialRequest.get('itemName')?.touched || isSubmitted)"
-                    class="w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                    placeholder="Enter item name">
-                  <div *ngIf="materialRequest.get('itemName')?.invalid && (materialRequest.get('itemName')?.touched || isSubmitted)" 
-                       class="text-red-500 text-xs mt-1">
-                    {{ getFieldError(materialRequest.get('itemName'), 'itemName') }}
-                  </div>
-                </td>
-                
-                <td class="px-6 py-3 border text-center">
-                  <input 
-                    type="number"
-                    formControlName="quantity"
-                    [class.border-red-500]="materialRequest.get('quantity')?.invalid && (materialRequest.get('quantity')?.touched || isSubmitted)"
-                    class="w-20 bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 text-center"
-                    min="1">
-                  <div *ngIf="materialRequest.get('quantity')?.invalid && (materialRequest.get('quantity')?.touched || isSubmitted)" 
-                       class="text-red-500 text-xs mt-1">
-                    {{ getFieldError(materialRequest.get('quantity'), 'quantity') }}
-                  </div>
-                </td>
-                
-                <td class="px-6 py-3 border text-center">
-                  <input 
-                    type="number"
-                    formControlName="estimatedCost"
-                    [class.border-red-500]="materialRequest.get('estimatedCost')?.invalid && (materialRequest.get('estimatedCost')?.touched || isSubmitted)"
-                    class="w-24 bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 text-center"
-                    min="0"
-                    step="0.01">
-                  <div *ngIf="materialRequest.get('estimatedCost')?.invalid && (materialRequest.get('estimatedCost')?.touched || isSubmitted)" 
-                       class="text-red-500 text-xs mt-1">
-                    {{ getFieldError(materialRequest.get('estimatedCost'), 'estimatedCost') }}
-                  </div>
-                </td>
-                
-                <td class="px-6 py-3 border text-center font-medium">
-                  {{ calculateTotalCost(materialRequest.get('quantity')?.value || 0, materialRequest.get('estimatedCost')?.value || 0) | number:'1.2-2' }}
-                </td>
-                
-                <td class="px-6 py-3 border text-center">
-                  <input 
-                    type="date"
-                    formControlName="requiredOn"
-                    [class.border-red-500]="materialRequest.get('requiredOn')?.invalid && (materialRequest.get('requiredOn')?.touched || isSubmitted)"
-                    class="bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500">
-                  <div *ngIf="materialRequest.get('requiredOn')?.invalid && (materialRequest.get('requiredOn')?.touched || isSubmitted)" 
-                       class="text-red-500 text-xs mt-1">
-                    {{ getFieldError(materialRequest.get('requiredOn'), 'requiredOn') }}
-                  </div>
-                </td>
+<div class="py-8 px-4 sm:px-6 lg:px-8">
 
-                <td class="px-6 py-3 border text-center">
-                  <textarea 
-                    formControlName="remarks"
-                    [disabled]="isItemApproved(i)"
-                    class="w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"></textarea>
-                </td>
-                
-                <td class="px-6 py-3 border text-center">
-                  <span 
-                    [class]="'px-2 py-1 rounded-full text-xs font-medium ' + getStatusClass(getItemStatus(i))"
-                    [matTooltip]="materialRequest.get('statusHistory')?.value && materialRequest.get('statusHistory')?.value.length > 0 ? 'Click to view history' : ''"
-                    (click)="showItemStatusHistory(i)"
-                    [style.cursor]="materialRequest.get('statusHistory')?.value && materialRequest.get('statusHistory')?.value.length > 0 ? 'pointer' : 'default'">
-                    {{ getItemStatus(i) | titlecase }}
-                  </span>
-                </td>
-                
-                <td class="px-6 py-3 border text-center">
-                  <button 
-                    type="button"
-                    (click)="removeMaterialRequest(i)"
-                    [disabled]="materialRequestsArray.length === 1 || isItemApproved(i)"
-                    class="text-red-600 hover:text-red-800 disabled:text-gray-400 disabled:cursor-not-allowed">
-                    <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
-                  </button>
-                </td>
-              </tr>
-            </ng-container>
-          </tbody>
-        </table>
-      </div>
+  <div class="bg-white shadow-sm border border-gray-200 overflow-hidden">
 
-      <div class="mt-4 flex justify-between items-center">
-        <button 
-          type="button"
-          (click)="addMaterialRequest()"
-          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm flex items-center gap-2">
-          <ng-icon name="heroPlus" class="w-4 h-4"></ng-icon>
-          Add Item
-        </button>
-        
-        <div class="text-right">
-          <div class="text-lg font-medium">
-            Grand Total: <span class="text-violet-700">{{ calculateGrandTotal() | number:'1.2-2' }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="mt-6 pt-6 border-t border-gray-200">
-        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-zip">
-          Attachment
-        </label>
-        <div class="flex border items-center justify-start px-3 mt-2 bg-gray-200 py-2 cursor-pointer"
-          (click)="fileInput.click()">
-          <div class="font-medium flex items-center text-sm py-1">
-            <ng-icon name="heroPaperClip" class="text-xl text-gray-600 mr-2"></ng-icon>
-            Select Files
-          </div>
-          <input appFileValidator appFileSizeValidator type="file" multiple hidden #fileInput
-            (change)="onFileSelected($event)">
-        </div>
-
-        <div *ngIf="existingAttachments.length > 0" class="mt-4">
-          <p class="text-sm font-medium text-gray-700 mb-2">Existing Attachments:</p>
-          <div class="space-y-2">
-            <div class="px-2 pt-1" *ngFor="let attachment of existingAttachments; let i=index">
-              <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
-                <div class="flex items-center gap-3 flex-1">
-                  <ng-icon name="heroDocument" class="text-gray-500"></ng-icon>
-                  <p class="text-sm px-2 flex-1 truncate" [matTooltip]="attachment.originalname" matTooltipPosition="above">{{attachment.originalname}}</p>
-                  <span 
-                    [class]="'px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ' + getFileStatusClass(attachment)"
-                    [matTooltip]="attachment.statusHistory && attachment.statusHistory.length > 0 ? 'Click to view history' : ''"
-                    (click)="showFileStatusHistory(attachment)"
-                    [style.cursor]="attachment.statusHistory && attachment.statusHistory.length > 0 ? 'pointer' : 'default'">
-                    {{ (attachment.status || 'pending') | titlecase }}
-                  </span>
-                </div>
-                <div class="ml-2">
-                  <ng-icon 
-                    name="heroXMark" 
-                    class="text-red-500 cursor-pointer hover:text-red-700" 
-                    (click)="removeExistingAttachment(i)"
-                    [class.disabled]="attachment.status === 'approved'"
-                    [style.cursor]="attachment.status === 'approved' ? 'not-allowed' : 'pointer'"
-                    [style.opacity]="attachment.status === 'approved' ? '0.5' : '1'"></ng-icon>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div *ngIf="selectedFiles.length > 0" class="mt-4">
-          <p class="text-sm font-medium text-gray-700 mb-2">New Files:</p>
-          <div class="space-y-2">
-            <div class="px-2 pt-1" *ngFor="let file of selectedFiles; let i=index">
-              <div class="flex justify-between items-center bg-blue-50 p-2 rounded">
-                <div class="flex items-center">
-                  <ng-icon name="heroDocumentArrowUp" class="text-blue-500"></ng-icon>
-                  <p class="text-sm px-2 w-40 truncate" [matTooltip]="file.name" matTooltipPosition="above">{{file.name}}</p>
-                </div>
-                <div>
-                  <ng-icon name="heroXMark" class="text-orange-500 cursor-pointer hover:text-orange-700" (click)="removeFile(i)"></ng-icon>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="border-b border-gray-200 p-4 px-6 flex flex-wrap justify-between items-center gap-3">
+      <h3 class="text-md font-semibold text-gray-900 tracking-tight">Material Request</h3>
+      <app-btn
+        theme="secondary-outline"
+        (click)="openPurchaseRequestModal()"
+        [disabled]="!hasPurchaseRequests">
+        <ng-icon name="heroShoppingCart" class="w-4 h-4 mr-1"></ng-icon>
+        {{ hasPurchaseRequests ? 'View Request from Purchase' : 'No Requests from Purchase' }}
+      </app-btn>
     </div>
 
-  </form>
-</app-modal-layout> 
+    <div class="p-6">
+      <div *ngIf="isLoading" class="flex flex-col items-center justify-center py-16">
+        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-600"></div>
+        <p class="mt-3 text-gray-500 text-sm">Loading material requests...</p>
+      </div>
+
+      <form *ngIf="!isLoading" [formGroup]="materialForm" (ngSubmit)="onSubmit('submit')">
+
+        <div class="relative overflow-x-auto border border-gray-200">
+          <table class="w-full text-sm text-left text-gray-700">
+            <thead class="text-xs text-gray-700 uppercase bg-violet-50 border-b border-gray-200">
+              <tr>
+                <th class="px-4 py-3 border-r border-gray-200">Item Name</th>
+                <th class="px-4 py-3 border-r border-gray-200 text-center w-24">Qty</th>
+                <th class="px-4 py-3 border-r border-gray-200 text-center w-32">Est. Cost</th>
+                <th class="px-4 py-3 border-r border-gray-200 text-center w-32">Total Cost</th>
+                <th class="px-4 py-3 border-r border-gray-200 text-center w-36">Required On</th>
+                <th class="px-4 py-3 border-r border-gray-200 text-center">Remarks</th>
+                <th class="px-4 py-3 border-r border-gray-200 text-center w-28">Status</th>
+                <th class="px-4 py-3 text-center w-16"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <ng-container formArrayName="materialRequests">
+                <tr
+                  *ngFor="let mr of materialRequestsArray.controls; let i = index"
+                  [formGroupName]="i"
+                  class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+
+                  <td class="px-4 py-2 border-r border-gray-100">
+                    <input
+                      type="text"
+                      formControlName="itemName"
+                      placeholder="Enter item name"
+                      [class.border-red-400]="mr.get('itemName')?.invalid && (mr.get('itemName')?.touched || isSubmitted)"
+                      class="w-full bg-gray-100 text-gray-800 border border-transparent rounded px-3 py-2 text-sm focus:outline-none focus:bg-white focus:border-violet-400 transition disabled:bg-gray-50 disabled:text-gray-500">
+                    <p *ngIf="mr.get('itemName')?.invalid && (mr.get('itemName')?.touched || isSubmitted)"
+                       class="text-red-500 text-xs mt-1">
+                      {{ getFieldError(mr.get('itemName'), 'itemName') }}
+                    </p>
+                  </td>
+
+                  <td class="px-4 py-2 border-r border-gray-100">
+                    <input
+                      type="number"
+                      formControlName="quantity"
+                      min="1"
+                      [class.border-red-400]="mr.get('quantity')?.invalid && (mr.get('quantity')?.touched || isSubmitted)"
+                      class="w-full bg-gray-100 text-gray-800 border border-transparent rounded px-3 py-2 text-sm text-center focus:outline-none focus:bg-white focus:border-violet-400 transition disabled:bg-gray-50 disabled:text-gray-500">
+                    <p *ngIf="mr.get('quantity')?.invalid && (mr.get('quantity')?.touched || isSubmitted)"
+                       class="text-red-500 text-xs mt-1">
+                      {{ getFieldError(mr.get('quantity'), 'quantity') }}
+                    </p>
+                  </td>
+
+                  <td class="px-4 py-2 border-r border-gray-100">
+                    <input
+                      type="number"
+                      formControlName="estimatedCost"
+                      min="0"
+                      step="0.01"
+                      [class.border-red-400]="mr.get('estimatedCost')?.invalid && (mr.get('estimatedCost')?.touched || isSubmitted)"
+                      class="w-full bg-gray-100 text-gray-800 border border-transparent rounded px-3 py-2 text-sm text-center focus:outline-none focus:bg-white focus:border-violet-400 transition disabled:bg-gray-50 disabled:text-gray-500">
+                    <p *ngIf="mr.get('estimatedCost')?.invalid && (mr.get('estimatedCost')?.touched || isSubmitted)"
+                       class="text-red-500 text-xs mt-1">
+                      {{ getFieldError(mr.get('estimatedCost'), 'estimatedCost') }}
+                    </p>
+                  </td>
+
+                  <td class="px-4 py-2 border-r border-gray-100 text-center font-medium text-gray-800">
+                    {{ calculateTotalCost(mr.get('quantity')?.value || 0, mr.get('estimatedCost')?.value || 0) | number:'1.2-2' }}
+                  </td>
+
+                  <td class="px-4 py-2 border-r border-gray-100">
+                    <input
+                      type="date"
+                      formControlName="requiredOn"
+                      [class.border-red-400]="mr.get('requiredOn')?.invalid && (mr.get('requiredOn')?.touched || isSubmitted)"
+                      class="w-full bg-gray-100 text-gray-800 border border-transparent rounded px-3 py-2 text-sm focus:outline-none focus:bg-white focus:border-violet-400 transition disabled:bg-gray-50 disabled:text-gray-500">
+                    <p *ngIf="mr.get('requiredOn')?.invalid && (mr.get('requiredOn')?.touched || isSubmitted)"
+                       class="text-red-500 text-xs mt-1">
+                      {{ getFieldError(mr.get('requiredOn'), 'requiredOn') }}
+                    </p>
+                  </td>
+
+                  <td class="px-4 py-2 border-r border-gray-100">
+                    <textarea
+                      formControlName="remarks"
+                      rows="1"
+                      class="w-full bg-gray-100 text-gray-800 border border-transparent rounded px-3 py-2 text-sm focus:outline-none focus:bg-white focus:border-violet-400 transition resize-none disabled:bg-gray-50 disabled:text-gray-500"></textarea>
+                  </td>
+
+                  <td class="px-4 py-2 border-r border-gray-100 text-center">
+                    <span
+                      [class]="'px-2 py-1 rounded-full text-xs font-medium cursor-default ' + getStatusClass(getItemStatus(i))"
+                      [matTooltip]="mr.get('statusHistory')?.value?.length > 0 ? 'Click to view history' : ''"
+                      [class.cursor-pointer]="mr.get('statusHistory')?.value?.length > 0"
+                      (click)="showItemStatusHistory(i)">
+                      {{ getItemStatus(i) | titlecase }}
+                    </span>
+                  </td>
+
+                  <td class="px-4 py-2 text-center">
+                    <button
+                      type="button"
+                      (click)="removeMaterialRequest(i)"
+                      [disabled]="materialRequestsArray.length === 1 || isItemApproved(i)"
+                      class="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition disabled:opacity-30 disabled:cursor-not-allowed">
+                      <ng-icon name="heroTrash" class="w-4 h-4"></ng-icon>
+                    </button>
+                  </td>
+                </tr>
+              </ng-container>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-4 flex justify-between items-center">
+          <button
+            type="button"
+            (click)="addMaterialRequest()"
+            class="flex items-center gap-1.5 text-sm text-violet-700 font-medium border border-violet-300 bg-violet-50 hover:bg-violet-100 px-4 py-2 transition">
+            <ng-icon name="heroPlus" class="w-4 h-4"></ng-icon>
+            Add Item
+          </button>
+          <div class="text-sm text-gray-600">
+            Grand Total:
+            <span class="text-lg font-semibold text-violet-700 ml-1">{{ calculateGrandTotal() | number:'1.2-2' }}</span>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-6 border-t border-gray-200">
+          <p class="text-xs font-bold uppercase tracking-wide text-gray-600 mb-2">Attachments</p>
+
+          <div class="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 hover:border-violet-400 hover:bg-violet-50 px-4 py-3 cursor-pointer transition w-fit"
+            (click)="fileInput.click()">
+            <ng-icon name="heroPaperClip" class="text-gray-500 text-lg"></ng-icon>
+            <span class="text-sm text-gray-600 font-medium">Select Files</span>
+            <input appFileValidator appFileSizeValidator type="file" multiple hidden #fileInput (change)="onFileSelected($event)">
+          </div>
+
+          <div *ngIf="existingAttachments.length > 0" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Existing Attachments</p>
+            <div *ngFor="let attachment of existingAttachments; let i = index"
+              class="flex justify-between items-center bg-white border border-gray-200 px-4 py-2.5 shadow-sm">
+              <div class="flex items-center gap-3 flex-1 min-w-0">
+                <ng-icon name="heroDocument" class="text-gray-400 shrink-0"></ng-icon>
+                <p class="text-sm text-gray-700 truncate flex-1" [matTooltip]="attachment.originalname" matTooltipPosition="above">
+                  {{ attachment.originalname }}
+                </p>
+                <span
+                  [class]="'px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ' + getFileStatusClass(attachment)"
+                  [matTooltip]="attachment.statusHistory?.length ? 'Click to view history' : ''"
+                  [class.cursor-pointer]="attachment.statusHistory?.length"
+                  (click)="showFileStatusHistory(attachment)">
+                  {{ (attachment.status || 'pending') | titlecase }}
+                </span>
+              </div>
+              <button
+                type="button"
+                (click)="removeExistingAttachment(i)"
+                [disabled]="attachment.status === 'approved' || attachment.status === 'rejected'"
+                class="ml-3 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-30 disabled:cursor-not-allowed">
+                <ng-icon name="heroXMark" class="text-base"></ng-icon>
+              </button>
+            </div>
+          </div>
+
+          <div *ngIf="selectedFiles.length > 0" class="mt-4 space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">New Files</p>
+            <div *ngFor="let file of selectedFiles; let i = index"
+              class="flex justify-between items-center bg-blue-50 border border-blue-200 px-4 py-2.5">
+              <div class="flex items-center gap-3 min-w-0">
+                <ng-icon name="heroDocumentArrowUp" class="text-blue-500 shrink-0"></ng-icon>
+                <p class="text-sm text-blue-800 truncate" [matTooltip]="file.name" matTooltipPosition="above">{{ file.name }}</p>
+              </div>
+              <button type="button" (click)="removeFile(i)"
+                class="ml-3 p-1 text-orange-400 hover:text-orange-600 hover:bg-orange-50 transition">
+                <ng-icon name="heroXMark" class="text-base"></ng-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-8 pt-5 border-t border-gray-200 flex justify-between items-center">
+          <button
+            type="button"
+            (click)="onCancel()"
+            class="px-5 py-2 text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <div class="flex gap-3">
+            <button
+              type="button"
+              (click)="onSubmit('draft')"
+              [disabled]="materialForm.invalid || isSaving"
+              class="px-5 py-2 text-sm font-medium text-violet-700 border border-violet-400 bg-violet-50 hover:bg-violet-100 transition disabled:opacity-40 disabled:cursor-not-allowed">
+              Save as Draft
+            </button>
+            <button
+              type="submit"
+              [disabled]="materialForm.invalid || isSaving"
+              class="px-5 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+              <ng-icon *ngIf="isSaving" name="heroArrowPath" class="animate-spin text-base"></ng-icon>
+              Send for Approval
+            </button>
+          </div>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>

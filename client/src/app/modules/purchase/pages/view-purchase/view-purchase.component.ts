@@ -1,3 +1,4 @@
+import { HttpEventType } from '@angular/common/http';
 import { Component, inject, OnDestroy, signal } from '@angular/core';
 import { ActivatedRoute, Router, TitleStrategy } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -15,14 +16,18 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
+import { saveAs } from 'file-saver';
+import { Subscription } from 'rxjs';
+import { MatTooltip } from '@angular/material/tooltip';
+import { MatProgressBar } from '@angular/material/progress-bar';
 
 @Component({
   selector: 'app-view-purchase',
-  imports: [IconsModule, ButtonComponent, CommonModule],
+  imports: [IconsModule, ButtonComponent, CommonModule, MatTooltip, MatProgressBar],
   templateUrl: './view-purchase.component.html',
   styleUrls: ['./view-purchase.component.css']
 })
-export class ViewPurchaseComponent {
+export class ViewPurchaseComponent implements OnDestroy {
   private purchaseService = inject(PurchaseService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
@@ -41,6 +46,15 @@ export class ViewPurchaseComponent {
   isDownloading = false;
   purchaseId!: string;
   suppliersList = signal<any[]>([])
+  selectedLpoFile?: string;
+  lpoDownloadProgress = 0;
+  private lpoDownloadSub?: Subscription;
+
+  get quotationLpoFiles(): any[] {
+    const files = this.purchase?.jobId?.quoteId?.lpoFiles;
+    if (!Array.isArray(files)) return [];
+    return files.filter((f: any) => f?.originalname || f?.fileName);
+  }
 
   ngOnInit(): void {
     this.loadPurchase();
@@ -52,6 +66,10 @@ export class ViewPurchaseComponent {
         console.log(error);
       }
     })
+  }
+
+  ngOnDestroy(): void {
+    this.lpoDownloadSub?.unsubscribe();
   }
 
   loadPurchase() {
@@ -353,6 +371,11 @@ export class ViewPurchaseComponent {
     }, 0);
   }
 
+  prCostAfterDiscount(): number {
+    if (!this.purchase) return 0;
+    return (this.purchase.totalPRCost || 0) - (this.purchase.totalDiscountReceived || 0);
+  }
+
   getProfitMargin(totalCost: number, discountedCost: number): number {
     if (!discountedCost || discountedCost <= 0) return 0;
     return (totalCost - discountedCost) || 0;
@@ -387,6 +410,73 @@ export class ViewPurchaseComponent {
     );
   }
 
+  onDownloadLpoFile(file: any): void {
+    if (!file?.fileName) return;
+    this.selectedLpoFile = file.fileName;
+    this.lpoDownloadProgress = 0;
+    this.lpoDownloadSub?.unsubscribe();
+    this.lpoDownloadSub = this.fileService.downloadFile(file.fileName).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.DownloadProgress) {
+          const total = event.total || event.loaded || 1;
+          this.lpoDownloadProgress = Math.round((100 * event.loaded) / total);
+        } else if (event.type === HttpEventType.Response) {
+          const fileContent = new Blob([event.body]);
+          saveAs(fileContent, file.originalname || file.fileName);
+          this.clearLpoDownloadProgress();
+        }
+      },
+      error: (error) => {
+        this.selectedLpoFile = undefined;
+        this.lpoDownloadProgress = 0;
+        if (error.status === 404) {
+          this.notificationService.warning(
+            'Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.'
+          );
+        } else {
+          this.notificationService.error('An error occurred while downloading the file.');
+        }
+      }
+    });
+  }
+
+  onViewLpoFile(file: any): void {
+    if (!file?.fileName) return;
+    if (!file.fileName.toLowerCase().endsWith('.pdf')) {
+      this.notificationService.warning(
+        'This file type is not supported for viewing. Please download and view the file.'
+      );
+      return;
+    }
+    this.lpoDownloadSub?.unsubscribe();
+    this.lpoDownloadSub = this.fileService.downloadFile(file.fileName).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.Response) {
+          const fileContent = new Blob([event.body], { type: 'application/pdf' });
+          const fileURL = URL.createObjectURL(fileContent);
+          window.open(fileURL, '_blank');
+          setTimeout(() => URL.revokeObjectURL(fileURL), 10000);
+        }
+      },
+      error: (error) => {
+        if (error.status === 404) {
+          this.notificationService.warning(
+            'Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.'
+          );
+        } else {
+          this.notificationService.error('An error occurred while trying to view the PDF. Please try again later.');
+        }
+      }
+    });
+  }
+
+  private clearLpoDownloadProgress(): void {
+    setTimeout(() => {
+      this.selectedLpoFile = undefined;
+      this.lpoDownloadProgress = 0;
+    }, 1000);
+  }
+
   getSelectedRows(items: any[]) {
     if (!Array.isArray(items) || items.length === 0) return [];
 
@@ -409,6 +499,7 @@ export class ViewPurchaseComponent {
               unitPrice: selected.unitPrice,
               quantity: selected.quantity,
               etaTerms: selected.etaTerms,
+              paymentTerms: selected.paymentTerms,
             },
           });
         }
