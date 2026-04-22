@@ -627,9 +627,6 @@ export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => 
             }
         ];
 
-        const mongoose = require('mongoose');
-        const Invoice = mongoose.model('Invoice');
-
         const result = await Invoice.aggregate(facetPipeline);
         const data = result[0].data;
         const total = result[0].metadata[0]?.total || 0;
@@ -754,7 +751,7 @@ export const getCancelledAdjustedInvoices = async (req: Request, res: Response) 
         }
 
         if (req.query.fromDate && req.query.toDate) {
-            matchStage.actionDate = {
+            matchStage.invoiceDate = {
                 $gte: new Date(req.query.fromDate as string),
                 $lte: new Date(req.query.toDate as string)
             };

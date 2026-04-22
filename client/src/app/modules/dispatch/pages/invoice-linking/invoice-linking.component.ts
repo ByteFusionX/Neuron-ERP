@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { Component, OnInit, OnChanges, SimpleChanges, Input, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
@@ -17,6 +17,8 @@ interface FilterParams {
   dnNo?: string;
   invoiceNo?: string;
   status?: string[];
+  fromDate?: string;
+  toDate?: string;
 }
 
 @Component({
@@ -32,7 +34,8 @@ interface FilterParams {
   styleUrl: './invoice-linking.component.css',
   providers: [PaginationService]
 })
-export class InvoiceLinkingComponent implements OnInit {
+export class InvoiceLinkingComponent implements OnInit, OnChanges {
+  @Input() globalDateRange: { fromDate: string, toDate: string } | null = null;
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private dnService = inject(DeliveryNoteService);
@@ -52,6 +55,12 @@ export class InvoiceLinkingComponent implements OnInit {
   ngOnInit(): void {
     this.setupTableColumns();
     this.loadData();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['globalDateRange'] && !changes['globalDateRange'].firstChange) {
+      this.loadData();
+    }
   }
 
   setupTableColumns(): void {
@@ -144,6 +153,11 @@ export class InvoiceLinkingComponent implements OnInit {
       ...filters
     };
 
+    if (this.globalDateRange) {
+      payload.fromDate = this.globalDateRange.fromDate;
+      payload.toDate = this.globalDateRange.toDate;
+    }
+
     this.dnService.getInvoiceLinking(payload).subscribe({
       next: (res) => {
         this.tableData.set(res.items || []);
@@ -213,10 +227,15 @@ export class InvoiceLinkingComponent implements OnInit {
       return;
     }
 
-    const payload = {
+    const payload: FilterParams = {
       page: 1,
       row: total
     };
+
+    if (this.globalDateRange) {
+      payload.fromDate = this.globalDateRange.fromDate;
+      payload.toDate = this.globalDateRange.toDate;
+    }
 
     this.dnService.getInvoiceLinking(payload).subscribe({
       next: (res) => {

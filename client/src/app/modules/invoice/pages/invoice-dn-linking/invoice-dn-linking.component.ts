@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy, ViewChild, OnChanges, SimpleChanges, Input } from '@angular/core';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
@@ -21,7 +21,8 @@ import { InvoiceService } from 'src/app/core/services/invoice.service';
     styleUrl: './invoice-dn-linking.component.css',
     providers: [PaginationService]
 })
-export class InvoiceDnLinkingComponent implements OnInit, OnDestroy {
+export class InvoiceDnLinkingComponent implements OnInit, OnDestroy, OnChanges {
+    @Input() globalDateRange: { fromDate: string, toDate: string } | null = null;
     @ViewChild(TableComponent) tableComponent!: TableComponent;
 
     private invoiceService = inject(InvoiceService);
@@ -50,6 +51,18 @@ export class InvoiceDnLinkingComponent implements OnInit, OnDestroy {
 
     ngOnDestroy(): void {
         this.subscriptions.unsubscribe();
+    }
+
+    ngOnChanges(changes: SimpleChanges): void {
+        if (changes['globalDateRange'] && !changes['globalDateRange'].firstChange) {
+            const paginationState = this.paginationService.paginationState();
+            this.paginationService.updatePaginationState({
+                page: 1,
+                row: paginationState.row,
+                total: paginationState.total
+            });
+            this.loadData();
+        }
     }
 
     initializeFromUrlParams(): void {
@@ -169,6 +182,11 @@ export class InvoiceDnLinkingComponent implements OnInit, OnDestroy {
             ...filters
         };
 
+        if (this.globalDateRange) {
+            params.fromDate = this.globalDateRange.fromDate;
+            params.toDate = this.globalDateRange.toDate;
+        }
+
         this.subscriptions.add(
             this.invoiceService.getInvoiceDnLinkingReport(params).subscribe({
                 next: (response) => {
@@ -279,6 +297,11 @@ export class InvoiceDnLinkingComponent implements OnInit, OnDestroy {
             limit: total,
             status: this.selectedStatus()
         };
+
+        if (this.globalDateRange) {
+            filterParams.fromDate = this.globalDateRange.fromDate;
+            filterParams.toDate = this.globalDateRange.toDate;
+        }
 
         this.invoiceService.getInvoiceDnLinkingReport(filterParams).subscribe({
             next: (response) => {

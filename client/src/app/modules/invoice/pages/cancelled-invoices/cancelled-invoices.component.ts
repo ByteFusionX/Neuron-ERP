@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, OnDestroy, inject, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, ViewChild, OnChanges, SimpleChanges, Input } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
@@ -42,7 +42,8 @@ interface FilterParams {
   styleUrl: './cancelled-invoices.component.css',
   providers: [PaginationService]
 })
-export class CancelledInvoicesComponent implements OnInit, OnDestroy {
+export class CancelledInvoicesComponent implements OnInit, OnDestroy, OnChanges {
+  @Input() globalDateRange: { fromDate: string, toDate: string } | null = null;
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private invoiceService = inject(InvoiceService);
@@ -76,6 +77,18 @@ export class CancelledInvoicesComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['globalDateRange'] && !changes['globalDateRange'].firstChange) {
+      const paginationState = this.paginationService.paginationState();
+      this.paginationService.updatePaginationState({
+        page: 1,
+        row: paginationState.row,
+        total: paginationState.total
+      });
+      this.loadData();
+    }
   }
 
   initializeFromUrlParams(): void {
@@ -241,6 +254,11 @@ export class CancelledInvoicesComponent implements OnInit, OnDestroy {
       ...filters
     };
 
+    if (this.globalDateRange) {
+      filterParams.fromDate = this.globalDateRange.fromDate;
+      filterParams.toDate = this.globalDateRange.toDate;
+    }
+
     this.subscriptions.add(
       this.invoiceService.getCancelledAdjustedInvoices(filterParams).subscribe({
         next: (response: any) => {
@@ -372,6 +390,11 @@ export class CancelledInvoicesComponent implements OnInit, OnDestroy {
       status: this.selectedStatus(),
       search: this.searchTerm() || undefined
     };
+
+    if (this.globalDateRange) {
+      filterParams.fromDate = this.globalDateRange.fromDate;
+      filterParams.toDate = this.globalDateRange.toDate;
+    }
 
     this.invoiceService.getCancelledAdjustedInvoices(filterParams).subscribe({
       next: (response: any) => {

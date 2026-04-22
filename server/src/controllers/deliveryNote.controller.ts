@@ -475,7 +475,13 @@ export const getInventoryDeductionReport = async (req: Request, res: Response) =
         const matchFilters: any = {};
 
         if (fromDate && toDate) {
-            matchFilters.dnDate = { $gte: new Date(fromDate), $lte: new Date(toDate) };
+            const startOfDay = new Date(fromDate);
+            startOfDay.setHours(0, 0, 0, 0);
+
+            const endOfDay = new Date(toDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            matchFilters.dnDate = { $gte: startOfDay, $lte: endOfDay };
         }
         if (customerName) {
             matchFilters.customerName = { $regex: customerName, $options: 'i' };
@@ -570,12 +576,26 @@ export const getInventoryDeductionReport = async (req: Request, res: Response) =
 
 export const getPendingDeliveriesSummary = async (req: Request, res: Response) => {
     try {
-        let { page, row, customerName, jobId, supplierName, supplierLpoNo, status } = req.body;
+        let { page, row, customerName, jobId, supplierName, supplierLpoNo, status, fromDate, toDate } = req.body;
         page = page || 1;
         row = row || 10;
 
+        const initialMatch: any = { isDeleted: { $ne: true }, status: 'Approved' };
+        if (fromDate && toDate) {
+            const startOfDay = new Date(fromDate);
+            startOfDay.setHours(0, 0, 0, 0);
+
+            const endOfDay = new Date(toDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            initialMatch.createdAt = {
+                $gte: startOfDay,
+                $lte: endOfDay
+            };
+        }
+
         const pipeline: any[] = [
-            { $match: { isDeleted: { $ne: true }, status: 'Approved' } },
+            { $match: initialMatch },
             { $unwind: { path: '$items', preserveNullAndEmptyArrays: true } },
             { $unwind: { path: '$items.itemDetails', preserveNullAndEmptyArrays: true } },
             {
@@ -676,10 +696,12 @@ export const getPendingDeliveriesSummary = async (req: Request, res: Response) =
                                             $and: [
                                                 { $ne: ['$$itemPartNo', null] },
                                                 { $ne: ['$items.partNo', null] },
-                                                { $eq: [
-                                                    { $convert: { input: '$items.partNo', to: 'string', onError: '', onNull: '' } },
-                                                    { $convert: { input: '$$itemPartNo', to: 'string', onError: '', onNull: '' } }
-                                                ] }
+                                                {
+                                                    $eq: [
+                                                        { $convert: { input: '$items.partNo', to: 'string', onError: '', onNull: '' } },
+                                                        { $convert: { input: '$$itemPartNo', to: 'string', onError: '', onNull: '' } }
+                                                    ]
+                                                }
                                             ]
                                         },
                                         {
@@ -793,7 +815,8 @@ export const getPendingDeliveriesSummary = async (req: Request, res: Response) =
                             then: 'Partially Delivered',
                             else: 'Not Delivered'
                         }
-                    }
+                    },
+                    date: '$createdAt'
                 }
             }
         ];
@@ -837,7 +860,6 @@ export const getPendingDeliveriesSummary = async (req: Request, res: Response) =
 
         const result = await PurchaseRequest.aggregate(pipeline).allowDiskUse(true);
 
-        
 
         const total = result[0]?.metadata[0]?.total || 0;
         const items = (result[0]?.data || []).map((r: any, i: number) => ({
@@ -1070,12 +1092,26 @@ export const getDnItemsForJob = async (req: Request, res: Response) => {
 
 export const getInvoiceLinkingSummary = async (req: Request, res: Response) => {
     try {
-        let { page, row, customerName, jobId, dnNo, invoiceNo, status } = req.body;
+        let { page, row, customerName, jobId, dnNo, invoiceNo, status, fromDate, toDate } = req.body;
         page = page || 1;
         row = row || 10;
 
+        const initialMatch: any = { status: 'Delivered' };
+        if (fromDate && toDate) {
+            const startOfDay = new Date(fromDate);
+            startOfDay.setHours(0, 0, 0, 0);
+
+            const endOfDay = new Date(toDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            initialMatch.dnDate = {
+                $gte: startOfDay,
+                $lte: endOfDay
+            };
+        }
+
         const pipeline: any[] = [
-            { $match: { status: 'Delivered' } },
+            { $match: initialMatch },
             {
                 $addFields: {
                     deliveredQty: { $sum: '$items.currentDeliveryQty' }

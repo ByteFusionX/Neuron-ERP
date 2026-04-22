@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, OnDestroy, inject, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, ViewChild, OnChanges, SimpleChanges, Input } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
@@ -40,7 +40,8 @@ interface FilterParams {
   styleUrl: './cancelled-reissued-report.component.css',
   providers: [PaginationService]
 })
-export class CancelledReissuedReportComponent implements OnInit, OnDestroy {
+export class CancelledReissuedReportComponent implements OnInit, OnDestroy, OnChanges {
+  @Input() globalDateRange: { fromDate: string, toDate: string } | null = null;
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private invoiceService = inject(InvoiceService);
@@ -73,6 +74,18 @@ export class CancelledReissuedReportComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['globalDateRange'] && !changes['globalDateRange'].firstChange) {
+      const paginationState = this.paginationService.paginationState();
+      this.paginationService.updatePaginationState({
+        page: 1,
+        row: paginationState.row,
+        total: paginationState.total
+      });
+      this.loadData();
+    }
   }
 
   initializeFromUrlParams(): void {
@@ -262,6 +275,11 @@ export class CancelledReissuedReportComponent implements OnInit, OnDestroy {
       status: normalizedStatus,
       ...filters
     };
+
+    if (this.globalDateRange) {
+      apiParams.fromDate = this.globalDateRange.fromDate;
+      apiParams.toDate = this.globalDateRange.toDate;
+    }
 
     this.subscriptions.add(
       this.invoiceService.getCancelledReissuedInvoices(apiParams).subscribe({

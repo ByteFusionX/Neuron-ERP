@@ -373,26 +373,12 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           privilegeValue: 'none'
         },
         {
-          id: 'pending-delivery-reports',
-          label: 'Pending Delivery',
-          route: '/dispatch/pending-delivery-reports',
+          id: 'dn-reports',
+          label: 'DN Reports',
+          route: '/dispatch/reports',
           privilegeKey: 'dispatch',
-          privilegeValue: 'viewPendingDelivery'
-        },
-        {
-          id: 'invoice-linking-report',
-          label: 'Invoice Linking',
-          route: '/dispatch/invoice-linking-report',
-          privilegeKey: 'dispatch',
-          privilegeValue: 'viewInvoiceLinking'
-        },
-        {
-          id: 'inventory-deduction-report',
-          label: 'Inventory Deduction',
-          route: '/dispatch/inventory-deduction-report',
-          privilegeKey: 'dispatch',
-          privilegeValue: 'viewInventoryDeduction'
-        },
+          privilegeValue: 'none'
+        }
       ]
     },
     {
@@ -412,25 +398,11 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           privilegeValue: 'none'
         },
         {
-          id: 'invoice-dn-linking',
-          label: 'Invoice vs DN',
-          route: '/invoice/invoice-dn-linking',
+          id: 'invoice-reports',
+          label: 'Reports',
+          route: '/invoice/reports',
           privilegeKey: 'invoice',
-          privilegeValue: 'viewInvoicesVsDn'
-        },
-        {
-          id: 'cancelled-adjusted-invoices',
-          label: 'Cancelled/Adjusted',
-          route: '/invoice/cancelled-invoices',
-          privilegeKey: 'invoice',
-          privilegeValue: 'viewCancelledAdjusted'
-        },
-        {
-          id: 'cancelled-reissued-invoices',
-          label: 'Reissued',
-          route: '/invoice/reissued',
-          privilegeKey: 'invoice',
-          privilegeValue: 'viewReissued'
+          privilegeValue: 'none'
         }
       ]
     },

@@ -68,6 +68,10 @@ import { InvoiceRegisterComponent } from './modules/invoice/pages/invoice-regist
 import { CreateInvoiceComponent } from './modules/invoice/pages/create-invoice/create-invoice.component';
 import { InvoiceDnLinkingComponent } from './modules/invoice/pages/invoice-dn-linking/invoice-dn-linking.component';
 import { CancelledInvoicesComponent } from './modules/invoice/pages/cancelled-invoices/cancelled-invoices.component';
+import { DnReportsComponent } from './modules/dispatch/pages/dn-reports/dn-reports.component';
+import { ReportsComponent } from './modules/invoice/pages/reports/reports.component';
+import { CancelledReissuedReportComponent } from './modules/invoice/pages/cancelled-reissued-report/cancelled-reissued-report.component';
+import { InvoiceViewComponent } from './modules/invoice/pages/invoice-view/invoice-view.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -276,9 +280,7 @@ export const routes: Routes = [
       { path: 'delivery-note-register', component: DnRegisterComponent },
       { path: 'delivery-note-register/create', component: CreateDnComponent },
       { path: 'delivery-note-register/view/:id', component: DeliveryNoteViewComponent },
-      { path: 'pending-delivery-reports', component: PendingDeliveryComponent },
-      { path: 'invoice-linking-report', component: InvoiceLinkingComponent },
-      { path: 'inventory-deduction-report', component: InventoryDeductionComponent },
+      { path: 'reports', component: DnReportsComponent },
     ]
   },
   {
@@ -290,10 +292,11 @@ export const routes: Routes = [
       { path: 'invoice-register/create', component: CreateInvoiceComponent },
       { path: 'invoice-register/edit/:id', component: CreateInvoiceComponent },
       { path: 'invoice-register/reissue/:id', component: CreateInvoiceComponent },
-      { path: 'invoice-register/view/:id', loadComponent: () => import('./modules/invoice/pages/invoice-view/invoice-view.component').then(m => m.InvoiceViewComponent) },
+      { path: 'invoice-register/view/:id', component: InvoiceViewComponent },
+      { path: 'reports', component: ReportsComponent },
       { path: 'invoice-dn-linking', component: InvoiceDnLinkingComponent },
       { path: 'cancelled-invoices', component: CancelledInvoicesComponent },
-      { path: 'reissued', loadComponent: () => import('./modules/invoice/pages/cancelled-reissued-report/cancelled-reissued-report.component').then(c => c.CancelledReissuedReportComponent) },
+      { path: 'reissued', component: CancelledReissuedReportComponent },
     ]
   },
   { path: '**', redirectTo: '', pathMatch: 'full' }

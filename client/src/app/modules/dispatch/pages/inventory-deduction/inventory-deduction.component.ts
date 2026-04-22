@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
+import { Component, inject, Input, OnChanges, SimpleChanges, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -44,7 +44,8 @@ interface FilterParams {
   styleUrl: './inventory-deduction.component.css',
   providers: [PaginationService]
 })
-export class InventoryDeductionComponent implements OnInit, OnDestroy {
+export class InventoryDeductionComponent implements OnInit, OnDestroy, OnChanges {
+  @Input() globalDateRange: { fromDate: string, toDate: string } | null = null;
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private dnService = inject(DeliveryNoteService);
@@ -71,6 +72,12 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['globalDateRange'] && !changes['globalDateRange'].firstChange) {
+      this.loadData();
+    }
   }
 
   initializeFromUrlParams(): void {
@@ -190,6 +197,11 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
       row: paginationState.row,
       ...filters
     };
+
+    if (this.globalDateRange) {
+      filterParams.fromDate = this.globalDateRange.fromDate;
+      filterParams.toDate = this.globalDateRange.toDate;
+    }
 
     this.subscriptions.add(
       this.dnService.getInventoryDeductionReport(filterParams).subscribe({

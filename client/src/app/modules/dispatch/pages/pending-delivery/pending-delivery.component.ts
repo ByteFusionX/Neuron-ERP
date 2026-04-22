@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { Component, OnInit, OnChanges, SimpleChanges, Input, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
@@ -17,6 +17,8 @@ interface FilterParams {
   supplierName?: string;
   supplierLpoNo?: string;
   status?: string[];
+  fromDate?: string;
+  toDate?: string;
 }
 
 @Component({
@@ -32,7 +34,8 @@ interface FilterParams {
   styleUrl: './pending-delivery.component.css',
   providers: [PaginationService]
 })
-export class PendingDeliveryComponent implements OnInit {
+export class PendingDeliveryComponent implements OnInit, OnChanges {
+  @Input() globalDateRange: { fromDate: string, toDate: string } | null = null;
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private dnService = inject(DeliveryNoteService);
@@ -54,6 +57,12 @@ export class PendingDeliveryComponent implements OnInit {
     this.loadData();
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['globalDateRange'] && !changes['globalDateRange'].firstChange) {
+      this.loadData();
+    }
+  }
+
   setupTableColumns(): void {
     this.tableColumns = [
       {
@@ -61,6 +70,14 @@ export class PendingDeliveryComponent implements OnInit {
         label: 'Sl No',
         type: 'number',
         filterable: false
+      },
+      {
+        key: 'date',
+        label: 'PR Created Date',
+        type: 'date',
+        filterable: true,
+        filterType: 'date',
+        filterPlaceholder: 'Search Date...'
       },
       {
         key: 'customerName',
@@ -150,6 +167,11 @@ export class PendingDeliveryComponent implements OnInit {
       ...filters
     };
 
+    if (this.globalDateRange) {
+      payload.fromDate = this.globalDateRange.fromDate;
+      payload.toDate = this.globalDateRange.toDate;
+    }
+
     this.dnService.getPendingDeliveries(payload).subscribe({
       next: (res) => {
         this.tableData.set(res.items || []);
@@ -219,10 +241,15 @@ export class PendingDeliveryComponent implements OnInit {
       return;
     }
 
-    const payload = {
+    const payload: FilterParams = {
       page: 1,
       row: total
     };
+
+    if (this.globalDateRange) {
+      payload.fromDate = this.globalDateRange.fromDate;
+      payload.toDate = this.globalDateRange.toDate;
+    }
 
     this.dnService.getPendingDeliveries(payload).subscribe({
       next: (res) => {
