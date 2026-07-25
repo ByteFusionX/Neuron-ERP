@@ -4,8 +4,6 @@ import { MatMenuModule } from '@angular/material/menu';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { ProjectService } from 'src/app/core/services/project.service';

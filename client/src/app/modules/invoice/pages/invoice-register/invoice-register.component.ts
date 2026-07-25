@@ -7,7 +7,6 @@ import { NgSelectModule } from '@ng-select/ng-select';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
@@ -28,8 +27,7 @@ import * as XLSX from 'xlsx';
     MatMenuModule,
     RouterModule,
     FormsModule,
-    NgSelectModule,
-    SearchComponent
+    NgSelectModule
   ],
   templateUrl: './invoice-register.component.html',
   styleUrl: './invoice-register.component.css',

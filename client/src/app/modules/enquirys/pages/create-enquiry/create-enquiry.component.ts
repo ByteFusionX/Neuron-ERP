@@ -1,10 +1,38 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, NgZone, OnDestroy, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
-import { FormBuilder, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { NgSelectConfig, NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  Inject,
+  NgZone,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  ViewEncapsulation,
+} from '@angular/core';
+import {
+  FormBuilder,
+  Validators,
+  FormsModule,
+  ReactiveFormsModule,
+} from '@angular/forms';
+import {
+  MAT_DIALOG_DATA,
+  MatDialog,
+  MatDialogRef,
+} from '@angular/material/dialog';
+import {
+  NgSelectConfig,
+  NgSelectComponent,
+  NgOptionComponent,
+  NgFooterTemplateDirective,
+} from '@ng-select/ng-select';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
-import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
+import {
+  ContactDetail,
+  getCustomer,
+} from 'src/app/shared/interfaces/customer.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { AssignPresaleComponent } from '../assign-presale/assign-presale.component';
 import { Observable, Subscription } from 'rxjs';
@@ -28,18 +56,32 @@ import { MatTooltip } from '@angular/material/tooltip';
   animations: [fileEnterState],
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgIcon, FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, appFileValidator, appFileSizeValidator, NgIf, MatTooltip, AsyncPipe]
+  imports: [
+    NgIcon,
+    FormsModule,
+    ReactiveFormsModule,
+    NgSelectComponent,
+    NgFor,
+    NgOptionComponent,
+    NgFooterTemplateDirective,
+    RouterLink,
+    appNoLeadingSpace,
+    appFileValidator,
+    appFileSizeValidator,
+    NgIf,
+    MatTooltip,
+    AsyncPipe,
+  ],
 })
 export class CreateEnquiryDialog implements OnInit, OnDestroy {
-
   @ViewChild('fileInput') fileInput!: ElementRef;
 
   customers$!: Observable<getCustomer[]>;
   enquirys$!: Observable<Enquiry[]>;
-  contacts: ContactDetail[] = []
+  contacts: ContactDetail[] = [];
   departments$!: Observable<getDepartment[]>;
   selectedDep!: string;
-  selectedFiles: any[] = []
+  selectedFiles: any[] = [];
   private subscriptions = new Subscription();
   tokenData!: any;
   submit: boolean = false;
@@ -49,7 +91,7 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
   isQuoting: boolean = false;
   isLoadingContacts: boolean = false;
 
-  today = new Date().toISOString().substring(0, 10)
+  today = new Date().toISOString().substring(0, 10);
   enquiryForm = this._fb.group({
     client: [undefined, Validators.required],
     contact: [undefined, Validators.required],
@@ -59,8 +101,8 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
     date: [this.today, Validators.required],
     attachments: [],
     presale: [],
-    status: 'Work In Progress'
-  })
+    status: 'Work In Progress',
+  });
 
   constructor(
     public dialogRef: MatDialogRef<CreateEnquiryDialog>,
@@ -74,55 +116,59 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
     private _employeeService: EmployeeService,
     private router: Router,
     private toastr: ToastrService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
   ) {
     this.config.notFoundText = 'Select a client first..';
   }
 
   ngOnInit(): void {
-    this.employeeData$ = this._employeeService.employeeData$
-    this.tokenData = this._employeeService.getEmployeeData()
-    console.log(this.tokenData)
-    this.getEmployee()
-    this.getAllCustomers()
-    this.getDepartments()
+    this.employeeData$ = this._employeeService.employeeData$;
+    this.tokenData = this._employeeService.getEmployeeData();
+    console.log(this.tokenData);
+    this.getEmployee();
+    this.getAllCustomers();
+    this.getDepartments();
   }
 
   ngOnDestroy(): void {
-    this.subscriptions.unsubscribe()
+    this.subscriptions.unsubscribe();
   }
 
   onChange(change: string) {
-    this.enquiryForm.controls.contact.patchValue(undefined)
-    this.contacts = []
+    this.enquiryForm.controls.contact.patchValue(undefined);
+    this.contacts = [];
     this.config.notFoundText = 'Wait a few Seconds..';
     if (change && this.customers$) {
       this.isLoadingContacts = true;
       this.cdr.markForCheck();
-      this.subscriptions.add(this.customers$.subscribe((data) => {
-        let customer = data.find((contact) => contact._id == change)
-        setTimeout(() => {
+      this.subscriptions.add(
+        this.customers$.subscribe((data) => {
+          let customer = data.find((contact) => contact._id == change);
+          setTimeout(() => {
             if (customer) {
-              this.contacts = customer.contactDetails
+              this.contacts = customer.contactDetails;
             }
             this.isLoadingContacts = false;
             this.cdr.markForCheck();
-        }, 600);
-      }))
+          }, 600);
+        }),
+      );
     } else {
       this.config.notFoundText = 'Select a client first..';
-      this.contacts = []
-      this.enquiryForm.controls.contact.setValue(undefined)
+      this.contacts = [];
+      this.enquiryForm.controls.contact.setValue(undefined);
     }
   }
 
   onFileSelected(event: any) {
-    let files = event.target.files
+    let files = event.target.files;
     for (let i = 0; i < files.length; i++) {
-      const newFile = files[i]
-      const exist = (this.selectedFiles as File[]).some((file: File) => file.name === newFile.name)
+      const newFile = files[i];
+      const exist = (this.selectedFiles as File[]).some(
+        (file: File) => file.name === newFile.name,
+      );
       if (!exist) {
-        (this.selectedFiles as File[]).push(files[i])
+        (this.selectedFiles as File[]).push(files[i]);
       }
     }
   }
@@ -132,23 +178,22 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
   }
 
   onFileRemoved(index: number) {
-    (this.selectedFiles as File[]).splice(index, 1)
+    (this.selectedFiles as File[]).splice(index, 1);
     this.fileInput.nativeElement.value = '';
   }
-
 
   setUpFormData(): FormData {
     let formData = new FormData();
     this.employeeData$.subscribe((data: any) => {
-      this.enquiryForm.controls.salesPerson.setValue(data._id)
+      this.enquiryForm.controls.salesPerson.setValue(data._id);
       this.tokenData = data;
     });
 
-    let data = this.enquiryForm.value as Partial<Enquiry>
+    let data = this.enquiryForm.value as Partial<Enquiry>;
 
     formData.append('enquiryData', JSON.stringify(data));
     for (let i = 0; i < this.selectedFiles.length; i++) {
-      formData.append('attachments', (this.selectedFiles[i] as Blob))
+      formData.append('attachments', this.selectedFiles[i] as Blob);
     }
     return formData;
   }
@@ -157,79 +202,82 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
     this.submit = true;
     this.isSaving = true;
     if (this.enquiryForm.valid) {
-      const formData = this.setUpFormData()
+      const formData = this.setUpFormData();
       this.subscriptions.add(
         this._enquiryService.createEnquiry(formData).subscribe((data) => {
           if (data) {
-            this.isSaving = false
-            this.dialogRef.close(data)
+            this.isSaving = false;
+            this.dialogRef.close(data);
           }
-        })
-      )
+        }),
+      );
     } else {
-      this.isSaving = false
-      this.toastr.warning('Check the fields properly!', 'Warning !')
+      this.isSaving = false;
+      this.toastr.warning('Check the fields properly!', 'Warning !');
     }
   }
 
-
   onClose() {
-    this.dialogRef.close()
+    this.dialogRef.close();
   }
 
   createCustomer() {
-    this.onClose()
+    this.onClose();
   }
 
   onClickQuote() {
     this.submit = true;
     this.isQuoting = true;
     if (this.enquiryForm.valid) {
-      const formData = this.setUpFormData()
+      const formData = this.setUpFormData();
       this.subscriptions.add(
         this._enquiryService.createEnquiry(formData).subscribe((data) => {
           if (data) {
-            this._enquiryService.emitToQuote(data)
+            this._enquiryService.emitToQuote(data);
             this.isQuoting = false;
-            this.dialogRef.close()
-            this.router.navigate(['/quotations/create'])
+            this.dialogRef.close();
+            this.router.navigate(['/quotations/create']);
           }
-        })
-      )
+        }),
+      );
     } else {
       this.isQuoting = false;
-      this.toastr.warning('Check the fields properly!', 'Warning !')
+      this.toastr.warning('Check the fields properly!', 'Warning !');
     }
   }
 
   getAllCustomers() {
     let userId;
     this._employeeService.employeeData$.subscribe((data) => {
-      userId = data?._id
-    })
-    this.customers$ = this._customerService.getAllCustomers(userId)
+      userId = data?._id;
+    });
+    this.customers$ = this._customerService.getAllCustomers(userId);
   }
 
   getDepartments() {
-    this.departments$ = this._profileService.getDepartments()
+    this.departments$ = this._profileService.getDepartments();
   }
 
   getEmployee() {
-    this._employeeService.employeeData$.subscribe(data => {
+    this._employeeService.employeeData$.subscribe((data) => {
       if (data) {
-        this.enquiryForm.controls.salesPerson.setValue(data.firstName + ' ' + data.lastName)
+        this.enquiryForm.controls.salesPerson.setValue(
+          data.firstName + ' ' + data.lastName,
+        );
       }
-    })
+    });
   }
 
   getDepartment(id: string) {
     this.subscriptions.add(
       this.departments$.subscribe((data) => {
-        let department = data.find(val => val._id == id)
+        let department = data.find((val) => val._id == id);
         if (department) {
-          this.selectedDep = department.departmentName.toUpperCase().slice(0, 4)
+          this.selectedDep = department.departmentName
+            .toUpperCase()
+            .slice(0, 4);
         }
-      })
-    )
+      }),
+    );
   }
 }

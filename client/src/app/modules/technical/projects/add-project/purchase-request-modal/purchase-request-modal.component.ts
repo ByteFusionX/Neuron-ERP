@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import { Component, Inject, OnInit, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
@@ -38,7 +37,6 @@ interface PurchaseRequest {
   imports: [
     CommonModule,
     IconsModule,
-    ButtonComponent,
     NumberFormatterPipe,
     ModalLayoutComponent
   ],

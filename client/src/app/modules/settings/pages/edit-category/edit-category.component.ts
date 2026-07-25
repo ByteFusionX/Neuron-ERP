@@ -3,7 +3,6 @@ import { FormBuilder, FormGroup, Validators, FormsModule, ReactiveFormsModule } 
 import { ActivatedRoute, Router } from '@angular/router';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
-import { NgIcon } from '@ng-icons/core';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 import { NgIf } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
@@ -13,7 +12,7 @@ import { PageLayoutComponent } from 'src/app/shared/components/page-layout/page-
     selector: 'app-edit-category',
     templateUrl: './edit-category.component.html',
     styleUrls: ['./edit-category.component.css'],
-    imports: [NgIcon, FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, PageLayoutComponent]
+    imports: [FormsModule, ReactiveFormsModule, appNoLeadingSpace, NgIf, PageLayoutComponent]
 })
 export class EditCategoryComponent implements OnInit {
 

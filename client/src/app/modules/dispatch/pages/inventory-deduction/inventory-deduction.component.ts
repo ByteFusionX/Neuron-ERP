@@ -10,7 +10,6 @@ import { DeliveryNoteService } from 'src/app/core/services/delivery-note/deliver
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 
@@ -37,8 +36,7 @@ interface FilterParams {
     MatMenuModule,
     IconsModule,
     ButtonComponent,
-    FormsModule,
-    SearchComponent
+    FormsModule
   ],
   templateUrl: './inventory-deduction.component.html',
   styleUrl: './inventory-deduction.component.css',

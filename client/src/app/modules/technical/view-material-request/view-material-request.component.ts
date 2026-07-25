@@ -8,8 +8,6 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 
@@ -20,8 +18,6 @@ import { ActionConfirmationDialogComponent } from 'src/app/shared/components/act
     CommonModule,
     IconsModule,
     MatTooltipModule,
-    ButtonComponent,
-    NumberFormatterPipe,
   ],
   templateUrl: './view-material-request.component.html',
   styleUrl: './view-material-request.component.css'

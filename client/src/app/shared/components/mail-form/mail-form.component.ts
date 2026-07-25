@@ -5,7 +5,6 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { FormFieldComponent } from '../forms/form-field/form-field.component';
 import { EmailTagInputComponent } from '../forms/email-tag-input/email-tag-input.component';
 import { UploadFileComponent } from '../upload-file/upload-file.component';
-import { ButtonComponent } from '../button/button.component';
 import { NgIconsModule } from '@ng-icons/core';
 import { MsalService } from '@azure/msal-angular';
 import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
@@ -36,7 +35,6 @@ export interface MailFormData {
     FormFieldComponent,
     EmailTagInputComponent,
     UploadFileComponent,
-    ButtonComponent,
     NgIconsModule,
     ModalLayoutComponent
   ],

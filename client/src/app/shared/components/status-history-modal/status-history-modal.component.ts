@@ -2,7 +2,6 @@ import { Component, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ButtonComponent } from '../button/button.component';
 import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
 
 export interface StatusHistoryItem {
@@ -34,7 +33,7 @@ export interface StatusHistoryData {
 @Component({
   selector: 'app-status-history-modal',
   standalone: true,
-  imports: [CommonModule, IconsModule, ButtonComponent, ModalLayoutComponent],
+  imports: [CommonModule, IconsModule, ModalLayoutComponent],
   templateUrl: './status-history-modal.component.html',
   styleUrls: ['./status-history-modal.component.css']
 })

@@ -5,7 +5,6 @@ import { FormsModule } from '@angular/forms';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -30,8 +29,7 @@ interface FilterParams {
     MatMenuModule,
     IconsModule,
     ButtonComponent,
-    FormsModule,
-    SearchComponent
+    FormsModule
   ],
   templateUrl: './lpo-approval.component.html',
   styleUrl: './lpo-approval.component.css',

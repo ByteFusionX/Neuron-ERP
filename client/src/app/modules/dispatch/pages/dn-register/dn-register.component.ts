@@ -7,7 +7,6 @@ import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 
 import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
@@ -38,7 +37,6 @@ interface FilterParams {
     ReactiveFormsModule,
     RouterModule,
     TableComponent,
-    SearchComponent,
     ButtonComponent,
     IconsModule,
     MatMenuModule

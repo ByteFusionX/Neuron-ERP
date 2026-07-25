@@ -84,7 +84,6 @@ const bearerStrategy = new BearerStrategy(bearerStrategyOptions, (token, done) =
   }
 });
 
-
 app.use(passport.initialize());
 passport.use(bearerStrategy);
 
@@ -137,15 +136,14 @@ connectToDatabase()
       console.log(`Server running on port ${port}`);
     });
 
-
     startCronJob();
     socketConnection(io)
 
     emailWorker.start();
   })
   .catch((err) => {
-    console.error('Failed to connect to the database:', err);
-    process.exit(1); // Exit the process if the database connection fails
+    console.error('Database not connected:', err.message || err);
+    process.exit(1);
   });
 
 

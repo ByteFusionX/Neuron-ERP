@@ -1,194 +1,412 @@
 <div class="relative overflow-x-auto" [formGroup]="parentFormGroup">
-    <div class=" mt-6" *ngFor="let options of optionalItems.controls; let optionIndex = index"
-        formArrayName="optionalItems">
-        <div *ngIf="optionIndex !== 0" class="flex items-center  gap-2 mb-1">
-            <p class="text-red-600 font-semibold">Option {{optionIndex +1}}</p>
-            <ng-icon name="heroXMark" class="cursor-pointer hover:text-red-600"
-                (click)="removeOptions(optionIndex)"></ng-icon>
-        </div>
-        <table class="w-full text-sm text-left rtl:text-right text-gray-500 border" [formGroupName]="optionIndex">
-            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                <tr>
-                    <th scope="col" resizable class=" w-96 border-l border-r border-t hover:border-r-slate-950"
-                        key="itemDetail">
-                        <div class="px-6 py-3">Item Details</div>
-
-                    </th>
-                    <th scope="col" resizable key="qty"
-                        class=" border-l border-r border-t hover:border-r-slate-950  text-center min-w-[66px]">
-                        <div class="px-2 py-3">QTY</div>
-                    </th>
-                    <th scope="col" resizable key="unitCost"
-                        class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                        <div class="px-6 py-3">Unit Cost</div>
-                    </th>
-                    <th scope="col" resizable key="totalCost"
-                        class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                        <div class="px-6 py-3">Total Cost</div>
-                    </th>
-                    <th scope="col" resizable key="profit"
-                        class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                        <div class="px-6 py-3">Profit</div>
-                    </th>
-                    <th scope="col" resizable key="unitSellingPrice"
-                        class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                        <div class="px-6 py-3">Unit Price</div>
-                    </th>
-                    <th scope="col" resizable key="totalPrice"
-                        class="border-l border-r border-t hover:border-r-slate-950  text-center">
-                        <div class="px-6 py-3">Total Price</div>
-                    </th>
-                    <th scope="col" resizable key="avbl"
-                        class="border-l border-r border-t hover:border-r-slate-950  text-center min-w-[90px]">
-                        <div class="px-2 py-3">AVBL.</div>
-                    </th>
-                </tr>
-            </thead>
-            <tbody formGroupName="items">
-                <ng-container *ngFor="let item of getItemAtOption(optionIndex).controls; let itemIndex = index"
-                    [formGroupName]="itemIndex">
-                    <tr>
-                        <td colspan="9" class="border px-6 py-3 bg-gray-50 ">
-                            <div class="flex justify-center items-center">
-                                <label for="">ITEM NAME : </label>
-                                <input formControlName="itemName" type="text"
-                                    [class.border-red-500]="getItemAtOption(optionIndex).at(itemIndex).get('itemName')?.invalid && submit"
-                                    class="appearance-none block bg-white text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 ml-2 w-3/6">
-                                <button type="button"
-                                    class="ml-2 bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
-                                    (click)="addItemDetail(optionIndex,itemIndex)">
-                                    + Add Item Detail
-                                </button>
-                                <button type="button" *ngIf="itemIndex!==0"
-                                    class="ml-2 bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded text-sm"
-                                    (click)="onRemoveItem(optionIndex,itemIndex)">
-                                    × Remove Item
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    <ng-container formArrayName="itemDetails">
-                        <ng-container
-                            *ngFor="let detail of getItemDetailsArrayControls(optionIndex,itemIndex)?.controls; let itemDetailIndex=index">
-                            <tr [formGroupName]="itemDetailIndex">
-                                <td [class.border-red-500]="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('detail')?.invalid && submit"
-                                    class="border px-6 py-3">
-                                    <textarea appNoLeadingSpace formControlName="detail"
-                                        class="w-full font-normal appearance-none block  rounded py-3 px-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                        type="text" placeholder="Type / copy the item here." #inputTextArea></textarea>
-                                    <div class="h-5 w-full ">
-
-                                        <button type="button"
-                                            (click)="applyFormatting(optionIndex, itemIndex,itemDetailIndex, inputTextArea)"
-                                            class="text-bold hover:bg-gray-300 rounded-full px-2 text-black text-lg"
-                                            matTooltip="Bold" matTooltipPosition="above">B</button>
-
-                                        <button type="button"
-                                            (click)="applyHighlighter(optionIndex, itemIndex,itemDetailIndex, inputTextArea)"
-                                            class="text-bold hover:bg-gray-300 rounded-full px-2 text-black text-lg"
-                                            matTooltip="Highlight" matTooltipPosition="above">H</button>
-                                    </div>
-                                </td>
-                                <td [class.border-red-500]="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('quantity')?.invalid && submit"
-                                    class="border px-2 py-2 text-center">
-                                    <input appNoLeadingSpace formControlName="quantity"
-                                        class="font-normal appearance-none block w-full text-center rounded py-5 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                        type="number" placeholder="00"
-                                        (input)="calculateunitSellingPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
-                                </td>
-                                <td [class.border-red-500]="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('unitCost')?.invalid && submit"
-                                    class="border px-6 py-3">
-                                    <input appNoLeadingSpace formControlName="unitCost"
-                                        class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                        type="number" placeholder="00.00"
-                                        (input)="calculateunitSellingPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
-                                </td>
-                                <td class="px-6 py-3 border-l border-b border-t text-center">
-                                    <p>{{ calculateTotalCost(optionIndex, itemIndex,itemDetailIndex).toFixed(2) }}</p>
-                                </td>
-                                <td [class.border-red-500]="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('profit')?.invalid && submit"
-                                    class="border py-2 px-6 text-center">
-                                    <div class="flex justify-center items-center">
-                                        <input appNoLeadingSpace formControlName="profit"
-                                            class="font-normal appearance-none block w-9 text-right rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                            type="number" placeholder="00"
-                                            (input)="calculateunitSellingPriceForInput(optionIndex, itemIndex,itemDetailIndex)">
-                                        <p class="ml-0.5 mb-0.5">%</p>
-                                    </div>
-                                    <div *ngIf="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('profit')?.hasError('negativeProfit')"
-                                        class="text-red-500 text-xs mt-1">
-                                        Profit cannot be negative.
-                                    </div>
-                                </td>
-                                <td class="border px-6 py-3 text-center">
-                                    <input appNoLeadingSpace formControlName="unitSellingPrice"
-                                        class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                        type="number" placeholder="00.00"
-                                        (input)="calculateProfit(optionIndex, itemIndex,itemDetailIndex)">
-                                </td>
-                                <td class="px-6 py-3 border-l border-b border-t text-center">
-                                    <p>{{ calculateTotalPrice(optionIndex, itemIndex,itemDetailIndex).toFixed(2) }}</p>
-                                </td>
-                                <td [class.border-red-500]="getItemDetailsArrayControls(optionIndex, itemIndex)?.at(itemDetailIndex)?.get('availability')?.invalid && submit"
-                                    class="border px-2 py-2 text-center">
-                                    <ng-select [items]="availabilityDefaultOptions" bindLabel="name" [addTag]="true"
-                                        [hideSelected]="true" [minTermLength]="2"
-                                        typeToSearchText="Please enter 2 or more characters"
-                                        [typeahead]="availabiltyInput$" formControlName="availability">
-                                    </ng-select>
-                                </td>
-                                <td class="px-2 py-2 border text-center" *ngIf="itemDetailIndex!==0">
-                                    <ng-icon name="heroXMark" class="text-md p-0 m-0 cursor-pointer text-red-600 mx-2"
-                                        (click)="onRemoveItemDetail(optionIndex, itemIndex,itemDetailIndex)"></ng-icon>
-                                </td>
-                            </tr>
-                        </ng-container>
-                    </ng-container>
-                </ng-container>
-
-            </tbody>
-            <tbody>
-                <tr>
-                    <td colspan="9" class="border px-6 py-3 bg-gray-50">
-                        <div class="flex justify-end items-center">
-                            <label for="totalDiscount" class="font-semibold">Discount: </label>
-                            <input formControlName="totalDiscount" type="number" placeholder="Enter discount"
-                                class="appearance-none block bg-white text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 ml-2 w-1/6">
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-
-
-        <div class="w-full flex justify-start items-center mt-3 gap-3">
-            <button type="button"
-                class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
-                (click)="addItemFormGroup(optionIndex)">
-                + Add Item
-            </button>
-
-
-        </div>
-
-
+  <div
+    class="mt-6"
+    *ngFor="let options of optionalItems.controls; let optionIndex = index"
+    formArrayName="optionalItems"
+  >
+    <div *ngIf="optionIndex !== 0" class="flex items-center gap-2 mb-1">
+      <p class="text-red-600 font-semibold">Option {{ optionIndex + 1 }}</p>
+      <ng-icon
+        name="heroXMark"
+        class="cursor-pointer hover:text-red-600"
+        (click)="removeOptions(optionIndex)"
+      ></ng-icon>
     </div>
-    <button type="button" class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm mt-2"
-        (click)="addOptionalItem()">
-        + Add Optional Quote
-    </button>
-    <div class="mt-6" *ngIf="optionalItems.controls.length > 1">
-        <label for="mainCalculationOption" class="uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">
-            Select Option For Final Calculation (This will not reflect in database):
-        </label>
-        <select id="mainCalculationOption" 
-                (change)="onCalculationOptionChange()" 
-                [(ngModel)]="selectedOption" 
-                [ngModelOptions]="{standalone: true}"
-                class="w-52 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-transparent focus:border-violet-500 p-2.5">
-            <option *ngFor="let option of optionalItems.controls; let i = index" [value]="i">
-                Option {{ i + 1 }}
-            </option>
-        </select>
+    <table
+      class="w-full text-sm text-left rtl:text-right text-gray-500 border"
+      [formGroupName]="optionIndex"
+    >
+      <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+        <tr>
+          <th
+            scope="col"
+            resizable
+            class="w-96 border-l border-r border-t hover:border-r-slate-950"
+            key="itemDetail"
+          >
+            <div class="px-6 py-3">Item Details</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="qty"
+            class="border-l border-r border-t hover:border-r-slate-950 text-center min-w-[66px]"
+          >
+            <div class="px-2 py-3">QTY</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="unitCost"
+            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+          >
+            <div class="px-6 py-3">Unit Cost</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="totalCost"
+            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+          >
+            <div class="px-6 py-3">Total Cost</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="profit"
+            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+          >
+            <div class="px-6 py-3">Profit</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="unitSellingPrice"
+            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+          >
+            <div class="px-6 py-3">Unit Price</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="totalPrice"
+            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+          >
+            <div class="px-6 py-3">Total Price</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="avbl"
+            class="border-l border-r border-t hover:border-r-slate-950 text-center min-w-[90px]"
+          >
+            <div class="px-2 py-3">AVBL.</div>
+          </th>
+        </tr>
+      </thead>
+      <tbody formGroupName="items">
+        <ng-container
+          *ngFor="
+            let item of getItemAtOption(optionIndex).controls;
+            let itemIndex = index
+          "
+          [formGroupName]="itemIndex"
+        >
+          <tr>
+            <td colspan="9" class="border px-6 py-3 bg-gray-50">
+              <div class="flex justify-center items-center">
+                <label for="">ITEM NAME : </label>
+                <input
+                  formControlName="itemName"
+                  type="text"
+                  [class.border-red-500]="
+                    getItemAtOption(optionIndex).at(itemIndex).get('itemName')
+                      ?.invalid && submit
+                  "
+                  class="appearance-none block bg-white text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 ml-2 w-3/6"
+                />
+                <button
+                  type="button"
+                  class="ml-2 bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
+                  (click)="addItemDetail(optionIndex, itemIndex)"
+                >
+                  + Add Item Detail
+                </button>
+                <button
+                  type="button"
+                  *ngIf="itemIndex !== 0"
+                  class="ml-2 bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded text-sm"
+                  (click)="onRemoveItem(optionIndex, itemIndex)"
+                >
+                  × Remove Item
+                </button>
+              </div>
+            </td>
+          </tr>
+          <ng-container formArrayName="itemDetails">
+            <ng-container
+              *ngFor="
+                let detail of getItemDetailsArrayControls(
+                  optionIndex,
+                  itemIndex
+                )?.controls;
+                let itemDetailIndex = index
+              "
+            >
+              <tr [formGroupName]="itemDetailIndex">
+                <td
+                  [class.border-red-500]="
+                    getItemDetailsArrayControls(optionIndex, itemIndex)
+                      ?.at(itemDetailIndex)
+                      ?.get('detail')?.invalid && submit
+                  "
+                  class="border px-6 py-3"
+                >
+                  <textarea
+                    appNoLeadingSpace
+                    formControlName="detail"
+                    class="w-full font-normal appearance-none block rounded py-3 px-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    type="text"
+                    placeholder="Type / copy the item here."
+                    #inputTextArea
+                  ></textarea>
+                  <div class="h-5 w-full">
+                    <button
+                      type="button"
+                      (click)="
+                        applyFormatting(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex,
+                          inputTextArea
+                        )
+                      "
+                      class="text-bold hover:bg-gray-300 rounded-full px-2 text-black text-lg"
+                      matTooltip="Bold"
+                      matTooltipPosition="above"
+                    >
+                      B
+                    </button>
+
+                    <button
+                      type="button"
+                      (click)="
+                        applyHighlighter(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex,
+                          inputTextArea
+                        )
+                      "
+                      class="text-bold hover:bg-gray-300 rounded-full px-2 text-black text-lg"
+                      matTooltip="Highlight"
+                      matTooltipPosition="above"
+                    >
+                      H
+                    </button>
+                  </div>
+                </td>
+                <td
+                  [class.border-red-500]="
+                    getItemDetailsArrayControls(optionIndex, itemIndex)
+                      ?.at(itemDetailIndex)
+                      ?.get('quantity')?.invalid && submit
+                  "
+                  class="border px-2 py-2 text-center"
+                >
+                  <input
+                    appNoLeadingSpace
+                    formControlName="quantity"
+                    class="font-normal appearance-none block w-full text-center rounded py-5 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    type="number"
+                    placeholder="00"
+                    (input)="
+                      calculateunitSellingPriceForInput(
+                        optionIndex,
+                        itemIndex,
+                        itemDetailIndex
+                      )
+                    "
+                  />
+                </td>
+                <td
+                  [class.border-red-500]="
+                    getItemDetailsArrayControls(optionIndex, itemIndex)
+                      ?.at(itemDetailIndex)
+                      ?.get('unitCost')?.invalid && submit
+                  "
+                  class="border px-6 py-3"
+                >
+                  <input
+                    appNoLeadingSpace
+                    formControlName="unitCost"
+                    class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    type="number"
+                    placeholder="00.00"
+                    (input)="
+                      calculateunitSellingPriceForInput(
+                        optionIndex,
+                        itemIndex,
+                        itemDetailIndex
+                      )
+                    "
+                  />
+                </td>
+                <td class="px-6 py-3 border-l border-b border-t text-center">
+                  <p>
+                    {{
+                      calculateTotalCost(
+                        optionIndex,
+                        itemIndex,
+                        itemDetailIndex
+                      ).toFixed(2)
+                    }}
+                  </p>
+                </td>
+                <td
+                  [class.border-red-500]="
+                    getItemDetailsArrayControls(optionIndex, itemIndex)
+                      ?.at(itemDetailIndex)
+                      ?.get('profit')?.invalid && submit
+                  "
+                  class="border py-2 px-6 text-center"
+                >
+                  <div class="flex justify-center items-center">
+                    <input
+                      appNoLeadingSpace
+                      formControlName="profit"
+                      class="font-normal appearance-none block w-9 text-right rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                      type="number"
+                      placeholder="00"
+                      (input)="
+                        calculateunitSellingPriceForInput(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                    />
+                    <p class="ml-0.5 mb-0.5">%</p>
+                  </div>
+                  <div
+                    *ngIf="
+                      getItemDetailsArrayControls(optionIndex, itemIndex)
+                        ?.at(itemDetailIndex)
+                        ?.get('profit')
+                        ?.hasError('negativeProfit')
+                    "
+                    class="text-red-500 text-xs mt-1"
+                  >
+                    Profit cannot be negative.
+                  </div>
+                </td>
+                <td class="border px-6 py-3 text-center">
+                  <input
+                    appNoLeadingSpace
+                    formControlName="unitSellingPrice"
+                    class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    type="number"
+                    placeholder="00.00"
+                    (input)="
+                      calculateProfit(optionIndex, itemIndex, itemDetailIndex)
+                    "
+                  />
+                </td>
+                <td class="px-6 py-3 border-l border-b border-t text-center">
+                  <p>
+                    {{
+                      calculateTotalPrice(
+                        optionIndex,
+                        itemIndex,
+                        itemDetailIndex
+                      ).toFixed(2)
+                    }}
+                  </p>
+                </td>
+                <td
+                  [class.border-red-500]="
+                    getItemDetailsArrayControls(optionIndex, itemIndex)
+                      ?.at(itemDetailIndex)
+                      ?.get('availability')?.invalid && submit
+                  "
+                  class="border px-2 py-2 text-center"
+                >
+                  <ng-select
+                    [items]="availabilityDefaultOptions"
+                    bindLabel="name"
+                    [addTag]="true"
+                    [hideSelected]="true"
+                    [minTermLength]="2"
+                    typeToSearchText="Please enter 2 or more characters"
+                    [typeahead]="availabiltyInput$"
+                    formControlName="availability"
+                  >
+                  </ng-select>
+                </td>
+                <td
+                  class="px-2 py-2 border text-center"
+                  *ngIf="itemDetailIndex !== 0"
+                >
+                  <ng-icon
+                    name="heroXMark"
+                    class="text-md p-0 m-0 cursor-pointer text-red-600 mx-2"
+                    (click)="
+                      onRemoveItemDetail(
+                        optionIndex,
+                        itemIndex,
+                        itemDetailIndex
+                      )
+                    "
+                  ></ng-icon>
+                </td>
+              </tr>
+            </ng-container>
+          </ng-container>
+        </ng-container>
+      </tbody>
+      <tbody>
+        <tr>
+          <td colspan="9" class="border px-6 py-3 bg-gray-50">
+            <div class="flex justify-end items-center">
+              <label for="totalDiscount" class="font-semibold"
+                >Discount:
+              </label>
+              <input
+                formControlName="totalDiscount"
+                type="number"
+                placeholder="Enter discount"
+                class="appearance-none block bg-white text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 ml-2 w-1/6"
+              />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="w-full flex justify-start items-center mt-3 gap-3">
+      <button
+        type="button"
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
+        (click)="addItemFormGroup(optionIndex)"
+      >
+        + Add Item
+      </button>
+      <!-- <button
+        type="button"
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
+        (click)="addItemFormGroup(optionIndex)"
+      >
+        + Add Optional Item
+      </button> -->
     </div>
+  </div>
+  <button
+    type="button"
+    class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm mt-2"
+    (click)="addOptionalItem()"
+  >
+    + Add Optional Quote
+  </button>
+  <div class="mt-6" *ngIf="optionalItems.controls.length > 1">
+    <label
+      for="mainCalculationOption"
+      class="uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+    >
+      Select Option For Final Calculation (This will not reflect in database):
+    </label>
+    <select
+      id="mainCalculationOption"
+      (change)="onCalculationOptionChange()"
+      [(ngModel)]="selectedOption"
+      [ngModelOptions]="{ standalone: true }"
+      class="w-52 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-transparent focus:border-violet-500 p-2.5"
+    >
+      <option
+        *ngFor="let option of optionalItems.controls; let i = index"
+        [value]="i"
+      >
+        Option {{ i + 1 }}
+      </option>
+    </select>
+  </div>
 </div>

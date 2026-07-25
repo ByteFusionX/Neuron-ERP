@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import Employee from '../models/employee.model'
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import announcementModel from "../models/announcement.model";
 import enquiryModel from "../models/enquiry.model";
 import quotationModel from "../models/quotation.model";

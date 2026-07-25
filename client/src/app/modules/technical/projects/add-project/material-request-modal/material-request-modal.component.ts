@@ -12,7 +12,6 @@ import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { PurchaseRequestModalComponent } from '../purchase-request-modal/purchase-request-modal.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
 import { MaterialRequest, MaterialRequestAttachment } from 'src/app/core/services/technical.service';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
@@ -39,7 +38,6 @@ interface MaterialRequestFormItem {
     appFileValidator,
     appFileSizeValidator,
     ButtonComponent,
-    NumberFormatterPipe,
     ModalLayoutComponent
   ],
   templateUrl: './material-request-modal.component.html',
