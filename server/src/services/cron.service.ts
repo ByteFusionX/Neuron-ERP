@@ -29,6 +29,13 @@ const processEmployeeEvent = async (element, eventType) => {
         const today = new Date();
         today.setUTCHours(0, 0, 0, 0);
 
+        const alreadyAnnounced = await announcementModel.findOne({
+            title: eventTitle,
+            date: today,
+            celeb: true
+        });
+        if (alreadyAnnounced) return true;
+
         const saveEvent = new announcementModel({
             title: eventTitle,
             description: eventDescription,
@@ -50,8 +57,8 @@ const processEmployeeEvent = async (element, eventType) => {
     }
 };
 
-
 const startCronJob = () => {
+    // 0 1 * * *
     cron.schedule('0 1 * * *', async () => {
         try {
             console.log('Working cron scheduled');
@@ -61,6 +68,7 @@ const startCronJob = () => {
 
             const [birthdayEmployees, anniversaryEmployees] = await Promise.all([
                 employeeModel.find({
+                    isBlocked: { $ne: true },
                     $expr: {
                         $and: [
                             { $eq: [{ $month: "$dob" }, currentMonth] },
@@ -69,6 +77,7 @@ const startCronJob = () => {
                     }
                 }),
                 employeeModel.find({
+                    isBlocked: { $ne: true },
                     $expr: {
                         $and: [
                             { $eq: [{ $month: "$dateOfJoining" }, currentMonth] },

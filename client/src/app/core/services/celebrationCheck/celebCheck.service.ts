@@ -13,17 +13,17 @@ export class celebCheckService {
         return this.http.get<announcementGetData[]>(`${this.apiUrl}/celebrationCheck`)
     }
 
-    markTodaysBirthdaysAsViewed(): void {
-        const today = new Date();
-        const formattedDate = today.toISOString().split('T')[0];
-        localStorage.setItem('todaysBirthdaysViewed', formattedDate);
-    }
-    
     hasTodaysBirthdaysBeenViewed(): boolean {
         const today = new Date();
         const formattedDate = today.toISOString().split('T')[0];
-        const storedDate = localStorage.getItem('todaysBirthdaysViewed');
+        const storedDate = localStorage.getItem('todaysCelebsViewed');
         return storedDate === formattedDate;
     }
 
+    markTodaysBirthdaysAsViewed(): void {
+        const today = new Date();
+        const formattedDate = today.toISOString().split('T')[0];
+        localStorage.setItem('todaysCelebsViewed', formattedDate);
+    }
+    
 }

@@ -51,6 +51,7 @@ import deliveryNoteRouter from './routes/deliveryNote.router';
 import invoiceRouter from './routes/invoice.router';
 
 const app = express();
+app.set('etag', false); // API responses are dynamic per request; conditional 304s were silently breaking notification/celebration polling
 const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 export const io = new Server(server, {
@@ -138,7 +139,6 @@ connectToDatabase()
 
     startCronJob();
     socketConnection(io)
-
     emailWorker.start();
   })
   .catch((err) => {

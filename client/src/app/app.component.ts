@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { celebCheckService } from './core/services/celebrationCheck/celebCheck.service';
 import { announcementGetData } from './shared/interfaces/announcement.interface';
-import { concatMap, from, interval, take, switchMap, takeUntil, Subscription, Observable } from 'rxjs';
+import { concatMap, from, takeUntil, Subscription, Observable } from 'rxjs';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { CelebrationDialogComponent } from './shared/components/celebration-dialog/celebration-dialog.component';
 import { Subject } from 'rxjs';
@@ -35,6 +35,7 @@ export class AppComponent implements OnDestroy, OnInit {
   employeeToken: string | null = null;
   employee!: { id: string, employeeId: string };
   token: string | null = null;
+  private celebrationCheckStarted = false;
   private destroy$ = new Subject<void>();
   private subscriptions: Subscription = new Subscription()
 
@@ -83,6 +84,9 @@ export class AppComponent implements OnDestroy, OnInit {
           this._notificationService.authSocketIo(data.accessToken)
           this._notificationService.getEmployeeTextNotifications()
           this._notificationService.initializeNotifications()
+          if (!this.isLoginRoute()) {
+            this.isUserThere();
+          }
         }
       })
     }
@@ -125,41 +129,35 @@ export class AppComponent implements OnDestroy, OnInit {
     this.getCelebData()
   }
   
-
   getCelebData() {
-    if (this.token) {
+    if (this.token && !this.celebrationCheckStarted) {
       this.birthdaysViewed = this._service.hasTodaysBirthdaysBeenViewed();
       if (!this.birthdaysViewed) {
+        this.celebrationCheckStarted = true;
         this.subscriptions.add(
-          this._service.getCelebrationData().subscribe((data) => {
-            if (data && data.length > 0) {
-              from(data).pipe(
-                concatMap((item, index) => {
-                  return interval(1000 * index).pipe(
-                    take(1),
-                    switchMap(() => {
-                      if (this.dialogRef && this.dialogRef.componentInstance) {
-                        return this.dialogRef.afterClosed().pipe(
-                          takeUntil(this.destroy$),
-                          switchMap(() => {
-                            this.dialogRef = this.openCelebrationDialog(item);
-                            return [];
-                          })
-                        );
-                      } else {
-                        this.dialogRef = this.openCelebrationDialog(item);
-                        return [];
-                      }
-                    })
-                  );
-                }),
-                takeUntil(this.destroy$)
-              ).subscribe();
+          this._service.getCelebrationData().subscribe({
+            next: (data) => {
+              if (data && data.length > 0) {
+                const uniqueCelebrations = Array.from(
+                  new Map(data.map(item => [item.title, item])).values()
+                );
+                from(uniqueCelebrations).pipe(
+                  concatMap(item => {
+                    this.dialogRef = this.openCelebrationDialog(item);
+                    return this.dialogRef.afterClosed();
+                  }),
+                  takeUntil(this.destroy$)
+                ).subscribe();
+                this._service.markTodaysBirthdaysAsViewed();
+              }
+            },
+            error: (error) => {
+              console.error('Error fetching celebration data:', error);
+              this.celebrationCheckStarted = false;
             }
           })
         )
       }
-      this._service.markTodaysBirthdaysAsViewed();
     }
   }
 

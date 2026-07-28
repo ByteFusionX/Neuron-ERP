@@ -200,8 +200,9 @@ export class NotificationService {
 
 
     getEmployeeTextNotifications() {
-        this.http.get<{ viewed: TextNotification[], unviewed: TextNotification[] }>(`${this.api}/notification`).subscribe((data) => {
-            this.textNotificationsSubject.next(data)
+        this.http.get<{ viewed: TextNotification[], unviewed: TextNotification[] }>(`${this.api}/notification`).subscribe({
+            next: (data) => this.textNotificationsSubject.next(data),
+            error: (error) => console.error('Error fetching notifications:', error)
         })
     }
 
