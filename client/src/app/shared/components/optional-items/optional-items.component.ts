@@ -1,5 +1,15 @@
 import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
-import { AbstractControl, FormArray, FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import {
+  AbstractControl,
+  FormArray,
+  FormControl,
+  FormGroup,
+  ValidationErrors,
+  ValidatorFn,
+  Validators,
+  FormsModule,
+  ReactiveFormsModule,
+} from '@angular/forms';
 import { FormBuilder } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
@@ -8,41 +18,54 @@ import { NgIcon } from '@ng-icons/core';
 import { NgSelectComponent } from '@ng-select/ng-select';
 
 @Component({
-    selector: 'optional-items',
-    templateUrl: './optional-items.component.html',
-    styleUrls: ['./optional-items.component.css'],
-    imports: [FormsModule, ReactiveFormsModule, NgFor, NgIf, NgIcon, NgSelectComponent]
+  selector: 'optional-items',
+  templateUrl: './optional-items.component.html',
+  styleUrls: ['./optional-items.component.css'],
+  imports: [
+    FormsModule,
+    ReactiveFormsModule,
+    NgFor,
+    NgIf,
+    NgIcon,
+    NgSelectComponent,
+  ],
 })
 export class OptionalItemsComponent implements OnInit {
-
   @Input() optionalItems!: FormArray;
   @Input() submit!: boolean;
   @Input() oldOptionalItems!: any;
-  @Output() calculatedValues = new EventEmitter<{ totalCost: number, sellingPrice: number, totalProfit: number, discount: number }>();
+  @Output() calculatedValues = new EventEmitter<{
+    totalCost: number;
+    sellingPrice: number;
+    totalProfit: number;
+    discount: number;
+    optionalCost: number;
+    optionalTotal: number;
+  }>();
 
   selectedOption: number = 0;
 
   removedItems: any[] = [];
   removedItemDetails: any[] = [];
   availabilityDefaultOptions: string[] = [
-    "Ex-Stock",
-    "Ex-Stock (Subject to Prior Sale)",
-    "6-8 Weeks",
-    "2-3 Weeks",
-    "4-6 Weeks"
+    'Ex-Stock',
+    'Ex-Stock (Subject to Prior Sale)',
+    '6-8 Weeks',
+    '2-3 Weeks',
+    '4-6 Weeks',
   ];
   availabiltyInput$ = new Subject<string>();
   removedOptions: any[] = [];
 
   constructor(
     private _fb: FormBuilder,
-    private snackBar: MatSnackBar
-  ) { }
+    private snackBar: MatSnackBar,
+  ) {}
 
   ngOnInit() {
-    this.addOptionalItem()
+    this.addOptionalItem();
     if (this.oldOptionalItems && this.oldOptionalItems.length) {
-      this.patchOptionalItems()
+      this.patchOptionalItems();
     }
     this.optionalItems.valueChanges.subscribe(() => {
       this.emitCalculatedValues();
@@ -65,7 +88,10 @@ export class OptionalItemsComponent implements OnInit {
           const unitSellingPrice = detail.unitSellingPrice;
 
           if (unitCost && unitSellingPrice) {
-            detail.profit = (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(2);
+            detail.profit = (
+              ((unitSellingPrice - unitCost) / unitSellingPrice) *
+              100
+            ).toFixed(2);
           }
         });
       });
@@ -76,16 +102,26 @@ export class OptionalItemsComponent implements OnInit {
   }
 
   onCalculationOptionChange() {
-    this.emitCalculatedValues()
+    this.emitCalculatedValues();
   }
 
   private emitCalculatedValues() {
-    const totalCost = this.calculateAllTotalCost();
-    const sellingPrice = this.calculateSellingPrice();
-    const totalProfit = this.calculateTotalProfit();
+    const totalCost = this.calculateAllTotalCost(false);
+    const sellingPrice = this.calculateSellingPrice(false);
+    const totalProfit = this.calculateTotalProfit(false);
     const discount = this.calculateDiscount();
 
-    this.calculatedValues.emit({ totalCost, sellingPrice, totalProfit, discount });
+    const optionalCost = this.calculateAllTotalCost(true) - totalCost;
+    const optionalTotal = this.calculateSellingPrice(true) - sellingPrice;
+
+    this.calculatedValues.emit({
+      totalCost,
+      sellingPrice,
+      totalProfit,
+      discount,
+      optionalCost,
+      optionalTotal,
+    });
   }
 
   get parentFormGroup(): FormGroup {
@@ -99,44 +135,48 @@ export class OptionalItemsComponent implements OnInit {
   getItemDetailsArrayControls(i: number, j: number): FormArray | null {
     const itemAtOption = this.getItemAtOption(i);
     if (itemAtOption instanceof FormArray) {
-      const atJ = itemAtOption.at(j)
+      const atJ = itemAtOption.at(j);
       if (atJ instanceof FormGroup) {
         const itemDetails = atJ.get('itemDetails') as FormArray;
-        return itemDetails
+        return itemDetails;
       }
     }
 
-    return null
+    return null;
   }
 
   addOptionalItem() {
-    this.optionalItems.push(this._fb.group({
-      items: this._fb.array([
-        this._fb.group({
-          itemName: ['', Validators.required],
-          itemDetails: this._fb.array([
-            this._fb.group({
-              detail: ['', Validators.required],
-              quantity: ['', Validators.required],
-              unitCost: ['', Validators.required],
-              profit: ['', [Validators.required, this.nonNegativeProfitValidator()]],
-              unitSellingPrice: ['', Validators.required],
-              availability: ['', Validators.required],
-            }),
-          ])
-        })
-      ]),
-      totalDiscount: [0, Validators.required]
-    }
-    ),
-    )
-
+    this.optionalItems.push(
+      this._fb.group({
+        items: this._fb.array([
+          this._fb.group({
+            itemName: ['', Validators.required],
+            isOptional: [false],
+            itemDetails: this._fb.array([
+              this._fb.group({
+                detail: ['', Validators.required],
+                quantity: ['', Validators.required],
+                unitCost: ['', Validators.required],
+                profit: [
+                  '',
+                  [Validators.required, this.nonNegativeProfitValidator()],
+                ],
+                unitSellingPrice: ['', Validators.required],
+                availability: ['', Validators.required],
+              }),
+            ]),
+          }),
+        ]),
+        totalDiscount: [0, Validators.required],
+      }),
+    );
   }
 
-  addItemFormGroup(index: number) {
+  addItemFormGroup(index: number, isOptional: boolean = false) {
     this.getItemAtOption(index).push(
       this._fb.group({
         itemName: ['', Validators.required],
+        isOptional: [isOptional],
         itemDetails: this._fb.array([
           this._fb.group({
             detail: ['', Validators.required],
@@ -145,10 +185,10 @@ export class OptionalItemsComponent implements OnInit {
             profit: ['', Validators.required],
             unitSellingPrice: [''],
             availability: ['', Validators.required],
-          })
-        ])
-      })
-    )
+          }),
+        ]),
+      }),
+    );
   }
 
   createItemDetail(): FormGroup {
@@ -158,7 +198,7 @@ export class OptionalItemsComponent implements OnInit {
       unitCost: ['', Validators.required],
       profit: ['', Validators.required],
       unitSellingPrice: [''],
-      availability: ['', Validators.required]
+      availability: ['', Validators.required],
     });
   }
 
@@ -175,15 +215,21 @@ export class OptionalItemsComponent implements OnInit {
   }
 
   onRemoveItem(i: number, j: number): void {
-    const removedItem = ((this.optionalItems.at(i) as FormGroup)?.get('items') as FormArray)?.at(j).value;
+    const removedItem = (
+      (this.optionalItems.at(i) as FormGroup)?.get('items') as FormArray
+    )?.at(j).value;
     this.removedItems.push({ item: removedItem, i, j });
-    ((this.optionalItems.at(i) as FormGroup)?.get('items') as FormArray)?.removeAt(j)
+    (
+      (this.optionalItems.at(i) as FormGroup)?.get('items') as FormArray
+    )?.removeAt(j);
 
     this.showUndoOption('item');
   }
 
   onRemoveItemDetail(i: number, j: number, k: number): void {
-    const removedItemDetail = this.getItemDetailsArrayControls(i, j)?.at(k).value;
+    const removedItemDetail = this.getItemDetailsArrayControls(i, j)?.at(
+      k,
+    ).value;
     this.removedItemDetails.push({ item: removedItemDetail, i, j, k });
     this.getItemDetailsArrayControls(i, j)?.removeAt(k);
 
@@ -193,22 +239,27 @@ export class OptionalItemsComponent implements OnInit {
   undoRemoveItem(): void {
     if (this.removedItems.length > 0) {
       const { item, i, j } = this.removedItems.pop();
-      ((this.optionalItems.at(i) as FormGroup)?.get('items') as FormArray)?.insert(j, this._fb.group({
-
-        itemName: item.itemName,
-        itemDetails: this._fb.array(
-          item.itemDetails.map((detail: any) =>
-            this._fb.group({
-              detail: detail.detail,
-              quantity: detail.quantity,
-              unitCost: detail.unitCost,
-              profit: detail.profit,
-              unitSellingPrice: detail.unitSellingPrice,
-              availability: detail.availability,
-            })
-          )
-        ),
-      }));
+      (
+        (this.optionalItems.at(i) as FormGroup)?.get('items') as FormArray
+      )?.insert(
+        j,
+        this._fb.group({
+          itemName: item.itemName,
+          isOptional: item.isOptional ?? false,
+          itemDetails: this._fb.array(
+            item.itemDetails.map((detail: any) =>
+              this._fb.group({
+                detail: detail.detail,
+                quantity: detail.quantity,
+                unitCost: detail.unitCost,
+                profit: detail.profit,
+                unitSellingPrice: detail.unitSellingPrice,
+                availability: detail.availability,
+              }),
+            ),
+          ),
+        }),
+      );
       (this.optionalItems.at(i) as FormArray)?.updateValueAndValidity();
     }
   }
@@ -217,14 +268,17 @@ export class OptionalItemsComponent implements OnInit {
     if (this.removedItemDetails.length > 0) {
       const { item, i, j, k } = this.removedItemDetails.pop();
       const itemDetailsArray = this.getItemDetailsArrayControls(i, j);
-      itemDetailsArray?.insert(k, this._fb.group({
-        detail: item.detail,
-        quantity: item.quantity,
-        unitCost: item.unitCost,
-        profit: item.profit,
-        unitSellingPrice: item.unitSellingPrice,
-        availability: item.availability,
-      }));
+      itemDetailsArray?.insert(
+        k,
+        this._fb.group({
+          detail: item.detail,
+          quantity: item.quantity,
+          unitCost: item.unitCost,
+          profit: item.profit,
+          unitSellingPrice: item.unitSellingPrice,
+          availability: item.availability,
+        }),
+      );
       itemDetailsArray?.updateValueAndValidity();
     }
   }
@@ -237,6 +291,7 @@ export class OptionalItemsComponent implements OnInit {
           option.items.map((item: any) =>
             this._fb.group({
               itemName: [item.itemName, Validators.required],
+              isOptional: [item.isOptional ?? false],
               itemDetails: this._fb.array(
                 item.itemDetails.map((detail: any) =>
                   this._fb.group({
@@ -244,15 +299,18 @@ export class OptionalItemsComponent implements OnInit {
                     quantity: [detail.quantity, Validators.required],
                     unitCost: [detail.unitCost, Validators.required],
                     profit: [detail.profit, Validators.required],
-                    unitSellingPrice: [detail.unitSellingPrice, Validators.required],
+                    unitSellingPrice: [
+                      detail.unitSellingPrice,
+                      Validators.required,
+                    ],
                     availability: [detail.availability, Validators.required],
-                  })
-                )
+                  }),
+                ),
               ),
-            })
-          )
+            }),
+          ),
         ),
-        totalDiscount: [option.totalDiscount, Validators.required]
+        totalDiscount: [option.totalDiscount, Validators.required],
       });
 
       this.optionalItems.insert(i, optionGroup);
@@ -261,7 +319,9 @@ export class OptionalItemsComponent implements OnInit {
   }
 
   showUndoOption(type: string): void {
-    const snackBarRef = this.snackBar.open(`Item removed. Undo?`, 'Undo', { duration: 3000 });
+    const snackBarRef = this.snackBar.open(`Item removed. Undo?`, 'Undo', {
+      duration: 3000,
+    });
 
     snackBarRef.onAction().subscribe(() => {
       if (type === 'item') {
@@ -280,82 +340,129 @@ export class OptionalItemsComponent implements OnInit {
   // k → itemDetailIndex
 
   calculateTotalCost(i: number, j: number, k: number) {
-    const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[k] as FormControl;
+    const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[
+      k
+    ] as FormControl;
     return (
       itemDetail.get('quantity')?.value * itemDetail.get('unitCost')?.value || 0
     );
   }
 
   calculateunitSellingPrice(i: number, j: number, k: number) {
-    const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[k] as FormControl;
+    const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[
+      k
+    ] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitSellingPrice = Math.ceil(Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0);
-    return unitSellingPrice
+    const unitSellingPrice = Math.ceil(
+      Number(
+        (itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2),
+      ) || 0,
+    );
+    return unitSellingPrice;
   }
 
   calculateunitSellingPriceForInput(i: number, j: number, k: number) {
-    const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[k] as FormControl;
+    const itemDetail = this.getItemDetailsArrayControls(i, j)?.controls[
+      k
+    ] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitSellingPrice = Number((itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2)) || 0;
-    itemDetail.get('unitSellingPrice')?.setValue(Number(Math.ceil(unitSellingPrice)).toFixed(2));
+    const unitSellingPrice =
+      Number(
+        (itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2),
+      ) || 0;
+    itemDetail
+      .get('unitSellingPrice')
+      ?.setValue(Number(Math.ceil(unitSellingPrice)).toFixed(2));
   }
 
   calculateProfit(i: number, j: number, k: number) {
-    const unitCost = this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitCost')?.value;
-    const unitSellingPrice = this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitSellingPrice')?.value;
+    const unitCost = this.getItemDetailsArrayControls(i, j)?.controls[k].get(
+      'unitCost',
+    )?.value;
+    const unitSellingPrice = this.getItemDetailsArrayControls(i, j)?.controls[
+      k
+    ].get('unitSellingPrice')?.value;
     if (unitCost && unitSellingPrice) {
       const profit = ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
-      this.getItemDetailsArrayControls(i, j)?.controls[k].get('profit')?.setValue(profit.toFixed(2));
+      this.getItemDetailsArrayControls(i, j)
+        ?.controls[k].get('profit')
+        ?.setValue(profit.toFixed(2));
     } else if (unitCost) {
-      this.getItemDetailsArrayControls(i, j)?.controls[k].get('profit')?.setValue('');
+      this.getItemDetailsArrayControls(i, j)
+        ?.controls[k].get('profit')
+        ?.setValue('');
     }
   }
 
   calculateTotalPrice(i: number, j: number, k: number) {
     return (
-      this.getItemDetailsArrayControls(i, j)?.controls[k].get('unitSellingPrice')?.value *
-      this.getItemDetailsArrayControls(i, j)?.controls[k].get('quantity')?.value || 0
+      this.getItemDetailsArrayControls(i, j)?.controls[k].get(
+        'unitSellingPrice',
+      )?.value *
+        this.getItemDetailsArrayControls(i, j)?.controls[k].get('quantity')
+          ?.value || 0
     );
   }
 
-  calculateAllTotalCost() {
+  calculateAllTotalCost(includeOptional: boolean = true) {
     let totalCost = 0;
-    this.optionalItems.value[this.selectedOption].items.forEach((item: any, j: number) => {
-      item.itemDetails.forEach((_: any, k: number) => {
-        totalCost += this.calculateTotalCost(this.selectedOption, j, k);
-      });
-    });
+    this.optionalItems.value[this.selectedOption].items.forEach(
+      (item: any, j: number) => {
+        if (!includeOptional && item.isOptional) {
+          return;
+        }
+        item.itemDetails.forEach((_: any, k: number) => {
+          totalCost += this.calculateTotalCost(this.selectedOption, j, k);
+        });
+      },
+    );
 
     return totalCost;
   }
 
-  calculateSellingPrice() {
+  calculateSellingPrice(includeOptional: boolean = true) {
     let totalSellingPrice = 0;
-    this.optionalItems.value[this.selectedOption].items.forEach((item: any, j: number) => {
-      item.itemDetails.forEach((_: any, k: number) => {
-        totalSellingPrice += this.calculateTotalPrice(this.selectedOption, j, k);
-      });
-    });
+    this.optionalItems.value[this.selectedOption].items.forEach(
+      (item: any, j: number) => {
+        if (!includeOptional && item.isOptional) {
+          return;
+        }
+        item.itemDetails.forEach((_: any, k: number) => {
+          totalSellingPrice += this.calculateTotalPrice(
+            this.selectedOption,
+            j,
+            k,
+          );
+        });
+      },
+    );
 
     return totalSellingPrice;
   }
 
-  calculateTotalProfit() {
-    const sellingPrice = this.calculateSellingPrice() - this.optionalItems.value[this.selectedOption].totalDiscount;
-    const totalCost = this.calculateAllTotalCost();
+  calculateTotalProfit(includeOptional: boolean = true) {
+    const sellingPrice =
+      this.calculateSellingPrice(includeOptional) -
+      this.optionalItems.value[this.selectedOption].totalDiscount;
+    const totalCost = this.calculateAllTotalCost(includeOptional);
     return sellingPrice > 0
       ? ((sellingPrice - totalCost) / sellingPrice) * 100
       : 0;
   }
 
   calculateDiscount() {
-    return this.optionalItems.value[this.selectedOption].totalDiscount || 0
+    return this.optionalItems.value[this.selectedOption].totalDiscount || 0;
   }
 
-
-
-  applyFormatting(i: number, j: number, k: number, textarea: HTMLTextAreaElement): void {
-    const control = this.getItemDetailsArrayControls(i, j)?.controls[k].get('detail') as FormControl;
+  applyFormatting(
+    i: number,
+    j: number,
+    k: number,
+    textarea: HTMLTextAreaElement,
+  ): void {
+    const control = this.getItemDetailsArrayControls(i, j)?.controls[k].get(
+      'detail',
+    ) as FormControl;
     let currentValue = control.value;
     const selectionStart = textarea.selectionStart;
     const selectionEnd = textarea.selectionEnd;
@@ -367,18 +474,31 @@ export class OptionalItemsComponent implements OnInit {
 
     let newText: string;
     if (isBold) {
-      newText = currentValue.substring(0, selectionStart) + selectedText.substring(2, selectedText.length - 2) + currentValue.substring(selectionEnd);
+      newText =
+        currentValue.substring(0, selectionStart) +
+        selectedText.substring(2, selectedText.length - 2) +
+        currentValue.substring(selectionEnd);
     } else {
       const escapedText = selectedText.replace(/\\/g, '\\\\');
       const formattedText = `**${escapedText}**`.replace(/\n/g, ' ');
-      newText = currentValue.substring(0, selectionStart) + formattedText + currentValue.substring(selectionEnd);
+      newText =
+        currentValue.substring(0, selectionStart) +
+        formattedText +
+        currentValue.substring(selectionEnd);
     }
 
     control.setValue(newText);
   }
 
-  applyHighlighter(i: number, j: number, k: number, textarea: HTMLTextAreaElement): void {
-    const control = this.getItemDetailsArrayControls(i, j)?.controls[k].get('detail') as FormControl;
+  applyHighlighter(
+    i: number,
+    j: number,
+    k: number,
+    textarea: HTMLTextAreaElement,
+  ): void {
+    const control = this.getItemDetailsArrayControls(i, j)?.controls[k].get(
+      'detail',
+    ) as FormControl;
     let currentValue = control.value;
     const selectionStart = textarea.selectionStart;
     const selectionEnd = textarea.selectionEnd;
@@ -390,11 +510,17 @@ export class OptionalItemsComponent implements OnInit {
 
     let newText: string;
     if (isBold) {
-      newText = currentValue.substring(0, selectionStart) + selectedText.substring(1, selectedText.length - 1) + currentValue.substring(selectionEnd);
+      newText =
+        currentValue.substring(0, selectionStart) +
+        selectedText.substring(1, selectedText.length - 1) +
+        currentValue.substring(selectionEnd);
     } else {
       const escapedText = selectedText.replace(/\\/g, '\\\\');
       const formattedText = `{${escapedText}}`.replace(/\n/g, ' ');
-      newText = currentValue.substring(0, selectionStart) + formattedText + currentValue.substring(selectionEnd);
+      newText =
+        currentValue.substring(0, selectionStart) +
+        formattedText +
+        currentValue.substring(selectionEnd);
     }
 
     control.setValue(newText);

@@ -94,6 +94,15 @@
         >
           <tr>
             <td colspan="9" class="border px-6 py-3 bg-gray-50">
+              <span
+                *ngIf="
+                  getItemAtOption(optionIndex).at(itemIndex).get('isOptional')
+                    ?.value
+                "
+                class="bg-yellow-500 text-white font-semibold py-1 px-2 rounded text-xs uppercase"
+              >
+                Optional
+              </span>
               <div class="flex justify-center items-center">
                 <label for="">ITEM NAME : </label>
                 <input
@@ -371,13 +380,13 @@
       >
         + Add Item
       </button>
-      <!-- <button
+      <button
         type="button"
-        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
-        (click)="addItemFormGroup(optionIndex)"
+        class="bg-yellow-500 hover:bg-yellow-400 text-white font-medium py-2 px-4 rounded text-sm"
+        (click)="addItemFormGroup(optionIndex, true)"
       >
         + Add Optional Item
-      </button> -->
+      </button>
     </div>
   </div>
   <button

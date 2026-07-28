@@ -355,6 +355,12 @@
                           class="flex justify-center items-center text-md text-black font-medium uppercase"
                         >
                           {{ item.itemName }}
+                          <span
+                            *ngIf="item.isOptional"
+                            class="ml-2 bg-yellow-500 text-white font-semibold py-1 px-2 rounded text-xs uppercase"
+                          >
+                            Optional
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -454,12 +460,32 @@
           <tbody>
             <tr class="border-b">
               <td class="px-2 py-3 border text-center font-medium text-xl">
+                <div class="flex justify-center items-center gap-2">
+                  <input
+                    #optionalTotalCheckbox
+                    type="checkbox"
+                    id="includeOptionalTotal"
+                    [checked]="includeOptionalTotal"
+                    (change)="onIncludeOptionalTotalChange($event)"
+                    class="w-4 h-4"
+                  />
+                  <label for="includeOptionalTotal">Optional Items Total</label>
+                </div>
+              </td>
+              <td
+                class="px-2 py-2 border text-center uppercase text-xl font-medium"
+              >
+                {{ calculatedValues.optionalTotal | numberFormatter }}
+              </td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-3 border text-center font-medium text-xl">
                 Total Cost
               </td>
               <td
                 class="px-2 py-2 border text-center uppercase text-xl font-medium"
               >
-                {{ calculatedValues.totalCost | numberFormatter }}
+                {{ calculateTotalCost() | numberFormatter }}
               </td>
             </tr>
             <tr class="border-b">
@@ -479,10 +505,7 @@
               <td
                 class="px-2 py-2 border text-center uppercase text-xl font-medium"
               >
-                {{
-                  calculateDiscountPrice() - calculatedValues.totalCost
-                    | numberFormatter
-                }}
+                {{ calculateProfitMarginAmount() | numberFormatter }}
               </td>
             </tr>
             <tr class="border-b">
@@ -492,7 +515,7 @@
               <td
                 class="px-2 py-2 border text-center uppercase text-xl font-medium"
               >
-                {{ calculatedValues.totalProfit.toFixed(2) }}%
+                {{ calculateProfitMarginPercentage().toFixed(2) }}%
               </td>
             </tr>
           </tbody>
@@ -508,7 +531,7 @@
               <td
                 class="px-2 py-2 border text-center uppercase text-xl font-medium"
               >
-                {{ calculatedValues.sellingPrice | numberFormatter }}
+                {{ calculateSubtotal() | numberFormatter }}
               </td>
             </tr>
             <tr class="border-b">
@@ -526,7 +549,7 @@
               <td
                 class="px-2 py-2 border text-center uppercase text-xl font-medium"
               >
-                {{ calculateDiscountPrice() | numberFormatter }}
+                {{ calculateFinalTotalAmount() | numberFormatter }}
               </td>
             </tr>
           </tbody>

@@ -55,6 +55,7 @@ import { Note, Notes } from 'src/app/shared/interfaces/notes.interface';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { NgIf, NgFor, AsyncPipe, DecimalPipe } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
@@ -110,12 +111,31 @@ export class CreateQuotatationComponent {
     sellingPrice: number;
     totalProfit: number;
     discount: number;
+    optionalCost: number;
+    optionalTotal: number;
   } = {
     totalCost: 0,
     sellingPrice: 0,
     totalProfit: 0,
     discount: 0,
+    optionalCost: 0,
+    optionalTotal: 0,
   };
+
+  includeOptionalTotal: boolean = false;
+
+  @ViewChild('optionalTotalCheckbox')
+  optionalTotalCheckbox!: ElementRef<HTMLInputElement>;
+
+  onIncludeOptionalTotalChange(event: Event) {
+    this.includeOptionalTotal = (event.target as HTMLInputElement).checked;
+  }
+
+  private syncIncludeOptionalTotalFromDom() {
+    if (this.optionalTotalCheckbox) {
+      this.includeOptionalTotal = this.optionalTotalCheckbox.nativeElement.checked;
+    }
+  }
 
   isEdit: boolean = false;
   isSaving: boolean = false;
@@ -195,6 +215,8 @@ export class CreateQuotatationComponent {
     sellingPrice: number;
     totalProfit: number;
     discount: number;
+    optionalCost: number;
+    optionalTotal: number;
   }) {
     this.calculatedValues = values;
   }
@@ -254,6 +276,7 @@ export class CreateQuotatationComponent {
 
   async onDownloadPdf(includeStamp: boolean) {
     this.submit = true;
+    this.syncIncludeOptionalTotalFromDom();
 
     if (this.quoteForm.valid) {
       this.isDownloading = true;
@@ -282,6 +305,9 @@ export class CreateQuotatationComponent {
 
       const finalQuoteData: getQuotatation =
         quoteData as unknown as getQuotatation;
+      finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
+        finalQuoteData.optionalItems,
+      );
 
       const pdfDoc = this._quoteService.generatePDF(
         finalQuoteData,
@@ -298,6 +324,7 @@ export class CreateQuotatationComponent {
 
   async onPreviewPdf() {
     this.submit = true;
+    this.syncIncludeOptionalTotalFromDom();
     if (this.quoteForm.valid) {
       this.isPreviewing = true;
 
@@ -329,6 +356,9 @@ export class CreateQuotatationComponent {
 
         const finalQuoteData: getQuotatation =
           quoteData as unknown as getQuotatation;
+        finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
+          finalQuoteData.optionalItems,
+        );
 
         const pdfDoc = await this._quoteService.generatePDF(
           finalQuoteData,
@@ -354,38 +384,63 @@ export class CreateQuotatationComponent {
     this.submit = true;
 
     if (this.quoteForm.valid) {
-      this.isSaving = true;
-      const quoteFormValue = this.quoteForm.value;
-
-      // Create a deep copy of the form value
-      const sanitizedQuoteFormValue = JSON.parse(
-        JSON.stringify(quoteFormValue),
-      );
-      if (!this.isEdit && this.estimatedOptionalItems?.length) {
-        sanitizedQuoteFormValue.optionalItems = this.estimatedOptionalItems;
-      }
-      // Remove unitPrice from each item detail
-      sanitizedQuoteFormValue.optionalItems.forEach((optionItem: any) => {
-        optionItem.items.forEach((item: any) => {
-          item.itemDetails.forEach((detail: any) => {
-            delete detail.unitPrice;
-          });
-        });
+      const dialogRef = this._dialog.open(ActionConfirmationDialogComponent, {
+        data: {
+          title: 'Save Quotation',
+          description:
+            'Are you sure you want to save this quotation? You can add a note to help you remember the context of this save.',
+          icon: 'heroExclamationTriangle',
+          iconColor: 'orange',
+          confirmButtonText: 'Save',
+          requireComment: true,
+          showComment: true,
+          commentLabel: 'Note',
+          commentPlaceholder: 'Enter a note about this quotation...',
+        },
       });
 
-      if (!sanitizedQuoteFormValue.enqId) {
-        delete sanitizedQuoteFormValue.enqId;
-      }
-
-      this._quoteService
-        .saveQuotation(sanitizedQuoteFormValue)
-        .subscribe((res: Quotatation) => {
-          this._router.navigate(['/quotations']);
-        });
+      dialogRef.afterClosed().subscribe((result) => {
+        if (result?.isConfirmed) {
+          this.saveQuote(result.comment);
+        }
+      });
     } else {
       this.isSaving = false;
       this.toastr.warning('Check the fields properly!', 'Warning !');
     }
+  }
+
+  private saveQuote(saveNote: string) {
+    this.isSaving = true;
+    const quoteFormValue = this.quoteForm.value;
+
+    // Create a deep copy of the form value
+    const sanitizedQuoteFormValue = JSON.parse(
+      JSON.stringify(quoteFormValue),
+    );
+    if (!this.isEdit && this.estimatedOptionalItems?.length) {
+      sanitizedQuoteFormValue.optionalItems = this.estimatedOptionalItems;
+    }
+    // Remove unitPrice from each item detail
+    sanitizedQuoteFormValue.optionalItems.forEach((optionItem: any) => {
+      optionItem.items.forEach((item: any) => {
+        item.itemDetails.forEach((detail: any) => {
+          delete detail.unitPrice;
+        });
+      });
+    });
+
+    if (!sanitizedQuoteFormValue.enqId) {
+      delete sanitizedQuoteFormValue.enqId;
+    }
+
+    sanitizedQuoteFormValue.saveNote = saveNote;
+
+    this._quoteService
+      .saveQuotation(sanitizedQuoteFormValue)
+      .subscribe((res: Quotatation) => {
+        this._router.navigate(['/quotations']);
+      });
   }
 
   patchValues(data: getEnquiry) {
@@ -411,10 +466,49 @@ export class CreateQuotatationComponent {
     this.calculateTotalValuesAfterPactch();
   }
 
+  calculateTotalCost() {
+    return this.includeOptionalTotal
+      ? this.calculatedValues.totalCost + (this.calculatedValues.optionalCost || 0)
+      : this.calculatedValues.totalCost;
+  }
+
+  calculateSubtotal() {
+    return this.includeOptionalTotal
+      ? this.calculatedValues.sellingPrice + (this.calculatedValues.optionalTotal || 0)
+      : this.calculatedValues.sellingPrice;
+  }
+
   calculateDiscountPrice() {
-    return (
-      this.calculatedValues.sellingPrice - (this.calculatedValues.discount || 0)
-    );
+    return this.calculateSubtotal() - (this.calculatedValues.discount || 0);
+  }
+
+  calculateProfitMarginAmount() {
+    return this.calculateDiscountPrice() - this.calculateTotalCost();
+  }
+
+  calculateProfitMarginPercentage() {
+    const sellingPrice = this.calculateDiscountPrice();
+    const totalCost = this.calculateTotalCost();
+    return sellingPrice > 0
+      ? ((sellingPrice - totalCost) / sellingPrice) * 100
+      : 0;
+  }
+
+  calculateFinalTotalAmount() {
+    return this.calculateDiscountPrice();
+  }
+
+  private getOptionalItemsForPdf(
+    optionalItems: OptionalItems[],
+  ): OptionalItems[] {
+    const includeOptionalTotal = this.includeOptionalTotal;
+
+    return optionalItems.map((option) => ({
+      ...option,
+      items: includeOptionalTotal
+        ? [...option.items]
+        : option.items.filter((item) => !item.isOptional),
+    }));
   }
 
   calculateProfit(i: number, j: number, k: number) {
@@ -443,6 +537,8 @@ export class CreateQuotatationComponent {
       // Calculate the total values of this.calculatedValues by using data.preSale.estimations.currency
       let totalCost = 0;
       let totalSellingPrice = 0;
+      let optionalCost = 0;
+      let optionalTotal = 0;
 
       this.estimatedOptionalItems[this.patchSelectedOption].items.forEach(
         (item, j) => {
@@ -451,16 +547,21 @@ export class CreateQuotatationComponent {
             const unitCost = itemDetail.unitCost;
             const profitMargin = itemDetail.profit / 100;
 
-            // Calculate total cost
-            totalCost += quantity * unitCost;
-
             // Calculate unit price with profit margin
             const unitPrice = Math.ceil(
               Number((unitCost / (1 - profitMargin)).toFixed(2)),
             );
 
-            // Calculate total selling price
-            totalSellingPrice += unitPrice * quantity;
+            if (item.isOptional) {
+              optionalCost += quantity * unitCost;
+              optionalTotal += unitPrice * quantity;
+            } else {
+              // Calculate total cost
+              totalCost += quantity * unitCost;
+
+              // Calculate total selling price
+              totalSellingPrice += unitPrice * quantity;
+            }
           });
         },
       );
@@ -475,6 +576,8 @@ export class CreateQuotatationComponent {
         totalProfit: profitMarginPercentage,
         discount:
           this.estimatedOptionalItems[this.patchSelectedOption].totalDiscount,
+        optionalCost: optionalCost,
+        optionalTotal: optionalTotal,
       };
     }
   }

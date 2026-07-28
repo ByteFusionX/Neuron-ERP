@@ -16,6 +16,7 @@ interface QuoteItemDetail {
 
 interface QuoteItem {
     itemName: string;
+    isOptional?: boolean;
     itemDetails: QuoteItemDetail[]
 }
 
@@ -67,6 +68,7 @@ interface Quotation extends Document {
     rfqNo: string;
     closingDate: Date;
     eventId: any;
+    saveNote: string;
 }
 
 export enum quoteStatus {
@@ -131,6 +133,10 @@ const quoteItem = new Schema<QuoteItem>({
     itemName: {
         type: String,
         required: true,
+    },
+    isOptional: {
+        type: Boolean,
+        default: false,
     },
     itemDetails: {
         type: [quoteItemDetailsSchema],
@@ -290,6 +296,10 @@ const quotationSchema = new Schema<Quotation>({
     eventId: {
         type: Schema.Types.ObjectId,
         ref: 'Event'
+    },
+    saveNote: {
+        type: String,
+        required: false,
     },
 });
 

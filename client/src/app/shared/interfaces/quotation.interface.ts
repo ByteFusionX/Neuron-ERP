@@ -6,6 +6,7 @@ import { Files, getEnquiry } from "./enquiry.interface";
 
 export interface QuoteItem {
     itemName: string;
+    isOptional?: boolean;
     itemDetails: QuoteItemDetail[]
 }
 
@@ -57,6 +58,7 @@ export interface Quotatation {
     rfqNo: string;
     closingDate: string;
     eventId?: any;
+    saveNote?: string;
 }
 
 export interface getQuotatation {
@@ -81,6 +83,7 @@ export interface getQuotatation {
     rfqNo: string;
     closingDate: string;
     eventId?: any;
+    saveNote?: string;
 }
 
 export interface DefaultAndText {
@@ -115,6 +118,7 @@ export interface quotatationForm {
     status: QuoteStatus;
     rfqNo: string;
     closingDate: string;
+    saveNote?: string;
 }
 
 export enum QuoteStatus {

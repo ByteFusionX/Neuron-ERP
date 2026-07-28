@@ -31,9 +31,9 @@
                 </button>
                 <button 
                     type="submit" 
-                    class="px-4 py-2 text-white rounded-md"
+                    class="px-4 py-2 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                     [ngClass]="{
-                        'bg-red-600': data.iconColor === 'red',
+                        'bg-orange-600': data.iconColor === 'orange',
                         'bg-green-600': data.iconColor === 'green',
                         'bg-violet-600': !data.iconColor
                     }"
