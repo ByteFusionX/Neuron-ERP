@@ -5,6 +5,7 @@ import {
     getDealSheet,
     getNextQuoteId,
     getQuotations,
+    getQuoteNote,
     getReportDetails,
     markAsQuotationSeened,
     markAsSeenDeal,
@@ -34,6 +35,7 @@ quoteRouter.post('/deal/revoke', revokeDeal)
 quoteRouter.post('/deal/get', getDealSheet)
 quoteRouter.post('/deal/approved/get', getApprovedDealSheet)
 quoteRouter.post('/get', getQuotations)
+quoteRouter.get('/note/:quoteId', getQuoteNote)
 quoteRouter.post('/report', getReportDetails)
 quoteRouter.get('/total', totalQuotation)
 quoteRouter.post('/nextQuoteId', getNextQuoteId)

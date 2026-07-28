@@ -528,4 +528,8 @@ export class QuotationService {
     return this.http.post<any>(`${this.api}/quotation/delete`, data);
   }
 
+  getQuoteNote(quoteId: string): Observable<{ saveNote: string, createdBy: string }> {
+    return this.http.get<{ saveNote: string, createdBy: string }>(`${this.api}/quotation/note/${quoteId}`);
+  }
+
 }

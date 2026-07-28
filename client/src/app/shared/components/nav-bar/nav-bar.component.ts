@@ -44,13 +44,13 @@ export class NavBarComponent {
     this.employeeData$ = this._employeeService.employeeData$
     this.employeeData$.subscribe((emp) => {
       if(emp){
-        console.log(emp)
         this.showPortalMangement = Object.values(emp.category.privileges.portalManagement).some(value => value === true);
       }else{
         this._employeeService.getEmployeeData()
       }
     })
   }
+  
   reduceSideBar() {
     this.showFullBar = !this.showFullBar
     this.reduce.emit(this.showFullBar)

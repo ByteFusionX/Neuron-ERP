@@ -1477,6 +1477,21 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
         next(error);
     }
 }
+export const getQuoteNote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const quote = await Quotation.findById(quoteId).select('saveNote createdBy');
+
+        if (!quote) {
+            return res.status(404).json({ message: 'Quote not found' });
+        }
+
+        return res.status(200).json({ saveNote: quote.saveNote || '', createdBy: quote.createdBy });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export const removeLpo = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { quoteId, fileName } = req.params;

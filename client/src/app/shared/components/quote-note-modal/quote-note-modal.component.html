@@ -1,0 +1,16 @@
+<app-modal-layout
+  title="Quote Note"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6">
+
+  <div *ngIf="isLoading" class="flex justify-center items-center py-12">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
+  </div>
+
+  <div *ngIf="!isLoading">
+    <p *ngIf="note" class="w-full whitespace-pre-line text-gray-800">{{ note }}</p>
+    <p *ngIf="!note" class="text-gray-500">No note available for this quote.</p>
+  </div>
+
+</app-modal-layout>

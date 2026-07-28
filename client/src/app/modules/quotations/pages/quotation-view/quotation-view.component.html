@@ -2,6 +2,13 @@
     <div class="border-b p-3 px-9 flex justify-between items-center">
         <h3 class="text-md font-medium">Quote - {{quoteData.quoteId}} </h3>
         <div class="flex gap-2">
+            <button class="bg-gray-500 hover:bg-gray-400 text-white font-medium py-2.5 px-4 rounded text-sm"
+                (click)="onViewNote()" *ngIf="isNoteOwner">
+                <div class="flex justify-center items-center gap-2">
+                    <ng-icon name="heroDocumentText"></ng-icon>
+                    Note
+                </div>
+            </button>
             <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm"
                 (click)="onQuoteEdit()">
                 <div class="flex justify-center items-center gap-2">

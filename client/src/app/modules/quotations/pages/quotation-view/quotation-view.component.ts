@@ -5,7 +5,7 @@ import { NavigationExtras, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
@@ -14,6 +14,7 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { Quotatation, getQuotatation, quotatationForm } from 'src/app/shared/interfaces/quotation.interface';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { QuoteNoteModalComponent } from 'src/app/shared/components/quote-note-modal/quote-note-modal.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { NgIcon } from '@ng-icons/core';
 import { NgIf, NgFor, DecimalPipe, DatePipe } from '@angular/common';
@@ -40,6 +41,8 @@ export class QuotationViewComponent {
   progress: number = 0;
   selectedOption: number = 0;
   isDeleteOption:boolean = false;
+  isNoteOwner:boolean = false;
+  employeeData$!: Observable<getEmployee | undefined>
 
   subscriptions = new Subscription();
 
@@ -65,12 +68,26 @@ export class QuotationViewComponent {
 
   getQuoteData() {
     const navigation = this._router.getCurrentNavigation();
-
     if (navigation && navigation.extras.state) {
       this.quoteData = navigation.extras.state as getQuotatation;
+      this.employeeData$ = this._employeeService.employeeData$
+    this.employeeData$.subscribe((emp) => {
+      if(emp){
+        if(emp._id === this.quoteData.createdBy._id){
+          this.isNoteOwner = true
+        }
+      }
+    })
     } else {
       this._router.navigate(['/quotations']);
     }
+  }
+
+  onViewNote() {
+    this._dialog.open(QuoteNoteModalComponent, {
+      data: { quoteId: this.quoteData._id },
+      width: '500px'
+    });
   }
 
   onQuoteEdit() {
