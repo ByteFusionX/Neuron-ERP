@@ -21,7 +21,7 @@
           <th
             scope="col"
             resizable
-            class="w-96 border-l border-r border-t hover:border-r-slate-950"
+            class="w-96 border-l border-r border-t"
             key="itemDetail"
           >
             <div class="px-6 py-3">Item Details</div>
@@ -30,7 +30,7 @@
             scope="col"
             resizable
             key="qty"
-            class="border-l border-r border-t hover:border-r-slate-950 text-center min-w-[66px]"
+            class="border-l border-r border-t text-center min-w-[66px]"
           >
             <div class="px-2 py-3">QTY</div>
           </th>
@@ -38,7 +38,7 @@
             scope="col"
             resizable
             key="unitCost"
-            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+            class="border-l border-r border-t text-center"
           >
             <div class="px-6 py-3">Unit Cost</div>
           </th>
@@ -46,7 +46,7 @@
             scope="col"
             resizable
             key="totalCost"
-            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+            class="border-l border-r border-t text-center"
           >
             <div class="px-6 py-3">Total Cost</div>
           </th>
@@ -54,7 +54,7 @@
             scope="col"
             resizable
             key="profit"
-            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+            class="border-l border-r border-t text-center"
           >
             <div class="px-6 py-3">Profit</div>
           </th>
@@ -62,7 +62,7 @@
             scope="col"
             resizable
             key="unitSellingPrice"
-            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+            class="border-l border-r border-t text-center"
           >
             <div class="px-6 py-3">Unit Price</div>
           </th>
@@ -70,7 +70,7 @@
             scope="col"
             resizable
             key="totalPrice"
-            class="border-l border-r border-t hover:border-r-slate-950 text-center"
+            class="border-l border-r border-t text-center"
           >
             <div class="px-6 py-3">Total Price</div>
           </th>
@@ -78,7 +78,7 @@
             scope="col"
             resizable
             key="avbl"
-            class="border-l border-r border-t hover:border-r-slate-950 text-center min-w-[90px]"
+            class="border-l border-r border-t text-center min-w-[90px]"
           >
             <div class="px-2 py-3">AVBL.</div>
           </th>
@@ -205,9 +205,11 @@
                 >
                   <input
                     appNoLeadingSpace
+                    appNoNegativeNumber
                     formControlName="quantity"
                     class="font-normal appearance-none block w-full text-center rounded py-5 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                     type="number"
+                    min="0"
                     placeholder="00"
                     (input)="
                       calculateunitSellingPriceForInput(
@@ -228,9 +230,11 @@
                 >
                   <input
                     appNoLeadingSpace
+                    appNoNegativeNumber
                     formControlName="unitCost"
                     class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                     type="number"
+                    min="0"
                     placeholder="00.00"
                     (input)="
                       calculateunitSellingPriceForInput(
@@ -263,9 +267,11 @@
                   <div class="flex justify-center items-center">
                     <input
                       appNoLeadingSpace
+                      appNoNegativeNumber
                       formControlName="profit"
                       class="font-normal appearance-none block w-9 text-right rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                       type="number"
+                      min="0"
                       placeholder="00"
                       (input)="
                         calculateunitSellingPriceForInput(
@@ -292,9 +298,11 @@
                 <td class="border px-6 py-3 text-center">
                   <input
                     appNoLeadingSpace
+                    appNoNegativeNumber
                     formControlName="unitSellingPrice"
                     class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                     type="number"
+                    min="0"
                     placeholder="00.00"
                     (input)="
                       calculateProfit(optionIndex, itemIndex, itemDetailIndex)
@@ -361,8 +369,10 @@
                 >Discount:
               </label>
               <input
+                appNoNegativeNumber
                 formControlName="totalDiscount"
                 type="number"
+                min="0"
                 placeholder="Enter discount"
                 class="appearance-none block bg-white text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 ml-2 w-1/6"
               />

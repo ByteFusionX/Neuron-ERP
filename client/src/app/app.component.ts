@@ -179,5 +179,4 @@ export class AppComponent implements OnDestroy, OnInit {
     this.destroy$.complete();
     this.subscriptions.unsubscribe()
   }
-
 }

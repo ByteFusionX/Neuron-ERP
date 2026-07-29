@@ -16,6 +16,7 @@ import { Subject } from 'rxjs';
 import { NgFor, NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { NgSelectComponent } from '@ng-select/ng-select';
+import { appNoNegativeNumber } from '../../directives/no-negative-number.directive';
 
 @Component({
   selector: 'optional-items',
@@ -28,6 +29,7 @@ import { NgSelectComponent } from '@ng-select/ng-select';
     NgIf,
     NgIcon,
     NgSelectComponent,
+    appNoNegativeNumber,
   ],
 })
 export class OptionalItemsComponent implements OnInit {
@@ -44,7 +46,6 @@ export class OptionalItemsComponent implements OnInit {
   }>();
 
   selectedOption: number = 0;
-
   removedItems: any[] = [];
   removedItemDetails: any[] = [];
   availabilityDefaultOptions: string[] = [
@@ -155,19 +156,26 @@ export class OptionalItemsComponent implements OnInit {
             itemDetails: this._fb.array([
               this._fb.group({
                 detail: ['', Validators.required],
-                quantity: ['', Validators.required],
-                unitCost: ['', Validators.required],
+                quantity: ['', [Validators.required, Validators.min(0)]],
+                unitCost: ['', [Validators.required, Validators.min(0)]],
                 profit: [
                   '',
-                  [Validators.required, this.nonNegativeProfitValidator()],
+                  [
+                    Validators.required,
+                    Validators.min(0),
+                    this.nonNegativeProfitValidator(),
+                  ],
                 ],
-                unitSellingPrice: ['', Validators.required],
+                unitSellingPrice: [
+                  '',
+                  [Validators.required, Validators.min(0)],
+                ],
                 availability: ['', Validators.required],
               }),
             ]),
           }),
         ]),
-        totalDiscount: [0, Validators.required],
+        totalDiscount: [0, [Validators.min(0)]],
       }),
     );
   }
@@ -180,10 +188,10 @@ export class OptionalItemsComponent implements OnInit {
         itemDetails: this._fb.array([
           this._fb.group({
             detail: ['', Validators.required],
-            quantity: ['', Validators.required],
-            unitCost: ['', Validators.required],
-            profit: ['', Validators.required],
-            unitSellingPrice: [''],
+            quantity: ['', [Validators.required, Validators.min(0)]],
+            unitCost: ['', [Validators.required, Validators.min(0)]],
+            profit: ['', [Validators.required, Validators.min(0)]],
+            unitSellingPrice: ['', Validators.min(0)],
             availability: ['', Validators.required],
           }),
         ]),
@@ -194,10 +202,10 @@ export class OptionalItemsComponent implements OnInit {
   createItemDetail(): FormGroup {
     return this._fb.group({
       detail: ['', Validators.required],
-      quantity: ['', Validators.required],
-      unitCost: ['', Validators.required],
-      profit: ['', Validators.required],
-      unitSellingPrice: [''],
+      quantity: ['', [Validators.required, Validators.min(0)]],
+      unitCost: ['', [Validators.required, Validators.min(0)]],
+      profit: ['', [Validators.required, Validators.min(0)]],
+      unitSellingPrice: ['', Validators.min(0)],
       availability: ['', Validators.required],
     });
   }
@@ -310,7 +318,7 @@ export class OptionalItemsComponent implements OnInit {
             }),
           ),
         ),
-        totalDiscount: [option.totalDiscount, Validators.required],
+        totalDiscount: [option.totalDiscount ?? 0, [Validators.min(0)]],
       });
 
       this.optionalItems.insert(i, optionGroup);

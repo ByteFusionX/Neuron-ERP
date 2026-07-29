@@ -163,6 +163,7 @@
               id="quoteDate"
               type="date"
               placeholder="Email"
+              (click)="openDatePicker($event)"
             />
           </div>
           <div class="w-full md:w-1/3 px-3">
@@ -178,6 +179,7 @@
               class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
               id="closingDate"
               type="date"
+              (click)="openDatePicker($event)"
             />
           </div>
 
@@ -282,7 +284,7 @@
                     <th
                       scope="col"
                       resizable
-                      class="w-96 border-l border-r border-t hover:border-r-slate-950"
+                      class="w-96 border-l border-r border-t"
                       key="itemDetail"
                     >
                       <div class="px-6 py-3">Item Details</div>
@@ -291,7 +293,7 @@
                       scope="col"
                       resizable
                       key="qty"
-                      class="border-l border-r border-t hover:border-r-slate-950 text-center min-w-[66px]"
+                      class="border-l border-r border-t text-center min-w-[66px]"
                     >
                       <div class="px-2 py-3">QTY</div>
                     </th>
@@ -299,7 +301,7 @@
                       scope="col"
                       resizable
                       key="unitCost"
-                      class="border-l border-r border-t hover:border-r-slate-950 text-center"
+                      class="border-l border-r border-t text-center"
                     >
                       <div class="px-6 py-3">Unit Cost</div>
                     </th>
@@ -307,7 +309,7 @@
                       scope="col"
                       resizable
                       key="totalCost"
-                      class="border-l border-r border-t hover:border-r-slate-950 text-center"
+                      class="border-l border-r border-t text-center"
                     >
                       <div class="px-6 py-3">Total Cost</div>
                     </th>
@@ -315,7 +317,7 @@
                       scope="col"
                       resizable
                       key="profit"
-                      class="border-l border-r border-t hover:border-r-slate-950 text-center"
+                      class="border-l border-r border-t text-center"
                     >
                       <div class="px-6 py-3">Profit</div>
                     </th>
@@ -323,7 +325,7 @@
                       scope="col"
                       resizable
                       key="unitPrice"
-                      class="border-l border-r border-t hover:border-r-slate-950 text-center"
+                      class="border-l border-r border-t text-center"
                     >
                       <div class="px-6 py-3">Unit Price</div>
                     </th>
@@ -331,7 +333,7 @@
                       scope="col"
                       resizable
                       key="totalPrice"
-                      class="border-l border-r border-t hover:border-r-slate-950 text-center"
+                      class="border-l border-r border-t text-center"
                     >
                       <div class="px-6 py-3">Total Price</div>
                     </th>
@@ -339,7 +341,7 @@
                       scope="col"
                       resizable
                       key="avbl"
-                      class="border-l border-r border-t hover:border-r-slate-950 text-center min-w-[90px]"
+                      class="border-l border-r border-t text-center min-w-[90px]"
                     >
                       <div class="px-2 py-3">AVBL.</div>
                     </th>
@@ -635,7 +637,7 @@
           (click)="onDownloadPdf(true)"
         >
           <ng-icon
-            *ngIf="isDownloading"
+            *ngIf="isDownloadingStamped"
             class="spin"
             name="heroArrowPath"
           ></ng-icon>

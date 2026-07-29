@@ -14,6 +14,7 @@ export interface ActionConfirmationDialogData {
   commentPlaceholder?: string;
   showComment?: boolean;
   requireComment?: boolean;
+  initialComment?: string;
 }
 
 export interface ActionConfirmationDialogResult {
@@ -51,7 +52,7 @@ export class ActionConfirmationDialogComponent {
 
     // Initialize form
     this.form = this.fb.group({
-      comment: ['', this.data.requireComment ? [Validators.required] : []]
+      comment: [this.data.initialComment || '', this.data.requireComment ? [Validators.required] : []]
     });
   }
 

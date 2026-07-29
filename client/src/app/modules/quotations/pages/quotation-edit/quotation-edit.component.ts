@@ -19,6 +19,7 @@ import { fadeInOut } from 'src/app/shared/animations/animations';
 import { Note, Notes } from 'src/app/shared/interfaces/notes.interface';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 import { OptionalItemsComponent } from '../../../../shared/components/optional-items/optional-items.component';
 import { NgIcon } from '@ng-icons/core';
@@ -58,17 +59,42 @@ export class QuotationEditComponent {
   submit: boolean = false;
   isSaving: boolean = false;
   isDownloading: boolean = false;
+  isDownloadingStamped: boolean = false;
   isPreviewing: boolean = false;
   isTextSelected: boolean = false;
 
   @ViewChild('inputTextArea') inputTextArea!: ElementRef;
 
   estimatedOptionalItems!: OptionalItems[];
-  calculatedValues: { totalCost: number, sellingPrice: number, totalProfit: number, discount: number } = {
+  calculatedValues: {
+    totalCost: number;
+    sellingPrice: number;
+    totalProfit: number;
+    discount: number;
+    optionalCost: number;
+    optionalTotal: number;
+  } = {
     totalCost: 0,
     sellingPrice: 0,
     totalProfit: 0,
-    discount: 0
+    discount: 0,
+    optionalCost: 0,
+    optionalTotal: 0,
+  }
+
+  includeOptionalTotal: boolean = false;
+
+  @ViewChild('optionalTotalCheckbox')
+  optionalTotalCheckbox!: ElementRef<HTMLInputElement>;
+
+  onIncludeOptionalTotalChange(event: Event) {
+    this.includeOptionalTotal = (event.target as HTMLInputElement).checked;
+  }
+
+  private syncIncludeOptionalTotalFromDom() {
+    if (this.optionalTotalCheckbox) {
+      this.includeOptionalTotal = this.optionalTotalCheckbox.nativeElement.checked;
+    }
   }
 
   constructor(
@@ -197,22 +223,72 @@ export class QuotationEditComponent {
     }
   }
 
-  onCalculatedValuesReceived(values: { totalCost: number, sellingPrice: number, totalProfit: number, discount: number }) {
+  onCalculatedValuesReceived(values: {
+    totalCost: number;
+    sellingPrice: number;
+    totalProfit: number;
+    discount: number;
+    optionalCost: number;
+    optionalTotal: number;
+  }) {
     this.calculatedValues = values;
   }
 
+  calculateTotalCost() {
+    return this.includeOptionalTotal
+      ? this.calculatedValues.totalCost + (this.calculatedValues.optionalCost || 0)
+      : this.calculatedValues.totalCost;
+  }
+
+  calculateSubtotal() {
+    return this.includeOptionalTotal
+      ? this.calculatedValues.sellingPrice + (this.calculatedValues.optionalTotal || 0)
+      : this.calculatedValues.sellingPrice;
+  }
+
   calculateDiscountPrice() {
-    return (
-      this.calculatedValues.sellingPrice -
-      (this.calculatedValues.discount || 0)
-    );
+    return this.calculateSubtotal() - (this.calculatedValues.discount || 0);
+  }
+
+  calculateProfitMarginAmount() {
+    return this.calculateDiscountPrice() - this.calculateTotalCost();
+  }
+
+  calculateProfitMarginPercentage() {
+    const sellingPrice = this.calculateDiscountPrice();
+    const totalCost = this.calculateTotalCost();
+    return sellingPrice > 0
+      ? ((sellingPrice - totalCost) / sellingPrice) * 100
+      : 0;
+  }
+
+  calculateFinalTotalAmount() {
+    return this.calculateDiscountPrice();
+  }
+
+  private getOptionalItemsForPdf(
+    optionalItems: OptionalItems[],
+  ): OptionalItems[] {
+    const includeOptionalTotal = this.includeOptionalTotal;
+
+    return optionalItems.map((option) => ({
+      ...option,
+      items: includeOptionalTotal
+        ? [...option.items]
+        : option.items.filter((item) => !item.isOptional),
+    }));
   }
 
   async onDownloadPdf(includeStamp: boolean) {
     this.submit = true;
+    this.syncIncludeOptionalTotalFromDom();
 
     if (this.quoteForm.valid) {
-      this.isDownloading = true;
+      if (includeStamp) {
+        this.isDownloadingStamped = true;
+      } else {
+        this.isDownloading = true;
+      }
       let quoteData: quotatationForm = this.quoteForm.value;
 
       const customers = await this.customers$.pipe(first()).toPromise() as getCustomer[];
@@ -233,11 +309,18 @@ export class QuotationEditComponent {
       quoteData.quoteId = this.quoteData.quoteId;
 
       const finalQuoteData: getQuotatation = quoteData as getQuotatation;
+      finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
+        finalQuoteData.optionalItems,
+      );
 
       const pdfDoc = this._quoteService.generatePDF(finalQuoteData, includeStamp)
       pdfDoc.then((pdf) => {
         pdf.download(quoteData.quoteId as string)
-        this.isDownloading = false;
+        if (includeStamp) {
+          this.isDownloadingStamped = false;
+        } else {
+          this.isDownloading = false;
+        }
       })
     } else {
       this.toastr.warning('Check the fields properly!', 'Warning !')
@@ -247,6 +330,7 @@ export class QuotationEditComponent {
 
   async onPreviewPdf() {
     this.submit = true;
+    this.syncIncludeOptionalTotalFromDom();
     if (this.quoteForm.valid) {
       this.isPreviewing = true;
 
@@ -269,6 +353,9 @@ export class QuotationEditComponent {
         })
 
         const finalQuoteData: getQuotatation = quoteData as unknown as getQuotatation;
+        finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
+          finalQuoteData.optionalItems,
+        );
 
         const pdfDoc = await this._quoteService.generatePDF(finalQuoteData, true);
         pdfDoc.getBlob((blob: Blob) => {
@@ -290,15 +377,52 @@ export class QuotationEditComponent {
   onQuoteSaveSubmit() {
     this.submit = true;
     if (this.quoteForm.valid) {
-      this.isSaving = true;
-      this._quoteService.updateQuotation(this.quoteForm.value, this.quoteData._id).subscribe((res: Quotatation) => {
-        this._router.navigate(['/quotations'])
-      })
+      const dialogRef = this._dialog.open(ActionConfirmationDialogComponent, {
+        data: {
+          title: 'Save Quotation',
+          description:
+            'Are you sure you want to save this quotation? You can add a note to help you remember the context of this save.',
+          icon: 'heroExclamationTriangle',
+          iconColor: 'orange',
+          confirmButtonText: 'Save',
+          requireComment: true,
+          showComment: true,
+          commentLabel: 'Note',
+          commentPlaceholder: 'Enter a note about this quotation...',
+          initialComment: this.quoteData?.saveNote || '',
+        },
+      });
+
+      dialogRef.afterClosed().subscribe((result) => {
+        if (result?.isConfirmed) {
+          this.saveQuote(result.comment);
+        }
+      });
     } else {
       this.isSaving = false;
       this.toastr.warning('Check the fields properly!', 'Warning !')
     }
 
+  }
+
+  private saveQuote(saveNote: string) {
+    this.isSaving = true;
+    const quoteFormValue = this.quoteForm.value;
+
+    const sanitizedQuoteFormValue = JSON.parse(JSON.stringify(quoteFormValue));
+    sanitizedQuoteFormValue.optionalItems.forEach((optionItem: any) => {
+      optionItem.items.forEach((item: any) => {
+        item.itemDetails.forEach((detail: any) => {
+          delete detail.unitPrice;
+        });
+      });
+    });
+
+    sanitizedQuoteFormValue.saveNote = saveNote;
+
+    this._quoteService.updateQuotation(sanitizedQuoteFormValue, this.quoteData._id).subscribe((res: Quotatation) => {
+      this._router.navigate(['/quotations'])
+    })
   }
 
   checkTextSelection(textarea: HTMLTextAreaElement) {

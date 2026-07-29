@@ -33,6 +33,7 @@ import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe'
 export class QuotationViewComponent {
   quoteData!: getQuotatation;
   isDownloading: boolean = false;
+  isDownloadingStamped: boolean = false;
   isPreviewing: boolean = false;
   showRevision: boolean = false;
   isSaving: boolean = false;
@@ -100,12 +101,20 @@ export class QuotationViewComponent {
   }
 
   onDownloadPdf(includeStamp:boolean) {
-    this.isDownloading = true;
+    if (includeStamp) {
+      this.isDownloadingStamped = true;
+    } else {
+      this.isDownloading = true;
+    }
     let quoteData: getQuotatation = this.quoteData;
     const pdfDoc = this.quotationService.generatePDF(quoteData, includeStamp)
     pdfDoc.then((pdf) => {
       pdf.download(quoteData.quoteId as string)
-      this.isDownloading = false;
+      if (includeStamp) {
+        this.isDownloadingStamped = false;
+      } else {
+        this.isDownloading = false;
+      }
     })
   }
 

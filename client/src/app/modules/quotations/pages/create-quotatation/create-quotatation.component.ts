@@ -141,6 +141,7 @@ export class CreateQuotatationComponent {
   isSaving: boolean = false;
   submit: boolean = false;
   isDownloading: boolean = false;
+  isDownloadingStamped: boolean = false;
   isPreviewing: boolean = false;
 
   estimatedOptionalItems!: OptionalItems[];
@@ -279,7 +280,11 @@ export class CreateQuotatationComponent {
     this.syncIncludeOptionalTotalFromDom();
 
     if (this.quoteForm.valid) {
-      this.isDownloading = true;
+      if (includeStamp) {
+        this.isDownloadingStamped = true;
+      } else {
+        this.isDownloading = true;
+      }
       let quoteData: quotatationForm = this.quoteForm.value;
 
       if (!this.isEdit && this.estimatedOptionalItems?.length) {
@@ -315,7 +320,11 @@ export class CreateQuotatationComponent {
       );
       pdfDoc.then((pdf) => {
         pdf.download(quoteData.quoteId as string);
-        this.isDownloading = false;
+        if (includeStamp) {
+          this.isDownloadingStamped = false;
+        } else {
+          this.isDownloading = false;
+        }
       });
     } else {
       this.toastr.warning('Check the fields properly!', 'Warning !');
@@ -589,5 +598,12 @@ export class CreateQuotatationComponent {
 
   onEnquiryEdit() {
     this.isEdit = true;
+  }
+
+  openDatePicker(event: Event) {
+    const input = event.target as HTMLInputElement & {
+      showPicker?: () => void;
+    };
+    input.showPicker?.();
   }
 }

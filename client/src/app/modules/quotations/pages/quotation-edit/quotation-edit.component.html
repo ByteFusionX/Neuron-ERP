@@ -85,10 +85,6 @@
                             <ng-option value="USD">USD</ng-option>
                         </ng-select>
                     </div>
-
-
-
-
                 </div>
 
                 <div class="flex flex-wrap -mx-3 ">
@@ -127,11 +123,29 @@
                 <table class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50">
                     <tbody>
                         <tr class=" border-b ">
+                            <td class="px-2 py-3 border text-center font-medium text-xl">
+                                <div class="flex justify-center items-center gap-2">
+                                    <input
+                                        #optionalTotalCheckbox
+                                        type="checkbox"
+                                        id="includeOptionalTotal"
+                                        [checked]="includeOptionalTotal"
+                                        (change)="onIncludeOptionalTotalChange($event)"
+                                        class="w-4 h-4"
+                                    />
+                                    <label for="includeOptionalTotal">Optional Items Total</label>
+                                </div>
+                            </td>
+                            <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
+                                {{ calculatedValues.optionalTotal | numberFormatter }}
+                            </td>
+                        </tr>
+                        <tr class=" border-b ">
                             <td class="px-2 py-3  border text-center font-medium text-xl ">
                                 Total Cost
                             </td>
                             <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
-                                {{calculatedValues.totalCost | numberFormatter}}
+                                {{calculateTotalCost() | numberFormatter}}
                             </td>
                         </tr>
                         <tr class=" border-b ">
@@ -147,7 +161,7 @@
                                 Profit Margin
                             </td>
                             <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
-                                {{(calculateDiscountPrice() - calculatedValues.totalCost) | numberFormatter}}
+                                {{calculateProfitMarginAmount() | numberFormatter}}
                             </td>
                         </tr>
                         <tr class=" border-b ">
@@ -155,7 +169,7 @@
                                 Profit margin with %
                             </td>
                             <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
-                                {{calculatedValues.totalProfit.toFixed(2)}}%
+                                {{calculateProfitMarginPercentage().toFixed(2)}}%
                             </td>
                         </tr>
 
@@ -168,7 +182,7 @@
                                 Subtotal
                             </td>
                             <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
-                                {{calculatedValues.sellingPrice | numberFormatter}}
+                                {{calculateSubtotal() | numberFormatter}}
                             </td>
                         </tr>
                         <tr class=" border-b ">
@@ -184,7 +198,7 @@
                                 Total Amount
                             </td>
                             <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
-                                {{ calculateDiscountPrice() | numberFormatter}}
+                                {{ calculateFinalTotalAmount() | numberFormatter}}
                             </td>
                         </tr>
 
@@ -239,7 +253,7 @@
                 <button type="button"
                     class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm  mr-3 w-full flex justify-center items-center gap-2 whitespace-nowrap"
                     (click)="onDownloadPdf(true)">
-                    <ng-icon *ngIf="isDownloading" class="spin" name="heroArrowPath"></ng-icon>
+                    <ng-icon *ngIf="isDownloadingStamped" class="spin" name="heroArrowPath"></ng-icon>
                     Download PDF (Stamped)
                 </button>
                 <button type="button"
