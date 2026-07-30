@@ -49,6 +49,7 @@ export class PaginationComponent implements OnChanges {
   onChangeSelect(event: Event) {
     let selected = (event.target as HTMLSelectElement).value
     this.row = Number(selected)
+    this.selectedPage = 1
     this.onLinkClick(this.selectedPage)
   }
 
