@@ -577,10 +577,11 @@
           </ng-select>
           <textarea
             appNoLeadingSpace
+            appBulletList
             formControlName="customerNote"
             [class.border-red-500]="f['customerNote'].invalid && submit"
             rows="6"
-            class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"
             id="customerNote"
             placeholder="Customer Note"
           ></textarea>
@@ -606,10 +607,11 @@
           </ng-select>
           <textarea
             appNoLeadingSpace
+            appBulletList
             [class.border-red-500]="f['termsAndCondition'].invalid && submit"
             formControlName="termsAndCondition"
             rows="6"
-            class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"
             id="termsAndCondition"
             placeholder="Terms and Conditions"
           ></textarea>

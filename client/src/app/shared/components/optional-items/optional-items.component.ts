@@ -361,11 +361,10 @@ export class OptionalItemsComponent implements OnInit {
       k
     ] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitSellingPrice = Math.ceil(
+    const unitSellingPrice =
       Number(
         (itemDetail.get('unitCost')?.value / (1 - decimalMargin)).toFixed(2),
-      ) || 0,
-    );
+      ) || 0;
     return unitSellingPrice;
   }
 
@@ -380,7 +379,7 @@ export class OptionalItemsComponent implements OnInit {
       ) || 0;
     itemDetail
       .get('unitSellingPrice')
-      ?.setValue(Number(Math.ceil(unitSellingPrice)).toFixed(2));
+      ?.setValue(unitSellingPrice.toFixed(2));
   }
 
   calculateProfit(i: number, j: number, k: number) {

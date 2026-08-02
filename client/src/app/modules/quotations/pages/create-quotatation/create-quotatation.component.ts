@@ -59,6 +59,7 @@ import { ActionConfirmationDialogComponent } from 'src/app/shared/components/act
 import { NgIf, NgFor, AsyncPipe, DecimalPipe } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { appBulletList } from '../../../../shared/directives/bullet-list.directive';
 import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
 import { OptionalItemsComponent } from '../../../../shared/components/optional-items/optional-items.component';
 import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
@@ -80,6 +81,7 @@ import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe'
     NgFooterTemplateDirective,
     RouterLink,
     appNoLeadingSpace,
+    appBulletList,
     ResizableComponent,
     OptionalItemsComponent,
     AsyncPipe,
@@ -557,8 +559,8 @@ export class CreateQuotatationComponent {
             const profitMargin = itemDetail.profit / 100;
 
             // Calculate unit price with profit margin
-            const unitPrice = Math.ceil(
-              Number((unitCost / (1 - profitMargin)).toFixed(2)),
+            const unitPrice = Number(
+              (unitCost / (1 - profitMargin)).toFixed(2),
             );
 
             if (item.isOptional) {
