@@ -108,14 +108,21 @@ export class QuotationViewComponent {
     }
     let quoteData: getQuotatation = this.quoteData;
     const pdfDoc = this.quotationService.generatePDF(quoteData, includeStamp)
-    pdfDoc.then((pdf) => {
-      pdf.download(quoteData.quoteId as string)
-      if (includeStamp) {
-        this.isDownloadingStamped = false;
-      } else {
-        this.isDownloading = false;
-      }
-    })
+    pdfDoc
+      .then((pdf) => {
+        pdf.download(quoteData.quoteId as string)
+      })
+      .catch((error) => {
+        console.error('Error generating PDF:', error);
+        this.toast.error('Error generating PDF. Please try again.');
+      })
+      .finally(() => {
+        if (includeStamp) {
+          this.isDownloadingStamped = false;
+        } else {
+          this.isDownloading = false;
+        }
+      });
   }
 
   onPreviewPdf() {
@@ -196,6 +203,9 @@ export class QuotationViewComponent {
   calculateAllTotalCost() {
     let totalCost = 0;
     this.quoteData.optionalItems[this.selectedOption].items.forEach((item, j) => {
+        if (item.isOptional && !item.includeInTotal) {
+          return;
+        }
         item.itemDetails.forEach((itemDetail, k) => {
           totalCost += this.calculateTotalCost(this.selectedOption, j, k)
         })
@@ -207,6 +217,9 @@ export class QuotationViewComponent {
   calculateSellingPrice(): number {
     let totalCost = 0;
     this.quoteData.optionalItems[this.selectedOption].items.forEach((item, j) => {
+      if (item.isOptional && !item.includeInTotal) {
+        return;
+      }
       item.itemDetails.forEach((itemDetail, k) => {
           totalCost += this.calculateTotalPrice(this.selectedOption, j, k)
         })

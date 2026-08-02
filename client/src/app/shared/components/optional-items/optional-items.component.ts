@@ -41,8 +41,6 @@ export class OptionalItemsComponent implements OnInit {
     sellingPrice: number;
     totalProfit: number;
     discount: number;
-    optionalCost: number;
-    optionalTotal: number;
   }>();
 
   selectedOption: number = 0;
@@ -107,21 +105,16 @@ export class OptionalItemsComponent implements OnInit {
   }
 
   private emitCalculatedValues() {
-    const totalCost = this.calculateAllTotalCost(false);
-    const sellingPrice = this.calculateSellingPrice(false);
-    const totalProfit = this.calculateTotalProfit(false);
+    const totalCost = this.calculateAllTotalCost();
+    const sellingPrice = this.calculateSellingPrice();
+    const totalProfit = this.calculateTotalProfit();
     const discount = this.calculateDiscount();
-
-    const optionalCost = this.calculateAllTotalCost(true) - totalCost;
-    const optionalTotal = this.calculateSellingPrice(true) - sellingPrice;
 
     this.calculatedValues.emit({
       totalCost,
       sellingPrice,
       totalProfit,
       discount,
-      optionalCost,
-      optionalTotal,
     });
   }
 
@@ -153,6 +146,7 @@ export class OptionalItemsComponent implements OnInit {
           this._fb.group({
             itemName: ['', Validators.required],
             isOptional: [false],
+            includeInTotal: [false],
             itemDetails: this._fb.array([
               this._fb.group({
                 detail: ['', Validators.required],
@@ -185,6 +179,7 @@ export class OptionalItemsComponent implements OnInit {
       this._fb.group({
         itemName: ['', Validators.required],
         isOptional: [isOptional],
+        includeInTotal: [false],
         itemDetails: this._fb.array([
           this._fb.group({
             detail: ['', Validators.required],
@@ -254,6 +249,7 @@ export class OptionalItemsComponent implements OnInit {
         this._fb.group({
           itemName: item.itemName,
           isOptional: item.isOptional ?? false,
+          includeInTotal: item.includeInTotal ?? false,
           itemDetails: this._fb.array(
             item.itemDetails.map((detail: any) =>
               this._fb.group({
@@ -300,6 +296,7 @@ export class OptionalItemsComponent implements OnInit {
             this._fb.group({
               itemName: [item.itemName, Validators.required],
               isOptional: [item.isOptional ?? false],
+              includeInTotal: [item.includeInTotal ?? false],
               itemDetails: this._fb.array(
                 item.itemDetails.map((detail: any) =>
                   this._fb.group({
@@ -411,11 +408,11 @@ export class OptionalItemsComponent implements OnInit {
     );
   }
 
-  calculateAllTotalCost(includeOptional: boolean = true) {
+  calculateAllTotalCost() {
     let totalCost = 0;
     this.optionalItems.value[this.selectedOption].items.forEach(
       (item: any, j: number) => {
-        if (!includeOptional && item.isOptional) {
+        if (item.isOptional && !item.includeInTotal) {
           return;
         }
         item.itemDetails.forEach((_: any, k: number) => {
@@ -427,11 +424,11 @@ export class OptionalItemsComponent implements OnInit {
     return totalCost;
   }
 
-  calculateSellingPrice(includeOptional: boolean = true) {
+  calculateSellingPrice() {
     let totalSellingPrice = 0;
     this.optionalItems.value[this.selectedOption].items.forEach(
       (item: any, j: number) => {
-        if (!includeOptional && item.isOptional) {
+        if (item.isOptional && !item.includeInTotal) {
           return;
         }
         item.itemDetails.forEach((_: any, k: number) => {
@@ -447,11 +444,11 @@ export class OptionalItemsComponent implements OnInit {
     return totalSellingPrice;
   }
 
-  calculateTotalProfit(includeOptional: boolean = true) {
+  calculateTotalProfit() {
     const sellingPrice =
-      this.calculateSellingPrice(includeOptional) -
+      this.calculateSellingPrice() -
       this.optionalItems.value[this.selectedOption].totalDiscount;
-    const totalCost = this.calculateAllTotalCost(includeOptional);
+    const totalCost = this.calculateAllTotalCost();
     return sellingPrice > 0
       ? ((sellingPrice - totalCost) / sellingPrice) * 100
       : 0;

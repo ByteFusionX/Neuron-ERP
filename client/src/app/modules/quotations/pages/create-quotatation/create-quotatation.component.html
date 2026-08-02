@@ -363,6 +363,18 @@
                           >
                             Optional
                           </span>
+                          <label
+                            *ngIf="item.isOptional"
+                            class="ml-2 inline-flex items-center gap-1 text-xs font-medium normal-case"
+                          >
+                            <input
+                              type="checkbox"
+                              [checked]="isItemIncludedInTotal(i, j, item)"
+                              (change)="onToggleEstimatedOptionalItem(i, j, $event)"
+                              class="w-3.5 h-3.5"
+                            />
+                            Include in Total
+                          </label>
                         </div>
                       </td>
                     </tr>
@@ -460,26 +472,6 @@
           class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50"
         >
           <tbody>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
-                <div class="flex justify-center items-center gap-2">
-                  <input
-                    #optionalTotalCheckbox
-                    type="checkbox"
-                    id="includeOptionalTotal"
-                    [checked]="includeOptionalTotal"
-                    (change)="onIncludeOptionalTotalChange($event)"
-                    class="w-4 h-4"
-                  />
-                  <label for="includeOptionalTotal">Optional Items Total</label>
-                </div>
-              </td>
-              <td
-                class="px-2 py-2 border text-center uppercase text-xl font-medium"
-              >
-                {{ calculatedValues.optionalTotal | numberFormatter }}
-              </td>
-            </tr>
             <tr class="border-b">
               <td class="px-2 py-3 border text-center font-medium text-xl">
                 Total Cost

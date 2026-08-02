@@ -190,6 +190,12 @@
                                         class="ml-2 bg-yellow-500 text-white font-semibold py-1 px-2 rounded text-xs uppercase">
                                         Optional
                                     </span>
+                                    <label *ngIf="item.isOptional"
+                                        class="ml-2 inline-flex items-center gap-1 text-xs font-medium normal-case">
+                                        <input type="checkbox" [checked]="item.includeInTotal" disabled
+                                            class="w-3.5 h-3.5" />
+                                        Include in Total
+                                    </label>
                                 </div>
                             </td>
                         </tr>

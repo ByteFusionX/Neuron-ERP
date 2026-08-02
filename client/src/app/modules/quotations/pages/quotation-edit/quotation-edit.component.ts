@@ -21,6 +21,7 @@ import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-p
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
+import { appBulletList } from '../../../../shared/directives/bullet-list.directive';
 import { OptionalItemsComponent } from '../../../../shared/components/optional-items/optional-items.component';
 import { NgIcon } from '@ng-icons/core';
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
@@ -32,7 +33,7 @@ import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe'
     styleUrls: ['./quotation-edit.component.css'],
     animations: [fadeInOut],
     providers:[DatePipe],
-    imports: [FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, OptionalItemsComponent, NgIf, NgIcon, AsyncPipe, NumberFormatterPipe]
+    imports: [FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, appBulletList, OptionalItemsComponent, NgIf, NgIcon, AsyncPipe, NumberFormatterPipe]
 })
 export class QuotationEditComponent {
   customers$!: Observable<getCustomer[]>;
@@ -71,30 +72,11 @@ export class QuotationEditComponent {
     sellingPrice: number;
     totalProfit: number;
     discount: number;
-    optionalCost: number;
-    optionalTotal: number;
   } = {
     totalCost: 0,
     sellingPrice: 0,
     totalProfit: 0,
     discount: 0,
-    optionalCost: 0,
-    optionalTotal: 0,
-  }
-
-  includeOptionalTotal: boolean = false;
-
-  @ViewChild('optionalTotalCheckbox')
-  optionalTotalCheckbox!: ElementRef<HTMLInputElement>;
-
-  onIncludeOptionalTotalChange(event: Event) {
-    this.includeOptionalTotal = (event.target as HTMLInputElement).checked;
-  }
-
-  private syncIncludeOptionalTotalFromDom() {
-    if (this.optionalTotalCheckbox) {
-      this.includeOptionalTotal = this.optionalTotalCheckbox.nativeElement.checked;
-    }
   }
 
   constructor(
@@ -228,22 +210,16 @@ export class QuotationEditComponent {
     sellingPrice: number;
     totalProfit: number;
     discount: number;
-    optionalCost: number;
-    optionalTotal: number;
   }) {
     this.calculatedValues = values;
   }
 
   calculateTotalCost() {
-    return this.includeOptionalTotal
-      ? this.calculatedValues.totalCost + (this.calculatedValues.optionalCost || 0)
-      : this.calculatedValues.totalCost;
+    return this.calculatedValues.totalCost;
   }
 
   calculateSubtotal() {
-    return this.includeOptionalTotal
-      ? this.calculatedValues.sellingPrice + (this.calculatedValues.optionalTotal || 0)
-      : this.calculatedValues.sellingPrice;
+    return this.calculatedValues.sellingPrice;
   }
 
   calculateDiscountPrice() {
@@ -266,22 +242,8 @@ export class QuotationEditComponent {
     return this.calculateDiscountPrice();
   }
 
-  private getOptionalItemsForPdf(
-    optionalItems: OptionalItems[],
-  ): OptionalItems[] {
-    const includeOptionalTotal = this.includeOptionalTotal;
-
-    return optionalItems.map((option) => ({
-      ...option,
-      items: includeOptionalTotal
-        ? [...option.items]
-        : option.items.filter((item) => !item.isOptional),
-    }));
-  }
-
   async onDownloadPdf(includeStamp: boolean) {
     this.submit = true;
-    this.syncIncludeOptionalTotalFromDom();
 
     if (this.quoteForm.valid) {
       if (includeStamp) {
@@ -309,19 +271,23 @@ export class QuotationEditComponent {
       quoteData.quoteId = this.quoteData.quoteId;
 
       const finalQuoteData: getQuotatation = quoteData as getQuotatation;
-      finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
-        finalQuoteData.optionalItems,
-      );
 
       const pdfDoc = this._quoteService.generatePDF(finalQuoteData, includeStamp)
-      pdfDoc.then((pdf) => {
-        pdf.download(quoteData.quoteId as string)
-        if (includeStamp) {
-          this.isDownloadingStamped = false;
-        } else {
-          this.isDownloading = false;
-        }
-      })
+      pdfDoc
+        .then((pdf) => {
+          pdf.download(quoteData.quoteId as string)
+        })
+        .catch((error) => {
+          console.error('Error generating PDF:', error);
+          this.toastr.error('Error generating PDF. Please try again.', 'Error');
+        })
+        .finally(() => {
+          if (includeStamp) {
+            this.isDownloadingStamped = false;
+          } else {
+            this.isDownloading = false;
+          }
+        });
     } else {
       this.toastr.warning('Check the fields properly!', 'Warning !')
     }
@@ -330,7 +296,6 @@ export class QuotationEditComponent {
 
   async onPreviewPdf() {
     this.submit = true;
-    this.syncIncludeOptionalTotalFromDom();
     if (this.quoteForm.valid) {
       this.isPreviewing = true;
 
@@ -353,9 +318,6 @@ export class QuotationEditComponent {
         })
 
         const finalQuoteData: getQuotatation = quoteData as unknown as getQuotatation;
-        finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
-          finalQuoteData.optionalItems,
-        );
 
         const pdfDoc = await this._quoteService.generatePDF(finalQuoteData, true);
         pdfDoc.getBlob((blob: Blob) => {

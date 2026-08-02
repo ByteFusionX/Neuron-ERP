@@ -113,30 +113,42 @@ export class CreateQuotatationComponent {
     sellingPrice: number;
     totalProfit: number;
     discount: number;
-    optionalCost: number;
-    optionalTotal: number;
   } = {
     totalCost: 0,
     sellingPrice: 0,
     totalProfit: 0,
     discount: 0,
-    optionalCost: 0,
-    optionalTotal: 0,
   };
 
-  includeOptionalTotal: boolean = false;
+  includedOptionalItemKeys = new Set<string>();
 
-  @ViewChild('optionalTotalCheckbox')
-  optionalTotalCheckbox!: ElementRef<HTMLInputElement>;
-
-  onIncludeOptionalTotalChange(event: Event) {
-    this.includeOptionalTotal = (event.target as HTMLInputElement).checked;
+  isItemIncludedInTotal(i: number, j: number, item: QuoteItem): boolean {
+    return !item.isOptional || this.includedOptionalItemKeys.has(`${i}-${j}`);
   }
 
-  private syncIncludeOptionalTotalFromDom() {
-    if (this.optionalTotalCheckbox) {
-      this.includeOptionalTotal = this.optionalTotalCheckbox.nativeElement.checked;
+  onToggleEstimatedOptionalItem(i: number, j: number, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    const key = `${i}-${j}`;
+    if (checked) {
+      this.includedOptionalItemKeys.add(key);
+    } else {
+      this.includedOptionalItemKeys.delete(key);
     }
+    this.calculateTotalValuesAfterPactch();
+  }
+
+  private applyOptionalSelectionToEstimatedItems(
+    items: OptionalItems[],
+  ): OptionalItems[] {
+    return items.map((option, i) => ({
+      ...option,
+      items: option.items.map((item, j) => ({
+        ...item,
+        includeInTotal: item.isOptional
+          ? this.includedOptionalItemKeys.has(`${i}-${j}`)
+          : undefined,
+      })),
+    }));
   }
 
   isEdit: boolean = false;
@@ -218,8 +230,6 @@ export class CreateQuotatationComponent {
     sellingPrice: number;
     totalProfit: number;
     discount: number;
-    optionalCost: number;
-    optionalTotal: number;
   }) {
     this.calculatedValues = values;
   }
@@ -279,7 +289,6 @@ export class CreateQuotatationComponent {
 
   async onDownloadPdf(includeStamp: boolean) {
     this.submit = true;
-    this.syncIncludeOptionalTotalFromDom();
 
     if (this.quoteForm.valid) {
       if (includeStamp) {
@@ -290,7 +299,9 @@ export class CreateQuotatationComponent {
       let quoteData: quotatationForm = this.quoteForm.value;
 
       if (!this.isEdit && this.estimatedOptionalItems?.length) {
-        quoteData.optionalItems = this.estimatedOptionalItems;
+        quoteData.optionalItems = this.applyOptionalSelectionToEstimatedItems(
+          this.estimatedOptionalItems,
+        );
       }
 
       const customers = (await this.customers$
@@ -312,22 +323,26 @@ export class CreateQuotatationComponent {
 
       const finalQuoteData: getQuotatation =
         quoteData as unknown as getQuotatation;
-      finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
-        finalQuoteData.optionalItems,
-      );
 
       const pdfDoc = this._quoteService.generatePDF(
         finalQuoteData,
         includeStamp,
       );
-      pdfDoc.then((pdf) => {
-        pdf.download(quoteData.quoteId as string);
-        if (includeStamp) {
-          this.isDownloadingStamped = false;
-        } else {
-          this.isDownloading = false;
-        }
-      });
+      pdfDoc
+        .then((pdf) => {
+          pdf.download(quoteData.quoteId as string);
+        })
+        .catch((error) => {
+          console.error('Error generating PDF:', error);
+          this.toastr.error('Error generating PDF. Please try again.', 'Error');
+        })
+        .finally(() => {
+          if (includeStamp) {
+            this.isDownloadingStamped = false;
+          } else {
+            this.isDownloading = false;
+          }
+        });
     } else {
       this.toastr.warning('Check the fields properly!', 'Warning !');
     }
@@ -335,7 +350,6 @@ export class CreateQuotatationComponent {
 
   async onPreviewPdf() {
     this.submit = true;
-    this.syncIncludeOptionalTotalFromDom();
     if (this.quoteForm.valid) {
       this.isPreviewing = true;
 
@@ -343,7 +357,9 @@ export class CreateQuotatationComponent {
         const quoteData: quotatationForm = this.quoteForm.value;
 
         if (!this.isEdit && this.estimatedOptionalItems?.length) {
-          quoteData.optionalItems = this.estimatedOptionalItems;
+          quoteData.optionalItems = this.applyOptionalSelectionToEstimatedItems(
+            this.estimatedOptionalItems,
+          );
         }
 
         const customers = (await this.customers$
@@ -367,9 +383,6 @@ export class CreateQuotatationComponent {
 
         const finalQuoteData: getQuotatation =
           quoteData as unknown as getQuotatation;
-        finalQuoteData.optionalItems = this.getOptionalItemsForPdf(
-          finalQuoteData.optionalItems,
-        );
 
         const pdfDoc = await this._quoteService.generatePDF(
           finalQuoteData,
@@ -478,15 +491,11 @@ export class CreateQuotatationComponent {
   }
 
   calculateTotalCost() {
-    return this.includeOptionalTotal
-      ? this.calculatedValues.totalCost + (this.calculatedValues.optionalCost || 0)
-      : this.calculatedValues.totalCost;
+    return this.calculatedValues.totalCost;
   }
 
   calculateSubtotal() {
-    return this.includeOptionalTotal
-      ? this.calculatedValues.sellingPrice + (this.calculatedValues.optionalTotal || 0)
-      : this.calculatedValues.sellingPrice;
+    return this.calculatedValues.sellingPrice;
   }
 
   calculateDiscountPrice() {
@@ -507,19 +516,6 @@ export class CreateQuotatationComponent {
 
   calculateFinalTotalAmount() {
     return this.calculateDiscountPrice();
-  }
-
-  private getOptionalItemsForPdf(
-    optionalItems: OptionalItems[],
-  ): OptionalItems[] {
-    const includeOptionalTotal = this.includeOptionalTotal;
-
-    return optionalItems.map((option) => ({
-      ...option,
-      items: includeOptionalTotal
-        ? [...option.items]
-        : option.items.filter((item) => !item.isOptional),
-    }));
   }
 
   calculateProfit(i: number, j: number, k: number) {
@@ -548,11 +544,12 @@ export class CreateQuotatationComponent {
       // Calculate the total values of this.calculatedValues by using data.preSale.estimations.currency
       let totalCost = 0;
       let totalSellingPrice = 0;
-      let optionalCost = 0;
-      let optionalTotal = 0;
 
       this.estimatedOptionalItems[this.patchSelectedOption].items.forEach(
         (item, j) => {
+          if (!this.isItemIncludedInTotal(this.patchSelectedOption, j, item)) {
+            return;
+          }
           item.itemDetails.forEach((itemDetail, k) => {
             const quantity = itemDetail.quantity;
             const unitCost = itemDetail.unitCost;
@@ -563,16 +560,11 @@ export class CreateQuotatationComponent {
               (unitCost / (1 - profitMargin)).toFixed(2),
             );
 
-            if (item.isOptional) {
-              optionalCost += quantity * unitCost;
-              optionalTotal += unitPrice * quantity;
-            } else {
-              // Calculate total cost
-              totalCost += quantity * unitCost;
+            // Calculate total cost
+            totalCost += quantity * unitCost;
 
-              // Calculate total selling price
-              totalSellingPrice += unitPrice * quantity;
-            }
+            // Calculate total selling price
+            totalSellingPrice += unitPrice * quantity;
           });
         },
       );
@@ -587,8 +579,6 @@ export class CreateQuotatationComponent {
         totalProfit: profitMarginPercentage,
         discount:
           this.estimatedOptionalItems[this.patchSelectedOption].totalDiscount,
-        optionalCost: optionalCost,
-        optionalTotal: optionalTotal,
       };
     }
   }

@@ -7,6 +7,7 @@ import { Files, getEnquiry } from "./enquiry.interface";
 export interface QuoteItem {
     itemName: string;
     isOptional?: boolean;
+    includeInTotal?: boolean;
     itemDetails: QuoteItemDetail[]
 }
 

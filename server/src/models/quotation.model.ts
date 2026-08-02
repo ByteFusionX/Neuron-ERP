@@ -17,6 +17,7 @@ interface QuoteItemDetail {
 interface QuoteItem {
     itemName: string;
     isOptional?: boolean;
+    includeInTotal?: boolean;
     itemDetails: QuoteItemDetail[]
 }
 
@@ -135,6 +136,10 @@ const quoteItem = new Schema<QuoteItem>({
         required: true,
     },
     isOptional: {
+        type: Boolean,
+        default: false,
+    },
+    includeInTotal: {
         type: Boolean,
         default: false,
     },

@@ -123,24 +123,6 @@
                 <table class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50">
                     <tbody>
                         <tr class=" border-b ">
-                            <td class="px-2 py-3 border text-center font-medium text-xl">
-                                <div class="flex justify-center items-center gap-2">
-                                    <input
-                                        #optionalTotalCheckbox
-                                        type="checkbox"
-                                        id="includeOptionalTotal"
-                                        [checked]="includeOptionalTotal"
-                                        (change)="onIncludeOptionalTotalChange($event)"
-                                        class="w-4 h-4"
-                                    />
-                                    <label for="includeOptionalTotal">Optional Items Total</label>
-                                </div>
-                            </td>
-                            <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
-                                {{ calculatedValues.optionalTotal | numberFormatter }}
-                            </td>
-                        </tr>
-                        <tr class=" border-b ">
                             <td class="px-2 py-3  border text-center font-medium text-xl ">
                                 Total Cost
                             </td>
@@ -215,9 +197,9 @@
                         placeholder="Default Customer Note" appendTo="body">
                         <ng-option *ngFor="let note of customerNotes" [value]="note">{{note.note}}</ng-option>
                     </ng-select>
-                    <textarea appNoLeadingSpace formControlName="customerNote"
+                    <textarea appNoLeadingSpace appBulletList formControlName="customerNote"
                         [class.border-red-500]="f['customerNote'].invalid && submit" rows="6"
-                        class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"
                         id="customerNote" placeholder="Customer Note"></textarea>
 
                 </div>
@@ -230,9 +212,9 @@
                         placeholder="Default Terms & Condition" appendTo="body">
                         <ng-option *ngFor="let terms of termsAndConditions" [value]="terms">{{terms.note}}</ng-option>
                     </ng-select>
-                    <textarea appNoLeadingSpace [class.border-red-500]="f['termsAndCondition'].invalid && submit"
+                    <textarea appNoLeadingSpace appBulletList [class.border-red-500]="f['termsAndCondition'].invalid && submit"
                         formControlName="termsAndCondition" rows="6"
-                        class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                        class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"
                         id="termsAndCondition" placeholder="Terms and Conditions"></textarea>
                 </div>
 

@@ -103,6 +103,20 @@
               >
                 Optional
               </span>
+              <label
+                *ngIf="
+                  getItemAtOption(optionIndex).at(itemIndex).get('isOptional')
+                    ?.value
+                "
+                class="ml-2 inline-flex items-center gap-1 text-xs font-medium text-gray-700"
+              >
+                <input
+                  type="checkbox"
+                  formControlName="includeInTotal"
+                  class="w-3.5 h-3.5"
+                />
+                Include in Total
+              </label>
               <div class="flex justify-center items-center">
                 <label for="">ITEM NAME : </label>
                 <input

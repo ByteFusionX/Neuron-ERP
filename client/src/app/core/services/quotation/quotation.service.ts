@@ -162,17 +162,29 @@ export class QuotationService {
       const tableBody: any[] = [];
       let totalCost = 0;
       let serialNumber = 1;
+      let hasExcludedOptionalItems = false;
 
       items.items.forEach(item => {
+        const isExcludedOptional = !!item.isOptional && !item.includeInTotal;
+        if (isExcludedOptional) {
+          hasExcludedOptionalItems = true;
+        }
+
         tableBody.push([
-          { text: item.itemName, colSpan: 7, style: 'itemRow' },
+          {
+            text: item.itemName + (isExcludedOptional ? '  (Optional)' : ''),
+            colSpan: 7,
+            style: 'itemRow'
+          },
           '', '', '', '', '', ''
         ]);
 
         item.itemDetails.forEach(detail => {
           const unitPrice = detail.unitSellingPrice;
           const totalPrice = unitPrice * detail.quantity;
-          totalCost += totalPrice;
+          if (!isExcludedOptional) {
+            totalCost += totalPrice;
+          }
 
           const segments = detail.detail;
           const result = [];
@@ -282,7 +294,11 @@ export class QuotationService {
             widths: [20, 175, 25, 40, 60, 60, 60],
             body: body
           }
-        }
+        },
+        ...(hasExcludedOptionalItems ? [{
+          text: 'Note: Item(s) marked (Optional) above are not included in the Total Amount.',
+          style: 'optionalNote'
+        }] : [])
       ];
     });
 
@@ -503,6 +519,12 @@ export class QuotationService {
           color: 'red',
           bold: true,
           margin: [0, 5, 0, 5]
+        },
+        optionalNote: {
+          fontSize: 9,
+          italics: true,
+          color: '#ED7D31',
+          margin: [0, 3, 0, 10]
         }
       }
 
