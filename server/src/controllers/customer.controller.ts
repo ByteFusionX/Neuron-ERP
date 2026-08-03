@@ -274,13 +274,6 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                 },
             },
             {
-                $unwind: {
-                    path: "$sharedWith",
-                    preserveNullAndEmptyArrays: true,
-                },
-
-            },
-            {
                 $unwind: "$department",
             },
             {
@@ -321,7 +314,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                     customerEmailId: { $first: "$customerEmailId" },
                     contactNo: { $first: "$contactNo" },
                     createdBy: { $first: "$createdBy" },
-                    sharedWith: { $push: "$sharedWith" },
+                    sharedWith: { $first: "$sharedWith" },
                     createdDate: { $first: "$createdDate" },
                     contactDetails: { $push: "$contactDetails" },
                 },
@@ -518,9 +511,9 @@ export const shareOrTransferCustomer = async (req: Request, res: Response, next:
             customer.sharedWith.filter((res) => res !== newOwner)
         } else if (type == "Share") {
             // Share the customer with specified employees
-            customer.sharedWith = [
-                ...new Set([...customer.sharedWith, ...employees]), // Avoid duplicates
-            ];
+            const existingIds = customer.sharedWith.map((id) => id.toString());
+            const mergedIds = [...existingIds, ...employees.map((id: string) => id.toString())];
+            customer.sharedWith = [...new Set(mergedIds)].map((id) => new ObjectId(id)); // Avoid duplicates
         } else {
             return res.status(400).json({ message: "Invalid type. Use 'transfer' or 'share'" });
         }
