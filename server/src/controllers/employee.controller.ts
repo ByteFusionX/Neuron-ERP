@@ -714,17 +714,19 @@ export const changePasswordOfEmployee = async (
 ) => {
   try {
     const { oldPassword, newPassword, userId } = req.body;
-    const user = await Employee.findById({ userId });
-    const userPassword = user.password;
-    bcrypt.compare(userPassword, oldPassword, async (err, result) => {
+    const user = await Employee.findById(userId).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+    bcrypt.compare(oldPassword, user.password, async (err, result) => {
       if (err) {
-        return;
+        return next(err);
       }
       if (result) {
-        await Employee.findOneAndUpdate(
-          { id: user.id },
-          { $set: { password: newPassword } },
-        );
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await Employee.findByIdAndUpdate(user._id, {
+          $set: { password: hashedPassword },
+        });
         return res.status(200).json({ passwordChanged: true });
       } else {
         return res.status(502).json({ passwordChanged: false });
@@ -767,7 +769,6 @@ export const login = async (
   next: NextFunction,
 ) => {
   try {
-    console.log(req.user, "ividem work aaknd");
     const token = req.user as any;
     const oid = token.oid;
 
@@ -940,10 +941,8 @@ export const blockEmployee = async (
   try {
     const { employeeId } = req.params;
     const employee = await Employee.findOne({ _id: employeeId });
-    console.log(employee);
     if (employee) {
       let isBlocked = employee.isBlocked ? false : true;
-      console.log(isBlocked);
       await Employee.findByIdAndUpdate(
         employeeId,
         { isBlocked: isBlocked },

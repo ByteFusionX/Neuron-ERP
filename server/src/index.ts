@@ -56,8 +56,7 @@ const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 export const io = new Server(server, {
   cors: {
-    // origin: process.env.ORIGIN1 ?? 'http://localhost:4200',
-    origin: '*',
+    origin: process.env.ORIGIN1 ?? 'https://localhost:4200',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true
   }

@@ -486,7 +486,6 @@ export const getCustomerCreators = async (req: Request, res: Response, next: Nex
 export const shareOrTransferCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { customerId, employees, type } = req.body;
-        console.log(req.body)
 
         // Validate the request body
         if (!customerId || !employees || !type) {
@@ -523,8 +522,6 @@ export const shareOrTransferCustomer = async (req: Request, res: Response, next:
         const newCustomer = await Customer.findById(savedCustomer._id)
             .populate('createdBy') // Populate single reference
             .populate('sharedWith'); // Populate array of references
-
-        console.log(newCustomer);
 
         res.status(200).json(newCustomer);
     } catch (error) {
