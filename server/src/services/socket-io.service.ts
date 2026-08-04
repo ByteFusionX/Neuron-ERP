@@ -1,5 +1,4 @@
 import { Server } from "socket.io";
-import jwt from 'jsonwebtoken'
 import { verifyAndExtractOid } from "../common/utils/extractToken";
 import { getEmployeeData } from "../common/utils/util";
 
@@ -25,11 +24,25 @@ export const socketConnection = async (socketIo:Server) => {
             })
 
             socket.on('auth', async (token) => {
-                const microsoftPayload = jwt.decode(token)
-                const employeeData = await getEmployeeData(microsoftPayload)
-                const userId = employeeData._id.toString();
-                connectedSockets[userId] = socket.id;
-                socket.join(userId)
+                try {
+                    const oid = await verifyAndExtractOid(token);
+                    if (!oid) {
+                        socket.emit('auth_error', { error: 'Authentication failed', message: 'Invalid token' });
+                        return socket.disconnect();
+                    }
+                    const employeeData = await getEmployeeData({ oid });
+                    if (!employeeData) {
+                        socket.emit('auth_error', { error: 'Authentication failed', message: 'Employee not found' });
+                        return socket.disconnect();
+                    }
+                    const userId = employeeData._id.toString();
+                    connectedSockets[userId] = socket.id;
+                    socket.join(userId)
+                } catch (error) {
+                    console.log('Socket auth verification failed:', error.message);
+                    socket.emit('auth_error', { error: 'Authentication failed', message: error.message });
+                    socket.disconnect();
+                }
             })
 
         })

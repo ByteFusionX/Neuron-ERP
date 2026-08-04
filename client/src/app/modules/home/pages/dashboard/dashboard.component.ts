@@ -129,7 +129,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         if (res.length == 1) {
 
           this._dashboardService.guageChart$.subscribe((report) => {
-            let criticalRange = report.criticalRange
+            let criticalRange = report.targetValue
 
             if (criticalRange > res[0].value) {
               res.push({ name: 'To Achieve Target', value: criticalRange - res[0].value, itemStyle: { color: '#D3D3D3' } })
