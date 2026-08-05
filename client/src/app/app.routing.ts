@@ -24,6 +24,7 @@ import { ApprovedDealsComponent } from './modules/deal-sheet/approved-deals/appr
 import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.component';
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
 import { EditCompanyDetailsComponent } from './modules/profile/pages/edit-company-details/edit-company-details.component';
+import { LoginPageComponent } from './modules/login/pages/login-page/login-page.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -117,7 +118,10 @@ export const routes: Routes = [
   {
     path: 'login',
     canActivate: [LoginGuard],
-    loadComponent: () => import('./modules/login/login.component').then((m) => m.LoginComponent)
+    loadComponent: () => import('./modules/login/login.component').then((m) => m.LoginComponent),
+    children: [
+      { path: '', component: LoginPageComponent }
+    ]
   },
   {
     path: 'recycle',
