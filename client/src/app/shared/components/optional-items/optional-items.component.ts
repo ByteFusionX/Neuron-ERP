@@ -5,9 +5,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
 
 @Component({
-  selector: 'optional-items',
-  templateUrl: './optional-items.component.html',
-  styleUrls: ['./optional-items.component.css']
+    selector: 'optional-items',
+    templateUrl: './optional-items.component.html',
+    styleUrls: ['./optional-items.component.css'],
+    standalone: false
 })
 export class OptionalItemsComponent implements OnInit {
 

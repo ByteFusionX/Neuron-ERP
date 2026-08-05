@@ -16,9 +16,10 @@ import { QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
 import { ViewEstimationComponent } from '../view-estimation/view-estimation.component';
 
 @Component({
-  selector: 'app-completed-jobs-list',
-  templateUrl: './completed-jobs-list.component.html',
-  styleUrls: ['./completed-jobs-list.component.css']
+    selector: 'app-completed-jobs-list',
+    templateUrl: './completed-jobs-list.component.html',
+    styleUrls: ['./completed-jobs-list.component.css'],
+    standalone: false
 })
 export class CompletedJobsListComponent implements OnInit, OnDestroy {
 

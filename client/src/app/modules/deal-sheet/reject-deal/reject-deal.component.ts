@@ -3,9 +3,10 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 
 @Component({
-  selector: 'app-reject-deal',
-  templateUrl: './reject-deal.component.html',
-  styleUrls: ['./reject-deal.component.css']
+    selector: 'app-reject-deal',
+    templateUrl: './reject-deal.component.html',
+    styleUrls: ['./reject-deal.component.css'],
+    standalone: false
 })
 export class RejectDealComponent {
   rejectForm!: FormGroup;

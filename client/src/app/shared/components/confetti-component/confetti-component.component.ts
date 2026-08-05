@@ -2,9 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit } from '@angular/core';
 
 @Component({
-  selector: 'app-confetti-component',
-  templateUrl: './confetti-component.component.html',
-  styles: [`
+    selector: 'app-confetti-component',
+    templateUrl: './confetti-component.component.html',
+    styles: [`
     :host {
       display: block;
       position: absolute;
@@ -22,8 +22,7 @@ import { Component, ElementRef, OnDestroy, OnInit, ViewChild, AfterViewInit } fr
       z-index: 0; 
     }
   `],
-  standalone:true,
-  imports:[CommonModule]
+    imports: [CommonModule]
 })
 export class ConfettiComponentComponent implements  AfterViewInit, OnDestroy {
   @ViewChild('confettiCanvas') confettiCanvasRef!: ElementRef<HTMLCanvasElement>;

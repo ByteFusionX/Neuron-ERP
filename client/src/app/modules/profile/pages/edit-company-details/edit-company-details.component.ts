@@ -5,9 +5,10 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getCompanyDetails } from 'src/app/shared/interfaces/company.interface';
 
 @Component({
-  selector: 'app-edit-company-details',
-  templateUrl: './edit-company-details.component.html',
-  styleUrls: ['./edit-company-details.component.css']
+    selector: 'app-edit-company-details',
+    templateUrl: './edit-company-details.component.html',
+    styleUrls: ['./edit-company-details.component.css'],
+    standalone: false
 })
 export class EditCompanyDetailsComponent {
   isSaving:boolean=false

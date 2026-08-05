@@ -28,10 +28,11 @@ import { ToastrService } from 'ngx-toastr';
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
 
 @Component({
-  selector: 'app-quotation-list',
-  templateUrl: './quotation-list.component.html',
-  styleUrls: ['./quotation-list.component.css'],
-  providers: [NumberFormatterPipe]
+    selector: 'app-quotation-list',
+    templateUrl: './quotation-list.component.html',
+    styleUrls: ['./quotation-list.component.css'],
+    providers: [NumberFormatterPipe],
+    standalone: false
 })
 export class QuotationListComponent {
   customers$!: Observable<getCustomer[]>;

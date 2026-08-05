@@ -13,12 +13,11 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
-  selector: 'app-events-list',
-  standalone: true,
-  imports: [CommonModule, IconsModule, MatDialogModule, MatTooltipModule],
-  templateUrl: './events-list.component.html',
-  styleUrls: ['./events-list.component.css'],
-  providers: [DatePipe]
+    selector: 'app-events-list',
+    imports: [CommonModule, IconsModule, MatDialogModule, MatTooltipModule],
+    templateUrl: './events-list.component.html',
+    styleUrls: ['./events-list.component.css'],
+    providers: [DatePipe]
 })
 export class EventsListComponent implements OnInit, OnDestroy {
 

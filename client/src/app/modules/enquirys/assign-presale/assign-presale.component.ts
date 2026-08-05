@@ -7,11 +7,12 @@ import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { TitleStrategy } from '@angular/router';
 
 @Component({
-  selector: 'app-assign-presale',
-  templateUrl: './assign-presale.component.html',
-  styleUrls: ['./assign-presale.component.css'],
-  animations: [fileEnterState],
-  encapsulation: ViewEncapsulation.None
+    selector: 'app-assign-presale',
+    templateUrl: './assign-presale.component.html',
+    styleUrls: ['./assign-presale.component.css'],
+    animations: [fileEnterState],
+    encapsulation: ViewEncapsulation.None,
+    standalone: false
 })
 export class AssignPresaleComponent implements OnInit {
 

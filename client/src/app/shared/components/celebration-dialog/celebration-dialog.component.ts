@@ -4,9 +4,10 @@ import { announcementGetData } from '../../interfaces/announcement.interface';
 import { interval, Subscription } from 'rxjs';
 
 @Component({
-  selector: 'app-celebration-dialog',
-  templateUrl: './celebration-dialog.component.html',
-  styleUrls: ['./celebration-dialog.component.css']
+    selector: 'app-celebration-dialog',
+    templateUrl: './celebration-dialog.component.html',
+    styleUrls: ['./celebration-dialog.component.css'],
+    standalone: false
 })
 export class CelebrationDialogComponent implements OnInit {
   celebData!: announcementGetData;

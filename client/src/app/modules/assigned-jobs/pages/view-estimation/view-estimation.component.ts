@@ -6,9 +6,10 @@ import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
 import { QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
 
 @Component({
-  selector: 'app-view-estimation',
-  templateUrl: './view-estimation.component.html',
-  styleUrls: ['./view-estimation.component.css']
+    selector: 'app-view-estimation',
+    templateUrl: './view-estimation.component.html',
+    styleUrls: ['./view-estimation.component.css'],
+    standalone: false
 })
 export class ViewEstimationComponent {
   selectedOption: number = 0;

@@ -5,9 +5,10 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
 
 @Component({
-  selector: 'app-edit-category',
-  templateUrl: './edit-category.component.html',
-  styleUrls: ['./edit-category.component.css']
+    selector: 'app-edit-category',
+    templateUrl: './edit-category.component.html',
+    styleUrls: ['./edit-category.component.css'],
+    standalone: false
 })
 export class EditCategoryComponent {
 

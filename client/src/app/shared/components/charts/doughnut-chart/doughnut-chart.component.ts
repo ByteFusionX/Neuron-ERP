@@ -1,41 +1,54 @@
-import { AfterViewChecked, AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnInit, AfterViewInit } from '@angular/core';
 import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
-import * as echarts from 'echarts';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
+
+import * as echarts from 'echarts/core';
+import {
+  PieChart
+} from 'echarts/charts';
+import {
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent
+} from 'echarts/components';
+import {
+  CanvasRenderer
+} from 'echarts/renderers';
+
+echarts.use([
+  PieChart,
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  CanvasRenderer
+]);
 
 @Component({
   selector: 'app-doughnut-chart',
   templateUrl: './doughnut-chart.component.html',
   styleUrls: ['./doughnut-chart.component.css'],
-  standalone: true,
   imports: [HomeRoutingModule],
+  standalone: true
 })
 export class DoughnutChartComponent implements OnInit, AfterViewInit {
-
   @ViewChild('doughnutChart', { static: true }) doughnutChart!: ElementRef;
   chartInstance: any;
 
-  constructor(
-    private _dashboardService: DashboardService
-  ) { }
+  constructor(private _dashboardService: DashboardService) {}
 
-  ngOnInit(): void {
-    // Initialization logic that doesn't depend on the view
-  }
+  ngOnInit(): void {}
 
   ngAfterViewInit(): void {
     this.chartInstance = echarts.init(this.doughnutChart.nativeElement);
     new ResizeObserver(() => this.chartInstance.resize()).observe(this.doughnutChart.nativeElement);
 
-    this._dashboardService.donutChart$.subscribe((data :any) => {
-
-
+    this._dashboardService.donutChart$.subscribe((data: any) => {
       if (!this.chartInstance) {
-        console.error('Chart instance is not initialized');  
+        console.error('Chart instance is not initialized');
         return;
       }
 
-      let option = {
+      const option = {
         tooltip: {
           trigger: 'item',
           formatter: function (params: any) {
@@ -87,6 +100,4 @@ export class DoughnutChartComponent implements OnInit, AfterViewInit {
       }
     });
   }
-
 }
-

@@ -4,7 +4,8 @@ import {distinctUntilChanged, map, switchMap, takeUntil, tap,} from 'rxjs/operat
 import { fromEvent } from 'rxjs';
 
 @Directive({
-  selector: '[resizable]',
+    selector: '[resizable]',
+    standalone: false
 })
 export class ResizableDirective {
   @Output()

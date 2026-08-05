@@ -14,9 +14,10 @@ import { ToastrService } from 'ngx-toastr';
 import { RejectDealComponent } from '../reject-deal/reject-deal.component';
 
 @Component({
-  selector: 'app-approve-deal',
-  templateUrl: './approve-deal.component.html',
-  styleUrls: ['./approve-deal.component.css']
+    selector: 'app-approve-deal',
+    templateUrl: './approve-deal.component.html',
+    styleUrls: ['./approve-deal.component.css'],
+    standalone: false
 })
 export class ApproveDealComponent implements OnInit {
   isApproving: boolean = false;

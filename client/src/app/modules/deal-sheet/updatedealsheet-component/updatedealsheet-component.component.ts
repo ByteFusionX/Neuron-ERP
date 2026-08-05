@@ -7,10 +7,11 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 
 
 @Component({
-  selector: 'app-updatedealsheet-component',
-  templateUrl: './updatedealsheet-component.component.html',
-  styleUrls: ['./updatedealsheet-component.component.css'],
-  animations: [fileEnterState],
+    selector: 'app-updatedealsheet-component',
+    templateUrl: './updatedealsheet-component.component.html',
+    styleUrls: ['./updatedealsheet-component.component.css'],
+    animations: [fileEnterState],
+    standalone: false
 })
 export class UpdatedealsheetComponent implements OnInit {
   @ViewChild('fileInput') fileInput!: ElementRef;

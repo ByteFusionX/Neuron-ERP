@@ -20,9 +20,10 @@ import saveAs from 'file-saver';
 import { QuotationPreviewComponent } from 'src/app/shared/components/quotation-preview/quotation-preview.component';
 
 @Component({
-  selector: 'app-approved-deals',
-  templateUrl: './approved-deals.component.html',
-  styleUrls: ['./approved-deals.component.css']
+    selector: 'app-approved-deals',
+    templateUrl: './approved-deals.component.html',
+    styleUrls: ['./approved-deals.component.css'],
+    standalone: false
 })
 export class ApprovedDealsComponent {
   @ViewChildren('quoteItem') quoteItems!: QueryList<ElementRef>;

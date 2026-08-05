@@ -6,9 +6,10 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
 
 @Component({
-  selector: 'app-create-category',
-  templateUrl: './create-category.component.html',
-  styleUrls: ['./create-category.component.css']
+    selector: 'app-create-category',
+    templateUrl: './create-category.component.html',
+    styleUrls: ['./create-category.component.css'],
+    standalone: false
 })
 
 export class CreateCategoryComponent {

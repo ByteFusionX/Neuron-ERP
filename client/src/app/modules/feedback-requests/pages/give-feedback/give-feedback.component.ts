@@ -2,9 +2,10 @@ import { Component } from '@angular/core';
 import {  MatDialogRef } from '@angular/material/dialog';
 
 @Component({
-  selector: 'app-give-feedback',
-  templateUrl: './give-feedback.component.html',
-  styleUrls: ['./give-feedback.component.css']
+    selector: 'app-give-feedback',
+    templateUrl: './give-feedback.component.html',
+    styleUrls: ['./give-feedback.component.css'],
+    standalone: false
 })
 export class GiveFeedbackComponent {
   feedback!:string;

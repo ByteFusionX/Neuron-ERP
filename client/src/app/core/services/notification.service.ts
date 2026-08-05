@@ -24,7 +24,7 @@ export class NotificationService {
     ) { }
 
     initializeNotifications() {
-        this.socket.fromEvent<string>('notifications').subscribe(
+        this.socket.fromEvent('notifications').subscribe(
             {
                 next: (notificationType) => {
                     this.incrementNotificationCount(notificationType);
@@ -35,7 +35,7 @@ export class NotificationService {
             }
         );
 
-        this.socket.fromEvent<any>('recieveNotifications').subscribe(
+        this.socket.fromEvent('recieveNotifications').subscribe(
             {
                 next: (notification) => {
                     const notifications = this.textNotificationsSubject.value

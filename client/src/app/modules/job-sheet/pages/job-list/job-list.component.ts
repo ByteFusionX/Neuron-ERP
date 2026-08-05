@@ -23,10 +23,11 @@ import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-c
 import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
-  selector: 'app-job-list',
-  templateUrl: './job-list.component.html',
-  styleUrls: ['./job-list.component.css'],
-  providers: [NumberFormatterPipe]
+    selector: 'app-job-list',
+    templateUrl: './job-list.component.html',
+    styleUrls: ['./job-list.component.css'],
+    providers: [NumberFormatterPipe],
+    standalone: false
 })
 export class JobListComponent {
 

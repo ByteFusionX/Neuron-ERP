@@ -4,16 +4,15 @@ import { CommonModule } from '@angular/common';
 import { NgSelectModule } from '@ng-select/ng-select';
 
 @Component({
-  selector: 'generate-report',
-  templateUrl: './generate-report.component.html',
-  styleUrls: ['./generate-report.component.css'],
-  standalone: true,
-  imports: [
-    FormsModule,
-    ReactiveFormsModule,
-    CommonModule,
-    NgSelectModule
-  ],
+    selector: 'generate-report',
+    templateUrl: './generate-report.component.html',
+    styleUrls: ['./generate-report.component.css'],
+    imports: [
+        FormsModule,
+        ReactiveFormsModule,
+        CommonModule,
+        NgSelectModule
+    ]
 })
 export class GenerateReportComponent {
   @Output() generatePdf: EventEmitter<{selectedMonth?: number, selectedYear: number,selectedMonthName?:string, download:boolean }> = new EventEmitter();

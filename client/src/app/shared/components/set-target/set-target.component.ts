@@ -8,11 +8,10 @@ import { rangeValidator } from '../../validators/target-rage.validator';
 
 
 @Component({
-  selector: 'app-set-target',
-  templateUrl: './set-target.component.html',
-  styleUrls: ['./set-target.component.css'],
-  standalone: true,
-  imports: [CommonModule, FormsModule, NgIconComponent, ReactiveFormsModule]
+    selector: 'app-set-target',
+    templateUrl: './set-target.component.html',
+    styleUrls: ['./set-target.component.css'],
+    imports: [CommonModule, FormsModule, NgIconComponent, ReactiveFormsModule]
 })
 
 export class SetTargetComponent {

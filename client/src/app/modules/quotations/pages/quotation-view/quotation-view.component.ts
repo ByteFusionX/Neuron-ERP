@@ -17,9 +17,10 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
-  selector: 'app-quotation-view',
-  templateUrl: './quotation-view.component.html',
-  styleUrls: ['./quotation-view.component.css']
+    selector: 'app-quotation-view',
+    templateUrl: './quotation-view.component.html',
+    styleUrls: ['./quotation-view.component.css'],
+    standalone: false
 })
 export class QuotationViewComponent {
   quoteData!: getQuotatation;

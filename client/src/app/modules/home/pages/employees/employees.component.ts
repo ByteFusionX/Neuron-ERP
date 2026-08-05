@@ -10,9 +10,10 @@ import { NavigationExtras, Router } from '@angular/router';
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
 
 @Component({
-  selector: 'app-employees',
-  templateUrl: './employees.component.html',
-  styleUrls: ['./employees.component.css']
+    selector: 'app-employees',
+    templateUrl: './employees.component.html',
+    styleUrls: ['./employees.component.css'],
+    standalone: false
 })
 export class EmployeesComponent {
 

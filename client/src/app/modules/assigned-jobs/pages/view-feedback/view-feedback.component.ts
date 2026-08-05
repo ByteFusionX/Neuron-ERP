@@ -5,9 +5,10 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { feedback } from 'src/app/shared/interfaces/enquiry.interface';
 
 @Component({
-  selector: 'app-view-feedback',
-  templateUrl: './view-feedback.component.html',
-  styleUrls: ['./view-feedback.component.css']
+    selector: 'app-view-feedback',
+    templateUrl: './view-feedback.component.html',
+    styleUrls: ['./view-feedback.component.css'],
+    standalone: false
 })
 export class ViewFeedbackComponent {
 

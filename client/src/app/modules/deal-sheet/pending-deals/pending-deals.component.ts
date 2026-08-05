@@ -17,9 +17,10 @@ import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
 
 @Component({
-  selector: 'app-pending-deals',
-  templateUrl: './pending-deals.component.html',
-  styleUrls: ['./pending-deals.component.css']
+    selector: 'app-pending-deals',
+    templateUrl: './pending-deals.component.html',
+    styleUrls: ['./pending-deals.component.css'],
+    standalone: false
 })
 export class PendingDealsComponent {
   @ViewChildren('dealItem') dealItem!: QueryList<ElementRef>;

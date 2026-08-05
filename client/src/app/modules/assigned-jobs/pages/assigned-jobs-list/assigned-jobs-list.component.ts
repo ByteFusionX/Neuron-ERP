@@ -22,9 +22,10 @@ import { ViewRejectsComponent } from 'src/app/modules/enquirys/view-rejects/view
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
 
 @Component({
-  selector: 'app-assigned-jobs-list',
-  templateUrl: './assigned-jobs-list.component.html',
-  styleUrls: ['./assigned-jobs-list.component.css']
+    selector: 'app-assigned-jobs-list',
+    templateUrl: './assigned-jobs-list.component.html',
+    styleUrls: ['./assigned-jobs-list.component.css'],
+    standalone: false
 })
 export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChildren('jobItem') jobItems!: QueryList<ElementRef>;

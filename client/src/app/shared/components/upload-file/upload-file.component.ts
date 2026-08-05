@@ -5,12 +5,11 @@ import { NgIconsModule } from '@ng-icons/core';
 import { appFileValidator } from '../../directives/file-validator.directive';
 
 @Component({
-  selector: 'app-upload-file',
-  templateUrl: './upload-file.component.html',
-  styleUrls: ['./upload-file.component.css'],
-  standalone: true,
-  imports: [CommonModule, NgIconsModule, MatTooltipModule],
-  providers: [appFileValidator]
+    selector: 'app-upload-file',
+    templateUrl: './upload-file.component.html',
+    styleUrls: ['./upload-file.component.css'],
+    imports: [CommonModule, NgIconsModule, MatTooltipModule],
+    providers: [appFileValidator]
 })
 export class UploadFileComponent {
 

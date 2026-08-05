@@ -5,9 +5,10 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 
 @Component({
-  selector: 'app-select-employee',
-  templateUrl: './select-employee.component.html',
-  styleUrls: ['./select-employee.component.css']
+    selector: 'app-select-employee',
+    templateUrl: './select-employee.component.html',
+    styleUrls: ['./select-employee.component.css'],
+    standalone: false
 })
 export class SelectEmployeeComponent {
 

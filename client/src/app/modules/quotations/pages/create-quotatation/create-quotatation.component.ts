@@ -22,9 +22,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
-  selector: 'app-create-quotatation',
-  templateUrl: './create-quotatation.component.html',
-  styleUrls: ['./create-quotatation.component.css'],
+    selector: 'app-create-quotatation',
+    templateUrl: './create-quotatation.component.html',
+    styleUrls: ['./create-quotatation.component.css'],
+    standalone: false
 })
 export class CreateQuotatationComponent {
   customers$!: Observable<getCustomer[]>;

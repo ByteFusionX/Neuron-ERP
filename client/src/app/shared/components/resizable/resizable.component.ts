@@ -1,9 +1,10 @@
 import { Component, HostBinding, Input } from '@angular/core';
 
 @Component({
-  selector: 'th[resizable]',
-  templateUrl: './resizable.component.html',
-  styleUrls: ['./resizable.component.css']
+    selector: 'th[resizable]',
+    templateUrl: './resizable.component.html',
+    styleUrls: ['./resizable.component.css'],
+    standalone: false
 })
 export class ResizableComponent {
   @HostBinding('style.width.px')

@@ -12,9 +12,10 @@ import { ShareTransferCustomerComponent } from '../share-transfer-customer/share
 import { SharedWithListComponent } from '../shared-with-list/shared-with-list.component';
 
 @Component({
-  selector: 'app-customers-list',
-  templateUrl: './customers-list.component.html',
-  styleUrls: ['./customers-list.component.css']
+    selector: 'app-customers-list',
+    templateUrl: './customers-list.component.html',
+    styleUrls: ['./customers-list.component.css'],
+    standalone: false
 })
 export class CustomersListComponent {
 

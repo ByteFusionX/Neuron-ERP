@@ -10,9 +10,10 @@ import { MatTableDataSource } from '@angular/material/table';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
-  selector: 'app-view-employee',
-  templateUrl: './view-employee.component.html',
-  styleUrls: ['./view-employee.component.css']
+    selector: 'app-view-employee',
+    templateUrl: './view-employee.component.html',
+    styleUrls: ['./view-employee.component.css'],
+    standalone: false
 })
 export class ViewEmployeeComponent {
 

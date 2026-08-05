@@ -1,14 +1,38 @@
-import { AfterViewChecked, AfterViewInit, Component, ElementRef, HostListener, Input, OnInit, ViewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  ViewChild,
+  Input,
+  AfterViewInit
+} from '@angular/core';
 import { HomeRoutingModule } from 'src/app/modules/home/home-routing.module';
-import * as echarts from 'echarts';
 import { DashboardService } from 'src/app/core/services/dashboard.service';
 
+import * as echarts from 'echarts/core';
+import {
+  PieChart
+} from 'echarts/charts';
+import {
+  TooltipComponent
+} from 'echarts/components';
+import {
+  CanvasRenderer
+} from 'echarts/renderers';
+
+// Register required ECharts components
+echarts.use([
+  PieChart,
+  TooltipComponent,
+  CanvasRenderer
+]);
+
+
 @Component({
-  selector: 'app-half-doughnut-chart',
-  standalone: true,
-  imports: [HomeRoutingModule],
-  templateUrl: './half-doughnut-chart.component.html',
-  styleUrls: ['./half-doughnut-chart.component.css']
+    selector: 'app-half-doughnut-chart',
+    imports: [HomeRoutingModule],
+    templateUrl: './half-doughnut-chart.component.html',
+    styleUrls: ['./half-doughnut-chart.component.css'],
+    standalone: true
 })
 export class HalfDoughnutChartComponent implements AfterViewInit {
 
@@ -75,7 +99,7 @@ export class HalfDoughnutChartComponent implements AfterViewInit {
           },
           data: [
             { value: data.converted || 0, name: 'Converted' },
-            { value: data.total - data.converted || 0, name: 'Not Converted' },
+            { value: Math.max(data.total - data.converted, 0), name: 'Not Converted' },
           ]
         }
       ]

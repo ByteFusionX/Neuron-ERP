@@ -12,11 +12,10 @@ import { NotificationCounts, TextNotification } from '../../interfaces/notificat
 import { NotificationService } from 'src/app/core/services/notification.service';
 
 @Component({
-  selector: 'app-nav-bar',
-  templateUrl: './nav-bar.component.html',
-  styleUrls: ['./nav-bar.component.css'],
-  standalone: true,
-  imports: [CommonModule, AppRoutingModule, IconsModule, MatMenuModule, MatButtonModule]
+    selector: 'app-nav-bar',
+    templateUrl: './nav-bar.component.html',
+    styleUrls: ['./nav-bar.component.css'],
+    imports: [CommonModule, AppRoutingModule, IconsModule, MatMenuModule, MatButtonModule]
 })
 export class NavBarComponent {
   notificationCounts$!: Observable<NotificationCounts>;
