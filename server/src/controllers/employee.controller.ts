@@ -742,7 +742,10 @@ export const msLogin = async (req: Request, res: Response, next: NextFunction) =
 
 export const getEmployee = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const employeeData = req.user;
+        const employeeData = await Employee.findOne(
+            { _id: req.employeeId, isDeleted: { $ne: true } },
+            { password: 0 }
+        ).populate('category');
 
         if (employeeData) return res.status(200).json(employeeData)
         return res.status(502).json()
