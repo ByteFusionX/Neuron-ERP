@@ -128,9 +128,5 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/recycle/recycle.component').then((m) => m.RecycleComponent)
   },
-  {
-    path: 'suppliers/pendings',
-    loadComponent: () => import('./shared/components/table/table.component').then((m) => m.TableComponent)
-  },
   { path: '**', redirectTo: '', pathMatch: 'full' }
 ];
