@@ -10,6 +10,7 @@ import { NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { MsalService } from '@azure/msal-angular';
 import { AuthenticationResult } from '@azure/msal-browser';
+import { environment } from 'src/environments/environment';
 
 @Component({
     selector: 'app-login-page',
@@ -94,9 +95,10 @@ export class LoginPageComponent {
   loginWithMicrosoft() {
     this.microsoftAccountNotLinkedError = false;
     this.isSigningInWithMicrosoft = true;
-    this._msalService.loginPopup().subscribe({
+    const scopes = [`api://${environment.microsoftClientId}/access_as_user`];
+    this._msalService.loginPopup({ scopes }).subscribe({
       next: (result: AuthenticationResult) => {
-        this.employeeService.employeeLoginWithMicrosoft(result.idToken).subscribe({
+        this.employeeService.employeeLoginWithMicrosoft(result.accessToken).subscribe({
           next: (res: login) => {
             if (res.employeeData && res.token) {
               this.handleLoginSuccess(res.token);
