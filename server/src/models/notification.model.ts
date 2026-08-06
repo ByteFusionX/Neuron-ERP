@@ -1,14 +1,17 @@
 import { Schema, model,Types } from "mongoose";
 
 interface Notification {
-    type: string; 
-    title: string; 
+    // Logical notification type (what the UI sees)
+    type: string;
+    // Actual Mongoose model referenced by referenceId (e.g. 'Event', 'Quotation')
+    referenceModel: string;
+    title: string;
     message: string;
     recipients: any[];
     sentBy: any;
-    date: Date; 
-    referenceId: Types.ObjectId; 
-    additionalData: any; 
+    date: Date;
+    referenceId: Types.ObjectId;
+    additionalData: any;
 }
 
 
@@ -16,7 +19,11 @@ const notificationSchema = new Schema<Notification>({
     type: {
         type: String,
         required: true,
-        enum: ['Event'], // Extendable
+        enum: ['Event', 'DealSheet'], // Extendable
+    },
+    referenceModel: {
+        type: String,
+        enum: ['Event', 'Quotation'],
     },
     title: {
         type: String,
@@ -43,7 +50,7 @@ const notificationSchema = new Schema<Notification>({
     },
     referenceId: {
         type: Schema.Types.ObjectId,
-        refPath: 'type',
+        refPath: 'referenceModel',
     },
     additionalData: {
         type: Schema.Types.Mixed,

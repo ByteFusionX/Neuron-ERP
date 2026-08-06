@@ -32,6 +32,7 @@ export const newEvent = async (req: any, res: Response, next: NextFunction) => {
         if(newEvent.employee){
             const saveNewNotification = await createNotification({
                 type:'Event',
+                referenceModel:'Event',
                 title:`A ${newEvent.event} Assigned to You`,
                 message:`${newEvent.summary}`,
                 date:new Date(),

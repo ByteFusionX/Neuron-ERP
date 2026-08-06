@@ -4,7 +4,7 @@ import { DashboardService } from 'src/app/core/services/dashboard.service';
 import { NumberShortenerPipe } from 'src/app/shared/pipes/numberShortener.pipe';
 
 import { LineChart } from 'echarts/charts';
-import { TooltipComponent, GridComponent, MarkAreaComponent } from 'echarts/components';
+import { TooltipComponent, GridComponent, MarkAreaComponent, GraphicComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([
@@ -12,6 +12,7 @@ echarts.use([
   TooltipComponent,
   GridComponent,
   MarkAreaComponent,
+  GraphicComponent,
   CanvasRenderer
 ]);
 
@@ -43,6 +44,10 @@ export class LineChartComponent implements OnInit, AfterViewInit {
     this._dashboardService.graphChart$.subscribe((data) => {
       const numberShortenerPipe = this.numberShortenerPipe;
       const maxProfit = Math.max(...data.profitPerMonths.profits);
+      const profitTarget = data.profitTarget;
+      const hasTarget = !!profitTarget && (profitTarget.targetValue > 0 || profitTarget.criticalRange > 0 || profitTarget.moderateRange > 0);
+      const yMax = hasTarget && profitTarget.targetValue > maxProfit ? profitTarget.targetValue : maxProfit.toFixed(2);
+
       let option = {
         tooltip: {
           trigger: 'axis',
@@ -60,58 +65,72 @@ export class LineChartComponent implements OnInit, AfterViewInit {
         },
         yAxis: {
           type: 'value',
-          max: data.profitTarget.targetValue || 0 > maxProfit ? data.profitTarget.targetValue : maxProfit.toFixed(2),
+          max: yMax,
           axisLabel: {
             formatter: function (value: number) {
               return numberShortenerPipe.transform(value);
             }
           },
         },
+        graphic: [{
+          id: 'no-target-label',
+          type: 'text',
+          right: 10,
+          top: 10,
+          ignore: hasTarget,
+          style: {
+            text: 'No target set for this period',
+            fontSize: 12,
+            fill: '#9CA3AF'
+          }
+        }],
         series: [
           {
             data: data.profitPerMonths.profits,
             type: 'line',
             smooth: true,
-            markArea: {
-              data: [
-                [
-                  {
-                    yAxis: '0',
-                    itemStyle: {
-                      color: '#FF7F7F',
-                      opacity: 0.5
+            ...(hasTarget && {
+              markArea: {
+                data: [
+                  [
+                    {
+                      yAxis: '0',
+                      itemStyle: {
+                        color: '#FF7F7F',
+                        opacity: 0.5
+                      },
                     },
-                  },
-                  {
-                    yAxis: data.profitTarget.criticalRange
-                  }
-                ],
-                [
-                  {
-                    yAxis: data.profitTarget.criticalRange,
-                    itemStyle: {
-                      color: '#FFFF00',
-                      opacity: 0.5
+                    {
+                      yAxis: profitTarget.criticalRange
+                    }
+                  ],
+                  [
+                    {
+                      yAxis: profitTarget.criticalRange,
+                      itemStyle: {
+                        color: '#FFFF00',
+                        opacity: 0.5
+                      },
                     },
-                  },
-                  {
-                    yAxis: data.profitTarget.moderateRange
-                  }
-                ],
-                [
-                  {
-                    yAxis: data.profitTarget.moderateRange,
-                    itemStyle: {
-                      color: '#90EE90',
-                      opacity: 0.5
+                    {
+                      yAxis: profitTarget.moderateRange
+                    }
+                  ],
+                  [
+                    {
+                      yAxis: profitTarget.moderateRange,
+                      itemStyle: {
+                        color: '#90EE90',
+                        opacity: 0.5
+                      },
                     },
-                  },
-                  {
-                    yAxis: data.profitTarget.targetValue || 0 > maxProfit ? data.profitTarget.targetValue : maxProfit.toFixed(2)
-                  }
-                ],
-              ]
-            },
+                    {
+                      yAxis: yMax
+                    }
+                  ],
+                ]
+              }
+            }),
           }
         ]
       };

@@ -319,8 +319,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   handleTargets(targets: Target[]) {
     this.years = targets.map((target) => Number(target.year));
     const extractedData = this.extractRevenueAndProfitTargets(targets);
-    this.salesTarget = extractedData?.salesRevenue as RangeTarget;
-    this.grossProfitTarget = extractedData?.grossProfit as RangeTarget;
+    const noTarget: RangeTarget = { targetValue: 0, criticalRange: 0, moderateRange: 0 };
+    this.salesTarget = (extractedData?.salesRevenue as RangeTarget) ?? noTarget;
+    this.grossProfitTarget = (extractedData?.grossProfit as RangeTarget) ?? noTarget;
     this._dashboardService.updateGuageChart(this.salesTarget);
     this._dashboardService.updateGraphChart({ profitTarget: this.grossProfitTarget });
   }
