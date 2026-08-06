@@ -1,6 +1,6 @@
 import { Router } from "express";
 import passport from "passport";
-import { createEmployee, getEmployees, login, msLogin, getEmployee, getFilteredEmployees, editEmployee, getEmployeeByEmployeId, isEmployeePresent, getNotificationCounts, setTarget, updateTarget, getEmployeesForCustomerTransfer, deleteEmployee, getPresaleEngineers, getPresaleManagers, blockEmployee } from "../controllers/employee.controller";
+import { createEmployee, getEmployees, login, legacyLogin, msLogin, getEmployee, getFilteredEmployees, editEmployee, getEmployeeByEmployeId, isEmployeePresent, getNotificationCounts, setTarget, updateTarget, getEmployeesForCustomerTransfer, deleteEmployee, getPresaleEngineers, getPresaleManagers, blockEmployee } from "../controllers/employee.controller";
 const empRouter = Router()
 
 empRouter.get('/', getEmployees)
@@ -16,6 +16,7 @@ empRouter.patch('/edit', editEmployee)
 empRouter.patch('/setTarget/:employeeId', setTarget)
 empRouter.patch('/update-target/:employeeId/:targetId', updateTarget)
 empRouter.post('/login', login)
+empRouter.post('/legacy-auth', legacyLogin)
 empRouter.post('/ms-login', passport.authenticate('oauth-bearer', { session: false }), msLogin)
 empRouter.get('/get', getEmployee)
 empRouter.get('/notifications/:token', getNotificationCounts)

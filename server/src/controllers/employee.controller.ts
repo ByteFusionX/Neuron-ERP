@@ -691,6 +691,38 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 
 }
 
+export const legacyLogin = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { employeeId, password } = req.body
+        const employee = await Employee.findOne(
+            {
+                employeeId: employeeId,
+                isDeleted: { $ne: true },
+                isBlocked: { $ne: true }
+            }
+        )
+        if (!employee) {
+            return res.status(401).json({ authError: true })
+        }
+
+        const passwordMatch = await bcrypt.compare(password, employee.password)
+        if (!passwordMatch) {
+            return res.status(401).json({ authError: true })
+        }
+
+        const payload = { id: employee._id, employeeId: employee.employeeId }
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '4h' })
+
+        const employeeData = employee.toObject()
+        delete employeeData.password
+
+        return res.status(200).json({ token: token, employeeData: employeeData })
+    } catch (error) {
+        console.log(error)
+        next(error)
+    }
+}
+
 export const msLogin = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const employee: any = req.user;
