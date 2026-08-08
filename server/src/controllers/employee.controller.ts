@@ -677,7 +677,11 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
             if (passwordMatch) {
                 const payload = { id: employee._id, employeeId: employee.employeeId }
                 const token = jwt.sign(payload, process.env.JWT_SECRET)
-                res.status(200).json({ token: token, employeeData: employee })
+
+                const employeeData = employee.toObject()
+                delete employeeData.password
+
+                res.status(200).json({ token: token, employeeData: employeeData })
             } else {
                 res.send({ passwordNotMatchError: true })
             }
@@ -733,7 +737,11 @@ export const msLogin = async (req: Request, res: Response, next: NextFunction) =
 
         const payload = { id: employee._id, employeeId: employee.employeeId }
         const token = jwt.sign(payload, process.env.JWT_SECRET)
-        return res.status(200).json({ token: token, employeeData: employee })
+
+        const employeeData = employee.toObject()
+        delete employeeData.password
+
+        return res.status(200).json({ token: token, employeeData: employeeData })
     } catch (error) {
         console.log(error)
         next(error)
