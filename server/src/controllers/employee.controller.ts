@@ -620,14 +620,18 @@ export const updateTarget = async (req: Request, res: Response, next: NextFuncti
 export const changePasswordOfEmployee = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { oldPassword, newPassword, userId } = req.body
-        const user = await Employee.findById({ userId })
+        const user = await Employee.findById(userId)
+        if (!user) {
+            return res.status(404).json({ employeeNotFoundError: true })
+        }
         const userPassword = user.password
-        bcrypt.compare(userPassword, oldPassword, async (err, result) => {
+        bcrypt.compare(oldPassword, userPassword, async (err, result) => {
             if (err) {
                 return
             }
             if (result) {
-                await Employee.findOneAndUpdate({ id: user.id }, { $set: { password: newPassword } })
+                const hashedPassword = await bcrypt.hash(newPassword, 10)
+                await Employee.findOneAndUpdate({ _id: user._id }, { $set: { password: hashedPassword } })
                 return res.status(200).json({ passwordChanged: true })
             } else {
                 return res.status(502).json({ passwordChanged: false })
