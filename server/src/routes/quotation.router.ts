@@ -19,11 +19,12 @@ import {
     uploadLpo,
     deleteQuotation,
 } from "../controllers/quotation.controller";
+import { authorize } from "../common/middlewares/authorize.middleware";
 const quoteRouter = Router()
 const upload = require("../common/multer.storage")
 
 
-quoteRouter.post('/', saveQuotation)
+quoteRouter.post('/', authorize('quotation', 'create'), saveQuotation)
 quoteRouter.post('/lpo', upload.array('files'), uploadLpo)
 quoteRouter.patch('/status/:quoteId', updateQuoteStatus)
 quoteRouter.patch('/update/:quoteId', updateQuotation)

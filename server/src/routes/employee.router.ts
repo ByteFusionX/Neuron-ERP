@@ -1,6 +1,7 @@
 import { Router } from "express";
 import passport from "passport";
 import { createEmployee, getEmployees, login, legacyLogin, msLogin, getEmployee, getFilteredEmployees, editEmployee, getEmployeeByEmployeId, isEmployeePresent, getNotificationCounts, setTarget, updateTarget, getEmployeesForCustomerTransfer, deleteEmployee, getPresaleEngineers, getPresaleManagers, blockEmployee } from "../controllers/employee.controller";
+import { authorize } from "../common/middlewares/authorize.middleware";
 const empRouter = Router()
 
 empRouter.get('/', getEmployees)
@@ -10,7 +11,7 @@ empRouter.get('/presale-engineers', getPresaleEngineers)
 empRouter.get('/check', isEmployeePresent)
 empRouter.get('/view/get/:employeeId', getEmployeeByEmployeId)
 empRouter.post('/get', getFilteredEmployees)
-empRouter.post('/', createEmployee)
+empRouter.post('/', authorize('employee', 'create'), createEmployee)
 empRouter.patch('/changePasswordOfEmployee',)
 empRouter.patch('/edit', editEmployee)
 empRouter.patch('/setTarget/:employeeId', setTarget)

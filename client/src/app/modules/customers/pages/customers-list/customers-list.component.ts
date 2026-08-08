@@ -176,11 +176,12 @@ export class CustomersListComponent {
     });
   }
 
-  onSharedList(sharedWith: any, customerId: string, index: number) {
+  onSharedList(sharedWith: any, customerId: string, index: number, ownerId: string) {
     const shareDialog = this.dialog.open(SharedWithListComponent, {
       data: {
         sharedWith,
-        customerId
+        customerId,
+        ownerId
       },
       disableClose: true,
       width: '500px'

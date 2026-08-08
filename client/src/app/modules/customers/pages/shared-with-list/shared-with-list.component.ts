@@ -19,9 +19,10 @@ import { NgIf, NgFor } from '@angular/common';
 export class SharedWithListComponent {
 
   userId!: string | undefined;
+  isOwner: boolean = false;
   constructor(
     private dialogRef: MatDialogRef<SharedWithListComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { sharedWith: getEmployee[], customerId: string },
+    @Inject(MAT_DIALOG_DATA) public data: { sharedWith: getEmployee[], customerId: string, ownerId: string },
     private dialog: MatDialog,
     private customerService: CustomerService,
     private _employeeService: EmployeeService,
@@ -31,6 +32,7 @@ export class SharedWithListComponent {
   ngOnInit() {
     this._employeeService.employeeData$.subscribe((res) => {
       this.userId = res?._id
+      this.isOwner = !!this.userId && this.userId === this.data.ownerId
     })
   }
 

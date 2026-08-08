@@ -28,7 +28,7 @@
                 </p>
               </div>
               <!-- Stop Sharing Button -->
-              <button *ngIf="employee._id !== userId"
+              <button *ngIf="isOwner && employee._id !== userId"
                 class="bg-red-500 text-white text-sm px-4 py-2 rounded-md shadow-md transition hover:bg-red-600"
                 (click)="stopSharing(employee._id)"
               >

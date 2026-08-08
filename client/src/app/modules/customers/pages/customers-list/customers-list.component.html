@@ -93,7 +93,7 @@
                                 <ng-container  *ngIf="shareAccess">
                                     <div *ngIf="element?.sharedWith?.length" matTooltip="View shared customer"
                                         matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                                        (click)="onSharedList(element.sharedWith,element._id,i)"
+                                        (click)="onSharedList(element.sharedWith,element._id,i,element.createdBy)"
                                         class="border border-gray-300 hover:border-gray-500 cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2  text-white text-sm rounded-full font-medium">
                                         <ng-icon name="heroEye" class="text-black"></ng-icon>
                                     </div>
