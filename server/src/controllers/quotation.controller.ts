@@ -17,8 +17,10 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         const quoteData = req.body;
         let quoteId: string = await generateQuoteId(quoteData.department, quoteData.createdBy, quoteData.date);
         quoteData.quoteId = quoteId;
+        quoteData.quoteExchangeRate = await getUSDRated();
 
         const quote = new Quotation(quoteData)
+        quote.$locals.actingEmployeeId = req.employeeId;
 
         const saveQuote = await (await quote.save()).populate('department')
 
@@ -28,7 +30,9 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
                 await Enquiry.findByIdAndUpdate(quoteData.enqId, { status: 'Quoted' });
                 const event = await Event.findOneAndUpdate({ collectionId: quoteData.enqId }, { $set: { collectionId: quote._id } });
                 if (event) {
-                    await Quotation.findOneAndUpdate({ _id: saveQuote._id }, { $set: { eventId: event._id } });
+                    const eventIdQuery = Quotation.findOneAndUpdate({ _id: saveQuote._id }, { $set: { eventId: event._id } });
+                    eventIdQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+                    await eventIdQuery;
                 }
             } else {
                 console.log(`Enquiry with ID ${quoteData.enqId} not found.`);
@@ -580,10 +584,12 @@ export const markAsSeenDeal = async (req: Request, res: Response, next: NextFunc
     try {
         const quoteId: string = req.body.quoteIds;
 
-        const result = await Quotation.findByIdAndUpdate(
+        const seenQuery = Quotation.findByIdAndUpdate(
             { _id: new ObjectId(quoteId) },
             { $set: { 'dealData.seenByApprover': true } },
         );
+        seenQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const result = await seenQuery;
 
         res.status(200).json({ message: 'Deal marked as seen', result });
     } catch (error) {
@@ -714,11 +720,13 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
             };
         }
 
-        const quoteUpdated = await Quotation.findByIdAndUpdate(
+        const statusQuery = Quotation.findByIdAndUpdate(
             quoteId,
             updateObject,
             { new: true }
         );
+        statusQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const quoteUpdated = await statusQuery;
 
         if (quoteUpdated) {
             return res.status(200).json(status);
@@ -735,7 +743,9 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         const quoteData = req.body;
         const { quoteId } = req.params;
 
-        const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, quoteData)
+        const updateQuery = Quotation.findByIdAndUpdate(quoteId, quoteData)
+        updateQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const quoteUpdated = await updateQuery
 
         if (quoteUpdated) {
             return res.status(200).json(quoteUpdated)
@@ -779,7 +789,8 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
                 status: 'pending',
                 attachments: files,
                 updatedItems: items,
-                totalDiscount: totalDiscount
+                totalDiscount: totalDiscount,
+                dealExchangeRate: await getUSDRated(),
             },
         }
 
@@ -787,7 +798,9 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         socket.emit("notifications", 'dealSheet')
 
         const { quoteId } = req.params;
-        const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, updateQuoteData, { new: true });
+        const dealSheetQuery = Quotation.findByIdAndUpdate(quoteId, updateQuoteData, { new: true });
+        dealSheetQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const quoteUpdated = await dealSheetQuery;
 
         if (quoteUpdated) {
             return res.status(200).json(quoteUpdated)
@@ -812,7 +825,9 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
         const job = new Job(jobData);
         const saveJob = await job.save()
         if (saveJob) {
-            const quoteUpdate = await Quotation.updateOne({ _id: jobData.quoteId }, { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(req.body.userId) })
+            const approveQuery = Quotation.updateOne({ _id: jobData.quoteId }, { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(req.body.userId) })
+            approveQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+            const quoteUpdate = await approveQuery
             if (quoteUpdate) {
                 const socket = req.app.get('io') as Server;
                 socket.emit("notifications", 'quotation')
@@ -838,6 +853,7 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         deal.dealData.status = 'rejected';
         deal.dealData.seenedBySalsePerson = false
         deal.dealData.comments.push(comment);
+        deal.$locals.actingEmployeeId = req.employeeId;
         const savedDeal = await deal.save();
 
         const socket = req.app.get('io') as Server;
@@ -861,6 +877,7 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
         }
         deal.dealData.status = 'pending';
         deal.dealData.seenByApprover = false;
+        deal.$locals.actingEmployeeId = req.employeeId;
         await deal.save();
         const jobDelete = await Job.deleteOne({ quoteId: quoteId })
 
@@ -890,7 +907,7 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
         }));
 
         // Use $push to append new files to existing array
-        const quote = await Quotation.findByIdAndUpdate(
+        const lpoQuery = Quotation.findByIdAndUpdate(
             req.body.quoteId,
             {
                 lpoSubmitted: true,
@@ -898,6 +915,8 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
             },
             { new: true } // Return updated document
         );
+        lpoQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const quote = await lpoQuery;
 
         if (quote) {
             return res.status(200).json(quote);
@@ -1019,57 +1038,49 @@ export const getReportDetails = async (req: Request, res: Response) => {
         ]);
 
         // Calculate values
-        const qatarUsdRates = await getUSDRated();
-        
+        // Fallback only for quotations saved before quoteExchangeRate existed.
+        const liveRateFallback = await getUSDRated();
+
         const totalValues = quotations.reduce((acc: any, quote: any) => {
             // Calculate the discounted price for the current quote
             const discountPrice = calculateDiscountPrice(quote.optionalItems[0].totalDiscount, quote.optionalItems[0].items);
-            
+
+            // Convert using the rate that was in effect when THIS quote was created,
+            // not whatever the live cached rate happens to be right now.
+            const rateForQuote = quote.quoteExchangeRate ?? liveRateFallback;
+            const combinedPrice = quote.currency == 'USD' ? discountPrice * rateForQuote : discountPrice;
+
             // Track values for each status type
             if (!acc.statusValues[quote.status]) {
                 acc.statusValues[quote.status] = {
-                    qar: 0,
-                    usd: 0,
                     combined: 0,
                     lpoValue: 0 // Add LPO value tracking
                 };
             }
 
-            // Add to the appropriate currency total
-            if (quote.currency == 'USD') {
-                acc.statusValues[quote.status].usd += discountPrice;
-            } else if (quote.currency == 'QAR') {
-                acc.statusValues[quote.status].qar += discountPrice;
-            }
-            
+            acc.statusValues[quote.status].combined += combinedPrice;
+
             // Calculate LPO value (example calculation - modify as needed)
             acc.statusValues[quote.status].lpoValue += discountPrice * 0.8; // Assuming LPO is 80% of quote value
-            
+
             // Track counts for pie chart
             acc.statusCounts[quote.status] = (acc.statusCounts[quote.status] || 0) + 1;
 
-            if (quote.currency == 'USD') {
-                acc.totalUSDValue += discountPrice;
-            } else if (quote.currency == 'QAR') {
-                acc.totalQARValue += discountPrice;
-            }
-            
+            acc.totalValue += combinedPrice;
+
             return acc;
         }, {
-            totalUSDValue: 0,
-            totalQARValue: 0,
+            totalValue: 0,
             statusCounts: {},
             statusValues: {}
         });
 
-        // Calculate combined values and total value
-        const totalValue = totalValues.totalQARValue + (totalValues.totalUSDValue * qatarUsdRates);
-        
+        const totalValue = totalValues.totalValue;
+
         // Create pie chart data with LPO values
         const pieChartData = Object.keys(totalValues.statusCounts).map(status => {
             const statusData = totalValues.statusValues[status];
-            statusData.combined = statusData.qar + (statusData.usd * qatarUsdRates);
-            
+
             return {
                 name: status,
                 value: totalValues.statusCounts[status],
@@ -1172,9 +1183,11 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
         }
 
         // Soft delete the quote
-        await Quotation.findByIdAndUpdate(dataId, {
+        const deleteQuery = Quotation.findByIdAndUpdate(dataId, {
             isDeleted: true
         });
+        deleteQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        await deleteQuery;
 
         newTrash('Quotation', dataId, employeeId)
 

@@ -1,4 +1,5 @@
 import { Schema, Document, model, Types } from "mongoose";
+import { auditLogPlugin } from "../common/utils/auditLog.plugin";
 
 interface ContactDetail {
   _id: string;
@@ -51,5 +52,7 @@ const customerSchema = new Schema<Customer>({
     default: false
   }
 });
+
+customerSchema.plugin(auditLogPlugin, "Customer");
 
 export default model<Customer>("Customer", customerSchema);

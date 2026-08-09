@@ -461,6 +461,7 @@ export const createEmployee = async (req: Request, res: Response, next: NextFunc
         employeeData.password = await bcrypt.hash(password, 10);
 
         const employee = new Employee(employeeData);
+        employee.$locals.actingEmployeeId = req.employeeId;
 
         const saveEmployee = await (await employee.save()).populate('category department reportingTo');
         if (saveEmployee) {
@@ -499,7 +500,7 @@ export const editEmployee = async (req: Request, res: Response, next: NextFuncti
             updatedEmployeeData.password = hashedPassword
         }
 
-        const saveEmployeeEdit = await Employee.findOneAndUpdate(
+        const editQuery = Employee.findOneAndUpdate(
             {
                 _id: employeeId,
                 isDeleted: { $ne: true }
@@ -507,6 +508,8 @@ export const editEmployee = async (req: Request, res: Response, next: NextFuncti
             updatedEmployeeData,
             { new: true }
         ).populate('category department reportingTo')
+        editQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const saveEmployeeEdit = await editQuery;
 
         if (saveEmployeeEdit) {
             return res.status(200).json(saveEmployeeEdit);
@@ -540,7 +543,7 @@ export const setTarget = async (req: Request, res: Response, next: NextFunction)
             });
         }
 
-        const employeeTargetUpdate = await Employee.findOneAndUpdate(
+        const setTargetQuery = Employee.findOneAndUpdate(
             { _id: employeeId },
             {
                 $push: {
@@ -553,6 +556,8 @@ export const setTarget = async (req: Request, res: Response, next: NextFunction)
             },
             { upsert: true, new: true }
         );
+        setTargetQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const employeeTargetUpdate = await setTargetQuery;
 
         if (employeeTargetUpdate) {
             return res.status(200).json(employeeTargetUpdate.targets);
@@ -595,7 +600,7 @@ export const updateTarget = async (req: Request, res: Response, next: NextFuncti
         }
 
         // Proceed to update the target
-        const updatedEmployee = await Employee.findOneAndUpdate(
+        const updateTargetQuery = Employee.findOneAndUpdate(
             {
                 _id: employeeId,
                 "targets._id": targetObjectId
@@ -605,6 +610,8 @@ export const updateTarget = async (req: Request, res: Response, next: NextFuncti
             },
             { new: true }
         );
+        updateTargetQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const updatedEmployee = await updateTargetQuery;
 
         if (!updatedEmployee) {
             return res.status(404).json({ message: 'Target not found' });
@@ -631,7 +638,9 @@ export const changePasswordOfEmployee = async (req: Request, res: Response, next
             }
             if (result) {
                 const hashedPassword = await bcrypt.hash(newPassword, 10)
-                await Employee.findOneAndUpdate({ _id: user._id }, { $set: { password: hashedPassword } })
+                const passwordQuery = Employee.findOneAndUpdate({ _id: user._id }, { $set: { password: hashedPassword } })
+                passwordQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+                await passwordQuery
                 return res.status(200).json({ passwordChanged: true })
             } else {
                 return res.status(502).json({ passwordChanged: false })
@@ -861,9 +870,11 @@ export const deleteEmployee = async (req: Request, res: Response, next: NextFunc
         }
 
         // Soft delete the employee
-        await Employee.findByIdAndUpdate(dataId, {
+        const deleteQuery = Employee.findByIdAndUpdate(dataId, {
             isDeleted: true
         });
+        deleteQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        await deleteQuery;
 
         newTrash('Employee', dataId, employeeId)
 
@@ -885,7 +896,9 @@ export const blockEmployee = async (req: Request, res: Response, next: NextFunct
         if (employee) {
             let isBlocked = employee.isBlocked ? false : true;
             console.log(isBlocked)
-            await Employee.findByIdAndUpdate(employeeId, { isBlocked : isBlocked }, { new: true });
+            const blockQuery = Employee.findByIdAndUpdate(employeeId, { isBlocked : isBlocked }, { new: true });
+            blockQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+            await blockQuery;
             return res.status(200).json({ isBlocked });
         } else {
             return res.status(404).json({ message: 'Employee not found' });

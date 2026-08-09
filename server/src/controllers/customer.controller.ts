@@ -524,6 +524,7 @@ export const shareOrTransferCustomer = async (req: Request, res: Response, next:
         } else {
             return res.status(400).json({ message: "Invalid type. Use 'transfer' or 'share'" });
         }
+        customer.$locals.actingEmployeeId = req.employeeId;
         const savedCustomer = await customer.save();
 
         // Populate both `createdBy` and `sharedWith`
@@ -558,6 +559,7 @@ export const stopSharingCustomer = async (req: Request, res: Response, next: Nex
         // Remove the employeeId from the sharedWith array
         customer.sharedWith = customer.sharedWith.filter(id => id.toString() !== employeeId);
 
+        customer.$locals.actingEmployeeId = req.employeeId;
         const updatedCustomer = await customer.save();
 
         res.status(200).json(updatedCustomer);
@@ -580,6 +582,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
         customerData.clientRef = clientId;
 
         const customer = new Customer(customerData)
+        customer.$locals.actingEmployeeId = req.employeeId;
         const saveCustomer = await customer.save()
 
         if (saveCustomer) {
@@ -600,7 +603,7 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
         if (companyExist) {
             return res.status(200).json({ companyExist: true })
         }
-        const updatedCustomer = await Customer.findOneAndUpdate({ _id: id }, {
+        const editQuery = Customer.findOneAndUpdate({ _id: id }, {
             $set: {
                 department: department,
                 contactDetails: contactDetails,
@@ -611,6 +614,8 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
                 customerType: customerType,
             }
         })
+        editQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        const updatedCustomer = await editQuery;
         return res.status(200).json(updatedCustomer)
     } catch (error) {
         console.log(error)
@@ -680,9 +685,11 @@ export const deleteCustomer = async (req: Request, res: Response, next: NextFunc
         }
 
         // Soft delete the customer
-        await Customer.findByIdAndUpdate(dataId, {
+        const deleteQuery = Customer.findByIdAndUpdate(dataId, {
             isDeleted: true
         });
+        deleteQuery.setOptions({ actingEmployeeId: req.employeeId } as any);
+        await deleteQuery;
         newTrash('Customer', dataId, employeeId)
 
         return res.status(200).json({

@@ -53,18 +53,27 @@ export const restoreTrash = async (req: Request, res: Response, next: NextFuncti
             case 'Category':
                 await Category.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
                 break;
-            case 'Employee':
-                await Employee.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
+            case 'Employee': {
+                const query = Employee.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
+                query.setOptions({ actingEmployeeId: req.employeeId } as any);
+                await query
                 break;
-            case 'Customer':
-                await Customer.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
+            }
+            case 'Customer': {
+                const query = Customer.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
+                query.setOptions({ actingEmployeeId: req.employeeId } as any);
+                await query
                 break;
+            }
             case 'Enquiry':
                 await Enquiry.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
                 break;
-            case 'Quotation':
-                await Quotation.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
+            case 'Quotation': {
+                const query = Quotation.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
+                query.setOptions({ actingEmployeeId: req.employeeId } as any);
+                await query
                 break;
+            }
             case 'Job':
                 await Job.findOneAndUpdate({ _id: dataId }, { $set: { isDeleted: false } })
                 break;

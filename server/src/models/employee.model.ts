@@ -1,4 +1,5 @@
 import { Schema, Document, model, Types } from "mongoose";
+import { auditLogPlugin } from "../common/utils/auditLog.plugin";
 
 interface Employee extends Document {
     employeeId: string;
@@ -145,4 +146,5 @@ const employeeSchema = new Schema<Employee>({
 });
 
 employeeSchema.index({ firstName: 1, lastName: 1 })
+employeeSchema.plugin(auditLogPlugin, "Employee");
 export default model<Employee>("Employee", employeeSchema);

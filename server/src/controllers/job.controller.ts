@@ -109,7 +109,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                                             {
                                                 $multiply: [
                                                     calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
-                                                    qatarUsdRate
+                                                    { $ifNull: ['$quotation.dealData.dealExchangeRate', qatarUsdRate] }
                                                 ]
                                             },
                                             calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')
@@ -182,7 +182,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                                             {
                                                 $multiply: [
                                                     calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
-                                                    qatarUsdRate
+                                                    { $ifNull: ['$quotation.dealData.dealExchangeRate', qatarUsdRate] }
                                                 ]
                                             },
                                             calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')

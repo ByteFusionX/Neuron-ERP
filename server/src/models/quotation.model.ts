@@ -1,5 +1,6 @@
 import { Schema, Document, model, Types } from "mongoose";
 import FilesSchema from "./files.model";
+import { auditLogPlugin } from "../common/utils/auditLog.plugin";
 
 interface QuoteItemDetail {
     detail: string;
@@ -42,6 +43,7 @@ interface Deal {
     attachments: [];
     updatedItems: QuoteItem[];
     totalDiscount:number;
+    dealExchangeRate: number;
 }
 
 interface Quotation extends Document {
@@ -65,6 +67,7 @@ interface Quotation extends Document {
     rfqNo: string;
     closingDate: Date;
     eventId: any;
+    quoteExchangeRate: number;
 }
 
 export enum quoteStatus {
@@ -195,6 +198,10 @@ const dealDatas = new Schema<Deal>({
         type: [quoteItem],
         required: true,
     },
+    dealExchangeRate: {
+        type: Number,
+        required: false,
+    },
 });
 
 const quotationSchema = new Schema<Quotation>({
@@ -274,6 +281,12 @@ const quotationSchema = new Schema<Quotation>({
         type: Schema.Types.ObjectId,
         ref: 'Event'
     },
+    quoteExchangeRate: {
+        type: Number,
+        required: false,
+    },
 });
+
+quotationSchema.plugin(auditLogPlugin, "Quotation");
 
 export default model<Quotation>("Quotation", quotationSchema);
