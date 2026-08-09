@@ -21,8 +21,6 @@ COPY . .
 
 RUN npm ci --omit=dev
 
-RUN this-command-does-not-exist
-
 COPY --from=development /usr/src/app/dist ./dist
 
 CMD ["node", "dist/index.js"]
