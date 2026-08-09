@@ -21,8 +21,6 @@ COPY . .
 
 RUN npm ci --omit=dev
 
-RUN npx migrate up
-
 COPY --from=development /usr/src/app/dist ./dist
 
 CMD ["node", "dist/index.js"]

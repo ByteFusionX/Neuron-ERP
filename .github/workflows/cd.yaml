@@ -27,3 +27,6 @@ jobs:
           
       - name: Docker compose up
         run: sudo docker compose -f ./docker/docker-compose.yml up -d --build
+
+      - name: Run database migrations
+        run: sudo docker compose -f ./docker/docker-compose.yml exec -T api npx migrate up
