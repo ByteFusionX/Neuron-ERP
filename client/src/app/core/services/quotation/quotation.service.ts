@@ -296,7 +296,7 @@ export class QuotationService {
           }
         },
         ...(hasExcludedOptionalItems ? [{
-          text: 'Note: Item(s) marked (Optional) above are not included in the Total Amount.',
+          text: 'Note: Items marked (Optional) above are not included in the Total Amount.',
           style: 'optionalNote'
         }] : [])
       ];
