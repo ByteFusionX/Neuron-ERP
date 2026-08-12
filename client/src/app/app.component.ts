@@ -66,29 +66,40 @@ export class AppComponent implements OnDestroy, OnInit {
       this.router.navigate(['/login']);
     });
 
-    // Check if there are any accounts available
-    const accounts = this.authService.instance.getAllAccounts();
-    if (accounts.length > 0) {
-      // Set active account if not already set
-      if (!this.authService.instance.getActiveAccount()) {
-        this.authService.instance.setActiveAccount(accounts[0]);
-      }
+    // Azure AD login is temporarily disabled in favor of employeeId/password login.
+    // Restore this MSAL-token block (and remove the employeeToken block below) to re-enable it.
+    // const accounts = this.authService.instance.getAllAccounts();
+    // if (accounts.length > 0) {
+    //   if (!this.authService.instance.getActiveAccount()) {
+    //     this.authService.instance.setActiveAccount(accounts[0]);
+    //   }
+    //
+    //   const token = this.authService.acquireTokenSilent({
+    //     scopes: [environment.microsoftApiUrl],
+    //   });
+    //
+    //   token.subscribe((data) => {
+    //     if (data) {
+    //       this.token = data.accessToken
+    //       this._notificationService.authSocketIo(data.accessToken)
+    //       this._notificationService.getEmployeeTextNotifications()
+    //       this._notificationService.initializeNotifications()
+    //       if (!this.isLoginRoute()) {
+    //         this.isUserThere();
+    //       }
+    //     }
+    //   })
+    // }
 
-      const token = this.authService.acquireTokenSilent({
-        scopes: [environment.microsoftApiUrl],
-      });
-      
-      token.subscribe((data) => {
-        if (data) {
-          this.token = data.accessToken
-          this._notificationService.authSocketIo(data.accessToken)
-          this._notificationService.getEmployeeTextNotifications()
-          this._notificationService.initializeNotifications()
-          if (!this.isLoginRoute()) {
-            this.isUserThere();
-          }
-        }
-      })
+    const employeeToken = this._employeeService.getToken();
+    if (employeeToken) {
+      this.token = employeeToken;
+      this._notificationService.authSocketIo(employeeToken)
+      this._notificationService.getEmployeeTextNotifications()
+      this._notificationService.initializeNotifications()
+      if (!this.isLoginRoute()) {
+        this.isUserThere();
+      }
     }
 
     this.router.events.subscribe(event => {
@@ -120,8 +131,10 @@ export class AppComponent implements OnDestroy, OnInit {
   }
 
   isLoginRoute(): boolean {
-    const accounts = this.authService.instance.getAllAccounts();
-    const isAuthenticated = accounts.length > 0;
+    // Azure AD login is temporarily disabled; check employeeToken instead of MSAL accounts.
+    // const accounts = this.authService.instance.getAllAccounts();
+    // const isAuthenticated = accounts.length > 0;
+    const isAuthenticated = !!this._employeeService.getToken();
     return !isAuthenticated || this.route.snapshot.firstChild?.routeConfig?.path === 'login';
   }
 

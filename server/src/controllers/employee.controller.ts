@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import Employee from "../models/employee.model";
 import * as bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import announcementModel from "../models/announcement.model";
 import enquiryModel from "../models/enquiry.model";
 import quotationModel from "../models/quotation.model";
@@ -763,39 +764,84 @@ const generateEmployeeId = async () => {
   }
 };
 
+// Azure AD login is temporarily disabled in favor of employeeId/password login.
+// Restore this function (and jwt.middleware.ts's passport-azure-ad path) to re-enable it.
+// export const login = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction,
+// ) => {
+//   try {
+//     const token = req.user as any;
+//     const oid = token.oid;
+//
+//     let employeeData = await Employee.findOne(
+//       {
+//         microsoftId: oid,
+//         isDeleted: { $ne: true },
+//       },
+//       { password: 0 },
+//     ).populate("category");
+//
+//     if (!employeeData) {
+//       const email = token.email || token.upn;
+//       const employee = await Employee.findOneAndUpdate(
+//         { email, isDeleted: { $ne: true } },
+//         { microsoftId: oid },
+//       );
+//       employeeData = employee;
+//     }
+//
+//     if (!employeeData) return res.status(401).json({ message: "Unauthorized" });
+//
+//     res.status(200).json({
+//       message: "Login successful",
+//       employee: employeeData,
+//       token: token,
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     return next(error);
+//   }
+// };
+
 export const login = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const token = req.user as any;
-    const oid = token.oid;
+    const { employeeId, password } = req.body;
 
-    let employeeData = await Employee.findOne(
-      {
-        microsoftId: oid,
-        isDeleted: { $ne: true },
-      },
-      { password: 0 },
-    ).populate("category");
+    const employee = await Employee.findOne({
+      employeeId: employeeId,
+      isDeleted: { $ne: true },
+      isBlocked: { $ne: true },
+    }).select("+password");
 
-    if (!employeeData) {
-      const email = token.email || token.upn;
-      const employee = await Employee.findOneAndUpdate(
-        { email, isDeleted: { $ne: true } },
-        { microsoftId: oid },
-      );
-      employeeData = employee;
+    if (!employee) {
+      return res.send({ employeeNotFoundError: true });
     }
 
-    if (!employeeData) return res.status(401).json({ message: "Unauthorized" });
+    // Supports both bcrypt-hashed passwords (set via the app) and plaintext
+    // passwords (e.g. set by hand directly in MongoDB).
+    const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(employee.password || "");
+    const passwordMatch = isBcryptHash
+      ? await bcrypt.compare(password, employee.password)
+      : password === employee.password;
 
-    res.status(200).json({
-      message: "Login successful",
-      employee: employeeData,
-      token: token,
-    });
+    if (!passwordMatch) {
+      return res.send({ passwordNotMatchError: true });
+    }
+
+    const payload = { id: employee._id, employeeId: employee.employeeId };
+    const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+
+    const employeeData = await Employee.findById(employee._id, {
+      password: 0,
+    }).populate("category");
+
+    res.status(200).json({ token, employeeData });
   } catch (error) {
     console.log(error);
     return next(error);

@@ -76,6 +76,7 @@ const employeeSchema = new Schema<Employee>({
     type: String,
     required: false,
     unique: true,
+    sparse: true,
   },
   employeeId: {
     type: String,

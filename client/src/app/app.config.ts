@@ -4,6 +4,7 @@ import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 
 import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { ErrorInterceptor } from './core/interceptors/error-interceptor/error.interceptor';
+import { JwtInterceptor } from './core/interceptors/jwt-interceptor/jwt.interceptor';
 import { BrowserModule, bootstrapApplication } from '@angular/platform-browser';
 import { routes } from './app.routing';
 import { provideAnimations } from '@angular/platform-browser/animations';
@@ -108,7 +109,10 @@ export const appConfig: ApplicationConfig = {
             }
         }),
         provideNgIdle(),
-        { provide: HTTP_INTERCEPTORS, useClass: MsalInterceptor, multi: true },
+        // Azure AD login is temporarily disabled in favor of employeeId/password login.
+        // Restore MsalInterceptor (and remove JwtInterceptor) to re-enable it.
+        // { provide: HTTP_INTERCEPTORS, useClass: MsalInterceptor, multi: true },
+        { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
         { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
         { provide: MSAL_INSTANCE, useFactory: MSALInstanceFactory },
         { provide: MSAL_GUARD_CONFIG, useFactory: MSALGuardConfigFactory },

@@ -429,8 +429,11 @@ export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> 
 
 export const getEmployeeData = async (userToken: any): Promise<any> => {
     try {
-        const oid = userToken.oid
-        const employee = await employeeModel.findOne({ microsoftId: oid }).populate('category reportingTo');
+        // Supports both the self-issued employeeId/password JWT ({ id }) and
+        // the Azure AD token ({ oid }), since Azure login is only temporarily disabled.
+        const employee = userToken?.id
+            ? await employeeModel.findById(userToken.id).populate('category reportingTo')
+            : await employeeModel.findOne({ microsoftId: userToken?.oid }).populate('category reportingTo');
         return employee;
     } catch (error) {
         console.error('Error fetching employee data:', error);

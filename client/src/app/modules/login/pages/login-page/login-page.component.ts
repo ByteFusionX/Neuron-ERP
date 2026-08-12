@@ -13,12 +13,17 @@ import { AuthenticationResult, InteractionStatus } from '@azure/msal-browser';
 import { filter, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
+import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 
+// Azure AD login is temporarily disabled in favor of employeeId/password login
+// (see login-page.component.html: the "Continue with Microsoft" block is commented out).
+// To re-enable Azure: uncomment that block, and swap the interceptor/guards back
+// (app.config.ts, auth.guard.ts, login.guard.ts) to their Azure/MsalService checks.
 @Component({
     selector: 'app-login-page',
     templateUrl: './login-page.component.html',
     styleUrls: ['./login-page.component.css'],
-    imports: [NgIf, FormsModule, ReactiveFormsModule, NgIcon]
+    imports: [NgIf, FormsModule, ReactiveFormsModule, NgIcon, appNoLeadingSpace]
 })
 export class LoginPageComponent implements OnDestroy {
   isEmployeePresent: boolean = true;
@@ -27,8 +32,22 @@ export class LoginPageComponent implements OnDestroy {
   isMicrosoftLoginLoading: boolean = false;
   isSuperAdminLoading: boolean = false;
 
+  // employeeId/password login state
+  submit: boolean = false;
+  employeeNotFoundError: boolean = false;
+  passwordNotMatchError: boolean = false;
+  isSaving: boolean = false;
+  showPassword: boolean = false;
+  passwordType: string = this.showPassword ? 'text' : 'password';
+  showIcon: string = this.showPassword ? 'heroEye' : 'heroEyeSlash';
+
+  loginForm = this._fb.group({
+    employeeId: ['', Validators.required],
+    password: ['', Validators.required]
+  })
+
   private readonly _destroying$ = new Subject<void>();
-  
+
   constructor(
     private router: Router,
     private _dialog: MatDialog,
@@ -36,10 +55,15 @@ export class LoginPageComponent implements OnDestroy {
     private employeeService: EmployeeService,
     private msalBroadcastService: MsalBroadcastService,
     private notificationService: NotificationService,
-    private toastr: ToastrService
+    private toastr: ToastrService,
+    private _fb: FormBuilder,
   ) { }
 
   ngOnInit(): void {
+    this.employeeService.isEmployeePresent().subscribe((res) => {
+      this.isEmployeePresent = res.exists;
+    })
+
     this.msalBroadcastService.inProgress$
       .pipe(
         filter((status: InteractionStatus) => status === InteractionStatus.None),
@@ -49,6 +73,40 @@ export class LoginPageComponent implements OnDestroy {
         this.setLoginDisplay();
         this.setActiveAccount();
       });
+  }
+
+  passwordShow() {
+    this.showPassword = !this.showPassword
+    this.passwordType = this.showPassword ? 'text' : 'password';
+    this.showIcon = this.showPassword ? 'heroEye' : 'heroEyeSlash';
+  }
+
+  onSubmit() {
+    this.submit = true
+    this.employeeNotFoundError = false
+    this.passwordNotMatchError = false
+    if (this.loginForm.valid) {
+      this.isSaving = true;
+      this.employeeService.employeeLogin(this.loginForm.value).subscribe({
+        next: (res: login) => {
+          if (res.employeeData && res.token) {
+            localStorage.setItem('employeeToken', res.token)
+            this.notificationService.authSocketIo(res.token)
+            this.notificationService.initializeNotifications()
+            this.router.navigate(['/home']);
+          } else if (res.employeeNotFoundError) {
+            this.isSaving = false;
+            this.employeeNotFoundError = true;
+          } else if (res.passwordNotMatchError) {
+            this.isSaving = false;
+            this.passwordNotMatchError = true
+          }
+        },
+        error: () => {
+          this.isSaving = false;
+        }
+      })
+    }
   }
 
   setLoginDisplay() {
@@ -102,7 +160,7 @@ export class LoginPageComponent implements OnDestroy {
         createSuperAdmin : true
       }
     });
-    
+
     dialogRef.afterClosed().subscribe({
       next: (data: any) => {
         this.isSuperAdminLoading = false;

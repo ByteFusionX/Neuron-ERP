@@ -41,8 +41,6 @@ export class ProfileInfoComponent {
   ) { }
 
   ngOnInit() {
-    this.employee = this._employeeService.employeeToken()
-    const employeeId = this.employee.employeeId
     this._employeeService.getEmployeeData()
     this.employeeData$ = this._employeeService.employeeData$
     this.getCompanyDetails();

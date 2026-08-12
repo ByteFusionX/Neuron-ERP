@@ -1,15 +1,15 @@
-<div class="bg-white m-6">
+<div class="bg-white m-6" *ngIf="employeeData">
     <div class="  border-b p-3 px-9 py-6 flex justify-between items-center">
         <h3 class="text-lg font-medium">Employee Details - {{employeeData.employeeId}}</h3>
         
         <div class="flex gap-2">
-            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm" (click)="onEmployeeEdit()">
+            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm" (click)="onEmployeeEdit()" *ngIf="!isOwnProfile">
                 <div class="flex justify-center items-center gap-2">
                     <ng-icon name="heroPencilSquare"></ng-icon>
                     Edit
                 </div>
             </button>
-            <button class="bg-red-600 hover:bg-red-500 text-white font-medium py-2.5 px-4 rounded text-sm" (click)="deleteEmployee()" *ngIf="isDeleteOption">
+            <button class="bg-red-600 hover:bg-red-500 text-white font-medium py-2.5 px-4 rounded text-sm" (click)="deleteEmployee()" *ngIf="isDeleteOption && !isOwnProfile">
                 <div class="flex justify-center items-center gap-2">
                     <ng-icon name="heroTrash"></ng-icon>
                     Delete
@@ -114,7 +114,7 @@
       
 </div>
 
-<div class="w-full h-full bg-white p-10 m-2 rounded-md" *ngIf="employeeData.category.isSalespersonWithTarget">
+<div class="w-full h-full bg-white p-10 m-2 rounded-md" *ngIf="employeeData?.category?.isSalespersonWithTarget">
     <div class="mb-3 flex justify-between">
         <div class="flex gap-1">
             <i><ng-icon name="heroBuildingLibrary" class="text-orange-400 text-lg mt-[1px]"></ng-icon></i>

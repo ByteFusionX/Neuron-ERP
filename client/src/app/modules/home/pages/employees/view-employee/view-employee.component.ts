@@ -27,6 +27,7 @@ export class ViewEmployeeComponent {
   isTargetLoading: boolean = true;
   isEmpty: boolean = false;
   isDeleteOption: boolean = false;
+  currentEmployeeId?: string;
 
   targets: Target[] = [];
 
@@ -42,11 +43,16 @@ export class ViewEmployeeComponent {
 
   ngOnInit() {
     this.employeeService.employeeData$.subscribe((employee) => {
+      this.currentEmployeeId = employee?._id;
       if (employee?.category.role == 'superAdmin') {
         this.isDeleteOption = true
       }
 
     })
+  }
+
+  get isOwnProfile(): boolean {
+    return !!this.employeeData && !!this.currentEmployeeId && this.currentEmployeeId === this.employeeData._id;
   }
 
   private initEmployeeData(): void {
@@ -178,7 +184,10 @@ export class ViewEmployeeComponent {
   }
 
   deleteEmployee() {
-    const employee = this.employeeService.employeeToken()
+    let currentEmployeeId: string | undefined;
+    this.employeeService.employeeData$.subscribe((employee) => {
+      currentEmployeeId = employee?._id;
+    });
 
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
@@ -191,7 +200,7 @@ export class ViewEmployeeComponent {
 
     dialogRef.afterClosed().subscribe((confirmed: boolean) => {
       if (confirmed) {
-        this.employeeService.deleteEmployee({ dataId: this.employeeData._id!, employeeId: employee.id }).subscribe({
+        this.employeeService.deleteEmployee({ dataId: this.employeeData._id!, employeeId: currentEmployeeId! }).subscribe({
           next: () => {
             this._toast.success('Employee deleted successfully');
             this.navigateToEmployeeList();
