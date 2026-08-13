@@ -3,7 +3,7 @@
 
         <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
             <div class="flex gap-2">
-                <h3>Pending Job Sheet </h3>
+                <h3>{{ isCompletedRoute ? 'Completed Job Sheet' : 'Pending Job Sheet' }}</h3>
                 <p *ngIf="reportDate"
                     class="text-sm font-normal bg-purple-200 px-4 gap-2 flex justify-center items-center">{{reportDate}}
                     <ng-icon (click)="onRemoveReport()" class="hover:text-red-500 cursor-pointer"
@@ -223,7 +223,7 @@
                             </button>
 
                             <button
-                                *ngIf="canAllocateJobs"
+                                *ngIf="canAllocateJobs && !isCompletedRoute"
                                 class="bg-violet-600 hover:bg-violet-800 w-7 h-7 rounded-full flex items-center justify-center text-white"
                                 matTooltip="Allocate" matTooltipPosition="above"
                                 (click)="openAllocateTypeSelecter(element)">

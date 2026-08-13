@@ -77,6 +77,7 @@ export class JobListComponent {
   isDeleteOption: boolean = false;
   loader = this.loadingBar.useRef();
   canAllocateJobs = false;
+  isCompletedRoute = false;
 
   private subscriptions = new Subscription();
 
@@ -104,6 +105,7 @@ export class JobListComponent {
 
   ngOnInit() {
     this.checkPrivileges();
+    this.isCompletedRoute = this.router.url.includes('/completed');
     this.employees$ = this._jobService.getJobSalesPerson();
     this.currentYear = new Date().getFullYear().toString();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -229,9 +231,8 @@ export class JobListComponent {
       userId = employee?._id;
     });
 
-    const currentRoute = this.router.url;
-    const isCompletedRoute = currentRoute.includes('/completed');
-    const allocateStatusFilter = isCompletedRoute ? allocateStatus.Completed : allocateStatus.Pending;
+    this.isCompletedRoute = this.router.url.includes('/completed');
+    const allocateStatusFilter = this.isCompletedRoute ? allocateStatus.Completed : allocateStatus.Pending;
 
     let filterData = {
       search: this.searchQuery,
