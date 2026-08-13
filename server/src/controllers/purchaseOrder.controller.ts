@@ -5,7 +5,7 @@ import Supplier from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
 import jobModel from "../models/job.model";
 import mongoose from "mongoose";
-import { getEmployeeData, updateIssuedQuantities, buildPrivilegeAccessFilter } from "../common/utils/util";
+import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
@@ -123,15 +123,6 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     await purchaseOrder.save();
 
     if (purchaseOrderData.poStatus !== 'Draft') {
-      const purchaseRequestDoc = await purchaseRequest.findById(purchaseId);
-      if (purchaseRequestDoc) {
-        await updateIssuedQuantities(
-          purchaseRequestDoc,
-          supplierId,
-          items.map((item: any) => ({ detail: item.detail, quantity: item.quantity })),
-          'add'
-        );
-      }
       const socket = req.app.get('io') as Server;
       await createNotificationWithPrivileges(
         {
@@ -169,7 +160,6 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 export const updatePurchaseOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { poStatus, items, supplierId } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -223,21 +213,6 @@ export const updatePurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
-    const oldStatus = existingOrder.poStatus;
-    const newStatus = poStatus || updateData.poStatus;
-
-    if ((oldStatus === 'Draft' || oldStatus === 'Rejected') && newStatus === 'Pending for Approval' && items && supplierId) {
-      const purchaseRequestDoc = await purchaseRequest.findById(updatedOrder.purchaseId);
-      if (purchaseRequestDoc) {
-        await updateIssuedQuantities(
-          purchaseRequestDoc,
-          supplierId,
-          items.map((item: any) => ({ detail: item.detail, quantity: item.quantity })),
-          'add'
-        );
-      }
-    }
-
     return res.status(200).json({
       success: true,
       message: "Purchase order updated successfully",
@@ -256,7 +231,10 @@ export const updatePurchaseOrder = async (req: Request, res: Response) => {
 export const reissuePurchaseOrder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { items, supplierId, originalItems, ...updateData } = req.body;
+    // originalItems/supplierId are excluded from updateData so they never get
+    // persisted onto the PO document; they're no longer needed for
+    // issuedQuantity bookkeeping (see comment below).
+    const { items, supplierId: _supplierId, originalItems: _originalItems, ...updateData } = req.body;
 
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
@@ -331,30 +309,10 @@ export const reissuePurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
-    // Handle issuedQuantity adjustment for reissue
-    if (originalItems && items && supplierId) {
-      const purchaseRequestDoc = await purchaseRequest.findById(updatedOrder.purchaseId);
-      if (purchaseRequestDoc) {
-        // Step 1: Subtract original quantities
-        await updateIssuedQuantities(
-          purchaseRequestDoc,
-          supplierId.toString(),
-          originalItems.map((item: any) => ({ detail: item.detail, quantity: item.quantity })),
-          'subtract'
-        );
-
-        // Step 2: Add new quantities (reload the document to get updated values)
-        const updatedPurchaseRequestDoc = await purchaseRequest.findById(updatedOrder.purchaseId);
-        if (updatedPurchaseRequestDoc) {
-          await updateIssuedQuantities(
-            updatedPurchaseRequestDoc,
-            supplierId.toString(),
-            items.map((item: any) => ({ detail: item.detail, quantity: item.quantity })),
-            'add'
-          );
-        }
-      }
-    }
+    // No issuedQuantity bookkeeping needed here: reissue updates this same
+    // PO document's items in place, so the next derived-sum read (see
+    // getSuppliersForPurchaseRequest / getItemsForPurchaseRequest) picks up
+    // the new quantities automatically.
 
     return res.status(200).json({
       success: true,
@@ -1222,15 +1180,9 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       }
     ).populate('rejectedHistory.rejectedBy', 'firstName lastName');
 
-    const purchaseRequestDoc = await purchaseRequest.findById(purchaseOrder.purchaseId);
-    if (purchaseRequestDoc && purchaseOrder.items && purchaseOrder.items.length > 0) {
-      await updateIssuedQuantities(
-        purchaseRequestDoc,
-        purchaseOrder.supplierId,
-        purchaseOrder.items.map((item: any) => ({ detail: item.detail, quantity: item.quantity })),
-        'subtract'
-      );
-    }
+    // No issuedQuantity bookkeeping needed: 'Rejected' POs are already
+    // excluded from the derived-sum queries in getSuppliersForPurchaseRequest
+    // / getItemsForPurchaseRequest, so this PO stops counting automatically.
 
     const socket = req.app.get('io') as Server;
     await createNotificationWithPrivileges(
@@ -1361,8 +1313,12 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
       });
     }
 
+    // Key items by partNo (stable item reference) rather than the free-text
+    // `detail` field, which can differ slightly between the purchase request
+    // and issued POs and cause required/issued quantities to fail to match up.
+    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+
     const supplierMap = new Map();
-    const supplierItemCountMap = new Map();
 
     purchaseRequestDoc.items.forEach((item: any) => {
       if (item.itemDetails && Array.isArray(item.itemDetails)) {
@@ -1371,21 +1327,16 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
             const selectedComparison = itemDetail.comparisons.find((comp: any) => comp.selected === true);
             if (selectedComparison && selectedComparison.supplierId) {
               const supplierId = selectedComparison.supplierId.toString();
-              
+
               if (!supplierMap.has(supplierId)) {
-                supplierMap.set(supplierId, {
-                  supplierId: selectedComparison.supplierId,
-                  itemDetails: []
-                });
-                supplierItemCountMap.set(supplierId, 0);
+                supplierMap.set(supplierId, { supplierId: selectedComparison.supplierId, itemDetails: [] });
               }
-              
+
               supplierMap.get(supplierId).itemDetails.push({
-                detail: itemDetail.detail,
+                key: itemKey(itemDetail),
                 quantity: selectedComparison.quantity,
                 unitPrice: selectedComparison.unitPrice
               });
-              supplierItemCountMap.set(supplierId, supplierItemCountMap.get(supplierId) + 1);
             }
           }
         });
@@ -1393,7 +1344,11 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
     });
 
     const supplierIds = Array.from(supplierMap.keys()).map(id => new mongoose.Types.ObjectId(id));
-    
+
+    // Always derive issued quantities live from the actual PurchaseOrder
+    // documents (never from a stored counter) so this can never drift out of
+    // sync, no matter how many times a PO for this item is created,
+    // rejected, resubmitted, revoked, or reissued.
     const existingPurchaseOrders = await PurchaseOrder.find({
       purchaseId: new mongoose.Types.ObjectId(purchaseId),
       supplierId: { $in: supplierIds },
@@ -1409,7 +1364,7 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
       if (po.items && Array.isArray(po.items)) {
         po.items.forEach((item: any) => {
           issuedItemsMap.get(supplierId).push({
-            detail: item.detail,
+            key: itemKey(item),
             quantity: item.quantity
           });
         });
@@ -1427,40 +1382,19 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
 
       const requiredItemsMap = new Map();
       supplierItemDetails.forEach((itemDetail: any) => {
-        const key = itemDetail.detail;
-        const currentRequired = requiredItemsMap.get(key) || 0;
-        requiredItemsMap.set(key, currentRequired + (itemDetail.quantity || 0));
+        const currentRequired = requiredItemsMap.get(itemDetail.key) || 0;
+        requiredItemsMap.set(itemDetail.key, currentRequired + (itemDetail.quantity || 0));
       });
 
       const issuedItemsCountMap = new Map();
       issuedItems.forEach((item: any) => {
-        const key = item.detail;
-        const currentIssued = issuedItemsCountMap.get(key) || 0;
-        issuedItemsCountMap.set(key, currentIssued + (item.quantity || 0));
-      });
-
-      purchaseRequestDoc.items.forEach((item: any) => {
-        if (item.itemDetails && Array.isArray(item.itemDetails)) {
-          item.itemDetails.forEach((itemDetail: any) => {
-            if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
-              const selectedComparison = itemDetail.comparisons.find((comp: any) => comp.selected === true);
-              if (selectedComparison && selectedComparison.supplierId && 
-                  selectedComparison.supplierId.toString() === supplierId) {
-                const key = itemDetail.detail;
-                const issuedQty = itemDetail.issuedQuantity || 0;
-                if (issuedQty > 0) {
-                  const currentIssued = issuedItemsCountMap.get(key) || 0;
-                  issuedItemsCountMap.set(key, currentIssued + issuedQty);
-                }
-              }
-            }
-          });
-        }
+        const currentIssued = issuedItemsCountMap.get(item.key) || 0;
+        issuedItemsCountMap.set(item.key, currentIssued + (item.quantity || 0));
       });
 
       let allQuantitiesIssued = true;
-      for (const [detail, requiredQty] of requiredItemsMap.entries()) {
-        const issuedQty = issuedItemsCountMap.get(detail) || 0;
+      for (const [key, requiredQty] of requiredItemsMap.entries()) {
+        const issuedQty = issuedItemsCountMap.get(key) || 0;
         if (issuedQty < requiredQty) {
           allQuantitiesIssued = false;
           break;
@@ -1524,24 +1458,11 @@ export const revokePurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
-    const purchaseId = purchaseOrder.purchaseId;
-    const supplierId = purchaseOrder.supplierId;
-    const items = purchaseOrder.items || [];
-
-    // Hard delete the purchase order
+    // Hard delete the purchase order. No issuedQuantity bookkeeping needed:
+    // deleted POs can no longer appear in the derived-sum queries in
+    // getSuppliersForPurchaseRequest / getItemsForPurchaseRequest, so this
+    // PO stops counting automatically.
     await PurchaseOrder.findByIdAndDelete(id);
-
-    if (purchaseOrder.poStatus !== 'Draft' && purchaseOrder.poStatus !== 'Rejected') {
-      const purchaseRequestDoc = await purchaseRequest.findById(purchaseId);
-      if (purchaseRequestDoc && items.length > 0) {
-        await updateIssuedQuantities(
-          purchaseRequestDoc,
-          supplierId,
-          items.map((item: any) => ({ detail: item.detail, quantity: item.quantity })),
-          'subtract'
-        );
-      }
-    }
 
     return res.status(200).json({
       success: true,
@@ -1596,31 +1517,23 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
       query._id = { $ne: new mongoose.Types.ObjectId(excludeLpoId as string) };
     }
 
+    // excludeLpoId already removes the reissued PO from `query` above, so the
+    // POs found here are exactly the ones that should count as "issued" -
+    // no separate stored counter or subtraction step needed.
     const existingPurchaseOrders = await PurchaseOrder.find(query);
+
+    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
 
     const issuedItemsMap = new Map();
     existingPurchaseOrders.forEach((po: any) => {
       if (po.items && Array.isArray(po.items)) {
         po.items.forEach((item: any) => {
-          const key = item.detail;
+          const key = itemKey(item);
           const currentIssued = issuedItemsMap.get(key) || 0;
           issuedItemsMap.set(key, currentIssued + (item.quantity || 0));
         });
       }
     });
-
-    // If excludeLpoId is provided (for reissue), get the excluded LPO and subtract its quantities
-    const excludedLpoItemsMap = new Map<string, number>();
-    if (excludeLpoId && mongoose.Types.ObjectId.isValid(excludeLpoId as string)) {
-      const excludedLpo = await PurchaseOrder.findById(excludeLpoId);
-      if (excludedLpo && excludedLpo.items && Array.isArray(excludedLpo.items)) {
-        excludedLpo.items.forEach((item: any) => {
-          const key = item.detail;
-          const currentQty = excludedLpoItemsMap.get(key) || 0;
-          excludedLpoItemsMap.set(key, currentQty + (item.quantity || 0));
-        });
-      }
-    }
 
     const items: any[] = [];
     purchaseRequestDoc.items.forEach((item: any) => {
@@ -1628,19 +1541,10 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
         item.itemDetails.forEach((itemDetail: any) => {
           if (itemDetail.comparisons && Array.isArray(itemDetail.comparisons)) {
             const selectedComparison = itemDetail.comparisons.find((comp: any) => comp.selected === true);
-            if (selectedComparison && selectedComparison.supplierId && 
+            if (selectedComparison && selectedComparison.supplierId &&
                 selectedComparison.supplierId.toString() === supplierId) {
               const totalQuantity = selectedComparison.quantity || itemDetail.quantity || 0;
-              const key = itemDetail.detail;
-              const issuedFromPOs = issuedItemsMap.get(key) || 0;
-              const issuedFromDetail = itemDetail.issuedQuantity || 0;
-              
-              // If excludeLpoId is provided (for reissue), subtract the excluded LPO quantities
-              const excludedQty = excludedLpoItemsMap.get(key) || 0;
-              const adjustedIssuedFromDetail = Math.max(0, issuedFromDetail - excludedQty);
-              
-              // Use adjusted issuedFromDetail as primary source, fall back to issuedFromPOs
-              const totalIssued = adjustedIssuedFromDetail > 0 ? adjustedIssuedFromDetail : issuedFromPOs;
+              const totalIssued = issuedItemsMap.get(itemKey(itemDetail)) || 0;
               const remainingQuantity = Math.max(0, totalQuantity - totalIssued);
               const isFullyIssued = remainingQuantity <= 0;
 
@@ -1651,7 +1555,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
                 partNo: itemDetail.partNo,
                 originalQuantity: totalQuantity,
                 remainingQuantity: remainingQuantity,
-                issuedQuantity: totalIssued, // This is the adjusted issued quantity (excluding the reissued LPO)
+                issuedQuantity: totalIssued,
                 quantity: remainingQuantity,
                 unitPrice: selectedComparison.unitPrice,
                 comparisons: selectedComparison,
