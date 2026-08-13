@@ -178,7 +178,7 @@ export class InitiateLpoComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error checking suppliers status:', error);
-        this.canIssueLpo.set(true);
+        this.canIssueLpo.set(false);
       }
     });
   }
