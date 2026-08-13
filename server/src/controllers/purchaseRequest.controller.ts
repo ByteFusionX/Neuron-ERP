@@ -227,6 +227,9 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
         }
 
         const purchases = await PurchaseRequest.aggregate([
+            // Match on raw fields (isDeleted, createdBy access scoping, status) before any
+            // $lookup/$unwind below overwrites 'createdBy' with the joined employee object.
+            { $match: matchStage },
             {
                 $lookup: {
                     from: 'customers',
@@ -442,8 +445,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                     }
                 }
             },
-            { $match: matchStage },
-            // Second $match for nested fields
+            // Match for nested fields (requires the earlier $lookup/$unwind of customerId/jobId)
             {
                 $match: {
                     ...(companyName && { "customerId.companyName": { $regex: companyName, $options: 'i' } }),
