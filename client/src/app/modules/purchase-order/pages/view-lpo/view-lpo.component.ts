@@ -12,6 +12,7 @@ import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-p
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import { PurchaseViewModalComponent } from 'src/app/shared/components/purchase-view-modal/purchase-view-modal.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
   selector: 'app-view-lpo',
@@ -32,6 +33,7 @@ export class ViewLpoComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
   private quotationService = inject(QuotationService);
+  private employeeService = inject(EmployeeService);
 
   lpoId!: string;
   lpo: any = null;
@@ -43,6 +45,7 @@ export class ViewLpoComponent implements OnInit {
   currency = signal<string>('QAR');
   isApproving = false;
   isRejecting = false;
+  canApprovePOs = signal<boolean>(false);
 
   ngOnInit(): void {
     this.lpoId = <string>this.route.snapshot.paramMap.get('id');
@@ -51,7 +54,16 @@ export class ViewLpoComponent implements OnInit {
       this.router.navigate(['/purchase-order/pending-approval']);
       return;
     }
+    this.checkPrivileges();
     this.loadLpo();
+  }
+
+  checkPrivileges(): void {
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canApprovePOs.set(data.category.privileges.purchaseOrder?.canApprovePOs || false);
+      }
+    });
   }
 
   loadLpo(): void {
@@ -265,7 +277,7 @@ export class ViewLpoComponent implements OnInit {
   }
 
   onApprove(): void {
-    if (!this.lpo || this.lpo.poStatus !== 'Pending for Approval') return;
+    if (!this.canApproveOrReject()) return;
 
     const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
       data: {
@@ -299,7 +311,7 @@ export class ViewLpoComponent implements OnInit {
   }
 
   onReject(): void {
-    if (!this.lpo || this.lpo.poStatus !== 'Pending for Approval') return;
+    if (!this.canApproveOrReject()) return;
 
     const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
       data: {
@@ -333,7 +345,7 @@ export class ViewLpoComponent implements OnInit {
   }
 
   canApproveOrReject(): boolean {
-    return this.lpo?.poStatus === 'Pending for Approval';
+    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs();
   }
 
   onViewPurchase(): void {

@@ -76,7 +76,7 @@ export class LpoApprovalComponent implements OnInit {
   checkCurrentRoute(): void {
     const currentPath = this.router.url;
     this.isPendingView.set(currentPath.includes('/pending-approval'));
-    this.selectedStatus.set(this.isPendingView() ? ['Pending for Approval'] : ['Open']);
+    this.selectedStatus.set(this.isPendingView() ? ['Pending for Approval'] : ['Approved', 'Closed']);
   }
 
   setupTableColumns(): void {
@@ -185,6 +185,7 @@ export class LpoApprovalComponent implements OnInit {
         filterOptions: [
           { label: 'Pending for Approval', value: 'Pending for Approval' },
           { label: 'Approved', value: 'Approved' },
+          { label: 'Closed', value: 'Closed' },
           { label: 'Draft', value: 'Draft' }
         ]
       },
