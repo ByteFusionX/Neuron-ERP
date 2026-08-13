@@ -136,9 +136,13 @@
                             <ng-icon name="heroEye" class="text-black"></ng-icon>
                         </div>
 
-                        <div matTooltip="Revoke Approved Deal" matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                            (click)="revokeDeal(element,i)"
-                            class="cursor-pointer w-8 h-8 rounded-full bg-red-600 flex justify-center items-center">
+                        <div [matTooltip]="canRevokeDeal(element) ? 'Revoke Approved Deal' : 'Cannot revoke: job has started'"
+                            matTooltipPosition="above" matTooltipClass="mat-tooltip"
+                            (click)="canRevokeDeal(element) && revokeDeal(element,i)"
+                            [class.opacity-50]="!canRevokeDeal(element)"
+                            [class.cursor-not-allowed]="!canRevokeDeal(element)"
+                            [class.cursor-pointer]="canRevokeDeal(element)"
+                            class="w-8 h-8 rounded-full bg-red-600 flex justify-center items-center">
                             <ng-icon name="heroArrowUturnLeft" class="text-white text-sm"></ng-icon>
                         </div>
                     </div>

@@ -60,6 +60,7 @@ export interface Quotatation {
     closingDate: string;
     eventId?: any;
     saveNote?: string;
+    job?: { allocateStatus?: string };
 }
 
 export interface getQuotatation {

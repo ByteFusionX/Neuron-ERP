@@ -1,6 +1,6 @@
 import { NextFunction, Response, Request } from "express";
 import Quotation, { quoteStatus } from '../models/quotation.model';
-import Job from '../models/job.model';
+import Job, { allocateStatus } from '../models/job.model';
 import Department from '../models/department.model';
 import Employee from '../models/employee.model'
 import Enquiry from "../models/enquiry.model";
@@ -641,6 +641,20 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             },
             {
                 $lookup: {
+                    from: 'jobs',
+                    localField: '_id',
+                    foreignField: 'quoteId',
+                    as: 'job'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$job',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $lookup: {
                     from: 'enquiries',
                     localField: 'enqId',
                     foreignField: '_id',
@@ -1132,6 +1146,13 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
         if (!deal) {
             return res.status(502).json({ message: 'Deal not found' });
         }
+
+        const job = await Job.findOne({ quoteId: quoteId });
+        const allocateStatusOrder: string[] = Object.values(allocateStatus);
+        if (job && allocateStatusOrder.indexOf(job.allocateStatus) >= allocateStatusOrder.indexOf(allocateStatus.OpenToWork)) {
+            return res.status(409).json({ message: 'Deal cannot be revoked once the job has started allocation (Open to Work or later)' });
+        }
+
         deal.dealData.status = 'pending';
         deal.dealData.seenByApprover = false;
         await deal.save();

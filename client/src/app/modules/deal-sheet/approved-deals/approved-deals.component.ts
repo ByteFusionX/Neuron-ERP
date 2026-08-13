@@ -291,7 +291,20 @@ export class ApprovedDealsComponent {
     });
   }
 
+  private readonly allocateStatusOrder = ['Pending', 'Work In Progress', 'OpenToWork', 'Completed'];
+
+  canRevokeDeal(quoteData: Quotatation): boolean {
+    const allocateStatus = quoteData.job?.allocateStatus;
+    if (!allocateStatus) return true;
+    return this.allocateStatusOrder.indexOf(allocateStatus) < this.allocateStatusOrder.indexOf('OpenToWork');
+  }
+
   revokeDeal(quoteData: Quotatation, index: number) {
+    if (!this.canRevokeDeal(quoteData)) {
+      this.toast.error('Deal cannot be revoked once the job has started allocation (Open to Work or later)');
+      return;
+    }
+
     const rejectModal = this._dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Are you absolutely sure',
@@ -302,13 +315,18 @@ export class ApprovedDealsComponent {
     })
     rejectModal.afterClosed().subscribe((approved: boolean) => {
       if (approved) {
-        this._quoteService.revokeDeal(quoteData._id, 'asdf').subscribe((res) => {
-          if (res) {
-            this.dataSource.data.splice(index, 1)
-            this.dataSource._updateChangeSubscription()
-            if (this.dataSource.data.length <= 0) {
-              this.isEmpty = true;
+        this._quoteService.revokeDeal(quoteData._id, 'asdf').subscribe({
+          next: (res) => {
+            if (res) {
+              this.dataSource.data.splice(index, 1)
+              this.dataSource._updateChangeSubscription()
+              if (this.dataSource.data.length <= 0) {
+                this.isEmpty = true;
+              }
             }
+          },
+          error: (err) => {
+            this.toast.error(err?.error?.message || 'Failed to revoke deal');
           }
         })
       }
