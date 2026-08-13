@@ -19,6 +19,7 @@ import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { GrnListModalComponent, GrnListModalData } from 'src/app/shared/components/grn-list-modal/grn-list-modal.component';
+import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
 
 @Component({
   selector: 'app-lpo-list',
@@ -145,19 +146,17 @@ export class LpoListComponent implements OnInit {
       {
         key: 'comments',
         label: 'Comments',
-        type: 'text',
-        headerClass: 'text-center',
-        cellRenderer: (item: any) => {
-          if (item.approvedHistory && item.approvedHistory.length > 0) {
-            const lastApproval = item.approvedHistory[item.approvedHistory.length - 1];
-            return lastApproval.reason || '-';
-          }
-          if (item.rejectedHistory && item.rejectedHistory.length > 0) {
-            const lastRejection = item.rejectedHistory[item.rejectedHistory.length - 1];
-            return lastRejection.reason || '-';
-          }
-          return '-';
-        }
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroEye',
+            tooltip: 'View Comment',
+            action: 'viewComment',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium',
+            condition: (item: any) => !!this.getLpoComment(item)
+          },
+        ]
       },
       {
         key: 'sendForApproval',
@@ -261,6 +260,13 @@ export class LpoListComponent implements OnInit {
         type: 'action',
         headerClass: '!text-center',
         actions: [
+          {
+            icon: 'heroEye',
+            tooltip: 'View/Download Invoice',
+            action: 'viewInvoice',
+            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-blue-500 hover:border-blue-700 text-blue-500 text-sm rounded-full font-medium',
+            condition: (item: any) => (item.poStatus === 'Approved' || item.poStatus === 'Closed') && item.supplierInvoices?.length > 0
+          },
           {
             icon: 'heroCloudArrowUp',
             tooltip: 'Upload Invoice',
@@ -432,7 +438,29 @@ export class LpoListComponent implements OnInit {
       case 'viewGrn':
         this.viewGrn(item);
         break;
+      case 'viewComment':
+        this.onViewComment(item);
+        break;
     }
+  }
+
+  getLpoComment(item: any): string {
+    if (item.approvedHistory && item.approvedHistory.length > 0) {
+      const lastApproval = item.approvedHistory[item.approvedHistory.length - 1];
+      if (lastApproval.reason) return lastApproval.reason;
+    }
+    if (item.rejectedHistory && item.rejectedHistory.length > 0) {
+      const lastRejection = item.rejectedHistory[item.rejectedHistory.length - 1];
+      if (lastRejection.reason) return lastRejection.reason;
+    }
+    return '';
+  }
+
+  onViewComment(item: any): void {
+    this._dialog.open(ViewCommentComponent, {
+      width: '500px',
+      data: { comment: this.getLpoComment(item) }
+    });
   }
 
   editLpo(lpo: any): void {
