@@ -29,7 +29,7 @@
                                 class="text-5xl transition-colors duration-200 ease-in-out"></ng-icon>
                             <p class="pointer-none text-gray-500">
                                 <span class="text-sm">Drop</span> files here
-                                <br /> or <a (click)="triggerFileInput()" class="text-violet-500 hover:underline cursor-pointer">select a file</a> from
+                                <br /> or <a (click)="triggerFileInput(); $event.stopPropagation()" class="text-violet-500 hover:underline cursor-pointer">select a file</a> from
                                 your device
                             </p>
                             <p class="text-sm text-gray-500">
