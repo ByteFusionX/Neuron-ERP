@@ -213,6 +213,7 @@ export class CreateQuotatationComponent {
             subject: data.title,
             date: data.date ? this.toDateInputValue(data.date) : '',
             attention: data.contact?._id,
+            enqId: data._id,
           });
         }
       }),
