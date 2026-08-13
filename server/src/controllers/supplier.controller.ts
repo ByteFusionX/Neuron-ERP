@@ -258,6 +258,13 @@ export const createSupplier = async (req: Request, res: Response) => {
          });
       }
 
+      if (!createdBy || !Types.ObjectId.isValid(createdBy)) {
+         return res.status(400).json({
+            success: false,
+            message: 'createdBy (employee id) is required',
+         });
+      }
+
       // Handle file uploads
       const files = (req as any).files.documents || []
       console.log(files);

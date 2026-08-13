@@ -157,7 +157,7 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     },
     createdBy: {
         type: Schema.Types.ObjectId,
-        ref: 'Department',
+        ref: 'Employee',
         required: true,
     },
     approvedHistory: {

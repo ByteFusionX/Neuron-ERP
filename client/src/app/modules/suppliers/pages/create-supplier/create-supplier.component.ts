@@ -12,6 +12,7 @@ import { TagInputComponent } from 'src/app/shared/components/forms/tag-input/tag
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { ToastrService } from 'ngx-toastr';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Department, getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { UploadFileComponent } from 'src/app/shared/components/upload-file/upload-file.component';
 
@@ -36,6 +37,7 @@ export class CreateSupplierComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private supplierService = inject(SupplierService);
   private departmentService = inject(ProfileService);
+  private employeeService = inject(EmployeeService);
   private notificationService = inject(ToastrService);
   selectedFiles: File[] = []
 
@@ -257,7 +259,13 @@ export class CreateSupplierComponent implements OnInit {
         }
       });
     } else {
-      this.supplierService.createSupplierWithFiles(this.supplierForm.value, this.selectedFiles).subscribe({
+      const employeeId = this.employeeService.employeeToken()?.id;
+      const supplierData = {
+        ...this.supplierForm.value,
+        createdBy: employeeId
+      };
+
+      this.supplierService.createSupplierWithFiles(supplierData, this.selectedFiles).subscribe({
         next: () => {
           this.notificationService.success('Supplier created successfully');
           this.router.navigate(['/suppliers/pendings']);

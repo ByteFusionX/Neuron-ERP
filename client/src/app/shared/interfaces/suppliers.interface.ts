@@ -106,6 +106,7 @@ export interface SupplierCreateRequest {
     products: Product[];
     creditDays: number;
     creditValue: number;
+    createdBy?: string;
 }
 
 // Request interface for updating a supplier status
