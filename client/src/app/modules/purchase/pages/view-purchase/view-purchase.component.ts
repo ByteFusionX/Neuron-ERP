@@ -56,8 +56,12 @@ export class ViewPurchaseComponent {
 
   loadPurchase() {
     this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
-    if (this.purchaseId == 'none') return
+    if (this.purchaseId == 'none') {
+      this.isLoading = false;
+      return;
+    }
     if (!this.purchaseId) {
+      this.isLoading = false;
       this.notificationService.error('Invalid Purchase Id');
       this.router.navigate(['/purchase/pendings']);
       return;
