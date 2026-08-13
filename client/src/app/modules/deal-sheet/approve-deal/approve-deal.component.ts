@@ -58,8 +58,13 @@ export class ApproveDealComponent implements OnInit {
       }
     })
     if (this.data.quoteData.dealData.seenedBySalsePerson === false) {
-      this._quoteService.markAsQuotationSeen(this.data.quoteData._id, this.userId).subscribe((res: any) => {
-        if (res.success) {
+      this._quoteService.markAsQuotationSeen(this.data.quoteData._id, this.userId).subscribe({
+        next: (res: any) => {
+          if (res.success) {
+          }
+        },
+        error: (error) => {
+          console.error('Error marking quotation as seen:', error);
         }
       })
     }
@@ -89,8 +94,14 @@ export class ApproveDealComponent implements OnInit {
 
     updateModal.afterClosed().subscribe((dealData: dealData) => {
       if (dealData) {
-        this._quoteService.saveDealSheet(dealData, this.data.quoteData._id).subscribe((res) => {
-          this.dialogRef.close({ approve: false, updatedData: res })
+        this._quoteService.saveDealSheet(dealData, this.data.quoteData._id).subscribe({
+          next: (res) => {
+            this.dialogRef.close({ approve: false, updatedData: res })
+          },
+          error: (error) => {
+            console.error('Error saving deal sheet:', error);
+            this.toast.error('Failed to save deal sheet');
+          }
         })
       }
     })

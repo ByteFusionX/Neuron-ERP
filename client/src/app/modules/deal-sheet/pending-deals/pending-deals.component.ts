@@ -138,20 +138,30 @@ export class PendingDealsComponent {
     }
     this.subscriptions.add(
       this._quoteService.getDealSheet(filterData)
-        .subscribe((data: getDealSheet) => {
-          if (data && data.dealSheet && data.dealSheet.length) {
-            this.dataSource.data = [...data.dealSheet];
-            this.dataSource._updateChangeSubscription()
-            this.total = data.total
-            this.isEmpty = false
-            this.updateNotViewedQuoteIds();
-            this.observeAllQuotes();
-          } else {
+        .subscribe({
+          next: (data: getDealSheet) => {
+            if (data && data.dealSheet && data.dealSheet.length) {
+              this.dataSource.data = [...data.dealSheet];
+              this.dataSource._updateChangeSubscription()
+              this.total = data.total
+              this.isEmpty = false
+              this.updateNotViewedQuoteIds();
+              this.observeAllQuotes();
+            } else {
+              this.total = 0;
+              this.dataSource.data = [];
+              this.isEmpty = true;
+            }
+            this.isLoading = false
+          },
+          error: (error) => {
+            console.error('Error loading deal sheets:', error);
+            this.toast.error('Failed to load deal sheets');
             this.total = 0;
             this.dataSource.data = [];
             this.isEmpty = true;
+            this.isLoading = false;
           }
-          this.isLoading = false
         })
     )
 
@@ -298,13 +308,19 @@ export class PendingDealsComponent {
 
     dialogRef.afterClosed().subscribe((actions: { approve: boolean, updating: boolean, comment: string }) => {
       if (actions.approve && !actions.updating) {
-        this._quoteService.approveDeal(quoteData._id, actions.comment, this.userId).subscribe((res) => {
-          if (res.success) {
-            this.dataSource.data.splice(index, 1)
-            this.dataSource._updateChangeSubscription()
-            if (this.dataSource.data.length == 0) {
-              this.isEmpty = true;
+        this._quoteService.approveDeal(quoteData._id, actions.comment, this.userId).subscribe({
+          next: (res) => {
+            if (res.success) {
+              this.dataSource.data.splice(index, 1)
+              this.dataSource._updateChangeSubscription()
+              if (this.dataSource.data.length == 0) {
+                this.isEmpty = true;
+              }
             }
+          },
+          error: (error) => {
+            console.error('Error approving deal:', error);
+            this.toast.error('Failed to approve deal');
           }
         })
       }
