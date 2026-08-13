@@ -215,6 +215,28 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       ],
     },
     {
+      id: 'suppliers',
+      label: 'Suppliers',
+      icon: 'heroTruck',
+      route: '/suppliers',
+      privilegeKey: 'supplier',
+      hasDropdown: true,
+      privilegeValue: 'none',
+      children: [
+        {
+          id: 'pendingSuppliers',
+          label: 'Pending',
+          route: '/suppliers/pendings',
+          notificationKey: 'dealSheetCount',
+        },
+        {
+          id: 'approvedSuppliers',
+          label: 'Approved',
+          route: '/suppliers/approved',
+        },
+      ],
+    },
+    {
       id: 'purchase',
       label: 'Purchase',
       icon: 'heroShoppingCart',
@@ -301,28 +323,6 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
           privilegeKey: 'technical',
           privilegeValue: 'canApproveMRRequests',
           notificationKey: 'purchaseCount',
-        },
-      ],
-    },
-    {
-      id: 'suppliers',
-      label: 'Suppliers',
-      icon: 'heroTruck',
-      route: '/suppliers',
-      privilegeKey: 'supplier',
-      hasDropdown: true,
-      privilegeValue: 'none',
-      children: [
-        {
-          id: 'pendingSuppliers',
-          label: 'Pending',
-          route: '/suppliers/pendings',
-          notificationKey: 'dealSheetCount',
-        },
-        {
-          id: 'approvedSuppliers',
-          label: 'Approved',
-          route: '/suppliers/approved',
         },
       ],
     },
