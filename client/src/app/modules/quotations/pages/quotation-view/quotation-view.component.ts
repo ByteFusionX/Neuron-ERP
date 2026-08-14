@@ -43,6 +43,7 @@ export class QuotationViewComponent {
   selectedOption: number = 0;
   isDeleteOption:boolean = false;
   isNoteOwner:boolean = false;
+  isSuperAdmin:boolean = false;
   employeeData$!: Observable<getEmployee | undefined>
 
   subscriptions = new Subscription();
@@ -61,10 +62,15 @@ export class QuotationViewComponent {
       this._employeeService.employeeData$.subscribe((employee) => {
         if (employee?.category.role == 'superAdmin') {
           this.isDeleteOption = true
+          this.isSuperAdmin = true
         }
 
       })
     )
+  }
+
+  get isEditDisabled(): boolean {
+    return this.quoteData?.status === 'Won' && !this.isSuperAdmin;
   }
 
   getQuoteData() {
@@ -92,7 +98,10 @@ export class QuotationViewComponent {
   }
 
   onQuoteEdit() {
-    let quoteData: quotatationForm = this.quoteData; 
+    if (this.isEditDisabled) {
+      return;
+    }
+    let quoteData: quotatationForm = this.quoteData;
     const navigationExtras: NavigationExtras = {
       state: quoteData
     };

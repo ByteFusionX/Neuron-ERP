@@ -9,8 +9,9 @@
                     Note
                 </div>
             </button>
-            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-                (click)="onQuoteEdit()">
+            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm disabled:bg-gray-400 disabled:hover:bg-gray-400 disabled:cursor-not-allowed"
+                (click)="onQuoteEdit()" [disabled]="isEditDisabled"
+                [title]="isEditDisabled ? 'Quote won' : ''">
                 <div class="flex justify-center items-center gap-2">
                     <ng-icon name="heroPencilSquare"></ng-icon>
                     Edit
