@@ -19,7 +19,7 @@ const s3Client = new S3Client({
     endpoint: process.env.AWS_ENDPOINT
 });
 
-export const uploadFileToAws = async (fileName: string, filePath: string): Promise<string | void> => {
+export const uploadFileToAws = async (fileName: string, filePath: string, contentType?: string): Promise<string | void> => {
     const fileStream = fs.createReadStream(filePath);
 
     return new Promise((resolve, reject) => {
@@ -32,6 +32,7 @@ export const uploadFileToAws = async (fileName: string, filePath: string): Promi
             Bucket: process.env.AWS_BUCKET_NAME!,
             Key: fileName,
             Body: fileStream,
+            ContentType: contentType,
         }))
         .then(async () => {
             fileStream.close(); // ensures fd is closed even if upload completes

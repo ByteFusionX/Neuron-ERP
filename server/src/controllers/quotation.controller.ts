@@ -1197,7 +1197,7 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
         const lpoFiles = req.files;
         const newFiles = await Promise.all(lpoFiles.map(async (file: any) => {
             console.log('reached here -- promise')
-            await uploadFileToAws(file.filename, file.path);
+            await uploadFileToAws(file.filename, file.path, file.mimetype);
             return { fileName: file.filename, originalname: file.originalname };
         }));
 

@@ -38,6 +38,10 @@ export const DownloadFile = async (
             return res.status(404).json({ message: "File not found" });
         }
 
+        const contentType = response.headers.get("content-type");
+        if (contentType) {
+            res.setHeader("Content-Type", contentType);
+        }
         res.setHeader(
             "Content-Disposition",
             `attachment; filename="${fileName}"`
@@ -74,9 +78,13 @@ export const fetchFile = async (
             return res.status(404).json({ message: "File not found" });
         }
 
+        const contentType = response.headers.get("content-type");
+        if (contentType) {
+            res.setHeader("Content-Type", contentType);
+        }
         res.setHeader(
             "Content-Disposition",
-            `attachment; filename="${filename}"`
+            `inline; filename="${filename}"`
         );
         response.body.pipe(res);
     } catch (error) {
