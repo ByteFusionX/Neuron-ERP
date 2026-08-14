@@ -10,6 +10,7 @@ import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 import { NgIcon } from '@ng-icons/core';
 import { NgFor, NgIf } from '@angular/common';
 import { MatTooltip } from '@angular/material/tooltip';
+import { environment } from 'src/environments/environment';
 
 @Component({
     selector: 'app-view-lpo',
@@ -37,6 +38,14 @@ export class ViewLpoComponent {
 
   onClose() {
     this.dialogRef.close(this.data)
+  }
+
+  getFileUrl(fileName: string): string {
+    return `${environment.api}/file/${fileName}`;
+  }
+
+  onPreviewFile(fileName: string): void {
+    window.open(this.getFileUrl(fileName), '_blank');
   }
 
   onDownloadClicks(file: any) {

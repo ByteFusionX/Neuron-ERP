@@ -17,25 +17,37 @@
                  class="p-3 hover:bg-gray-50 rounded-md flex justify-between items-center gap-4 border border-gray-100">
                 <p class="text-sm flex items-center">
                     <ng-icon name="heroDocument" class="text-gray-400 mr-2"></ng-icon>
-                    <span (click)="onDownloadClicks(file)"
-                          class="hover:underline hover:text-purple-600 hover:cursor-pointer max-w-[13rem] truncate"
-                          [matTooltip]="'Download File'" 
-                          matTooltipPosition="below"
-                          matTooltipClass="mat-tooltip">
+                    <span class="max-w-[13rem] truncate">
                         {{file.originalname}}
                     </span>
                 </p>
-                <ng-container *ngIf="data.dealData?.status !== 'approved' || !data.dealData">
-                    <ng-container *ngIf="removingFileIndex === i; else removeIcon">
-                        <ng-icon name="heroArrowPath" class="text-orange-500 text-lg spin"></ng-icon>
+                <div class="flex items-center gap-3">
+                    <ng-icon name="heroEye"
+                            class="text-gray-400 hover:text-purple-600 text-lg cursor-pointer transition-colors"
+                            [matTooltip]="'Preview File'"
+                            matTooltipPosition="below"
+                            matTooltipClass="mat-tooltip"
+                            (click)="onPreviewFile(file.fileName)">
+                    </ng-icon>
+                    <ng-icon name="heroArrowDownTray"
+                            class="text-gray-400 hover:text-purple-600 text-lg cursor-pointer transition-colors"
+                            [matTooltip]="'Download File'"
+                            matTooltipPosition="below"
+                            matTooltipClass="mat-tooltip"
+                            (click)="onDownloadClicks(file)">
+                    </ng-icon>
+                    <ng-container *ngIf="data.dealData?.status !== 'approved' || !data.dealData">
+                        <ng-container *ngIf="removingFileIndex === i; else removeIcon">
+                            <ng-icon name="heroArrowPath" class="text-orange-500 text-lg spin"></ng-icon>
+                        </ng-container>
+                        <ng-template #removeIcon>
+                            <ng-icon name="heroXMark"
+                                    class="text-gray-400 hover:text-red-500 text-lg cursor-pointer transition-colors"
+                                    (click)="onFileRemoved(i)">
+                            </ng-icon>
+                        </ng-template>
                     </ng-container>
-                    <ng-template #removeIcon>
-                        <ng-icon name="heroXMark" 
-                                class="text-gray-400 hover:text-red-500 text-lg cursor-pointer transition-colors"
-                                (click)="onFileRemoved(i)">
-                        </ng-icon>
-                    </ng-template>
-                </ng-container>
+                </div>
             </div>
         </div>
 

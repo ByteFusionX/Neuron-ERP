@@ -9,7 +9,7 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { dealData, getQuotation, Quotatation, quotatationForm, QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
 import { UploadLpoComponent } from '../upload-lpo/upload-lpo.component';
-import { BehaviorSubject, Observable, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, forkJoin, of } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
@@ -17,7 +17,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { MatMenuTrigger, MatMenu, MatMenuItem } from '@angular/material/menu';
 import { LoadingBarService } from '@ngx-loading-bar/core';
 import { DealFormComponent } from '../deal-form/deal-form.component';
-import { ViewLpoComponent } from '../view-lpo/view-lpo.component';
+import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import { ViewReportComponent } from '../view-report/view-report.component';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import * as ExcelJS from 'exceljs';
@@ -431,14 +431,55 @@ export class QuotationListComponent {
 
   onViewLpo(data: Quotatation, event: Event, index: number) {
     event.stopPropagation();
-    this._dialog.open(ViewLpoComponent,
+    const isApproved = data.dealData?.status === 'approved';
+    const modalData: FileUploadModalData = {
+      title: 'LPO Files',
+      existingFiles: data.lpoFiles || [],
+      allowMultiple: true,
+      showActions: {
+        upload: !isApproved,
+        download: true,
+        view: true,
+        delete: !isApproved
+      }
+    };
+    this._dialog.open(FileUploadModalComponent,
       {
-        data: data
-      }).afterClosed().subscribe((quote: Quotatation) => {
-        if (quote) {
-          this.dataSource.data[index].lpoFiles = quote.lpoFiles;
-          this.dataSource._updateChangeSubscription();
-        }
+        data: modalData,
+        width: '800px',
+        maxHeight: '90vh'
+      }).afterClosed().subscribe((result) => {
+        if (result?.action !== 'save') { return; }
+
+        const existingFileNames = (data.lpoFiles || []).map((file: any) => file.fileName);
+        const returnedFileNames = result.files
+          .filter((file: any) => !file.file)
+          .map((file: any) => file.fileName);
+        const removedFileNames = existingFileNames.filter((name: string) => !returnedFileNames.includes(name));
+        const newFiles = result.files.filter((file: any) => file.file);
+
+        const removeRequests = removedFileNames.map((fileName: string) =>
+          this._quoteService.removeLpo(fileName, data._id as string)
+        );
+
+        forkJoin(removeRequests.length ? removeRequests : [of(null)]).subscribe(() => {
+          if (newFiles.length) {
+            const formData = new FormData();
+            formData.append('quoteId', data._id as string);
+            newFiles.forEach((file: any) => formData.append('files', file.file));
+            this._quoteService.uploadLpo(formData).subscribe((quote: Quotatation) => {
+              if (quote) {
+                this.dataSource.data[index].lpoFiles = quote.lpoFiles;
+                this.dataSource._updateChangeSubscription();
+              }
+            });
+          } else if (removedFileNames.length) {
+            this.dataSource.data[index].lpoFiles = (data.lpoFiles || []).filter(
+              (file: any) => !removedFileNames.includes(file.fileName)
+            );
+            this.dataSource._updateChangeSubscription();
+          }
+        });
       });
   }
 
