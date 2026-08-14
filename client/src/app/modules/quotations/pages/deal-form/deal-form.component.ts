@@ -45,7 +45,7 @@ export class DealFormComponent {
     this.loadSuppliers();
     this.costForm = this.fb.group({
       paymentTerms: ['', Validators.required],
-      items: this.fb.array(this.data.optionalItems[0].items.map(item => this.createItemGroup(item))),
+      items: this.fb.array(this.data.optionalItems[0].items.filter(item => this.isItemIncludedInDeal(item)).map(item => this.createItemGroup(item))),
       costs: this.fb.array([], this.additionalCostsValidator())
     });
   }
@@ -73,8 +73,14 @@ export class DealFormComponent {
   onCalculationOptionChange() {
     this.items.clear();
     this.data.optionalItems[this.selectedOption].items.forEach(item => {
-        this.items.push(this.createItemGroup(item));
+        if (this.isItemIncludedInDeal(item)) {
+          this.items.push(this.createItemGroup(item));
+        }
     });
+  }
+
+  isItemIncludedInDeal(item: any): boolean {
+    return !item.isOptional || !!item.includeInTotal;
   }
 
   createItemGroup(item: any): FormGroup {
