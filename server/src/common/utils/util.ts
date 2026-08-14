@@ -204,7 +204,7 @@ export const calculateQuoteDiscountPricePipe = (input: string) => {
 
 
 
-export const calculateCostPricePipe = (input: string) => {
+export const calculateCostPricePipe = (input: string, additionalCostsInput: string = '$quotation.dealData.additionalCosts') => {
     return {
         $round: [
             {
@@ -241,7 +241,7 @@ export const calculateCostPricePipe = (input: string) => {
                     },
                     {
                         $reduce: {
-                            input: '$quotation.dealData.additionalCosts',
+                            input: additionalCostsInput,
                             initialValue: 0,
                             in: {
                                 $switch: {

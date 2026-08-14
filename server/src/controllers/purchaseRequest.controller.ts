@@ -1592,7 +1592,7 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                                     { $ifNull: ['$jobId.quoteId.dealData.updatedItems', false] }
                                 ]
                             },
-                            calculateCostPricePipe('$jobId.quoteId.dealData.updatedItems'),
+                            calculateCostPricePipe('$jobId.quoteId.dealData.updatedItems', '$jobId.quoteId.dealData.additionalCosts'),
                             0
                         ]
                     },

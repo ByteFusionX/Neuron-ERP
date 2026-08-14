@@ -558,8 +558,8 @@ export class CreateQuotatationComponent {
             const profitMargin = itemDetail.profit / 100;
 
             // Calculate unit price with profit margin
-            const unitPrice = Number(
-              (unitCost / (1 - profitMargin)).toFixed(2),
+            const unitPrice = Math.ceil(
+              Number((unitCost / (1 - profitMargin)).toFixed(2)),
             );
 
             // Calculate total cost
