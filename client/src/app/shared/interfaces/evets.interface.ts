@@ -8,4 +8,5 @@ export interface Events {
     date: Date,
     status: string,
     createdBy:any,
+    eventFiles?: { fileName: string, originalname: string }[],
 }

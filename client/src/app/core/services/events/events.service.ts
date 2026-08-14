@@ -25,4 +25,8 @@ export class EventsService {
   eventDelete(eventId: string): Observable<any> {
     return this.http.delete(`${this.api}/events/delete/${eventId}`)
   }
+
+  eventFileDelete(eventId: string, fileName: string): Observable<any> {
+    return this.http.delete(`${this.api}/events/${eventId}/file/${encodeURIComponent(fileName)}`)
+  }
 }

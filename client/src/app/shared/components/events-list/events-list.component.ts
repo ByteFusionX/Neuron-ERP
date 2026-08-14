@@ -11,6 +11,8 @@ import { Router } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
+import { HttpEventType } from '@angular/common/http';
 
 @Component({
     selector: 'app-events-list',
@@ -37,6 +39,7 @@ export class EventsListComponent implements OnInit, OnDestroy {
     private datePipe: DatePipe,
     private router: Router,
     private _employeeServices: EmployeeService,
+    private _enquiryService: EnquiryService,
   ) { }
 
   ngOnInit(): void {
@@ -141,6 +144,49 @@ export class EventsListComponent implements OnInit, OnDestroy {
     const currentEvents = this.eventsSubject.value;
     const updatedEvents = currentEvents.filter((event) => event._id !== eventId);
     this.eventsSubject.next(updatedEvents);
+  }
+
+  onPreviewFile(fileName: string): void {
+    this._enquiryService.downloadFile(fileName).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.Response) {
+          const fileContent: Blob = new Blob([event.body], { type: event.body.type || 'application/octet-stream' });
+          const fileURL = URL.createObjectURL(fileContent);
+          window.open(fileURL, '_blank');
+          setTimeout(() => URL.revokeObjectURL(fileURL), 10000);
+        }
+      },
+      error: (error) => {
+        if (error.status === 404) {
+          this.toaster.warning('Sorry, the requested file was not found on the server.');
+        } else {
+          this.toaster.error('An error occurred while trying to preview the file.');
+        }
+      }
+    });
+  }
+
+  onDeleteFile(event: Events, fileName: string): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Delete File',
+        description: 'Are you sure you want to delete this file?',
+        icon: 'heroExclamationCircle',
+        IconColor: 'red',
+      },
+    });
+    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+      if (confirmed) {
+        this.subscriptions.add(
+          this._eventsServices.eventFileDelete(event._id, fileName).subscribe((res) => {
+            if (res.success) {
+              this.toaster.success('File Deleted');
+              event.eventFiles = event.eventFiles?.filter((file) => file.fileName !== fileName);
+            }
+          })
+        );
+      }
+    });
   }
 
   isCreatedEmployee(employeeId: string | any): boolean {

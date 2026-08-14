@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express"
-import { uploadFileToAws } from "../common/aws-connect";
+import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import Event from '../models/events.model';
 import Enquiry from '../models/enquiry.model';
 import Quotation from '../models/quotation.model'
@@ -39,7 +39,7 @@ export const newEvent = async (req: any, res: Response, next: NextFunction) => {
         let eventFiles = []
         if (req.files?.eventFile) {
             eventFiles = await Promise.all(req.files.eventFile.map(async (file: any) => {
-                // await uploadFileToAws(file.filename, file.path);
+                await uploadFileToAws(file.filename, file.path, file.mimetype);
                 return { fileName: file.filename, originalname: file.originalname };
             }));
         }
@@ -118,6 +118,24 @@ export const eventStatus = async (req: Request, res: Response, next: NextFunctio
         const { status, eventId } = req.body
         const eventUpdate = await Event.findOneAndUpdate({ _id: eventId }, { $set: { status: status } })
         return res.status(200).json({ success: true })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const deleteEventFile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { eventId, fileName } = req.params
+        await deleteFileFromAws(fileName)
+        const updatedEvent = await Event.findByIdAndUpdate(
+            eventId,
+            { $pull: { eventFiles: { fileName: fileName } } },
+            { new: true }
+        )
+        if (updatedEvent) {
+            return res.status(200).json({ success: true, event: updatedEvent })
+        }
+        return res.status(404).json({ success: false, message: 'Event not found' })
     } catch (error) {
         next(error)
     }
