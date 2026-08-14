@@ -192,6 +192,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     const comparisonEntries = this.comparisonList().map(entry => ({
       ...entry
     }));
+    const selectedComparison = comparisonEntries.find(entry => entry.selected);
 
     return purchase.items.map((data: QuoteItem) => {
       const updatedItemDetails = data.itemDetails.map((item: QuoteItemDetails) => {
@@ -202,12 +203,15 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
             ...item,
             comparison: false,
             comparisons: isTarget ? comparisonEntries : (item.comparisons || []),
-            detail: isTarget 
+            detail: isTarget
               ? (hasPartNumber && selectedDescription ? selectedDescription : (originalDesc || item.detail))
               : item.detail,
             partNo: isTarget
               ? (selectedPartNumber ? { ...selectedPartNumber } : undefined)
-              : item.partNo
+              : item.partNo,
+            unitCost: isTarget && selectedComparison ? selectedComparison.unitPrice : item.unitCost,
+            supplierName: isTarget && selectedComparison ? selectedComparison.supplierName : item.supplierName,
+            availability: isTarget && selectedComparison ? selectedComparison.etaTerms : item.availability
           };
         }
 

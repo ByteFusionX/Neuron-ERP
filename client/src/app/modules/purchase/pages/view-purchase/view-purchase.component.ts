@@ -171,7 +171,7 @@ export class ViewPurchaseComponent {
       return { label: 'Merged', class: 'bg-green-100 text-green-700' };
     }
     if (detail.isNewlyAdded) {
-      return { label: 'Newly Added', class: 'bg-blue-100 text-blue-700' };
+      return { label: 'New', class: 'bg-blue-100 text-blue-700' };
     }
     return null;
   }
@@ -400,6 +400,7 @@ export class ViewPurchaseComponent {
 
       for (const detail of item.itemDetails) {
         const selected = detail.comparisons?.find((c: any) => c.selected);
+
         if (selected) {
           const supplier = this.suppliersList().find(
             (s: any) => s._id === selected.supplierId
@@ -413,6 +414,17 @@ export class ViewPurchaseComponent {
               unitPrice: selected.unitPrice,
               quantity: selected.quantity,
               etaTerms: selected.etaTerms,
+            },
+          });
+        } else {
+          rows.push({
+            itemName: item.itemName,
+            detail,
+            selectedSupplier: {
+              supplierName: detail.supplierName ?? 'Unknown Supplier',
+              unitPrice: detail.unitCost,
+              quantity: detail.quantity,
+              etaTerms: detail.availability,
             },
           });
         }

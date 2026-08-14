@@ -702,8 +702,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
           return subTotal;
         }
         const quantity = +detail.quantity || 0;
-        const unitSellingPrice = +detail.unitSellingPrice || +detail.unitCost || 0;
-        return subTotal + (quantity * unitSellingPrice);
+        const unitCost = +detail.unitCost || 0;
+        return subTotal + (quantity * unitCost);
       }, 0);
       return total + itemTotal;
     }, 0);
