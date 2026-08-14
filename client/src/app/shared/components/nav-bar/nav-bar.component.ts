@@ -71,6 +71,7 @@ export class NavBarComponent {
   signOut() {
     localStorage.clear();
     sessionStorage.clear();
+    this._employeeService.employeeSubject.next(undefined);
     this._router.navigate(['/login'])
   }
 
