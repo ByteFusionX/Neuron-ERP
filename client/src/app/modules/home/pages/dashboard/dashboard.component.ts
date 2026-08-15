@@ -98,15 +98,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     console.log(this.filterForm.value)
 
-    this.onFilter()
+    this.filtered = true;
+    this.selectedSalespersonName = '';
 
     this.selectedTargetYear = currentYear.toString();
     this.onTargetYearChange(true, false)
     this.getSalesPerson();
     this.getDepartments();
-    // this.getSalesTarget(true);
-    this.getDashboardReports();
-
   }
 
   getDashboardReports() {
@@ -126,6 +124,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     );
     this.subscriptions.add(
       this._dashboardService.getRevenuePerSalesperson(this.filterForm.value).subscribe((res: any) => {
+        res = res || [];
         if (res.length == 1) {
 
           this._dashboardService.guageChart$.subscribe((report) => {

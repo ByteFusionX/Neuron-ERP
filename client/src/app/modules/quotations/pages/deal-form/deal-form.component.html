@@ -291,7 +291,7 @@
                   <div>%</div>
                 </th>
                 <td class=" px-4 border text-gray-800">
-                  {{((calculateSellingPrice() - calculateAllTotalCost()) / calculateSellingPrice()).toFixed(2) || 0}} %
+                  {{calculateSellingPrice() ? ((((calculateSellingPrice() - calculateAllTotalCost()) / calculateSellingPrice()) * 100).toFixed(2)) : '0.00'}} %
                 </td>
               </tr>
             </tbody>

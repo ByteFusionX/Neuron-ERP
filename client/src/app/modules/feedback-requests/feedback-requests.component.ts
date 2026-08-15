@@ -102,11 +102,10 @@ export class FeedbackRequestsComponent {
   updateNotViewedFeebackIds() {
     this.notViewedfeedbackIds.clear();
     this.dataSource.data.forEach(enquiry => {
-      enquiry.preSale.feedback?.forEach((feedback) => {
-        if (!feedback?.seenByFeedbackProvider) {
-          this.notViewedfeedbackIds.add(enquiry._id);
-        }
-      })
+      const feedback = enquiry.preSale.feedback as any;
+      if (feedback && !feedback.seenByFeedbackProvider) {
+        this.notViewedfeedbackIds.add(enquiry._id);
+      }
     });
   }
 

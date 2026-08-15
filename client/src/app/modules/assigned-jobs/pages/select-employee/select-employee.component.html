@@ -13,7 +13,7 @@
       <div class="px-4 py-5">
         <label for="employee-select" class="block text-sm font-medium text-gray-700">Employee</label>
         <div class="mt-1">
-            <ng-select id="employee" class="filter" placeholder="Emloyees" appendTo="body" [(ngModel)]="selectedEmployee">
+            <ng-select id="employee" class="filter" placeholder="Employees" appendTo="body" [(ngModel)]="selectedEmployee">
                 <ng-option *ngFor="let employee of employees$ | async"
                     [value]="employee._id">{{employee.firstName}} {{employee.lastName}}</ng-option>
             </ng-select>

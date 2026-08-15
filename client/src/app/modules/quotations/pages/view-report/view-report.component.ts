@@ -4,14 +4,14 @@ import { QuotationService } from 'src/app/core/services/quotation/quotation.serv
 import { FilterQuote, PieChartOptions, QuoteStatus, QuoteStatusColors, ReportDetails } from 'src/app/shared/interfaces/quotation.interface';
 import { NgIcon } from '@ng-icons/core';
 import { ChartComponent } from 'ng-apexcharts';
-import { NgFor } from '@angular/common';
+import { NgFor, NgIf } from '@angular/common';
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
 @Component({
     selector: 'app-view-report',
     templateUrl: './view-report.component.html',
     styleUrls: ['./view-report.component.css'],
-    imports: [NgIcon, ChartComponent, NgFor, NumberFormatterPipe]
+    imports: [NgIcon, ChartComponent, NgFor, NgIf, NumberFormatterPipe]
 })
 export class ViewReportComponent {
   reportData!: ReportDetails;

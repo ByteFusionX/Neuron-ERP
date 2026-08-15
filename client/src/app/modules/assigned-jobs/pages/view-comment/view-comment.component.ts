@@ -13,7 +13,7 @@ export class ViewCommentComponent {
 
   constructor(
     private dialogRef: MatDialogRef<ViewCommentComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { comment: string, revisionComment: string[], feedbackComment: string },
+    @Inject(MAT_DIALOG_DATA) public data: { comment: string, revisionComment?: string[], feedbackComment?: string },
   ) { }
 
   onClose() {

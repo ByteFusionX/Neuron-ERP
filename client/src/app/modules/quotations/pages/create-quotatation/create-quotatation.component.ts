@@ -215,6 +215,11 @@ export class CreateQuotatationComponent {
             attention: data.contact?._id,
             enqId: data._id,
           });
+
+          if (data?.preSale?.estimations?.optionalItems?.length) {
+            this.estimatedOptionalItems = data.preSale.estimations.optionalItems;
+            this.calculateTotalValuesAfterPactch();
+          }
         }
       }),
     );

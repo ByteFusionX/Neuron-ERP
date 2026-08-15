@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { ActivatedRoute, ActivatedRouteSnapshot, CanActivateFn, NavigationStart, Router, RouterStateSnapshot } from '@angular/router';
 import { EmployeeService } from '../../services/employee/employee.service';
-import { Observable, filter, map, take } from 'rxjs';
+import { Observable, filter, map, switchMap, take, of } from 'rxjs';
 import { Privileges, getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
 
@@ -13,7 +13,9 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
     const toast: ToastrService = inject(ToastrService);
     const employeeService = inject(EmployeeService)
 
-    return employeeService.getEmployee().pipe(
+    return employeeService.employeeData$.pipe(
+        take(1),
+        switchMap((cached) => cached ? of(cached) : employeeService.getEmployee()),
         map((data) => {
             employeeService.employeeSubject.next(data);
             isSuperAdmin = data.category.role == 'superAdmin'

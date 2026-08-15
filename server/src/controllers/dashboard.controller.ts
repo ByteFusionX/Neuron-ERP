@@ -545,7 +545,8 @@ const getQuotations = async (access: string, userId: string, filters: Filters) =
         const quoteTotal = await quotationModel.aggregate([
             {
                 $match: {
-                    status: { $ne: 'Work In Progress' }
+                    status: { $ne: 'Work In Progress' },
+                    isDeleted: { $ne: true }
                 }
             },
             {
@@ -843,7 +844,7 @@ export const getRevenuePerSalesperson = async (req: Request, res: Response, next
 
             switch (privileges.jobSheet.viewReport) {
                 case 'none':
-                    return res.status(204)
+                    return res.status(204).send()
                 case 'created':
                     accessFilter = { 'salesPerson._id': new ObjectId(userId) };
                     break;

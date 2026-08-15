@@ -313,6 +313,7 @@ export class PendingDealsComponent {
             if (res.success) {
               this.dataSource.data.splice(index, 1)
               this.dataSource._updateChangeSubscription()
+              this.total = Math.max(0, this.total - 1);
               if (this.dataSource.data.length == 0) {
                 this.isEmpty = true;
               }
@@ -358,6 +359,7 @@ export class PendingDealsComponent {
           if (res) {
             this.dataSource.data.splice(index, 1)
             this.dataSource._updateChangeSubscription()
+            this.total = Math.max(0, this.total - 1);
             if (this.dataSource.data.length <= 0) {
               this.isEmpty = true;
             }

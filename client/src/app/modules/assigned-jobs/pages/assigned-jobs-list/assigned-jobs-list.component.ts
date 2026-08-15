@@ -220,12 +220,7 @@ export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewIn
           }
           this._enquiryService.sendFeedbackRequest(feedbackBody).subscribe((data: any) => {
             if (data) {
-              data.client = [data.client]
-              data.department = [data.department]
-              data.salesPerson = [data.salesPerson]
-              this.dataSource.data[index] = data
-              this.dataSource.data = [...this.dataSource.data];
-              this.dataSource._updateChangeSubscription();
+              this.getJobsData();
             }
           })
         }
@@ -348,6 +343,7 @@ export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewIn
               if (res.success) {
                 this.dataSource.data.splice(index, 1)
                 this.dataSource._updateChangeSubscription()
+                this.total = this.dataSource.data.length;
                 if (this.dataSource.data.length <= 0) {
                   this.isEmpty = true;
                 }

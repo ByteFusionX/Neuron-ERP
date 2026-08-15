@@ -43,6 +43,10 @@ export class LineChartComponent implements OnInit, AfterViewInit {
     this._dashboardService.graphChart$.subscribe((data) => {
       const numberShortenerPipe = this.numberShortenerPipe;
       const maxProfit = Math.max(...data.profitPerMonths.profits);
+      data = {
+        ...data,
+        profitTarget: data.profitTarget || { criticalRange: 0, moderateRange: 0, targetValue: 0 }
+      };
       let option = {
         tooltip: {
           trigger: 'axis',

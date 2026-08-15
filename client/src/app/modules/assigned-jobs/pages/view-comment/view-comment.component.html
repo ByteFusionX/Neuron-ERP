@@ -11,7 +11,7 @@
                 <p class="text-gray-700">{{data.comment}}</p>
                 <p *ngIf="!data" class="text-gray-700">No comment</p>
             </div>
-            <div *ngIf="data.revisionComment.length">
+            <div *ngIf="data.revisionComment?.length">
                 <h3 class="text-md font-semibold">Revision Comment</h3>
                 <div class="p-4 bg-gray-100 rounded" *ngFor="let comment of data.revisionComment;let i=index">
                     <p class="text-gray-700">Revision {{i+1}}: {{comment}}</p>
