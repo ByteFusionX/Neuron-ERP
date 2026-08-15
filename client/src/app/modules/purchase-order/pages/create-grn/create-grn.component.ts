@@ -486,7 +486,10 @@ export class CreateGrnComponent implements OnInit {
               this.toastr.warning(warning, '', { timeOut: 5000 });
             });
           }
-          if (this.purchaseId) {
+          const createdGrnId = response.data?._id;
+          if (createdGrnId) {
+            this.router.navigate(['/purchase-order/view-grn', createdGrnId]);
+          } else if (this.purchaseId) {
             this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
           } else {
             this.router.navigate(['/purchase/approves']);
