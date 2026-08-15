@@ -454,7 +454,7 @@ export const getInvoiceDnLinkingReport = async (req: Request, res: Response) => 
         const limit = parseInt(req.query.limit as string) || 10;
         const skip = (page - 1) * limit;
 
-        const matchStage: any = { isDeleted: false, status: { $ne: 'Cancelled' } };
+        const matchStage: any = { isDeleted: false, status: { $nin: ['Cancelled', 'Reissued'] } };
 
         // Filters matching Invoice fields directly
         if (req.query.search && req.query.search !== 'undefined') {
