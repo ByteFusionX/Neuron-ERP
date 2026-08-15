@@ -18,6 +18,7 @@ import { JobService } from 'src/app/core/services/job/job.service';
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { BlockItemComponent } from './modals/block-item/block-item.component';
 import { ViewBlockedItemsComponent } from './modals/view-blocked-items/view-blocked-items.component';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 
 @Component({
   selector: 'app-stock-entries',
@@ -74,6 +75,14 @@ export class StockEntriesComponent implements OnInit {
     this.refreshInlineEditConfig();
     this.loadFilterOptions();
     this.loadStockEntries();
+  }
+
+  formatPlainNumber(value: any): string {
+    if (value == null) return '';
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
   }
 
   loadFilterOptions(): void {
@@ -247,18 +256,18 @@ export class StockEntriesComponent implements OnInit {
       {
         key: 'unitCost',
         label: 'Unit Cost',
-        type: 'currency',
+        type: 'text',
         sortable: true,
         filterable: false,
-        pipeParams: { currency: 'USD' }
+        cellRenderer: (item: any) => this.formatPlainNumber(item?.unitCost)
       },
       {
         key: 'totalCost',
         label: 'Total Cost',
-        type: 'currency',
+        type: 'text',
         sortable: true,
         filterable: false,
-        pipeParams: { currency: 'USD' }
+        cellRenderer: (item: any) => this.formatPlainNumber(item?.totalCost)
       },
       {
         key: 'supplierName',
@@ -323,10 +332,10 @@ export class StockEntriesComponent implements OnInit {
       {
         key: 'sellingPrice',
         label: 'Selling Price',
-        type: 'currency',
+        type: 'text',
         sortable: true,
         filterable: false,
-        pipeParams: { currency: 'USD' }
+        cellRenderer: (item: any) => this.formatPlainNumber(item?.sellingPrice)
       },
       {
         key: 'blockedQuantities',
@@ -370,23 +379,39 @@ export class StockEntriesComponent implements OnInit {
         headerClass: '!text-center',
         actions: [
           {
+            icon: 'heroCheck',
+            tooltip: 'Save',
+            action: 'saveItem',
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-green-200 hover:bg-green-50 flex justify-center items-center text-green-600',
+            condition: (item: any) => this.tableComponent?.isRowEditing(item) ?? false
+          },
+          {
+            icon: 'heroXMark',
+            tooltip: 'Cancel',
+            action: 'cancelEditItem',
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-gray-200 hover:bg-gray-50 flex justify-center items-center text-gray-600',
+            condition: (item: any) => this.tableComponent?.isRowEditing(item) ?? false
+          },
+          {
             icon: 'heroPencilSquare',
             tooltip: 'Edit Stock',
             action: 'editItem',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600'
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600',
+            condition: (item: any) => !(this.tableComponent?.isRowEditing(item) ?? false)
           },
           {
             icon: 'heroTrash',
             tooltip: 'Delete Stock',
             action: 'deleteItem',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-red-200 hover:bg-red-50 flex justify-center items-center text-red-600'
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-red-200 hover:bg-red-50 flex justify-center items-center text-red-600',
+            condition: (item: any) => !(this.tableComponent?.isRowEditing(item) ?? false)
           },
           {
             icon: 'heroLockClosed',
             tooltip: 'Block Stock',
             action: 'blockItem',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-300 hover:border-orange-500 text-orange-600 text-sm rounded-full font-medium',
-            condition: (item: any) => (item?.availableQuantity ?? item?.quantity ?? 0) > 0
+            condition: (item: any) => (item?.availableQuantity ?? item?.quantity ?? 0) > 0 && !(this.tableComponent?.isRowEditing(item) ?? false)
           }
         ]
       }
@@ -456,6 +481,14 @@ export class StockEntriesComponent implements OnInit {
     } else if (event.action === 'editItem') {
       if (this.tableComponent) {
         this.tableComponent.startInlineEdit(event.item, event.event);
+      }
+    } else if (event.action === 'saveItem') {
+      if (this.tableComponent) {
+        this.tableComponent.saveInlineEdit(event.event);
+      }
+    } else if (event.action === 'cancelEditItem') {
+      if (this.tableComponent) {
+        this.tableComponent.cancelInlineEdit(event.event);
       }
     } else if (event.action === 'deleteItem') {
       this.onInlineDelete(event.item);
@@ -567,17 +600,28 @@ export class StockEntriesComponent implements OnInit {
 
   onInlineDelete(item: StockEntry): void {
     if (!item?._id) return;
-    const confirmed = confirm('Are you sure you want to delete this stock entry?');
-    if (!confirmed) return;
 
-    this.stockEntryService.deleteStockEntry(item._id).subscribe({
-      next: () => {
-        this.toastr.success('Stock entry deleted');
-        this.loadStockEntries();
-      },
-      error: (error) => {
-        this.toastr.error(error.error?.message || 'Failed to delete stock entry');
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Delete Stock Entry',
+        description: `Are you sure you want to delete this stock entry (${item.partNo?.partNo || item.partNo || 'this item'})? This action cannot be undone and will permanently remove it from inventory.`,
+        icon: 'heroExclamationCircle',
+        IconColor: 'red'
       }
+    });
+
+    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+      if (!confirmed) return;
+
+      this.stockEntryService.deleteStockEntry(item._id!).subscribe({
+        next: () => {
+          this.toastr.success('Stock entry deleted');
+          this.loadStockEntries();
+        },
+        error: (error) => {
+          this.toastr.error(error.error?.message || 'Failed to delete stock entry');
+        }
+      });
     });
   }
 
