@@ -2415,7 +2415,7 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             if (rejectedIndex !== -1) {
                 try {
                     const newApprovalStatus = await getWorkflowSteps('purchaseApproval', existingPurchaseRequest.createdBy.toString());
-                    updateData.approvalStatus = [...existingPurchaseRequest.approvalStatus, ...newApprovalStatus];
+                    updateData.approvalStatus = newApprovalStatus;
                 } catch (error) {
                     console.error('Error initializing workflow steps for resubmission:', error);
                 }

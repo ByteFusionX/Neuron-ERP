@@ -30,6 +30,7 @@ export class ViewPurchaseComponent {
   private dialog = inject(MatDialog);
   private fileService = inject(FileService);
   private supplierService = inject(SupplierService)
+  private employeeService = inject(EmployeeService)
 
   purchase: PurchaseData | null = null;
   isLoading = true;
@@ -41,6 +42,7 @@ export class ViewPurchaseComponent {
   isDownloading = false;
   purchaseId!: string;
   suppliersList = signal<any[]>([])
+  canApprovePR = false;
 
   ngOnInit(): void {
     this.loadPurchase();
@@ -52,6 +54,12 @@ export class ViewPurchaseComponent {
         console.log(error);
       }
     })
+
+    this.employeeService.employeeData$.subscribe((data) => {
+      if (data?.category?.privileges) {
+        this.canApprovePR = data.category.privileges.purchase?.canApprovePR || false;
+      }
+    });
   }
 
   loadPurchase() {

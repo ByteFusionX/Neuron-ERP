@@ -131,7 +131,7 @@
                                 </td>
                                 <td class="px-4 py-2 border">
                                     {{ row.selectedSupplier.unitPrice *
-                                        row.selectedSupplier.quantity |
+                                        row.detail.quantity |
                                         number:"1.2-2" }} {{ purchase?.currency }}</td>
                                 <td class="px-4 py-2 border">
                                     {{ row.detail.unitSellingPrice | number : "1.2-2" }} {{ purchase?.currency }}
@@ -236,11 +236,13 @@
                     <ng-icon name="heroXCircle" class="mr-1"></ng-icon>
                     Reject
                 </app-btn>
+                @if(canApprovePR){
                 <app-btn theme="success" (click)="onApprove()"
                     [loading]="isApproving">
                     <ng-icon name="heroCheckCircle" class="mr-1"></ng-icon>
                     Approve
                 </app-btn>
+                }
             </div>
             }
         </div>
