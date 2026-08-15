@@ -199,7 +199,7 @@ export class CreateInvoiceComponent implements OnInit {
               invoice.items.forEach((item: any) => {
                 const qty = item.quantity || 0;
                 const total = item.amount || 0;
-                const unitPrice = qty ? total / qty : 0;
+                const unitPrice = qty ? Math.round((total / qty) * 100) / 100 : 0;
 
                 const dnRefs = Array.isArray(item.dnRefs) && item.dnRefs.length > 0
                   ? item.dnRefs
