@@ -847,7 +847,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     
     // Load suppliers first
     this.subscriptions.add(
-      this.purchaseOrderService.getSuppliersForPurchaseRequest(this.purchaseId).subscribe({
+      this.purchaseOrderService.getSuppliersForPurchaseRequest(this.purchaseId, this.lpoId || undefined).subscribe({
         next: (suppliersResponse) => {
           if (suppliersResponse.success) {
             this.suppliersList.set(suppliersResponse.data);

@@ -1297,6 +1297,7 @@ export const updateSupplierInvoices = async (req: any, res: Response) => {
 export const getSuppliersForPurchaseRequest = async (req: Request, res: Response) => {
   try {
     const { purchaseId } = req.params;
+    const { excludeLpoId } = req.query; // Optional: exclude a specific LPO's own reservation (for reissue)
 
     if (!mongoose.Types.ObjectId.isValid(purchaseId)) {
       return res.status(400).json({
@@ -1349,11 +1350,20 @@ export const getSuppliersForPurchaseRequest = async (req: Request, res: Response
     // documents (never from a stored counter) so this can never drift out of
     // sync, no matter how many times a PO for this item is created,
     // rejected, resubmitted, revoked, or reissued.
-    const existingPurchaseOrders = await PurchaseOrder.find({
+    // Pending-for-Approval POs reserve quantity too - included alongside confirmed
+    // issues so a supplier isn't offered as selectable while its items are locked
+    // in an LPO still awaiting an approval decision. excludeLpoId leaves out the
+    // LPO's own (still-pending) reservation while it's being reissued, so its
+    // supplier doesn't appear locked against itself.
+    const suppliersQuery: any = {
       purchaseId: new mongoose.Types.ObjectId(purchaseId),
       supplierId: { $in: supplierIds },
-      poStatus: { $nin: ['Draft', 'Pending for Approval', 'Rejected'] }
-    });
+      poStatus: { $nin: ['Draft', 'Rejected'] }
+    };
+    if (excludeLpoId && mongoose.Types.ObjectId.isValid(excludeLpoId as string)) {
+      suppliersQuery._id = { $ne: new mongoose.Types.ObjectId(excludeLpoId as string) };
+    }
+    const existingPurchaseOrders = await PurchaseOrder.find(suppliersQuery);
 
     const issuedItemsMap = new Map();
     existingPurchaseOrders.forEach((po: any) => {
@@ -1511,16 +1521,29 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
       supplierId: new mongoose.Types.ObjectId(supplierId),
       poStatus: { $nin: ['Draft', 'Pending for Approval', 'Rejected'] }
     };
-    
+
+    // Pending-for-Approval POs reserve quantity too - they just aren't confirmed yet.
+    // Tracked separately from `query` so the frontend can show how much is locked in
+    // pending approval versus already issued.
+    const pendingQuery: any = {
+      purchaseId: new mongoose.Types.ObjectId(purchaseId),
+      supplierId: new mongoose.Types.ObjectId(supplierId),
+      poStatus: 'Pending for Approval'
+    };
+
     // If excludeLpoId is provided, exclude that LPO from calculations (for reissue)
     if (excludeLpoId && mongoose.Types.ObjectId.isValid(excludeLpoId as string)) {
       query._id = { $ne: new mongoose.Types.ObjectId(excludeLpoId as string) };
+      pendingQuery._id = { $ne: new mongoose.Types.ObjectId(excludeLpoId as string) };
     }
 
     // excludeLpoId already removes the reissued PO from `query` above, so the
     // POs found here are exactly the ones that should count as "issued" -
     // no separate stored counter or subtraction step needed.
-    const existingPurchaseOrders = await PurchaseOrder.find(query);
+    const [existingPurchaseOrders, pendingPurchaseOrders] = await Promise.all([
+      PurchaseOrder.find(query),
+      PurchaseOrder.find(pendingQuery)
+    ]);
 
     const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
 
@@ -1535,6 +1558,17 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
       }
     });
 
+    const pendingItemsMap = new Map();
+    pendingPurchaseOrders.forEach((po: any) => {
+      if (po.items && Array.isArray(po.items)) {
+        po.items.forEach((item: any) => {
+          const key = itemKey(item);
+          const currentPending = pendingItemsMap.get(key) || 0;
+          pendingItemsMap.set(key, currentPending + (item.quantity || 0));
+        });
+      }
+    });
+
     const items: any[] = [];
     purchaseRequestDoc.items.forEach((item: any) => {
       if (item.itemDetails && Array.isArray(item.itemDetails)) {
@@ -1545,7 +1579,8 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
                 selectedComparison.supplierId.toString() === supplierId) {
               const totalQuantity = selectedComparison.quantity || itemDetail.quantity || 0;
               const totalIssued = issuedItemsMap.get(itemKey(itemDetail)) || 0;
-              const remainingQuantity = Math.max(0, totalQuantity - totalIssued);
+              const pendingQuantity = pendingItemsMap.get(itemKey(itemDetail)) || 0;
+              const remainingQuantity = Math.max(0, totalQuantity - totalIssued - pendingQuantity);
               const isFullyIssued = remainingQuantity <= 0;
 
               items.push({
@@ -1556,6 +1591,7 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
                 originalQuantity: totalQuantity,
                 remainingQuantity: remainingQuantity,
                 issuedQuantity: totalIssued,
+                pendingQuantity: pendingQuantity,
                 quantity: remainingQuantity,
                 unitPrice: selectedComparison.unitPrice,
                 comparisons: selectedComparison,

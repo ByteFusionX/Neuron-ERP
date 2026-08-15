@@ -44,7 +44,7 @@
                                 Terms</td>
                             <td class="px-2 py-2 border w-2/6">
                                 <ng-container *ngIf="this.selectedSupplier()">
-                                    {{this.items()[0].comparisons.etaTerms}}
+                                    {{this.items()[0]?.comparisons?.etaTerms}}
                                 </ng-container>
                             </td>
                         </tr>
@@ -116,7 +116,7 @@
                                 Terms</td>
                             <td class="px-2 py-2 border w-2/6">
                                 <ng-container *ngIf="this.selectedSupplier()">
-                                    {{this.items()[0].comparisons.paymentTerms}}
+                                    {{this.items()[0]?.comparisons?.paymentTerms}}
                                 </ng-container>
                             </td>
                         </tr>
@@ -280,6 +280,7 @@
                             <th class="px-4 py-2 border">Part No.</th>
                             <th class="px-4 py-2 border">Original Qty</th>
                             <th class="px-4 py-2 border">Issued Qty</th>
+                            <th class="px-4 py-2 border">Pending Qty</th>
                             <th class="px-4 py-2 border">Remaining Qty</th>
                             <th class="px-4 py-2 border">Issue Qty</th>
                             <th class="px-4 py-2 border">Unit Cost</th>
@@ -289,13 +290,14 @@
                     <tbody>
                         <ng-container *ngIf="this.selectedSupplier()">
                             @for (item of this.items(); track item._id || $index; let i = $index) {
-                            @let itemId = item._id || (item.detail + '-' + item.comparisons.quantity);
+                            @let itemId = item._id || (item.detail + '-' + item.comparisons?.quantity);
                             @let isIssued = item.isIssued || false;
+                            @let hasPending = (item.pendingQuantity || 0) > 0;
                             @let issueQuantity = getItemQuantity(itemId);
                             <tr class="border-b" [class.opacity-50]="isIssued && !isReissueMode" [class.bg-gray-100]="isIssued && !isReissueMode">
                                 <td class="px-4 py-2 border">
-                                    <input 
-                                        type="checkbox" 
+                                    <input
+                                        type="checkbox"
                                         [checked]="isItemSelected(itemId) && (!isIssued || isReissueMode)"
                                         (change)="toggleItemSelection(itemId, isIssued)"
                                         [disabled]="isIssued && !isReissueMode"
@@ -305,11 +307,14 @@
                                 <td class="px-4 py-2 border">{{i+1}}</td>
                                 <td class="px-4 py-2 border">
                                     {{item.detail}}
-                                    <span *ngIf="isIssued" class="ml-2 text-xs text-orange-600 font-semibold">(Fully Issued)</span>
+                                    <span *ngIf="isIssued && (item.issuedQuantity || 0) > 0" class="ml-2 text-xs text-orange-600 font-semibold">(Fully Issued)</span>
+                                    <span *ngIf="isIssued && (item.issuedQuantity || 0) === 0" class="ml-2 text-xs text-yellow-600 font-semibold">(Pending Approval)</span>
+                                    <span *ngIf="!isIssued && hasPending" class="ml-2 text-xs text-yellow-600 font-semibold">({{item.pendingQuantity}} Pending Approval)</span>
                                 </td>
                                 <td class="px-4 py-2 border">{{getPartNumberForItem(item)}}</td>
                                 <td class="px-4 py-2 border">{{item.originalQuantity || item.comparisons?.quantity || item.quantity}}</td>
                                 <td class="px-4 py-2 border">{{item.issuedQuantity || 0}}</td>
+                                <td class="px-4 py-2 border">{{item.pendingQuantity || 0}}</td>
                                 <td class="px-4 py-2 border">{{item.remainingQuantity || 0}}</td>
                                 <td class="px-4 py-2 border">
                                     <div *ngIf="(!isIssued || isReissueMode) && isItemSelected(itemId)" class="flex flex-col">

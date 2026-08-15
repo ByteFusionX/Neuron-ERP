@@ -50,8 +50,12 @@ export class PurchaseOrderService {
     return this.http.patch<any>(`${this.baseUrl}/${lpoId}/supplier-invoices`, formData);
   }
 
-  getSuppliersForPurchaseRequest(purchaseId: string): Observable<any> {
-    return this.http.get<any>(`${this.baseUrl}/suppliers/${purchaseId}`);
+  getSuppliersForPurchaseRequest(purchaseId: string, excludeLpoId?: string): Observable<any> {
+    const params: any = {};
+    if (excludeLpoId) {
+      params.excludeLpoId = excludeLpoId;
+    }
+    return this.http.get<any>(`${this.baseUrl}/suppliers/${purchaseId}`, { params });
   }
 
   getItemsForPurchaseRequest(purchaseId: string, supplierId: string, excludeLpoId?: string): Observable<any> {
