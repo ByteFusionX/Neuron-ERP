@@ -721,7 +721,7 @@ export const getFeedbackRequestsById = async (req: Request, res: Response, next:
 
 
         if (totalFeedbacks.length) return res.status(200).json({ total: totalFeedbacks[0].total, feedbacks: feedbacks });
-        return res.status(502).json();
+        return res.status(200).json({ total: 0, feedbacks: [] });
     } catch (error) {
         console.log(error)
         next(error);
@@ -783,11 +783,13 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
     try {
         let { revisionComment } = req.body;
         let enquiryId = req.params.enquiryId;
+        const existingEnquiry = await enquiryModel.findById(enquiryId);
+        const revisionStatus = existingEnquiry?.reAssigned ? 'Assigned To Presale Engineer' : 'Assigned To Presale Manager';
         const result = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId },
             {
                 $push: { 'preSale.revisionComment': revisionComment },
-                status: 'Assigned To Presales',
+                status: revisionStatus,
                 'preSale.seenbyEmployee': false,
                 'preSale.newFeedbackAccess': true,
                 'preSale.createdDate': Date.now()
@@ -837,7 +839,7 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
             { _id: enquiryId },
             {
                 $push: { 'preSale.revisionComment': revisionComment },
-                status: 'Assigned To Presales Manager',
+                status: 'Assigned To Presale Manager',
                 'preSale.seenbyEmployee': false,
                 'preSale.newFeedbackAccess': true,
                 'preSale.createdDate': Date.now()
@@ -978,7 +980,7 @@ export const presalesCount = async (req: Request, res: Response, next: NextFunct
     try {
         let { access, userId } = req.query;
 
-        let accessFilter: any = { status: 'Assigned To Presales' };
+        let accessFilter: any = { status: { $in: ['Assigned To Presale Manager', 'Assigned To Presale Engineer'] } };
 
         switch (access) {
             case 'assigned':
@@ -1121,12 +1123,13 @@ export const markAsSeenReAssingedJob = async (req: Request, res: Response, next:
     }
 };
 
-export const markAsSeenFeedback = async (req: Request, res: Response, next: NextFunction) => {
+export const markAsSeenFeedback = async (req: any, res: Response, next: NextFunction) => {
     try {
-        const { enqId, feedbackId } = req.body;
+        const { enqIds } = req.body;
+        const userData = await getEmployeeData(req.user);
 
         const result = await enquiryModel.updateOne(
-            { _id: new ObjectId(enqId), "preSale.feedback._id": feedbackId },
+            { _id: new ObjectId(enqIds), "preSale.feedback.employeeId": userData?._id },
             { $set: { "preSale.feedback.$.seenByFeedbackProvider": true } }
         );
 

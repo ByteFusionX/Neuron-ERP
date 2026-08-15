@@ -6,19 +6,19 @@
         <form action="">
             <div class="w-full px-5 py-2 mt-2">
                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="customers">
-                    Presale Person
+                    Presale Person <span class="text-red-500">*</span>
                 </label>
-                <ng-select id="saleperson" class="form" placeholder="Sales Person" appendTo="body" name="salesperson"
+                <ng-select id="saleperson" class="form" placeholder="Presale Person" appendTo="body" name="salesperson"
                     (change)="onChange($event)" [(ngModel)]="selectedEmployee">
                     <ng-option *ngFor="let employee of employees$ | async" [value]="employee._id">{{employee.firstName}}
                         {{employee.lastName}}</ng-option>
                 </ng-select>
-                <p class="text-sm mt-1 text-red-500" *ngIf="employeeError">Select Sales Person</p>
+                <p class="text-sm mt-1 text-red-500" *ngIf="employeeError">Select Presale Person</p>
             </div>
 
             <div class="w-full px-5 py-2">
                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="comment">
-                    Comment
+                    Comment <span class="text-red-500">*</span>
                 </label>
                 <textarea appNoLeadingSpace [(ngModel)]="comment" name="comment" (ngModelChange)="validateComment()" [ngClass]="{'border-red-500':commentError}"
                     class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white "

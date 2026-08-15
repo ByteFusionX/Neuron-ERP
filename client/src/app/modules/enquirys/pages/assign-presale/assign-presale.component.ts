@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, Inject, OnInit, ViewChi
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { fileEnterState } from '../../enquiry-animations';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { Observable } from 'rxjs';
+import { combineLatest, map, Observable } from 'rxjs';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { TitleStrategy } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
@@ -42,7 +42,10 @@ export class AssignPresaleComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-    this.employees$ = this._employeeService.getPresaleManagers()
+    this.employees$ = combineLatest([
+      this._employeeService.getPresaleEngineers(),
+      this._employeeService.getPresaleManagers()
+    ]).pipe(map(([engineers, managers]) => [...engineers, ...managers]))
     if (this.data) {
       this.selectedEmployee = this.data.presalePerson
       this.comment = this.data.comment
