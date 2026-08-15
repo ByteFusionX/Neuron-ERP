@@ -112,6 +112,41 @@ export const getPresaleEngineers = async (
   }
 };
 
+export const getProcurementEmployees = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const employees = await Employee.aggregate([
+      { $match: { isDeleted: { $ne: true }, isBlocked: { $ne: true } } },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: false } },
+      { $match: { "category.privileges.purchase.viewReport": { $ne: "none" } } },
+      {
+        $project: {
+          password: 0,
+        },
+      },
+      { $sort: { createdDate: -1 } },
+    ]);
+
+    if (employees.length) {
+      return res.status(200).json(employees);
+    }
+    return res.status(204).json();
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getEmployeesForCustomerTransfer = async (
   req: Request,
   res: Response,

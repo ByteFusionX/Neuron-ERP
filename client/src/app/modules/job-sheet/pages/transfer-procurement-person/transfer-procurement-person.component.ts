@@ -27,7 +27,7 @@ export class TransferProcurementPersonComponent implements OnInit {
   ) { }
 
   ngOnInit() {
-    this.employees$ = this._employeeService.getAllEmployees()
+    this.employees$ = this._employeeService.getProcurementEmployees()
   }
 
   onClose() {

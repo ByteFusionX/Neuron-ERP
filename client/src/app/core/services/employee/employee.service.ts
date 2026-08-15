@@ -28,6 +28,10 @@ export class EmployeeService {
     return this.http.get<getEmployee[]>(`${this.api}/employee/presale-managers`)
   }
 
+  getProcurementEmployees(): Observable<getEmployee[]> {
+    return this.http.get<getEmployee[]>(`${this.api}/employee/procurement-employees`)
+  }
+
   getEmployees(filterData: FilterEmployee): Observable<{ total: number, employees: getEmployee[] }> {
     return this.http.post<{ total: number, employees: getEmployee[] }>(`${this.api}/employee/get`, filterData)
   }

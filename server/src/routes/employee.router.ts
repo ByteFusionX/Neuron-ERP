@@ -15,6 +15,7 @@ import {
   deleteEmployee,
   getPresaleEngineers,
   getPresaleManagers,
+  getProcurementEmployees,
   blockEmployee,
 } from "../controllers/employee.controller";
 const empRouter = Router();
@@ -22,6 +23,7 @@ const empRouter = Router();
 empRouter.get("/", getEmployees);
 empRouter.get("/presale-managers", getPresaleManagers);
 empRouter.get("/presale-engineers", getPresaleEngineers);
+empRouter.get("/procurement-employees", getProcurementEmployees);
 
 empRouter.get("/check", isEmployeePresent);
 empRouter.get("/view/get/:employeeId", getEmployeeByEmployeeId);
