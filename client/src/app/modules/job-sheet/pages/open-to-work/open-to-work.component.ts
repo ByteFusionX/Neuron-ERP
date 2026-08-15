@@ -80,6 +80,7 @@ export class OpenToWorckComponent {
   canAllocateJobs = false;
   canConvertToPurchase = false;
   canTransferProcurementPerson = false;
+  isInProgressRoute = false;
 
   private subscriptions = new Subscription();
 
@@ -235,8 +236,8 @@ export class OpenToWorckComponent {
     });
 
     const currentRoute = this.router.url;
-    const isInProgressRoute = currentRoute.includes('/in-progress');
-    const allocateStatusFilter = isInProgressRoute ? allocateStatus.WorkInProgress : allocateStatus.OpenToWork;
+    this.isInProgressRoute = currentRoute.includes('/in-progress');
+    const allocateStatusFilter = this.isInProgressRoute ? allocateStatus.WorkInProgress : allocateStatus.OpenToWork;
 
     let filterData = {
       search: this.searchQuery,
@@ -258,11 +259,10 @@ export class OpenToWorckComponent {
           this.filteredData.data = data.job;
           this.total = data.total;
           this.totalLpoValue = data.totalLpo;
-          this.isEmpty = false;
+          this.isEmpty = data.total === 0;
           this.isLoading = false;
         },
         error: ((error) => {
-          if (error.status == 504) this.jobId = '000';
           this.dataSource.data = [];
           this.isLoading = false;
           this.isEmpty = true;
@@ -509,13 +509,10 @@ export class OpenToWorckComponent {
         this.filteredData.data = data.job;
         this.totalLpoValue = data.totalLpo;
         this.total = data.total;
-        this.isEmpty = false;
+        this.isEmpty = data.total === 0;
         this.isLoading = false;
       }),
       catchError((error) => {
-        if (error.status == 504) {
-          this.jobId = '000';
-        }
         this.dataSource.data = [];
         this.isLoading = false;
         this.isEmpty = true;

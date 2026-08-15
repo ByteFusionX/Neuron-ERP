@@ -307,11 +307,7 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         }, 0);
 
 
-        if (jobTotal.length) {
-            return res.status(200).json({ total: jobTotal.length, totalLpo: totalValues, job: jobData });
-        } else {
-            return res.status(504).json({ err: 'No job data found' });
-        }
+        return res.status(200).json({ total: jobTotal.length, totalLpo: totalValues, job: jobData });
     } catch (error) {
         console.log(error)
         next(error);

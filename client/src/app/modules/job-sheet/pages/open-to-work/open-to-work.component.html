@@ -3,7 +3,7 @@
 
         <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
             <div class="flex gap-2">
-                <h3>Open to work Jobs</h3>
+                <h3>{{ isInProgressRoute ? 'In Progress Jobs' : 'Open to work Jobs' }}</h3>
                 <p *ngIf="reportDate"
                     class="text-sm font-normal bg-purple-200 px-4 gap-2 flex justify-center items-center">{{reportDate}}
                     <ng-icon (click)="onRemoveReport()" class="hover:text-red-500 cursor-pointer"

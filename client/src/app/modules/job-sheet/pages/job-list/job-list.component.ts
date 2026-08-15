@@ -254,11 +254,10 @@ export class JobListComponent {
           this.filteredData.data = data.job;
           this.total = data.total;
           this.totalLpoValue = data.totalLpo;
-          this.isEmpty = false;
+          this.isEmpty = data.total === 0;
           this.isLoading = false;
         },
         error: ((error) => {
-          if (error.status == 504) this.jobId = '000';
           this.dataSource.data = [];
           this.isLoading = false;
           this.isEmpty = true;
@@ -485,13 +484,10 @@ export class JobListComponent {
         this.filteredData.data = data.job;
         this.totalLpoValue = data.totalLpo;
         this.total = data.total;
-        this.isEmpty = false;
+        this.isEmpty = data.total === 0;
         this.isLoading = false;
       }),
       catchError((error) => {
-        if (error.status == 504) {
-          this.jobId = '000';
-        }
         this.dataSource.data = [];
         this.isLoading = false;
         this.isEmpty = true;
