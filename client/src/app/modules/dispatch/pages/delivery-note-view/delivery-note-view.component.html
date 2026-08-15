@@ -13,16 +13,16 @@
         Preview DN
       </app-btn>
       
-      <app-btn theme="primary" (click)="onEdit()">
+      <app-btn *ngIf="deliveryNote?.status === 'Draft'" theme="primary" (click)="onEdit()">
         <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
         Edit
       </app-btn>
-      
-        <app-btn theme="danger" (click)="onCancel()" [loading]="isCancelling">
+
+        <app-btn *ngIf="deliveryNote?.status !== 'Cancelled'" theme="danger" (click)="onCancel()" [loading]="isCancelling">
           <ng-icon name="heroXCircle" class="mr-2"></ng-icon>
           Cancel DN
         </app-btn>
-      
+
     </div>
   </div>
 

@@ -446,6 +446,18 @@ export const cancelDn = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Delivery Note is already cancelled' });
         }
 
+        const referencingInvoice = await Invoice.findOne({
+            isDeleted: { $ne: true },
+            $or: [
+                { 'items.dnId': dn._id },
+                { 'items.dnRefs.dnId': dn._id }
+            ]
+        });
+
+        if (referencingInvoice) {
+            return res.status(400).json({ message: `Cannot cancel: this Delivery Note is referenced by Invoice ${referencingInvoice.invoiceNo}` });
+        }
+
         const wasDraft = dn.status === 'Draft';
 
         dn.status = 'Cancelled';
