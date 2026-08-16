@@ -138,6 +138,16 @@ export class LpoListComponent implements OnInit {
         type: 'text',
       },
       {
+        key: 'issuedQty',
+        label: 'Issued Quantity',
+        type: 'text',
+        cellRenderer: (item: any) => {
+          if (!item.items || !Array.isArray(item.items)) return '0';
+          const totalQty = item.items.reduce((sum: number, lpoItem: any) => sum + (lpoItem.quantity || 0), 0);
+          return totalQty.toString();
+        }
+      },
+      {
         key: 'poStatus',
         label: 'Status',
         type: 'status',
@@ -280,7 +290,7 @@ export class LpoListComponent implements OnInit {
     ]
 
     this.defaultColumns = [
-      'poDate', 'supplierId.supplierName', 'poNo', 'jobId.jobId', 'totalLpoValue', 'createdBy.firstName', 'poStatus', 'comments', 'sendForApproval', 'grn', 'actions'
+      'poDate', 'supplierId.supplierName', 'poNo', 'jobId.jobId', 'totalLpoValue', 'createdBy.firstName', 'issuedQty', 'poStatus', 'comments', 'sendForApproval', 'grn', 'actions'
     ];
   }
 
