@@ -13,8 +13,12 @@ import jwt from "jsonwebtoken";
 
 const EXEMPT_PATHS = ['/uploads', '/employee/login', '/employee/check'];
 
+// Phone scanning a QR code is never logged in; the scan session id itself (unguessable,
+// only ever shared via the QR) is the security boundary for this one read-only lookup.
+const isPublicScanSessionRead = (req: any) => req.method === 'GET' && /^\/scan-session\/[^/]+$/.test(req.path);
+
 const PassportMiddleware = (req: any, res: any, next: any) => {
-    if (EXEMPT_PATHS.some((path) => req.path.includes(path))) {
+    if (EXEMPT_PATHS.some((path) => req.path.includes(path)) || isPublicScanSessionRead(req)) {
         return next();
     }
 

@@ -296,5 +296,9 @@ export const routes: Routes = [
       { path: 'reissued', loadComponent: () => import('./modules/invoice/pages/cancelled-reissued-report/cancelled-reissued-report.component').then(c => c.CancelledReissuedReportComponent) },
     ]
   },
+  {
+    path: 'zxing-scan',
+    loadComponent: () => import('./modules/scan/pages/zxing-scan/zxing-scan.component').then((c) => c.ZxingScanComponent)
+  },
   { path: '**', redirectTo: '', pathMatch: 'full' }
 ];

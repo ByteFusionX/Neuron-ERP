@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import { verifyAndExtractOid } from "../common/utils/extractToken";
 import { getEmployeeData } from "../common/utils/util";
+import ScanSession from "../models/scanSession.model";
 
 export const connectedSockets = {};
 
@@ -42,6 +43,52 @@ export const socketConnection = async (socketIo:Server) => {
                     console.log('Socket auth verification failed:', error.message);
                     socket.emit('auth_error', { error: 'Authentication failed', message: error.message });
                     socket.disconnect();
+                }
+            })
+
+            socket.on('joinScanSession', (sessionId: string) => {
+                if (typeof sessionId === 'string' && sessionId) {
+                    socket.join(sessionId);
+                }
+            })
+
+            socket.on('leaveScanSession', (sessionId: string) => {
+                if (typeof sessionId === 'string' && sessionId) {
+                    socket.leave(sessionId);
+                }
+            })
+
+            socket.on('scanCode', async ({ sessionId, code }: { sessionId: string; code: string }) => {
+                try {
+                    if (!sessionId || !code) {
+                        socket.emit('scanError', { sessionId, message: 'Invalid scan payload' });
+                        return;
+                    }
+
+                    const session = await ScanSession.findOne({ sessionId });
+                    if (!session) {
+                        socket.emit('scanError', { sessionId, message: 'Scan session not found' });
+                        return;
+                    }
+
+                    if (session.status !== 'active') {
+                        socket.emit('scanError', { sessionId, message: 'Scan session is closed' });
+                        return;
+                    }
+
+                    const scan = {
+                        code,
+                        order: session.scans.length + 1,
+                        scannedAt: new Date(),
+                    };
+
+                    session.scans.push(scan as any);
+                    await session.save();
+
+                    socketIo.to(sessionId).emit('scanAdded', { sessionId, scan });
+                } catch (error) {
+                    console.log('scanCode error:', error.message);
+                    socket.emit('scanError', { sessionId, message: 'Failed to record scan' });
                 }
             })
 

@@ -12,6 +12,7 @@ import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
+import { ScanCellComponent } from 'src/app/shared/components/scan-cell/scan-cell.component';
 
 @Component({
   selector: 'app-create-dn',
@@ -24,7 +25,8 @@ import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-p
     SelectDropdownComponent,
     ButtonComponent,
     IconsModule,
-    MatDialogModule
+    MatDialogModule,
+    ScanCellComponent
   ],
   templateUrl: './create-dn.component.html',
   styleUrl: './create-dn.component.css'
@@ -378,6 +380,12 @@ export class CreateDnComponent implements OnInit {
     return this.dnForm.get('items') as FormArray;
   }
 
+  scanRowKey(index: number): string {
+    const itemControl = this.items.at(index);
+    const itemId = itemControl?.get('itemId')?.value;
+    return `${this.dnForm.get('dnNo')?.value || 'dn'}-${itemId || index}`;
+  }
+
   getBalanceQty(itemControl: AbstractControl): number {
     const orderedQty = itemControl.get('orderedQty')?.value || 0;
     const deliveredQty = itemControl.get('deliveredQty')?.value || 0;
@@ -415,6 +423,20 @@ export class CreateDnComponent implements OnInit {
     const currentList = this.itemSerialNos.get(index) || [];
     const filtered = currentList.filter(s => s !== serialNo);
     this.itemSerialNos.set(index, filtered);
+  }
+
+  onScanReceived(index: number, code: string): void {
+    const trimmed = code?.trim();
+    if (!trimmed) return;
+
+    const currentList = this.itemSerialNos.get(index) || [];
+    if (currentList.includes(trimmed)) {
+      this.toastr.warning(`Serial number ${trimmed} already added`);
+      return;
+    }
+    currentList.push(trimmed);
+    this.itemSerialNos.set(index, currentList);
+    this.toastr.success(`Scanned: ${trimmed}`);
   }
 
   onSerialNoKeydown(event: KeyboardEvent, index: number): void {

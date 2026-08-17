@@ -1,0 +1,37 @@
+<div class="scan-cell">
+  @if (status === 'idle') {
+    <button type="button" class="scan-btn" [disabled]="disabled" (click)="startScan()">Scan</button>
+  }
+
+  @if (status === 'active') {
+    <div class="scan-active">
+      <div class="scan-actions">
+        <button type="button" class="link-btn" (click)="toggleQr()">
+          {{ showQr ? 'Hide QR' : 'Show QR' }}
+        </button>
+        <button type="button" class="link-btn danger" (click)="closeSession()">Close session</button>
+      </div>
+
+      @if (showQr && qrDataUrl) {
+        <img [src]="qrDataUrl" alt="Scan QR code" class="qr-image" />
+      }
+
+      @if (scans.length > 0) {
+        <ul class="scan-list">
+          @for (scan of scans; track scan.order) {
+            <li>{{ scan.order }}. {{ scan.code }}</li>
+          }
+        </ul>
+      } @else {
+        <div class="scan-empty">No codes scanned yet</div>
+      }
+    </div>
+  }
+
+  @if (status === 'closed') {
+    <div class="scan-closed-wrap">
+      <span class="scan-closed">Session closed ({{ scans.length }} scanned)</span>
+      <button type="button" class="scan-btn" [disabled]="disabled" (click)="newScan()">Scan Again</button>
+    </div>
+  }
+</div>

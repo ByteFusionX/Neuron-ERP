@@ -2783,11 +2783,20 @@ export const getPurchaseRequestsByJobId = async (req: Request, res: Response, ne
 
 export const getConvertibleJobs = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const employee = await getEmployeeData(req.user);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found",
+            });
+        }
+
         const jobs = await jobModel.aggregate([
             {
                 $match: {
                     isDeleted: { $ne: true },
-                    allocateStatus: allocateStatus.OpenToWork
+                    allocateStatus: allocateStatus.OpenToWork,
+                    procurementPerson: employee._id
                 }
             },
             {

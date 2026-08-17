@@ -88,6 +88,7 @@
                                 <th class="px-4 py-2 border text-center w-32">Current Delivery</th>
                                 <th class="px-4 py-2 border text-center min-w-[180px]">Serial No(s)</th>
                                 <th class="px-4 py-2 border text-center min-w-8">Status</th>
+                                <th class="px-4 py-2 border text-center">Scan</th>
                             </tr>
                         </thead>
                         <tbody formArrayName="items">
@@ -197,10 +198,20 @@
                                             {{ item.get('status')?.value }}
                                         </span>
                                     </td>
+                                    <td class="px-4 py-2 border text-center">
+                                        <app-scan-cell
+                                            [rowKey]="scanRowKey(i)"
+                                            [supplier]="dnForm.get('clientName')?.value"
+                                            [product]="item.get('description')?.value"
+                                            [reference]="item.get('partNo')?.value"
+                                            [disabled]="!isItemSelected(i)"
+                                            (scanReceived)="onScanReceived(i, $event)">
+                                        </app-scan-cell>
+                                    </td>
                                 </tr>
                             </ng-container>
                             <tr *ngIf="items.length === 0">
-                                <td colspan="11" class="text-center py-8 text-gray-500">
+                                <td colspan="12" class="text-center py-8 text-gray-500">
                                     No materials found. Select a Job ID.
                                 </td>
                             </tr>
