@@ -233,11 +233,6 @@ export class CreateSupplierComponent implements OnInit {
       return;
     }
 
-    if (!this.isEditMode() && this.selectedFiles.length === 0) {
-      this.notificationService.error('Please attach at least one document');
-      return;
-    }
-    
     this.isSaving.set(true);
     
     if (this.isEditMode()) {
