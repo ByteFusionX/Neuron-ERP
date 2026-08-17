@@ -2,6 +2,7 @@ import { Schema, model, Types } from "mongoose";
 
 interface Product {
     partNo: string;
+    itemCode: string;
     productDescription: string;
     productCategory: Types.ObjectId;
     productSegment: Types.ObjectId;
@@ -16,6 +17,10 @@ interface Product {
 
 const productSchema = new Schema<Product>({
     partNo: {
+        type: String,
+        required: true,
+    },
+    itemCode: {
         type: String,
         required: true,
     },

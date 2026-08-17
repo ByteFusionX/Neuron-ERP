@@ -48,6 +48,7 @@ export class CreateProductComponent implements OnInit {
 
   productForm: FormGroup = this.fb.group({
     partNo: ['', [Validators.required]],
+    itemCode: ['', [Validators.required]],
     createdDate: [new Date().toISOString().split('T')[0], [Validators.required]],
     productDescription: ['', [Validators.required]],
     productSegment: ['', [Validators.required]],

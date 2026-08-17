@@ -6,6 +6,7 @@ import { environment } from 'src/environments/environment';
 export interface Product {
   _id?: string;
   partNo: string;
+  itemCode: string;
   productDescription: string;
   productCategory: any;
   productSegment: any;
@@ -38,6 +39,7 @@ export interface ProductQueryParams {
   row?: number;
   search?: string;
   partNo?: string;
+  itemCode?: string;
   productDescription?: string;
   productCategory?: string;
   productSegment?: string;

@@ -3,34 +3,41 @@
   [onClose]="onCancel.bind(this)"
   [footerButtons]="[
     { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
-    { label: 'Save & Exit', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+    {
+      label: 'Save & Exit',
+      onClick: onSubmit.bind(this),
+      theme: 'primary',
+      loading: isSubmitting,
+    },
   ]"
   contentClass="p-6"
-  contentMaxHeight="90vh">
+  contentMaxHeight="90vh"
+>
   <form [formGroup]="productForm" (ngSubmit)="onSubmit()">
-      <div class="space-y-4">
-        <div class="grid grid-cols-2 gap-4">
-          <app-form-field
-            label="Part No"
-            [control]="productForm.get('partNo')"
-            [isSubmitted]="isSubmitting"
-            placeholder="Manual Entry">
-          </app-form-field>
-
-          <app-form-field
-            label="Date"
-            [control]="productForm.get('createdDate')"
-            [isSubmitted]="isSubmitting"
-            type="date">
-          </app-form-field>
-        </div>
+    <div class="space-y-3">
+      <div class="grid grid-cols-2 gap-5">
+        <app-form-field
+          label="Date"
+          [control]="productForm.get('createdDate')"
+          [isSubmitted]="isSubmitting"
+          type="date"
+        >
+        </app-form-field>
 
         <app-form-field
-          label="Product Description"
-          [control]="productForm.get('productDescription')"
+          label="Item Code"
+          [control]="productForm.get('itemCode')"
           [isSubmitted]="isSubmitting"
-          type="textarea"
-          placeholder="Enter product description">
+          placeholder="Manual Entry"
+        >
+        </app-form-field>
+
+        <app-form-field
+          label="Part No"
+          [control]="productForm.get('partNo')"
+          [isSubmitted]="isSubmitting"
+          placeholder="Manual Entry"
+        >
         </app-form-field>
 
         <app-select-dropdown
@@ -40,7 +47,8 @@
           optionValue="_id"
           formControlName="productSegment"
           placeholder="Auto fill"
-          [isSubmitted]="isSubmitting">
+          [isSubmitted]="isSubmitting"
+        >
         </app-select-dropdown>
 
         <app-select-dropdown
@@ -52,7 +60,8 @@
           placeholder="Select category"
           [isSubmitted]="isSubmitting"
           footerLabel="+ Add category"
-          (footerAction)="onAddCategory()">
+          (footerAction)="onAddCategory()"
+        >
         </app-select-dropdown>
 
         <app-select-dropdown
@@ -64,10 +73,19 @@
           placeholder="Select warehouse"
           [isSubmitted]="isSubmitting"
           footerLabel="+ Add warehouse"
-          (footerAction)="onAddWarehouse()">
+          (footerAction)="onAddWarehouse()"
+        >
         </app-select-dropdown>
       </div>
-  
-    </form>
-</app-modal-layout>
 
+      <app-form-field
+        label="Product Description"
+        [control]="productForm.get('productDescription')"
+        [isSubmitted]="isSubmitting"
+        type="textarea"
+        placeholder="Enter product description"
+      >
+      </app-form-field>
+    </div>
+  </form>
+</app-modal-layout>

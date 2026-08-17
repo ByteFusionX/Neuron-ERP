@@ -12,7 +12,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         const data: any = req.body;
         const token = (req as any).user;
 
-        if (!data.partNo || !data.productDescription || !data.productCategory || !data.productSegment || !data.warehouse || !data.createdDate) {
+        if (!data.partNo || !data.itemCode || !data.productDescription || !data.productCategory || !data.productSegment || !data.warehouse || !data.createdDate) {
             return res.status(400).json({ message: "Missing required fields" });
         }
 
@@ -26,6 +26,12 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         const existing = await Product.findOne({ partNo: new RegExp(`^${data.partNo}$`, 'i'), isDeleted: { $ne: true } });
         if (existing) {
             return res.status(409).json({ message: "Product with this part number already exists" });
+        }
+
+        // Uniqueness check on itemCode (case-insensitive)
+        const existingItemCode = await Product.findOne({ itemCode: new RegExp(`^${data.itemCode}$`, 'i'), isDeleted: { $ne: true } });
+        if (existingItemCode) {
+            return res.status(409).json({ message: "Product with this item code already exists" });
         }
 
         // Validate referenced docs exist
@@ -45,6 +51,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
 
         const product = await Product.create({
             partNo: data.partNo.trim(),
+            itemCode: data.itemCode.trim(),
             productDescription: data.productDescription.trim(),
             productCategory: data.productCategory,
             productSegment: data.productSegment,
@@ -75,6 +82,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             row = '10',
             search,
             partNo,
+            itemCode,
             productDescription,
             productCategory,
             productSegment,
@@ -109,6 +117,10 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             filter.partNo = { $regex: partNo as string, $options: 'i' };
         }
 
+        if (itemCode) {
+            filter.itemCode = { $regex: itemCode as string, $options: 'i' };
+        }
+
         if (productDescription) {
             filter.productDescription = { $regex: productDescription as string, $options: 'i' };
         }
@@ -130,6 +142,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             const regex = new RegExp(searchTerm, 'i');
             filter.$or = [
                 { partNo: regex },
+                { itemCode: regex },
                 { productDescription: regex }
             ];
         }
@@ -228,6 +241,11 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
             if (exist) return res.status(409).json({ message: "Product with this part number already exists" });
         }
 
+        if (data.itemCode) {
+            const existItemCode = await Product.findOne({ _id: { $ne: id }, itemCode: new RegExp(`^${data.itemCode}$`, 'i'), isDeleted: { $ne: true } });
+            if (existItemCode) return res.status(409).json({ message: "Product with this item code already exists" });
+        }
+
         // Validate refs when supplied
         const refChecks: Promise<any>[] = [];
         if (data.productCategory) refChecks.push(ProductCategory.findById(data.productCategory));
@@ -246,6 +264,7 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
             {
                 $set: {
                     ...(data.partNo ? { partNo: data.partNo.trim() } : {}),
+                    ...(data.itemCode ? { itemCode: data.itemCode.trim() } : {}),
                     ...(data.productDescription ? { productDescription: data.productDescription.trim() } : {}),
                     ...(data.productCategory ? { productCategory: data.productCategory } : {}),
                     ...(data.productSegment ? { productSegment: data.productSegment } : {}),
@@ -292,6 +311,7 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
             const regex = new RegExp(search.trim(), 'i');
             filter.$or = [
                 { partNo: regex },
+                { itemCode: regex },
                 { productDescription: regex }
             ];
         }
@@ -299,7 +319,7 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
         const limitValue = Math.min(Math.max(parseInt(limit as string, 10) || 25, 1), 100);
 
         const partNumbers = await Product.find(filter)
-            .select('partNo productDescription')
+            .select('partNo itemCode productDescription')
             .sort({ partNo: 1 })
             .limit(limitValue);
 
