@@ -1,0 +1,26 @@
+<div class="scan-page">
+  @if (status === 'loading') {
+    <div class="state-message">Loading scan session...</div>
+  }
+
+  @if (status === 'invalid' || status === 'closed' || status === 'camera-error') {
+    <div class="state-message error">
+      <p>{{ errorMessage }}</p>
+    </div>
+  }
+
+  @if (status === 'ready') {
+    <div class="video-wrapper">
+      <video id="scan-video" class="scan-video"></video>
+    </div>
+
+    <div class="scan-feedback">
+      <div class="scan-count">Scanned: <strong>{{ scanCount }}</strong></div>
+      @if (lastCode) {
+        <div class="last-code">Last code: <span>{{ lastCode }}</span></div>
+      } @else {
+        <div class="last-code">Point the camera at a barcode or QR code</div>
+      }
+    </div>
+  }
+</div>
