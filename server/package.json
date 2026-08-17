@@ -37,7 +37,8 @@
     "passport-azure-ad": "^4.3.5",
     "path": "^0.12.7",
     "socket.io": "^4.7.5",
-    "ts-migrate-mongoose": "^3.8.7"
+    "ts-migrate-mongoose": "^3.8.7",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -46,6 +47,7 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.10.4",
     "@types/passport": "^1.0.17",
+    "@types/web-push": "^3.6.4",
     "cross-env": "^7.0.3",
     "rimraf": "^5.0.5",
     "ts-node": "^10.9.2",

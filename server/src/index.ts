@@ -29,6 +29,7 @@ import trashRouter from './routes/trash.router';
 import eventRouter from './routes/event.router';
 import { connectToDatabase } from './db/connect';
 import notificationRouter from './routes/notification.router';
+import pushSubscriptionRouter from './routes/pushSubscription.router';
 import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
@@ -49,14 +50,27 @@ import stockEntryRouter from './routes/stockEntry.router';
 import grnRouter from './routes/grn.router';
 import deliveryNoteRouter from './routes/deliveryNote.router';
 import invoiceRouter from './routes/invoice.router';
+import scanSessionRouter from './routes/scanSession.router';
 
 const app = express();
 app.set('etag', false); // API responses are dynamic per request; conditional 304s were silently breaking notification/celebration polling
 const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+const allowedOrigins = (process.env.ORIGIN1 ?? 'https://localhost:4200')
+  .split(',')
+  .map((origin) => origin.trim());
+const corsOriginCheck = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+  if (!origin || allowedOrigins.includes(origin)) {
+    callback(null, true);
+  } else {
+    callback(new Error('Not allowed by CORS'));
+  }
+};
+
 export const io = new Server(server, {
   cors: {
-    origin: process.env.ORIGIN1 ?? 'https://localhost:4200',
+    origin: corsOriginCheck,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true
   }
@@ -71,7 +85,7 @@ app.use(cookieParser());
 
 
 app.use(cors({
-  origin: process.env.ORIGIN1 ?? 'https://localhost:4200',
+  origin: corsOriginCheck,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
@@ -106,6 +120,7 @@ app.use('/dashboard', dashboardRouter)
 app.use('/trash', trashRouter)
 app.use('/events', eventRouter)
 app.use('/notification', notificationRouter)
+app.use('/push-subscription', pushSubscriptionRouter)
 app.use('/customerType', customerTypeRouter)
 app.use('/supplier', supplierRouter)
 app.use('/purchase', purchaseRequestRouter)
@@ -120,6 +135,7 @@ app.use('/stock-entry', stockEntryRouter);
 app.use('/grn', grnRouter);
 app.use('/delivery-note', deliveryNoteRouter);
 app.use('/invoice', invoiceRouter);
+app.use('/scan-session', scanSessionRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');

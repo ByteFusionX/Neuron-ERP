@@ -25,6 +25,11 @@
               "src/favicon.ico",
               "src/assets",
               {
+                "glob": "sw-push.js",
+                "input": "src",
+                "output": "/"
+              },
+              {
                 "glob": "**/*",
                 "input": "node_modules/ngx-extended-pdf-viewer/assets/",
                 "output": "/assets/"

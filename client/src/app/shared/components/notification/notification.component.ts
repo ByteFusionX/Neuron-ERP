@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, Output, EventEmitter } from '@angular/core';
 import { NotificationService } from 'src/app/core/services/notification.service';
+import { PushNotificationService } from 'src/app/core/services/push-notification.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { TextNotification } from '../../interfaces/notification.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -19,9 +20,13 @@ export class NotificationComponent {
   @Output() closeSidenav = new EventEmitter<void>();
   notifications$!: Observable<{ viewed: TextNotification[], unviewed: TextNotification[] }>;
   activeTab: 'unread' | 'read' = 'unread';
+  pushSubscribed$!: Observable<boolean>;
+  pushSupported = false;
+  pushToggleBusy = false;
 
   constructor(
-    private _notificationService: NotificationService
+    private _notificationService: NotificationService,
+    private _pushNotificationService: PushNotificationService
   ) { }
 
   private sortByLatest(list: TextNotification[]): TextNotification[] {
@@ -39,6 +44,22 @@ export class NotificationComponent {
         unviewed: this.sortByLatest(unviewed),
       }))
     );
+
+    this.pushSupported = this._pushNotificationService.isSupported;
+    this.pushSubscribed$ = this._pushNotificationService.subscribed$;
+    if (this.pushSupported) {
+      this._pushNotificationService.refreshStatus();
+    }
+  }
+
+  onTogglePush() {
+    if (this.pushToggleBusy) {
+      return;
+    }
+    this.pushToggleBusy = true;
+    this._pushNotificationService.toggle()
+      .catch(error => console.error('Error toggling push notifications:', error))
+      .finally(() => this.pushToggleBusy = false);
   }
 
   onClose() {

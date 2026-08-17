@@ -5,6 +5,7 @@
 /tmp
 /out-tsc
 /bazel-out
+/src/sw-push.js
 
 # Node
 /node_modules

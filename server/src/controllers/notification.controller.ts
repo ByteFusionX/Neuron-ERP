@@ -7,6 +7,7 @@ import { getEmployeeData } from "../common/utils/util";
 import { Server } from "socket.io";
 import { connectedSockets } from "../services/socket-io.service";
 import { ObjectId } from "mongodb";
+import { sendWebPushToEmployees } from "../services/webPush.service";
 
 
 interface NotificationData {
@@ -474,6 +475,15 @@ export const createNotificationWithPrivileges = async (
                 if (connectedSockets[recipientId]) {
                     socket.to(recipientId).emit("recieveNotifications", notification);
                 }
+            });
+        }
+
+        if (notification) {
+            const routeInfo = getRoutePath(notification.type, notification.referenceId, notification.additionalData);
+            void sendWebPushToEmployees(eligibleEmployeeIds, {
+                title: notification.title,
+                body: notification.message,
+                data: { routePath: routeInfo.routePath, routeData: routeInfo.routeData },
             });
         }
 

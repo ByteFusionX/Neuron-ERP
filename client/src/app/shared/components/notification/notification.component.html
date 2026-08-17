@@ -9,7 +9,22 @@
         </span>
       </ng-container>
     </div>
-    <ng-icon name="heroXMark" class="cursor-pointer text-xl hover:text-red-500" (click)="onClose()"></ng-icon>
+    <div class="flex items-center gap-3">
+      <button *ngIf="pushSupported" type="button"
+        class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition disabled:opacity-50"
+        [class.bg-blue-50]="(pushSubscribed$ | async)"
+        [class.text-blue-700]="(pushSubscribed$ | async)"
+        [class.border-blue-300]="(pushSubscribed$ | async)"
+        [class.text-gray-500]="!(pushSubscribed$ | async)"
+        [class.border-gray-300]="!(pushSubscribed$ | async)"
+        [disabled]="pushToggleBusy"
+        [title]="(pushSubscribed$ | async) ? 'Disable push notifications' : 'Enable push notifications'"
+        (click)="onTogglePush()">
+        <ng-icon [name]="(pushSubscribed$ | async) ? 'heroBellAlert' : 'heroBell'" class="text-sm"></ng-icon>
+        {{ (pushSubscribed$ | async) ? 'Notifications On' : 'Enable Notifications' }}
+      </button>
+      <ng-icon name="heroXMark" class="cursor-pointer text-xl hover:text-red-500" (click)="onClose()"></ng-icon>
+    </div>
   </div>
 
   <!-- Topbar with Toggle Buttons -->

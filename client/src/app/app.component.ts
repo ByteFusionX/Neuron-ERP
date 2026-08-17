@@ -7,6 +7,7 @@ import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { CelebrationDialogComponent } from './shared/components/celebration-dialog/celebration-dialog.component';
 import { Subject } from 'rxjs';
 import { NotificationService } from './core/services/notification.service';
+import { PushNotificationService } from './core/services/push-notification.service';
 import { EmployeeService } from './core/services/employee/employee.service';
 import { MatDrawer, MatDrawerContainer, MatDrawerContent } from '@angular/material/sidenav';
 import { LoadingBarModule } from '@ngx-loading-bar/core';
@@ -50,7 +51,8 @@ export class AppComponent implements OnDestroy, OnInit {
     private router: Router,
     private toaster: ToastrService,
     private authService: MsalService,
-    private idle: Idle
+    private idle: Idle,
+    private pushNotificationService: PushNotificationService
   ) { }
 
 
@@ -97,6 +99,7 @@ export class AppComponent implements OnDestroy, OnInit {
       this._notificationService.authSocketIo(employeeToken)
       this._notificationService.getEmployeeTextNotifications()
       this._notificationService.initializeNotifications()
+      this.pushNotificationService.registerAndSubscribe().catch(err => console.error('Push subscription failed:', err));
       if (!this.isLoginRoute()) {
         this.isUserThere();
       }
@@ -135,7 +138,8 @@ export class AppComponent implements OnDestroy, OnInit {
     // const accounts = this.authService.instance.getAllAccounts();
     // const isAuthenticated = accounts.length > 0;
     const isAuthenticated = !!this._employeeService.getToken();
-    return !isAuthenticated || this.route.snapshot.firstChild?.routeConfig?.path === 'login';
+    const bareShellPaths = ['login', 'zxing-scan'];
+    return !isAuthenticated || bareShellPaths.includes(this.route.snapshot.firstChild?.routeConfig?.path ?? '');
   }
 
   isUserThere() {
