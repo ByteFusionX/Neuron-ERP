@@ -64,7 +64,11 @@ export class NotificationService {
                 };
 
             case 'ProcurementTransferred':
-                return { routePath: '' };
+                const transferredJobId = additionalData?.jobId || referenceId?._id?.toString() || referenceId?.toString();
+                return {
+                    routePath: '/purchase/create',
+                    routeData: { jobId: transferredJobId }
+                };
 
             case 'MrRequest':
                 const technicalId = additionalData?.technicalId;

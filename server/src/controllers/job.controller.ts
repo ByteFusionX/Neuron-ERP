@@ -848,6 +848,17 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
             });
         }
 
+        const existingPurchaseRequest = await PurchaseRequest.findOne({
+            jobId: existingJob._id,
+            isDeleted: false
+        });
+        if (existingPurchaseRequest) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot reassign procurement person: a purchase requisition has already been started for this job'
+            });
+        }
+
         const updateJob = await jobModel.findByIdAndUpdate(
             { _id: jobId },
             {
@@ -865,17 +876,6 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
                 message: 'Job not found'
             });
         }
-
-        await PurchaseRequest.updateMany(
-            { jobId: updateJob._id, isDeleted: false },
-            {
-                $set: {
-                    procurementPerson: procurementPersonId,
-                    updatedBy: employee._id,
-                    updatedAt: new Date(),
-                },
-            }
-        );
 
         const newProcurementId = procurementPersonId.toString();
         const previousProcurementId = existingJob.procurementPerson?.toString();

@@ -98,12 +98,8 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       if (jobId) {
         this.requestedJobId.set(jobId);
       }
-      
-      this.deelSheets();
-      
-      if (jobId) {
-        this.selectJobById(jobId);
-      }
+
+      this.deelSheets(jobId);
     }
 
     this.generatedPRId = this.generateId();
@@ -118,15 +114,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.jobService.getOneJob(jobId).subscribe({
       next: (res) => {
         if (res && res.length > 0) {
-          const job = res[0];
-          const currentJobSheets = this.jobSheets();
-          const jobExists = currentJobSheets.some(j => j._id === job._id);
-          
-          if (!jobExists) {
-            this.jobSheets.set([...currentJobSheets, job]);
-          }
-          
-          this.patchValues(job);
+          this.patchValues(res[0]);
         }
       },
       error: (error) => {
@@ -600,11 +588,21 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }).catch(() => {});
   }
 
-  deelSheets() {
+  deelSheets(requestedJobId?: string | null) {
     this.subscriptions.add(
       this.jobService.getConvertibleJobs().subscribe({
         next: (res: any) => {
           if (res.jobs) this.jobSheets.set(res.jobs);
+
+          if (requestedJobId) {
+            const isEligible = (res.jobs || []).some((j: any) => j._id === requestedJobId);
+            if (isEligible) {
+              this.selectJobById(requestedJobId);
+            } else {
+              this.requestedJobId.set('');
+              this.toaster.error('This job is not available for a new purchase requisition. It may already have a purchase request or is not open for procurement.');
+            }
+          }
         }, error: (err) => {
           console.error(err)
         }

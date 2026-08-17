@@ -682,7 +682,7 @@ export class OpenToWorckComponent {
             }
           },
           error: (error) => {
-            this.toast.error('Failed to transfer procurement person');
+            this.toast.error(error?.error?.message || 'Failed to transfer procurement person');
             console.error('Transfer failed:', error);
           }
         });
