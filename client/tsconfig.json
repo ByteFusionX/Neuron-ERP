@@ -34,4 +34,8 @@
     "strictInputAccessModifiers": true,
     "strictTemplates": true
   },
+  "exclude": [
+    "src/sw-push.ts",
+    "scripts/build-sw-push.mts"
+  ]
 }
