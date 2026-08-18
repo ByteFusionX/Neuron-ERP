@@ -27,8 +27,8 @@
                     <ng-container *ngIf="(textNotificationCount$ | async) as textNotification">
 
                         <span *ngIf="textNotification.unviewed.length"
-                            class="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center ">
-                            {{textNotification.unviewed.length}}
+                            class="absolute -top-1 -right-1 z-10 bg-red-500 text-white text-[11px] leading-none font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center border-2 border-white shadow">
+                            {{textNotification.unviewed.length > 99 ? '99+' : textNotification.unviewed.length}}
                         </span>
                     </ng-container>
                 </button>
@@ -96,7 +96,7 @@
                                     <ng-icon name="heroTrash" class="text-lg mx-3"></ng-icon>
                                     <p class="text-sm">Recycle Bin</p>
                                 </li>
-                                <li *ngIf="showPortalMangement"
+                                <li *ngIf="isSuperAdmin"
                                     class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-gray-100 hover:text-violet-900 hover:scale-105 cursor-pointer"
                                     routerLink="/bug-reports">
                                     <ng-icon name="heroWrenchScrewdriver" class="text-lg mx-3"></ng-icon>

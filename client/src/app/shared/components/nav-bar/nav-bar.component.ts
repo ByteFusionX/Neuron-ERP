@@ -27,6 +27,7 @@ export class NavBarComponent {
   showFullBar: boolean = true
   menuState: boolean = false
   showPortalMangement: boolean = false;
+  isSuperAdmin: boolean = false;
   employee!: { id: string, employeeId: string };
   employeeData$!: Observable<getEmployee | undefined>
   @Output() toggleDrawer = new EventEmitter<void>();
@@ -50,6 +51,7 @@ export class NavBarComponent {
     this.employeeData$.subscribe((emp) => {
       if(emp){
         this.showPortalMangement = Object.values(emp.category.privileges.portalManagement).some(value => value === true);
+        this.isSuperAdmin = emp.category.role === 'superAdmin';
       }else{
         this._employeeService.getEmployeeData()
       }
