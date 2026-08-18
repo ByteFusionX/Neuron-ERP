@@ -53,6 +53,10 @@ export class GaugeChartComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    requestAnimationFrame(() => this.initChart());
+  }
+
+  private initChart(): void {
     this.chartInstance = echarts.init(this.gaugeChart.nativeElement);
     new ResizeObserver(() => this.chartInstance.resize()).observe(this.gaugeChart.nativeElement);
 

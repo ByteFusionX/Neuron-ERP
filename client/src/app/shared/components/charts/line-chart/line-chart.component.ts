@@ -37,6 +37,10 @@ export class LineChartComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    requestAnimationFrame(() => this.initChart());
+  }
+
+  private initChart(): void {
     this.chartInstance = echarts.init(this.lineChart.nativeElement);
     new ResizeObserver(() => this.chartInstance.resize()).observe(this.lineChart.nativeElement);
 

@@ -38,6 +38,10 @@ export class DoughnutChartComponent implements OnInit, AfterViewInit {
   ngOnInit(): void {}
 
   ngAfterViewInit(): void {
+    requestAnimationFrame(() => this.initChart());
+  }
+
+  private initChart(): void {
     this.chartInstance = echarts.init(this.doughnutChart.nativeElement);
     new ResizeObserver(() => this.chartInstance.resize()).observe(this.doughnutChart.nativeElement);
 

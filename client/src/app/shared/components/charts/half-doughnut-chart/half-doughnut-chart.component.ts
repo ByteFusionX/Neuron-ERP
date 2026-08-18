@@ -42,12 +42,15 @@ export class HalfDoughnutChartComponent implements AfterViewInit {
   constructor(private _dashboardService: DashboardService) { }
 
   ngAfterViewInit(): void {
-    this.initializeChart();
-    this.makeChartResponsive();
+    requestAnimationFrame(() => {
+      this.initializeChart();
+      this.makeChartResponsive();
+    });
   }
 
   initializeChart(): void {
     this.chartInstance = echarts.init(this.halfDoughnutChart.nativeElement);
+    new ResizeObserver(() => this.chartInstance?.resize()).observe(this.halfDoughnutChart.nativeElement);
 
     // Subscribe based on conversionType and update chart
     if (this.conversionType === 'direct') {
