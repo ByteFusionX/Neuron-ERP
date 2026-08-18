@@ -15,7 +15,11 @@ import { EmployeeService } from '../../services/employee/employee.service';
 export class JwtInterceptor implements HttpInterceptor {
 
   private excludedUrls: string[] = [
-    'https://latest.currency-api.pages.dev/v1/currencies/qar.min.json'
+    'https://latest.currency-api.pages.dev/v1/currencies/qar.min.json',
+    // Presigned Wasabi/S3 upload URLs (Phase 2, Step 8) already carry their own
+    // query-string signature — attaching our Bearer token here would give the
+    // request two conflicting auth mechanisms and Wasabi would reject it.
+    'wasabisys.com'
   ];
 
   constructor(private _employeeService: EmployeeService) { }

@@ -166,6 +166,9 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                         return privileges.claims?.viewReport !== 'none';
                     case 'Event':
                         return true;
+                    case 'BugReportAssigned':
+                    case 'BugReportResolved':
+                        return true;
                     default:
                         return false;
                 }
@@ -411,6 +414,10 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             return { routePath: '/claims/my-claims' };
         }
         
+        case 'BugReportAssigned':
+        case 'BugReportResolved':
+            return { routePath: '/bug-reports' };
+
         case 'Event':
             if (referenceId?.collectionId) {
                 const from = referenceId.from;

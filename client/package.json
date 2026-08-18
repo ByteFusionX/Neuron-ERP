@@ -47,6 +47,7 @@
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "frappe-gantt": "^1.0.4",
+    "html2canvas": "^1.4.1",
     "jwt-decode": "^4.0.0",
     "lodash": "^4.17.21",
     "lodash.clonedeep": "^4.5.0",

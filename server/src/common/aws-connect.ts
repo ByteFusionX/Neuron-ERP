@@ -1,5 +1,6 @@
 // Import necessary modules from AWS SDK v3
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import crypto from 'crypto';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -51,6 +52,22 @@ export const uploadFileToAws = async (fileName: string, filePath: string, conten
             reject('error');
         });
     });
+};
+
+// Generates a presigned PUT URL so the client can upload a file directly to
+// S3 without routing the bytes through this server (Phase 2, Step 8).
+export const getPresignedUploadUrl = async (
+    keyPrefix: string,
+    contentType: string
+): Promise<{ uploadUrl: string; key: string }> => {
+    const key = `${keyPrefix}/${Date.now()}-${crypto.randomUUID()}`;
+    const command = new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME!,
+        Key: key,
+        ContentType: contentType,
+    });
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+    return { uploadUrl, key };
 };
 
 // Export function to get a signed URL for downloading a file from AWS S3

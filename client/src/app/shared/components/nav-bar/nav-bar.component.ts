@@ -3,6 +3,9 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
+import { ReportBugComponent } from '../report-bug/report-bug.component';
+import { BugReportScreenshotService } from 'src/app/core/diagnostics/bug-report-screenshot.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Observable } from 'rxjs';
 import { getEmployee } from '../../interfaces/employee.interface';
@@ -32,7 +35,9 @@ export class NavBarComponent {
     private _employeeService: EmployeeService,
     private _router: Router,
     private _notificationService: NotificationService,
-    private msalService: MsalService
+    private msalService: MsalService,
+    private dialog: MatDialog,
+    private bugReportScreenshotService: BugReportScreenshotService
   ) { }
 
   ngOnInit() {
@@ -77,5 +82,14 @@ export class NavBarComponent {
 
   onBellClick() {
     this.toggleDrawer.emit();
+  }
+
+  onReportBug() {
+    this.bugReportScreenshotService.clear();
+    this.dialog.open(ReportBugComponent, {
+      disableClose: true,
+      maxHeight: '90vh',
+      width: '600px',
+    });
   }
 }

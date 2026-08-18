@@ -174,6 +174,11 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/feedback-requests/feedback-requests.component').then((c) => c.FeedbackRequestsComponent)
   },
   {
+    path: 'bug-reports',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/bug-reports/bug-reports.component').then((c) => c.BugReportsComponent)
+  },
+  {
     path: 'login',
     canActivate: [LoginGuard],
     loadComponent: () => import('./modules/login/pages/login-page/login-page.component').then((c) => c.LoginPageComponent)

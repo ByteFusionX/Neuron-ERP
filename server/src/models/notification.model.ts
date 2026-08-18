@@ -48,13 +48,15 @@ const notificationSchema = new Schema<Notification>({
             'SupplierRejected',
             'ClaimApprovalRequest',
             'ClaimApproved',
-            'ClaimRejected'
+            'ClaimRejected',
+            'BugReportAssigned',
+            'BugReportResolved'
         ],
     },
     referenceModel: {
         type: String,
         required: true,
-        enum: ['Event', 'Announcement', 'Enquiry', 'Quotation', 'Job', 'Purchase', 'Technical', 'PurchaseOrder', 'Supplier', 'Claim'],
+        enum: ['Event', 'Announcement', 'Enquiry', 'Quotation', 'Job', 'Purchase', 'Technical', 'PurchaseOrder', 'Supplier', 'Claim', 'BugReport'],
     },
     title: {
         type: String,

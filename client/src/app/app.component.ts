@@ -19,6 +19,7 @@ import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
 import { ToastrService } from 'ngx-toastr';
 import { MsalService } from '@azure/msal-angular';
 import { environment } from 'src/environments/environment';
+import { ActionTrailService } from './core/diagnostics/action-trail.service';
 
 @Component({
     selector: 'app-root',
@@ -52,7 +53,8 @@ export class AppComponent implements OnDestroy, OnInit {
     private toaster: ToastrService,
     private authService: MsalService,
     private idle: Idle,
-    private pushNotificationService: PushNotificationService
+    private pushNotificationService: PushNotificationService,
+    private actionTrailService: ActionTrailService
   ) { }
 
 

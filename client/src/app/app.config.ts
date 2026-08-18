@@ -1,4 +1,6 @@
-import { ApplicationConfig } from "@angular/core";
+import { ApplicationConfig, ErrorHandler } from "@angular/core";
+import { DiagnosticsErrorHandler } from './core/diagnostics/diagnostics-buffer.service';
+import { DiagnosticsInterceptor } from './core/interceptors/diagnostics-interceptor/diagnostics.interceptor';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 
 
@@ -114,6 +116,8 @@ export const appConfig: ApplicationConfig = {
         // { provide: HTTP_INTERCEPTORS, useClass: MsalInterceptor, multi: true },
         { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
         { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
+        { provide: ErrorHandler, useClass: DiagnosticsErrorHandler },
+        { provide: HTTP_INTERCEPTORS, useClass: DiagnosticsInterceptor, multi: true },
         { provide: MSAL_INSTANCE, useFactory: MSALInstanceFactory },
         { provide: MSAL_GUARD_CONFIG, useFactory: MSALGuardConfigFactory },
         { provide: MSAL_INTERCEPTOR_CONFIG, useFactory: MSALInterceptorConfigFactory },
