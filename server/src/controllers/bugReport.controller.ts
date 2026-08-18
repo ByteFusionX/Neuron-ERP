@@ -3,7 +3,6 @@ import { getPresignedUploadUrl, getFileUrlFromAws } from "../common/aws-connect"
 import { getEmployeeData } from "../common/utils/util";
 import BugReport from "../models/bugReport.model";
 import Employee from "../models/employee.model";
-import { analyzeBugReportWithClaude } from "../common/bugAnalysis";
 import { notifyEmployee } from "../common/bugReportNotify";
 
 const DEFAULT_REPORTING_TO_EMPLOYEE_ID = "NT-1101";
@@ -69,15 +68,6 @@ export const createBugReport = async (req: Request, res: Response, next: NextFun
         });
 
         const saved = await bugReport.save();
-
-        // Analysis needs a locally-authenticated Claude CLI session, which only exists on
-        // machines where `claude login` has been run (this dev machine, or the Oracle worker).
-        // Skip on hosts like Render that don't have it, instead of failing every report.
-        if (process.env.ENABLE_AI_BUG_ANALYSIS === 'true') {
-            analyzeBugReportWithClaude(saved._id.toString()).catch((error) => {
-                console.log("Failed to kick off bug report AI analysis:", error);
-            });
-        }
 
         if (reportingToId) {
             void notifyEmployee(reportingToId.toString(), {
