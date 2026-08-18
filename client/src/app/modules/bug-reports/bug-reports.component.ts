@@ -1,9 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, MatTableDataSource } from '@angular/material/table';
+import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatTooltip } from '@angular/material/tooltip';
-import { MatDialog } from '@angular/material/dialog';
 import { NgIcon } from '@ng-icons/core';
 import { Socket } from 'ngx-socket-io';
 import { Subscription, timer } from 'rxjs';
@@ -11,7 +12,6 @@ import { switchMap } from 'rxjs/operators';
 import { environment } from 'src/environments/environment';
 import { ToastrService } from 'ngx-toastr';
 import { SkeltonLoadingComponent } from '../../shared/components/skelton-loading/skelton-loading.component';
-import { AiAnalysisDialogComponent } from './ai-analysis-dialog/ai-analysis-dialog.component';
 
 const IN_PROGRESS_STATUSES = ['analyzing', 'implementing'];
 const SAFETY_POLL_INTERVAL_MS = 15000;
@@ -30,25 +30,19 @@ interface BugReportListItem {
   createdAt: string;
   reporterId: { firstName: string; lastName: string; email: string } | null;
   reportingTo: { firstName: string; lastName: string; email: string; employeeId: string } | null;
-  aiAnalysis?: {
-    summary?: string; probableCause?: string; suggestedFix?: string; severity?: string;
-    error?: string; failedReason?: string; analyzedAt?: string; costUsd?: number;
-    applied?: boolean; filesChanged?: string[]; explanation?: string; codeChanges?: string;
-    implementationError?: string; implementationCostUsd?: number;
-  };
 }
 
 @Component({
   selector: 'app-bug-reports',
   standalone: true,
-  imports: [CommonModule, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, MatTooltip, NgIcon, SkeltonLoadingComponent],
+  imports: [CommonModule, FormsModule, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, MatTooltip, MatPaginatorModule, NgIcon, SkeltonLoadingComponent],
   templateUrl: './bug-reports.component.html',
   styleUrl: './bug-reports.component.css',
 })
-export class BugReportsComponent implements OnInit, OnDestroy {
+export class BugReportsComponent implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
   private readonly http = inject(HttpClient);
   private readonly api = environment.api;
-  private readonly dialog = inject(MatDialog);
   private readonly toastr = inject(ToastrService);
   private readonly socket = inject(Socket);
   private notificationSub?: Subscription;
@@ -58,11 +52,16 @@ export class BugReportsComponent implements OnInit, OnDestroy {
   isEmpty = false;
 
   dataSource = new MatTableDataSource<BugReportListItem>();
-  displayedColumns: string[] = ['reporter', 'reportingTo', 'description', 'route', 'status', 'aiAnalysis', 'screenshots', 'consoleErrors', 'networkErrors', 'createdAt', 'actions'];
+  displayedColumns: string[] = ['reporter', 'reportingTo', 'description', 'route', 'status', 'screenshots', 'consoleErrors', 'networkErrors', 'createdAt', 'actions'];
+  statusOptions: string[] = ['new', 'analyzing', 'implementing', 'fix-ready', 'approved', 'rejected', 'resolved', 'failed'];
 
   ngOnInit(): void {
     this.fetchBugReports();
     this.listenForLiveUpdates();
+  }
+
+  ngAfterViewInit(): void {
+    this.dataSource.paginator = this.paginator;
   }
 
   ngOnDestroy(): void {
@@ -124,21 +123,19 @@ export class BugReportsComponent implements OnInit, OnDestroy {
     window.open(url, '_blank');
   }
 
-  openAiAnalysis(element: BugReportListItem): void {
-    this.dialog.open(AiAnalysisDialogComponent, {
-      width: '600px',
-      maxHeight: '90vh',
-      data: { reportId: element._id, status: element.status, aiAnalysis: element.aiAnalysis },
-    });
+  markAsResolved(element: BugReportListItem): void {
+    this.changeStatus(element, 'resolved');
   }
 
-  markAsResolved(element: BugReportListItem): void {
-    this.http.patch<BugReportListItem>(`${this.api}/bug-reports/${element._id}/status`, { status: 'resolved' }).subscribe({
+  changeStatus(element: BugReportListItem, status: string): void {
+    const previousStatus = element.status;
+    this.http.patch<BugReportListItem>(`${this.api}/bug-reports/${element._id}/status`, { status }).subscribe({
       next: (updated) => {
         element.status = updated.status;
-        this.toastr.success('Bug report marked as resolved. Reporter notified.');
+        this.toastr.success(status === 'resolved' ? 'Bug report marked as resolved. Reporter notified.' : 'Bug report status updated.');
       },
       error: () => {
+        element.status = previousStatus;
         this.toastr.error('Failed to update bug report status.');
       },
     });
