@@ -155,6 +155,7 @@ const optionalItems = new Schema<OptionalItems>({
     },
     totalDiscount: {
         type: Number,
+        default: 0,
     },
 });
 

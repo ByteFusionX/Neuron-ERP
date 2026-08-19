@@ -454,6 +454,7 @@ export class CreateQuotatationComponent {
     }
     // Remove unitPrice from each item detail
     sanitizedQuoteFormValue.optionalItems.forEach((optionItem: any) => {
+      optionItem.totalDiscount = Number(optionItem.totalDiscount) || 0;
       optionItem.items.forEach((item: any) => {
         item.itemDetails.forEach((detail: any) => {
           delete detail.unitPrice;

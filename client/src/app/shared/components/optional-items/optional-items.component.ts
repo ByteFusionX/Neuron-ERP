@@ -169,7 +169,7 @@ export class OptionalItemsComponent implements OnInit {
             ]),
           }),
         ]),
-        totalDiscount: [0, [Validators.min(0)]],
+        totalDiscount: ['', [Validators.min(0)]],
       }),
     );
   }
