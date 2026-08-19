@@ -1,0 +1,114 @@
+<app-modal-layout
+  [title]="'PR Details - ' + (purchaseRequest?.purchaseNo || '')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-5 flex flex-col"
+  contentMaxHeight="80vh">
+
+  @if (isLoading()) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else {
+    <div class="w-full mb-6">
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">PR Number</td>
+              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.purchaseNo || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Status</td>
+              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.status || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Job ID</td>
+              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.jobId?.jobId || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Customer</td>
+              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.customerId?.customerName || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Created By</td>
+              <td class="px-2 py-2 border text-start">{{ formatEmployeeName(purchaseRequest?.createdBy) || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Created Date</td>
+              <td class="px-2 py-2 border text-start">{{ formatDate(purchaseRequest?.createdAt) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="w-full mb-6">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">PR Items</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-64 overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 border text-center">SL.NO</th>
+              <th class="px-3 py-2 border text-center">Item Name</th>
+              <th class="px-3 py-2 border text-center">Detail</th>
+              <th class="px-3 py-2 border text-center">Qty</th>
+              <th class="px-3 py-2 border text-center">Unit Cost</th>
+              <th class="px-3 py-2 border text-center">Supplier</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of purchaseRequest?.items; track $index) {
+              <tr class="border-b">
+                <td class="px-3 py-2 border text-center">{{ $index + 1 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.itemName || '-' }}</td>
+                <td class="px-3 py-2 border text-center">{{ getSelectedDetail(item)?.detail || '-' }}</td>
+                <td class="px-3 py-2 border text-center">{{ getSelectedDetail(item)?.quantity || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ getSelectedDetail(item)?.unitCost || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ getSelectedDetail(item)?.supplierName || '-' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td class="px-3 py-2 border text-center text-gray-400" colspan="6">No items found</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    @if (purchaseOrder) {
+      <div class="w-full">
+        <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">
+          LPO Progress - {{ purchaseOrder?.poNo || 'N/A' }}
+        </label>
+        <div class="relative overflow-x-auto border rounded-lg max-h-64 overflow-y-auto">
+          <table class="w-full text-sm text-left border">
+            <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+              <tr>
+                <th class="px-3 py-2 border text-center">SL.NO</th>
+                <th class="px-3 py-2 border text-center">Part No.</th>
+                <th class="px-3 py-2 border text-center">Description</th>
+                <th class="px-3 py-2 border text-center">Ordered Qty</th>
+                <th class="px-3 py-2 border text-center">Issued Qty</th>
+                <th class="px-3 py-2 border text-center">Pending Qty</th>
+                <th class="px-3 py-2 border text-center">Unit Cost</th>
+                <th class="px-3 py-2 border text-center">Total Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of purchaseOrder?.items; track $index) {
+                <tr class="border-b">
+                  <td class="px-3 py-2 border text-center">{{ $index + 1 }}</td>
+                  <td class="px-3 py-2 border text-center">{{ formatPartNumber(item.partNo) }}</td>
+                  <td class="px-3 py-2 border text-center">{{ item.detail || '-' }}</td>
+                  <td class="px-3 py-2 border text-center">{{ item.quantity || 0 }}</td>
+                  <td class="px-3 py-2 border text-center">{{ item.issuedQty || 0 }}</td>
+                  <td class="px-3 py-2 border text-center" [class.text-red-600]="item.pendingQty > 0" [class.font-medium]="item.pendingQty > 0">{{ item.pendingQty || 0 }}</td>
+                  <td class="px-3 py-2 border text-center">{{ item.unitCost || 0 }}</td>
+                  <td class="px-3 py-2 border text-center">{{ item.totalCost || 0 }}</td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td class="px-3 py-2 border text-center text-gray-400" colspan="8">No items found</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  }
+</app-modal-layout>
