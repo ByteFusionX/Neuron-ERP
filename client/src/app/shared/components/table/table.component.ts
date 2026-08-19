@@ -5,12 +5,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { NgIconsModule } from '@ng-icons/core';
-
-// PrimeNG imports
-import { InputTextModule } from 'primeng/inputtext';
-import { DatePickerModule } from 'primeng/datepicker';
-import { DropdownModule } from 'primeng/dropdown';
-import { InputNumberModule } from 'primeng/inputnumber';
+import { NgSelectModule } from '@ng-select/ng-select';
 
 import { TableColumn, TableFilter, DateRange, ApprovalRejectionList, InlineEditConfig, InlineEditColumnConfig } from './table.model';
 import { SkeltonLoadingComponent } from '../skelton-loading/skelton-loading.component';
@@ -29,13 +24,9 @@ import * as XLSX from 'xlsx';
     MatMenuModule,
     MatTooltipModule,
     NgIconsModule,
+    NgSelectModule,
     SkeltonLoadingComponent,
     PaginationComponent,
-    // PrimeNG imports
-    InputTextModule,
-    DatePickerModule,
-    DropdownModule,
-    InputNumberModule,
   ],
   templateUrl: './table.component.html',
   styleUrls: ['./table.component.css']

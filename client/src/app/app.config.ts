@@ -25,8 +25,6 @@ import { provideRouter, RouteReuseStrategy, withRouterConfig } from '@angular/ro
 import { AppRouteReuseStrategy } from './core/strategies/app-route-reuse.strategy';
 import { DatePipe } from '@angular/common';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
-import { providePrimeNG } from 'primeng/config';
-import Aura from '@primeng/themes/aura';
 import { MsalModule, MsalGuard, MsalInterceptor, MsalService, MSAL_INSTANCE, MSAL_GUARD_CONFIG, MSAL_INTERCEPTOR_CONFIG, MsalGuardConfiguration, MsalInterceptorConfiguration } from '@azure/msal-angular';
 import { IPublicClientApplication, PublicClientApplication, InteractionType, BrowserCacheLocation, LogLevel } from '@azure/msal-browser';
 import { environment } from 'src/environments/environment';
@@ -102,14 +100,6 @@ export const appConfig: ApplicationConfig = {
         ),
         { provide: RouteReuseStrategy, useClass: AppRouteReuseStrategy },
         provideAnimationsAsync(),
-        providePrimeNG({
-            theme: {
-                preset: Aura,
-                options: {
-                    darkModeSelector: '.my-app-dark'
-                }
-            }
-        }),
         provideNgIdle(),
         // Azure AD login is temporarily disabled in favor of employeeId/password login.
         // Restore MsalInterceptor (and remove JwtInterceptor) to re-enable it.

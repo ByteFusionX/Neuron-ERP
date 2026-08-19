@@ -86,60 +86,47 @@
 
                   <!-- Filter Input -->
                   <div
-                    *ngIf="column.filterable"
+                    *ngIf="column.filterable && column.filterType !== 'date'"
                     class="w-full overflow-visible"
                   >
                     <!-- Text Filter -->
                     <input
                       *ngIf="column.filterType === 'text'"
-                      pInputText
                       [placeholder]="column.filterPlaceholder || 'Search...'"
                       [(ngModel)]="filterValues[column.key]"
                       (ngModelChange)="onFilterChange(column, $event)"
-                      class="w-full"
+                      class="w-full appearance-none bg-white text-gray-700 border border-gray-200 rounded-lg py-2 px-3 text-sm leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white"
                       (click)="$event.stopPropagation()"
                     />
 
                     <!-- Select Filter -->
-                    <p-dropdown
+                    <ng-select
                       *ngIf="column.filterType === 'select'"
-                      [options]="column.filterOptions"
-                      [(ngModel)]="filterValues[column.key]"
-                      (onChange)="onFilterChange(column, $event.value)"
-                      [placeholder]="'Select...'"
-                      [showClear]="true"
-                      class="w-full"
-                      (click)="$event.stopPropagation()"
-                      [appendTo]="'body'"
-                    >
-                    </p-dropdown>
-
-                    <!-- Date Filter -->
-                    <p-datepicker
-                      *ngIf="column.filterType === 'date'"
-                      class="w-full"
-                      [style]="{ width: '100%' }"
-                      selectionMode="range"
-                      [readonlyInput]="true"
+                      [items]="column.filterOptions"
+                      bindLabel="label"
+                      bindValue="value"
                       [(ngModel)]="filterValues[column.key]"
                       (ngModelChange)="onFilterChange(column, $event)"
+                      placeholder="Select..."
+                      [clearable]="true"
+                      class="w-full filter"
+                      (click)="$event.stopPropagation()"
                       appendTo="body"
                     >
-                    </p-datepicker>
+                    </ng-select>
 
                     <!-- Number Filter -->
-                    <p-inputNumber
+                    <input
                       *ngIf="column.filterType === 'number'"
-                      [(ngModel)]="filterValues[column.key]"
-                      (onInput)="onFilterChange(column, $event.value)"
+                      type="number"
                       [placeholder]="
                         column.filterPlaceholder || 'Enter number...'
                       "
-                      [showButtons]="false"
-                      class="w-full"
+                      [(ngModel)]="filterValues[column.key]"
+                      (ngModelChange)="onFilterChange(column, $event)"
+                      class="w-full appearance-none bg-white text-gray-700 border border-gray-200 rounded-lg py-2 px-3 text-sm leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white"
                       (click)="$event.stopPropagation()"
-                    >
-                    </p-inputNumber>
+                    />
                   </div>
                 </div>
               </th>

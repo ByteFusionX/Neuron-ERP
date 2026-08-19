@@ -17,16 +17,17 @@
         <label for="cancel-job-id" class="block text-sm font-medium text-gray-700 mb-1">
           Job ID <span class="text-red-500">*</span>
         </label>
-        <p-dropdown
+        <ng-select
           id="cancel-job-id"
-          class="w-full"
-          [options]="jobOptions"
+          class="w-full form"
+          [items]="jobOptions"
           formControlName="jobId"
-          optionLabel="label"
-          optionValue="value"
+          bindLabel="label"
+          bindValue="value"
           placeholder="Select Job ID"
+          [clearable]="true"
           [ngClass]="{'ng-invalid ng-dirty': form.get('jobId')?.invalid && form.get('jobId')?.touched}"
-        ></p-dropdown>
+        ></ng-select>
       </div>
 
       <!-- Invoice No Field -->
@@ -34,16 +35,17 @@
         <label for="cancel-invoice-no" class="block text-sm font-medium text-gray-700 mb-1">
           Invoice No <span class="text-red-500">*</span>
         </label>
-        <p-dropdown
+        <ng-select
           id="cancel-invoice-no"
-          class="w-full"
-          [options]="invoiceOptions"
+          class="w-full form"
+          [items]="invoiceOptions"
           formControlName="invoiceNo"
-          optionLabel="label"
-          optionValue="value"
+          bindLabel="label"
+          bindValue="value"
           placeholder="Select Invoice"
+          [clearable]="true"
           [ngClass]="{'ng-invalid ng-dirty': form.get('invoiceNo')?.invalid && form.get('invoiceNo')?.touched}"
-        ></p-dropdown>
+        ></ng-select>
       </div>
     </div>
 

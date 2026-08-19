@@ -11,16 +11,17 @@
       <label for="assign-engineer" class="block text-sm font-medium text-gray-700 mb-1">
         Assign To Engineer <span class="text-red-500">*</span>
       </label>
-      <p-dropdown
+      <ng-select
         id="assign-engineer"
-        class="w-full"
-        [options]="engineerOptions"
+        class="w-full form"
+        [items]="engineerOptions"
         formControlName="engineerId"
-        optionLabel="label"
-        optionValue="value"
+        bindLabel="label"
+        bindValue="value"
         placeholder="Select Engineer"
+        [clearable]="true"
         [ngClass]="{'ng-invalid ng-dirty': form.get('engineerId')?.invalid && form.get('engineerId')?.touched}"
-      ></p-dropdown>
+      ></ng-select>
       <div 
         *ngIf="form.get('engineerId')?.invalid && form.get('engineerId')?.touched" 
         class="text-red-500 mt-1 text-sm">
@@ -32,16 +33,17 @@
       <label for="assign-priority" class="block text-sm font-medium text-gray-700 mb-1">
         Priority <span class="text-red-500">*</span>
       </label>
-      <p-dropdown
+      <ng-select
         id="assign-priority"
-        class="w-full"
-        [options]="priorityOptions"
+        class="w-full form"
+        [items]="priorityOptions"
         formControlName="priority"
-        optionLabel="label"
-        optionValue="value"
+        bindLabel="label"
+        bindValue="value"
         placeholder="Select Priority"
+        [clearable]="true"
         [ngClass]="{'ng-invalid ng-dirty': form.get('priority')?.invalid && form.get('priority')?.touched}"
-      ></p-dropdown>
+      ></ng-select>
       <div 
         *ngIf="form.get('priority')?.invalid && form.get('priority')?.touched" 
         class="text-red-500 mt-1 text-sm">

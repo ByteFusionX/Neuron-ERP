@@ -16,7 +16,7 @@ import { CanDeactivate } from '@angular/router';
 import { Observable, Subscription } from 'rxjs';
 import { getProject } from 'src/app/shared/interfaces/project.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { AccordionModule } from 'primeng/accordion';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { LoadingBarService } from '@ngx-loading-bar/core';
@@ -38,7 +38,7 @@ import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
     ButtonComponent,
     SelectDropdownComponent,
     FormFieldComponent,
-    AccordionModule,
+    MatExpansionModule,
     MatTooltip,
     MatProgressBar,
     NumberFormatterPipe,

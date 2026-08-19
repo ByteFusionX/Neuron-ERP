@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, Inject, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
-import { DropdownModule } from 'primeng/dropdown';
+import { NgSelectModule } from '@ng-select/ng-select';
 import { NgIconsModule } from '@ng-icons/core';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
@@ -27,7 +27,7 @@ export interface AssignEngineerDialogResult {
     CommonModule,
     ReactiveFormsModule,
     MatDialogModule,
-    DropdownModule,
+    NgSelectModule,
     NgIconsModule,
     ModalLayoutComponent
   ],

@@ -274,33 +274,34 @@
             </div>
           </div>
 
-          <p-accordion value="0" [multiple]="true" class="my-6">
+          <mat-accordion multi class="my-6">
             <!-- Notes Section -->
-            <p-accordion-panel value="0">
-              <p-accordion-header>
-                <div class="flex items-center gap-2">
-                  <ng-icon name="heroDocumentText" class="text-lg"></ng-icon>
-                  <span class="font-medium">Notes</span>
-                </div>
-              </p-accordion-header>
-              <p-accordion-content>
+            <mat-expansion-panel [expanded]="true">
+              <mat-expansion-panel-header>
+                <mat-panel-title>
+                  <div class="flex items-center gap-2">
+                    <ng-icon name="heroDocumentText" class="text-lg"></ng-icon>
+                    <span class="font-medium">Notes</span>
+                  </div>
+                </mat-panel-title>
+              </mat-expansion-panel-header>
                 <div class="bg-white p-4">
                   <app-form-field label="Project Notes" [control]="projectForm.get('notes')" type="textarea"
                     placeholder="Add any project notes" [isSubmitted]="isSubmitted()">
                   </app-form-field>
                 </div>
-              </p-accordion-content>
-            </p-accordion-panel>
+            </mat-expansion-panel>
 
             <!-- Users and Involved Persons Section -->
-            <p-accordion-panel value="1">
-              <p-accordion-header>
-                <div class="flex items-center gap-2">
-                  <ng-icon name="heroUserGroup" class="text-lg"></ng-icon>
-                  <span class="font-medium">Users and Involved Persons</span>
-                </div>
-              </p-accordion-header>
-              <p-accordion-content>
+            <mat-expansion-panel [expanded]="true">
+              <mat-expansion-panel-header>
+                <mat-panel-title>
+                  <div class="flex items-center gap-2">
+                    <ng-icon name="heroUserGroup" class="text-lg"></ng-icon>
+                    <span class="font-medium">Users and Involved Persons</span>
+                  </div>
+                </mat-panel-title>
+              </mat-expansion-panel-header>
                 <div class="bg-white p-4">
                   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
@@ -355,18 +356,18 @@
                     </div>
                   </div>
                 </div>
-              </p-accordion-content>
-            </p-accordion-panel>
+            </mat-expansion-panel>
 
             <!-- Costing and Billing Section -->
-            <p-accordion-panel value="2">
-              <p-accordion-header>
-                <div class="flex items-center gap-2">
-                  <ng-icon name="heroBanknotes" class="text-lg"></ng-icon>
-                  <span class="font-medium">Costing and Billing</span>
-                </div>
-              </p-accordion-header>
-              <p-accordion-content>
+            <mat-expansion-panel [expanded]="true">
+              <mat-expansion-panel-header>
+                <mat-panel-title>
+                  <div class="flex items-center gap-2">
+                    <ng-icon name="heroBanknotes" class="text-lg"></ng-icon>
+                    <span class="font-medium">Costing and Billing</span>
+                  </div>
+                </mat-panel-title>
+              </mat-expansion-panel-header>
                 <div class="bg-white p-4">
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- Left Column -->
@@ -459,9 +460,8 @@
                 </div>
 
 
-              </p-accordion-content>
-            </p-accordion-panel>
-          </p-accordion>
+            </mat-expansion-panel>
+          </mat-accordion>
 
 
 

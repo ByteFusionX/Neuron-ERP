@@ -16,7 +16,6 @@ import { MatDialog } from '@angular/material/dialog';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
-import { DropdownModule } from "primeng/dropdown";
 import { TechnicalService } from 'src/app/core/services/technical.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { allocateType } from '../../job-sheet/pages/allocate-type-modal/allocate-type-modal.component';
@@ -43,7 +42,6 @@ interface FilterParams {
     MatMenuModule,
     IconsModule,
     FormsModule,
-    DropdownModule,
     ButtonComponent
   ],
   templateUrl: './open-to-work-project.component.html',
