@@ -215,13 +215,13 @@
                       ?.at(itemDetailIndex)
                       ?.get('quantity')?.invalid && submit
                   "
-                  class="border px-2 py-2 text-center"
+                  class="border px-1 py-2 text-center"
                 >
                   <input
                     appNoLeadingSpace
                     appNoNegativeNumber
                     formControlName="quantity"
-                    class="font-normal appearance-none block w-full text-center rounded py-5 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                     type="number"
                     min="0"
                     placeholder="00"
@@ -283,7 +283,7 @@
                       appNoLeadingSpace
                       appNoNegativeNumber
                       formControlName="profit"
-                      class="font-normal appearance-none block w-9 text-right rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                      class="font-normal appearance-none block w-12 min-w-0 text-right rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                       type="number"
                       min="0"
                       placeholder="00"

@@ -17,6 +17,7 @@ export class FormFieldComponent {
   @Input() id = '';
   @Input() readonly = false;
   @Input() class = '';
+  @Input() rows = 2;
 
   ngOnInit() {
     if (!this.id) {

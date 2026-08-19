@@ -1,5 +1,5 @@
 <app-modal-layout
-  title="Create Part No."
+  title="New Product"
   [onClose]="onCancel.bind(this)"
   [footerButtons]="[
     { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
@@ -41,7 +41,7 @@
         </app-form-field>
 
         <app-select-dropdown
-          label="Product Segment"
+          label="Department"
           [options]="departments"
           optionLabel="departmentName"
           optionValue="_id"
@@ -52,7 +52,7 @@
         </app-select-dropdown>
 
         <app-select-dropdown
-          label="Product Category"
+          label="Category"
           [options]="categories"
           optionLabel="categoryName"
           optionValue="_id"
@@ -65,7 +65,7 @@
         </app-select-dropdown>
 
         <app-select-dropdown
-          label="Target Warehouse"
+          label="Warehouse"
           [options]="warehouses"
           optionLabel="wareHouseName"
           optionValue="_id"
@@ -83,6 +83,7 @@
         [control]="productForm.get('productDescription')"
         [isSubmitted]="isSubmitting"
         type="textarea"
+        [rows]="3"
         placeholder="Enter product description"
       >
       </app-form-field>

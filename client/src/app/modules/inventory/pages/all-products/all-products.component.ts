@@ -220,7 +220,8 @@ export class AllProductsComponent implements OnInit {
   onCreateProduct(): void {
     const dialogRef = this.dialog.open(CreateProductComponent, {
       disableClose: true,
-      maxHeight: '90vh'
+      maxHeight: '90vh',
+      width:'50vw'
     });
 
     dialogRef.afterClosed().subscribe((result) => {
