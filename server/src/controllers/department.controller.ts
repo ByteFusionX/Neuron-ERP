@@ -37,6 +37,31 @@ export const getDepartments = async (req: Request, res: Response, next: NextFunc
 export const createDepartment = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const departmentData = req.body
+
+        const existingDeleted = await Department.findOne({
+            departmentName: departmentData.departmentName,
+            forCustomerContact: departmentData.forCustomerContact,
+            isDeleted: true
+        })
+
+        if (existingDeleted) {
+            const revivedDepartment = await Department.findOneAndUpdate(
+                { _id: existingDeleted._id },
+                {
+                    $set: {
+                        departmentHead: departmentData.departmentHead,
+                        isDeleted: false
+                    }
+                },
+                { new: true }
+            ).populate(['departmentHead'])
+
+            return res.status(200).json({
+                ...revivedDepartment.toObject(),
+                message: 'Department already existed, renewed'
+            })
+        }
+
         const department = new Department(departmentData)
         const saveDepartment = await (await department.save()).populate(['departmentHead'])
 
@@ -98,6 +123,31 @@ export const getCustomerDepartments = async (req: Request, res: Response, next: 
 export const createCustomerDepartment = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const departmentData = req.body;
+
+        const existingDeleted = await Department.findOne({
+            departmentName: departmentData.departmentName,
+            forCustomerContact: departmentData.forCustomerContact,
+            isDeleted: true
+        })
+
+        if (existingDeleted) {
+            const revivedDepartment = await Department.findOneAndUpdate(
+                { _id: existingDeleted._id },
+                {
+                    $set: {
+                        departmentHead: departmentData.departmentHead,
+                        isDeleted: false
+                    }
+                },
+                { new: true }
+            ).populate(['departmentHead'])
+
+            return res.status(200).json({
+                ...revivedDepartment.toObject(),
+                message: 'Department already existed, renewed'
+            })
+        }
+
         const department = new Department(departmentData)
         const saveDepartment = await (await department.save()).populate(['departmentHead'])
 
@@ -222,6 +272,30 @@ export const totalEnquiries = async (req: Request, res: Response, next: NextFunc
 export const createInternalDepartment = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const departmentData = req.body
+
+        const existingDeleted = await internalDepartment.findOne({
+            departmentName: departmentData.departmentName,
+            isDeleted: true
+        })
+
+        if (existingDeleted) {
+            const revivedDepartment = await internalDepartment.findOneAndUpdate(
+                { _id: existingDeleted._id },
+                {
+                    $set: {
+                        departmentHead: departmentData.departmentHead,
+                        isDeleted: false
+                    }
+                },
+                { new: true }
+            ).populate(['departmentHead'])
+
+            return res.status(200).json({
+                ...revivedDepartment.toObject(),
+                message: 'Department already existed, renewed'
+            })
+        }
+
         const department = new internalDepartment(departmentData)
         const saveDepartment = await (await department.save()).populate(['departmentHead'])
 
