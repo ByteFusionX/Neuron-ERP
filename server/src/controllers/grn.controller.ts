@@ -7,6 +7,7 @@ import PurchaseRequest from "../models/purchaseRequest.model";
 import mongoose from "mongoose";
 import { getEmployeeData } from "../common/utils/util";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
+import { uploadFileToAws } from "../common/aws-connect";
 
 export const generateGRNNumber = async (req: Request, res: Response) => {
   try {
@@ -99,10 +100,16 @@ export const createGRN = async (req: Request, res: Response) => {
       }
     }
 
-    const existingGRNs = await GRN.find({ 
+    const existingGRNs = await GRN.find({
       purchaseOrderId,
       isDeleted: { $ne: true }
     });
+
+    let derivedJobId = purchaseOrder.jobId;
+    if (!derivedJobId && purchaseOrder.purchaseId) {
+      const linkedPurchase = await PurchaseRequest.findById(purchaseOrder.purchaseId);
+      derivedJobId = linkedPurchase?.jobId;
+    }
 
     const grnData: any = {
       grnNo,
@@ -112,6 +119,10 @@ export const createGRN = async (req: Request, res: Response) => {
       items,
       createdBy: employee._id
     };
+
+    if (derivedJobId && mongoose.Types.ObjectId.isValid(derivedJobId)) {
+      grnData.jobId = derivedJobId;
+    }
 
     if (supplierInvoiceNo) {
       grnData.supplierInvoiceNo = supplierInvoiceNo;
@@ -131,6 +142,7 @@ export const createGRN = async (req: Request, res: Response) => {
     
     const populatedGrn = await GRN.findById(grn._id)
       .populate('warehouse')
+      .populate('jobId')
       .populate('receivedBy')
       .populate({
         path: 'purchaseOrderId',
@@ -396,6 +408,7 @@ export const getGRNByLpoId = async (req: Request, res: Response) => {
       isDeleted: { $ne: true }
     })
       .populate('warehouse')
+      .populate('jobId')
       .populate('receivedBy')
       .populate({
         path: 'purchaseOrderId',
@@ -451,6 +464,7 @@ export const getAllGRNsByLpoId = async (req: Request, res: Response) => {
       isDeleted: { $ne: true }
     })
       .populate('warehouse')
+      .populate('jobId')
       .populate('receivedBy')
       .populate({
         path: 'purchaseOrderId',
@@ -496,6 +510,7 @@ export const getGRNById = async (req: Request, res: Response) => {
 
     const grn = await GRN.findById(id)
       .populate('warehouse')
+      .populate('jobId')
       .populate('receivedBy')
       .populate({
         path: 'purchaseOrderId',
@@ -529,6 +544,263 @@ export const getGRNById = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch GRN",
+      error: error.message,
+    });
+  }
+};
+
+export const getAllGRNs = async (req: Request, res: Response) => {
+  try {
+    const { page = 1, row = 10, search = "" } = req.query;
+    const pageNumber = Number(page);
+    const pageSize = Number(row);
+    const skip = (pageNumber - 1) * pageSize;
+
+    const pipeline: any[] = [
+      { $match: { isDeleted: { $ne: true } } },
+      {
+        $lookup: {
+          from: "purchaseorders",
+          localField: "purchaseOrderId",
+          foreignField: "_id",
+          as: "purchaseOrderId"
+        }
+      },
+      { $unwind: { path: "$purchaseOrderId", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "suppliers",
+          localField: "purchaseOrderId.supplierId",
+          foreignField: "_id",
+          as: "purchaseOrderId.supplierId"
+        }
+      },
+      { $unwind: { path: "$purchaseOrderId.supplierId", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "purchases",
+          localField: "purchaseOrderId.purchaseId",
+          foreignField: "_id",
+          as: "purchaseOrderId.purchaseId"
+        }
+      },
+      { $unwind: { path: "$purchaseOrderId.purchaseId", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "jobs",
+          localField: "jobId",
+          foreignField: "_id",
+          as: "jobId"
+        }
+      },
+      { $unwind: { path: "$jobId", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "warehouses",
+          localField: "warehouse",
+          foreignField: "_id",
+          as: "warehouse"
+        }
+      },
+      { $unwind: { path: "$warehouse", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "createdBy",
+          foreignField: "_id",
+          as: "createdBy"
+        }
+      },
+      { $unwind: { path: "$createdBy", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "receivedBy",
+          foreignField: "_id",
+          as: "receivedBy"
+        }
+      },
+      { $unwind: { path: "$receivedBy", preserveNullAndEmptyArrays: true } },
+      ...(search ? [{
+        $match: {
+          $or: [
+            { "grnNo": { $regex: search, $options: "i" } },
+            { "purchaseOrderId.poNo": { $regex: search, $options: "i" } },
+            { "purchaseOrderId.purchaseId.purchaseNo": { $regex: search, $options: "i" } },
+            { "purchaseOrderId.supplierId.supplierName": { $regex: search, $options: "i" } },
+            { "jobId.jobId": { $regex: search, $options: "i" } }
+          ]
+        }
+      }] : []),
+      { $sort: { createdAt: -1 } },
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: pageSize }
+          ],
+          totalCount: [
+            { $count: "count" }
+          ]
+        }
+      }
+    ];
+
+    const result = await GRN.aggregate(pipeline);
+    const grns = result[0].data;
+    const totalItems = result[0].totalCount[0]?.count || 0;
+
+    return res.status(200).json({
+      success: true,
+      data: grns,
+      pagination: {
+        total: totalItems,
+        page: pageNumber,
+        pageSize: pageSize,
+        totalPages: Math.ceil(totalItems / pageSize)
+      }
+    });
+  } catch (error: any) {
+    console.error("Get all GRNs error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch GRNs",
+      error: error.message,
+    });
+  }
+};
+
+export const updateGRNSupplierInvoices = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const invoiceFiles = req.files;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid GRN ID"
+      });
+    }
+
+    let supplierInvoices = [];
+
+    if (invoiceFiles && invoiceFiles.length > 0) {
+      supplierInvoices = await Promise.all(invoiceFiles.map(async (file: any) => {
+        await uploadFileToAws(file.filename, file.path);
+        return { fileName: file.filename, originalname: file.originalname };
+      }));
+    }
+
+    if (req.body.existingFiles) {
+      let existingFiles = [];
+      try {
+        existingFiles = typeof req.body.existingFiles === 'string'
+          ? JSON.parse(req.body.existingFiles)
+          : req.body.existingFiles;
+        supplierInvoices = [...supplierInvoices, ...existingFiles];
+      } catch (error) {
+        console.error("Error parsing existingFiles:", error);
+      }
+    }
+
+    const updatedGrn = await GRN.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          supplierInvoices: supplierInvoices
+        }
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!updatedGrn) {
+      return res.status(404).json({
+        success: false,
+        message: "GRN not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Supplier invoices updated successfully",
+      data: updatedGrn,
+    });
+  } catch (error: any) {
+    console.error("Update GRN supplier invoices error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update supplier invoices",
+      error: error.message,
+    });
+  }
+};
+
+export const updateGRNSupplierDeliveryNotes = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const deliveryNoteFiles = req.files;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid GRN ID"
+      });
+    }
+
+    let supplierDeliveryNotes = [];
+
+    if (deliveryNoteFiles && deliveryNoteFiles.length > 0) {
+      supplierDeliveryNotes = await Promise.all(deliveryNoteFiles.map(async (file: any) => {
+        await uploadFileToAws(file.filename, file.path);
+        return { fileName: file.filename, originalname: file.originalname };
+      }));
+    }
+
+    if (req.body.existingFiles) {
+      let existingFiles = [];
+      try {
+        existingFiles = typeof req.body.existingFiles === 'string'
+          ? JSON.parse(req.body.existingFiles)
+          : req.body.existingFiles;
+        supplierDeliveryNotes = [...supplierDeliveryNotes, ...existingFiles];
+      } catch (error) {
+        console.error("Error parsing existingFiles:", error);
+      }
+    }
+
+    const updatedGrn = await GRN.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          supplierDeliveryNotes: supplierDeliveryNotes
+        }
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!updatedGrn) {
+      return res.status(404).json({
+        success: false,
+        message: "GRN not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Supplier delivery notes updated successfully",
+      data: updatedGrn,
+    });
+  } catch (error: any) {
+    console.error("Update GRN supplier delivery notes error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update supplier delivery notes",
       error: error.message,
     });
   }

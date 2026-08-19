@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import PurchaseOrder from "../models/purchaseOrder.model"; 
+import PurchaseOrder from "../models/purchaseOrder.model";
+import GRN from "../models/grn.model";
 import purchaseRequest from "../models/purchaseRequest.model"
 import Supplier from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
@@ -658,6 +659,39 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
       return res.status(404).json({
         success: false,
         message: "Purchase order not found",
+      });
+    }
+
+    const grns = await GRN.find({
+      purchaseOrderId: objectId,
+      isDeleted: { $ne: true }
+    });
+
+    if (Array.isArray(purchaseOrder.items)) {
+      purchaseOrder.items = purchaseOrder.items.map((poItem: any) => {
+        const poPartNoId = poItem.partNo?._id ? poItem.partNo._id.toString() : null;
+
+        let issuedQty = 0;
+        for (const grn of grns) {
+          if (!Array.isArray(grn.items)) continue;
+          for (const grnItem of grn.items) {
+            const partNoMatch = poPartNoId && grnItem.partNo && String(grnItem.partNo) === String(poItem.partNo?.partNo);
+            const descriptionMatch = poItem.detail && grnItem.itemDescription &&
+              poItem.detail.trim().toLowerCase() === grnItem.itemDescription.trim().toLowerCase();
+            if (partNoMatch || descriptionMatch) {
+              issuedQty += Number(grnItem.acceptedQty) || 0;
+            }
+          }
+        }
+
+        const orderedQty = Number(poItem.quantity) || 0;
+        const pendingQty = Math.max(orderedQty - issuedQty, 0);
+
+        return {
+          ...poItem,
+          issuedQty,
+          pendingQty
+        };
       });
     }
 

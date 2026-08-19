@@ -33,6 +33,22 @@ export class GrnService {
     return this.http.get<any>(`${this.baseUrl}/${id}`);
   }
 
+  getAllGRNs(params?: {
+    page?: number;
+    row?: number;
+    search?: string;
+  }): Observable<any> {
+    return this.http.get<any>(this.baseUrl, { params: params as any });
+  }
+
+  updateSupplierInvoices(grnId: string, formData: FormData): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-invoices`, formData);
+  }
+
+  updateSupplierDeliveryNotes(grnId: string, formData: FormData): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-delivery-notes`, formData);
+  }
+
 
   async generateGRNReceiptPDF(grnData: any, selectedItems: any[]) {
     pdfMake.vfs = pdfFonts.vfs;

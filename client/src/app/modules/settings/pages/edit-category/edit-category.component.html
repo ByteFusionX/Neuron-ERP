@@ -485,6 +485,26 @@
             </div>
 
             <div class="bg-white rounded-lg p-4 border border-gray-200">
+              <label class="flex items-center space-x-3 cursor-pointer group" for="grn">
+                <input type="checkbox" id="grn" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                  [(ngModel)]="grnChecked" [ngModelOptions]="{standalone: true}"
+                  (change)="onCheckboxChange($event,'grn','grnChecked')">
+                <span class="text-base font-semibold text-gray-800 group-hover:text-gray-900">GRN</span>
+              </label>
+              <div class="ml-7 mt-3 space-y-3 border-l-2 border-violet-200 pl-4" *ngIf="grnChecked" formGroupName="grn">
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" checked disabled class="w-4 h-4 text-violet-600 border-gray-300 rounded cursor-not-allowed">
+                  <label class="text-sm font-medium text-gray-700">View GRN Data</label>
+                </div>
+                <label class="flex items-center space-x-2 cursor-pointer group">
+                  <input type="checkbox" id="grnUploadInvoice" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
+                    formControlName="canUploadInvoice">
+                  <span class="text-sm font-medium text-gray-700 group-hover:text-gray-900">Can Upload Supplier Invoice</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
               <label class="flex items-center space-x-3 cursor-pointer group" for="dispatch">
                 <input type="checkbox" id="dispatch" class="w-4 h-4 text-violet-600 border-gray-300 rounded focus:ring-violet-500 cursor-pointer"
                   [(ngModel)]="dispatchChecked" [ngModelOptions]="{standalone: true}"

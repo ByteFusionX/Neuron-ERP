@@ -502,7 +502,7 @@ export class LpoListComponent implements OnInit {
   }
 
   createGrn(lpo: any): void {
-    this.router.navigate(['/purchase-order/create-grn', lpo._id]);
+    this.router.navigate(['/grn/create-grn', lpo._id]);
   }
 
   viewGrn(lpo: any): void {

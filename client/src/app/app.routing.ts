@@ -39,8 +39,9 @@ import { IssueLpoComponent } from './modules/purchase-order/pages/issue-lpo/issu
 import { LpoListComponent } from './modules/purchase-order/pages/lpo-list/lpo-list.component';
 import { LpoApprovalComponent } from './modules/purchase-order/pages/lpo-approval/lpo-approval.component';
 import { ViewLpoComponent } from './modules/purchase-order/pages/view-lpo/view-lpo.component';
-import { CreateGrnComponent } from './modules/purchase-order/pages/create-grn/create-grn.component';
-import { ViewGrnComponent } from './modules/purchase-order/pages/view-grn/view-grn.component';
+import { CreateGrnComponent } from './modules/grn/pages/create-grn/create-grn.component';
+import { ViewGrnComponent } from './modules/grn/pages/view-grn/view-grn.component';
+import { GrnListComponent } from './modules/grn/pages/grn-list/grn-list.component';
 import { MrApprovalRequestsComponent } from './modules/technical/mr-approval-requests/mr-approval-requests.component';
 import { ViewMaterialRequestComponent } from './modules/technical/view-material-request/view-material-request.component';
 import { ProjectsComponent } from './modules/technical/projects/projects.component';
@@ -226,9 +227,17 @@ export const routes: Routes = [
     children: [
       { path: 'pending-approval', component: LpoApprovalComponent },
       { path: 'approved', component: LpoApprovalComponent },
-      { path: 'view-lpo/:id', component: ViewLpoComponent },
+      { path: 'view-lpo/:id', component: ViewLpoComponent }
+    ]
+  },
+  {
+    path: 'grn',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/grn/grn.component').then((c) => c.GrnComponent),
+    children: [
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
-      { path: 'view-grn/:id', component: ViewGrnComponent }
+      { path: 'view-grn/:id', component: ViewGrnComponent },
+      { path: 'grn-list', component: GrnListComponent }
     ]
   },
   {

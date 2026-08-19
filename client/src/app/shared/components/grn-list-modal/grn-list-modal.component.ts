@@ -62,17 +62,17 @@ export class GrnListModalComponent implements OnInit {
 
   onViewGrn(grn: any): void {
     this.dialogRef.close();
-    this.router.navigate(['/purchase-order/view-grn', grn._id]);
+    this.router.navigate(['/grn/view-grn', grn._id]);
   }
 
   onCreateGrn(): void {
     this.dialogRef.close();
     if (this.data.purchaseId) {
-      this.router.navigate(['/purchase-order/create-grn', this.data.lpoId], {
+      this.router.navigate(['/grn/create-grn', this.data.lpoId], {
         queryParams: { purchaseId: this.data.purchaseId }
       });
     } else {
-      this.router.navigate(['/purchase-order/create-grn', this.data.lpoId]);
+      this.router.navigate(['/grn/create-grn', this.data.lpoId]);
     }
   }
 

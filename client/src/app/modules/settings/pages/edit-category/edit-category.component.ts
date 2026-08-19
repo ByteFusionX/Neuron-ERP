@@ -31,6 +31,7 @@ export class EditCategoryComponent implements OnInit {
   jobSheetChecked: boolean = false;
   purchaseChecked: boolean = false;
   purchaseOrderChecked: boolean = false;
+  grnChecked: boolean = false;
   technicalChecked: boolean = false;
   supplierChecked: boolean = false;
   inventoryChecked: boolean = false;
@@ -98,6 +99,10 @@ export class EditCategoryComponent implements OnInit {
         canInitiateLPO: [false],
         canApprovePOs: [false],
         canReissueAndRevoke: [false],
+      }),
+      grn: this._fb.group({
+        viewReport: 'none',
+        canUploadInvoice: [false],
       }),
       technical: this._fb.group({
         canViewOpenToWorkAndAssign: [false],
@@ -195,7 +200,9 @@ export class EditCategoryComponent implements OnInit {
       this.purchaseOrderChecked = privileges.purchaseOrder ?
         ((privileges.purchaseOrder.viewReport ?? 'none') !== 'none' ||
          privileges.purchaseOrder.canInitiateLPO || privileges.purchaseOrder.canApprovePOs || privileges.purchaseOrder.canReissueAndRevoke) : false,
-      this.technicalChecked = privileges.technical ? 
+      this.grnChecked = privileges.grn ?
+        ((privileges.grn.viewReport ?? 'none') !== 'none' || privileges.grn.canUploadInvoice) : false,
+      this.technicalChecked = privileges.technical ?
         (privileges.technical.viewReport !== 'none' || privileges.technical.canViewOpenToWorkAndAssign || 
          privileges.technical.canTransferToEngineer || privileges.technical.canApproveMRRequests) : false,
       this.supplierChecked = privileges.supplier?.viewReport !== 'none',
@@ -225,7 +232,7 @@ export class EditCategoryComponent implements OnInit {
     this.router.navigate(['/settings']);
   }
 
-  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'dispatchChecked' | 'invoiceChecked' | 'claimsChecked' | 'portalChecked'): void {
+  onCheckboxChange(event: Event, formControlName: string, checkedVariable: 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked' | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'grnChecked' | 'technicalChecked' | 'supplierChecked' | 'inventoryChecked' | 'dispatchChecked' | 'invoiceChecked' | 'claimsChecked' | 'portalChecked'): void {
     const eventTarget = event.target as HTMLInputElement;
     const checked = eventTarget.checked;
 
@@ -240,6 +247,12 @@ export class EditCategoryComponent implements OnInit {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canApprovePR: false } } });
       } else {
         this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false } } });
+      }
+    } else if (formControlName === 'grn') {
+      if (checked) {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canUploadInvoice: false } } });
+      } else {
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canUploadInvoice: false } } });
       }
     } else if (formControlName === 'inventory') {
       if (checked) {

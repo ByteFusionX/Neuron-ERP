@@ -284,6 +284,14 @@ export class SideBarComponent implements OnInit, AfterViewInit, OnDestroy {
       ],
     },
     {
+      id: 'grn',
+      label: 'GRN',
+      icon: 'heroClipboardDocumentCheck',
+      route: '/grn/grn-list',
+      privilegeKey: 'grn',
+      privilegeValue: 'none',
+    },
+    {
       id: 'technical',
       label: 'Technical',
       icon: 'heroWrenchScrewdriver',

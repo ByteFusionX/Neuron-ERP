@@ -154,6 +154,11 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                         router.navigate(['/home']);
                         return false;
                     }
+                } else if (url.startsWith('/grn')) {
+                    if (!privileges?.grn?.viewReport || privileges?.grn?.viewReport == 'none') {
+                        router.navigate(['/home']);
+                        return false;
+                    }
                 } else if (url.startsWith('/purchase-order')) {
                     if (!privileges?.purchaseOrder?.viewReport || privileges?.purchaseOrder?.viewReport == 'none') {
                         router.navigate(['/home']);

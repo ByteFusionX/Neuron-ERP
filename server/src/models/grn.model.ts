@@ -9,6 +9,15 @@ interface GRN extends Document {
   supplierDeliveryNoteNo?: string;
   receivedBy?: Types.ObjectId;
   warehouse: Types.ObjectId;
+  jobId?: Types.ObjectId;
+  supplierInvoices: {
+    fileName: string;
+    originalname: string;
+  }[];
+  supplierDeliveryNotes: {
+    fileName: string;
+    originalname: string;
+  }[];
   items: {
     partNo?: string;
     itemDescription: string;
@@ -98,6 +107,24 @@ const grnSchema = new Schema<GRN>(
       type: Schema.Types.ObjectId,
       required: true,
       ref: "Warehouse"
+    },
+    jobId: {
+      type: Schema.Types.ObjectId,
+      ref: "Job"
+    },
+    supplierInvoices: {
+      type: [{
+        fileName: { type: String, required: true },
+        originalname: { type: String, required: true }
+      }],
+      default: []
+    },
+    supplierDeliveryNotes: {
+      type: [{
+        fileName: { type: String, required: true },
+        originalname: { type: String, required: true }
+      }],
+      default: []
     },
     items: {
       type: [itemSchema],

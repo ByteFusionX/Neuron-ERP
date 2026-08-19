@@ -145,6 +145,10 @@ export interface Privileges {
     canApprovePOs: boolean;
     canReissueAndRevoke: boolean;
   };
+  grn: {
+    viewReport: string;
+    canUploadInvoice: boolean;
+  };
   technical: {
     canViewOpenToWorkAndAssign: boolean;
     canTransferToEngineer: boolean;
