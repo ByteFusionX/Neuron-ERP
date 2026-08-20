@@ -470,8 +470,14 @@ export class CreateQuotatationComponent {
 
     this._quoteService
       .saveQuotation(sanitizedQuoteFormValue)
-      .subscribe((res: Quotatation) => {
-        this._router.navigate(['/quotations']);
+      .subscribe({
+        next: (res: Quotatation) => {
+          this.isSaving = false;
+          this._router.navigate(['/quotations']);
+        },
+        error: () => {
+          this.isSaving = false;
+        }
       });
   }
 

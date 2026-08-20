@@ -221,17 +221,22 @@ export class QuotationListComponent {
 
     this.subscriptions.add(
       this._quoteService.getQuotation(filterData)
-        .subscribe((data: getQuotation) => {
-          if (data) {
-            this.dataSource.data = [...data.quotations];
-            this.filteredData.data = data.quotations;
-            this.total = data.total;
-            this.isEmpty = false;
-          } else {
-            this.dataSource.data = [];
-            this.isEmpty = true;
+        .subscribe({
+          next: (data: getQuotation) => {
+            if (data) {
+              this.dataSource.data = [...data.quotations];
+              this.filteredData.data = data.quotations;
+              this.total = data.total;
+              this.isEmpty = false;
+            } else {
+              this.dataSource.data = [];
+              this.isEmpty = true;
+            }
+            this.isLoading = false;
+          },
+          error: () => {
+            this.isLoading = false;
           }
-          this.isLoading = false;
         })
     );
   }

@@ -109,9 +109,14 @@ export class CreateEmployeeDialog implements OnInit {
       employeeData.createdBy = userId;
       employeeData.reportingTo = reportingToValue;
 
-      this._employeeService.createEmployees(employeeData).subscribe((data) => {
-        this.isSaving = false;
-        this.dialogRef.close(data)
+      this._employeeService.createEmployees(employeeData).subscribe({
+        next: (data) => {
+          this.isSaving = false;
+          this.dialogRef.close(data)
+        },
+        error: () => {
+          this.isSaving = false;
+        }
       })
     }
   }

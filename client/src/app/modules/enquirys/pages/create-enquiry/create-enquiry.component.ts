@@ -142,15 +142,21 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
       this.isLoadingContacts = true;
       this.cdr.markForCheck();
       this.subscriptions.add(
-        this.customers$.subscribe((data) => {
-          let customer = data.find((contact) => contact._id == change);
-          setTimeout(() => {
-            if (customer) {
-              this.contacts = customer.contactDetails;
-            }
+        this.customers$.subscribe({
+          next: (data) => {
+            let customer = data.find((contact) => contact._id == change);
+            setTimeout(() => {
+              if (customer) {
+                this.contacts = customer.contactDetails;
+              }
+              this.isLoadingContacts = false;
+              this.cdr.markForCheck();
+            }, 600);
+          },
+          error: () => {
             this.isLoadingContacts = false;
             this.cdr.markForCheck();
-          }, 600);
+          }
         }),
       );
     } else {
@@ -204,10 +210,15 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
     if (this.enquiryForm.valid) {
       const formData = this.setUpFormData();
       this.subscriptions.add(
-        this._enquiryService.createEnquiry(formData).subscribe((data) => {
-          if (data) {
+        this._enquiryService.createEnquiry(formData).subscribe({
+          next: (data) => {
+            if (data) {
+              this.isSaving = false;
+              this.dialogRef.close(data);
+            }
+          },
+          error: () => {
             this.isSaving = false;
-            this.dialogRef.close(data);
           }
         }),
       );
@@ -231,12 +242,17 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
     if (this.enquiryForm.valid) {
       const formData = this.setUpFormData();
       this.subscriptions.add(
-        this._enquiryService.createEnquiry(formData).subscribe((data) => {
-          if (data) {
-            this._enquiryService.emitToQuote(data);
+        this._enquiryService.createEnquiry(formData).subscribe({
+          next: (data) => {
+            if (data) {
+              this._enquiryService.emitToQuote(data);
+              this.isQuoting = false;
+              this.dialogRef.close();
+              this.router.navigate(['/quotations/create']);
+            }
+          },
+          error: () => {
             this.isQuoting = false;
-            this.dialogRef.close();
-            this.router.navigate(['/quotations/create']);
           }
         }),
       );

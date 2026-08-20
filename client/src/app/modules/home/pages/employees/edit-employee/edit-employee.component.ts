@@ -123,9 +123,14 @@ export class EditEmployeeComponent {
 
       employeeData.reportingTo = reportingToValue;
 
-      this._employeeService.editEmployees(employeeData as CreateEmployee).subscribe((data) => {
-        this.isSaving = false;
-        this.dialogRef.close(data)
+      this._employeeService.editEmployees(employeeData as CreateEmployee).subscribe({
+        next: (data) => {
+          this.isSaving = false;
+          this.dialogRef.close(data)
+        },
+        error: () => {
+          this.isSaving = false;
+        }
       })
     }
   }

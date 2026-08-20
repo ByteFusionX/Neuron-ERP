@@ -264,10 +264,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
       }).unsubscribe()
     } else if (this.selectedTarget == 'company') {
-      this._profileService.getCompanyTargets().subscribe((res) => {
-        this.handleTargets(res.targets);
-        this.checkTheCurrentYear()
-        this.ngSelectLoading = false;
+      this._profileService.getCompanyTargets().subscribe({
+        next: (res) => {
+          this.handleTargets(res.targets);
+          this.checkTheCurrentYear()
+          this.ngSelectLoading = false;
+        },
+        error: () => {
+          this.ngSelectLoading = false;
+        }
       })
     }
   }

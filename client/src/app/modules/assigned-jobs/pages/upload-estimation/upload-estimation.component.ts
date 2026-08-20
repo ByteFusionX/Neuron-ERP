@@ -94,13 +94,18 @@ export class UploadEstimationComponent {
       this.isSaving = true;
       const quoteForm = this.quoteForm.value
       const postBody = { optionalItems: quoteForm.optionalItems, enquiryId: this.enqId, currency: quoteForm.currency, preSaleNote: quoteForm.presaleNote, totalDiscount: quoteForm.totalDiscount }
-      this._enquiryService.uploadEstimations(postBody).subscribe((data) => {
-        if (data.success) {
-          this.toastr.success('Estimation Updated!', 'Success')
-          this._router.navigate(['/assigned-jobs']);
-        } else {
+      this._enquiryService.uploadEstimations(postBody).subscribe({
+        next: (data) => {
+          if (data.success) {
+            this.toastr.success('Estimation Updated!', 'Success')
+            this._router.navigate(['/assigned-jobs']);
+          } else {
+            this.isSaving = false;
+            this.toastr.warning('Something went Wrong!', 'Warning')
+          }
+        },
+        error: () => {
           this.isSaving = false;
-          this.toastr.warning('Something went Wrong!', 'Warning')
         }
       })
 

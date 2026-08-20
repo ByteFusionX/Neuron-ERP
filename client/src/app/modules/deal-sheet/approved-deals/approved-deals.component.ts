@@ -164,20 +164,25 @@ export class ApprovedDealsComponent {
     }
     this.subscriptions.add(
       this._quoteService.getApprovedDealSheet(filterData)
-        .subscribe((data: getDealSheet) => {
-          if (data && data.dealSheet  && data.dealSheet.length) {
-            this.dataSource.data = [...data.dealSheet];
-            this.dataSource._updateChangeSubscription()
-            this.total = data.total
-            this.isEmpty = false
-            this.updateNotViewedQuoteIds();
-            this.observeAllQuotes();
-          } else {
-            this.total = 0;
-            this.dataSource.data = [];
-            this.isEmpty = true;
+        .subscribe({
+          next: (data: getDealSheet) => {
+            if (data && data.dealSheet  && data.dealSheet.length) {
+              this.dataSource.data = [...data.dealSheet];
+              this.dataSource._updateChangeSubscription()
+              this.total = data.total
+              this.isEmpty = false
+              this.updateNotViewedQuoteIds();
+              this.observeAllQuotes();
+            } else {
+              this.total = 0;
+              this.dataSource.data = [];
+              this.isEmpty = true;
+            }
+            this.isLoading = false
+          },
+          error: () => {
+            this.isLoading = false
           }
-          this.isLoading = false
         })
     )
 

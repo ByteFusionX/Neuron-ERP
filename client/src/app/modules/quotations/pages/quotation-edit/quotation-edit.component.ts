@@ -382,8 +382,14 @@ export class QuotationEditComponent {
 
     sanitizedQuoteFormValue.saveNote = saveNote;
 
-    this._quoteService.updateQuotation(sanitizedQuoteFormValue, this.quoteData._id).subscribe((res: Quotatation) => {
-      this._router.navigate(['/quotations'])
+    this._quoteService.updateQuotation(sanitizedQuoteFormValue, this.quoteData._id).subscribe({
+      next: (res: Quotatation) => {
+        this.isSaving = false;
+        this._router.navigate(['/quotations'])
+      },
+      error: () => {
+        this.isSaving = false;
+      }
     })
   }
 

@@ -54,9 +54,14 @@ export class EditCompanyDetailsComponent {
       this.isSaving = true;
 
           const companyData = this.companyDetailsForm.value as getCompanyDetails
-          this._profileService.updateCompanyDetails(companyData).subscribe((res)=>{
-            this.isSaving = false;
-            this.dialogRef.close(res)
+          this._profileService.updateCompanyDetails(companyData).subscribe({
+            next: (res)=>{
+              this.isSaving = false;
+              this.dialogRef.close(res)
+            },
+            error: () => {
+              this.isSaving = false;
+            }
           })
     }
  

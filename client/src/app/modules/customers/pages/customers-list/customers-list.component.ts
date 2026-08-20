@@ -131,17 +131,22 @@ export class CustomersListComponent {
 
     this.subscriptions.add(
       this._customerService.getCustomers(filterData)
-        .subscribe((data: getFilteredCustomer) => {
-          if (data) {
-            this.dataSource.data = [...data.customers];
-            this.filteredData.data = data.customers;
-            this.total = data.total;
-            this.isEmpty = false;
-          } else {
-            this.dataSource.data = [];
-            this.isEmpty = true;
+        .subscribe({
+          next: (data: getFilteredCustomer) => {
+            if (data) {
+              this.dataSource.data = [...data.customers];
+              this.filteredData.data = data.customers;
+              this.total = data.total;
+              this.isEmpty = false;
+            } else {
+              this.dataSource.data = [];
+              this.isEmpty = true;
+            }
+            this.isLoading = false;
+          },
+          error: () => {
+            this.isLoading = false;
           }
-          this.isLoading = false;
         })
     );
   }

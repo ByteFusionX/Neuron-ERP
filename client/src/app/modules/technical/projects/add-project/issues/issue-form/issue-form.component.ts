@@ -136,14 +136,24 @@ export class IssueFormComponent implements OnInit, OnChanges {
       }, {} as any);
 
       if(this.data.issue._id) {
-        this._technicalService.updateIssue(this.data.technicalId, this.data.issue._id, filteredValue).subscribe((res) => {
-          this.dialogRef.close(res);
-          this.isSaving = false;
+        this._technicalService.updateIssue(this.data.technicalId, this.data.issue._id, filteredValue).subscribe({
+          next: (res) => {
+            this.dialogRef.close(res);
+            this.isSaving = false;
+          },
+          error: () => {
+            this.isSaving = false;
+          }
         })
       } else {
-        this._technicalService.createIssue(this.data.technicalId, filteredValue).subscribe((res) => {
-          this.dialogRef.close(res);
-          this.isSaving = false;
+        this._technicalService.createIssue(this.data.technicalId, filteredValue).subscribe({
+          next: (res) => {
+            this.dialogRef.close(res);
+            this.isSaving = false;
+          },
+          error: () => {
+            this.isSaving = false;
+          }
         })
       }
     }

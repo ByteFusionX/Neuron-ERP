@@ -110,6 +110,9 @@ export class EmployeesComponent {
               this.isLoading = false;
               this.isEmpty = true;
             }
+          },
+          error: () => {
+            this.isLoading = false;
           }
         })
     )

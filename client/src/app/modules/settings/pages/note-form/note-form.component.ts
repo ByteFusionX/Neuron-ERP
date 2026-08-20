@@ -69,14 +69,24 @@ export class NoteFormComponent {
         const note = { note: this.noteText };
         const action = this.data.action;
         if (action == 'createCustomerNote') {
-            this._profileService.createCustomerNote(note).subscribe((res) => {
-                this.dialogRef.close(res);
-                this.isSaving = false;
+            this._profileService.createCustomerNote(note).subscribe({
+                next: (res) => {
+                    this.dialogRef.close(res);
+                    this.isSaving = false;
+                },
+                error: () => {
+                    this.isSaving = false;
+                }
             })
         } else {
-            this._profileService.createTermsAndCondition(note).subscribe((res) => {
-                this.dialogRef.close(res);
-                this.isSaving = false;
+            this._profileService.createTermsAndCondition(note).subscribe({
+                next: (res) => {
+                    this.dialogRef.close(res);
+                    this.isSaving = false;
+                },
+                error: () => {
+                    this.isSaving = false;
+                }
             })
         }
     }
@@ -98,9 +108,14 @@ export class NoteFormComponent {
             note: this.noteText,
             noteType: noteType
         }
-        this._profileService.updateNote(updateNodeData,this.data.noteId).subscribe((res) => {
-            this.dialogRef.close(res);
-            this.isSaving = false;
+        this._profileService.updateNote(updateNodeData,this.data.noteId).subscribe({
+            next: (res) => {
+                this.dialogRef.close(res);
+                this.isSaving = false;
+            },
+            error: () => {
+                this.isSaving = false;
+            }
         })
     }
 }
