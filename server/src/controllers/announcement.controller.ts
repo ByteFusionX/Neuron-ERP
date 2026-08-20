@@ -37,7 +37,7 @@ export const createAnnouncement = async (req: any, res: Response, next: NextFunc
     if (saveAnnouncement) {
       const socket = req.app.get('io') as Server;
       
-      const userData = await employeeModel.find();
+      const userData = await employeeModel.find({ isDeleted: { $ne: true } });
       const announcementCategory = category.length > 0 ? category : ['all'];
       
       const eligibleUsers = userData.filter(user => 
