@@ -77,6 +77,26 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
+    const supplier = await Supplier.findById(supplierId);
+    if (!supplier) {
+      return res.status(404).json({
+        success: false,
+        message: "Supplier not found",
+      });
+    }
+    if (supplier.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "This supplier is blocked and cannot be used for a new purchase order",
+      });
+    }
+    if (supplier.status !== "Approved") {
+      return res.status(403).json({
+        success: false,
+        message: `This supplier is not approved (status: ${supplier.status}) and cannot be used for a new purchase order`,
+      });
+    }
+
     let currency;
     if (existingPurchaseRequest.currency) {
       currency = existingPurchaseRequest.currency;

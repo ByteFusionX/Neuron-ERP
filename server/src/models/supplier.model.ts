@@ -2,11 +2,13 @@ import { model, Schema, Types } from "mongoose";
 
 interface supplierSchemaInterface {
     supplierId: string;
+    supplierCode: string;
     supplierName: string;
     address: AddressInterface;
     supplierType: String;
     category: Types.ObjectId;
     contactDetails: contactDetailsInterface;
+    bankDetails?: BankDetailsInterface;
     documents?: any[];
     status: supplierStatus;
     products: ProductsInterface[];
@@ -21,6 +23,7 @@ interface supplierSchemaInterface {
         approvedBy: Types.ObjectId;
     }[];
     isDeleted: boolean;
+    isBlocked: boolean;
     rejectHistory: {
         date: Date;
         reason: string;
@@ -46,6 +49,18 @@ interface AddressInterface {
     poBox: string;
     city: string;
     location: string;
+}
+
+interface BankDetailsInterface {
+    bankName: string;
+    branch: string;
+    accountName: string;
+    accountNumber: string;
+    iban: string;
+    swiftCode: string;
+    currency: string;
+    bankCountry: string;
+    bankAddress: string;
 }
 
 interface ProductsInterface {
@@ -100,9 +115,24 @@ const Address = new Schema<AddressInterface>({
     city: String,
 })
 
+const BankDetails = new Schema<BankDetailsInterface>({
+    bankName: String,
+    branch: String,
+    accountName: String,
+    accountNumber: String,
+    iban: String,
+    swiftCode: String,
+    currency: String,
+    bankCountry: String,
+    bankAddress: String,
+})
+
 
 const supplierSchema = new Schema<supplierSchemaInterface>({
     supplierId: {
+        type: String,
+    },
+    supplierCode: {
         type: String,
     },
     supplierName: {
@@ -125,6 +155,9 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
     contactDetails: {
         type: contactDetailsSchema,
         required: true,
+    },
+    bankDetails: {
+        type: BankDetails,
     },
     documents: {
         type: [],
@@ -177,6 +210,10 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         default: [],
     },
     isDeleted: {
+        type: Boolean,
+        default: false,
+    },
+    isBlocked: {
         type: Boolean,
         default: false,
     },

@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import Supplier, { supplierStatus } from '../models/supplier.model';
+import Department from '../models/department.model';
 import { Types } from 'mongoose';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
@@ -88,10 +89,10 @@ export const getSuppliers = async (req: Request, res: Response) => {
       // Use aggregation pipeline for advanced querying with lookups
       const aggregationPipeline: PipelineStage[] = [
          { $match: filter },
-         // Lookup for category (which is now a reference)
+         // Lookup for category (references 'Department')
          {
             $lookup: {
-               from: 'employees', // Based on your schema, category references 'Employee'
+               from: 'departments',
                localField: 'category',
                foreignField: '_id',
                as: 'categoryDetails'
@@ -99,7 +100,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
          },
          {
             $lookup: {
-               from: 'departments', // createdBy now references 'Department'
+               from: 'employees', // createdBy references 'Employee'
                localField: 'createdBy',
                foreignField: '_id',
                as: 'createdByDepartment'
@@ -122,9 +123,18 @@ export const getSuppliers = async (req: Request, res: Response) => {
             }
          },
          {
+            $lookup: {
+               from: 'purchaseorders',
+               localField: '_id',
+               foreignField: 'supplierId',
+               as: 'purchaseOrders'
+            }
+         },
+         {
             $addFields: {
                categoryInfo: { $arrayElemAt: ["$categoryDetails", 0] },
                createdByInfo: { $arrayElemAt: ["$createdByDepartment", 0] },
+               hasOrders: { $gt: [{ $size: "$purchaseOrders" }, 0] },
                approvedHistory: {
                   $map: {
                      input: "$approvedHistory",
@@ -180,13 +190,17 @@ export const getSuppliers = async (req: Request, res: Response) => {
          {
             $project: {
                supplierId: 1,
+               supplierCode: 1,
                supplierName: 1,
                address: 1,
                supplierType: 1,
                category: "$categoryInfo",
                contactDetails: 1,
+               bankDetails: 1,
                documents: 1,
                status: 1,
+               isBlocked: 1,
+               hasOrders: 1,
                products: 1,
                creditDays: 1,
                creditValue: 1,
@@ -244,6 +258,7 @@ export const createSupplier = async (req: Request, res: Response) => {
          supplierType,
          category,
          contactDetails,
+         bankDetails,
          products,
          creditDays,
          creditValue,
@@ -283,6 +298,10 @@ export const createSupplier = async (req: Request, res: Response) => {
       }
 
 
+      // Derive the department code (e.g. ICT/ELV) from the selected category for the supplier code
+      const department = await Department.findById(category);
+      const supplierCode = await generateSupplierCode(department?.departmentName || 'GEN');
+
       // Create new supplier object
       const newSupplier = new Supplier({
          supplierName,
@@ -290,6 +309,7 @@ export const createSupplier = async (req: Request, res: Response) => {
          supplierType,
          category,
          contactDetails: contactDetails,
+         bankDetails: bankDetails,
          documents: documents,
          products: products,
          creditDays,
@@ -298,6 +318,7 @@ export const createSupplier = async (req: Request, res: Response) => {
          createdDate: new Date(),
          updatedDate: new Date(),
          status: 'Pending', // Default status
+         supplierCode,
       });
 
       // Save the supplier to database
@@ -604,6 +625,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
          supplierType,
          category,
          contactDetails,
+         bankDetails,
          products,
          creditDays,
          creditValue,
@@ -662,6 +684,20 @@ export const updateSupplier = async (req: Request, res: Response) => {
          console.log("No new files found, keeping existing documents");
       }
 
+      // If the category (department) changed, refresh the department segment of the
+      // supplier code while keeping its original sequence number and date intact.
+      let supplierCode = existingSupplier.supplierCode;
+      if (supplierCode && String(existingSupplier.category) !== String(category)) {
+         const department = await Department.findById(category);
+         if (department) {
+            const parts = supplierCode.split('-');
+            if (parts.length === 5) {
+               parts[2] = deriveDepartmentCode(department.departmentName);
+               supplierCode = parts.join('-');
+            }
+         }
+      }
+
       // Find the supplier by ID and update it
       const updatedSupplier = await Supplier.findByIdAndUpdate(
          id,
@@ -671,6 +707,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
             supplierType,
             category,
             contactDetails: contactDetails,
+            bankDetails: bankDetails,
             documents, // Always update documents (either new ones or existing ones)
             products: products,
             creditDays,
@@ -678,6 +715,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
             updatedBy: new Types.ObjectId(updatedBy),
             updatedDate: new Date(),
             status: newStatus, // Update status accordingly
+            supplierCode,
          },
          { new: true }
       )
@@ -799,12 +837,98 @@ const generateSupplierId = async (countryName: string, code: string = 'YYMM') =>
    return `SUP_${locationCode}_${code}_${sequenceStr}`;
 };
 
+const deriveDepartmentCode = (departmentName: string) => {
+   return departmentName.trim().split(' ')[0].replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase();
+};
+
+const generateSupplierCode = async (departmentName: string) => {
+   const deptCode = deriveDepartmentCode(departmentName);
+
+   const now = new Date();
+   const monthYear = `${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear().toString().slice(-2)}`;
+
+   // Global running sequence across all suppliers, regardless of department
+   const latestSupplier = await Supplier.findOne({
+      supplierCode: { $regex: `^NT-SP-[A-Z]+-\\d{3}-\\d{4}$` }
+   }).sort({ createdDate: -1 });
+
+   let sequence = 1;
+   if (latestSupplier?.supplierCode) {
+      const lastSequence = parseInt(latestSupplier.supplierCode.split('-')[3], 10);
+      if (!isNaN(lastSequence)) {
+         sequence = lastSequence + 1;
+      }
+   }
+
+   const sequenceStr = sequence.toString().padStart(3, '0');
+   return `NT-SP-${deptCode}-${sequenceStr}-${monthYear}`;
+};
+
+// Read-only preview of the supplier code for a given category, used to populate the
+// readonly Supplier Code field on the create/edit forms as the user picks a department.
+export const previewSupplierCode = async (req: Request, res: Response) => {
+   try {
+      const { category } = req.query;
+
+      if (!category || !Types.ObjectId.isValid(category as string)) {
+         return res.status(400).json({
+            success: false,
+            message: 'A valid category is required',
+         });
+      }
+
+      const department = await Department.findById(category);
+      if (!department) {
+         return res.status(404).json({
+            success: false,
+            message: 'Category not found',
+         });
+      }
+
+      const supplierCode = await generateSupplierCode(department.departmentName);
+
+      return res.status(200).json({
+         success: true,
+         data: { supplierCode, departmentCode: deriveDepartmentCode(department.departmentName) },
+      });
+   } catch (error) {
+      console.error('Error previewing supplier code:', error);
+      return res.status(500).json({
+         success: false,
+         message: 'Error previewing supplier code',
+         error: error instanceof Error ? error.message : 'Unknown error',
+      });
+   }
+};
+
+export const blockSupplier = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const { id: supplierId } = req.params;
+      const supplier = await Supplier.findOne({ _id: supplierId });
+      if (supplier) {
+         const isBlocked = supplier.isBlocked ? false : true;
+         await Supplier.findByIdAndUpdate(
+            supplierId,
+            { isBlocked, updatedDate: new Date() },
+            { new: true },
+         );
+         return res.status(200).json({ isBlocked });
+      } else {
+         return res.status(404).json({ message: "Supplier not found" });
+      }
+   } catch (error) {
+      console.log(error);
+      next(error);
+   }
+};
+
 export const getSupplierList = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const suppliers = await Supplier.find(
          {
             isDeleted: false,
-            status: 'Approved'
+            status: 'Approved',
+            isBlocked: { $ne: true }
          },
          {
             _id: 1,

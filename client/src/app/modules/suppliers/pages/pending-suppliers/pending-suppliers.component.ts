@@ -14,6 +14,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { Supplier } from 'src/app/shared/interfaces/suppliers.interface';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { SupplierViewModalComponent } from 'src/app/shared/components/supplier-view-modal/supplier-view-modal.component';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 
@@ -169,7 +170,7 @@ export class PendingSuppliersComponent implements OnInit, OnDestroy {
       },
       {
         key: 'creditValue',
-        label: 'Credit Value',
+        label: 'Credit Limit',
         type: 'text',
         pipeParams: { currency: 'USD', format: '1.2-2' },
         filterable: false,
@@ -222,14 +223,28 @@ export class PendingSuppliersComponent implements OnInit, OnDestroy {
             tooltip: 'Edit Supplier',
             action: 'editSupplier',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium',
-            condition: (item) => item.status === 'Rejected'
+            condition: (item) => item.status === 'Pending'
           },
           {
             icon: 'heroArrowUturnLeft',
             tooltip: 'Revoke Approval',
             action: 'revokeApproval',
-            buttonClass: 'cursor-pointer w-8 h-8 rounded-full bg-red-600 flex justify-center items-center text-white',
+            buttonClass: 'cursor-pointer w-8 h-8 rounded-full bg-orange-500 flex justify-center items-center text-white',
             condition: (item) => item.status === 'Approved'
+          },
+          {
+            icon: 'heroXMark',
+            tooltip: 'Block Supplier',
+            action: 'blockSupplier',
+            buttonClass: 'cursor-pointer w-8 h-8 rounded-full bg-red-600 flex justify-center items-center text-white',
+            condition: (item) => item.status === 'Approved' && item.hasOrders && !item.isBlocked
+          },
+          {
+            icon: 'heroCheck',
+            tooltip: 'Unblock Supplier',
+            action: 'blockSupplier',
+            buttonClass: 'cursor-pointer w-8 h-8 rounded-full bg-green-600 flex justify-center items-center text-white',
+            condition: (item) => item.status === 'Approved' && item.hasOrders && !!item.isBlocked
           }
         ]
       }
@@ -377,12 +392,25 @@ export class PendingSuppliersComponent implements OnInit, OnDestroy {
       case 'revokeApproval':
         this.revokeApproval(item);
         break;
+      case 'blockSupplier':
+        this.toggleBlockSupplier(item);
+        break;
     }
   }
 
   viewSupplierDetails(supplier: Supplier): void {
-    // console.log(supplier);
-    this.router.navigate(['/suppliers', supplier._id]);
+    const dialogRef = this.dialog.open(SupplierViewModalComponent, {
+      data: { supplier },
+      width: '1100px',
+      maxHeight: '90vh',
+      panelClass: 'supplier-view-modal'
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.refresh) {
+        this.loadData();
+      }
+    });
   }
 
   editSupplier(supplier: Supplier): void {
@@ -405,6 +433,34 @@ export class PendingSuppliersComponent implements OnInit, OnDestroy {
           next: () => {
             this.loadData();
             this.notificationService.success('Approval revoked successfully');
+          }
+        });
+      }
+    });
+  }
+
+  toggleBlockSupplier(supplier: Supplier): void {
+    const willBlock = !supplier.isBlocked;
+    const confirm = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Are you absolutely sure',
+        description: willBlock
+          ? 'This supplier has existing purchase orders, so approval cannot be revoked. Blocking will prevent any new purchase orders from being created for this supplier; existing orders are unaffected.'
+          : 'This will unblock the supplier, allowing new purchase orders to be created for them again.',
+        icon: 'heroExclamationCircle',
+        IconColor: 'orange'
+      }
+    });
+
+    confirm.afterClosed().subscribe((result: boolean) => {
+      if (result && supplier._id) {
+        this.supplierService.blockSupplier(supplier._id).subscribe({
+          next: () => {
+            this.loadData();
+            this.notificationService.success(willBlock ? 'Supplier blocked successfully' : 'Supplier unblocked successfully');
+          },
+          error: (error) => {
+            this.notificationService.error(error.error?.message || 'Failed to update supplier block status');
           }
         });
       }

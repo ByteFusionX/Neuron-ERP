@@ -203,7 +203,7 @@ export const routes: Routes = [
   },
   {
     path: 'purchase',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/purchase/purchase.component').then((c) => c.PurchaseComponent),
     children: [
       { path: 'pendings', component: PendingPurchaseComponent },
@@ -222,7 +222,7 @@ export const routes: Routes = [
   },
   {
     path: 'purchase-order',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/purchase-order/purchase-order.component').then((c) => c.PurchaseOrderComponent),
     children: [
       { path: 'pending-approval', component: LpoApprovalComponent },
@@ -232,7 +232,7 @@ export const routes: Routes = [
   },
   {
     path: 'grn',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/grn/grn.component').then((c) => c.GrnComponent),
     children: [
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },

@@ -17,6 +17,19 @@ export interface ContactDetails {
     phoneNumber: string;
 }
 
+// Bank Details interface
+export interface BankDetails {
+    bankName: string;
+    branch: string;
+    accountName: string;
+    accountNumber: string;
+    iban: string;
+    swiftCode: string;
+    currency: string;
+    bankCountry: string;
+    bankAddress: string;
+}
+
 // Product interface
 export interface Product {
     productName: string;
@@ -55,6 +68,7 @@ export interface Employee {
 export interface Supplier {
     _id?: string;
     supplierId: string;
+    supplierCode: string;
     supplierName: string;
     address: Address;
     supplierType: string;
@@ -63,6 +77,7 @@ export interface Supplier {
       departmentName: string;
     };
     contactDetails: ContactDetails;
+    bankDetails?: BankDetails;
     documents: Document[];
     status: SupplierStatus;
     products: Product[];
@@ -74,6 +89,8 @@ export interface Supplier {
     approvedDate: Date;
     approvedBy: string;
     isDeleted: boolean;
+    isBlocked?: boolean;
+    hasOrders?: boolean;
     approvedHistory?: {
         date: Date;
         reason: string;
@@ -103,6 +120,7 @@ export interface SupplierCreateRequest {
     supplierType: string;
     category: string;
     contactDetails: ContactDetails;
+    bankDetails?: BankDetails;
     products: Product[];
     creditDays: number;
     creditValue: number;

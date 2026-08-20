@@ -1,22 +1,33 @@
-<div class="bg-white m-6">
-  <div class="border-b p-3 px-9 flex justify-between items-center">
-    <h3 class="text-md font-medium">Supplier - <span class="uppercase">{{supplier?.supplierName}}</span></h3>
-
-    <div class="flex gap-2">
-      @if(supplier?.status === 'Pending'){
-      <app-btn theme="primary" (click)="onEdit()">
-        <ng-icon name="heroPencilSquare" class="mr-2"></ng-icon>
-        Edit
-      </app-btn>
-      }
+<app-modal-layout
+  [title]="'Supplier - ' + (supplier?.supplierName || '')"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="footerButtons"
+  [showFooter]="footerButtons.length > 0"
+  contentClass="p-6"
+  contentMaxHeight="80vh">
+  <div *ngIf="supplier" class="flex flex-col w-full text-gray-900">
+    <!-- Status Badge -->
+    <div class="mb-4 flex items-center gap-2">
+      <span class="text-sm font-medium text-gray-700">Status:</span>
+      <span [class]="getStatusClass(supplier.status)" class="px-3 py-1 rounded-full text-sm font-medium">
+        {{ supplier.status }}
+      </span>
+      <ng-container *ngIf="supplier.status === 'Rejected' && supplier.rejectHistory?.length">
+        <div class="h-4 w-px bg-gray-300"></div>
+        <app-btn theme="secondary" (click)="showStatusHistory()" size="sm">
+          <ng-icon name="heroClock" class="mr-1"></ng-icon>
+          View Reason
+        </app-btn>
+      </ng-container>
+      <ng-container *ngIf="supplier.status === 'Approved' && supplier.approvedHistory?.length">
+        <div class="h-4 w-px bg-gray-300"></div>
+        <app-btn theme="secondary" (click)="showApprovalHistory()" size="sm">
+          <ng-icon name="heroClock" class="mr-1"></ng-icon>
+          View Comments
+        </app-btn>
+      </ng-container>
     </div>
-  </div>
 
-  <div *ngIf="isLoading" class="flex justify-center items-center h-64">
-    <ng-icon name="heroArrowPath" class="animate-spin text-4xl"></ng-icon>
-  </div>
-
-  <div *ngIf="!isLoading && supplier" class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
     <!-- Basic Information Table -->
     <div class="w-full mb-8">
       <h4 class="text-lg font-semibold mb-4">Basic Information</h4>
@@ -31,35 +42,9 @@
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Category</td>
-              <td class="px-2 py-2 border text-start">{{supplier.category.departmentName}}</td>
-            </tr>
-            <tr class="border-b">
+              <td class="px-2 py-2 border text-start">{{supplier.category?.departmentName}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Supplier Type</td>
               <td class="px-2 py-2 border text-start">{{supplier.supplierType}}</td>
-              <td class="px-2 py-2 border text-left font-medium bg-gray-50">Status</td>
-              <td class="px-2 py-2 border text-start flex items-center gap-2">
-                @if(supplier.status === 'Pending'){
-                <span class="bg-yellow-500 text-white px-2 py-1 rounded-md">Pending</span>
-                }@else if(supplier.status === 'Approved'){
-                <span class="bg-green-500 text-white px-2 py-1 rounded-md">Approved</span>
-                }@else if(supplier.status === 'Rejected'){
-                <span class="bg-red-500 text-white px-2 py-1 rounded-md">Rejected</span>
-                }
-                @if(supplier?.status === 'Rejected' && supplier?.rejectHistory?.length) {
-                  <div class="h-4 w-px bg-gray-300"></div>
-                  <app-btn theme="secondary" (click)="showStatusHistory()" size="sm">
-                    <ng-icon name="heroClock" class="mr-1"></ng-icon>
-                    View Reason
-                  </app-btn>
-                }
-                @if(supplier?.status === 'Approved' && supplier?.approvedHistory?.length) {
-                  <div class="h-4 w-px bg-gray-300"></div>
-                  <app-btn theme="secondary" (click)="showApprovalHistory()" size="sm">
-                    <ng-icon name="heroClock" class="mr-1"></ng-icon>
-                    View Comments
-                  </app-btn>
-                }
-              </td>
             </tr>
           </tbody>
         </table>
@@ -74,19 +59,19 @@
           <tbody>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Street No</td>
-              <td class="px-2 py-2 border text-start">{{supplier.address.streetNo}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address?.streetNo}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Building No</td>
-              <td class="px-2 py-2 border text-start">{{supplier.address.buildingNo}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address?.buildingNo}}</td>
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Zone No</td>
-              <td class="px-2 py-2 border text-start">{{supplier.address.zoneNo}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address?.zoneNo}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">PO Box</td>
-              <td class="px-2 py-2 border text-start">{{supplier.address.poBox}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.address?.poBox}}</td>
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Location</td>
-              <td class="px-2 py-2 border text-start" colspan="3">{{supplier.address.location}}</td>
+              <td class="px-2 py-2 border text-start" colspan="3">{{supplier.address?.location}}</td>
             </tr>
           </tbody>
         </table>
@@ -101,13 +86,13 @@
           <tbody>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Name</td>
-              <td class="px-2 py-2 border text-start">{{supplier.contactDetails.name}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.contactDetails?.name}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Email</td>
-              <td class="px-2 py-2 border text-start">{{supplier.contactDetails.email}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.contactDetails?.email}}</td>
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Phone Number</td>
-              <td class="px-2 py-2 border text-start" colspan="3">{{supplier.contactDetails.phoneNumber}}</td>
+              <td class="px-2 py-2 border text-start" colspan="3">{{supplier.contactDetails?.phoneNumber}}</td>
             </tr>
           </tbody>
         </table>
@@ -115,8 +100,7 @@
     </div>
 
     <!-- Bank Details Table (Restricted - Financial Information) -->
-    @if(supplier.bankDetails){
-    <div class="w-full mb-8">
+    <div class="w-full mb-8" *ngIf="supplier.bankDetails">
       <div class="flex items-center gap-2 mb-4">
         <h4 class="text-lg font-semibold">Banking Information</h4>
         <span class="text-xs font-semibold text-amber-800 bg-amber-200 px-2 py-0.5 rounded">
@@ -128,41 +112,39 @@
           <tbody>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Bank Name</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.bankName}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.bankName}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Branch</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.branch}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.branch}}</td>
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Account Name</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.accountName}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.accountName}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Account Number</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.accountNumber}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.accountNumber}}</td>
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">IBAN</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.iban}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.iban}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">SWIFT/BIC</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.swiftCode}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.swiftCode}}</td>
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Currency</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.currency}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.currency}}</td>
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Bank Country</td>
-              <td class="px-2 py-2 border text-start">{{supplier.bankDetails.bankCountry}}</td>
+              <td class="px-2 py-2 border text-start">{{supplier.bankDetails?.bankCountry}}</td>
             </tr>
             <tr class="border-b">
               <td class="px-2 py-2 border text-left font-medium bg-gray-50">Bank Address</td>
-              <td class="px-2 py-2 border text-start" colspan="3">{{supplier.bankDetails.bankAddress}}</td>
+              <td class="px-2 py-2 border text-start" colspan="3">{{supplier.bankDetails?.bankAddress}}</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
-    }
 
     <!-- Products Table -->
-    @if(supplier.products && supplier.products.length > 0){
-    <div class="w-full mb-8">
+    <div class="w-full mb-8" *ngIf="supplier.products && supplier.products.length > 0">
       <h4 class="text-lg font-semibold mb-4">Products</h4>
       <div class="relative overflow-x-auto">
         <table class="w-full text-md text-left rtl:text-right text-black border">
@@ -187,7 +169,6 @@
         </table>
       </div>
     </div>
-    }
 
     <!-- Credit Information -->
     <div class="w-full mb-8">
@@ -231,21 +212,5 @@
         </table>
       </div>
     </div>
-
-    <!-- Action Buttons -->
-    @if(supplier.status === 'Pending'){
-    <div class="mt-8 pt-6 border-t">
-      <div class="flex justify-end gap-4">
-        <app-btn theme="danger" (click)="onReject()" [loading]="isRejecting">
-          <ng-icon name="heroXCircle" class="mr-2"></ng-icon>
-          Reject
-        </app-btn>
-        <app-btn *ngIf="canApproveSupplier" theme="success" (click)="onApprove()" [loading]="isApproving">
-          <ng-icon name="heroCheckCircle" class="mr-2"></ng-icon>
-          Approve
-        </app-btn>
-      </div>
-    </div>
-    }
   </div>
-</div>
+</app-modal-layout>

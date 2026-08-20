@@ -59,6 +59,7 @@ export class CreateSupplierComponent implements OnInit {
   // categories = signal<Department[]>([]);
 
   supplierForm: FormGroup = this.fb.group({
+    supplierCode: [{ value: 'NT-SP-', disabled: true }],
     supplierName: ['', [Validators.required]],
     address: this.fb.group({
       streetNo: [''],
@@ -74,6 +75,17 @@ export class CreateSupplierComponent implements OnInit {
       email: ['', [Validators.required, Validators.email]],
       phoneNumber: ['', [Validators.required]]
     }),
+    bankDetails: this.fb.group({
+      bankName: [''],
+      branch: [''],
+      accountName: [''],
+      accountNumber: [''],
+      iban: [''],
+      swiftCode: [''],
+      currency: [''],
+      bankCountry: [''],
+      bankAddress: ['']
+    }),
     products: this.fb.array([]),
     creditDays: [30, [Validators.required, Validators.min(0)]],
     creditValue: [0, [Validators.required, Validators.min(0)]]
@@ -82,6 +94,38 @@ export class CreateSupplierComponent implements OnInit {
   ngOnInit(): void {
     this.loadDepartments();
     this.checkEditMode();
+    this.watchCategoryChanges();
+  }
+
+  private watchCategoryChanges(): void {
+    this.supplierForm.get('category')?.valueChanges.subscribe((categoryId: string) => {
+      if (!categoryId) {
+        this.supplierForm.get('supplierCode')?.setValue('NT-SP-');
+        return;
+      }
+
+      this.supplierService.previewSupplierCode(categoryId).subscribe({
+        next: (response) => {
+          const preview = this.isEditMode()
+            ? this.applyDepartmentToExistingCode(response.data.departmentCode)
+            : response.data.supplierCode;
+          this.supplierForm.get('supplierCode')?.setValue(preview);
+        },
+        error: (error) => {
+          console.error('Error previewing supplier code:', error);
+        }
+      });
+    });
+  }
+
+  private applyDepartmentToExistingCode(departmentCode: string): string {
+    const currentCode = this.supplierForm.get('supplierCode')?.value as string;
+    const parts = currentCode?.split('-');
+    if (parts?.length === 5) {
+      parts[2] = departmentCode;
+      return parts.join('-');
+    }
+    return currentCode;
   }
 
   private loadDepartments(): void {
@@ -126,6 +170,7 @@ export class CreateSupplierComponent implements OnInit {
 
     // Patch the main form values
     this.supplierForm.patchValue({
+      supplierCode: supplier.supplierCode || 'NT-SP-',
       supplierName: supplier.supplierName || '',
       supplierType: supplier.supplierType || '',
       category: supplier.category?._id || supplier.category || '',
@@ -154,6 +199,22 @@ export class CreateSupplierComponent implements OnInit {
         name: supplier.contactDetails.name || '',
         email: supplier.contactDetails.email || '',
         phoneNumber: supplier.contactDetails.phoneNumber || ''
+      });
+    }
+
+    // Patch bank details form group
+    if (supplier.bankDetails) {
+      const bankGroup = this.supplierForm.get('bankDetails') as FormGroup;
+      bankGroup.patchValue({
+        bankName: supplier.bankDetails.bankName || '',
+        branch: supplier.bankDetails.branch || '',
+        accountName: supplier.bankDetails.accountName || '',
+        accountNumber: supplier.bankDetails.accountNumber || '',
+        iban: supplier.bankDetails.iban || '',
+        swiftCode: supplier.bankDetails.swiftCode || '',
+        currency: supplier.bankDetails.currency || '',
+        bankCountry: supplier.bankDetails.bankCountry || '',
+        bankAddress: supplier.bankDetails.bankAddress || ''
       });
     }
 

@@ -7,17 +7,22 @@
       <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
         <div class="flex flex-col mx-auto text-gray-900 bg-white">
 
-          <!-- Supplier Name -->
-          <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="isSubmitted()"
-            placeholder="Enter supplier name">
-          </app-form-field>
-
-          <div class="text-red-700 text-sm mt-1" *ngIf="supplierExists()">
-            Supplier already exists
+          <div class="mb-6 grid grid-cols-2 gap-6">
+            <app-form-field label="Supplier Code" [control]="f['supplierCode']" [isSubmitted]="isSubmitted()"
+              [readonly]="true">
+            </app-form-field>
+  
+            <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="isSubmitted()"
+              placeholder="Enter supplier name">
+            </app-form-field>
+  
+            <!-- <div class="text-red-700 text-sm mt-1" *ngIf="supplierExists()">
+              Supplier already exists
+            </div> -->
           </div>
 
           <!-- Address Fields -->
-          <div class="mb-6">
+          <div class="mb-6 space-y-3">
             <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
               Supplier Address
             </label>
@@ -71,7 +76,7 @@
           </app-select-dropdown>
 
           <!-- Primary Contact -->
-          <div class="mb-6">
+          <div class="my-6 space-y-3">
             <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold mb-2">
               Primary Contact
             </label>
@@ -96,6 +101,84 @@
                 [isSubmitted]="isSubmitted()"
                 placeholder="Enter phone number">
               </app-form-field>
+            </div>
+          </div>
+
+          <!-- Bank Details (Restricted - Financial Information) -->
+          <div class="my-6 space-y-3">
+            <div class="border border-amber-300 bg-amber-50 rounded-md p-4">
+              <div class="flex items-center gap-2 mb-3">
+                <label class="block uppercase tracking-wide text-gray-700 text-sm font-bold">
+                  Banking Information
+                </label>
+                <span class="text-xs font-semibold text-amber-800 bg-amber-200 px-2 py-0.5 rounded">
+                  Restricted &mdash; Financial Information
+                </span>
+              </div>
+              <div formGroupName="bankDetails" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <app-form-field
+                  label="Bank Name"
+                  [control]="f['bankDetails'].get('bankName')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter bank name">
+                </app-form-field>
+
+                <app-form-field
+                  label="Branch"
+                  [control]="f['bankDetails'].get('branch')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter branch">
+                </app-form-field>
+
+                <app-form-field
+                  label="Account Name"
+                  [control]="f['bankDetails'].get('accountName')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter account name">
+                </app-form-field>
+
+                <app-form-field
+                  label="Account Number"
+                  [control]="f['bankDetails'].get('accountNumber')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter account number">
+                </app-form-field>
+
+                <app-form-field
+                  label="IBAN"
+                  [control]="f['bankDetails'].get('iban')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter IBAN">
+                </app-form-field>
+
+                <app-form-field
+                  label="SWIFT/BIC"
+                  [control]="f['bankDetails'].get('swiftCode')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter SWIFT/BIC code">
+                </app-form-field>
+
+                <app-form-field
+                  label="Currency"
+                  [control]="f['bankDetails'].get('currency')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter currency">
+                </app-form-field>
+
+                <app-form-field
+                  label="Bank Country"
+                  [control]="f['bankDetails'].get('bankCountry')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter bank country">
+                </app-form-field>
+
+                <app-form-field
+                  label="Bank Address"
+                  [control]="f['bankDetails'].get('bankAddress')"
+                  [isSubmitted]="isSubmitted()"
+                  placeholder="Enter bank address">
+                </app-form-field>
+              </div>
             </div>
           </div>
 
@@ -170,8 +253,8 @@
               </app-form-field>
             </div>
             <div class="w-1/2 px-3">
-              <app-form-field label="Credit Value" [control]="f['creditValue']" [isSubmitted]="isSubmitted()"
-                type="number" placeholder="Enter credit value">
+              <app-form-field label="Credit Limit" [control]="f['creditValue']" [isSubmitted]="isSubmitted()"
+                type="number" placeholder="Enter credit limit">
               </app-form-field>
             </div>
           </div>
