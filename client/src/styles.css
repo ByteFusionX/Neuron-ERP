@@ -130,6 +130,14 @@ th {
   max-width: 90vw !important;
 }
 
+/* app-modal-layout manages its own header/content/footer scroll regions,
+   so the Material dialog surface itself must not scroll as one block. */
+.mdc-dialog__surface:has(app-modal-layout) {
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
 
 
 .gantt .bar {
