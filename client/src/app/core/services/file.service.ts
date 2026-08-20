@@ -18,6 +18,7 @@ export class FileService {
    * @param originalName - Original name of the file (optional)
    * @returns Observable with download progress and completion
    */
+  // NOTE: some callers already show their own error toast; global interceptor toast may duplicate there — needs per-call-site handling, not done here.
   downloadFile(fileName: string, originalName?: string): Observable<any> {
     return this.http.get(
       `${this.api}/download?file=${encodeURIComponent(fileName)}`,

@@ -1,7 +1,12 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 export interface StockEntry {
   _id?: string;
@@ -103,7 +108,7 @@ export class StockEntryService {
   constructor(private http: HttpClient) { }
 
   generateGRN(): Observable<{ grn: string }> {
-    return this.http.get<{ grn: string }>(`${this.api}/stock-entry/generate-grn`);
+    return this.http.get<{ grn: string }>(`${this.api}/stock-entry/generate-grn`, { context: context() });
   }
 
   getStockEntries(params: StockEntryQueryParams = {}): Observable<StockEntryListResponse> {
@@ -116,7 +121,8 @@ export class StockEntryService {
     });
 
     return this.http.get<StockEntryListResponse>(`${this.api}/stock-entry`, {
-      params: httpParams
+      params: httpParams,
+      context: context()
     });
   }
 
@@ -125,25 +131,26 @@ export class StockEntryService {
   }
 
   createStockEntry(stockEntry: Partial<StockEntry>): Observable<StockEntry> {
-    return this.http.post<StockEntry>(`${this.api}/stock-entry`, stockEntry);
+    return this.http.post<StockEntry>(`${this.api}/stock-entry`, stockEntry, { context: context() });
   }
 
   updateStockEntry(id: string, stockEntry: Partial<StockEntry>): Observable<StockEntry> {
-    return this.http.patch<StockEntry>(`${this.api}/stock-entry/${id}`, stockEntry);
+    return this.http.patch<StockEntry>(`${this.api}/stock-entry/${id}`, stockEntry, { context: context() });
   }
 
   deleteStockEntry(id: string): Observable<any> {
-    return this.http.delete(`${this.api}/stock-entry/${id}`);
+    return this.http.delete(`${this.api}/stock-entry/${id}`, { context: context() });
   }
 
   getAvailableQuantity(stockEntryId: string): Observable<AvailableQuantityResponse> {
     return this.http.get<AvailableQuantityResponse>(`${this.api}/stock-entry/available-quantity`, {
-      params: { stockEntryId }
+      params: { stockEntryId },
+      context: context()
     });
   }
 
   createStockBlock(block: Partial<StockBlock>): Observable<StockBlockResponse> {
-    return this.http.post<StockBlockResponse>(`${this.api}/stock-entry/block`, block);
+    return this.http.post<StockBlockResponse>(`${this.api}/stock-entry/block`, block, { context: context() });
   }
 
   getStockBlocks(stockEntryId: string): Observable<StockBlockResponse> {

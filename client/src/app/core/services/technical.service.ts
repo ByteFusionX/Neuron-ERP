@@ -1,8 +1,13 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import { Project } from 'src/app/shared/interfaces/project.interface';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 export interface MaterialRequestStatusHistory {
   status: 'pending' | 'approved' | 'rejected';
@@ -89,15 +94,15 @@ export class TechnicalService {
   }
 
   createProject(projectData: AssignEngineer): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/createProject`, projectData);
+    return this.http.post<any>(`${this.apiUrl}/technical/createProject`, projectData, { context: context() });
   }
 
-  getMaterialRequestByJobId(jobId: string): Observable<any> { 
-    return this.http.get<any>(`${this.apiUrl}/technical/material-request/${jobId}`);
+  getMaterialRequestByJobId(jobId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/technical/material-request/${jobId}`, { context: context() });
   }
 
   updateMaterialRequest(technicalId: string, formData: FormData): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/material-request/${technicalId}`, formData);
+    return this.http.post<any>(`${this.apiUrl}/technical/material-request/${technicalId}`, formData, { context: context() });
   }
 
   createTechnicalProject(projectData: TechnicalProject): Observable<any> {
@@ -301,22 +306,22 @@ export class TechnicalService {
   }
 
   approveMaterialRequestItem(technicalId: string, itemIndex: number, comment: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/item/${itemIndex}/approve`, { comment });
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/item/${itemIndex}/approve`, { comment }, { context: context() });
   }
 
   rejectMaterialRequestItem(technicalId: string, itemIndex: number, comment: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/item/${itemIndex}/reject`, { comment });
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/item/${itemIndex}/reject`, { comment }, { context: context() });
   }
 
   approveMaterialRequestFile(technicalId: string, fileIndex: number, comment: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/file/${fileIndex}/approve`, { comment });
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/file/${fileIndex}/approve`, { comment }, { context: context() });
   }
 
   rejectMaterialRequestFile(technicalId: string, fileIndex: number, comment: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/file/${fileIndex}/reject`, { comment });
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/file/${fileIndex}/reject`, { comment }, { context: context() });
   }
 
   approveAllPendingMaterialRequests(technicalId: string, comment: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/approve-all-pending`, { comment });
+    return this.http.post<any>(`${this.apiUrl}/technical/material-requests/${technicalId}/approve-all-pending`, { comment }, { context: context() });
   }
 } 

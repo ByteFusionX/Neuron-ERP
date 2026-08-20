@@ -1,9 +1,14 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
   providedIn: 'root'
@@ -38,7 +43,7 @@ export class DeliveryNoteService {
   }
 
   getAllDeliveryNotes(filter: any): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/get`, filter);
+    return this.http.post<any>(`${this.apiUrl}/get`, filter, { context: context() });
   }
 
   getPendingDeliveries(filter: any): Observable<any> {
@@ -46,7 +51,7 @@ export class DeliveryNoteService {
   }
 
   getInvoiceLinking(filter: any): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/invoice-linking`, filter);
+    return this.http.post<any>(`${this.apiUrl}/invoice-linking`, filter, { context: context() });
   }
 
   getPendingDeliveryDetails(jobId: string): Observable<any> {
@@ -62,7 +67,7 @@ export class DeliveryNoteService {
   }
 
   getInventoryDeductionReport(params: any): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/inventory-deduction-report`, params);
+    return this.http.post<any>(`${this.apiUrl}/inventory-deduction-report`, params, { context: context() });
   }
 
   getBase64ImageFromURL(url: string): Promise<string> {

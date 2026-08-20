@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
@@ -8,6 +8,11 @@ import { TotalEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { getCompanyDetails } from 'src/app/shared/interfaces/company.interface';
 import { Target } from 'src/app/shared/interfaces/employee.interface';
 import { getCustomerType } from 'src/app/shared/interfaces/customerType.interface';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 
 @Injectable({
@@ -19,7 +24,7 @@ export class ProfileService {
   constructor(private http: HttpClient) { }
 
   getDepartments(): Observable<getDepartment[]> {
-    return this.http.get<getDepartment[]>(`${this.api}/department`)
+    return this.http.get<getDepartment[]>(`${this.api}/department`, { context: context() })
   }
 
   setDepartment(department: Department): Observable<getDepartment> {
@@ -48,7 +53,7 @@ export class ProfileService {
 
 
   deleteCustomerType(data: { dataId: string, employee: string}): Observable<any> {
-    return this.http.post<any>(`${this.api}/customerType/delete-customerType`,data)
+    return this.http.post<any>(`${this.api}/customerType/delete-customerType`, data, { context: context() })
   }
 
   updateCustomerDepartment(department: Department): Observable<getDepartment> {
@@ -113,15 +118,15 @@ export class ProfileService {
   }
 
   deleteDepartment(data: { dataId: string, employee: string }): Observable<any> {
-    return this.http.post<any>(`${this.api}/department/delete-department`, data)
+    return this.http.post<any>(`${this.api}/department/delete-department`, data, { context: context() })
   }
 
   deleteInternalDepartment(data: { dataId: string, employee: string }): Observable<any> {
-    return this.http.post<any>(`${this.api}/department/delete-internalDepartment/`,data)
+    return this.http.post<any>(`${this.api}/department/delete-internalDepartment/`, data, { context: context() })
   }
 
   deleteCustomerDepartment(data: { dataId: string, employee: string }): Observable<any> {
-    return this.http.post<any>(`${this.api}/department/delete-customer`,data)
+    return this.http.post<any>(`${this.api}/department/delete-customer`, data, { context: context() })
   }
 
   createPlaceOfDelivery(note: NotePost): Observable<Notes> {

@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails } from 'src/app/shared/interfaces/quotation.interface';
@@ -6,6 +6,11 @@ import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 
 @Injectable({
@@ -33,7 +38,7 @@ export class QuotationService {
   }
 
   getDealSheet(filterData: FilterDeal): Observable<getDealSheet> {
-    return this.http.post<getDealSheet>(`${this.api}/quotation/deal/get`, filterData)
+    return this.http.post<getDealSheet>(`${this.api}/quotation/deal/get`, filterData, { context: context() })
   }
 
   getApprovedDealSheet(filterData: FilterDeal): Observable<getDealSheet> {
@@ -49,7 +54,7 @@ export class QuotationService {
   }
 
   saveDealSheet(dealDatas: dealData, quoteId?: string): Observable<Quotatation> {
-    return this.http.patch<Quotatation>(`${this.api}/quotation/deal/${quoteId}`, dealDatas)
+    return this.http.patch<Quotatation>(`${this.api}/quotation/deal/${quoteId}`, dealDatas, { context: context() })
   }
 
   totalQuotations(access?: string, userId?: string): Observable<{ total: number }> {
@@ -62,7 +67,7 @@ export class QuotationService {
   }
 
   approveDeal(quoteId: string | undefined, comment: string | undefined, userId: string | undefined): Observable<{ success: true }> {
-    return this.http.post<{ success: true }>(`${this.api}/quotation/deal/approve`, { quoteId, userId, comment })
+    return this.http.post<{ success: true }>(`${this.api}/quotation/deal/approve`, { quoteId, userId, comment }, { context: context() })
   }
 
   rejectDeal(comment: string, quoteId?: string): Observable<{ success: true }> {
@@ -70,7 +75,7 @@ export class QuotationService {
   }
 
   revokeDeal(quoteId: string | undefined, userId: string | undefined): Observable<{ success: true }> {
-    return this.http.post<{ success: true }>(`${this.api}/quotation/deal/revoke`, { quoteId, userId })
+    return this.http.post<{ success: true }>(`${this.api}/quotation/deal/revoke`, { quoteId, userId }, { context: context() })
   }
 
   markDealAsViewed(quoteIds: any): Observable<any> {
@@ -547,7 +552,7 @@ export class QuotationService {
   }
 
   deleteQuotation(data: { dataId: string, employeeId: string }): Observable<any> {
-    return this.http.post<any>(`${this.api}/quotation/delete`, data);
+    return this.http.post<any>(`${this.api}/quotation/delete`, data, { context: context() });
   }
 
   getQuoteNote(quoteId: string): Observable<{ saveNote: string, createdBy: string }> {

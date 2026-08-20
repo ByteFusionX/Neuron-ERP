@@ -1,8 +1,13 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import { PurchaseOrder } from 'src/app/shared/interfaces/purchase.interface';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
   providedIn: 'root'
@@ -21,7 +26,7 @@ export class PurchaseOrderService {
   }
 
   getPurchaseOrderById(id: string): Observable<PurchaseOrder> {
-    return this.http.get<PurchaseOrder>(`${this.baseUrl}/${id}`);
+    return this.http.get<PurchaseOrder>(`${this.baseUrl}/${id}`, { context: context() });
   }
 
   getAllPurchaseOrders(params?: {
@@ -31,7 +36,7 @@ export class PurchaseOrderService {
     status?: string[];
     purchaseId?: string;
   }): Observable<any> {
-    return this.http.get<any>(this.baseUrl, { params: params as any });
+    return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
   }
 
   deletePurchaseOrder(id: string): Observable<any> {
@@ -43,11 +48,11 @@ export class PurchaseOrderService {
   }
 
   updatePurchaseOrderStatus(id: string, poStatus: string): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${id}/status`, { poStatus });
+    return this.http.patch<any>(`${this.baseUrl}/${id}/status`, { poStatus }, { context: context() });
   }
 
   updateSupplierInvoices(lpoId: string, formData: FormData): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${lpoId}/supplier-invoices`, formData);
+    return this.http.patch<any>(`${this.baseUrl}/${lpoId}/supplier-invoices`, formData, { context: context() });
   }
 
   getSuppliersForPurchaseRequest(purchaseId: string, excludeLpoId?: string): Observable<any> {
@@ -71,14 +76,14 @@ export class PurchaseOrderService {
   }
 
   approvePurchaseOrder(id: string, comment?: string): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${id}/approve`, { comment });
+    return this.http.patch<any>(`${this.baseUrl}/${id}/approve`, { comment }, { context: context() });
   }
 
   rejectPurchaseOrder(id: string, comment?: string): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${id}/reject`, { comment });
+    return this.http.patch<any>(`${this.baseUrl}/${id}/reject`, { comment }, { context: context() });
   }
 
   revokePurchaseOrder(id: string): Observable<any> {
-    return this.http.delete<any>(`${this.baseUrl}/${id}/revoke`);
+    return this.http.delete<any>(`${this.baseUrl}/${id}/revoke`, { context: context() });
   }
 }

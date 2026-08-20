@@ -1,10 +1,15 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import { Invoice, InvoiceListResponse, InvoiceFilterParams } from 'src/app/shared/interfaces/invoice.interface';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
     providedIn: 'root'
@@ -16,11 +21,11 @@ export class InvoiceService {
     constructor(private http: HttpClient) { }
 
     getInvoices(params: InvoiceFilterParams): Observable<InvoiceListResponse> {
-        return this.http.get<InvoiceListResponse>(`${this.api}/invoice`, { params: params as any });
+        return this.http.get<InvoiceListResponse>(`${this.api}/invoice`, { params: params as any, context: context() });
     }
 
     getInvoiceDnLinkingReport(params: any): Observable<any> {
-        return this.http.get<any>(`${this.api}/invoice/dn-linking-report`, { params });
+        return this.http.get<any>(`${this.api}/invoice/dn-linking-report`, { params, context: context() });
     }
 
   getJobItemInvoicedQty(jobId: string, excludeInvoiceId?: string): Observable<any> {
@@ -344,31 +349,31 @@ export class InvoiceService {
     }
 
     createInvoice(data: Partial<Invoice>): Observable<any> {
-        return this.http.post<any>(`${this.api}/invoice`, data);
+        return this.http.post<any>(`${this.api}/invoice`, data, { context: context() });
     }
 
     getInvoiceById(id: string): Observable<any> {
-        return this.http.get<any>(`${this.api}/invoice/${id}`);
+        return this.http.get<any>(`${this.api}/invoice/${id}`, { context: context() });
     }
 
     updateInvoice(id: string, data: Partial<Invoice>): Observable<any> {
-        return this.http.put<any>(`${this.api}/invoice/${id}`, data);
+        return this.http.put<any>(`${this.api}/invoice/${id}`, data, { context: context() });
     }
 
     cancelInvoice(id: string, data: { reason: string }): Observable<any> {
-        return this.http.patch<any>(`${this.api}/invoice/${id}/cancel`, data);
+        return this.http.patch<any>(`${this.api}/invoice/${id}/cancel`, data, { context: context() });
     }
 
     cancelAndReissueInvoice(id: string, data: { reason: string }): Observable<any> {
-        return this.http.post<any>(`${this.api}/invoice/${id}/cancel-reissue`, data);
+        return this.http.post<any>(`${this.api}/invoice/${id}/cancel-reissue`, data, { context: context() });
     }
 
     generateInvoiceNumber(): Observable<{ success: boolean, invoiceNo: string }> {
-        return this.http.get<{ success: boolean, invoiceNo: string }>(`${this.api}/invoice/generate-number`);
+        return this.http.get<{ success: boolean, invoiceNo: string }>(`${this.api}/invoice/generate-number`, { context: context() });
     }
 
     getCancelledAdjustedInvoices(params: any): Observable<any> {
-        return this.http.get<any>(`${this.api}/invoice/audit`, { params });
+        return this.http.get<any>(`${this.api}/invoice/audit`, { params, context: context() });
     }
 
     getCancelledReissuedInvoices(params: any): Observable<any> {

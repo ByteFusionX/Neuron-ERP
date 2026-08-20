@@ -1,7 +1,12 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable, forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 export interface PersonSearchResult {
   displayName: string;
@@ -123,6 +128,6 @@ export class EmailSearchService {
       ]
     };
     
-    return this.http.post<any>(this.CONTACTS_API_URL, contact);
+    return this.http.post<any>(this.CONTACTS_API_URL, contact, { context: context() });
   }
 } 

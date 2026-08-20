@@ -1,16 +1,21 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { 
-    CreateWorkflowRequest, 
-    UpdateWorkflowRequest, 
-    WorkflowResponse, 
-    WorkflowListResponse, 
-    WorkflowFilter, 
+import {
+    CreateWorkflowRequest,
+    UpdateWorkflowRequest,
+    WorkflowResponse,
+    WorkflowListResponse,
+    WorkflowFilter,
     DeleteWorkflowResponse,
-    WorkflowFeature 
+    WorkflowFeature
 } from 'src/app/shared/interfaces/workflow.interface';
 import { environment } from 'src/environments/environment';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
     providedIn: 'root'
@@ -22,7 +27,7 @@ export class WorkflowService {
     constructor(private http: HttpClient) { }
 
     createWorkflow(workflowData: CreateWorkflowRequest): Observable<WorkflowResponse> {
-        return this.http.post<WorkflowResponse>(`${this.api}/workflow`, workflowData);
+        return this.http.post<WorkflowResponse>(`${this.api}/workflow`, workflowData, { context: context() });
     }
 
     getWorkflows(filter?: WorkflowFilter): Observable<WorkflowListResponse> {
@@ -42,7 +47,7 @@ export class WorkflowService {
     }
 
     updateWorkflow(id: string, workflowData: UpdateWorkflowRequest): Observable<WorkflowResponse> {
-        return this.http.put<WorkflowResponse>(`${this.api}/workflow/${id}`, workflowData);
+        return this.http.put<WorkflowResponse>(`${this.api}/workflow/${id}`, workflowData, { context: context() });
     }
 
     deleteWorkflow(id: string): Observable<DeleteWorkflowResponse> {

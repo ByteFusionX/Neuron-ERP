@@ -1,9 +1,14 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
   providedIn: 'root'
@@ -14,11 +19,11 @@ export class GrnService {
   constructor(private http: HttpClient) {}
 
   generateGRNNumber(): Observable<{ grn: string }> {
-    return this.http.get<{ grn: string }>(`${this.baseUrl}/generate-grn-no`);
+    return this.http.get<{ grn: string }>(`${this.baseUrl}/generate-grn-no`, { context: context() });
   }
 
   createGRN(grnData: any): Observable<any> {
-    return this.http.post<any>(`${this.baseUrl}`, grnData);
+    return this.http.post<any>(`${this.baseUrl}`, grnData, { context: context() });
   }
 
   getGRNByLpoId(lpoId: string): Observable<any> {
@@ -30,7 +35,7 @@ export class GrnService {
   }
 
   getGRNById(id: string): Observable<any> {
-    return this.http.get<any>(`${this.baseUrl}/${id}`);
+    return this.http.get<any>(`${this.baseUrl}/${id}`, { context: context() });
   }
 
   getAllGRNs(params?: {
@@ -38,15 +43,15 @@ export class GrnService {
     row?: number;
     search?: string;
   }): Observable<any> {
-    return this.http.get<any>(this.baseUrl, { params: params as any });
+    return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
   }
 
   updateSupplierInvoices(grnId: string, formData: FormData): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-invoices`, formData);
+    return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-invoices`, formData, { context: context() });
   }
 
   updateSupplierDeliveryNotes(grnId: string, formData: FormData): Observable<any> {
-    return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-delivery-notes`, formData);
+    return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-delivery-notes`, formData, { context: context() });
   }
 
 

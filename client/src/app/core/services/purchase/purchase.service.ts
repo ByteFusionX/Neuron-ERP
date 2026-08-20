@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { PurchaseData, PurchaseOrder, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
@@ -6,6 +6,11 @@ import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
   providedIn: 'root'
@@ -27,7 +32,7 @@ export class PurchaseService {
     toDate?: string;
     search?: string;
   }): Observable<any> {
-    return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params);
+    return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
   }
 
   createPurchase(purchaseData: PurchaseData): Observable<any> {
@@ -35,11 +40,11 @@ export class PurchaseService {
   }
 
   getPurchaseById(purchaseId: string): Observable<any> {
-    return this.http.get(`${this.api}/purchase/purchase-request/${purchaseId}`)
+    return this.http.get(`${this.api}/purchase/purchase-request/${purchaseId}`, { context: context() })
   }
 
   updatePurchaseStatus(purchaseId: string, status: 'approved' | 'rejected', comment?: string): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, comment });
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, comment }, { context: context() });
   }
 
   getApprovalsByEmployee(filters?: any): Observable<any> {
@@ -71,23 +76,23 @@ export class PurchaseService {
   }
 
   updatePurchaseComparisons(purchaseId: string, items: any[]): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/comparison/${purchaseId}`, { items });
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/comparison/${purchaseId}`, { items }, { context: context() });
   }
 
   updatePurchaseSupplierDiscounts(purchaseId: string, supplierDiscounts: any): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/supplier-discount/${purchaseId}`, { supplierDiscounts });
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/supplier-discount/${purchaseId}`, { supplierDiscounts }, { context: context() });
   }
 
   updatePurchaseMrRequest(purchaseId: string, mrRequest: any): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/mr-request/${purchaseId}`, { mrRequest });
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/mr-request/${purchaseId}`, { mrRequest }, { context: context() });
   }
 
   mergeItemsToDealSheet(purchaseId: string): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/merge-items/${purchaseId}`, {});
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/merge-items/${purchaseId}`, {}, { context: context() });
   }
 
   revokeMergedItems(purchaseId: string): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/revoke-merge/${purchaseId}`, {});
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/revoke-merge/${purchaseId}`, {}, { context: context() });
   }
 
 

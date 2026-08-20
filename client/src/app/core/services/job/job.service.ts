@@ -1,10 +1,15 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, filter } from 'rxjs';
 import { getCreators } from 'src/app/shared/interfaces/employee.interface';
 import { JobStatus, JobTable, allocateType, filterJob, getJob } from 'src/app/shared/interfaces/job.interface';
 import { QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
   providedIn: 'root'
@@ -40,7 +45,7 @@ export class JobService {
   }
 
   deleteJob(data: { dataId: string, employeeId: string }): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/job/delete`, data);
+    return this.http.post<any>(`${this.apiUrl}/job/delete`, data, { context: context() });
   }
 
   getJobids(): Observable<getJob[]> {
@@ -71,7 +76,7 @@ export class JobService {
     return this.http.post<any>(`${this.apiUrl}/job/transferProcurementPerson`, {
       jobId,
       procurementPersonId
-    })
+    }, { context: context() })
   }
 
   getConvertibleJobs(): Observable<{ success: boolean; jobs: getJob[] }> {

@@ -1,8 +1,13 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { EnquiryTable, FeedbackTable, FilterEnquiry, MonthlyEnquiry, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { environment } from 'src/environments/environment';
+import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+
+// Methods below flagged with context() are called only from components that already
+// show their own error toast on failure, so requests opt out of the interceptor's global toast.
+const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
   providedIn: 'root'
@@ -123,7 +128,7 @@ export class EnquiryService {
   }
 
   deleteEnquiry(data: { dataId: string, employeeId: string }): Observable<any> {
-    return this.http.post<any>(`${this.api}/enquiry/delete`, data);
+    return this.http.post<any>(`${this.api}/enquiry/delete`, data, { context: context() });
   }
 
   reassignjob(data: { enquiryId: string, employeeId: string }): Observable<any> {
