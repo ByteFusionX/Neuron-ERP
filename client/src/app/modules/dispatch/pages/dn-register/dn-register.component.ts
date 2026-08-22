@@ -58,6 +58,10 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   private subscriptions = new Subscription();
 
   canCreateDn = signal<boolean>(false);
+  canViewPendingDelivery = signal<boolean>(false);
+  canViewInvoiceLinking = signal<boolean>(false);
+  canViewInventoryDeduction = signal<boolean>(false);
+  canSwitchDispatchView = signal<boolean>(false);
 
   tableData = signal<DeliveryNote[]>([]);
   tableColumns: TableColumn[] = [];
@@ -73,9 +77,16 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe(emp => {
-        if (emp?.category?.privileges?.dispatch?.createDeliveryNote) {
+        const privileges = emp?.category?.privileges?.dispatch;
+        if (privileges?.createDeliveryNote) {
           this.canCreateDn.set(true);
         }
+        this.canViewPendingDelivery.set(!!privileges?.viewPendingDelivery);
+        this.canViewInvoiceLinking.set(!!privileges?.viewInvoiceLinking);
+        this.canViewInventoryDeduction.set(!!privileges?.viewInventoryDeduction);
+        this.canSwitchDispatchView.set(
+          !!(privileges?.viewPendingDelivery || privileges?.viewInvoiceLinking || privileges?.viewInventoryDeduction)
+        );
       })
     );
     this.setupTableColumns();
