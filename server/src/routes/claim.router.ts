@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { 
-    createClaim, 
-    getClaims, 
-    getApprovalsByEmployee, 
-    getClaimById, 
-    updateClaimAndSubmit, 
+import {
+    createClaim,
+    getClaims,
+    getApprovalsByEmployee,
+    getClaimById,
+    updateClaimAndSubmit,
     updateClaimStatus,
+    markClaimAsPaid,
     deleteClaim,
     removeClaimAttachment
 } from "../controllers/claim.controller";
@@ -18,6 +19,7 @@ claimRouter.get('/approvals', getApprovalsByEmployee);
 claimRouter.get('/:id', getClaimById);
 claimRouter.put('/:id',upload.fields([{ name: 'newAttachments' }]), updateClaimAndSubmit);
 claimRouter.put('/:id/status', updateClaimStatus);
+claimRouter.patch('/:id/mark-paid', markClaimAsPaid);
 claimRouter.put('/:id/remove-attachment', removeClaimAttachment);
 claimRouter.delete('/:id', deleteClaim);
 

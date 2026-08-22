@@ -163,6 +163,7 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                         return privileges.claims?.canApprove === true;
                     case 'ClaimApproved':
                     case 'ClaimRejected':
+                    case 'ClaimPaid':
                         return privileges.claims?.viewReport !== 'none';
                     case 'Event':
                         return true;
@@ -403,7 +404,8 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             return { routePath: '/claims/approval-requests' };
 
         case 'ClaimApproved':
-        case 'ClaimRejected': {
+        case 'ClaimRejected':
+        case 'ClaimPaid': {
             const technicalId = additionalData?.technicalId || referenceId?.technicalId?.toString?.();
             if (technicalId) {
                 return {

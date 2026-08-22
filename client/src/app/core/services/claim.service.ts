@@ -80,6 +80,10 @@ export class ClaimService {
         return this.http.put<any>(`${this.api}/claim/${id}/status`, statusData, { context: context() });
     }
 
+    markClaimAsPaid(id: string, paymentData: { paidAmount?: number; paymentReference?: string }): Observable<any> {
+        return this.http.patch<any>(`${this.api}/claim/${id}/mark-paid`, paymentData, { context: context() });
+    }
+
     deleteClaim(id: string): Observable<any> {
         return this.http.delete<any>(`${this.api}/claim/${id}`, { context: context() });
     }

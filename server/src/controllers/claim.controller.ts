@@ -591,6 +591,101 @@ export const updateClaimStatus = async (req: Request, res: Response, next: NextF
     }
 };
 
+export const markClaimAsPaid = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { paidAmount, paymentReference } = req.body;
+        const userToken = req.user;
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid claim ID"
+            });
+        }
+
+        const employee = await getEmployeeData(userToken);
+        if (!employee) {
+            return res.status(401).json({
+                success: false,
+                message: "Employee not found"
+            });
+        }
+
+        const privileges = employee.category?.privileges;
+        if (!privileges?.claims?.canApprove) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have permission to mark claims as paid",
+            });
+        }
+
+        const claim = await Claim.findById(id);
+        if (!claim) {
+            return res.status(404).json({
+                success: false,
+                message: "Claim not found"
+            });
+        }
+
+        const hasPending = claim.approvalStatus.some((s: any) => s.status === 'pending');
+        const lastStatus = claim.approvalStatus[claim.approvalStatus.length - 1]?.status;
+        if (hasPending || lastStatus !== 'approved') {
+            return res.status(400).json({
+                success: false,
+                message: "Claim must be fully approved before it can be marked as paid"
+            });
+        }
+
+        if (claim.paymentStatus === 'Paid') {
+            return res.status(400).json({
+                success: false,
+                message: "Claim is already marked as paid"
+            });
+        }
+
+        claim.paymentStatus = 'Paid';
+        claim.paidAmount = paidAmount !== undefined ? paidAmount : claim.amount;
+        claim.paidBy = employee._id;
+        claim.paidDate = new Date();
+        claim.paymentReference = paymentReference || '';
+
+        await claim.save();
+
+        const socket = req.app.get('io') as Server;
+        await createNotificationWithPrivileges(
+            {
+                type: 'ClaimPaid',
+                referenceModel: 'Claim',
+                title: 'Claim paid',
+                message: 'Your claim has been paid',
+                sentBy: employee._id?.toString(),
+                referenceId: claim._id,
+                additionalData: { claimId: claim._id.toString(), technicalId: claim.technicalId?.toString() }
+            },
+            {
+                privilegeKey: 'claims' as const,
+                checkFunction: (p: any, employeeId?: string) => employeeId === claim.raisedBy?.toString() && p.claims?.viewReport !== 'none'
+            },
+            socket
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Claim marked as paid successfully",
+            data: claim
+        });
+
+    } catch (error) {
+        console.error('Error marking claim as paid:', error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to mark claim as paid",
+            error: error instanceof Error ? error.message : "Unknown error"
+        });
+    }
+};
+
 export const getApprovalsByEmployee = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const userToken = req.user;

@@ -153,6 +153,12 @@ export class ClaimsComponent implements OnInit {
         ],
       },
       {
+        key: 'paymentStatus',
+        label: 'Payment Status',
+        type: 'status',
+        cellRenderer: (item: any) => item.paymentStatus || 'Pending'
+      },
+      {
         key: 'actions',
         label: 'Actions',
         type: 'action',
@@ -163,6 +169,12 @@ export class ClaimsComponent implements OnInit {
             tooltip: 'Resubmit Claim',
             action: 'resubmitClaim',
             condition: (item: any) => item.approvalStatus?.some((status: any) => status.status === 'rejected')
+          },
+          {
+            icon: 'heroBanknotes',
+            tooltip: 'Mark as Paid',
+            action: 'markAsPaid',
+            condition: (item: any) => item.overallStatus === 'approved' && item.paymentStatus !== 'Paid'
           },
           { icon: 'heroTrash', tooltip: 'Delete Claim', action: 'deleteClaim' }
         ]
@@ -251,7 +263,36 @@ export class ClaimsComponent implements OnInit {
       case 'viewDocuments':
         this.onViewDocuments(event.item);
         break;
+      case 'markAsPaid':
+        this.onMarkAsPaid(event.item);
+        break;
     }
+  }
+
+  onMarkAsPaid(claim: any): void {
+    const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
+      width: '400px',
+      data: {
+        title: 'Mark as Paid',
+        description: 'Are you sure you want to mark this claim as paid?',
+        icon: 'heroBanknotes',
+        IconColor: 'green'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((result: any) => {
+      if (result) {
+        this._claimService.markClaimAsPaid(claim._id, {}).subscribe({
+          next: () => {
+            this._toaster.success('Claim marked as paid');
+            this.loadClaims(this.currentFilters);
+          },
+          error: () => {
+            this._toaster.error('Failed to mark claim as paid');
+          }
+        });
+      }
+    });
   }
 
   onViewApprovalStatus(claim: any): void {

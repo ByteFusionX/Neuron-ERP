@@ -14,6 +14,11 @@ interface Claim {
     technicalId: Types.ObjectId;
     jobId: string;
     category: string;
+    paymentStatus: string;
+    paidAmount?: number;
+    paidBy?: Types.ObjectId;
+    paidDate?: Date;
+    paymentReference?: string;
 }
 
 interface ClaimStatus {
@@ -98,6 +103,24 @@ const ClaimSchema = new Schema<Claim>({
         ref: 'Technical',
     },
     jobId: {
+        type: String,
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['Pending', 'Paid'],
+        default: 'Pending'
+    },
+    paidAmount: {
+        type: Number,
+    },
+    paidBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+    },
+    paidDate: {
+        type: Date,
+    },
+    paymentReference: {
         type: String,
     },
 })
