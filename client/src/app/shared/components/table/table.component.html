@@ -73,7 +73,7 @@
                 [class.hidden]="!displayedColumns.includes(column.key)"
               >
                 <div class="flex flex-col gap-2 overflow-visible">
-                  <div class="flex items-center justify-between">
+                  <div class="flex items-center" [ngClass]="getFilterValue(column) ? 'justify-between' : column.headerClass?.includes('text-center') ? 'justify-center' : 'justify-between'">
                     <span>{{ column.label }}</span>
                     <button
                       *ngIf="getFilterValue(column)"

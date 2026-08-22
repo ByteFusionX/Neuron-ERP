@@ -1,20 +1,21 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
-import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn } from 'src/app/shared/components/table/table.model';
-import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
+import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ViewGrnDetailsModalComponent, ViewGrnDetailsModalData } from '../view-grn-details-modal/view-grn-details-modal.component';
 import { ViewPurchaseRequestDetailsModalComponent, ViewPurchaseRequestDetailsModalData } from '../view-purchase-request-details-modal/view-purchase-request-details-modal.component';
 
 @Component({
   selector: 'app-grn-list',
   standalone: true,
-  imports: [TableComponent, CommonModule],
+  imports: [TableComponent, CommonModule, RouterModule, ButtonComponent, IconsModule],
   templateUrl: './grn-list.component.html',
   styleUrl: './grn-list.component.css',
   providers: [PaginationService]
@@ -23,7 +24,6 @@ export class GrnListComponent implements OnInit {
   private paginationService = inject(PaginationService);
   private grnService = inject(GrnService);
   private notificationService = inject(ToastrService);
-  private employeeService = inject(EmployeeService);
 
   tableData = signal<any[]>([]);
   tableColumns: TableColumn[] = [];
@@ -32,22 +32,12 @@ export class GrnListComponent implements OnInit {
   isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
-  canUploadInvoice = signal<boolean>(false);
 
   constructor(private _dialog: MatDialog) {}
 
   ngOnInit(): void {
-    this.checkPrivileges();
     this.setupTableColumns();
     this.getGRNs();
-  }
-
-  checkPrivileges(): void {
-    this.employeeService.employeeData$.subscribe((data) => {
-      if (data?.category?.privileges) {
-        this.canUploadInvoice.set(data.category.privileges.grn?.canUploadInvoice || false);
-      }
-    });
   }
 
   setupTableColumns(): void {
@@ -121,33 +111,11 @@ export class GrnListComponent implements OnInit {
           },
         ]
       },
-      {
-        key: 'supplierInvoiceActions',
-        label: 'Uploads',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: [
-          {
-            icon: 'heroDocumentArrowUp',
-            tooltip: 'Supplier Invoice',
-            action: 'uploadInvoice',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-violet-500 hover:border-violet-700 text-violet-500 text-sm rounded-full font-medium',
-            condition: () => this.canUploadInvoice()
-          },
-          {
-            icon: 'heroTruck',
-            tooltip: 'Supplier DN',
-            action: 'uploadDeliveryNote',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-blue-500 hover:border-blue-700 text-blue-500 text-sm rounded-full font-medium',
-            condition: () => this.canUploadInvoice()
-          },
-        ]
-      }
     ];
 
     this.defaultColumns = [
       'grnDate', 'grnNo', 'purchaseOrderId.poNo', 'purchaseOrderId.purchaseId.purchaseNo', 'purchaseOrderId.supplierId.supplierName',
-      'jobId.jobId', 'warehouse.wareHouseName', 'acceptedQty', 'createdBy.firstName', 'actions', 'supplierInvoiceActions'
+      'jobId.jobId', 'warehouse.wareHouseName', 'acceptedQty', 'createdBy.firstName', 'actions'
     ];
   }
 
@@ -185,15 +153,6 @@ export class GrnListComponent implements OnInit {
       case 'viewDetails':
         this.viewDetails(item);
         break;
-      case 'viewInvoice':
-        this.viewInvoice(item);
-        break;
-      case 'uploadInvoice':
-        this.uploadInvoice(item);
-        break;
-      case 'uploadDeliveryNote':
-        this.uploadDeliveryNote(item);
-        break;
     }
   }
 
@@ -223,160 +182,6 @@ export class GrnListComponent implements OnInit {
       data: modalData,
       width: '900px',
       maxHeight: '90vh'
-    });
-  }
-
-  viewInvoice(grn: any): void {
-    if (!grn.supplierInvoices || grn.supplierInvoices.length === 0) {
-      this.notificationService.info('No invoices uploaded for this GRN');
-      return;
-    }
-
-    const modalData: FileUploadModalData = {
-      title: `Supplier Invoices - ${grn.grnNo}`,
-      existingFiles: grn.supplierInvoices || [],
-      allowMultiple: true,
-      acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx',
-      showActions: {
-        upload: false,
-        download: true,
-        view: true,
-        delete: false
-      }
-    };
-
-    this._dialog.open(FileUploadModalComponent, {
-      data: modalData,
-      width: '800px',
-      maxHeight: '90vh'
-    });
-  }
-
-  uploadInvoice(grn: any): void {
-    const modalData: FileUploadModalData = {
-      title: `Upload Supplier Invoice - ${grn.grnNo}`,
-      existingFiles: grn.supplierInvoices || [],
-      allowMultiple: true,
-      acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx',
-      maxFileSize: 10 * 1024 * 1024,
-      showActions: {
-        upload: true,
-        download: true,
-        view: true,
-        delete: true
-      }
-    };
-
-    const dialogRef = this._dialog.open(FileUploadModalComponent, {
-      data: modalData,
-      width: '800px',
-      maxHeight: '90vh'
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result && result.action === 'save') {
-        const formData = new FormData();
-        const newFiles: File[] = [];
-        const existingFiles: any[] = [];
-
-        result.files.forEach((file: any) => {
-          if (file.file) {
-            newFiles.push(file.file);
-          } else if (file.isUploaded && file.fileName) {
-            existingFiles.push({
-              fileName: file.fileName,
-              originalname: file.originalname
-            });
-          }
-        });
-
-        newFiles.forEach(file => {
-          formData.append('files', file);
-        });
-
-        if (existingFiles.length > 0) {
-          formData.append('existingFiles', JSON.stringify(existingFiles));
-        }
-
-        this.grnService.updateSupplierInvoices(grn._id, formData).subscribe({
-          next: (response: any) => {
-            if (response.success) {
-              this.notificationService.success('Supplier invoices uploaded successfully');
-              this.getGRNs();
-            } else {
-              this.notificationService.error('Failed to upload invoices');
-            }
-          },
-          error: (error: any) => {
-            console.error('Error uploading invoices:', error);
-            this.notificationService.error('Failed to upload invoices');
-          }
-        });
-      }
-    });
-  }
-
-  uploadDeliveryNote(grn: any): void {
-    const modalData: FileUploadModalData = {
-      title: `Upload Supplier Delivery Note - ${grn.grnNo}`,
-      existingFiles: grn.supplierDeliveryNotes || [],
-      allowMultiple: true,
-      acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx',
-      maxFileSize: 10 * 1024 * 1024,
-      showActions: {
-        upload: true,
-        download: true,
-        view: true,
-        delete: true
-      }
-    };
-
-    const dialogRef = this._dialog.open(FileUploadModalComponent, {
-      data: modalData,
-      width: '800px',
-      maxHeight: '90vh'
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result && result.action === 'save') {
-        const formData = new FormData();
-        const newFiles: File[] = [];
-        const existingFiles: any[] = [];
-
-        result.files.forEach((file: any) => {
-          if (file.file) {
-            newFiles.push(file.file);
-          } else if (file.isUploaded && file.fileName) {
-            existingFiles.push({
-              fileName: file.fileName,
-              originalname: file.originalname
-            });
-          }
-        });
-
-        newFiles.forEach(file => {
-          formData.append('files', file);
-        });
-
-        if (existingFiles.length > 0) {
-          formData.append('existingFiles', JSON.stringify(existingFiles));
-        }
-
-        this.grnService.updateSupplierDeliveryNotes(grn._id, formData).subscribe({
-          next: (response: any) => {
-            if (response.success) {
-              this.notificationService.success('Supplier delivery notes uploaded successfully');
-              this.getGRNs();
-            } else {
-              this.notificationService.error('Failed to upload delivery notes');
-            }
-          },
-          error: (error: any) => {
-            console.error('Error uploading delivery notes:', error);
-            this.notificationService.error('Failed to upload delivery notes');
-          }
-        });
-      }
     });
   }
 

@@ -250,6 +250,7 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/grn/grn.component').then((c) => c.GrnComponent),
     children: [
+      { path: 'create-grn', component: CreateGrnComponent },
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
       { path: 'view-grn/:id', component: ViewGrnComponent },
       { path: 'grn-list', component: GrnListComponent }

@@ -10,6 +10,19 @@
                 </div>
             } @else {
                 <div class="flex flex-col md:flex-row md:mb-5 gap-3">
+                    @if(!isLpoPreselected()) {
+                        <app-select-dropdown
+                            label="Select LPO Number"
+                            [options]="lpoOptions"
+                            optionLabel="label"
+                            optionValue="_id"
+                            formControlName="selectedLpo"
+                            placeholder="Select LPO to create GRN against"
+                            [isSubmitted]="isSubmitting()"
+                            (onSelected)="onLpoSelected($event)"
+                            class="w-full">
+                        </app-select-dropdown>
+                    }
                     <app-form-field label="GRN Number" [control]="f['grnNo']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
                     </app-form-field>
                     <app-form-field label="GRN Date" [control]="f['grnDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
@@ -19,10 +32,25 @@
                 <div class="flex flex-col md:flex-row md:mb-5 gap-3">
                     <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
                     </app-form-field>
-                    <app-form-field label="Supplier Invoice No." [control]="f['supplierInvoiceNo']" [isSubmitted]="isSubmitting()" class="w-full">
-                    </app-form-field>
                     <app-form-field label="Supplier Invoice Date" [control]="f['supplierInvoiceDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
                     </app-form-field>
+                    <div class="mb-1 w-full">
+                        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierInvoiceNo">
+                            Supplier Invoice No.
+                        </label>
+                        <div class="flex items-stretch gap-2">
+                            <input id="supplierInvoiceNo" formControlName="supplierInvoiceNo"
+                                [class.border-red-500]="f['supplierInvoiceNo'].invalid && isSubmitting()"
+                                class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                                type="text"/>
+                            <button type="button"
+                                (click)="openInvoiceUpload()"
+                                class="cursor-pointer flex justify-center items-center px-3 rounded-full border border-violet-500 hover:border-violet-600 text-violet-500 hover:text-violet-600 shrink-0"
+                                [matTooltip]="invoiceFiles.length ? invoiceFiles.length + ' file(s) selected' : 'Upload Supplier Invoice'">
+                                <ng-icon name="heroDocumentText" class="text-xl"></ng-icon>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex flex-col md:flex-row md:mb-5 gap-3">
@@ -30,8 +58,23 @@
                     </app-form-field>
                     <app-form-field label="Job ID" [control]="f['jobId']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
                     </app-form-field>
-                    <app-form-field label="Supplier Delivery Note No." [control]="f['supplierDeliveryNoteNo']" [isSubmitted]="isSubmitting()" class="w-full">
-                    </app-form-field>
+                    <div class="mb-1 w-full">
+                        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierDeliveryNoteNo">
+                            Supplier Delivery Note No.
+                        </label>
+                        <div class="flex items-stretch gap-2">
+                            <input id="supplierDeliveryNoteNo" formControlName="supplierDeliveryNoteNo"
+                                [class.border-red-500]="f['supplierDeliveryNoteNo'].invalid && isSubmitting()"
+                                class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                                type="text"/>
+                            <button type="button"
+                                (click)="openDeliveryNoteUpload()"
+                                class="cursor-pointer flex justify-center items-center px-3 rounded-full border border-orange-500 hover:border-orange-600 text-orange-500 hover:text-orange-600 shrink-0"
+                                [matTooltip]="deliveryNoteFiles.length ? deliveryNoteFiles.length + ' file(s) selected' : 'Upload Supplier DN'">
+                                <ng-icon name="heroDocumentArrowUp" class="text-xl"></ng-icon>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex flex-col md:flex-row md:mb-5 gap-3">
@@ -138,7 +181,7 @@
         <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
                 <app-btn theme="cancel" type="button" (buttonClick)="onDiscard()">Discard</app-btn>
-                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled()" (buttonClick)="onSave()">Save & Exit</app-btn>
+                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled() || !lpo" (buttonClick)="onSave()">Save & Exit</app-btn>
             </div>
         </div>
     </form>

@@ -12,6 +12,9 @@ import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.serv
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { AddWarehouseComponent } from 'src/app/modules/inventory/pages/all-products/modals/add-warehouse/add-warehouse.component';
+import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
+import { IconsModule } from 'src/app/lib/icons/icons.module';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 @Component({
   selector: 'app-create-grn',
@@ -21,7 +24,9 @@ import { AddWarehouseComponent } from 'src/app/modules/inventory/pages/all-produ
     ReactiveFormsModule,
     FormFieldComponent,
     SelectDropdownComponent,
-    ButtonComponent
+    ButtonComponent,
+    IconsModule,
+    MatTooltipModule
   ],
   templateUrl: './create-grn.component.html',
   styleUrl: './create-grn.component.css'
@@ -42,12 +47,17 @@ export class CreateGrnComponent implements OnInit {
   lpo: any = null;
   warehouses: any[] = [];
   employees: any[] = [];
+  lpoOptions: any[] = [];
   isLoading = signal<boolean>(true);
   isSubmitting = signal<boolean>(false);
   isFormDisabled = signal<boolean>(false);
+  isLpoPreselected = signal<boolean>(false);
   existingGRNs: any[] = [];
+  deliveryNoteFiles: File[] = [];
+  invoiceFiles: File[] = [];
 
   grnForm: FormGroup = this.fb.group({
+    selectedLpo: [''],
     grnNo: ['', [Validators.required]],
     grnDate: ['', [Validators.required]],
     supplierName: ['', [Validators.required]],
@@ -63,20 +73,40 @@ export class CreateGrnComponent implements OnInit {
 
   ngOnInit(): void {
     this.lpoId = <string>this.route.snapshot.paramMap.get('lpoId');
-    if (!this.lpoId) {
-      this.toastr.error('Invalid LPO ID');
-      const purchaseIdFromRoute = this.route.snapshot.queryParams['purchaseId'] || this.route.snapshot.paramMap.get('purchaseId');
-      if (purchaseIdFromRoute) {
-        this.router.navigate(['/purchase/initiate-lpo', purchaseIdFromRoute]);
-      } else {
-        this.router.navigate(['/purchase/approves']);
-      }
-      return;
-    }
-    this.loadLpo();
     this.loadWarehouses();
     this.loadEmployees();
     this.generateGRNNumber();
+
+    if (this.lpoId) {
+      this.isLpoPreselected.set(true);
+      this.loadLpo();
+    } else {
+      this.isLoading.set(false);
+      this.loadEligibleLpos();
+    }
+  }
+
+  loadEligibleLpos(): void {
+    this.purchaseOrderService.getAllPurchaseOrders({ page: 1, row: 500, status: ['Approved', 'Closed'] }).subscribe({
+      next: (response: any) => {
+        this.lpoOptions = (response?.success ? response.data : []).map((lpo: any) => ({
+          _id: lpo._id,
+          label: `${lpo.poNo || 'N/A'} - ${lpo.supplierId?.supplierName || 'N/A'}`
+        }));
+      },
+      error: (error) => {
+        console.error('Error loading LPOs:', error);
+        this.toastr.error('Failed to load LPOs');
+      }
+    });
+  }
+
+  onLpoSelected(lpoId: string | string[]): void {
+    const id = Array.isArray(lpoId) ? lpoId[0] : lpoId;
+    if (!id) return;
+    this.lpoId = id;
+    this.isLoading.set(true);
+    this.loadLpo();
   }
 
   loadLpo(): void {
@@ -102,10 +132,12 @@ export class CreateGrnComponent implements OnInit {
           }
         } else {
           this.toastr.error('LPO not found');
-          if (this.purchaseId) {
-            this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
-          } else {
-            this.router.navigate(['/purchase/approves']);
+          if (this.isLpoPreselected()) {
+            if (this.purchaseId) {
+              this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
+            } else {
+              this.router.navigate(['/purchase/approves']);
+            }
           }
         }
         this.isLoading.set(false);
@@ -114,10 +146,12 @@ export class CreateGrnComponent implements OnInit {
         this.toastr.error('Failed to load LPO details');
         console.error('Error loading LPO:', error);
         this.isLoading.set(false);
-        if (this.purchaseId) {
-          this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
-        } else {
-          this.router.navigate(['/purchase/approves']);
+        if (this.isLpoPreselected()) {
+          if (this.purchaseId) {
+            this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
+          } else {
+            this.router.navigate(['/purchase/approves']);
+          }
         }
       }
     });
@@ -427,6 +461,92 @@ export class CreateGrnComponent implements OnInit {
     return this.grnForm.controls;
   }
 
+  openDeliveryNoteUpload(): void {
+    const modalData: FileUploadModalData = {
+      title: 'Upload Supplier Delivery Note',
+      allowMultiple: true,
+      acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx',
+      maxFileSize: 10 * 1024 * 1024,
+      showActions: {
+        upload: true,
+        download: false,
+        view: false,
+        delete: true
+      }
+    };
+
+    const dialogRef = this.dialog.open(FileUploadModalComponent, {
+      data: modalData,
+      width: '800px',
+      maxHeight: '90vh'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.action === 'save') {
+        this.deliveryNoteFiles = result.files
+          .filter((file: any) => file.file)
+          .map((file: any) => file.file);
+      }
+    });
+  }
+
+  uploadDeliveryNoteFiles(grnId: string): void {
+    if (this.deliveryNoteFiles.length === 0) return;
+
+    const formData = new FormData();
+    this.deliveryNoteFiles.forEach(file => formData.append('files', file));
+
+    this.grnService.updateSupplierDeliveryNotes(grnId, formData).subscribe({
+      error: (error) => {
+        console.error('Error uploading delivery note:', error);
+        this.toastr.error('GRN saved, but failed to upload delivery note');
+      }
+    });
+  }
+
+  openInvoiceUpload(): void {
+    const modalData: FileUploadModalData = {
+      title: 'Upload Supplier Invoice',
+      allowMultiple: true,
+      acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx',
+      maxFileSize: 10 * 1024 * 1024,
+      showActions: {
+        upload: true,
+        download: false,
+        view: false,
+        delete: true
+      }
+    };
+
+    const dialogRef = this.dialog.open(FileUploadModalComponent, {
+      data: modalData,
+      width: '800px',
+      maxHeight: '90vh'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.action === 'save') {
+        this.invoiceFiles = result.files
+          .filter((file: any) => file.file)
+          .map((file: any) => file.file);
+      }
+    });
+  }
+
+  uploadInvoiceFiles(grnId: string): void {
+    if (this.invoiceFiles.length === 0) return;
+
+    const formData = new FormData();
+    this.invoiceFiles.forEach(file => formData.append('files', file));
+
+    this.grnService.updateSupplierInvoices(grnId, formData).subscribe({
+      error: (error) => {
+        console.error('Error uploading invoice:', error);
+        this.toastr.error('GRN saved, but failed to upload invoice');
+      }
+    });
+  }
+
   onSave(): void {
     if (this.isFormDisabled()) {
       this.toastr.warning('All quantities have been fully received. Cannot create new GRN.');
@@ -488,6 +608,8 @@ export class CreateGrnComponent implements OnInit {
           }
           const createdGrnId = response.data?._id;
           if (createdGrnId) {
+            this.uploadDeliveryNoteFiles(createdGrnId);
+            this.uploadInvoiceFiles(createdGrnId);
             this.router.navigate(['/grn/view-grn', createdGrnId]);
           } else if (this.purchaseId) {
             this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
@@ -508,6 +630,10 @@ export class CreateGrnComponent implements OnInit {
   }
 
   onDiscard(): void {
+    if (!this.isLpoPreselected()) {
+      this.router.navigate(['/grn/grn-list']);
+      return;
+    }
     if (this.purchaseId) {
       this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
     } else {

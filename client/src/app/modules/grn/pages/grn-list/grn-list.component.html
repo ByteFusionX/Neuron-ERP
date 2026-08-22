@@ -12,4 +12,10 @@
 (search)="onSearch($event)"
 [title]="'GRN List'"
 >
+  <ng-template #sideColumn>
+    <app-btn theme="primary" routerLink="/grn/create-grn">
+      <ng-icon name="heroPlus" class="mr-1"></ng-icon>
+      Create GRN
+    </app-btn>
+  </ng-template>
 </data-table>
