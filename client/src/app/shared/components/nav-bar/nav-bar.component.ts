@@ -14,6 +14,7 @@ import { TextNotification } from '../../interfaces/notification.interface';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { ButtonComponent } from '../button/button.component';
 import { MsalService } from '@azure/msal-angular';
+import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
 
 @Component({
     selector: 'app-nav-bar',
@@ -39,10 +40,12 @@ export class NavBarComponent {
     private _notificationService: NotificationService,
     private msalService: MsalService,
     private dialog: MatDialog,
-    private bugReportScreenshotService: BugReportScreenshotService
+    private bugReportScreenshotService: BugReportScreenshotService,
+    private sidebarPrefs: SidebarPreferencesService
   ) { }
 
   ngOnInit() {
+    this.showFullBar = this.sidebarPrefs.getShowFullBar();
     this.textNotificationCount$ = this._notificationService.textNotificationsSubject$;
     this.announcementNotificationCount$ = this.textNotificationCount$.pipe(
       map((notifications) => notifications.unviewed.filter((n) => n.type === 'Announcement').length)
@@ -64,6 +67,7 @@ export class NavBarComponent {
   
   reduceSideBar() {
     this.showFullBar = !this.showFullBar
+    this.sidebarPrefs.setShowFullBar(this.showFullBar)
     this.reduce.emit(this.showFullBar)
   }
 
@@ -91,7 +95,7 @@ export class NavBarComponent {
   }
 
   onAnnouncementsClick() {
-    this._router.navigate(['/home/announcements']);
+    this._router.navigate(['/announcements']);
   }
 
   onReportBug() {

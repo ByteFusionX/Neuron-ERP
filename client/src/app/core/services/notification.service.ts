@@ -31,7 +31,7 @@ export class NotificationService {
 
         switch (type) {
             case 'Announcement':
-                return { routePath: '/home/announcements' };
+                return { routePath: '/announcements' };
             
             case 'AssignedJob':
                 return { routePath: '/assigned-jobs' };

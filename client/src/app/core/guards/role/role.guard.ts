@@ -43,7 +43,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 }
                 break;
 
-            case '/home/announcements':
+            case '/announcements':
                 if (privileges?.announcement?.viewReport == 'none') {
                     router.navigate(['/home']);
                     return false;

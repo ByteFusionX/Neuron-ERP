@@ -20,6 +20,7 @@ import { ToastrService } from 'ngx-toastr';
 import { MsalService } from '@azure/msal-angular';
 import { environment } from 'src/environments/environment';
 import { ActionTrailService } from './core/diagnostics/action-trail.service';
+import { SidebarPreferencesService } from './core/services/sidebar-preferences.service';
 
 @Component({
     selector: 'app-root',
@@ -54,11 +55,14 @@ export class AppComponent implements OnDestroy, OnInit {
     private authService: MsalService,
     private idle: Idle,
     private pushNotificationService: PushNotificationService,
-    private actionTrailService: ActionTrailService
+    private actionTrailService: ActionTrailService,
+    private sidebarPrefs: SidebarPreferencesService
   ) { }
 
 
   ngOnInit() {
+    this.reduceState = this.sidebarPrefs.getShowFullBar();
+
     this.idle.setIdle(14400); // 4 hours
     this.idle.setTimeout(5);
     this.idle.setInterrupts(DEFAULT_INTERRUPTSOURCES);
@@ -133,6 +137,7 @@ export class AppComponent implements OnDestroy, OnInit {
 
   reduceSideBar(event: boolean) {
     this.reduceState = event;
+    this.sidebarPrefs.setShowFullBar(event);
   }
 
   isLoginRoute(): boolean {

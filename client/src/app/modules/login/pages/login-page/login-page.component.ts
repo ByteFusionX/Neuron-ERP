@@ -4,7 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
-import { CreateEmployeeDialog } from 'src/app/modules/home/pages/employees/create-employee/create-employee.component';
+import { CreateEmployeeDialog } from 'src/app/modules/employees/create-employee/create-employee.component';
 import { login } from 'src/app/shared/interfaces/login';
 import { NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';

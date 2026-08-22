@@ -1,0 +1,231 @@
+<div class="  border border-white border-b-gray-300 p-3 px-6 flex justify-between">
+    <h3 class="text-md font-medium">Edit Employee</h3>
+    <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
+      <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+    </button>
+  </div>
+  
+  <form [formGroup]="employeeForm" (ngSubmit)="onSubmit()">
+    <div class="flex flex-col p-6 mx-auto max-w-3xl  text-gray-900 bg-white rounded-lg  shadow px-9">
+      <div class="w-full max-w-6xl">
+        <div class="flex flex-wrap -mx-3 mb-6">
+          <div class="w-full md:w-1/3 px-3">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="firstName">
+              First Name
+            </label>
+            <input formControlName="firstName" id="firstName" appNoLeadingSpace
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              type="text" placeholder="First Name">
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('firstName')?.hasError('required') && employeeForm.get('firstName')?.touched">
+              This field is Required
+            </div>
+          </div>
+          <div class="w-full md:w-1/3 px-3">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="lastName">
+              Last Name
+            </label>
+            <input formControlName="lastName" id="lastName" appNoLeadingSpace
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              type="text" placeholder="Last Name">
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('lastName')?.hasError('required') && employeeForm.get('lastName')?.touched">
+              This field is Required
+            </div>
+          </div>
+          <div class="w-full md:w-1/3 px-3 mb-6 md:mb-0">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="department">
+              Department
+            </label>
+            <div class="relative">
+              <select formControlName="department"
+                class="block appearance-none w-full bg-gray-200 border border-gray-200 text-gray-700 py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                id="department">
+                <option value="" disabled selected hidden>Select an option</option>
+                <option *ngFor="let department of departments$ | async" [value]="department._id">{{ department.departmentName }}
+                </option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                  <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                </svg>
+              </div>
+            </div>
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('department')?.hasError('required') && employeeForm.get('department')?.touched">
+              This field is Required
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-wrap -mx-3 mb-6">
+          <div class="w-full md:w-1/3 px-3">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="email">
+              Email
+            </label>
+            <input formControlName="email" for="email" appNoLeadingSpace
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              type="text" placeholder="Email">
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('email')?.hasError('required') && employeeForm.get('email')?.touched">
+              This field is Required
+            </div>
+            <div class="text-red-700 text-sm mt-1"
+              *ngIf="employeeForm.get('email')?.hasError('email')  && employeeForm.get('email')?.touched">
+              Invalid email format.
+            </div>
+  
+          </div>
+          <div class="w-full md:w-1/3 px-3">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="contactNo">
+              Contact No
+            </label>
+            <input formControlName="contactNo" id="contactNo" appNoLeadingSpace
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              type="text" placeholder="Contact No">
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('contactNo')?.hasError('required') && employeeForm.get('contactNo')?.touched">
+              This field is Required
+            </div>
+          </div>
+          <div class="w-full md:w-1/3 px-3">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="designation">
+              Designation
+            </label>
+            <input formControlName="designation" id="designation" appNoLeadingSpace
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              type="text" placeholder="Designation">
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('designation')?.hasError('required') && employeeForm.get('designation')?.touched">
+              This field is Required
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-wrap -mx-3 mb-6">
+        
+          <div class="w-full md:w-1/3 px-3 mb-6 md:mb-0">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="category">
+              Category
+            </label>
+            <ng-select formControlName="category" class="form" id="category" placeholder="Category">
+              <ng-option *ngFor="let category of category$ | async" [value]="category._id">
+                <div class="flex justify-between">
+                  {{category.categoryName}} - {{category.role | titlecase}}
+                  <!-- <a class="underline text-blue-600 text-sm hover:text-blue-900">edit</a> -->
+                </div>
+              </ng-option>
+              <ng-template ng-footer-tmp *ngIf="canCreateCategory">
+                <a (click)="createCategory()"
+                    class="text-violet-700 cursor-pointer  flex justify-center items-center h-full w-full">
+                    + Create Category
+                </a>
+            </ng-template>
+            </ng-select>
+          </div>
+          <div class="w-full md:w-1/3 px-3">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="dob">
+              Date Of Birth
+            </label>
+            <input dateFutureDirective formControlName="dob"
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              id="dob" type="date" placeholder="">
+            <div class="text-red-700 text-sm mt-1 absolute mb-1" *ngIf="employeeForm.get('dob')?.hasError('futureDate')">
+              Date must be in the past.
+            </div>
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('dob')?.hasError('required') && employeeForm.get('dob')?.touched">
+              This field is Required
+            </div>
+          </div>
+           <div class="w-full md:w-1/3 px-3 ">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="doj">
+              Date Of Joining
+            </label>
+            <input dateFutureDirective formControlName="dateOfJoining"
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              id="dateOfJoining" type="date" placeholder="Date Of Joining">
+            <div class="text-red-700 text-sm mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('dateOfJoining')?.hasError('futureDate')">
+              Date must be in the past.
+            </div>
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('dateOfJoining')?.hasError('required') && employeeForm.get('dateOfJoining')?.touched">
+              This field is Required
+            </div>
+          </div>
+        </div>
+        
+        <div class="flex flex-wrap  -mx-3 mb-2">
+         
+          <div class="w-full md:w-1/3 px-3 mt-2">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="reporting">
+              Reporting To
+            </label>
+            <ng-select formControlName="reportingTo" class="form" id="reporting">
+              <ng-option value="">No one</ng-option>
+              <ng-option *ngFor="let employee of employees$ | async" [value]="employee._id">{{employee.firstName+' '+employee.lastName}}
+                </ng-option>
+            </ng-select>
+            
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('reportingTo')?.hasError('required') && employeeForm.get('reportingTo')?.touched">
+              This field is Required
+            </div>
+          </div>
+          
+          <div class="w-full md:w-1/3 px-3">
+            <div class="flex justify-between items-center gap-2">
+              <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="password">
+                Password
+              </label>
+              <button *ngIf="changePasswordChoice" class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-1 px-2 rounded text-xs mb-2 whitespace-nowrap"
+                type="button" (click)="changePasswordChoiceButton()">
+                Change Password
+              </button>
+              <button *ngIf="canGeneratePassword" class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-1 px-2 rounded text-xs mb-2 whitespace-nowrap"
+                type="button" (click)="generateRandomPassword()">
+                Generate Password
+              </button>
+            </div>
+            <div
+              class="flex justify-center items-center border border-gray-200  w-full bg-gray-200 text-gray-700  rounded leading-tight ">
+              <input formControlName="password" id="password" appNoLeadingSpace
+                class="appearance-none block py-3 px-4  bg-gray-200 w-10/12 focus:outline-none focus:bg-white focus:border-gray-500"
+                [type]="passwordType" placeholder="*********" >
+              <button *ngIf="canGeneratePassword" class="p-2 hover:bg-gray-300 rounded-full w-8 h-8 mx-1" type="button" (click)="passwordShow()">
+  
+                <ng-icon [name]="showIcon" class="text-black"></ng-icon>
+              </button>
+            </div>
+            <div class="text-red-700 text-xs mt-1 absolute mb-1"
+              *ngIf="employeeForm.get('password')?.hasError('required') && employeeForm.get('password')?.touched">
+              This field is Required
+            </div>
+            <div class="text-red-700 text-xs mt-1  "
+              *ngIf="employeeForm.get('password')?.hasError('pattern') && employeeForm.get('password')?.touched">
+              Password should min 8 char and include min 1 char,number,symbol
+            </div>
+  
+          </div>
+          
+  
+        </div>
+
+       
+      </div>
+    </div>
+  
+  
+    <div class="  border border-white border-t-gray-300 p-3 px-6 flex justify-end gap-2">
+      <button type="button" (click)="onClose()"  type="button"
+        class="bg-violet-200 hover:bg-violet-300 text-black font-medium py-2 px-4 rounded text-sm">
+        Cancel
+      </button>
+      <button type="submit"
+      
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm  flex justify-center items-center gap-2 disabled:bg-violet-400 disabled:cursor-not-allowed">
+        <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
+  
+        Update
+      </button>
+    </div>
+  </form>

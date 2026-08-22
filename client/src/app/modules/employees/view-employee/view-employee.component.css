@@ -1,0 +1,7 @@
+.center-content {
+    display: table-cell;
+    text-align: center;  /* Centers horizontally */
+    vertical-align: middle;  /* Centers vertically */
+    height: 100%; /* Ensure the td takes full height */
+  }
+  

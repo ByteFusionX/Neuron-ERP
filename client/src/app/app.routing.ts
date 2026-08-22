@@ -3,10 +3,10 @@ import { RouterModule, Routes } from '@angular/router';
 import { LoginGuard } from './core/guards/login/login.guard';
 import { AuthGuard } from './core/guards/auth/auth.guard';
 import { RoleGuard } from './core/guards/role/role.guard';
-import { AnnouncementsComponent } from './modules/home/pages/announcements/announcements.component';
-import { ViewEmployeeComponent } from './modules/home/pages/employees/view-employee/view-employee.component';
-import { EmployeesComponent } from './modules/home/pages/employees/employees.component';
-import { DashboardComponent } from './modules/home/pages/dashboard/dashboard.component';
+import { AnnouncementsComponent } from './modules/announcements/announcements.component';
+import { ViewEmployeeComponent } from './modules/employees/view-employee/view-employee.component';
+import { EmployeesComponent } from './modules/employees/employees.component';
+import { HomeLandingComponent } from './modules/home/pages/home-landing/home-landing.component';
 import { CustomersListComponent } from './modules/customers/pages/customers-list/customers-list.component';
 import { CreateCustomerDialog } from './modules/customers/pages/create-customer/create-customer.component';
 import { CustomerViewComponent } from './modules/customers/pages/customer-view/customer-view.component';
@@ -77,9 +77,18 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/home/home.component').then((c) => c.HomeComponent),
     children: [
-      { path: '', component: DashboardComponent },
-      { path: 'announcements', canActivate: [RoleGuard], component: AnnouncementsComponent },
+      { path: '', component: HomeLandingComponent },
     ],
+  },
+  {
+    path: 'dashboard',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/dashboard/dashboard.component').then((c) => c.DashboardComponent),
+  },
+  {
+    path: 'announcements',
+    canActivate: [AuthGuard, RoleGuard],
+    component: AnnouncementsComponent,
   },
   {
     path: 'employees',
@@ -87,7 +96,7 @@ export const routes: Routes = [
     children: [
       { path: '', canActivate: [RoleGuard], component: EmployeesComponent },
       { path: 'view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
-      { path: 'category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
+      { path: 'category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
     ],
   },
   {
@@ -168,7 +177,7 @@ export const routes: Routes = [
   {
     path: 'settings/category/create',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent)
+    loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent)
   },
   {
     path: 'settings/category/edit/:id',
