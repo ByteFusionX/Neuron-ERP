@@ -95,7 +95,8 @@ import {
   heroTableCells,
   heroLockClosed,
   heroDocumentArrowDown,
-  heroExclamationTriangle
+  heroExclamationTriangle,
+  heroMegaphone
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -198,7 +199,8 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroTableCells,
       heroLockClosed,
       heroDocumentArrowDown,
-      heroExclamationTriangle
+      heroExclamationTriangle,
+      heroMegaphone
     }),
   ],
   exports: [NgIconsModule]

@@ -170,7 +170,7 @@ export class CreateCategoryComponent implements OnInit {
       if (currentUrl.includes('/settings')) {
         this.router.navigate(['/settings']);
       } else {
-        this.router.navigate(['/home/employees']);
+        this.router.navigate(['/employees']);
       }
     }
   }
@@ -301,7 +301,7 @@ export class CreateCategoryComponent implements OnInit {
             if (currentUrl.includes('/settings')) {
               this.router.navigate(['/settings']);
             } else {
-              this.router.navigate(['/home/employees']);
+              this.router.navigate(['/employees']);
             }
           }
         },

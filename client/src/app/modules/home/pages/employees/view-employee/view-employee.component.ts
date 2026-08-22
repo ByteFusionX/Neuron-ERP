@@ -94,7 +94,7 @@ export class ViewEmployeeComponent {
   }
 
   private navigateToEmployeeList(): void {
-    this.router.navigateByUrl('/home/employees');
+    this.router.navigateByUrl('/employees');
   }
 
   private updateTargetTable(employeeData: getEmployeeDetails): void {

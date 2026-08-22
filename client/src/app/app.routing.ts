@@ -78,10 +78,16 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/home/home.component').then((c) => c.HomeComponent),
     children: [
       { path: '', component: DashboardComponent },
-      { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
-      { path: 'employees/view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
-      { path: 'employees/category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
       { path: 'announcements', canActivate: [RoleGuard], component: AnnouncementsComponent },
+    ],
+  },
+  {
+    path: 'employees',
+    canActivate: [AuthGuard],
+    children: [
+      { path: '', canActivate: [RoleGuard], component: EmployeesComponent },
+      { path: 'view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
+      { path: 'category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/home/pages/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
     ],
   },
   {

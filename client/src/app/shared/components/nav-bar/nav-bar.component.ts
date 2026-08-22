@@ -7,7 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { ReportBugComponent } from '../report-bug/report-bug.component';
 import { BugReportScreenshotService } from 'src/app/core/diagnostics/bug-report-screenshot.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { getEmployee } from '../../interfaces/employee.interface';
 import { Router, RouterModule } from '@angular/router';
 import { TextNotification } from '../../interfaces/notification.interface';
@@ -23,6 +23,7 @@ import { MsalService } from '@azure/msal-angular';
 })
 export class NavBarComponent {
   textNotificationCount$!: Observable<{viewed:TextNotification[],unviewed:TextNotification[]}>;
+  announcementNotificationCount$!: Observable<number>;
   @Output() reduce = new EventEmitter<boolean>()
   showFullBar: boolean = true
   menuState: boolean = false
@@ -43,6 +44,9 @@ export class NavBarComponent {
 
   ngOnInit() {
     this.textNotificationCount$ = this._notificationService.textNotificationsSubject$;
+    this.announcementNotificationCount$ = this.textNotificationCount$.pipe(
+      map((notifications) => notifications.unviewed.filter((n) => n.type === 'Announcement').length)
+    );
     this.getEmployeeData()
   }
 
@@ -84,6 +88,10 @@ export class NavBarComponent {
 
   onBellClick() {
     this.toggleDrawer.emit();
+  }
+
+  onAnnouncementsClick() {
+    this._router.navigate(['/home/announcements']);
   }
 
   onReportBug() {

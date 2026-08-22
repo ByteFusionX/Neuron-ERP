@@ -122,7 +122,7 @@ export class CreateEmployeeDialog implements OnInit {
   }
 
   createCategory() {
-    const url = this.router.serializeUrl(this.router.createUrlTree(['/home/employees/category/create']));
+    const url = this.router.serializeUrl(this.router.createUrlTree(['/employees/category/create']));
     const newWindow = window.open(url, '_blank');
     
     if (newWindow) {

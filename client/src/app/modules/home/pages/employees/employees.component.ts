@@ -208,7 +208,7 @@ export class EmployeesComponent {
     const navigationExtras: NavigationExtras = {
       state: data
     };
-    this._router.navigate(['/home', 'employees', 'view', data.employeeId], navigationExtras);
+    this._router.navigate(['/employees', 'view', data.employeeId], navigationExtras);
   }
 
   checkPermission() {

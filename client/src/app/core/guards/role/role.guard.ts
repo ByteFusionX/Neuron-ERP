@@ -36,7 +36,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
         const url = state.url;
 
         switch (url) {
-            case '/home/employees':
+            case '/employees':
                 if (privileges?.employee?.viewReport == 'none') {
                     router.navigate(['/home']);
                     return false;
