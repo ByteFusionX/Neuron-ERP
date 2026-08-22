@@ -17,6 +17,8 @@ if (isConfigured) {
         console.error('Invalid VAPID configuration, web push disabled:', error);
         isConfigured = false;
     }
+} else {
+    console.warn('VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set — web push notifications are disabled.');
 }
 
 export interface WebPushPayload {
