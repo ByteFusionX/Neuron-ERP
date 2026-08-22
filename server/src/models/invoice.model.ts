@@ -34,6 +34,9 @@ const invoiceSchema = new Schema({
     cancellationReason: { type: String },
     cancelledBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     cancelledAt: { type: Date },
+    rejectionReason: { type: String },
+    rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    rejectedAt: { type: Date },
     reissuedInvoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' }, // To track which invoice replaced this one
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     isDeleted: { type: Boolean, default: false }

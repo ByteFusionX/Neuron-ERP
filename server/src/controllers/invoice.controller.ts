@@ -227,6 +227,13 @@ export const updateInvoice = async (req: Request, res: Response) => {
             delete updateData.status;
         }
 
+        if (updateData?.status === 'Rejected by customer') {
+            return res.status(400).json({
+                success: false,
+                message: 'Use the dedicated reject endpoint to mark an invoice as rejected by customer'
+            });
+        }
+
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ success: false, message: 'Invalid invoice ID' });
         }
@@ -370,6 +377,57 @@ export const cancelInvoice = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error cancelling invoice:', error);
         res.status(500).json({ success: false, message: 'Failed to cancel invoice' });
+    }
+};
+
+export const rejectInvoiceByCustomer = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Invalid invoice ID' });
+        }
+
+        const token = req.user;
+        const employee = await getEmployeeData(token);
+
+        if (!employee) {
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const invoice = await Invoice.findById(id);
+
+        if (!invoice || invoice.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Invoice not found' });
+        }
+
+        if (invoice.status === 'Cancelled' || invoice.status === 'Reissued') {
+            return res.status(400).json({
+                success: false,
+                message: `Invoice cannot be rejected while in '${invoice.status}' status`
+            });
+        }
+
+        if (invoice.status === 'Rejected by customer') {
+            return res.status(400).json({ success: false, message: 'Invoice is already rejected by customer' });
+        }
+
+        invoice.status = 'Rejected by customer';
+        invoice.rejectionReason = reason || '';
+        invoice.rejectedBy = new mongoose.Types.ObjectId(employee._id);
+        invoice.rejectedAt = new Date();
+
+        await invoice.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Invoice marked as rejected by customer',
+            data: invoice
+        });
+    } catch (error) {
+        console.error('Error rejecting invoice:', error);
+        res.status(500).json({ success: false, message: 'Failed to reject invoice' });
     }
 };
 

@@ -368,6 +368,10 @@ export class InvoiceService {
         return this.http.post<any>(`${this.api}/invoice/${id}/cancel-reissue`, data, { context: context() });
     }
 
+    rejectInvoiceByCustomer(id: string, data: { reason: string }): Observable<any> {
+        return this.http.patch<any>(`${this.api}/invoice/${id}/reject`, data, { context: context() });
+    }
+
     generateInvoiceNumber(): Observable<{ success: boolean, invoiceNo: string }> {
         return this.http.get<{ success: boolean, invoiceNo: string }>(`${this.api}/invoice/generate-number`, { context: context() });
     }

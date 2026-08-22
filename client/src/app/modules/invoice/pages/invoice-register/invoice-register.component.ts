@@ -337,6 +337,20 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
         this.notificationService.warning('Status cannot be changed for cancelled or reissued invoices');
         return;
       }
+
+      if (event.newValue === 'Rejected by customer') {
+        this.invoiceService.rejectInvoiceByCustomer(invoice._id, { reason: '' }).subscribe({
+          next: () => {
+            this.notificationService.success('Invoice marked as rejected by customer');
+            this.loadData();
+          },
+          error: () => {
+            this.notificationService.error('Failed to reject invoice');
+          }
+        });
+        return;
+      }
+
       update.status = event.newValue;
     } else if (event.column === 'paymentStatus') {
       update.paymentStatus = event.newValue;
