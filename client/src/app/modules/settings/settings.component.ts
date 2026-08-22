@@ -91,24 +91,34 @@ export class SettingsComponnet {
 
         if (this.privileges?.portalManagement?.companyTarget) {
           this.subscriptions.add(
-            this._profileService.getCompanyTargets().subscribe((data) => {
-              if (data) {
-                this.compnayTargetDataSource.data = this.expandData(data.targets)
-                this.compnayTargetDataSource._updateChangeSubscription()
-                this.isTargetEmpty = false;
-              } else {
-                this.isTargetEmpty = true;
+            this._profileService.getCompanyTargets().subscribe({
+              next: (data) => {
+                if (data) {
+                  this.compnayTargetDataSource.data = this.expandData(data.targets)
+                  this.compnayTargetDataSource._updateChangeSubscription()
+                  this.isTargetEmpty = false;
+                } else {
+                  this.isTargetEmpty = true;
+                }
+                this.isTargetLoading = false;
+              },
+              error: () => {
+                this.isTargetLoading = false;
               }
-              this.isTargetLoading = false;
             })
           )
         }
 
         if (this.privileges?.portalManagement?.department) {
           this.subscriptions.add(
-            this._profileService.getDepartments().subscribe((data) => {
-              if (data) {
-                this.departmentDataSource.data = data
+            this._profileService.getDepartments().subscribe({
+              next: (data) => {
+                if (data) {
+                  this.departmentDataSource.data = data
+                  this.isDepartmentLoading = false
+                }
+              },
+              error: () => {
                 this.isDepartmentLoading = false
               }
             })
@@ -117,9 +127,14 @@ export class SettingsComponnet {
 
         if (this.privileges?.portalManagement?.department) {
           this.subscriptions.add(
-            this._profileService.getInternalDepartments().subscribe((data) => {
-              if (data) {
-                this.internalDepartmentDataSource.data = data
+            this._profileService.getInternalDepartments().subscribe({
+              next: (data) => {
+                if (data) {
+                  this.internalDepartmentDataSource.data = data
+                  this.isInternalDepartmentLoading = false
+                }
+              },
+              error: () => {
                 this.isInternalDepartmentLoading = false
               }
             })
@@ -129,9 +144,14 @@ export class SettingsComponnet {
 
         if (this.privileges?.portalManagement?.department) {
           this.subscriptions.add(
-            this._profileService.getCustomerDepartments().subscribe((data) => {
-              if (data) {
-                this.customerDepartmentDataSource.data = data
+            this._profileService.getCustomerDepartments().subscribe({
+              next: (data) => {
+                if (data) {
+                  this.customerDepartmentDataSource.data = data
+                  this.isCustomerDepartmentLoading = false
+                }
+              },
+              error: () => {
                 this.isCustomerDepartmentLoading = false
               }
             })
@@ -140,9 +160,14 @@ export class SettingsComponnet {
 
         if(this.privileges?.portalManagement?.customerType){
           this.subscriptions.add(
-            this._profileService.getCustomerTypes().subscribe((data) => {
-              if(data) {
-                this.customerTypeDataSource.data = data
+            this._profileService.getCustomerTypes().subscribe({
+              next: (data) => {
+                if(data) {
+                  this.customerTypeDataSource.data = data
+                  this.isCustomerTypeLoading = false
+                }
+              },
+              error: () => {
                 this.isCustomerTypeLoading = false
               }
             })
@@ -151,13 +176,18 @@ export class SettingsComponnet {
 
         if (this.privileges?.portalManagement?.notesAndTerms) {
           this.subscriptions.add(
-            this._profileService.getNotes().subscribe((data) => {
-              if (data) {
-                this.cstcDataSource.data = [data]
-              }else {
-                this.cstcDataSource.data = []
+            this._profileService.getNotes().subscribe({
+              next: (data) => {
+                if (data) {
+                  this.cstcDataSource.data = [data]
+                }else {
+                  this.cstcDataSource.data = []
+                }
+                this.isNotesLoading = false
+              },
+              error: () => {
+                this.isNotesLoading = false
               }
-              this.isNotesLoading = false
             })
           )
         }
@@ -165,9 +195,14 @@ export class SettingsComponnet {
         if (employee?.category.role == 'superAdmin') {
           this.categorySection = true
           this.subscriptions.add(
-            this._employeeService.getCategory().subscribe((data) => {
-              if (data) {
-                this.categoryDataSource.data = data
+            this._employeeService.getCategory().subscribe({
+              next: (data) => {
+                if (data) {
+                  this.categoryDataSource.data = data
+                  this.isCategoryLoading = false
+                }
+              },
+              error: () => {
                 this.isCategoryLoading = false
               }
             })

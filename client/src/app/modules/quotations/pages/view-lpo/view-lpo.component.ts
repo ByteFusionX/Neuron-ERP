@@ -95,10 +95,15 @@ export class ViewLpoComponent {
       for (let i = 0; i < files.length; i++) {
         formData.append('files', files[i] as Blob)
       }
-      this._quotationService.uploadLpo(formData).subscribe((quote: Quotatation) => {
-        if (quote) {
+      this._quotationService.uploadLpo(formData).subscribe({
+        next: (quote: Quotatation) => {
+          if (quote) {
+            this.isUploading = false
+            this.data.lpoFiles = quote.lpoFiles
+          }
+        },
+        error: () => {
           this.isUploading = false
-          this.data.lpoFiles = quote.lpoFiles
         }
       })
     }

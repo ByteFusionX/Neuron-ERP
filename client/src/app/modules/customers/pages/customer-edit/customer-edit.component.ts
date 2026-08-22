@@ -163,13 +163,18 @@ export class CustomerEditComponent {
       const customer = this.customerForm.value
       customer.id = this.customerData._id
 
-      this._customerService.editCustomer(customer).subscribe((res: any) => {
-        if (res.companyExist) {
-          this.customerExist = true
+      this._customerService.editCustomer(customer).subscribe({
+        next: (res: any) => {
+          if (res.companyExist) {
+            this.customerExist = true
+            this.isSaving = false;
+          } else {
+            this.toastr.success('Customer Updated Succesfully');
+            this._router.navigate(['/customers'])
+          }
+        },
+        error: () => {
           this.isSaving = false;
-        } else {
-          this.toastr.success('Customer Updated Succesfully');
-          this._router.navigate(['/customers'])
         }
       })
     } else {

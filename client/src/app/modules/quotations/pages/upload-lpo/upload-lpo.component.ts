@@ -59,12 +59,16 @@ export class UploadLpoComponent {
       for (let i = 0; i < this.selectedFiles.length; i++) {
         formData.append('files', this.selectedFiles[i] as Blob)
       }
-      this._quoationService.uploadLpo(formData).subscribe((quote: Quotatation) => {
-        if (quote) {
+      this._quoationService.uploadLpo(formData).subscribe({
+        next: (quote: Quotatation) => {
+          if (quote) {
+            this.isSaving = false;
+            this.dialogRef.close(quote)
+          }
+        },
+        error: () => {
           this.isSaving = false;
-          this.dialogRef.close(quote)
         }
-
       })
 
     } else {

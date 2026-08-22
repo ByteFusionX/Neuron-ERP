@@ -29,11 +29,16 @@ export class RecycleComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.subscriptions.add(
-      this.recycleServices.fetchTrash().subscribe((data) => {
-        if (data) {
+      this.recycleServices.fetchTrash().subscribe({
+        next: (data) => {
+          if (data) {
+            this.isLoading = false
+            this.dataSource.data = data;
+            this.isEmptyCheck()
+          }
+        },
+        error: () => {
           this.isLoading = false
-          this.dataSource.data = data;
-          this.isEmptyCheck()
         }
       })
     )

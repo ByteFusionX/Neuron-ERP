@@ -155,13 +155,18 @@ export class CreateCustomerDialog {
     this.isSubmitted = true;
     this.isSaving = true;
     if (this.customerForm.valid) {
-      this._customerService.createCustomer(this.customerForm.value).subscribe((res: any) => {
-        if (res.companyExist) {
-          this.customerExist = true
+      this._customerService.createCustomer(this.customerForm.value).subscribe({
+        next: (res: any) => {
+          if (res.companyExist) {
+            this.customerExist = true
+            this.isSaving = false;
+          } else {
+            this.toastr.success('Customer added!', 'Success')
+            this._router.navigate(['/customers']);
+          }
+        },
+        error: () => {
           this.isSaving = false;
-        } else {
-          this.toastr.success('Customer added!', 'Success')
-          this._router.navigate(['/customers']);
         }
       })
     } else {
