@@ -1,0 +1,16 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background-color: #f9fafb;
+  z-index: 10;
+}

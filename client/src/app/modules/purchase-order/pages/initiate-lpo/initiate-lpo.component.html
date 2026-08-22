@@ -45,10 +45,11 @@
                             <th class="px-4 py-2 border">Approved Vendor</th>
                             <th class="px-4 py-2 border">ETA Terms</th>
                             <th class="px-4 py-2 border">Payment Terms</th>
+                            <th class="px-4 py-2 border text-center">Issue History</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <ng-container *ngFor="let item of selectedComparison(purchase.items); let i = index;">
+                        <ng-container *ngFor="let item of comparisonItems; let i = index;">
                             <tr class="border-b">
                                 <td class="px-4 py-2 border">{{i+1}}</td>
                                 <td class="px-4 py-2 border">{{item.detail}}</td>
@@ -59,6 +60,15 @@
                                 <td class="px-4 py-2 border">{{item.supplierName}}</td>
                                 <td class="px-4 py-2 border">{{item.etaTerms}}</td>
                                 <td class="px-4 py-2 border">{{item.paymentTerms}}</td>
+                                <td class="px-4 py-2 border text-center">
+                                    <button type="button"
+                                        class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        [disabled]="loadingIssueHistoryFor === (item.detail + '-' + item.partNo)"
+                                        (click)="viewItemIssueHistory(item)">
+                                        <ng-icon name="heroEye" class="text-base"></ng-icon>
+                                        View
+                                    </button>
+                                </td>
                             </tr>
                         </ng-container>
                     </tbody>

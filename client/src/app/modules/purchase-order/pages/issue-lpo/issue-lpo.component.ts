@@ -63,7 +63,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   currency = signal<string>('QAR');
   canInitiateLPO = signal<boolean>(false);
   canReissueAndRevoke = signal<boolean>(false);
-  
+
   currencyOptions = [
     { label: 'QAR', value: 'QAR' },
     { label: 'USD', value: 'USD' }
@@ -596,12 +596,12 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     }
 
     this.isCreatingPO.set(true);
-    
+
     const formData = this.poForm.value;
     const subtotal = this.getSubTotal();
     const discount = formData.discount || 0;
     const totalLpoValue = subtotal - discount;
-    
+
     const purchaseOrderData = {
       poNo: this.generatedPONumber(),
       poStatus: 'Pending for Approval',

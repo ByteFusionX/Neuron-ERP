@@ -1,0 +1,64 @@
+<app-modal-layout
+  [title]="'Item Issue History'"
+  [subtitle]="data.itemDetail"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-5 flex flex-col"
+  contentMaxHeight="85vh">
+  <div class="flex-1 overflow-hidden flex flex-col gap-4">
+    <div class="relative overflow-x-auto">
+      <table class="w-full text-sm text-left border">
+        <tbody>
+          <tr class="border-b">
+            <td class="px-3 py-2 border font-medium bg-gray-50 w-1/4">Part No.</td>
+            <td class="px-3 py-2 border">{{ data.partNo || '-' }}</td>
+            <td class="px-3 py-2 border font-medium bg-gray-50 w-1/4">Ordered Qty</td>
+            <td class="px-3 py-2 border">{{ data.orderedQty }}</td>
+          </tr>
+          <tr class="border-b">
+            <td class="px-3 py-2 border font-medium bg-gray-50">Issued Qty</td>
+            <td class="px-3 py-2 border">{{ totalIssuedQty }}</td>
+            <td class="px-3 py-2 border font-medium bg-gray-50">Pending Qty</td>
+            <td class="px-3 py-2 border">{{ pendingQty }}</td>
+          </tr>
+          <tr>
+            <td class="px-3 py-2 border font-medium bg-gray-50">Balance Qty</td>
+            <td class="px-3 py-2 border" colspan="3">{{ balanceQty }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
+      <table class="w-full text-sm text-left">
+        <thead class="bg-gray-50 sticky top-0 z-10">
+          <tr>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">GRN No</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">Date</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">LPO No</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Received Qty</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Accepted Qty</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Rejected Qty</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          @if (data.issues.length === 0) {
+            <tr>
+              <td colspan="6" class="px-4 py-6 text-center text-gray-500">No issues recorded for this item yet.</td>
+            </tr>
+          }
+          @for (issue of data.issues; track issue.grnNo + issue.grnDate) {
+            <tr>
+              <td class="px-4 py-3 border-b font-medium text-violet-600">{{ issue.grnNo || '-' }}</td>
+              <td class="px-4 py-3 border-b text-gray-700">{{ formatDate(issue.grnDate) }}</td>
+              <td class="px-4 py-3 border-b text-gray-700">{{ issue.poNo || '-' }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ issue.receivedQty }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ issue.acceptedQty }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ issue.rejectedQty }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</app-modal-layout>
