@@ -201,7 +201,8 @@
                         Status </th>
                     <td mat-cell *matCellDef="let element;let i= index" class="hover:bg-white"
                         (click)="preventClick($event)">
-                        <div (click)="onStatus($event,element.status)" *ngIf="!element.lpoFiles.length || isSuperAdmin"
+                        <div (click)="onStatus($event,element.status)"
+                            *ngIf="element.status !== 'Expired' && (!element.lpoFiles.length || isSuperAdmin)"
                             class="flex items-center cursor-pointer border border-gray/60 rounded-[6px] px-[14px] py-1 max-w-fit hover:bg-white"
                             [matMenuTriggerFor]="beforeMenu" mat-button>
                             <p class="mx-2 text-sm whitespace-nowrap">{{element.status}}</p>
@@ -211,7 +212,7 @@
                         </div>
                         <mat-menu #beforeMenu="matMenu" class="mt-2 h-auto mat-elevation-z0 border">
                             <div class="">
-                                <div *ngFor="let status of quoteStatuses">
+                                <div *ngFor="let status of selectableQuoteStatuses">
                                     <p class="p-2 hover:bg-violet-200 cursor-pointer   px-[12px]  text-dark  text-[15px] "
                                         *ngIf="status !== element.status" (click)="updateStatus(i,element._id,status)">
                                         {{status}}</p>
@@ -220,7 +221,12 @@
                             </div>
                         </mat-menu>
                         <div class="w-full flex justify-center items-center"
-                            *ngIf="element.lpoFiles.length && !isSuperAdmin">
+                            *ngIf="element.status === 'Expired'">
+                            <p class="w-fit text-center bg-gray-200 rounded-full px-5 text-gray-700 py-1">
+                                Expired</p>
+                        </div>
+                        <div class="w-full flex justify-center items-center"
+                            *ngIf="element.status !== 'Expired' && element.lpoFiles.length && !isSuperAdmin">
                             <p *ngIf="element.status === 'Won'"
                                 class="w-fit text-center bg-green-100 rounded-full px-5 text-green-600  py-1">
                                 {{element.status}}</p>
@@ -281,37 +287,39 @@
                     <td mat-cell *matCellDef="let element; let i=index" class="hover:bg-white"
                         (click)="preventClick($event)">
                         <div class="flex justify-end items-center gap-2">
-                            <div (click)="onClickLpo(element,$event)"
-                                *ngIf="element.status == 'Won' && !element?.lpoFiles?.length " matTooltip="Upload Lpo"
-                                matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                                class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium">
-                                <ng-icon name="heroDocumentArrowUp"></ng-icon>
-                            </div>
-                            <div (click)="onViewLpo(element,$event,i)"
-                                *ngIf="element.status == 'Won' && element.lpoFiles.length " matTooltip="View Lpo"
-                                matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                                class="cursor-pointer w-8 h-8 rounded-full  border border-gray-300 hover:border-gray-500 flex justify-center items-center">
-                                <ng-icon name="heroEye" class="text-black"></ng-icon>
-                            </div>
-                            <div (click)="onPreviewDeal(false, element, $event , i)"
-                                *ngIf="element.status == 'Won' && element.lpoFiles.length && element.dealData && element.dealData._id"
-                                matTooltip="Deal Status" matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                                class="cursor-pointer w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center relative">
-                                <ng-icon name="heroClipboardDocumentCheck" class="text-black"></ng-icon>
-                                <div *ngIf="element.dealData.seenedBySalsePerson === false && element.createdBy._id == userId"
-                                    class="w-2.5 h-2.5 bg-orange-500 rounded-full absolute -top-1 -right-1 border border-white">
+                            <ng-container *ngIf="element.status !== 'Expired'">
+                                <div (click)="onClickLpo(element,$event)"
+                                    *ngIf="element.status == 'Won' && !element?.lpoFiles?.length " matTooltip="Upload Lpo"
+                                    matTooltipPosition="above" matTooltipClass="mat-tooltip"
+                                    class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium">
+                                    <ng-icon name="heroDocumentArrowUp"></ng-icon>
                                 </div>
-                            </div>
+                                <div (click)="onViewLpo(element,$event,i)"
+                                    *ngIf="element.status == 'Won' && element.lpoFiles.length " matTooltip="View Lpo"
+                                    matTooltipPosition="above" matTooltipClass="mat-tooltip"
+                                    class="cursor-pointer w-8 h-8 rounded-full  border border-gray-300 hover:border-gray-500 flex justify-center items-center">
+                                    <ng-icon name="heroEye" class="text-black"></ng-icon>
+                                </div>
+                                <div (click)="onPreviewDeal(false, element, $event , i)"
+                                    *ngIf="element.status == 'Won' && element.lpoFiles.length && element.dealData && element.dealData._id"
+                                    matTooltip="Deal Status" matTooltipPosition="above" matTooltipClass="mat-tooltip"
+                                    class="cursor-pointer w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center relative">
+                                    <ng-icon name="heroClipboardDocumentCheck" class="text-black"></ng-icon>
+                                    <div *ngIf="element.dealData.seenedBySalsePerson === false && element.createdBy._id == userId"
+                                        class="w-2.5 h-2.5 bg-orange-500 rounded-full absolute -top-1 -right-1 border border-white">
+                                    </div>
+                                </div>
 
-                            <div (click)="onConvertToDealSheet(element,$event,i)"
-                                *ngIf="element.status == 'Won' && element.lpoFiles.length && (!element.dealData || !element.dealData._id)"
-                                matTooltip="Convert To Deal Sheet" matTooltipPosition="above"
-                                matTooltipClass="mat-tooltip"
-                                class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium">
-                                <ng-icon name="heroArrowsRightLeft"></ng-icon>
-                            </div>
+                                <div (click)="onConvertToDealSheet(element,$event,i)"
+                                    *ngIf="element.status == 'Won' && element.lpoFiles.length && (!element.dealData || !element.dealData._id)"
+                                    matTooltip="Convert To Deal Sheet" matTooltipPosition="above"
+                                    matTooltipClass="mat-tooltip"
+                                    class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium">
+                                    <ng-icon name="heroArrowsRightLeft"></ng-icon>
+                                </div>
+                            </ng-container>
                             <div (click)="onQuoteEdit(element,$event)"
-                                *ngIf="!element.lpoFiles.length && !element.dealData"
+                                *ngIf="element.status === 'Expired' || (!element.lpoFiles.length && !element.dealData)"
                                 class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray/60  text-sm rounded-full  font-medium hover:bg-white">
                                 <ng-icon name="heroPencilSquare"></ng-icon>
                             </div>

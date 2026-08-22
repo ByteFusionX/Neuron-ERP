@@ -60,6 +60,7 @@ export class QuotationListComponent {
   isEventClicked: boolean = false
 
   quoteStatuses = Object.values(QuoteStatus);
+  selectableQuoteStatuses = Object.values(QuoteStatus).filter(status => status !== QuoteStatus.Expired);
   dealStatuses = ['pending','approved','rejected'];
   displayedColumns: string[] = ['date', 'quoteId', 'customerName', 'description', 'salesPerson', 'department', 'totalCost', 'status', 'dealStatus', 'events', 'action'];
 

@@ -80,6 +80,7 @@ export enum quoteStatus {
     ReadyForSubmission = 'Ready for submission',
     Won = 'Won',
     Lost = 'Lost',
+    Expired = 'Expired',
 }
 
 const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({

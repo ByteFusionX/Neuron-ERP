@@ -920,6 +920,10 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
 
         const statusCheck = await Quotation.findOne({ _id: quoteId });
 
+        if (statusCheck?.status === 'Expired') {
+            return res.status(400).json({ message: "Quote is expired (past its closing date) and can no longer change status" });
+        }
+
         type UpdateQuery = {
             $set?: { status: string; lpoFiles?: any[] };
             $unset?: { [key: string]: number };

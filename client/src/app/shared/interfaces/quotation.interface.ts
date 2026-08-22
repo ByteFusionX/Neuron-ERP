@@ -131,6 +131,7 @@ export enum QuoteStatus {
     ReadyForSubmission = 'Ready for submission',
     Won = 'Won',
     Lost = 'Lost',
+    Expired = 'Expired',
 }
 
 export interface dealData {
@@ -216,4 +217,5 @@ export const QuoteStatusColors: { [key in QuoteStatus]: string } = {
     [QuoteStatus.ReadyForSubmission]: '#FF6347', // Tomato
     [QuoteStatus.Won]: '#228B22',  // Forest Green
     [QuoteStatus.Lost]: '#FF0000', // Red
+    [QuoteStatus.Expired]: '#6B7280', // Gray
 };

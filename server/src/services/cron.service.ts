@@ -3,6 +3,7 @@ import announcementModel from "../models/announcement.model";
 import Notification from "../models/notification.model";
 import { fetchExchangeRate } from "../common/utils/util";
 import Event from '../models/events.model';
+import Quotation from '../models/quotation.model';
 import { createNotification } from '../controllers/notification.controller';
 import { Server } from "socket.io";
 const cron = require('node-cron');
@@ -96,6 +97,15 @@ const startCronJob = () => {
                 await Promise.all(anniversaryPromises);
             }
             checkTodayEventsAndSendNotifications()
+
+            await Quotation.updateMany(
+                {
+                    closingDate: { $lt: today },
+                    status: { $nin: ['Won', 'Lost', 'Expired'] },
+                    isDeleted: { $ne: true }
+                },
+                { $set: { status: 'Expired' } }
+            );
 
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
