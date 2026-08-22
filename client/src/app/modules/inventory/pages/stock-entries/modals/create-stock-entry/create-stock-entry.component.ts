@@ -247,6 +247,7 @@ export class CreateStockEntryComponent implements OnInit {
   onSubmit(): void {
     if (this.stockEntryForm.invalid) {
       this.stockEntryForm.markAllAsTouched();
+      this.toastr.error('Please fill all required fields');
       return;
     }
 
