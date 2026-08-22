@@ -35,6 +35,7 @@ export class PurchaseOrderService {
     search?: string;
     status?: string[];
     purchaseId?: string;
+    jobId?: string;
   }): Observable<any> {
     return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
   }

@@ -149,7 +149,7 @@
                     <td mat-cell *matCellDef="let element"
                         class="hover:text-purple-600 hover:font-semibold cursor-pointer" matTooltip="View Deal"
                         matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                        (click)="onViewDealSheet(element.quotation,element.salesPersonDetails[0],element.clientDetails)">
+                        (click)="onViewDealSheet(element.quotation,element.salesPersonDetails[0],element.clientDetails,element._id)">
                         {{element.quotation.dealData.dealId}} </td>
                 </ng-container>
 

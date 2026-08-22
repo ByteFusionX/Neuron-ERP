@@ -1,7 +1,7 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { dealData, priceDetails, Quotatation, QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
+import { dealData, priceDetails, Quotatation, QuoteItem, QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
 import { UpdatedealsheetComponent } from '../updatedealsheet-component/updatedealsheet-component.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ViewCommentComponent } from '../../assigned-jobs/pages/view-comment/view-comment.component';
@@ -21,6 +21,8 @@ import { ParseBracketsTextPipe } from '../../../shared/pipes/highlightParse.pipe
 import { NumberFormatterPipe } from '../../../shared/pipes/numFormatter.pipe';
 import { SupplierService } from '../../../core/services/supplier.service';
 import { Supplier } from '../../../shared/interfaces/suppliers.interface';
+import { PurchaseOrderService } from '../../../core/services/purchaseOrder/purchaseOrder.service';
+import { PurchaseOrder } from '../../../shared/interfaces/purchase.interface';
 
 
 @Component({
@@ -34,6 +36,9 @@ export class ApproveDealComponent implements OnInit {
   isApproving: boolean = false;
   suppliers: Supplier[] = [];
 
+  approvedPo: PurchaseOrder | null = null;
+  viewMode: 'deal' | 'po' = 'deal';
+
   constructor(
     public dialogRef: MatDialogRef<ApproveDealComponent>,
     private _dialog: MatDialog,
@@ -43,7 +48,8 @@ export class ApproveDealComponent implements OnInit {
     private toast: ToastrService,
     private _notificationService: NotificationService,
     private supplierService: SupplierService,
-    @Inject(MAT_DIALOG_DATA) public data: { approval: boolean, quoteData: Quotatation, quoteItems: (QuoteItem | undefined)[], priceDetails: priceDetails, quoteView: boolean }
+    private _purchaseOrderService: PurchaseOrderService,
+    @Inject(MAT_DIALOG_DATA) public data: { approval: boolean, quoteData: Quotatation, quoteItems: (QuoteItem | undefined)[], priceDetails: priceDetails, quoteView: boolean, jobId?: string }
   ) {
   }
 
@@ -52,22 +58,94 @@ export class ApproveDealComponent implements OnInit {
   ngOnInit(): void {
     console.log(this.data.quoteData);
     this.loadSuppliers();
+    this.loadApprovedPo();
     this._employeeService.employeeData$.subscribe((data) => {
       if (data?._id) {
         this.userId = data?._id;
+        this.markQuotationSeenIfCreator();
       }
     })
-    if (this.data.quoteData.dealData.seenedBySalsePerson === false) {
-      this._quoteService.markAsQuotationSeen(this.data.quoteData._id, this.userId).subscribe({
-        next: (res: any) => {
-          if (res.success) {
-          }
-        },
-        error: (error) => {
-          console.error('Error marking quotation as seen:', error);
+  }
+
+  // The PO-view tab only appears when an Approved LPO exists against this job -
+  // silently skip the lookup if we weren't given a job to check.
+  private loadApprovedPo(): void {
+    if (!this.data.jobId) return;
+
+    this._purchaseOrderService.getAllPurchaseOrders({ jobId: this.data.jobId, status: ['Approved'] }).subscribe({
+      next: (response: any) => {
+        const list = response?.data || response || [];
+        this.approvedPo = list.length ? list[0] : null;
+      },
+      error: (error) => {
+        console.error('Error loading approved purchase order:', error);
+      }
+    });
+  }
+
+  switchToPoView(): void {
+    if (this.approvedPo) this.viewMode = 'po';
+  }
+
+  switchToDealView(): void {
+    this.viewMode = 'deal';
+  }
+
+  private getPoItem(detail: QuoteItemDetail): { unitCost: number; totalCost: number } | undefined {
+    return this.approvedPo?.items?.find(i => i.detail === detail.detail);
+  }
+
+  getPoUnitCost(detail: QuoteItemDetail): number {
+    const match = this.getPoItem(detail);
+    return match ? match.unitCost : detail.unitCost;
+  }
+
+  getPoItemTotalCost(detail: QuoteItemDetail): number {
+    const match = this.getPoItem(detail);
+    return match ? match.totalCost : detail.quantity * detail.unitCost;
+  }
+
+  get poSummaryTotalCost(): number {
+    let total = 0;
+    this.data.quoteItems.forEach((item: any) => {
+      item?.itemDetails?.forEach((detail: QuoteItemDetail) => {
+        if (detail.dealSelected) {
+          total += this.getPoItemTotalCost(detail);
         }
-      })
-    }
+      });
+    });
+    return total;
+  }
+
+  get poSummaryProfit(): number {
+    return this.data.priceDetails.totalSellingPrice - this.poSummaryTotalCost;
+  }
+
+  get poSummaryPerc(): number {
+    return this.data.priceDetails.totalSellingPrice
+      ? (this.poSummaryProfit / this.data.priceDetails.totalSellingPrice) * 100
+      : 0;
+  }
+
+  // Only the salesperson who created the quotation can mark it seen - other
+  // roles (e.g. superadmin browsing all deals) can view it without this
+  // firing, since createdBy won't match them and the server would 404.
+  private markQuotationSeenIfCreator(): void {
+    if (this.data.quoteData.dealData.seenedBySalsePerson !== false) return;
+
+    const createdBy = this.data.quoteData.createdBy;
+    const creatorId = typeof createdBy === 'string' ? createdBy : createdBy?._id;
+    if (!creatorId || creatorId !== this.userId) return;
+
+    this._quoteService.markAsQuotationSeen(this.data.quoteData._id, this.userId).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+        }
+      },
+      error: (error) => {
+        console.error('Error marking quotation as seen:', error);
+      }
+    })
   }
 
   loadSuppliers() {

@@ -768,7 +768,7 @@ export const getPurchaseOrderByPurchaseId = async (req: Request, res: Response) 
 
 export const getAllPurchaseOrders = async (req: Request, res: Response) => {
   try {
-    const { page = 1, row = 10, search = "", status, purchaseId } = req.query;
+    const { page = 1, row = 10, search = "", status, purchaseId, jobId } = req.query;
     const pageNumber = Number(page);
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
@@ -792,6 +792,10 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
 
     if (purchaseId) {
       initialMatchStage.purchaseId = new mongoose.Types.ObjectId(purchaseId as string);
+    }
+
+    if (jobId) {
+      initialMatchStage.jobId = new mongoose.Types.ObjectId(jobId as string);
     }
 
 

@@ -99,7 +99,7 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
                         JobID </th>
-                    <td mat-cell *matCellDef="let element" class="text-purple-600 font-medium"> {{element.jobId}} </td>
+                    <td mat-cell *matCellDef="let element"> {{element.jobId}} </td>
                 </ng-container>
 
                 <ng-container matColumnDef="customerName">
@@ -136,7 +136,7 @@
                         class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
                         Quotations </th>
                     <td mat-cell *matCellDef="let element"
-                        class="hover:text-purple-600 hover:font-semibold cursor-pointer" matTooltip="Preview Quote"
+                        class="text-purple-600 font-medium cursor-pointer" matTooltip="Preview Quote"
                         matTooltipPosition="above" matTooltipClass="mat-tooltip"
                         (click)="onPreviewPdf(element.quotation,element.salesPersonDetails[0],element.clientDetails,element.attention)">
                         {{element.quotation.quoteId}} </td>
@@ -147,9 +147,9 @@
                         class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden ">
                         Deal Sheet </th>
                     <td mat-cell *matCellDef="let element"
-                        class="hover:text-purple-600 hover:font-semibold cursor-pointer" matTooltip="View Deal"
+                        class="text-purple-600 font-medium cursor-pointer" matTooltip="View Deal"
                         matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                        (click)="onViewDealSheet(element.quotation,element.salesPersonDetails[0],element.clientDetails)">
+                        (click)="onViewDealSheet(element.quotation,element.salesPersonDetails[0],element.clientDetails,element._id)">
                         {{element.quotation.dealData.dealId}} </td>
                 </ng-container>
 
@@ -179,13 +179,13 @@
                                     <p class="w-24 truncate ..." matTooltip="{{file.originalname}}"
                                         matTooltipPosition="above" matTooltipClass="mat-tooltip">{{file.originalname}}
                                     </p>
-                                    <button class="w-5 h-5 border rounded-full flex justify-center items-center mr-2"
+                                    <button class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center mr-2"
                                         (click)="onViewPDF(file)">
-                                        <ng-icon class="text-black" name="heroEye"></ng-icon>
+                                        <ng-icon class="text-black" name="heroEye" size="16"></ng-icon>
                                     </button>
-                                    <button class="w-5 h-5 border rounded-full flex justify-center items-center"
+                                    <button class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
                                         (click)="onDownloadClicks(file)">
-                                        <ng-icon class="text-black" name="heroInboxArrowDown"></ng-icon>
+                                        <ng-icon class="text-black" name="heroInboxArrowDown" size="16"></ng-icon>
                                     </button>
                                 </div>
                                 <div class="w-24" *ngIf="file.fileName && file.fileName === selectedFile">
@@ -203,13 +203,13 @@
                     <td mat-cell *matCellDef="let element">
                         <div class="flex items-center gap-2">
                             <span>{{element.procurementPerson ? (element.procurementPerson.firstName + ' ' + element.procurementPerson.lastName) : '-'}}</span>
-                            <button 
-                                *ngIf="element.procurementPerson && canTransferProcurementPerson"
-                                class="cursor-pointer text-center flex justify-center items-center gap-1 px-1 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-full font-medium transition-colors"
-                                (click)="onTransferProcurementPerson(element); $event.stopPropagation()" 
-                                matTooltip="Transfer Procurement Person" 
+                            <button
+                                *ngIf="element.procurementPerson && canTransferProcurementPerson && !isInProgressRoute"
+                                class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center bg-orange-600 hover:bg-orange-700 text-white transition-colors"
+                                (click)="onTransferProcurementPerson(element); $event.stopPropagation()"
+                                matTooltip="Transfer Procurement Person"
                                 matTooltipPosition="above">
-                                <ng-icon name="heroUserPlus" size="18"></ng-icon>
+                                <ng-icon name="heroUserPlus" size="16"></ng-icon>
                             </button>
                         </div>
                     </td>
@@ -229,24 +229,18 @@
                     </th>
                     <td mat-cell *matCellDef="let element" class="text-center">
                         <div class="flex justify-center items-center gap-3">
-                            <div class="inline-flex items-center gap-3 justify-center">
-                                <button class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 text-violet-600 hover:text-violet-800  text-sm rounded-full font-medium border-gray-400 border"
-                                    (click)="openJobHistory(element)" matTooltip="View Workflow Timeline" matTooltipPosition="above">
-                                    <ng-icon name="heroClock" size="18"></ng-icon>
-                                </button>
-                            </div>
-                            <div class="inline-flex items-center gap-3 justify-center">
-                                <button class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 text-red-600 hover:text-red-800  text-sm rounded-full font-medium border-gray-400 border" *ngIf="isDeleteOption"
-                                    (click)="onDeleteJob(element._id)" matTooltip="Delete Job" matTooltipPosition="above">
-                                    <ng-icon name="heroTrash" size="18"></ng-icon>
-                                </button>
-                            </div>
-                            <div class="inline-flex items-center gap-3 justify-center" *ngIf="shouldShowConvertButton(element) && canConvertToPurchase">
-                                <button class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium"
-                                    (click)="onConvertToPurchase(element._id)" matTooltip="Convert to Purchase" matTooltipPosition="above">
-                                    <ng-icon name="heroArrowUturnLeft" size="18"></ng-icon>
-                                </button>
-                            </div>
+                            <button class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center text-violet-600 hover:text-violet-800"
+                                (click)="openJobHistory(element)" matTooltip="View Workflow Timeline" matTooltipPosition="above">
+                                <ng-icon name="heroClock" size="16"></ng-icon>
+                            </button>
+                            <button class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center text-red-600 hover:text-red-800" *ngIf="isDeleteOption"
+                                (click)="onDeleteJob(element._id)" matTooltip="Delete Job" matTooltipPosition="above">
+                                <ng-icon name="heroTrash" size="16"></ng-icon>
+                            </button>
+                            <button class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center bg-violet-700 hover:bg-violet-600 text-white" *ngIf="shouldShowConvertButton(element) && canConvertToPurchase"
+                                (click)="onConvertToPurchase(element._id)" matTooltip="Convert to Purchase" matTooltipPosition="above">
+                                <ng-icon name="heroArrowUturnLeft" size="16"></ng-icon>
+                            </button>
                         </div>
                     </td>
                 </ng-container>

@@ -305,7 +305,7 @@ export class JobListComponent {
     this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
   }
 
-  onViewDealSheet(quoteData: Quotatation, salesPerson: any, customer: any) {
+  onViewDealSheet(quoteData: Quotatation, salesPerson: any, customer: any, jobId?: string) {
     quoteData.createdBy = salesPerson;
     quoteData.client = customer;
     let priceDetails = {
@@ -350,7 +350,7 @@ export class JobListComponent {
 
     this._dialog.open(ApproveDealComponent,
       {
-        data: { approval: false, quoteData, quoteItems, priceDetails },
+        data: { approval: false, quoteData, quoteItems, priceDetails, jobId },
         width: '1200x'
       });
   }

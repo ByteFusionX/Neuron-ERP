@@ -1,6 +1,18 @@
 <div>
-    <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between">
-        <h3 class="text-md font-medium">Deal Sheet</h3>
+    <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <h3 class="text-md font-medium">{{ viewMode === 'po' ? 'Purchase Order' : 'Deal Sheet' }}</h3>
+            <button *ngIf="approvedPo && viewMode === 'deal'"
+                class="border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded px-3 py-1 text-xs font-medium"
+                (click)="switchToPoView()">
+                View Purchase Order
+            </button>
+            <button *ngIf="approvedPo && viewMode === 'po'"
+                class="border border-gray-300 text-gray-700 bg-gray-50 hover:bg-gray-100 rounded px-3 py-1 text-xs font-medium"
+                (click)="switchToDealView()">
+                Back to Deal Sheet
+            </button>
+        </div>
         <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
             <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
         </button>
@@ -64,7 +76,7 @@
                     <tr>
                         <th scope="col"
                             class="px-4 py-2 border-l border-r border-t text-gray-700 text-start uppercase bg-violet-50">
-                            <div>SALES AM NAME</div>
+                            <div>SALES PERSON NAME</div>
                         </th>
                         <td class=" px-4 border text-gray-800">
                             {{ data.quoteData.createdBy.firstName + ' ' + data.quoteData.createdBy.lastName }}
@@ -99,7 +111,7 @@
                             <div>Total cost</div>
                         </th>
                         <td class=" px-4 border text-gray-800">
-                            {{ data.priceDetails.totalCost | numberFormatter }} {{ data.quoteData.currency }}
+                            {{ (viewMode === 'po' ? poSummaryTotalCost : data.priceDetails.totalCost) | numberFormatter }} {{ data.quoteData.currency }}
                         </td>
                     </tr>
                     <tr>
@@ -108,7 +120,7 @@
                             <div>Profit </div>
                         </th>
                         <td class=" px-4 border text-gray-800">
-                            {{ data.priceDetails.profit | numberFormatter }} {{ data.quoteData.currency }}
+                            {{ (viewMode === 'po' ? poSummaryProfit : data.priceDetails.profit) | numberFormatter }} {{ data.quoteData.currency }}
                         </td>
                     </tr>
                     <tr>
@@ -117,7 +129,7 @@
                             <div>%</div>
                         </th>
                         <td class=" px-4 border text-gray-800">
-                            {{ data.priceDetails.perc.toFixed(3) }}
+                            {{ (viewMode === 'po' ? poSummaryPerc : data.priceDetails.perc).toFixed(3) }}
                         </td>
                     </tr>
                 </tbody>
@@ -189,10 +201,10 @@
                                         {{ detail.unitSellingPrice * detail.quantity | numberFormatter }}
                                     </td>
                                     <td class="px-2 py-2 border text-center">
-                                        {{ detail.unitCost | numberFormatter }}
+                                        {{ (viewMode === 'po' ? getPoUnitCost(detail) : detail.unitCost) | numberFormatter }}
                                     </td>
                                     <td class="py-2 border text-center">
-                                        {{ (detail.quantity * detail.unitCost) | numberFormatter }}
+                                        {{ (viewMode === 'po' ? getPoItemTotalCost(detail) : (detail.quantity * detail.unitCost)) | numberFormatter }}
                                     </td>
                                     <td class="py-2 border text-center">
                                         <!-- Legacy supplier data -->
@@ -272,7 +284,7 @@
         </div>
     </div>
 
-    <div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2" *ngIf="data.approval">
+    <div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2" *ngIf="data.approval && viewMode === 'deal'">
         <div class="flex gap-2 ">
             <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onClose()">
                 Close
@@ -285,7 +297,7 @@
     </div>
 
     <div class="border border-white border-t-gray-300 py-3 px-6 flex justify-end gap-2"
-        *ngIf="data.quoteView && data.quoteData.dealData.status == 'rejected'">
+        *ngIf="data.quoteView && data.quoteData.dealData.status == 'rejected' && viewMode === 'deal'">
         <div class="flex gap-2 ">
             <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onClose()">
                 Close
