@@ -20,6 +20,7 @@ import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/co
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { GrnListModalComponent, GrnListModalData } from 'src/app/shared/components/grn-list-modal/grn-list-modal.component';
 import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
+import { LpoActionGates } from 'src/app/shared/utils/lpo-action-gates.util';
 
 @Component({
   selector: 'app-lpo-list',
@@ -179,7 +180,7 @@ export class LpoListComponent implements OnInit {
             tooltip: 'Send for Approval',
             action: 'sendForApproval',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-green-500 hover:border-green-700 text-green-500 text-sm rounded-full font-medium',
-            condition: (item: any) => (item.poStatus === 'Draft' || item.poStatus === 'Rejected') && this.canInitiateLPO()
+            condition: (item: any) => LpoActionGates.canSendForApproval(item.poStatus) && this.canInitiateLPO()
           },
         ]
       },
@@ -194,7 +195,7 @@ export class LpoListComponent implements OnInit {
             tooltip: 'Edit LPO',
             action: 'editLpo',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-blue-300 hover:border-blue-500 text-blue-600 text-sm rounded-full font-medium',
-            condition: (item: any) => item.poStatus === 'Draft' || item.poStatus === 'Rejected'
+            condition: (item: any) => LpoActionGates.canEdit(item.poStatus)
           },
           {
             icon: 'heroEye',
@@ -223,7 +224,7 @@ export class LpoListComponent implements OnInit {
             tooltip: 'Re Issue',
             action: 'reIssue',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-500 hover:border-orange-700 text-orange-500 text-sm rounded-full font-medium',
-            condition: (item: any) => item.poStatus !== 'Draft' && item.poStatus !== 'Rejected' && item.poStatus !== 'Approved' && item.poStatus !== 'Closed' && this.canReissueAndRevoke()
+            condition: (item: any) => LpoActionGates.canReIssue(item.poStatus) && this.canReissueAndRevoke()
           },
         ]
       },
@@ -238,7 +239,7 @@ export class LpoListComponent implements OnInit {
             tooltip: 'Revoke LPO',
             action: 'revokeLpo',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-red-500 hover:border-red-700 text-red-500 text-sm rounded-full font-medium',
-            condition: (item: any) => item.poStatus !== 'Approved' && item.poStatus !== 'Closed' && this.canReissueAndRevoke()
+            condition: (item: any) => LpoActionGates.canRevoke(item.poStatus) && this.canReissueAndRevoke()
           },
         ]
       },

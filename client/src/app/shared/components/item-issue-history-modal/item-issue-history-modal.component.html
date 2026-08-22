@@ -22,8 +22,10 @@
             <td class="px-3 py-2 border">{{ pendingQty }}</td>
           </tr>
           <tr>
+            <td class="px-3 py-2 border font-medium bg-gray-50">Delivered Qty</td>
+            <td class="px-3 py-2 border">{{ data.deliveredQty }}</td>
             <td class="px-3 py-2 border font-medium bg-gray-50">Balance Qty</td>
-            <td class="px-3 py-2 border" colspan="3">{{ balanceQty }}</td>
+            <td class="px-3 py-2 border">{{ balanceQty }}</td>
           </tr>
         </tbody>
       </table>
@@ -33,28 +35,83 @@
       <table class="w-full text-sm text-left">
         <thead class="bg-gray-50 sticky top-0 z-10">
           <tr>
-            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">GRN No</th>
-            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">Date</th>
             <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">LPO No</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">PO Date</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Issued Qty</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Status</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">GRN No</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b">GRN Date</th>
             <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Received Qty</th>
             <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Accepted Qty</th>
             <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Rejected Qty</th>
+            <th class="px-4 py-3 font-semibold text-gray-700 uppercase text-xs border-b text-center">Actions</th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          @if (data.issues.length === 0) {
+          @if (combinedRows.length === 0) {
             <tr>
-              <td colspan="6" class="px-4 py-6 text-center text-gray-500">No issues recorded for this item yet.</td>
+              <td colspan="10" class="px-4 py-6 text-center text-gray-500">No LPO has been issued for this item yet.</td>
             </tr>
           }
-          @for (issue of data.issues; track issue.grnNo + issue.grnDate) {
+          @for (row of combinedRows; track row.poNo + row.grnNo + row.grnDate) {
             <tr>
-              <td class="px-4 py-3 border-b font-medium text-violet-600">{{ issue.grnNo || '-' }}</td>
-              <td class="px-4 py-3 border-b text-gray-700">{{ formatDate(issue.grnDate) }}</td>
-              <td class="px-4 py-3 border-b text-gray-700">{{ issue.poNo || '-' }}</td>
-              <td class="px-4 py-3 border-b text-center text-gray-700">{{ issue.receivedQty }}</td>
-              <td class="px-4 py-3 border-b text-center text-gray-700">{{ issue.acceptedQty }}</td>
-              <td class="px-4 py-3 border-b text-center text-gray-700">{{ issue.rejectedQty }}</td>
+              <td class="px-4 py-3 border-b font-medium text-violet-600">{{ row.poNo || '-' }}</td>
+              <td class="px-4 py-3 border-b text-gray-700">{{ formatDate(row.poDate) }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ row.issuedQty }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ formatStatus(row.poStatus) || '-' }}</td>
+              <td class="px-4 py-3 border-b font-medium text-violet-600">{{ row.grnNo || '-' }}</td>
+              <td class="px-4 py-3 border-b text-gray-700">{{ row.grnDate ? formatDate(row.grnDate) : '-' }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ row.receivedQty ?? '-' }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ row.acceptedQty ?? '-' }}</td>
+              <td class="px-4 py-3 border-b text-center text-gray-700">{{ row.rejectedQty ?? '-' }}</td>
+              <td class="px-4 py-3 border-b text-center">
+                @if (row.isFirstForPo && hasAnyAction(row)) {
+                  <div class="flex justify-center items-center gap-1.5">
+                    @if (row.comment) {
+                      <button type="button" (click)="onViewComment(row)" title="View Comment"
+                        class="cursor-pointer flex justify-center items-center p-1.5 border border-gray-300 hover:border-gray-500 text-gray-500 rounded-full">
+                        <ng-icon name="heroChatBubbleBottomCenterText" class="text-sm"></ng-icon>
+                      </button>
+                    }
+                    @if (canSendForApproval(row)) {
+                      <button type="button" (click)="onSendForApproval(row)" title="Send for Approval"
+                        class="cursor-pointer flex justify-center items-center p-1.5 border border-green-500 hover:border-green-700 text-green-500 rounded-full">
+                        <ng-icon name="heroPaperAirplane" class="text-sm"></ng-icon>
+                      </button>
+                    }
+                    @if (canViewOrDownload(row)) {
+                      <button type="button" (click)="onViewLpo(row)" title="View LPO"
+                        class="cursor-pointer flex justify-center items-center p-1.5 border border-gray-300 hover:border-gray-500 rounded-full">
+                        <ng-icon name="heroEye" class="text-sm"></ng-icon>
+                      </button>
+                      <button type="button" (click)="onDownloadLpo(row)" title="Download LPO"
+                        class="cursor-pointer flex justify-center items-center p-1.5 border border-gray-300 hover:border-gray-500 rounded-full">
+                        <ng-icon name="heroArrowDownTray" class="text-sm"></ng-icon>
+                      </button>
+                    }
+                    @if (canEdit(row)) {
+                      <button type="button" (click)="onEditLpo(row)" title="Edit LPO"
+                        class="cursor-pointer flex justify-center items-center p-1.5 border border-blue-300 hover:border-blue-500 text-blue-600 rounded-full">
+                        <ng-icon name="heroPencil" class="text-sm"></ng-icon>
+                      </button>
+                    }
+                    @if (canReIssue(row)) {
+                      <button type="button" (click)="onReIssueLpo(row)" title="Re Issue"
+                        class="cursor-pointer flex justify-center items-center p-1.5 border border-orange-500 hover:border-orange-700 text-orange-500 rounded-full">
+                        <ng-icon name="heroPaperAirplane" class="text-sm"></ng-icon>
+                      </button>
+                    }
+                    @if (canRevoke(row)) {
+                      <button type="button" (click)="onRevokeLpo(row)" title="Revoke LPO"
+                        class="cursor-pointer flex justify-center items-center p-1.5 border border-red-500 hover:border-red-700 text-red-500 rounded-full">
+                        <ng-icon name="heroTrash" class="text-sm"></ng-icon>
+                      </button>
+                    }
+                  </div>
+                } @else if (row.isFirstForPo) {
+                  <span class="text-gray-400">-</span>
+                }
+              </td>
             </tr>
           }
         </tbody>

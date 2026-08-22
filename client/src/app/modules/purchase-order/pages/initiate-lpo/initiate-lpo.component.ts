@@ -9,10 +9,12 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
+import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
+import { DnStatus } from 'src/app/shared/interfaces/delivery-note.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { PurchaseData, QuoteItem } from 'src/app/shared/interfaces/purchase.interface';
 import { LpoListComponent } from '../lpo-list/lpo-list.component';
-import { ItemIssueHistoryModalComponent, ItemIssueEntry } from 'src/app/shared/components/item-issue-history-modal/item-issue-history-modal.component';
+import { ItemIssueHistoryModalComponent, ItemIssueEntry, LpoStatusEntry } from 'src/app/shared/components/item-issue-history-modal/item-issue-history-modal.component';
 
 @Component({
   selector: 'app-initiate-lpo',
@@ -33,6 +35,7 @@ export class InitiateLpoComponent implements OnInit {
   private supplierService = inject(SupplierService)
   private purchaseOrderService = inject(PurchaseOrderService);
   private grnService = inject(GrnService);
+  private deliveryNoteService = inject(DeliveryNoteService);
   private dialog = inject(MatDialog);
   loadingIssueHistoryFor: string | null = null;
 
@@ -46,6 +49,7 @@ export class InitiateLpoComponent implements OnInit {
   suppliersList = signal<any[]>([])
   canIssueLpo = signal<boolean>(false);
   canInitiateLPO = signal<boolean>(false);
+  canReissueAndRevoke = signal<boolean>(false);
   currency = signal<string>('');
 
   ngOnInit(): void {
@@ -69,6 +73,7 @@ export class InitiateLpoComponent implements OnInit {
     this.employeeService.employeeData$.subscribe((data) => {
       if (data?.category?.privileges) {
         this.canInitiateLPO.set(data.category.privileges.purchaseOrder?.canInitiateLPO || false);
+        this.canReissueAndRevoke.set(data.category.privileges.purchaseOrder?.canReissueAndRevoke || false);
         if (!this.canInitiateLPO()) {
           this.notificationService.warning('You do not have permission to initiate LPO');
           this.router.navigate(['/purchase/approves']);
@@ -167,6 +172,18 @@ export class InitiateLpoComponent implements OnInit {
     this.router.navigate(['/purchase/issue-lpo', this.purchaseId || 'none'])
   }
 
+  private getLpoComment(lpo: any): string {
+    if (lpo.approvedHistory && lpo.approvedHistory.length > 0) {
+      const lastApproval = lpo.approvedHistory[lpo.approvedHistory.length - 1];
+      if (lastApproval.reason) return lastApproval.reason;
+    }
+    if (lpo.rejectedHistory && lpo.rejectedHistory.length > 0) {
+      const lastRejection = lpo.rejectedHistory[lpo.rejectedHistory.length - 1];
+      if (lastRejection.reason) return lastRejection.reason;
+    }
+    return '';
+  }
+
   private matchPartNo(grnPartNo: any, itemPartNo: any): boolean {
     const formatPartNo = (partNo: any): string => {
       if (!partNo) return '';
@@ -190,9 +207,29 @@ export class InitiateLpoComponent implements OnInit {
       const lpos = lposResponse?.success ? lposResponse.data : [];
 
       const issues: ItemIssueEntry[] = [];
+      const lpoStatuses: LpoStatusEntry[] = [];
 
       await Promise.all(
         lpos.map(async (lpo: any) => {
+          // List every LPO this item was issued on, regardless of its current
+          // status (Draft through Closed), so the modal shows the full trail.
+          (lpo.items || []).forEach((lpoItem: any) => {
+            const partNoMatch = this.matchPartNo(lpoItem.partNo, item.partNo);
+            const descriptionMatch = lpoItem.detail === item.detail;
+            if (partNoMatch || descriptionMatch) {
+              lpoStatuses.push({
+                lpoId: lpo._id,
+                purchaseId: lpo.purchaseId?._id || lpo.purchaseId || this.purchaseId,
+                poNo: lpo.poNo,
+                poStatus: lpo.poStatus,
+                poDate: lpo.poDate,
+                issuedQty: lpoItem.quantity || 0,
+                comment: this.getLpoComment(lpo),
+                lpo,
+              });
+            }
+          });
+
           try {
             const grnResponse = await firstValueFrom(this.grnService.getAllGRNsByLpoId(lpo._id));
             const grns = grnResponse?.success && grnResponse?.data ? grnResponse.data : [];
@@ -221,15 +258,56 @@ export class InitiateLpoComponent implements OnInit {
         }),
       );
 
-      this.dialog.open(ItemIssueHistoryModalComponent, {
-        width: '800px',
+      // Delivery notes (Dispatch) are only linked to a Job, not to a specific
+      // LPO, so delivered/pending-delivery quantities are aggregated at the
+      // job level and matched to this item by part number / description.
+      let deliveredQty = 0;
+      const jobId = this.purchase?.jobId?._id;
+      if (jobId) {
+        try {
+          const dnResponse = await firstValueFrom(this.deliveryNoteService.getDnsByJobId(jobId));
+          const dns = dnResponse?.data || dnResponse?.dns || (Array.isArray(dnResponse) ? dnResponse : []);
+
+          (dns || []).forEach((dn: any) => {
+            if (dn.status === DnStatus.CANCELLED) return;
+            (dn.items || []).forEach((dnItem: any) => {
+              const partNoMatch = this.matchPartNo(dnItem.partNo, item.partNo);
+              const descriptionMatch = dnItem.description === item.detail;
+              if (partNoMatch || descriptionMatch) {
+                deliveredQty += dnItem.currentDeliveryQty || 0;
+              }
+            });
+          });
+        } catch (error) {
+          console.error('Error loading delivery notes for job:', jobId, error);
+        }
+      }
+      const pendingDeliveryQty = Math.max(0, item.quantity - deliveredQty);
+
+      const dialogRef = this.dialog.open(ItemIssueHistoryModalComponent, {
+        width: '1100px',
+        maxWidth: '95vw',
         maxHeight: '90vh',
         data: {
           itemDetail: item.detail,
           partNo: item.partNo,
           orderedQty: item.quantity,
           issues,
+          lpoStatuses,
+          deliveredQty,
+          pendingDeliveryQty,
+          canInitiateLPO: this.canInitiateLPO(),
+          canReissueAndRevoke: this.canReissueAndRevoke(),
         },
+      });
+
+      // An action taken inside the modal (send for approval / revoke) can
+      // change this item's issue trail, so reload the same history in place
+      // rather than leaving a stale table behind after the modal closes.
+      dialogRef.afterClosed().subscribe((result) => {
+        if (result?.refreshed) {
+          this.viewItemIssueHistory(item);
+        }
       });
     } catch (error) {
       console.error('Error loading item issue history:', error);
