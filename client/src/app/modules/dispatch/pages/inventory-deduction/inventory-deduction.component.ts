@@ -153,6 +153,20 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
         filterable: false
       },
       {
+        key: 'requestedQty',
+        label: 'Requested Qty',
+        type: 'number',
+        filterable: false
+      },
+      {
+        key: 'hasShortfall',
+        label: 'Shortfall',
+        type: 'status',
+        headerClass: 'text-center',
+        filterable: false,
+        cellRenderer: (item: any) => item.hasShortfall ? 'Shortfall' : 'OK'
+      },
+      {
         key: 'stockBefore',
         label: 'Stock Before',
         type: 'number',

@@ -12,6 +12,8 @@ interface InventoryDeduction {
     description: string;
     uom?: string;
     quantityDeducted: number;
+    requestedQty: number;
+    hasShortfall: boolean;
     stockBefore: number;
     stockAfter: number;
     deductedBy?: Types.ObjectId;
@@ -69,6 +71,15 @@ const inventoryDeductionSchema = new Schema<InventoryDeduction>({
         type: Number,
         required: true,
         min: 0,
+    },
+    requestedQty: {
+        type: Number,
+        required: true,
+        min: 0,
+    },
+    hasShortfall: {
+        type: Boolean,
+        default: false,
     },
     stockBefore: {
         type: Number,

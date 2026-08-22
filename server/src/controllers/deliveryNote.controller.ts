@@ -57,6 +57,11 @@ const deductInventoryForDn = async (dn: any, userId?: string): Promise<void> => 
         const stockBefore = stockEntry.quantity;
         const deductQty = Math.min(qty, stockBefore); // Never deduct more than available
         const stockAfter = stockBefore - deductQty;
+        const hasShortfall = deductQty < qty;
+
+        if (hasShortfall) {
+            console.warn(`deductInventoryForDn: Stock shortfall for product "${item.partNo}" on DN "${dn.dnNo}" — requested ${qty}, only ${deductQty} available.`);
+        }
 
         // Reduce stock entry quantity
         stockEntry.quantity = stockAfter;
@@ -76,6 +81,8 @@ const deductInventoryForDn = async (dn: any, userId?: string): Promise<void> => 
             description: item.description || '',
             uom: stockEntry.uom || '',
             quantityDeducted: deductQty,
+            requestedQty: qty,
+            hasShortfall,
             stockBefore,
             stockAfter,
             deductedBy: userId ? new mongoose.Types.ObjectId(userId) : undefined,
@@ -548,6 +555,8 @@ export const getInventoryDeductionReport = async (req: Request, res: Response) =
                     description: 1,
                     uom: 1,
                     quantityDeducted: 1,
+                    requestedQty: 1,
+                    hasShortfall: 1,
                     stockBefore: 1,
                     stockAfter: 1,
                     deductedDate: 1,
