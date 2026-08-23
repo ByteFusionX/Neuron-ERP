@@ -48,9 +48,12 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             purchaseNo,
             dealSheetId,
             status,
+            sourceType,
         } = req.body;
 
-        if (!jobId || !purchaseNo || !dealSheetId || !status) {
+        const isManual = sourceType === 'manual';
+
+        if (!purchaseNo || !status || (!isManual && (!jobId || !dealSheetId))) {
             return res.status(400).json({
                 success: false,
                 message: "Missing required fields",
@@ -58,17 +61,20 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
             });
         }
 
-        const job = await jobModel.findById(jobId);
-        if (!job) {
-            return res.status(404).json({
-                success: false,
-                message: "Job not found",
-                status: 404
-            });
+        let job;
+        if (!isManual) {
+            job = await jobModel.findById(jobId);
+            if (!job) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Job not found",
+                    status: 404
+                });
+            }
         }
 
         let currency;
-        if (job.quoteId) {
+        if (job && job.quoteId) {
             const quotation = await Quotation.findById(job.quoteId);
             if (quotation && quotation.currency) {
                 currency = quotation.currency;
@@ -79,11 +85,11 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
         if (currency) {
             requestData.currency = currency;
         }
-        
-        if (!requestData.procurementPerson && job.procurementPerson) {
+
+        if (job && !requestData.procurementPerson && job.procurementPerson) {
             requestData.procurementPerson = job.procurementPerson;
         }
-        
+
         if (requestData.items && Array.isArray(requestData.items)) {
             requestData.items = requestData.items.map((item: any) => {
                 if (item.itemDetails && Array.isArray(item.itemDetails)) {
@@ -131,14 +137,17 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
 
         const newPurchaseRequest = new PurchaseRequest(requestData);
         const savedPurchaseRequest = await newPurchaseRequest.save();
-        await jobModel.updateOne({ _id: jobId }, { $set: { status: `Purchase ${savedPurchaseRequest.status !== 'Drafted' ? 'Requested' : savedPurchaseRequest.status}` } })
 
-        await jobModel.findByIdAndUpdate(jobId, {
-            $set: {
-                allocateStatus: allocateStatus.WorkInProgress,
-                updatedDate: new Date()
-            }
-        });
+        if (!isManual) {
+            await jobModel.updateOne({ _id: jobId }, { $set: { status: `Purchase ${savedPurchaseRequest.status !== 'Drafted' ? 'Requested' : savedPurchaseRequest.status}` } })
+
+            await jobModel.findByIdAndUpdate(jobId, {
+                $set: {
+                    allocateStatus: allocateStatus.WorkInProgress,
+                    updatedDate: new Date()
+                }
+            });
+        }
 
         console.log(savedPurchaseRequest.status);
 
@@ -175,7 +184,7 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
 
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName } = req.body;
+        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType } = req.body;
         const pageNumber = Number(page) || 1;
         const pageSize = Number(row) || 10;
 
@@ -211,6 +220,12 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
 
         if (firstName) {
             matchStage['createdBy.firstName'] = { $regex: firstName, $options: 'i' }
+        }
+
+        if (sourceType === 'manual') {
+            matchStage.sourceType = 'manual';
+        } else if (sourceType === 'job') {
+            matchStage.sourceType = { $ne: 'manual' };
         }
 
         const statusArray = Array.isArray(status) ? status : (status ? [status] : []);

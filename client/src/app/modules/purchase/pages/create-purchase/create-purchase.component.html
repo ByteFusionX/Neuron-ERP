@@ -4,7 +4,12 @@
     </div>
     <form [formGroup]="purchaseForm">
         <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
-            <div class="flex flex-col md:flex-row md:mb-5 gap-3">
+            <div class="flex items-center gap-2 mb-4" *ngIf="!isEditing">
+                <input type="checkbox" id="isJobLess" class="h-4 w-4"
+                    [checked]="isJobLess" (change)="toggleJobLess($any($event.target).checked)" />
+                <label for="isJobLess" class="text-sm font-medium">Create without a Job</label>
+            </div>
+            <div class="flex flex-col md:flex-row md:mb-5 gap-3" *ngIf="!isJobLess">
                 @if(!isEditing) {
                 <app-select-dropdown [options]="jobSheets()" label="Job Id" optionLabel="jobId" optionValue="_id"
                     formControlName="jobId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()"
@@ -22,7 +27,15 @@
                     class="w-full" [readonly]="true">
                 </app-form-field>
             </div>
-            <div class="flex flex-col md:flex-row mb-3 gap-3">
+            <div class="flex flex-col md:flex-row md:mb-5 gap-3" *ngIf="isJobLess">
+                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()" class="w-full"
+                    [readonly]="true">
+                </app-form-field>
+                <app-form-field label="Created By" [control]="f['salesManager']" [isSubmitted]="isSubmitted()"
+                    class="w-full" [readonly]="true">
+                </app-form-field>
+            </div>
+            <div class="flex flex-col md:flex-row mb-3 gap-3" *ngIf="!isJobLess">
                 <app-form-field label="Customer" [control]="f['customer']" [isSubmitted]="isSubmitted()" class="w-full"
                     [readonly]="true">
                 </app-form-field>
@@ -63,12 +76,12 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <ng-container *ngIf="selectedJobSheet">
+                    <ng-container *ngIf="selectedJobSheet || isJobLess">
                         <ng-container *ngIf="itemsList()?.length; else noItems">
                             <!-- Table Content -->
                             <ng-container *ngFor="let items of itemsList(); let i = index">
                                 <ng-container *ngFor="let item of items.itemDetails; let j = index">
-                                    <tr class="bg-white border-b text-gray-800 py-2" [ngClass]="{'bg-gray-50': item.fromMrRequest}">
+                                    <tr class="bg-white border-b text-gray-800 py-2" [ngClass]="{'bg-gray-50': item.fromMrRequest}" *ngIf="!isEditingItem(i, j)">
                                         <td class="px-2 border text-center">{{ (i +1 ) * (j + 1) }}</td>
                                         <td class="px-2 py-2 border text-center text-sm">
                                             {{ item.detail }}
@@ -95,7 +108,7 @@
                                             <span class="text-gray-400">-</span>
                                         </td>
                                         <td class="px-2 py-2 border text-center">
-                                            <div class="flex items-center justify-center gap-2">
+                                            <div class="flex items-center justify-center gap-2" *ngIf="!isJobLess">
                                                 <button type="button"
                                                     [ngClass]="{'text-orange-500 hover:text-orange-600': !(item.comparisons?.length > 0), 'text-violet-600 hover:text-violet-700': item.comparisons?.length > 0}"
                                                     class="text-violet-600 hover:text-violet-700 hover:underline"
@@ -103,6 +116,65 @@
                                                     <ng-icon
                                                         [name]="item.comparisons?.length > 0 ? 'heroCheck' : 'heroPlus'"
                                                         class="text-sm"></ng-icon> Comparison
+                                                </button>
+                                            </div>
+                                            <div class="flex items-center justify-center gap-2" *ngIf="isJobLess">
+                                                <button type="button" class="text-violet-600 hover:text-violet-700"
+                                                    (click)="onEditItemClick(i, j)" title="Edit">
+                                                    <ng-icon name="heroPencilSquare" class="text-sm"></ng-icon>
+                                                </button>
+                                                <button type="button" class="text-red-600 hover:text-red-800"
+                                                    (click)="onDeleteItemClick(i, j)" title="Delete">
+                                                    <ng-icon name="heroTrash" class="text-sm"></ng-icon>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr *ngIf="isEditingItem(i, j)" class="bg-violet-50 border-b text-gray-800 py-2">
+                                        <td class="px-2 text-center border"></td>
+                                        <td class="px-2 py-2 text-center border">
+                                            <textarea class="px-2 py-1 rounded w-full outline-none" rows="2"
+                                                placeholder="Item Details" [(ngModel)]="editBuffer.detail" [ngModelOptions]="{standalone: true}"></textarea>
+                                        </td>
+                                        <td class="px-2 py-2 text-center border p-1">
+                                            <app-select-dropdown
+                                                [options]="partNumberOptions()"
+                                                optionLabel="label"
+                                                optionValue="value"
+                                                placeholder="Select Part Number"
+                                                [selected]="editBuffer.partNo"
+                                                (onSelected)="onEditPartNumberSelected($event)"
+                                                [defaultClass]="false"
+                                                class="w-full text-sm">
+                                            </app-select-dropdown>
+                                        </td>
+                                        <td class="px-2 py-2 text-center border">
+                                            <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
+                                                [(ngModel)]="editBuffer.quantity" [ngModelOptions]="{standalone: true}" placeholder="0" />
+                                        </td>
+                                        <td class="px-2 py-2 text-center border">
+                                            <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
+                                                [(ngModel)]="editBuffer.unitCost" [ngModelOptions]="{standalone: true}" placeholder="0" />
+                                        </td>
+                                        <td class="px-2 py-2 text-center border">
+                                            {{ (editBuffer.quantity || 0) * (editBuffer.unitCost || 0) | number:'1.2-2' }} {{ currency() }}
+                                        </td>
+                                        <td class="px-2 py-2 text-center border">
+                                            <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
+                                                [(ngModel)]="editBuffer.unitSellingPrice" [ngModelOptions]="{standalone: true}" placeholder="0" />
+                                        </td>
+                                        <td class="px-2 py-2 text-center border">
+                                            {{ (editBuffer.quantity || 0) * (editBuffer.unitSellingPrice || editBuffer.unitCost || 0) | number:'1.2-2' }} {{ currency() }}
+                                        </td>
+                                        <td class="px-2 py-2 border text-center">
+                                            <div class="flex items-center justify-center gap-2">
+                                                <button type="button" class="text-violet-600 hover:text-violet-700"
+                                                    (click)="onSaveEditedItem(i, j)" title="Save">
+                                                    <ng-icon name="heroCheck" class="text-sm"></ng-icon>
+                                                </button>
+                                                <button type="button" class="text-red-600 hover:text-red-800"
+                                                    (click)="onCancelEditItem()" title="Cancel">
+                                                    <ng-icon name="heroXMark" class="text-sm"></ng-icon>
                                                 </button>
                                             </div>
                                         </td>
@@ -196,7 +268,7 @@
                         </tr>
                     </ng-container>
 
-                    <ng-container *ngIf="!selectedJobSheet">
+                    <ng-container *ngIf="!selectedJobSheet && !isJobLess">
                         <tr>
                             <td colspan="10" class="bg-gray-100 border">
                                 <p class="text-center text-base p-2">No job selected</p>
@@ -205,7 +277,7 @@
                     </ng-container>
                 </tbody>
             </table>
-            <div class="w-full flex md:justify-between">
+            <div class="w-full flex md:justify-between" *ngIf="!isJobLess">
                 <button [ngClass]="{'invisible': !selectedJobSheet}"
                     class="bg-violet-600 text-white text-sm px-4 py-2 rounded hover:bg-violet-500 flex items-center gap-2 h-fit"
                     (click)="onGetMaterialRequestsClicks()">
@@ -237,7 +309,7 @@
                     class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
                     type="button" (click)="onFinalDasdboardClicks()">Final
                     Dashboard</button>
-                <button
+                <button *ngIf="!isJobLess"
                     class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 outline-none"
                     type="button" (click)="onComparisonSummaryClicks()">Comparison
                     Summary</button>

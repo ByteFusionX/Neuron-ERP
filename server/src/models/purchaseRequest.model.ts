@@ -111,8 +111,14 @@ export enum PurchaseRequestStatus {
     Approved = 'Approved'
 }
 
+export enum PurchaseRequestSourceType {
+    Job = 'job',
+    Manual = 'manual'
+}
+
 interface PurchaseRequest extends Document {
-    jobId: Types.ObjectId;
+    jobId?: Types.ObjectId;
+    sourceType: PurchaseRequestSourceType;
     purchaseNo: String;
     items: PurchaseRequestItem[];
     supplierDiscounts: discounts[];
@@ -142,7 +148,12 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     jobId: {
         type: Schema.Types.ObjectId,
         ref: 'Job',
-        required: true
+        required: false
+    },
+    sourceType: {
+        type: String,
+        enum: Object.values(PurchaseRequestSourceType),
+        default: PurchaseRequestSourceType.Job
     },
     purchaseNo: {
         type: String,

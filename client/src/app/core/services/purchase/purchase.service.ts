@@ -31,6 +31,7 @@ export class PurchaseService {
     fromDate?: string;
     toDate?: string;
     search?: string;
+    sourceType?: string;
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
   }

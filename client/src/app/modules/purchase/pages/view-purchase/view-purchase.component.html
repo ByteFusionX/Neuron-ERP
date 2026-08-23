@@ -45,7 +45,7 @@
             <div class="relative overflow-x-auto">
                 <table class="w-full text-md text-left border">
                     <tbody>
-                        <tr class="border-b">
+                        <tr class="border-b" *ngIf="purchase.sourceType !== 'manual'">
                             <td class="px-2 py-2 border font-medium bg-gray-50"
                                 colspan="1">
                                 Customer
@@ -62,7 +62,7 @@
                                 {{ purchase.jobId?.quoteId?.createdBy?.lastName }}
                             </td>
                         </tr>
-                        <tr class="border-b">
+                        <tr class="border-b" *ngIf="purchase.sourceType !== 'manual'">
                             <td class="px-2 py-2 border font-medium bg-gray-50">
                                 Purchase No
                             </td>
@@ -85,7 +85,24 @@
                                 class="px-2 py-2 border font-medium bg-gray-50">Job
                                 ID</td>
                             <td class="px-2 py-2 border">{{
-                                purchase.jobId?.jobId.jobId || purchase.jobId?.jobId }}</td>
+                                purchase.jobId?.jobId?.jobId || purchase.jobId?.jobId }}</td>
+                        </tr>
+                        <tr class="border-b" *ngIf="purchase.sourceType === 'manual'">
+                            <td class="px-2 py-2 border font-medium bg-gray-50"
+                                colspan="1">
+                                Purchase No
+                            </td>
+                            <td class="px-2 py-2 border" colspan="2">
+                                {{ purchase.purchaseNo }}
+                            </td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50"
+                                colspan="1">
+                                Created By
+                            </td>
+                            <td class="px-2 py-2 border" colspan="2">
+                                {{ purchase.createdBy?.firstName }}
+                                {{ purchase.createdBy?.lastName }}
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -102,11 +119,13 @@
                             <th class="px-4 py-2 border">Quantity</th>
                             <th class="px-4 py-2 border">Unit Cost</th>
                             <th class="px-4 py-2 border">Total Cost</th>
-                            <th class="px-4 py-2 border">Unit Selling Price</th>
-                            <th class="px-4 py-2 border">Total Selling
-                                Price</th>
-                            <th class="px-4 py-2 border">Aprroved Supplier</th>
-                            <th class="px-4 py-2 border">ETA Terms</th>
+                            <ng-container *ngIf="purchase.sourceType !== 'manual'">
+                                <th class="px-4 py-2 border">Unit Selling Price</th>
+                                <th class="px-4 py-2 border">Total Selling
+                                    Price</th>
+                                <th class="px-4 py-2 border">Aprroved Supplier</th>
+                                <th class="px-4 py-2 border">ETA Terms</th>
+                            </ng-container>
                         </tr>
                     </thead>
                     <tbody>
@@ -116,7 +135,7 @@
                                 <td class="px-4 py-2 border font-semibold">
                                     <div class="flex items-center gap-2">
                                         <span>{{ row.detail.detail }}</span>
-                                        <span *ngIf="getItemStatus(row.detail)" 
+                                        <span *ngIf="getItemStatus(row.detail)"
                                               [class]="'px-2 py-0.5 text-xs font-medium rounded-full ' + getItemStatus(row.detail)?.class">
                                             {{ getItemStatus(row.detail)?.label }}
                                         </span>
@@ -133,20 +152,22 @@
                                     {{ row.selectedSupplier.unitPrice *
                                         row.detail.quantity |
                                         number:"1.2-2" }} {{ purchase?.currency }}</td>
-                                <td class="px-4 py-2 border">
-                                    {{ row.detail.unitSellingPrice | number : "1.2-2" }} {{ purchase?.currency }}
-                                </td>
-                                <td class="px-4 py-2 border">
-                                    {{ row.detail.quantity * row.detail.unitSellingPrice | number : "1.2-2" }} {{ purchase?.currency }}
-                                </td>
-                                <td class="px-4 py-2 border">{{
-                                    row.selectedSupplier.supplierName }}</td>
-                                <td class="px-4 py-2 border">{{
-                                    row.selectedSupplier.etaTerms }}</td>
+                                <ng-container *ngIf="purchase.sourceType !== 'manual'">
+                                    <td class="px-4 py-2 border">
+                                        {{ row.detail.unitSellingPrice | number : "1.2-2" }} {{ purchase?.currency }}
+                                    </td>
+                                    <td class="px-4 py-2 border">
+                                        {{ row.detail.quantity * row.detail.unitSellingPrice | number : "1.2-2" }} {{ purchase?.currency }}
+                                    </td>
+                                    <td class="px-4 py-2 border">{{
+                                        row.selectedSupplier.supplierName }}</td>
+                                    <td class="px-4 py-2 border">{{
+                                        row.selectedSupplier.etaTerms }}</td>
+                                </ng-container>
                             </tr>
 
                             <tr *ngIf="rows.length === 0">
-                                <td colspan="9"
+                                <td [attr.colspan]="purchase.sourceType === 'manual' ? 5 : 9"
                                     class="px-4 py-2 border text-center text-gray-400 italic">
                                     No supplier selected
                                 </td>
@@ -157,7 +178,24 @@
             </div>
         </div>
 
-        <div class="w-full mb-8">
+        <div class="w-full mb-8" *ngIf="purchase.sourceType === 'manual'">
+            <h4 class="text-lg font-semibold mb-4">Purchase Summary</h4>
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <tbody>
+                        <tr class="border-b">
+                            <td class="px-2 py-2 border font-medium bg-gray-50"
+                                colspan="1">
+                                Total LPO Value
+                            </td>
+                            <td class="px-2 py-2 border">{{ purchase?.totalLpo | number : '1.2-2' }} {{ purchase?.currency }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="w-full mb-8" *ngIf="purchase.sourceType !== 'manual'">
             <h4 class="text-lg font-semibold mb-4">Job Summary</h4>
             <div class="relative overflow-x-auto">
                 <table class="w-full text-md text-left border">
@@ -219,13 +257,13 @@
             </app-btn>
             @if(purchase.status === 'Pending'){
             <div class="flex justify-end gap-4">
-                @if(hasNewItemsToMerge()){
+                @if(purchase.sourceType !== 'manual' && hasNewItemsToMerge()){
                     <app-btn theme="primary" (click)="onMergeItems()" [loading]="isMerging">
                         <ng-icon name="heroArrowRightCircle" class="mr-1"></ng-icon>
                         Merge Items
                     </app-btn>
                 }
-                @if(hasMergedItems()){
+                @if(purchase.sourceType !== 'manual' && hasMergedItems()){
                     <app-btn theme="warning" (click)="onRevokeMerge()" [loading]="isRevoking">
                         <ng-icon name="heroArrowLeftCircle" class="mr-1"></ng-icon>
                         Revoke Merge

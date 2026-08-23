@@ -19,6 +19,7 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { CreateProductComponent } from 'src/app/modules/inventory/pages/all-products/modals/create-product/create-product.component';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 interface PartNumberDropdownOption {
   label: string;
@@ -51,6 +52,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   private purchaseService = inject(PurchaseService)
   private jobService = inject(JobService)
   private productService = inject(ProductService)
+  private employeeService = inject(EmployeeService)
   private subscriptions = new Subscription()
 
   generatedPRId: string = '';
@@ -68,6 +70,10 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   isEditing: boolean = false;
   partNumberOptions = signal<PartNumberDropdownOption[]>([])
   currency = signal<string>('')
+  isJobLess: boolean = false;
+  currentEmployeeName = signal<string>('');
+  editingItemKey: string | null = null;
+  editBuffer: any = null;
 
   purchaseForm: FormGroup = this.fb.group({
     customerId: ['', [Validators.required]],
@@ -82,6 +88,47 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     job: [''],
     customer: [''],
   })
+
+  toggleJobLess(isJobLess: boolean): void {
+    this.isJobLess = isJobLess;
+    this.selectedJobSheet = undefined as any;
+    this.requestedJobId.set('');
+    this.itemsList.set([]);
+    this.purchaseForm.reset();
+    this.purchaseForm.get('purchaseNo')?.setValue(this.purchaseNo);
+
+    const jobIdControl = this.purchaseForm.get('jobId');
+    const dealSheetIdControl = this.purchaseForm.get('dealSheetId');
+    const customerIdControl = this.purchaseForm.get('customerId');
+
+    if (isJobLess) {
+      jobIdControl?.clearValidators();
+      dealSheetIdControl?.clearValidators();
+      customerIdControl?.clearValidators();
+      this.loadCurrentEmployeeName();
+    } else {
+      jobIdControl?.setValidators([Validators.required]);
+      dealSheetIdControl?.setValidators([Validators.required]);
+      customerIdControl?.setValidators([Validators.required]);
+    }
+    jobIdControl?.updateValueAndValidity();
+    dealSheetIdControl?.updateValueAndValidity();
+    customerIdControl?.updateValueAndValidity();
+  }
+
+  loadCurrentEmployeeName(): void {
+    this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe((emp) => {
+        if (emp) {
+          const name = `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+          this.currentEmployeeName.set(name);
+          this.purchaseForm.patchValue({ salesManager: name });
+        } else {
+          this.employeeService.getEmployeeData();
+        }
+      })
+    );
+  }
 
   ngOnInit(): void {
     const url = this.route.snapshot.routeConfig?.path || '';
@@ -132,6 +179,17 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.data) {
             const purchase = res.data;
+            this.isJobLess = purchase.sourceType === 'manual' || !purchase.jobId;
+
+            if (this.isJobLess) {
+              const jobIdControl = this.purchaseForm.get('jobId');
+              const dealSheetIdControl = this.purchaseForm.get('dealSheetId');
+              jobIdControl?.clearValidators();
+              dealSheetIdControl?.clearValidators();
+              jobIdControl?.updateValueAndValidity();
+              dealSheetIdControl?.updateValueAndValidity();
+            }
+
             this.purchaseForm.patchValue({
               customerId: purchase.customerId?._id || purchase.customerId,
               salesManager: `${purchase.createdBy?.firstName || ''} ${purchase.createdBy?.lastName || ''}`.trim(),
@@ -162,7 +220,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
               this.patchSupplierDiscounts(purchase.supplierDiscounts);
             }
 
-            if (purchase.jobId) {
+            if (purchase.jobId?._id) {
               this.jobService.getOneJob(purchase.jobId._id).subscribe({
                 next: (jobRes) => {
                   if (jobRes && jobRes.length > 0) {
@@ -293,13 +351,19 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   getFormValueForSave(): any {
     const job = this.purchaseForm.get('job')?.value;
     const formValue = { ...this.purchaseForm.value };
-    
+
     if (job) {
       formValue.jobId = job;
     }
     const itemsWithPartNoObjects = this.convertPartNoIdsToObjects(this.itemsList());
     formValue.items = itemsWithPartNoObjects;
     delete formValue.job;
+
+    formValue.sourceType = this.isJobLess ? 'manual' : 'job';
+    if (this.isJobLess) {
+      delete formValue.jobId;
+      delete formValue.dealSheetId;
+    }
 
     return formValue;
   }
@@ -490,7 +554,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         return;
       }
 
-      if (!this.selectedJobSheet) {
+      if (!this.selectedJobSheet && !this.isJobLess) {
         this.warningMessage('Please select any job from given list');
         reject('No job selected');
         return;
@@ -802,6 +866,72 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     this.saveItemsToBackend(updatedItemsList);
   }
 
+  isEditingItem(i: number, j: number): boolean {
+    return this.editingItemKey === `${i}-${j}`;
+  }
+
+  onEditItemClick(i: number, j: number): void {
+    const item = this.itemsList()[i]?.itemDetails?.[j];
+    if (!item) return;
+    this.editingItemKey = `${i}-${j}`;
+    this.editBuffer = {
+      detail: item.detail,
+      quantity: item.quantity,
+      unitCost: item.unitCost,
+      unitSellingPrice: item.unitSellingPrice,
+      partNo: typeof item.partNo === 'object' && item.partNo?._id ? item.partNo._id : (item.partNo || '')
+    };
+  }
+
+  onEditPartNumberSelected(event: string | string[]): void {
+    const value = Array.isArray(event) ? event[0] : event;
+    this.editBuffer.partNo = (value || '').trim();
+  }
+
+  onCancelEditItem(): void {
+    this.editingItemKey = null;
+    this.editBuffer = null;
+  }
+
+  onSaveEditedItem(i: number, j: number): void {
+    if (!this.editBuffer) return;
+
+    if (!this.editBuffer.detail || !(this.editBuffer.quantity > 0) || !(this.editBuffer.unitCost > 0)) {
+      this.toaster.warning('Please fill all required fields!');
+      return;
+    }
+
+    const updatedList = [...this.itemsList()];
+    const updatedItem = { ...updatedList[i] };
+    const updatedDetails = [...updatedItem.itemDetails];
+    updatedDetails[j] = { ...updatedDetails[j], ...this.editBuffer };
+    updatedItem.itemDetails = updatedDetails;
+    updatedList[i] = updatedItem;
+
+    this.itemsList.set(updatedList);
+    this.editingItemKey = null;
+    this.editBuffer = null;
+    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+    this.saveItemsToBackend(updatedList);
+  }
+
+  onDeleteItemClick(i: number, j: number): void {
+    const updatedList = [...this.itemsList()];
+    const updatedItem = { ...updatedList[i] };
+    const updatedDetails = updatedItem.itemDetails.filter((_: any, idx: number) => idx !== j);
+
+    if (updatedDetails.length === 0) {
+      updatedList.splice(i, 1);
+    } else {
+      updatedItem.itemDetails = updatedDetails;
+      updatedList[i] = updatedItem;
+    }
+
+    this.itemsList.set(updatedList);
+    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
+    this.saveItemsToBackend(updatedList);
+  }
+
   saveItemsToBackend(updatedItemsList: any[]): void {
     // Convert part number IDs to objects first, then clean for backend
     const itemsWithPartNos = this.convertPartNoIdsToObjects(updatedItemsList);
@@ -828,7 +958,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
           }
         })
       );
-    } else if (this.selectedJobSheet) {
+    } else if (this.selectedJobSheet || this.isJobLess) {
       console.log('Creating draft first before saving items');
       this.ensurePurchaseId().then((purchaseId) => {
         this.subscriptions.add(

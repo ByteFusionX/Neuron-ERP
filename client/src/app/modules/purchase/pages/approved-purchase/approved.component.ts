@@ -43,6 +43,8 @@ export class ApprovedPurchaseComponent implements OnInit, OnDestroy {
   tableData = signal<any[]>([]);
   tableColumns: TableColumn[] = [];
   defaultColumns: string[] = [];
+  jobColumns: string[] = [];
+  manualColumns: string[] = [];
 
   isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
@@ -53,6 +55,7 @@ export class ApprovedPurchaseComponent implements OnInit, OnDestroy {
   selectedStatus = signal<string[]>(['Approved']);
   statusOptions: string[] = ['Pending', 'Drafted'];
   searchQuery = signal<string>('');
+  sourceTypeView = signal<'job' | 'manual'>('job');
 
   ngOnInit(): void {
     this.setupTableColumns();
@@ -181,9 +184,13 @@ export class ApprovedPurchaseComponent implements OnInit, OnDestroy {
       }
     ]
 
-    this.defaultColumns = [
+    this.jobColumns = [
       'approvedDate', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'procurementPerson', 'status', 'actions'
     ];
+    this.manualColumns = [
+      'approvedDate', 'purchaseNo', 'totalLpo', `createdBy.firstName`, 'status', 'actions'
+    ];
+    this.defaultColumns = this.sourceTypeView() === 'manual' ? this.manualColumns : this.jobColumns;
   }
 
   onPaginationChange(event: { page: number, row: number }): void {
@@ -239,6 +246,7 @@ export class ApprovedPurchaseComponent implements OnInit, OnDestroy {
       row: currentState.row,
       status: this.selectedStatus(),
       search: this.searchQuery() || undefined,
+      sourceType: this.sourceTypeView(),
       ...filters
     };
 
@@ -329,6 +337,19 @@ export class ApprovedPurchaseComponent implements OnInit, OnDestroy {
   viewDocuments(purchase: any): void {
     // Implement document viewing logic
     console.log('Viewing documents for purchase:', purchase);
+  }
+
+  setSourceTypeView(sourceType: 'job' | 'manual'): void {
+    if (this.sourceTypeView() === sourceType) return;
+    this.sourceTypeView.set(sourceType);
+    this.defaultColumns = sourceType === 'manual' ? this.manualColumns : this.jobColumns;
+    const currentState = this.paginationService.paginationState();
+    this.paginationService.updatePaginationState({
+      page: 1,
+      row: currentState.row,
+      total: currentState.total
+    });
+    this.getPurchases();
   }
 
   onSearch(searchInput: string) {

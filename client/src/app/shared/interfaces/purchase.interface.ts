@@ -93,6 +93,7 @@ export interface PurchaseData {
     totalDiscountReceived?: number;
     dealProfit?: number;
     currency?: string;
+    sourceType?: string;
 }
 
 export enum PurchaseStatus {
