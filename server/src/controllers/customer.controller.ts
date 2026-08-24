@@ -4,6 +4,7 @@ import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller'
 import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
+import { getNextSequence } from "../models/counter.model";
 const { ObjectId } = require('mongodb')
 
 export const getAllCustomers = async (req: Request, res: Response, next: NextFunction) => {
@@ -615,47 +616,24 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+const seedClientRefSequence = async (): Promise<number> => {
+    const lastClientId = await Customer.aggregate([
+        { $match: { clientRef: { $ne: null } } },
+        { $addFields: { slNoString: { $regexFind: { input: "$clientRef", regex: "^[0-9]+" } } } },
+        { $addFields: { slNo: { $toInt: "$slNoString.match" } } },
+        { $sort: { slNo: -1 } },
+        { $limit: 1 }
+    ]);
+    return lastClientId.length ? lastClientId[0].slNo : 0;
+};
+
 const generateClientRef = async (date: string) => {
     try {
-        const lastClientId = await Customer.aggregate([
-            {
-                $match: {
-                    clientRef: { $ne: null }
-                }
-            },
-            {
-                $addFields: {
-                    slNoString: {
-                        $regexFind: {
-                            input: "$clientRef",
-                            regex: "^[0-9]+"
-                        }
-                    }
-                }
-            },
-            {
-                $addFields: {
-                    slNo: {
-                        $toInt: "$slNoString.match"
-                    }
-                }
-            },
-            {
-                $sort: { slNo: -1 }
-            }
-        ]);
-        let clientRef: string;
         const currentYear = new Date().getFullYear();
         const year = currentYear.toString().slice(-2);
 
-        if (lastClientId.length) {
-            let lastSlNo = lastClientId[0].slNo;
-            const formattedSlNo = String(lastSlNo + 1).padStart(3, '0');
-            clientRef = `${formattedSlNo}-${year}`
-        } else {
-            clientRef = `001-${year}`
-        }
-        return clientRef;
+        const nextSlNo = await getNextSequence('clientRef', seedClientRefSequence);
+        return `${String(nextSlNo).padStart(3, '0')}-${year}`;
     } catch (error) {
         console.log(error)
     }

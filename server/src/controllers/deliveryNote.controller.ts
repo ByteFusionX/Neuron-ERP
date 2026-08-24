@@ -8,6 +8,7 @@ import Quotation from '../models/quotation.model';
 import PurchaseRequest from '../models/purchaseRequest.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import InventoryDeduction from '../models/inventoryDeduction.model';
+import { getNextSequence } from '../models/counter.model';
 import GRN from '../models/grn.model';
 import { Invoice } from '../models/invoice.model';
 import { checkAndUpdateJobCompletionStatus } from './job.controller';
@@ -116,16 +117,20 @@ const reverseInventoryDeductions = async (dnId: string): Promise<void> => {
     }
 };
 
+const seedDnSequence = async (): Promise<number> => {
+    const lastDn = await DeliveryNote.findOne().sort({ createdDate: -1 });
+    if (lastDn && lastDn.dnNo) {
+        const matches = lastDn.dnNo.match(/DN-(\d+)/);
+        if (matches && matches[1]) {
+            return parseInt(matches[1], 10);
+        }
+    }
+    return 0;
+};
+
 export const generateDnNumber = async (req: Request, res: Response) => {
     try {
-        const lastDn = await DeliveryNote.findOne().sort({ createdDate: -1 });
-        let nextNum = 1;
-        if (lastDn && lastDn.dnNo) {
-            const matches = lastDn.dnNo.match(/DN-(\d+)/);
-            if (matches && matches[1]) {
-                nextNum = parseInt(matches[1], 10) + 1;
-            }
-        }
+        const nextNum = await getNextSequence('dnNo', seedDnSequence);
         const dnNumber = `DN-${String(nextNum).padStart(4, '0')}`;
         res.status(200).json({ dnNumber });
     } catch (error) {

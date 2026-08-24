@@ -12,22 +12,34 @@ import jobModel from "../models/job.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
+import { getNextSequence } from "../models/counter.model";
+
+// grn values can carry a per-line suffix (e.g. GRN-2026-0009-1, -2, -3 for multiple
+// stock entries filed under the same GRN), so the main sequence must be read from the
+// digits immediately after the prefix, and the max must be taken across all matching
+// entries rather than the most recently created one.
+const seedStockEntryGrnSequence = (prefix: string) => async (): Promise<number> => {
+    const entries = await StockEntry.find({
+        grn: new RegExp(`^${prefix}-\\d+`)
+    }).select('grn').lean();
+
+    let maxNum = 0;
+    const pattern = new RegExp(`^${prefix}-(\\d+)`);
+    for (const entry of entries) {
+        const match = entry.grn.match(pattern);
+        if (match) {
+            maxNum = Math.max(maxNum, parseInt(match[1], 10));
+        }
+    }
+    return maxNum;
+};
 
 export const generateGRN = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const currentYear = new Date().getFullYear();
         const prefix = `GRN-${currentYear}`;
 
-        const lastEntry = await StockEntry.findOne({
-            grn: new RegExp(`^${prefix}`)
-        }).sort({ createdDate: -1 });
-
-        let sequence = 1;
-        if (lastEntry) {
-            const lastSequence = parseInt(lastEntry.grn.replace(prefix, '')) || 0;
-            sequence = lastSequence + 1;
-        }
-
+        const sequence = await getNextSequence(`stockEntryGrn-${currentYear}`, seedStockEntryGrnSequence(prefix));
         const grn = `${prefix}-${sequence.toString().padStart(4, '0')}`;
 
         return res.status(200).json({ grn });

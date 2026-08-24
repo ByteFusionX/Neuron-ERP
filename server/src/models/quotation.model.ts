@@ -184,6 +184,8 @@ const dealDatas = new Schema<Deal>({
     dealId: {
         type: String,
         required: false,
+        unique: true,
+        sparse: true,
     },
     paymentTerms: {
         type: String,

@@ -8,6 +8,7 @@ import jobModel from "../models/job.model";
 import mongoose from "mongoose";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
+import { getNextSequence } from "../models/counter.model";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
@@ -947,36 +948,28 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
   }
 };
 
+const seedLpoSequence = (year: string) => async (): Promise<number> => {
+  const lastOrder = await PurchaseOrder.findOne(
+    { poNo: { $regex: `^NTP-LP-\\d{4}-${year}$` } }
+  ).sort({ poNo: -1 });
+
+  if (lastOrder && lastOrder.poNo) {
+    const parts = lastOrder.poNo.split("-");
+    if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
+      return parseInt(parts[2]);
+    }
+  }
+  return 0;
+};
+
 export const generateLpoNo = async (req: Request, res: Response) => {
   try {
     const now = new Date();
-    const year = now.getFullYear().toString().slice(-2); 
-    let nextNumber = 1;
-  
-    // Find the last order by sorting by poNo to ensure proper sequence
-    const lastOrder = await PurchaseOrder.findOne(
-      { poNo: { $regex: `^NTP-LP-\\d{4}-${year}$` } }
-    ).sort({ poNo: -1 });
-  
-    if (lastOrder && lastOrder.poNo) {
-      const parts = lastOrder.poNo.split("-");
-      if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
-        const lastSeq = parseInt(parts[2]); 
-        nextNumber = lastSeq + 1;
-      }
-    }
-  
+    const year = now.getFullYear().toString().slice(-2);
+
+    const nextNumber = await getNextSequence(`poNo-${year}`, seedLpoSequence(year));
     const poNo = `NTP-LP-${nextNumber.toString().padStart(4, "0")}-${year}`;
-    
-    // Verify this PO number doesn't already exist
-    const existingPO = await PurchaseOrder.findOne({ poNo });
-    if (existingPO) {
-      return res.status(409).json({
-        success: false,
-        message: "Generated PO number already exists. Please try again.",
-      });
-    }
-    
+
     return res.status(200).json({
       success: true,
       message: "Purchase order number generated successfully",
@@ -1015,8 +1008,8 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
 
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       id,
-      { 
-        $set: { 
+      {
+        $set: {
           poStatus: poStatus,
           updatedAt: new Date()
         }
@@ -1077,7 +1070,7 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
     const { comment } = req.body;
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
-    
+
     if (!employee) {
       return res.status(401).json({
         success: false,
@@ -1177,7 +1170,7 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
     const { comment } = req.body;
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
-    
+
     if (!employee) {
       return res.status(401).json({
         success: false,
@@ -1312,8 +1305,8 @@ export const updateSupplierInvoices = async (req: any, res: Response) => {
 
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       id,
-      { 
-        $set: { 
+      {
+        $set: {
           supplierInvoices: supplierInvoices,
           updatedAt: new Date()
         }

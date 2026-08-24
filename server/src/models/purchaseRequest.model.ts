@@ -157,7 +157,8 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     },
     purchaseNo: {
         type: String,
-        required: true
+        required: true,
+        unique: true
     },
     items: {
         type: [itemSchema],

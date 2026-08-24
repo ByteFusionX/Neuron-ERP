@@ -3,6 +3,7 @@ import { Invoice } from '../models/invoice.model';
 import { InvoiceAudit } from '../models/invoiceAudit.model';
 import mongoose from 'mongoose';
 import { getEmployeeData } from '../common/utils/util';
+import { getNextSequence } from '../models/counter.model';
 
 export const getInvoices = async (req: Request, res: Response) => {
     try {
@@ -302,19 +303,21 @@ export const updateInvoice = async (req: Request, res: Response) => {
     }
 };
 
+const seedInvoiceNumber = async (): Promise<number> => {
+    const invoices = await Invoice.find({ isDeleted: false }).select('invoiceNo').lean();
+    let maxNum = 0;
+    for (const inv of invoices) {
+        const match = (inv.invoiceNo || '').match(/^INV-(\d+)/);
+        if (match) {
+            maxNum = Math.max(maxNum, parseInt(match[1], 10));
+        }
+    }
+    return maxNum;
+};
+
 export const generateInvoiceNumber = async (req: Request, res: Response) => {
     try {
-        const invoices = await Invoice.find({ isDeleted: false }).select('invoiceNo').lean();
-        const numbers: number[] = [];
-        for (const inv of invoices) {
-            const no = inv.invoiceNo || '';
-            const match = no.match(/^INV-(\d+)/);
-            if (match) {
-                numbers.push(parseInt(match[1], 10));
-            }
-        }
-        const maxNum = numbers.length ? Math.max(...numbers) : 0;
-        const nextNumber = maxNum + 1;
+        const nextNumber = await getNextSequence('invoiceNo', seedInvoiceNumber);
         const invoiceNo = `INV-${nextNumber.toString().padStart(4, '0')}`;
         res.status(200).json({ success: true, invoiceNo });
     } catch (error) {

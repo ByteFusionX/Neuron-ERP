@@ -9,6 +9,7 @@ import { uploadFileToAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
 import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import { createNotificationWithPrivileges } from "./notification.controller";
+import { getNextSequence } from "../models/counter.model";
 const { ObjectId } = require('mongodb')
 
 export const createEnquiry = async (req: any, res: Response, next: NextFunction) => {
@@ -925,29 +926,18 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
 }
 
 
+const seedEnquiryIdSequence = async (): Promise<number> => {
+    const lastEnquiry = await enquiryModel.aggregate([
+        { $match: { enquiryId: { $exists: true } } },
+        { $addFields: { lastNumber: { $toInt: { $arrayElemAt: [{ $split: ["$enquiryId", "-"] }, -1] } } } },
+        { $sort: { lastNumber: -1 } },
+        { $limit: 1 }
+    ]);
+    return lastEnquiry.length ? parseInt(lastEnquiry[0].lastNumber) : 0;
+};
+
 const generateEnquiryId = async (departmentId: string, employeeId: string, date: string) => {
     try {
-        const lastEnquiry = await enquiryModel.aggregate([
-            {
-                $match: {
-                    enquiryId: { $exists: true }
-                }
-            },
-            {
-                $addFields: {
-                    lastNumber: {
-                        $toInt: { $arrayElemAt: [{ $split: ["$enquiryId", "-"] }, -1] }
-                    }
-                }
-            },
-            {
-                $sort: { lastNumber: -1 }
-            },
-            {
-                $limit: 1
-            }
-        ])
-
         const department = await Department.findById(departmentId);
         const employee = await Employee.findById(employeeId);
         let quoteId: string;
@@ -959,14 +949,9 @@ const generateEnquiryId = async (departmentId: string, employeeId: string, date:
             const [year, month] = date.split('-');
             const formatedDate = `${month}/${year.substring(2)}`;
 
-            if (lastEnquiry.length) {
-                const lastNumber = lastEnquiry[0].lastNumber;
-                const incrementedNum = parseInt(lastNumber) + 1;
-                const formattedIncrementedNum = String(incrementedNum).padStart(3, '0');
-                quoteId = `ENQ-NT/${salesId}/${departmentName}-${formatedDate}-${formattedIncrementedNum}`
-            } else {
-                quoteId = `ENQ-NT/${salesId}/${departmentName}-${formatedDate}-001`
-            }
+            const incrementedNum = await getNextSequence('enquiryId', seedEnquiryIdSequence);
+            const formattedIncrementedNum = String(incrementedNum).padStart(3, '0');
+            quoteId = `ENQ-NT/${salesId}/${departmentName}-${formatedDate}-${formattedIncrementedNum}`
         }
         return quoteId;
     } catch (error) {

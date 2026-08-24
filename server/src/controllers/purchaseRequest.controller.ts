@@ -8,6 +8,7 @@ import { getEmployeeData, calculateDiscountPricePipe, calculateCostPricePipe, ge
 import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
+import { getNextSequence } from "../models/counter.model";
 import technicalModel from "../models/technical.model";
 import Employee from "../models/employee.model";
 const mongoose = require('mongoose');
@@ -1876,6 +1877,18 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
     }
 };
 
+const seedPurchaseNoSequence = async (): Promise<number> => {
+    const latestPR = await PurchaseRequest.findOne().sort({ purchaseNo: -1 });
+    if (latestPR) {
+        const parts = latestPR.purchaseNo.split('-');
+        const lastCounter = parseInt(parts[3]);
+        if (!isNaN(lastCounter)) {
+            return lastCounter;
+        }
+    }
+    return 0;
+};
+
 // Generate a new purchase number
 export const generatePurchaseNumber = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1883,14 +1896,7 @@ export const generatePurchaseNumber = async (req: Request, res: Response, next: 
         const year = now.getFullYear().toString().slice(-2);
         const month = (now.getMonth() + 1).toString().padStart(2, '0');
 
-        const latestPR = await PurchaseRequest.findOne().sort({ purchaseNo: -1 });
-        let nextNumber = 1;
-
-        if (latestPR) {
-            const parts = latestPR.purchaseNo.split('-');
-            const lastCounter = parseInt(parts[3]);
-            nextNumber = lastCounter + 1;
-        }
+        const nextNumber = await getNextSequence('purchaseNo', seedPurchaseNoSequence);
 
         const newPurchaseNumber = `NRN/PR-${year}-${month}-${nextNumber
             .toString()

@@ -8,25 +8,28 @@ import mongoose from "mongoose";
 import { getEmployeeData } from "../common/utils/util";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { uploadFileToAws } from "../common/aws-connect";
+import { getNextSequence } from "../models/counter.model";
+
+const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
+  const lastEntry = await GRN.findOne({
+    grnNo: new RegExp(`^${prefix}`)
+  }).sort({ createdAt: -1 });
+
+  if (lastEntry && lastEntry.grnNo) {
+    const parts = lastEntry.grnNo.split('-');
+    if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
+      return parseInt(parts[2]);
+    }
+  }
+  return 0;
+};
 
 export const generateGRNNumber = async (req: Request, res: Response) => {
   try {
     const currentYear = new Date().getFullYear();
     const prefix = `GRN-${currentYear}`;
 
-    const lastEntry = await GRN.findOne({
-      grnNo: new RegExp(`^${prefix}`)
-    }).sort({ createdAt: -1 });
-
-    let sequence = 1;
-    if (lastEntry && lastEntry.grnNo) {
-      const parts = lastEntry.grnNo.split('-');
-      if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
-        const lastSequence = parseInt(parts[2]);
-        sequence = lastSequence + 1;
-      }
-    }
-
+    const sequence = await getNextSequence(`grnNo-${currentYear}`, seedGRNSequence(prefix));
     const grn = `${prefix}-${sequence.toString().padStart(4, '0')}`;
 
     return res.status(200).json({ grn });

@@ -12,6 +12,7 @@ import { removeFile } from '../common/utils/util'
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import Event from '../models/events.model'
 import { createNotificationWithPrivileges } from "./notification.controller";
+import { getNextSequence } from "../models/counter.model";
 
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -821,71 +822,41 @@ export const markAsSeenDeal = async (req: Request, res: Response, next: NextFunc
 
 
 
+const seedDealIdSequence = async (): Promise<number> => {
+    const lastQuote = await Quotation.aggregate([
+        { $match: { dealData: { $exists: true } } },
+        { $addFields: { lastNumber: { $toInt: { $arrayElemAt: [{ $split: ["$dealData.dealId", "-"] }, -1] } } } },
+        { $sort: { lastNumber: -1 } },
+        { $limit: 1 }
+    ]);
+    return lastQuote.length ? parseInt(lastQuote[0].lastNumber) : 0;
+};
+
 const generateDealId = async () => {
     try {
-        const lastQuote = await Quotation.aggregate([
-            {
-                $match: {
-                    dealData: { $exists: true }
-                }
-            },
-            {
-                $addFields: {
-                    lastNumber: {
-                        $toInt: { $arrayElemAt: [{ $split: ["$dealData.dealId", "-"] }, -1] }
-                    }
-                }
-            },
-            {
-                $sort: { lastNumber: -1 }
-            },
-            {
-                $limit: 1
-            }
-        ])
-        let dealId: string;
-
-
         const today = new Date();
-        const currentYear = today.getFullYear();
-        const year = currentYear.toString().slice(-2);
+        const year = today.getFullYear().toString().slice(-2);
 
-        if (lastQuote.length) {
-            const lastNumber = lastQuote[0].lastNumber;
-            const incrementedNum = parseInt(lastNumber) + 1;
-            const formattedIncrementedNum = String(incrementedNum).padStart(3, '0');
-            dealId = `DL-${year}-${formattedIncrementedNum}`
-        } else {
-            dealId = `DL-${year}-001`
-        }
-        return dealId;
+        const incrementedNum = await getNextSequence('dealId', seedDealIdSequence);
+        const formattedIncrementedNum = String(incrementedNum).padStart(3, '0');
+        return `DL-${year}-${formattedIncrementedNum}`;
     } catch (error) {
         console.log(error)
     }
 }
 
+const seedQuoteIdSequence = async (): Promise<number> => {
+    const lastQuote = await Quotation.aggregate([
+        { $match: { quoteId: { $exists: true } } },
+        { $addFields: { lastNumber: { $toInt: { $arrayElemAt: [{ $split: ["$quoteId", "-"] }, -1] } } } },
+        { $sort: { lastNumber: -1 } },
+        { $limit: 1 }
+    ]);
+    return lastQuote.length ? parseInt(lastQuote[0].lastNumber) : 0;
+};
+
 const generateQuoteId = async (departmentId: string, employeeId: string, date: string) => {
     try {
-        const lastQuote = await Quotation.aggregate([
-            {
-                $match: {
-                    quoteId: { $exists: true }
-                }
-            },
-            {
-                $addFields: {
-                    lastNumber: {
-                        $toInt: { $arrayElemAt: [{ $split: ["$quoteId", "-"] }, -1] }
-                    }
-                }
-            },
-            {
-                $sort: { lastNumber: -1 }
-            },
-            {
-                $limit: 1
-            }
-        ])
         const department = await Department.findById(departmentId);
         const employee = await Employee.findById(employeeId);
         let quoteId: string;
@@ -897,14 +868,9 @@ const generateQuoteId = async (departmentId: string, employeeId: string, date: s
             const [year, month] = date.split('-');
             const formatedDate = `${month}/${year.substring(2)}`;
 
-            if (lastQuote.length) {
-                const lastNumber = lastQuote[0].lastNumber;
-                const incrementedNum = parseInt(lastNumber) + 1;
-                const formattedIncrementedNum = String(incrementedNum).padStart(3, '0');
-                quoteId = `QN-NT/${salesId}/${departmentName}-${formatedDate}-${formattedIncrementedNum}`
-            } else {
-                quoteId = `QN-NT/${salesId}/${departmentName}-${formatedDate}-001`
-            }
+            const incrementedNum = await getNextSequence('quoteId', seedQuoteIdSequence);
+            const formattedIncrementedNum = String(incrementedNum).padStart(3, '0');
+            quoteId = `QN-NT/${salesId}/${departmentName}-${formatedDate}-${formattedIncrementedNum}`
         }
         return quoteId;
     } catch (error) {
@@ -1406,31 +1372,29 @@ export const getReportDetails = async (req: Request, res: Response) => {
     }
 };
 
+const seedJobIdSequence = async (): Promise<number> => {
+    const lastJob = await Job.findOne({}, {}, { sort: { jobId: -1 } });
+    if (lastJob && lastJob.jobId) {
+        const parts = lastJob.jobId.split('-');
+        const lastNum = parseInt(parts[1]);
+        if (!isNaN(lastNum)) {
+            return lastNum;
+        }
+    }
+    // Legacy default: numbering historically started at 0100, not 0001.
+    return 99;
+};
+
 const generateJobId = async () => {
     try {
-        const lastJob = await Job.findOne({}, {}, { sort: { jobId: -1 } });
-        let lastJobId: String;
-        let jobId: string;
-
-        if (lastJob) {
-            lastJobId = lastJob.jobId
-        }
         const today = new Date();
-
         const year = today.getFullYear();
         const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
         const formattedDate = `${year}/${month}`;
 
-        if (lastJob && lastJobId) {
-            const IdNumber = lastJobId.split('-')
-            const incrementedNum = parseInt(IdNumber[1]) + 1;
-            const formattedIncrementedNum = incrementedNum.toString().padStart(4, '0');
-            jobId = `${formattedDate}-${formattedIncrementedNum}`
-        } else {
-            jobId = `${formattedDate}-0100`
-        }
-        return jobId;
+        const incrementedNum = await getNextSequence('jobId', seedJobIdSequence);
+        const formattedIncrementedNum = incrementedNum.toString().padStart(4, '0');
+        return `${formattedDate}-${formattedIncrementedNum}`;
     } catch (error) {
         console.log(error)
     }
