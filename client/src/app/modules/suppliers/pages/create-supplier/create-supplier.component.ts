@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { Router, RouterLink, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { MatDialog } from '@angular/material/dialog';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { RadioGroupComponent } from 'src/app/shared/components/forms/radio-group/radio-group.component';
@@ -14,19 +16,21 @@ import { ToastrService } from 'ngx-toastr';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Department, getDepartment } from 'src/app/shared/interfaces/department.interface';
-import { UploadFileComponent } from 'src/app/shared/components/upload-file/upload-file.component';
+import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
+import { IconsModule } from 'src/app/lib/icons/icons.module';
 
 @Component({
   selector: 'app-create-supplier',
   imports: [
-    CommonModule, 
-    ReactiveFormsModule, 
+    CommonModule,
+    ReactiveFormsModule,
     RouterLink,
     FormFieldComponent,
     RadioGroupComponent,
     ButtonComponent,
     SelectDropdownComponent,
-    UploadFileComponent
+    IconsModule,
+    MatTooltipModule
   ],
   templateUrl: './create-supplier.component.html',
   styleUrl: './create-supplier.component.css',
@@ -39,7 +43,10 @@ export class CreateSupplierComponent implements OnInit {
   private departmentService = inject(ProfileService);
   private employeeService = inject(EmployeeService);
   private notificationService = inject(ToastrService);
+  private dialog = inject(MatDialog);
   selectedFiles: File[] = []
+  bankDocumentFiles: File[] = [];
+  existingDocuments: { fileName: string; originalname: string }[] = [];
 
   // Signals
   departments = signal<getDepartment[]>([]);
@@ -47,7 +54,78 @@ export class CreateSupplierComponent implements OnInit {
   isSubmitted = signal<boolean>(false);
   supplierExists = signal<boolean>(false);
   isEditMode = signal<boolean>(false);
-  
+  showBankDetails = signal<boolean>(false);
+
+  toggleBankDetails(): void {
+    this.showBankDetails.update(v => !v);
+  }
+
+  openDocumentsUpload(): void {
+    const modalData: FileUploadModalData = {
+      title: 'Upload Documents',
+      existingFiles: [
+        ...this.existingDocuments.map(doc => ({ fileName: doc.fileName, originalname: doc.originalname, isUploaded: true })),
+        ...this.selectedFiles.map(file => ({ fileName: '', originalname: file.name, file, isUploaded: false }))
+      ],
+      allowMultiple: true,
+      acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx',
+      maxFileSize: 10 * 1024 * 1024,
+      showActions: {
+        upload: true,
+        download: true,
+        view: true,
+        delete: true
+      }
+    };
+
+    const dialogRef = this.dialog.open(FileUploadModalComponent, {
+      data: modalData,
+      width: '800px',
+      maxHeight: '90vh'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.action === 'save') {
+        this.existingDocuments = result.files
+          .filter((file: any) => file.isUploaded)
+          .map((file: any) => ({ fileName: file.fileName, originalname: file.originalname }));
+        this.selectedFiles = result.files
+          .filter((file: any) => !file.isUploaded && file.file)
+          .map((file: any) => file.file);
+      }
+    });
+  }
+
+  openBankDocumentUpload(): void {
+    const modalData: FileUploadModalData = {
+      title: 'Upload Banking Documents',
+      existingFiles: this.bankDocumentFiles.map(file => ({ fileName: '', originalname: file.name, file, isUploaded: false })),
+      allowMultiple: true,
+      acceptedTypes: '.pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx',
+      maxFileSize: 10 * 1024 * 1024,
+      showActions: {
+        upload: true,
+        download: false,
+        view: true,
+        delete: true
+      }
+    };
+
+    const dialogRef = this.dialog.open(FileUploadModalComponent, {
+      data: modalData,
+      width: '800px',
+      maxHeight: '90vh'
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result && result.action === 'save') {
+        this.bankDocumentFiles = result.files
+          .filter((file: any) => file.file)
+          .map((file: any) => file.file);
+      }
+    });
+  }
+
   // Form Data
   supplierTypes = [
     { id: 'OEM', name: 'OEM' },
@@ -59,7 +137,7 @@ export class CreateSupplierComponent implements OnInit {
   // categories = signal<Department[]>([]);
 
   supplierForm: FormGroup = this.fb.group({
-    supplierCode: [{ value: 'NT-SP-', disabled: true }],
+    supplierId: [{ value: 'NT-SP-', disabled: true }],
     supplierName: ['', [Validators.required]],
     address: this.fb.group({
       streetNo: [''],
@@ -100,26 +178,26 @@ export class CreateSupplierComponent implements OnInit {
   private watchCategoryChanges(): void {
     this.supplierForm.get('category')?.valueChanges.subscribe((categoryId: string) => {
       if (!categoryId) {
-        this.supplierForm.get('supplierCode')?.setValue('NT-SP-');
+        this.supplierForm.get('supplierId')?.setValue('NT-SP-');
         return;
       }
 
-      this.supplierService.previewSupplierCode(categoryId).subscribe({
+      this.supplierService.previewSupplierId(categoryId).subscribe({
         next: (response) => {
           const preview = this.isEditMode()
             ? this.applyDepartmentToExistingCode(response.data.departmentCode)
-            : response.data.supplierCode;
-          this.supplierForm.get('supplierCode')?.setValue(preview);
+            : response.data.supplierId;
+          this.supplierForm.get('supplierId')?.setValue(preview);
         },
         error: (error) => {
-          console.error('Error previewing supplier code:', error);
+          console.error('Error previewing supplier id:', error);
         }
       });
     });
   }
 
   private applyDepartmentToExistingCode(departmentCode: string): string {
-    const currentCode = this.supplierForm.get('supplierCode')?.value as string;
+    const currentCode = this.supplierForm.get('supplierId')?.value as string;
     const parts = currentCode?.split('-');
     if (parts?.length === 5) {
       parts[2] = departmentCode;
@@ -170,7 +248,7 @@ export class CreateSupplierComponent implements OnInit {
 
     // Patch the main form values
     this.supplierForm.patchValue({
-      supplierCode: supplier.supplierCode || 'NT-SP-',
+      supplierId: supplier.supplierId || 'NT-SP-',
       supplierName: supplier.supplierName || '',
       supplierType: supplier.supplierType || '',
       category: supplier.category?._id || supplier.category || '',
@@ -232,7 +310,7 @@ export class CreateSupplierComponent implements OnInit {
       });
     }
 
-    this.selectedFiles.push(...supplier.documents);
+    this.existingDocuments = supplier.documents || [];
 
     // Mark the form as pristine and untouched after population
     this.supplierForm.markAsPristine();
@@ -280,10 +358,6 @@ export class CreateSupplierComponent implements OnInit {
 
   oncontactDetailsChange(contactData: any): void {
     this.supplierForm.patchValue({ contactDetails: contactData });
-  }
-
-  onFileUpload(event: File[]) {
-    this.selectedFiles = event
   }
 
   onSubmit(): void {

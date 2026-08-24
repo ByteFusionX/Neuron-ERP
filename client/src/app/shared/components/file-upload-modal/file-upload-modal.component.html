@@ -108,10 +108,10 @@
                         </button>
 
                         <!-- View Button -->
-                        <button *ngIf="data.showActions?.view && file.isUploaded && isPDF(file.originalname)"
+                        <button *ngIf="data.showActions?.view && (isPDF(file.originalname) || isImage(file.originalname)) && (file.isUploaded || file.file)"
                                 class="w-8 h-8 flex justify-center items-center border border-gray-300 rounded-full hover:bg-gray-200 transition"
                                 (click)="onView(file)"
-                                [matTooltip]="'View PDF'"
+                                [matTooltip]="'View File'"
                                 matTooltipPosition="above">
                             <ng-icon class="text-gray-700" name="heroEye"></ng-icon>
                         </button>

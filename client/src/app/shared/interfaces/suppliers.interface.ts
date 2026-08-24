@@ -68,7 +68,6 @@ export interface Employee {
 export interface Supplier {
     _id?: string;
     supplierId: string;
-    supplierCode: string;
     supplierName: string;
     address: Address;
     supplierType: string;

@@ -73,7 +73,7 @@ export class FileUploadModalComponent implements OnInit {
 
   ngOnInit(): void {
     if (this.data.existingFiles) {
-      this.files = [...this.data.existingFiles.map(file => ({ ...file, isUploaded: true }))];
+      this.files = [...this.data.existingFiles.map(file => ({ ...file, isUploaded: file.isUploaded ?? true }))];
     }
   }
 
@@ -198,6 +198,20 @@ export class FileUploadModalComponent implements OnInit {
   }
 
   onView(file: FileItem) {
+    // Local file that hasn't been uploaded to the server/cloud yet - preview it directly from the browser.
+    if (!file.isUploaded && file.file) {
+      if (!this.isPDF(file.originalname) && !this.isImage(file.originalname)) {
+        this.toast.warning('This file type is not supported for viewing. Please download and view the file.');
+        return;
+      }
+      const fileURL = URL.createObjectURL(file.file);
+      window.open(fileURL, '_blank');
+      setTimeout(() => {
+        URL.revokeObjectURL(fileURL);
+      }, 10000);
+      return;
+    }
+
     if (!file.fileName) {
       this.toast.error('File not available for viewing');
       return;
@@ -284,5 +298,9 @@ export class FileUploadModalComponent implements OnInit {
 
   isPDF(filename: string): boolean {
     return filename.toLowerCase().endsWith('.pdf');
+  }
+
+  isImage(filename: string): boolean {
+    return /\.(png|jpe?g|gif|webp)$/i.test(filename);
   }
 }

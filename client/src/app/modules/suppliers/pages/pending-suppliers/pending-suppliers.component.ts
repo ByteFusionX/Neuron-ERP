@@ -129,6 +129,15 @@ export class PendingSuppliersComponent implements OnInit, OnDestroy {
   setupTableColumns(): void {
     const baseColumns: TableColumn[] = [
       {
+        key: 'supplierId',
+        label: 'Supplier ID',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search supplier ID...'
+      },
+      {
         key: 'createdDate',
         label: 'Created Date',
         type: 'date',
@@ -253,7 +262,7 @@ export class PendingSuppliersComponent implements OnInit, OnDestroy {
     this.tableColumns = baseColumns;
 
     const defaultCols = [
-      'createdDate', 'supplierName', 'address.location', 'supplierType',
+      'supplierId', 'createdDate', 'supplierName', 'address.location', 'supplierType',
       'creditDays', 'creditValue'
     ];
 

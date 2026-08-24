@@ -7,6 +7,7 @@ import { PipelineStage } from 'mongoose';
 import { getEmployeeData, buildPrivilegeAccessFilter } from '../common/utils/util';
 import { Server } from 'socket.io';
 import { createNotificationWithPrivileges } from './notification.controller';
+import { getNextSequence } from '../models/counter.model';
 
 
 export const getSuppliers = async (req: Request, res: Response) => {
@@ -190,7 +191,6 @@ export const getSuppliers = async (req: Request, res: Response) => {
          {
             $project: {
                supplierId: 1,
-               supplierCode: 1,
                supplierName: 1,
                address: 1,
                supplierType: 1,
@@ -298,9 +298,9 @@ export const createSupplier = async (req: Request, res: Response) => {
       }
 
 
-      // Derive the department code (e.g. ICT/ELV) from the selected category for the supplier code
+      // Derive the department code (e.g. ICT/ELV) from the selected category for the supplier id
       const department = await Department.findById(category);
-      const supplierCode = await generateSupplierCode(department?.departmentName || 'GEN');
+      const supplierId = await generateSupplierId(department?.departmentName || 'GEN');
 
       // Create new supplier object
       const newSupplier = new Supplier({
@@ -318,7 +318,7 @@ export const createSupplier = async (req: Request, res: Response) => {
          createdDate: new Date(),
          updatedDate: new Date(),
          status: 'Pending', // Default status
-         supplierCode,
+         supplierId,
       });
 
       // Save the supplier to database
@@ -429,10 +429,6 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
             });
          }
 
-         const { location } = supplier.address;
-         const newSupplierId = await generateSupplierId(location);
-
-         supplier.supplierId = newSupplierId;
          supplier.status = supplierStatus.approved;
          supplier.approvedHistory.push({
             date: new Date(),
@@ -685,15 +681,15 @@ export const updateSupplier = async (req: Request, res: Response) => {
       }
 
       // If the category (department) changed, refresh the department segment of the
-      // supplier code while keeping its original sequence number and date intact.
-      let supplierCode = existingSupplier.supplierCode;
-      if (supplierCode && String(existingSupplier.category) !== String(category)) {
+      // supplier id while keeping its original sequence number intact.
+      let supplierId = existingSupplier.supplierId;
+      if (supplierId && String(existingSupplier.category) !== String(category)) {
          const department = await Department.findById(category);
          if (department) {
-            const parts = supplierCode.split('-');
-            if (parts.length === 5) {
+            const parts = supplierId.split('-');
+            if (parts.length === 4) {
                parts[2] = deriveDepartmentCode(department.departmentName);
-               supplierCode = parts.join('-');
+               supplierId = parts.join('-');
             }
          }
       }
@@ -715,7 +711,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
             updatedBy: new Types.ObjectId(updatedBy),
             updatedDate: new Date(),
             status: newStatus, // Update status accordingly
-            supplierCode,
+            supplierId,
          },
          { new: true }
       )
@@ -816,57 +812,25 @@ export const getSupplierById = async (req: Request, res: Response) => {
    }
 };
 
-const generateSupplierId = async (countryName: string, code: string = 'YYMM') => {
-   const locationCode = countryName.trim().substring(0, 3).toUpperCase();
-
-   // Find the supplier with the highest sequence number globally
-   const latestSupplier = await Supplier.findOne({
-      supplierId: { $regex: `^SUP_[A-Z]{3}_${code}_\\d{3}$` }
-   }).sort({ supplierId: -1 });
-
-   let sequence = 1;
-   if (latestSupplier) {
-      // Extract the sequence number from the latest supplier ID
-      const lastSequence = parseInt(latestSupplier.supplierId.slice(-3), 10);
-      if (!isNaN(lastSequence)) {
-         sequence = lastSequence + 1;
-      }
-   }
-
-   const sequenceStr = sequence.toString().padStart(3, '0');
-   return `SUP_${locationCode}_${code}_${sequenceStr}`;
-};
-
 const deriveDepartmentCode = (departmentName: string) => {
    return departmentName.trim().split(' ')[0].replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase();
 };
 
-const generateSupplierCode = async (departmentName: string) => {
+// Format: NT-SP-{DEPT}-{seq}. Sequence is scoped per department via an atomic counter,
+// so concurrent creates cannot collide on the same supplierId.
+const generateSupplierId = async (departmentName: string) => {
    const deptCode = deriveDepartmentCode(departmentName);
 
-   const now = new Date();
-   const monthYear = `${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getFullYear().toString().slice(-2)}`;
-
-   // Global running sequence across all suppliers, regardless of department
-   const latestSupplier = await Supplier.findOne({
-      supplierCode: { $regex: `^NT-SP-[A-Z]+-\\d{3}-\\d{4}$` }
-   }).sort({ createdDate: -1 });
-
-   let sequence = 1;
-   if (latestSupplier?.supplierCode) {
-      const lastSequence = parseInt(latestSupplier.supplierCode.split('-')[3], 10);
-      if (!isNaN(lastSequence)) {
-         sequence = lastSequence + 1;
-      }
-   }
-
+   const sequence = await getNextSequence(`supplierId-${deptCode}`);
    const sequenceStr = sequence.toString().padStart(3, '0');
-   return `NT-SP-${deptCode}-${sequenceStr}-${monthYear}`;
+   return `NT-SP-${deptCode}-${sequenceStr}`;
 };
 
-// Read-only preview of the supplier code for a given category, used to populate the
-// readonly Supplier Code field on the create/edit forms as the user picks a department.
-export const previewSupplierCode = async (req: Request, res: Response) => {
+// Read-only preview of the supplier ID for a given category, used to populate the
+// readonly Supplier ID field on the create/edit forms as the user picks a department.
+// Note: this is a preview only — the real value is generated again at create time,
+// so the previewed sequence number may not match what actually gets saved.
+export const previewSupplierId = async (req: Request, res: Response) => {
    try {
       const { category } = req.query;
 
@@ -885,17 +849,30 @@ export const previewSupplierCode = async (req: Request, res: Response) => {
          });
       }
 
-      const supplierCode = await generateSupplierCode(department.departmentName);
+      const deptCode = deriveDepartmentCode(department.departmentName);
+      const latestSupplier = await Supplier.findOne({
+         supplierId: { $regex: `^NT-SP-${deptCode}-\\d{3}$` }
+      }).sort({ supplierId: -1 });
+
+      let sequence = 1;
+      if (latestSupplier?.supplierId) {
+         const lastSequence = parseInt(latestSupplier.supplierId.split('-')[3], 10);
+         if (!isNaN(lastSequence)) {
+            sequence = lastSequence + 1;
+         }
+      }
+
+      const supplierId = `NT-SP-${deptCode}-${sequence.toString().padStart(3, '0')}`;
 
       return res.status(200).json({
          success: true,
-         data: { supplierCode, departmentCode: deriveDepartmentCode(department.departmentName) },
+         data: { supplierId, departmentCode: deptCode },
       });
    } catch (error) {
-      console.error('Error previewing supplier code:', error);
+      console.error('Error previewing supplier id:', error);
       return res.status(500).json({
          success: false,
-         message: 'Error previewing supplier code',
+         message: 'Error previewing supplier id',
          error: error instanceof Error ? error.message : 'Unknown error',
       });
    }

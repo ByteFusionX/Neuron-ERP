@@ -2,7 +2,6 @@ import { model, Schema, Types } from "mongoose";
 
 interface supplierSchemaInterface {
     supplierId: string;
-    supplierCode: string;
     supplierName: string;
     address: AddressInterface;
     supplierType: String;
@@ -131,9 +130,8 @@ const BankDetails = new Schema<BankDetailsInterface>({
 const supplierSchema = new Schema<supplierSchemaInterface>({
     supplierId: {
         type: String,
-    },
-    supplierCode: {
-        type: String,
+        unique: true,
+        sparse: true,
     },
     supplierName: {
         type: String,

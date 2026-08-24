@@ -82,8 +82,8 @@ export class SupplierService {
         return this.http.patch<{ isBlocked: boolean }>(`${this.api}/supplier/block/${id}`, {}, { context: context() });
     }
 
-    previewSupplierCode(category: string): Observable<{ success: boolean; data: { supplierCode: string; departmentCode: string } }> {
-        return this.http.get<{ success: boolean; data: { supplierCode: string; departmentCode: string } }>(`${this.api}/supplier/preview-code`, {
+    previewSupplierId(category: string): Observable<{ success: boolean; data: { supplierId: string; departmentCode: string } }> {
+        return this.http.get<{ success: boolean; data: { supplierId: string; departmentCode: string } }>(`${this.api}/supplier/preview-code`, {
             params: { category }
         });
     }
