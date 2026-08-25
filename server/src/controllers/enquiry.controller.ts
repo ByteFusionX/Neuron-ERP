@@ -482,7 +482,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
         ])
 
         if (totalPresale.length) return res.status(200).json({ total: totalPresale[0].total, enquiry: preSaleData })
-        return res.status(502).json()
+        return res.status(200).json({ total: 0, enquiry: [] })
     } catch (error) {
         console.log(error)
         next(error)

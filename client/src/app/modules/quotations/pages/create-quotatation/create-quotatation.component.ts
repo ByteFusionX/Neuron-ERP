@@ -214,6 +214,7 @@ export class CreateQuotatationComponent {
             date: data.date ? this.toDateInputValue(data.date) : '',
             attention: data.contact?._id,
             enqId: data._id,
+            currency: data?.preSale?.estimations?.currency,
           });
 
           if (data?.preSale?.estimations?.optionalItems?.length) {

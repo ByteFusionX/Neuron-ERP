@@ -4,7 +4,7 @@
   "scripts": {
     "ng": "ng",
     "build-sw-push": "node scripts/build-sw-push.mts",
-    "start": "npm run build-sw-push && ng serve --host 0.0.0.0 --ssl true",
+    "start": "npm run build-sw-push && ng serve --host 0.0.0.0",
     "dev": "npm run build-sw-push && ng serve --builder=@angular-devkit/build-angular:dev-server-esbuild",
     "build": "npm run build-sw-push && ng build",
     "watch": "npm run build-sw-push && ng build --watch --configuration development",

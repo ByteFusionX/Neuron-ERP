@@ -46,10 +46,10 @@ export class AssignPresaleComponent implements OnInit {
       this._employeeService.getPresaleEngineers(),
       this._employeeService.getPresaleManagers()
     ]).pipe(map(([engineers, managers]) => [...engineers, ...managers]))
-    if (this.data) {
+    if (this.data?.presalePerson) {
       this.selectedEmployee = this.data.presalePerson
       this.comment = this.data.comment
-      this.selectedFiles = this.data.presaleFiles
+      this.selectedFiles = this.data.presaleFiles || []
       this.isClear = true
     }
     this.updateFooterButtons();
