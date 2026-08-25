@@ -14,22 +14,25 @@ import {
   approvePurchaseOrder,
   rejectPurchaseOrder,
   revokePurchaseOrder
-} from "../controllers/purchaseOrder.controller"; 
+} from "../controllers/purchaseOrder.controller";
+import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage")
 
 const router = Router();
 
-router.post("/", createPurchaseOrder);
+router.use(requirePrivilege("purchaseOrder"));
+
+router.post("/", requirePrivilege("purchaseOrder", "canInitiateLPO"), createPurchaseOrder);
 router.put("/:id", updatePurchaseOrder);
-router.put("/:id/reissue", reissuePurchaseOrder);
+router.put("/:id/reissue", requirePrivilege("purchaseOrder", "canReissueAndRevoke"), reissuePurchaseOrder);
 router.patch("/:id/status", updatePurchaseOrderStatus);
-router.patch("/:id/approve", approvePurchaseOrder);
-router.patch("/:id/reject", rejectPurchaseOrder);
+router.patch("/:id/approve", requirePrivilege("purchaseOrder", "canApprovePOs"), approvePurchaseOrder);
+router.patch("/:id/reject", requirePrivilege("purchaseOrder", "canApprovePOs"), rejectPurchaseOrder);
 router.patch("/:id/supplier-invoices",upload.array('files'), updateSupplierInvoices);
 router.get("/generate-po-no", generateLpoNo);
 router.get("/suppliers/:purchaseId", getSuppliersForPurchaseRequest);
 router.get("/items/:purchaseId/:supplierId", getItemsForPurchaseRequest);
-router.delete("/:id/revoke", revokePurchaseOrder);
+router.delete("/:id/revoke", requirePrivilege("purchaseOrder", "canReissueAndRevoke"), revokePurchaseOrder);
 router.get("/:id", getPurchaseOrderById);
 router.get("purchase/:id", getPurchaseOrderByPurchaseId);
 router.get("/", getAllPurchaseOrders);

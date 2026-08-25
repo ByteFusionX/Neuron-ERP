@@ -19,6 +19,7 @@ import startCronJob from './services/cron.service';
 import quoteRouter from './routes/quotation.router';
 import fileRouter from './routes/file.router';
 import PassportMiddleware from './common/middlewares/jwt.middleware';
+import { attachEmployee } from './common/middlewares/privilege.middleware';
 import jobRouter from './routes/job.router';
 import catRouter from './routes/category.router';
 import { socketConnection } from './services/socket-io.service';
@@ -58,7 +59,7 @@ app.set('etag', false); // API responses are dynamic per request; conditional 30
 const server = http.createServer(app);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const allowedOrigins = (process.env.ORIGIN1 ?? 'https://localhost:4200')
+const allowedOrigins = (process.env.ORIGIN1 ?? 'http://localhost:4200')
   .split(',')
   .map((origin) => origin.trim());
 const corsOriginCheck = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
@@ -103,6 +104,7 @@ app.use(passport.initialize());
 passport.use(bearerStrategy);
 
 app.use(PassportMiddleware);
+app.use(attachEmployee);
 
 app.use('/', router);
 app.use('/department', depRouter);

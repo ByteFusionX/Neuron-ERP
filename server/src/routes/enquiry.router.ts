@@ -24,9 +24,12 @@ import {
     reAssignJob,
     markAsSeenReAssingedJob
 } from "../controllers/enquiry.controller";
+import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const equiRouter = Router()
 
-equiRouter.post('/create', upload.fields([{ name: 'attachments' }, { name: 'presaleFiles' }]), createEnquiry);
+equiRouter.use(requirePrivilege("enquiry"));
+
+equiRouter.post('/create', requirePrivilege("enquiry", "create"), upload.fields([{ name: 'attachments' }, { name: 'presaleFiles' }]), createEnquiry);
 equiRouter.post('/get', getEnquiries);
 equiRouter.get('/presales', getPreSaleJobs);
 equiRouter.patch('/presales/:enquiryId', upload.fields([{ name: 'newPresaleFile' }]), assignPresale);

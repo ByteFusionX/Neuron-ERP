@@ -258,7 +258,7 @@ export const routes: Routes = [
   },
   {
     path: 'technical',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/technical/technical.component').then((c) => c.TechnicalComponent),
     children: [
       { path: 'project', component: ProjectsComponent },

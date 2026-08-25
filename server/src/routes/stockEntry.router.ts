@@ -10,8 +10,11 @@ import {
     createStockBlock,
     getStockBlocks
 } from "../controllers/stockEntry.controller";
+import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
 const stockEntryRouter = Router();
+
+stockEntryRouter.use(requirePrivilege("inventory.stockEntries"));
 
 stockEntryRouter.get('/generate-grn', generateGRN);
 stockEntryRouter.get('/available-quantity', getAvailableQuantity);

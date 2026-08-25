@@ -1,14 +1,17 @@
 import { Router } from "express";
 import { getProjectAndAMCJobs, getEngineers, getUnassignedJobsByCustomer, assignEngineer, getProjects, getProjectById, updateProject, getTasks, createTask, updateTask, getIssues, createIssue, updateIssue, deleteIssue, getActivityPlans, createActivityPlan, updateActivityPlan, deleteActivityPlan, closeActivityPlan, getProjectUpdates, getProjectUpdateById, createProjectUpdate, updateProjectUpdate, deleteProjectUpdate, removeProjectUpdateAttachment, updateMaterialRequest, getBillingSummaries, getBillingSummaryById, createBillingSummary, updateBillingSummary, deleteBillingSummary, getCostingDetails, getMrRequests, createProject, getMaterialRequestByJobId, transferEngineer, getPendingMaterialRequestProjects, approveMaterialRequest, rejectMaterialRequest, approveMaterialRequestItem, rejectMaterialRequestItem, approveMaterialRequestFile, rejectMaterialRequestFile, approveAllPendingMaterialRequests } from "../controllers/technical.controller";
 const upload = require("../common/multer.storage")
+import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
 const technicalRouter = Router()
 
+technicalRouter.use(requirePrivilege("technical"));
+
 technicalRouter.get('/getProjectAndAMCJobs', getProjectAndAMCJobs)
 technicalRouter.get('/getEngineers', getEngineers)
-technicalRouter.get('/unassigned-jobs/:customerId', getUnassignedJobsByCustomer)
-technicalRouter.post('/assignEngineer', assignEngineer)
-technicalRouter.post('/transferEngineer', transferEngineer)
+technicalRouter.get('/unassigned-jobs/:customerId', requirePrivilege("technical", "canViewOpenToWorkAndAssign"), getUnassignedJobsByCustomer)
+technicalRouter.post('/assignEngineer', requirePrivilege("technical", "canViewOpenToWorkAndAssign"), assignEngineer)
+technicalRouter.post('/transferEngineer', requirePrivilege("technical", "canTransferToEngineer"), transferEngineer)
 technicalRouter.post('/getProjects', getProjects)
 technicalRouter.post('/createProject', createProject)
 technicalRouter.post('/getMrRequests', getMrRequests)
@@ -48,12 +51,12 @@ technicalRouter.put('/billing-summary/:id/:billingSummaryId', updateBillingSumma
 technicalRouter.delete('/billing-summary/:id/:billingSummaryId', deleteBillingSummary)
 
 technicalRouter.post('/material-requests/pending', getPendingMaterialRequestProjects)
-technicalRouter.post('/material-requests/:id/approve', approveMaterialRequest)
-technicalRouter.post('/material-requests/:id/reject', rejectMaterialRequest)
-technicalRouter.post('/material-requests/:id/approve-all-pending', approveAllPendingMaterialRequests)
-technicalRouter.post('/material-requests/:id/item/:itemIndex/approve', approveMaterialRequestItem)
-technicalRouter.post('/material-requests/:id/item/:itemIndex/reject', rejectMaterialRequestItem)
-technicalRouter.post('/material-requests/:id/file/:fileIndex/approve', approveMaterialRequestFile)
-technicalRouter.post('/material-requests/:id/file/:fileIndex/reject', rejectMaterialRequestFile)
+technicalRouter.post('/material-requests/:id/approve', requirePrivilege("technical", "canApproveMRRequests"), approveMaterialRequest)
+technicalRouter.post('/material-requests/:id/reject', requirePrivilege("technical", "canApproveMRRequests"), rejectMaterialRequest)
+technicalRouter.post('/material-requests/:id/approve-all-pending', requirePrivilege("technical", "canApproveMRRequests"), approveAllPendingMaterialRequests)
+technicalRouter.post('/material-requests/:id/item/:itemIndex/approve', requirePrivilege("technical", "canApproveMRRequests"), approveMaterialRequestItem)
+technicalRouter.post('/material-requests/:id/item/:itemIndex/reject', requirePrivilege("technical", "canApproveMRRequests"), rejectMaterialRequestItem)
+technicalRouter.post('/material-requests/:id/file/:fileIndex/approve', requirePrivilege("technical", "canApproveMRRequests"), approveMaterialRequestFile)
+technicalRouter.post('/material-requests/:id/file/:fileIndex/reject', requirePrivilege("technical", "canApproveMRRequests"), rejectMaterialRequestFile)
 
 export default technicalRouter
