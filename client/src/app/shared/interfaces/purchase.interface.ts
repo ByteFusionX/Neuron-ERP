@@ -70,6 +70,7 @@ export interface PurchaseData {
     _id?: string,
     customer?: any;
     customerId: any;
+    supplierId?: any;
     salesManager: string;
     purchaseNo: string;
     jobId: any;

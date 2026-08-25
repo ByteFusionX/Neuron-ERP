@@ -203,7 +203,7 @@
                                 Ref</td>
                             <td class="px-2 py-2 border w-2/6">
                                 <ng-container *ngIf="this.selectedSupplier()">
-                                    {{purchase?.jobId?.quoteId.quoteId}}
+                                    {{purchase?.sourceType !== 'manual' ? (purchase?.jobId?.quoteId?.quoteId) : 'N/A'}}
                                 </ng-container>
                             </td>
                             <td
@@ -243,7 +243,7 @@
                                 No</td>
                             <td class="px-2 py-2 border w-2/6">
                                 <ng-container *ngIf="this.selectedSupplier()">
-                                    {{purchase?.jobId.jobId}}
+                                    {{purchase?.sourceType !== 'manual' ? (purchase?.jobId?.jobId) : 'N/A'}}
                                 </ng-container>
                             </td>
                         </tr>

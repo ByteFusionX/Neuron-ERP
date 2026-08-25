@@ -257,6 +257,15 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             { $unwind: { path: '$customerId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
+                    from: 'suppliers',
+                    localField: 'supplierId',
+                    foreignField: '_id',
+                    as: 'supplierId'
+                }
+            },
+            { $unwind: { path: '$supplierId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
                     from: 'jobs',
                     localField: 'jobId',
                     foreignField: '_id',
@@ -1400,6 +1409,15 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
             { $unwind: { path: '$customerId', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
+                    from: 'suppliers',
+                    localField: 'supplierId',
+                    foreignField: '_id',
+                    as: 'supplierId'
+                }
+            },
+            { $unwind: { path: '$supplierId', preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
                     from: 'jobs',
                     localField: 'jobId',
                     foreignField: '_id',
@@ -2114,7 +2132,9 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
 
         const procurementPersonId =
             (purchaseRequest as any).procurementPerson?.toString?.() ||
-            (await jobModel.findById(purchaseRequest.jobId).select('procurementPerson').lean())?.procurementPerson?.toString?.();
+            (purchaseRequest.jobId
+                ? (await jobModel.findById(purchaseRequest.jobId).select('procurementPerson').lean())?.procurementPerson?.toString?.()
+                : undefined);
 
         if (procurementPersonId) {
             const purchaseId = purchaseRequest._id.toString();

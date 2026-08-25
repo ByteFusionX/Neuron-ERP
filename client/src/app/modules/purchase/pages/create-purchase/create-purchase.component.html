@@ -34,6 +34,10 @@
                 <app-form-field label="Created By" [control]="f['salesManager']" [isSubmitted]="isSubmitted()"
                     class="w-full" [readonly]="true">
                 </app-form-field>
+                <app-select-dropdown [options]="suppliersList()" label="Supplier" optionLabel="supplierName"
+                    optionValue="_id" formControlName="supplierId" placeholder="Select Supplier"
+                    [selected]="f['supplierId'].value" class="w-full">
+                </app-select-dropdown>
             </div>
             <div class="flex flex-col md:flex-row mb-3 gap-3" *ngIf="!isJobLess">
                 <app-form-field label="Customer" [control]="f['customer']" [isSubmitted]="isSubmitted()" class="w-full"
@@ -64,10 +68,10 @@
                         <th scope="col" resizable key="totalCost" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Total Cost</div>
                         </th>
-                        <th scope="col" resizable key="unitPrice" class="border-l border-r border-t text-center">
+                        <th *ngIf="!isJobLess" scope="col" resizable key="unitPrice" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Unit Selling Price</div>
                         </th>
-                        <th scope="col" resizable key="totalPrice" class="border-l border-r border-t text-center">
+                        <th *ngIf="!isJobLess" scope="col" resizable key="totalPrice" class="border-l border-r border-t text-center">
                             <div class="px-6 py-3">Total Selling Price</div>
                         </th>
                         <th scope="col" resizable key="actions" class="border-l border-r border-t text-center">
@@ -95,16 +99,16 @@
                                         <td class="px-2 py-2 border text-center">
                                             {{ item.unitCost * item.quantity | numberFormatter }} {{ currency() }}
                                         </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="!item.fromMrRequest">
+                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && !item.fromMrRequest">
                                             {{ item.unitSellingPrice  | numberFormatter }} {{ currency() }}
                                         </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="item.fromMrRequest">
+                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && item.fromMrRequest">
                                             <span class="text-gray-400">-</span>
                                         </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="!item.fromMrRequest">
+                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && !item.fromMrRequest">
                                             {{ (item.unitSellingPrice ) * item.quantity | numberFormatter }} {{ currency() }}
                                         </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="item.fromMrRequest">
+                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && item.fromMrRequest">
                                             <span class="text-gray-400">-</span>
                                         </td>
                                         <td class="px-2 py-2 border text-center">
@@ -159,11 +163,11 @@
                                         <td class="px-2 py-2 text-center border">
                                             {{ (editBuffer.quantity || 0) * (editBuffer.unitCost || 0) | number:'1.2-2' }} {{ currency() }}
                                         </td>
-                                        <td class="px-2 py-2 text-center border">
+                                        <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
                                             <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
                                                 [(ngModel)]="editBuffer.unitSellingPrice" [ngModelOptions]="{standalone: true}" placeholder="0" />
                                         </td>
-                                        <td class="px-2 py-2 text-center border">
+                                        <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
                                             {{ (editBuffer.quantity || 0) * (editBuffer.unitSellingPrice || editBuffer.unitCost || 0) | number:'1.2-2' }} {{ currency() }}
                                         </td>
                                         <td class="px-2 py-2 border text-center">
@@ -227,11 +231,11 @@
                                     {{ getNewItemDetailGroup().value.quantity *
                                     getNewItemDetailGroup().value.unitCost | number:'1.2-2' }} {{ currency() }}
                                 </td>
-                                <td class="px-2 py-2 text-center border">
+                                <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
                                     <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
                                         formControlName="unitSellingPrice" placeholder="0" />
                                 </td>
-                                <td class="px-2 py-2 text-center border">
+                                <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
                                     {{ getNewItemDetailGroup().value.quantity *
                                     (getNewItemDetailGroup().value.unitSellingPrice || getNewItemDetailGroup().value.unitCost) | number:'1.2-2' }} {{ currency() }}
                                 </td>
@@ -244,7 +248,7 @@
                         </ng-container>
 
                         <tr>
-                            <td colspan="6" class="align-top bg-gray-100 border">
+                            <td [attr.colspan]="isJobLess ? 4 : 6" class="align-top bg-gray-100 border">
                                 <div class=" p-2 w-full h-full md:flex md:items-center justify-between ">
                                     <div>
                                         <button *ngIf="!isAddingItem"

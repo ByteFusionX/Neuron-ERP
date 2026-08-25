@@ -103,6 +103,13 @@
                                 {{ purchase.createdBy?.firstName }}
                                 {{ purchase.createdBy?.lastName }}
                             </td>
+                            <td class="px-2 py-2 border font-medium bg-gray-50"
+                                colspan="1">
+                                Supplier
+                            </td>
+                            <td class="px-2 py-2 border" colspan="2">
+                                {{ purchase.supplierId?.supplierName || '-' }}
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -135,7 +142,7 @@
                                 <td class="px-4 py-2 border font-semibold">
                                     <div class="flex items-center gap-2">
                                         <span>{{ row.detail.detail }}</span>
-                                        <span *ngIf="getItemStatus(row.detail)"
+                                        <span *ngIf="purchase?.sourceType !== 'manual' && purchase?.jobId?._id && getItemStatus(row.detail)"
                                               [class]="'px-2 py-0.5 text-xs font-medium rounded-full ' + getItemStatus(row.detail)?.class">
                                             {{ getItemStatus(row.detail)?.label }}
                                         </span>

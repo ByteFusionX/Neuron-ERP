@@ -20,6 +20,7 @@ import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/a
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { CreateProductComponent } from 'src/app/modules/inventory/pages/all-products/modals/create-product/create-product.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { SupplierService } from 'src/app/core/services/supplier.service';
 
 interface PartNumberDropdownOption {
   label: string;
@@ -53,6 +54,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   private jobService = inject(JobService)
   private productService = inject(ProductService)
   private employeeService = inject(EmployeeService)
+  private supplierService = inject(SupplierService)
   private subscriptions = new Subscription()
 
   generatedPRId: string = '';
@@ -74,9 +76,11 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   currentEmployeeName = signal<string>('');
   editingItemKey: string | null = null;
   editBuffer: any = null;
+  suppliersList = signal<any[]>([]);
 
   purchaseForm: FormGroup = this.fb.group({
     customerId: ['', [Validators.required]],
+    supplierId: [''],
     salesManager: ['', [Validators.required]],
     purchaseNo: ['', [Validators.required]],
     jobId: ['', [Validators.required]],
@@ -111,9 +115,26 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
       dealSheetIdControl?.setValidators([Validators.required]);
       customerIdControl?.setValidators([Validators.required]);
     }
+
+    if (isJobLess && this.itemsList().length === 0) {
+      this.onAddColumnClicks();
+    }
     jobIdControl?.updateValueAndValidity();
     dealSheetIdControl?.updateValueAndValidity();
     customerIdControl?.updateValueAndValidity();
+  }
+
+  loadSuppliers(): void {
+    this.subscriptions.add(
+      this.supplierService.supplierList().subscribe({
+        next: (res) => {
+          this.suppliersList.set(res.data || []);
+        },
+        error: (error) => {
+          console.error('Failed to load suppliers', error);
+        }
+      })
+    );
   }
 
   loadCurrentEmployeeName(): void {
@@ -151,6 +172,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
     this.generatedPRId = this.generateId();
     this.loadPartNumbers();
+    this.loadSuppliers();
 
     (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
       this.updateTotalLpo();
@@ -192,6 +214,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
             this.purchaseForm.patchValue({
               customerId: purchase.customerId?._id || purchase.customerId,
+              supplierId: purchase.supplierId?._id || purchase.supplierId || '',
               salesManager: `${purchase.createdBy?.firstName || ''} ${purchase.createdBy?.lastName || ''}`.trim(),
               purchaseNo: purchase.purchaseNo,
               jobId: purchase.jobId?.jobId || purchase.jobId,
@@ -269,7 +292,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
           if (res.success && res.data?._id) {
             this.purchaseId = res.data._id;
             this.toaster.success('Purchase saved as draft');
-            this.router.navigate(['/purchase/pendings']);
+            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
           }
         },
         error: (error) => {
@@ -289,7 +312,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase updated successfully');
-            this.router.navigate(['/purchase/pendings']);
+            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
           }
         },
         error: (error) => {
@@ -317,7 +340,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase uploaded successfully');
-            this.router.navigate(['/purchase/pendings']);
+            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
           }
         },
         error: (error) => {
@@ -337,7 +360,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase updated successfully');
-            this.router.navigate(['/purchase/pendings']);
+            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
           }
         },
         error: (error) => {
@@ -371,9 +394,10 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
 
   onDiscardClicks() {
+    const isJobLess = this.isJobLess;
     this.purchaseForm.reset()
     this.itemsList.set([])
-    this.router.navigate(['/purchase/pendings'])
+    this.router.navigate(['/purchase/pendings'], isJobLess ? { queryParams: { sourceType: 'general' } } : {})
   }
 
   createSupplierGroup(): FormGroup {

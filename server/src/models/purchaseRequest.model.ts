@@ -139,6 +139,7 @@ interface PurchaseRequest extends Document {
         createdDate: Date;
     };
     customerId: Types.ObjectId;
+    supplierId?: Types.ObjectId;
     totalLpo: Number | String;
     procurementPerson?: Types.ObjectId;
     currency?: String;
@@ -226,6 +227,10 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     customerId: {
         type: Schema.Types.ObjectId,
         ref: 'Customer'
+    },
+    supplierId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Supplier'
     },
     totalLpo: {
         type: Number

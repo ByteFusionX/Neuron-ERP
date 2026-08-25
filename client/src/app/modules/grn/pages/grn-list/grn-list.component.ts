@@ -76,6 +76,7 @@ export class GrnListComponent implements OnInit {
         key: 'jobId.jobId',
         label: 'Job ID',
         type: 'text',
+        cellRenderer: (item: any) => item?.jobId?.jobId || 'N/A',
       },
       {
         key: 'warehouse.wareHouseName',

@@ -55,6 +55,7 @@ export class CreateGrnComponent implements OnInit {
   existingGRNs: any[] = [];
   deliveryNoteFiles: File[] = [];
   invoiceFiles: File[] = [];
+  isJobLess = false;
 
   grnForm: FormGroup = this.fb.group({
     selectedLpo: [''],
@@ -119,7 +120,16 @@ export class CreateGrnComponent implements OnInit {
           
           const jobIdValue = lpoData.purchaseId?.jobId?.jobId || '';
           this.purchaseId = lpoData.purchaseId?._id || lpoData.purchaseId || '';
-          
+          this.isJobLess = lpoData.purchaseId?.sourceType === 'manual' || !jobIdValue;
+
+          const jobIdControl = this.grnForm.get('jobId');
+          if (this.isJobLess) {
+            jobIdControl?.clearValidators();
+          } else {
+            jobIdControl?.setValidators([Validators.required]);
+          }
+          jobIdControl?.updateValueAndValidity();
+
           this.grnForm.patchValue({
             supplierName: lpoData.supplierId?.supplierName || '',
             linkedLpoNo: lpoData.poNo || '',

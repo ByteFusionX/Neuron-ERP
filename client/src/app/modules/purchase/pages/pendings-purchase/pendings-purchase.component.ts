@@ -70,6 +70,7 @@ export class PendingPurchaseComponent implements OnInit, OnDestroy {
       const page = params['page'] ? parseInt(params['page']) : 1;
       const row = params['row'] ? parseInt(params['row']) : 10;
       const search = params['search'] || '';
+      const sourceType = params['sourceType'] === 'general' ? 'manual' : 'job';
 
       this.paginationService.updatePaginationState({
         page,
@@ -78,6 +79,8 @@ export class PendingPurchaseComponent implements OnInit, OnDestroy {
       });
 
       if (search) this.searchQuery.set(search);
+      this.sourceTypeView.set(sourceType);
+      this.defaultColumns = sourceType === 'manual' ? this.manualColumns : this.jobColumns;
 
       this.getPurchases();
     });
@@ -141,6 +144,13 @@ export class PendingPurchaseComponent implements OnInit, OnDestroy {
         filterPlaceholder: 'Search created by...'
       },
       {
+        key: 'supplierId.supplierName',
+        label: 'Supplier',
+        type: 'text',
+        filterable: false,
+        cellRenderer: (item: any) => item.supplierId?.supplierName || '-'
+      },
+      {
         key: 'procurementPerson',
         label: 'Procurement Person',
         type: 'text',
@@ -181,7 +191,7 @@ export class PendingPurchaseComponent implements OnInit, OnDestroy {
       'createdAt', 'customerId.companyName', 'purchaseNo', 'jobId.jobId', 'totalLpo', `createdBy.firstName`, 'procurementPerson', 'status', 'actions'
     ];
     this.manualColumns = [
-      'createdAt', 'purchaseNo', 'totalLpo', `createdBy.firstName`, 'status', 'actions'
+      'createdAt', 'purchaseNo', 'totalLpo', `createdBy.firstName`, 'supplierId.supplierName', 'status', 'actions'
     ];
     this.defaultColumns = this.sourceTypeView() === 'manual' ? this.manualColumns : this.jobColumns;
   }
@@ -275,6 +285,7 @@ export class PendingPurchaseComponent implements OnInit, OnDestroy {
     queryParams.page = paginationState.page !== 1 ? paginationState.page : null;
     queryParams.row = paginationState.row !== 10 ? paginationState.row : null;
     queryParams.search = this.searchQuery() || null;
+    queryParams.sourceType = this.sourceTypeView() === 'manual' ? 'general' : null;
 
     this.router.navigate([], {
       relativeTo: this.route,
