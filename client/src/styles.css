@@ -74,6 +74,169 @@ th {
 }
 
 
+/* ==========================================================================
+   Tooltip — shared design system
+   Angular Material 19 (MDC) tooltips, restyled to match the app's violet /
+   Jost visual language. Applies globally, so every `matTooltip` in the
+   project picks it up without touching the markup.
+
+   Optional variants, used via `matTooltipClass`:
+     tooltip-danger | tooltip-success | tooltip-warning | tooltip-light
+   ========================================================================== */
+
+:root {
+  /* Surface: deep violet-tinted charcoal, not flat black — reads warmer and
+     sits better against the app's violet accents than Material's default. */
+  --erp-tooltip-bg: 30, 27, 45;
+  --erp-tooltip-fg: #ecebf3;
+  --erp-tooltip-border: rgba(139, 92, 246, 0.28);
+  --erp-tooltip-arrow-size: 6px;
+
+  /* Feed Material's own tokens so the base component matches before our
+     own rules layer on top (avoids a flash of default styling). */
+  --mdc-plain-tooltip-container-color: rgb(var(--erp-tooltip-bg));
+  --mdc-plain-tooltip-supporting-text-color: var(--erp-tooltip-fg);
+  --mdc-plain-tooltip-supporting-text-size: 12px;
+  --mdc-plain-tooltip-supporting-text-line-height: 17px;
+  --mdc-plain-tooltip-supporting-text-weight: 500;
+  --mdc-plain-tooltip-supporting-text-tracking: 0.01em;
+  --mdc-plain-tooltip-supporting-text-font: "Jost-medium, sans-serif";
+  --mdc-plain-tooltip-container-shape: 8px;
+}
+
+/* Give the bubble breathing room from its trigger so the arrow has space. */
+.mat-mdc-tooltip-panel-above .mat-mdc-tooltip {
+  margin-bottom: 8px;
+}
+
+.mat-mdc-tooltip-panel-below .mat-mdc-tooltip {
+  margin-top: 8px;
+}
+
+.mat-mdc-tooltip-panel-left .mat-mdc-tooltip {
+  margin-right: 8px;
+}
+
+.mat-mdc-tooltip-panel-right .mat-mdc-tooltip {
+  margin-left: 8px;
+}
+
+.mat-mdc-tooltip .mdc-tooltip__surface {
+  /* Layered shadow: a tight contact shadow plus a soft, wide ambient one.
+     Reads as "floating" rather than the single harsh drop shadow. */
+  box-shadow:
+    0 1px 2px rgba(17, 12, 34, 0.24),
+    0 8px 24px -6px rgba(30, 27, 45, 0.45);
+  border: 1px solid var(--erp-tooltip-border);
+  background-color: rgb(var(--erp-tooltip-bg));
+  color: var(--erp-tooltip-fg);
+  padding: 7px 11px;
+  min-height: 0;
+  max-width: 260px;
+  border-radius: 8px;
+  font-family: "Jost-medium, sans-serif";
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: normal;
+  overflow: visible;
+  /* Slight backdrop blur so tooltips over dense tables stay legible. */
+  backdrop-filter: blur(2px);
+}
+
+/* Left-align longer, multi-line copy — centred text is only pleasant on
+   short labels. */
+.mat-mdc-tooltip .mdc-tooltip--multiline .mdc-tooltip__surface,
+.mat-mdc-tooltip .mdc-tooltip__surface.mdc-tooltip--multiline {
+  text-align: left;
+}
+
+/* --- Arrow ---------------------------------------------------------------
+   Removed: it was pinned to the bubble's own center (left/top: 50%), but
+   Material re-anchors the bubble to stay on-screen for longer tooltip text,
+   so the arrow drifted away from the trigger element instead of pointing
+   at it. */
+
+/* --- Motion --------------------------------------------------------------
+   Fade + a short travel toward the trigger. Fast enough to feel instant,
+   slow enough to not pop. */
+.mat-mdc-tooltip.mat-mdc-tooltip-show .mdc-tooltip__surface {
+  animation: erp-tooltip-in 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mat-mdc-tooltip.mat-mdc-tooltip-hide .mdc-tooltip__surface {
+  animation: erp-tooltip-out 90ms ease-in forwards;
+}
+
+@keyframes erp-tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes erp-tooltip-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .mat-mdc-tooltip.mat-mdc-tooltip-show .mdc-tooltip__surface,
+  .mat-mdc-tooltip.mat-mdc-tooltip-hide .mdc-tooltip__surface {
+    animation-duration: 1ms;
+  }
+}
+
+/* --- Variants ------------------------------------------------------------
+   For tooltips that carry meaning beyond a plain label — a blocked action,
+   a confirmation, a caution. Tinted surface, matching arrow. */
+.mat-mdc-tooltip.tooltip-danger {
+  --erp-tooltip-bg: 69, 10, 10;
+  --erp-tooltip-border: rgba(248, 113, 113, 0.38);
+  --erp-tooltip-fg: #fee2e2;
+}
+
+.mat-mdc-tooltip.tooltip-success {
+  --erp-tooltip-bg: 5, 46, 22;
+  --erp-tooltip-border: rgba(74, 222, 128, 0.35);
+  --erp-tooltip-fg: #dcfce7;
+}
+
+.mat-mdc-tooltip.tooltip-warning {
+  --erp-tooltip-bg: 66, 32, 6;
+  --erp-tooltip-border: rgba(251, 191, 36, 0.38);
+  --erp-tooltip-fg: #fef3c7;
+}
+
+.mat-mdc-tooltip.tooltip-light {
+  --erp-tooltip-bg: 255, 255, 255;
+  --erp-tooltip-border: rgba(148, 163, 184, 0.35);
+  --erp-tooltip-fg: #334155;
+}
+
+.mat-mdc-tooltip.tooltip-light .mdc-tooltip__surface {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    0 10px 28px -8px rgba(15, 23, 42, 0.22);
+}
+
+/* Legacy class name still passed via `matTooltipClass="mat-tooltip"` in a
+   number of templates — kept so those call sites stay valid. */
 .mat-tooltip {
   font-size: 12px;
 }
