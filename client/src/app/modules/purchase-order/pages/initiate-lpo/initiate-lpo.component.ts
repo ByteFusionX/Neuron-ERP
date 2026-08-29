@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
@@ -21,6 +22,7 @@ import { ItemIssueHistoryModalComponent, ItemIssueEntry, LpoStatusEntry } from '
   imports: [
     CommonModule,
     NgIcon,
+    MatTooltipModule,
     LpoListComponent
   ],
   templateUrl: './initiate-lpo.component.html',
@@ -38,6 +40,11 @@ export class InitiateLpoComponent implements OnInit {
   private deliveryNoteService = inject(DeliveryNoteService);
   private dialog = inject(MatDialog);
   loadingIssueHistoryFor: string | null = null;
+  // LPOs/GRNs/DNs don't change between clicking "View" on different items of
+  // the same purchase, so fetch them once and reuse across clicks instead of
+  // re-hitting the server (LPO list + N GRN calls + DN list) every time.
+  private issueHistoryCache: { lpos: any[]; grnsByLpoId: Map<string, any[]>; dns: any[] } | null = null;
+  private issueHistoryCachePromise: Promise<{ lpos: any[]; grnsByLpoId: Map<string, any[]>; dns: any[] }> | null = null;
 
   purchaseId!: string;
   purchase: PurchaseData | null = null;
@@ -47,7 +54,7 @@ export class InitiateLpoComponent implements OnInit {
   comparisonItems: ReturnType<InitiateLpoComponent['selectedComparison']> = [];
   isLoading = true;
   suppliersList = signal<any[]>([])
-  canIssueLpo = signal<boolean>(false);
+  supplierSelectableMap = signal<Map<string, boolean>>(new Map());
   canInitiateLPO = signal<boolean>(false);
   canReissueAndRevoke = signal<boolean>(false);
   currency = signal<string>('');
@@ -119,6 +126,7 @@ export class InitiateLpoComponent implements OnInit {
       detail: string;
       partNo: string;
       quantity: number;
+      supplierId?: string;
       supplierName: string;
       unitPrice: number;
       totalPrice: number;
@@ -138,6 +146,7 @@ export class InitiateLpoComponent implements OnInit {
             detail: detail.detail,
             partNo: partNo,
             quantity: selected.quantity,
+            supplierId: selected.supplierId,
             supplierName: supplier?.supplierName || 'Unknown Supplier',
             unitPrice: selected.unitPrice,
             totalPrice: selected.unitPrice * detail.quantity,
@@ -168,8 +177,16 @@ export class InitiateLpoComponent implements OnInit {
     return '-';
   }
 
-  onIssueLpoClick() {
-    this.router.navigate(['/purchase/issue-lpo', this.purchaseId || 'none'])
+  onIssueLpoClickForItem(item: { supplierId?: string }) {
+    this.router.navigate(['/purchase/issue-lpo', this.purchaseId || 'none'], {
+      queryParams: item.supplierId ? { supplierId: item.supplierId } : undefined
+    });
+  }
+
+  canIssueForSupplier(supplierId: string | undefined): boolean {
+    if (!supplierId) return true;
+    const map = this.supplierSelectableMap();
+    return map.has(supplierId) ? map.get(supplierId)! : true;
   }
 
   private getLpoComment(lpo: any): string {
@@ -194,6 +211,54 @@ export class InitiateLpoComponent implements OnInit {
     return formatPartNo(grnPartNo) === formatPartNo(itemPartNo);
   }
 
+  private async loadIssueHistoryCache(): Promise<{ lpos: any[]; grnsByLpoId: Map<string, any[]>; dns: any[] }> {
+    if (this.issueHistoryCache) return this.issueHistoryCache;
+    if (this.issueHistoryCachePromise) return this.issueHistoryCachePromise;
+
+    this.issueHistoryCachePromise = (async () => {
+      const lposResponse = await firstValueFrom(
+        this.purchaseOrderService.getAllPurchaseOrders({ purchaseId: this.purchaseId, row: 200 }),
+      );
+      const lpos = lposResponse?.success ? lposResponse.data : [];
+
+      const grnsByLpoId = new Map<string, any[]>();
+      await Promise.all(
+        lpos.map(async (lpo: any) => {
+          try {
+            const grnResponse = await firstValueFrom(this.grnService.getAllGRNsByLpoId(lpo._id));
+            grnsByLpoId.set(lpo._id, grnResponse?.success && grnResponse?.data ? grnResponse.data : []);
+          } catch (error) {
+            console.error('Error loading GRNs for LPO:', lpo._id, error);
+            grnsByLpoId.set(lpo._id, []);
+          }
+        }),
+      );
+
+      // Delivery notes (Dispatch) are only linked to a Job, not to a specific
+      // LPO, so they're fetched once per purchase and matched per item below.
+      let dns: any[] = [];
+      const jobId = this.purchase?.jobId?._id;
+      if (jobId) {
+        try {
+          const dnResponse = await firstValueFrom(this.deliveryNoteService.getDnsByJobId(jobId));
+          dns = dnResponse?.data || dnResponse?.dns || (Array.isArray(dnResponse) ? dnResponse : []);
+        } catch (error) {
+          console.error('Error loading delivery notes for job:', jobId, error);
+        }
+      }
+
+      const cache = { lpos, grnsByLpoId, dns };
+      this.issueHistoryCache = cache;
+      return cache;
+    })();
+
+    try {
+      return await this.issueHistoryCachePromise;
+    } finally {
+      this.issueHistoryCachePromise = null;
+    }
+  }
+
   async viewItemIssueHistory(item: { detail: string; partNo: string; quantity: number }) {
     if (!this.purchaseId || this.purchaseId === 'none') return;
 
@@ -201,87 +266,63 @@ export class InitiateLpoComponent implements OnInit {
     this.loadingIssueHistoryFor = itemKey;
 
     try {
-      const lposResponse = await firstValueFrom(
-        this.purchaseOrderService.getAllPurchaseOrders({ purchaseId: this.purchaseId, row: 200 }),
-      );
-      const lpos = lposResponse?.success ? lposResponse.data : [];
+      const { lpos, grnsByLpoId, dns } = await this.loadIssueHistoryCache();
 
       const issues: ItemIssueEntry[] = [];
       const lpoStatuses: LpoStatusEntry[] = [];
 
-      await Promise.all(
-        lpos.map(async (lpo: any) => {
-          // List every LPO this item was issued on, regardless of its current
-          // status (Draft through Closed), so the modal shows the full trail.
-          (lpo.items || []).forEach((lpoItem: any) => {
-            const partNoMatch = this.matchPartNo(lpoItem.partNo, item.partNo);
-            const descriptionMatch = lpoItem.detail === item.detail;
+      lpos.forEach((lpo: any) => {
+        // List every LPO this item was issued on, regardless of its current
+        // status (Draft through Closed), so the modal shows the full trail.
+        (lpo.items || []).forEach((lpoItem: any) => {
+          const partNoMatch = this.matchPartNo(lpoItem.partNo, item.partNo);
+          const descriptionMatch = lpoItem.detail === item.detail;
+          if (partNoMatch || descriptionMatch) {
+            lpoStatuses.push({
+              lpoId: lpo._id,
+              purchaseId: lpo.purchaseId?._id || lpo.purchaseId || this.purchaseId,
+              poNo: lpo.poNo,
+              poStatus: lpo.poStatus,
+              poDate: lpo.poDate,
+              issuedQty: lpoItem.quantity || 0,
+              comment: this.getLpoComment(lpo),
+              lpo,
+            });
+          }
+        });
+
+        const grns = grnsByLpoId.get(lpo._id) || [];
+        grns.forEach((grn: any) => {
+          (grn.items || []).forEach((grnItem: any) => {
+            const partNoMatch = this.matchPartNo(grnItem.partNo, item.partNo);
+            const descriptionMatch = grnItem.itemDescription === item.detail;
             if (partNoMatch || descriptionMatch) {
-              lpoStatuses.push({
-                lpoId: lpo._id,
-                purchaseId: lpo.purchaseId?._id || lpo.purchaseId || this.purchaseId,
+              const receivedQty = grnItem.receivedQty || 0;
+              const acceptedQty = grnItem.acceptedQty || 0;
+              issues.push({
+                grnNo: grn.grnNo,
+                grnDate: grn.grnDate,
                 poNo: lpo.poNo,
-                poStatus: lpo.poStatus,
-                poDate: lpo.poDate,
-                issuedQty: lpoItem.quantity || 0,
-                comment: this.getLpoComment(lpo),
-                lpo,
+                receivedQty,
+                acceptedQty,
+                rejectedQty: Math.max(0, receivedQty - acceptedQty),
               });
             }
           });
+        });
+      });
 
-          try {
-            const grnResponse = await firstValueFrom(this.grnService.getAllGRNsByLpoId(lpo._id));
-            const grns = grnResponse?.success && grnResponse?.data ? grnResponse.data : [];
-
-            grns.forEach((grn: any) => {
-              (grn.items || []).forEach((grnItem: any) => {
-                const partNoMatch = this.matchPartNo(grnItem.partNo, item.partNo);
-                const descriptionMatch = grnItem.itemDescription === item.detail;
-                if (partNoMatch || descriptionMatch) {
-                  const receivedQty = grnItem.receivedQty || 0;
-                  const acceptedQty = grnItem.acceptedQty || 0;
-                  issues.push({
-                    grnNo: grn.grnNo,
-                    grnDate: grn.grnDate,
-                    poNo: lpo.poNo,
-                    receivedQty,
-                    acceptedQty,
-                    rejectedQty: Math.max(0, receivedQty - acceptedQty),
-                  });
-                }
-              });
-            });
-          } catch (error) {
-            console.error('Error loading GRNs for LPO:', lpo._id, error);
-          }
-        }),
-      );
-
-      // Delivery notes (Dispatch) are only linked to a Job, not to a specific
-      // LPO, so delivered/pending-delivery quantities are aggregated at the
-      // job level and matched to this item by part number / description.
       let deliveredQty = 0;
-      const jobId = this.purchase?.jobId?._id;
-      if (jobId) {
-        try {
-          const dnResponse = await firstValueFrom(this.deliveryNoteService.getDnsByJobId(jobId));
-          const dns = dnResponse?.data || dnResponse?.dns || (Array.isArray(dnResponse) ? dnResponse : []);
-
-          (dns || []).forEach((dn: any) => {
-            if (dn.status === DnStatus.CANCELLED) return;
-            (dn.items || []).forEach((dnItem: any) => {
-              const partNoMatch = this.matchPartNo(dnItem.partNo, item.partNo);
-              const descriptionMatch = dnItem.description === item.detail;
-              if (partNoMatch || descriptionMatch) {
-                deliveredQty += dnItem.currentDeliveryQty || 0;
-              }
-            });
-          });
-        } catch (error) {
-          console.error('Error loading delivery notes for job:', jobId, error);
-        }
-      }
+      (dns || []).forEach((dn: any) => {
+        if (dn.status === DnStatus.CANCELLED) return;
+        (dn.items || []).forEach((dnItem: any) => {
+          const partNoMatch = this.matchPartNo(dnItem.partNo, item.partNo);
+          const descriptionMatch = dnItem.description === item.detail;
+          if (partNoMatch || descriptionMatch) {
+            deliveredQty += dnItem.currentDeliveryQty || 0;
+          }
+        });
+      });
       const pendingDeliveryQty = Math.max(0, item.quantity - deliveredQty);
 
       const dialogRef = this.dialog.open(ItemIssueHistoryModalComponent, {
@@ -302,10 +343,11 @@ export class InitiateLpoComponent implements OnInit {
       });
 
       // An action taken inside the modal (send for approval / revoke) can
-      // change this item's issue trail, so reload the same history in place
+      // change this item's issue trail, so drop the cache and reload fresh
       // rather than leaving a stale table behind after the modal closes.
       dialogRef.afterClosed().subscribe((result) => {
         if (result?.refreshed) {
+          this.issueHistoryCache = null;
           this.viewItemIssueHistory(item);
         }
       });
@@ -329,23 +371,23 @@ export class InitiateLpoComponent implements OnInit {
 
   checkSuppliersStatus() {
     if (!this.purchaseId || this.purchaseId === 'none') {
-      this.canIssueLpo.set(false);
+      this.supplierSelectableMap.set(new Map());
       return;
     }
 
     this.purchaseOrderService.getSuppliersForPurchaseRequest(this.purchaseId).subscribe({
       next: (response) => {
         if (response.success && response.data) {
-          const suppliers = response.data;
-          const hasSelectableSupplier = suppliers.some((supplier: any) => supplier.canSelect === true);
-          this.canIssueLpo.set(hasSelectableSupplier);
+          const map = new Map<string, boolean>();
+          response.data.forEach((supplier: any) => map.set(supplier._id, supplier.canSelect === true));
+          this.supplierSelectableMap.set(map);
         } else {
-          this.canIssueLpo.set(false);
+          this.supplierSelectableMap.set(new Map());
         }
       },
       error: (error) => {
         console.error('Error checking suppliers status:', error);
-        this.canIssueLpo.set(false);
+        this.supplierSelectableMap.set(new Map());
       }
     });
   }

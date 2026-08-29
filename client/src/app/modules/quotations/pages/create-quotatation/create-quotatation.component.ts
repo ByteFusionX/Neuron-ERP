@@ -285,6 +285,12 @@ export class CreateQuotatationComponent {
           let customer = data.find((contact) => contact._id == change);
           if (customer) {
             this.contacts = customer.contactDetails;
+            const departmentId =
+              (customer.department as getDepartment)?._id ??
+              (customer.department as unknown as string);
+            this.quoteForm.controls['department'].patchValue(
+              departmentId ?? null,
+            );
           }
         }),
       );
@@ -292,6 +298,7 @@ export class CreateQuotatationComponent {
       this.config.notFoundText = 'Select a client first..';
       this.contacts = [];
       this.quoteForm.controls['attention'].setValue(undefined);
+      this.quoteForm.controls['department'].patchValue(null);
     }
   }
 

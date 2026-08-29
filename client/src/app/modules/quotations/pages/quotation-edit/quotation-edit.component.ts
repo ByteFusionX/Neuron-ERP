@@ -192,6 +192,10 @@ export class QuotationEditComponent {
     const customer: getCustomer | undefined = customers.find((value) => value._id == event)
     if (customer) {
       this.contacts = customer?.contactDetails;
+      const departmentId =
+        (customer.department as getDepartment)?._id ??
+        (customer.department as unknown as string);
+      this.quoteForm.controls['department'].patchValue(departmentId ?? null);
     }
   }
 

@@ -52,7 +52,7 @@ export class AllocateTypeModalComponent implements OnInit {
   }
 
   loadEmployees(): void {
-    this.employeeService.getAllEmployees().subscribe({
+    this.employeeService.getProcurementEmployees().subscribe({
       next: (employees) => {
         this.employees = employees;
         this.employeeOptions = employees.map(emp => ({

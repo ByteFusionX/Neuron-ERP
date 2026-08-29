@@ -469,8 +469,11 @@ export class CreateDnComponent implements OnInit {
     } else {
       this.selectedItems.add(index);
       const balance = this.getBalanceQty(itemControl!);
+      const existingValue = currentDeliveryControl?.value;
       currentDeliveryControl?.enable();
-      currentDeliveryControl?.setValue(balance, { emitEvent: false });
+      if (!existingValue || existingValue <= 0) {
+        currentDeliveryControl?.setValue(balance, { emitEvent: false });
+      }
       currentDeliveryControl?.setValidators([Validators.required, Validators.min(1), Validators.max(balance)]);
       currentDeliveryControl?.updateValueAndValidity();
     }

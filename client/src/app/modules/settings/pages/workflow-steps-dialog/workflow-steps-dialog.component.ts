@@ -205,7 +205,12 @@ export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
     }
 
     get dialogTitle(): string {
-        const featureName = this.data.feature === WorkflowFeature.CLAIM ? 'Claim' : 'Project Claim';
+        const featureNames: Record<WorkflowFeature, string> = {
+            [WorkflowFeature.CLAIM]: 'Claim',
+            [WorkflowFeature.PROJECT_CLAIM]: 'Project Claim',
+            [WorkflowFeature.PURCHASE_APPROVAL]: 'Purchase Approval'
+        };
+        const featureName = featureNames[this.data.feature];
         return this.data.isEdit ? `Edit ${featureName} Workflow` : `Create ${featureName} Workflow`;
     }
 

@@ -616,10 +616,28 @@ export class CreateInvoiceComponent implements OnInit {
       amount: formVal.amountFigures,
       items: selectedItems.map((item: any) => {
         const dnRefs = Array.isArray(item.dnRefs) ? item.dnRefs : [];
-        const normalizedDnRefs = dnRefs.map((r: any) => ({
-          dnId: r.dnId,
-          quantity: r.quantity
-        }));
+        // dnRefs[].quantity is captured from the DN's currentDeliveryQty when the
+        // item was loaded, but the user can edit the invoiced "quantity" afterwards.
+        // Re-scale each dnRef's quantity so the refs stay in sync with what's
+        // actually being invoiced, instead of reporting the original DN snapshot.
+        const invoicedQty = item.quantity || 0;
+        const dnRefsTotal = dnRefs.reduce((sum: number, r: any) => sum + (r.quantity || 0), 0);
+        let allocatedSoFar = 0;
+        const normalizedDnRefs = dnRefs.map((r: any, idx: number) => {
+          const isLast = idx === dnRefs.length - 1;
+          let quantity: number;
+          if (dnRefs.length === 1) {
+            quantity = invoicedQty;
+          } else if (dnRefsTotal > 0) {
+            quantity = isLast
+              ? invoicedQty - allocatedSoFar
+              : Math.round((r.quantity / dnRefsTotal) * invoicedQty);
+          } else {
+            quantity = 0;
+          }
+          allocatedSoFar += quantity;
+          return { dnId: r.dnId, quantity };
+        });
         const singleDnId = item.dnId || (normalizedDnRefs.length === 1 ? normalizedDnRefs[0].dnId : undefined);
         return {
           dnId: singleDnId,

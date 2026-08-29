@@ -86,7 +86,8 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     this.loadShippingTerms();
     this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
     this.lpoId = this.route.snapshot.paramMap.get('lpoId');
-    
+    const preselectedSupplierId = this.route.snapshot.queryParamMap.get('supplierId');
+
     // Detect mode from URL
     const url = this.router.url;
     this.isReissueMode = url.includes('/reissue/');
@@ -118,7 +119,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
           this.currency.set(currency);
           this.isLoading = false;
           if (this.purchase && !this.isEditMode) {
-            this.loadSuppliers();
+            this.loadSuppliers(preselectedSupplierId || undefined);
           }
         },
         error: (error) => {
@@ -355,12 +356,16 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     );
   }
 
-  loadSuppliers() {
+  loadSuppliers(preselectedSupplierId?: string) {
     this.subscriptions.add(
       this.purchaseOrderService.getSuppliersForPurchaseRequest(this.purchaseId).subscribe({
         next: (response) => {
           if (response.success) {
             this.suppliersList.set(response.data);
+            if (preselectedSupplierId) {
+              this.poForm.patchValue({ supplierId: preselectedSupplierId });
+              this.onSupplierSelected(preselectedSupplierId);
+            }
           }
         },
         error: (error) => {
