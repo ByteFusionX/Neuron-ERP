@@ -2,7 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, signal, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatDialog } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
+import { ReasonPromptModalComponent } from 'src/app/shared/components/reason-prompt-modal/reason-prompt-modal.component';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PaginationService } from 'src/app/core/services/pagination.service';
@@ -42,6 +44,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
   public paginationService = inject(PaginationService);
   private notificationService = inject(ToastrService);
   private employeeService = inject(EmployeeService);
+  private dialog = inject(MatDialog);
   private subscriptions = new Subscription();
 
   // State
@@ -339,14 +342,29 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
       }
 
       if (event.newValue === 'Rejected by customer') {
-        this.invoiceService.rejectInvoiceByCustomer(invoice._id, { reason: '' }).subscribe({
-          next: () => {
-            this.notificationService.success('Invoice marked as rejected by customer');
-            this.loadData();
-          },
-          error: () => {
-            this.notificationService.error('Failed to reject invoice');
+        const dialogRef = this.dialog.open(ReasonPromptModalComponent, {
+          width: '480px',
+          data: {
+            title: 'Reject Invoice',
+            label: 'Rejection Reason',
+            placeholder: 'Enter the reason the customer rejected this invoice',
+            confirmLabel: 'Reject Invoice'
           }
+        });
+
+        dialogRef.afterClosed().subscribe((reason: string | null) => {
+          if (!reason) {
+            return;
+          }
+          this.invoiceService.rejectInvoiceByCustomer(invoice._id, { reason }).subscribe({
+            next: () => {
+              this.notificationService.success('Invoice marked as rejected by customer');
+              this.loadData();
+            },
+            error: (error) => {
+              this.notificationService.error(error?.error?.message || 'Failed to reject invoice');
+            }
+          });
         });
         return;
       }

@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 import { Invoice } from '../models/invoice.model';
 import { InvoiceAudit } from '../models/invoiceAudit.model';
+import DeliveryNote from '../models/deliveryNote.model';
 import mongoose from 'mongoose';
 import { getEmployeeData } from '../common/utils/util';
 import { getNextSequence } from '../models/counter.model';
+import { applyDnItemRejections, RejectDnItemInput } from './deliveryNote.controller';
+import { createCreditNote } from './creditNote.controller';
 
 export const getInvoices = async (req: Request, res: Response) => {
     try {
@@ -416,17 +419,98 @@ export const rejectInvoiceByCustomer = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Invoice is already rejected by customer' });
         }
 
+        if (!reason) {
+            return res.status(400).json({ success: false, message: 'A rejection reason is required' });
+        }
+
+        const warnings: string[] = [];
+
+        // Cascade into the linked DeliveryNote(s): resolve rejection targets per item via
+        // dnRefs (split-DN items) or the single dnId, then apply the DN-side rejection.
+        const dnRejections = new Map<string, RejectDnItemInput[]>();
+
+        for (const item of (invoice.items as any[]) || []) {
+            const targets: { dnId: any; qty: number }[] = [];
+            if (item.dnRefs && Array.isArray(item.dnRefs) && item.dnRefs.length > 0) {
+                item.dnRefs.forEach((ref: any) => {
+                    if (ref.dnId && ref.quantity) {
+                        targets.push({ dnId: ref.dnId, qty: ref.quantity });
+                    }
+                });
+            } else if (item.dnId && item.quantity) {
+                targets.push({ dnId: item.dnId, qty: item.quantity });
+            }
+
+            targets.forEach(({ dnId, qty }) => {
+                const key = dnId.toString();
+                const existing = dnRejections.get(key) || [];
+                existing.push({ itemId: item.itemId, rejectedQty: qty, reason });
+                dnRejections.set(key, existing);
+            });
+        }
+
+        for (const [dnId, dnItems] of dnRejections.entries()) {
+            try {
+                const dn = await DeliveryNote.findById(dnId);
+                if (!dn) {
+                    warnings.push(`Linked Delivery Note "${dnId}" not found — could not cascade rejection to stock`);
+                    continue;
+                }
+                const dnWarnings = await applyDnItemRejections(dn, dnItems, reason, employee._id);
+                warnings.push(...dnWarnings);
+            } catch (dnError: any) {
+                warnings.push(`Delivery Note "${dnId}": ${dnError.message || 'failed to apply rejection'}`);
+            }
+        }
+
+        // Reconcile the invoiced amount via a CreditNote rather than mutating invoice.amount/items.
+        const creditNoteItems = ((invoice.items as any[]) || []).map((item: any) => ({
+            itemId: item.itemId,
+            description: item.description,
+            rejectedQty: item.quantity || 0,
+            unitPrice: item.quantity ? (item.amount || 0) / item.quantity : (item.amount || 0),
+            amount: item.amount || 0
+        }));
+        const creditNoteTotal = creditNoteItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+
+        const creditNote = await createCreditNote({
+            invoiceId: invoice._id.toString(),
+            dnId: dnRejections.size === 1 ? Array.from(dnRejections.keys())[0] : undefined,
+            jobId: invoice.jobId?.toString(),
+            customer: invoice.customer?.toString(),
+            items: creditNoteItems,
+            totalAmount: creditNoteTotal,
+            reason,
+            createdBy: employee._id
+        });
+
         invoice.status = 'Rejected by customer';
-        invoice.rejectionReason = reason || '';
+        invoice.rejectionReason = reason;
         invoice.rejectedBy = new mongoose.Types.ObjectId(employee._id);
         invoice.rejectedAt = new Date();
 
         await invoice.save();
 
+        await InvoiceAudit.create({
+            invoiceId: invoice._id,
+            invoiceNo: invoice.invoiceNo,
+            invoiceDate: invoice.date,
+            customer: invoice.customer,
+            jobId: invoice.jobId,
+            originalAmount: invoice.amount,
+            adjustedAmount: invoice.amount,
+            reason,
+            actionBy: employee._id,
+            status: 'Rejected',
+            actionDate: new Date()
+        });
+
         res.status(200).json({
             success: true,
             message: 'Invoice marked as rejected by customer',
-            data: invoice
+            data: invoice,
+            creditNote,
+            warnings
         });
     } catch (error) {
         console.error('Error rejecting invoice:', error);

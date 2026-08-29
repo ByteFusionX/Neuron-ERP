@@ -12,7 +12,7 @@ const invoiceAuditSchema = new Schema({
     actionBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     status: {
         type: String,
-        enum: ['Cancelled', 'Adjusted'],
+        enum: ['Cancelled', 'Adjusted', 'Rejected'],
         required: true
     },
     actionDate: { type: Date, default: Date.now },
