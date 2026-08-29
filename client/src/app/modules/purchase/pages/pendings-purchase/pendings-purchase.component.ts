@@ -355,6 +355,10 @@ export class PendingPurchaseComponent implements OnInit, OnDestroy {
     console.log('Viewing documents for purchase:', purchase);
   }
 
+  goToCreatePr(): void {
+    this.router.navigate(['/purchase/create'], this.sourceTypeView() === 'manual' ? { queryParams: { withoutJob: true } } : {});
+  }
+
   setSourceTypeView(sourceType: 'job' | 'manual'): void {
     if (this.sourceTypeView() === sourceType) return;
     this.sourceTypeView.set(sourceType);

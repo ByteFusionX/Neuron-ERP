@@ -18,7 +18,7 @@
             class="px-3 py-1.5 rounded-md border text-sm font-medium transition-colors"
             [ngClass]="sourceTypeView() === 'manual' ? 'bg-white text-violet-600 border-violet-600 ring-2 ring-violet-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
             (click)="setSourceTypeView(sourceTypeView() === 'manual' ? 'job' : 'manual')">General Purchase</button>
-        <app-btn theme="primary" routerLink="/purchase/create">+ Create PR</app-btn>
+        <app-btn theme="primary" (click)="goToCreatePr()">+ Create PR</app-btn>
     </div>
 </ng-template>
 </data-table>

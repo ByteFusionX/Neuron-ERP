@@ -167,6 +167,10 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         this.requestedJobId.set(jobId);
       }
 
+      if (this.route.snapshot.queryParamMap.get('withoutJob') === 'true') {
+        this.toggleJobLess(true);
+      }
+
       this.deelSheets(jobId);
     }
 
