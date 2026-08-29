@@ -12,4 +12,34 @@
 (filterChange)="onFilterChange($event)"
 (paginationChange)="onPaginationChange($event)"
 (exportRequest)="onExportRequest()"
-></data-table>
+>
+  <ng-template #sideColumn>
+    <div class="flex items-center gap-3">
+      <ng-container *ngIf="canSwitchDispatchView()">
+        <button
+          type="button"
+          [matMenuTriggerFor]="dispatchViewMenu"
+          class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
+        >
+          <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
+          Switch Table
+          <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
+        </button>
+        <mat-menu #dispatchViewMenu="matMenu">
+          <button mat-menu-item routerLink="/dispatch/delivery-note-register">
+            <ng-icon name="heroTableCells" class="mr-2 text-slate-500"></ng-icon>
+            Delivery Note Register
+          </button>
+          <button mat-menu-item *ngIf="canViewPendingDelivery()" routerLink="/dispatch/pending-delivery-reports">
+            <ng-icon name="heroClock" class="mr-2 text-slate-500"></ng-icon>
+            Pending Delivery
+          </button>
+          <button mat-menu-item *ngIf="canViewInventoryDeduction()" routerLink="/dispatch/inventory-deduction-report">
+            <ng-icon name="heroArchiveBoxArrowDown" class="mr-2 text-slate-500"></ng-icon>
+            Inventory Deduction
+          </button>
+        </mat-menu>
+      </ng-container>
+    </div>
+  </ng-template>
+</data-table>

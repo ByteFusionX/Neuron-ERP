@@ -2,11 +2,12 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatMenuModule } from '@angular/material/menu';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
@@ -36,7 +37,8 @@ interface FilterParams {
     MatMenuModule,
     IconsModule,
     ButtonComponent,
-    FormsModule
+    FormsModule,
+    RouterModule
   ],
   templateUrl: './inventory-deduction.component.html',
   styleUrl: './inventory-deduction.component.css',
@@ -50,6 +52,7 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private paginationService = inject(PaginationService);
+  private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
 
   tableData = signal<any[]>([]);
@@ -60,9 +63,23 @@ export class InventoryDeductionComponent implements OnInit, OnDestroy {
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
 
+  canViewPendingDelivery = signal<boolean>(false);
+  canViewInvoiceLinking = signal<boolean>(false);
+  canSwitchDispatchView = signal<boolean>(false);
+
   statusOptions: string[] = ['Deducted', 'Reversed'];
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe(emp => {
+        const privileges = emp?.category?.privileges?.dispatch;
+        this.canViewPendingDelivery.set(!!privileges?.viewPendingDelivery);
+        this.canViewInvoiceLinking.set(!!privileges?.viewInvoiceLinking);
+        this.canSwitchDispatchView.set(
+          !!(privileges?.viewPendingDelivery || privileges?.viewInvoiceLinking || privileges?.viewInventoryDeduction)
+        );
+      })
+    );
     this.setupTableColumns();
     this.initializeFromUrlParams();
   }

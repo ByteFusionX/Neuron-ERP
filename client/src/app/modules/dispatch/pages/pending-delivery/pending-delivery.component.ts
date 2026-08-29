@@ -1,12 +1,15 @@
-import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
+import { MatMenuModule } from '@angular/material/menu';
 
 interface FilterParams {
   [key: string]: any;
@@ -26,18 +29,21 @@ interface FilterParams {
     CommonModule,
     RouterModule,
     TableComponent,
-    IconsModule
+    IconsModule,
+    MatMenuModule
   ],
   templateUrl: './pending-delivery.component.html',
   styleUrl: './pending-delivery.component.css',
   providers: [PaginationService]
 })
-export class PendingDeliveryComponent implements OnInit {
+export class PendingDeliveryComponent implements OnInit, OnDestroy {
   @ViewChild(TableComponent) tableComponent!: TableComponent;
 
   private dnService = inject(DeliveryNoteService);
   private toaster = inject(ToastrService);
   private paginationService = inject(PaginationService);
+  private employeeService = inject(EmployeeService);
+  private subscriptions = new Subscription();
 
   tableData = signal<any[]>([]);
   tableColumns: TableColumn[] = [];
@@ -47,11 +53,29 @@ export class PendingDeliveryComponent implements OnInit {
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
 
+  canViewInvoiceLinking = signal<boolean>(false);
+  canViewInventoryDeduction = signal<boolean>(false);
+  canSwitchDispatchView = signal<boolean>(false);
+
   statusOptions: string[] = ['Not Delivered', 'Partially Delivered'];
 
   ngOnInit(): void {
+    this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe(emp => {
+        const privileges = emp?.category?.privileges?.dispatch;
+        this.canViewInvoiceLinking.set(!!privileges?.viewInvoiceLinking);
+        this.canViewInventoryDeduction.set(!!privileges?.viewInventoryDeduction);
+        this.canSwitchDispatchView.set(
+          !!(privileges?.viewPendingDelivery || privileges?.viewInvoiceLinking || privileges?.viewInventoryDeduction)
+        );
+      })
+    );
     this.setupTableColumns();
     this.loadData();
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
   }
 
   setupTableColumns(): void {
