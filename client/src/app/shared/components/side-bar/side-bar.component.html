@@ -1,13 +1,13 @@
 <div class="h-screen bg-white flex flex-col">
   <div class="flex flex-col flex-1 min-h-0">
-    <div class="py-2 px-4 flex flex-col flex-1 min-h-0">
+    <div class="py-2 flex flex-col flex-1 min-h-0" [ngClass]="showFullBar ? 'px-4' : 'px-1'">
       <div class="flex flex-col flex-1 min-h-0" [@sideBarTrigger]="showFullBar? 'default':'reduce'">
         <!-- Logo Section -->
         <div class="w-10 h-14 overflow-hidden absolute top-0 bg-white z-10"
           [ngClass]="{'w-60':showFullBar}">
           <div class="w-full h-full flex justify-start items-center mt-2">
             <img src="assets/images/logo.webp" alt
-              class="me-3 w-9 transition-all" [ngClass]="{'ml-6':showFullBar}">
+              class="me-3 w-9 transition-all ml-2" [ngClass]="{'ml-6':showFullBar}">
             <img src="assets/images/company.jpg" alt class="me-2 w-28">
           </div>
         </div>
@@ -46,7 +46,8 @@
                 *ngIf="item.hasDropdown; else singleItem"
                 (click)="toggleMenu(item.id)">
                 <div
-                  class="w-full px-3 py-2 rounded-md hover:text-violet-800 flex items-center"
+                  class="rounded-md hover:text-violet-800 flex items-center"
+                  [ngClass]="showFullBar ? 'w-full px-3 py-2' : 'w-9 h-9 mx-auto justify-center'"
                   [class.active]="!showFullBar && isParentActive(item)">
                   <ng-icon [name]="item.icon" class="text-xl text-gray-600"
                     [matTooltip]="showFullBar ? '' : item.label"
@@ -78,10 +79,11 @@
                 <div class="my-1 cursor-pointer"
                   [id]="'sidebar-item-' + item.id"
                   [@slideTrigger]="expandedMenus['home'] && showFullBar ? 'slideDown' : 'slideUp'"
-                  [routerLink]="item.route"
-                  routerLinkActive="active">
+                  [routerLink]="item.route">
                   <div
-                    class="w-full px-3 py-2 rounded-md hover:text-violet-800 flex items-center relative">
+                    class="rounded-md hover:text-violet-800 flex items-center relative"
+                    [ngClass]="showFullBar ? 'w-full px-3 py-2' : 'w-9 h-9 mx-auto justify-center'"
+                    routerLinkActive="active">
 
                     <ng-icon [name]="item.icon" class="text-xl text-gray-600"
                       [matTooltip]="showFullBar ? '' : item.label"
@@ -111,7 +113,7 @@
                     <ng-container *ngFor="let subItem of item.children">
                       <!-- Only show submenu items user has access to -->
                       <li *ngIf="!subItem.privilegeKey || hasAccess(subItem)"
-                        class="py-2 pl-11 pr-3 hover:text-violet-800 rounded-md cursor-pointer"
+                        class="ml-8 py-2 px-3 hover:text-violet-800 rounded-md cursor-pointer"
                         [routerLink]="subItem.route"
                         [class.active]="activeLink === subItem.route">
                         <button class="relative w-full text-left">

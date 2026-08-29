@@ -159,6 +159,12 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
         filterPlaceholder: 'Search customer...'
       },
       {
+        key: 'customerLpoNumber',
+        label: 'LPO Number',
+        type: 'text',
+        cellRenderer: (item: DeliveryNote) => item.customerLpoNumber || 'N/A'
+      },
+      {
         key: 'status',
         label: 'Status',
         type: 'status',
@@ -184,7 +190,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     ];
 
     this.tableColumns = baseColumns;
-    this.defaultColumns = ['dnDate', 'dnNo', 'job.jobId', 'clientName', 'status', 'actions'];
+    this.defaultColumns = ['dnDate', 'dnNo', 'job.jobId', 'clientName', 'customerLpoNumber', 'status', 'actions'];
   }
 
   loadData(filters?: Partial<FilterParams>): void {

@@ -1,11 +1,11 @@
 <div class="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:flex-row sm:items-center sm:justify-between border-t border-gray-200">
 
     <!-- Rows per page -->
-    <div class="flex items-center gap-3 rounded-xl bg-gray-50 border border-gray-100 px-4 py-2 w-fit">
-        <span class="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Rows</span>
+    <div class="flex items-center gap-3 rounded-md bg-gray-50 border border-gray-100 px-4 py-2 w-fit">
+        <span class="text-[11px] font-semibold uppercase tracking-widest text-gray-600">Rows</span>
         <div class="relative">
             <select
-                class="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                class="appearance-none bg-white border border-gray-200 rounded-md pl-3 pr-8 py-1.5 text-sm font-medium text-gray-900 outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                 (change)="onChangeSelect($event)" [value]="row" [disabled]="total<=6">
                 <option value="5">5</option>
                 <option value="10">10</option>
@@ -19,12 +19,12 @@
     </div>
 
     <!-- Range summary -->
-    <p class="text-sm text-gray-500 whitespace-nowrap">
-        Showing
-        <span class="font-semibold text-violet-600">{{ total ? ((selectedPage - 1) * row) + 1 : 0 }}-{{ row * selectedPage >= total ? total : row * selectedPage }}</span>
-        of
+    <p class="flex items-center gap-1.5 text-sm text-gray-500 whitespace-nowrap">
+        <span>Showing</span>
+        <span class="font-semibold text-violet-600">{{ total ? ((selectedPage - 1) * row) + 1 : 0 }} - {{ row * selectedPage >= total ? total : row * selectedPage }}</span>
+        <span>of</span>
         <span class="font-semibold text-gray-900">{{ total }}</span>
-        items
+        <span>items</span>
     </p>
 
     <!-- Page controls -->

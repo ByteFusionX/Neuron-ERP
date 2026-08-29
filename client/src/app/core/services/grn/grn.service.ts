@@ -54,6 +54,10 @@ export class GrnService {
     return this.http.patch<any>(`${this.baseUrl}/${grnId}/supplier-delivery-notes`, formData, { context: context() });
   }
 
+  getGRNRejections(params?: { purchaseOrderId?: string; supplierId?: string }): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/rejections`, { params: params as any, context: context() });
+  }
+
 
   async generateGRNReceiptPDF(grnData: any, selectedItems: any[]) {
     pdfMake.vfs = pdfFonts.vfs;
@@ -87,7 +91,9 @@ export class GrnService {
     let serialNumber = 1;
 
     selectedItems.forEach((item: any) => {
-      const rejectedQty = (item.receivedQty || 0) - (item.acceptedQty || 0);
+      const rejectedQty = item.rejectedQty !== undefined && item.rejectedQty !== null
+        ? item.rejectedQty
+        : (item.receivedQty || 0) - (item.acceptedQty || 0);
       const partNo = typeof item.partNo === 'string' ? item.partNo : (item.partNo?.partNo || '-');
       const itemDate = item.date ? new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
       const remarksText = item.remarks || '-';

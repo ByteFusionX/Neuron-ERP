@@ -23,6 +23,11 @@
           Cancel DN
         </app-btn>
 
+        <app-btn *ngIf="canReject()" theme="secondary" (click)="onReject()" [loading]="isRejecting">
+          <ng-icon name="heroExclamationTriangle" class="mr-2"></ng-icon>
+          Reject Items
+        </app-btn>
+
     </div>
   </div>
 

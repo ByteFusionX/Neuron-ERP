@@ -66,6 +66,10 @@ export class DeliveryNoteService {
     return this.http.patch<any>(`${this.apiUrl}/${id}/cancel`, {});
   }
 
+  rejectDnItems(id: string, data: { items: { itemId: string; rejectedQty: number; reason?: string }[]; reason: string }): Observable<any> {
+    return this.http.patch<any>(`${this.apiUrl}/${id}/reject`, data);
+  }
+
   getInventoryDeductionReport(params: any): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/inventory-deduction-report`, params, { context: context() });
   }

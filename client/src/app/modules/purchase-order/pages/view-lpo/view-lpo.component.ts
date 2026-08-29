@@ -46,6 +46,7 @@ export class ViewLpoComponent implements OnInit {
   isApproving = false;
   isRejecting = false;
   canApprovePOs = signal<boolean>(false);
+  currentEmployeeId: string | null = null;
 
   ngOnInit(): void {
     this.lpoId = <string>this.route.snapshot.paramMap.get('id');
@@ -60,10 +61,17 @@ export class ViewLpoComponent implements OnInit {
 
   checkPrivileges(): void {
     this.employeeService.employeeData$.subscribe((data) => {
+      this.currentEmployeeId = data?._id || null;
       if (data?.category?.privileges) {
         this.canApprovePOs.set(data.category.privileges.purchaseOrder?.canApprovePOs || false);
       }
     });
+  }
+
+  isOwnLpo(): boolean {
+    const createdById = this.lpo?.createdBy?._id || this.lpo?.createdBy
+      || this.purchase?.createdBy?._id || this.purchase?.createdBy;
+    return !!this.currentEmployeeId && !!createdById && createdById === this.currentEmployeeId;
   }
 
   loadLpo(): void {
@@ -282,7 +290,7 @@ export class ViewLpoComponent implements OnInit {
     const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
       data: {
         title: 'Approve LPO',
-        description: 'Are you sure you want to approve this LPO? Please provide a comment explaining your decision.',
+        description: 'Are you sure you want to approve this LPO? You may optionally provide a comment.',
         icon: 'heroCheckCircle',
         iconColor: 'green',
         confirmButtonText: 'Approve',
@@ -345,7 +353,7 @@ export class ViewLpoComponent implements OnInit {
   }
 
   canApproveOrReject(): boolean {
-    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs();
+    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs() && !this.isOwnLpo();
   }
 
   onViewPurchase(): void {

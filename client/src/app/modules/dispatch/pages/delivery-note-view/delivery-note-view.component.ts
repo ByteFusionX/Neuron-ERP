@@ -9,6 +9,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
+import { RejectDnItemsModalComponent, RejectDnItemsModalResult } from 'src/app/shared/components/reject-dn-items-modal/reject-dn-items-modal.component';
 
 @Component({
   selector: 'app-delivery-note-view',
@@ -28,6 +29,7 @@ export class DeliveryNoteViewComponent implements OnInit {
   deliveryItems: any[] = [];
   isLoading = true;
   isCancelling = false;
+  isRejecting = false;
 
   constructor() {
     this.loadDeliveryNote();
@@ -104,6 +106,49 @@ export class DeliveryNoteViewComponent implements OnInit {
     });
   }
 
+  canReject(): boolean {
+    if (!this.deliveryNote) return false;
+    return this.deliveryNote.status === 'Delivered' || this.deliveryNote.status === 'Partially Rejected';
+  }
+
+  onReject() {
+    if (!this.deliveryNote?._id) return;
+
+    const modalItems = this.deliveryItems.map((item: any) => ({
+      itemId: item.itemId,
+      description: item.description,
+      partNo: item.partNo,
+      deliveredQty: item.deliveredQty || 0,
+      rejectedQty: item.rejectedQty || 0
+    }));
+
+    const dialogRef = this.dialog.open(RejectDnItemsModalComponent, {
+      width: '900px',
+      maxHeight: '90vh',
+      data: { items: modalItems }
+    });
+
+    dialogRef.afterClosed().subscribe((result: RejectDnItemsModalResult | null) => {
+      if (!result || !this.deliveryNote?._id) return;
+
+      this.isRejecting = true;
+      this.dnService.rejectDnItems(this.deliveryNote._id, result).subscribe({
+        next: (response) => {
+          this.notificationService.success('Delivery Note items rejected successfully');
+          if (response?.warnings?.length) {
+            response.warnings.forEach((warning: string) => this.notificationService.warning(warning, '', { timeOut: 6000 }));
+          }
+          this.isRejecting = false;
+          this.loadDeliveryNote();
+        },
+        error: (error) => {
+          this.notificationService.error(error.error?.message || 'Failed to reject delivery note items');
+          this.isRejecting = false;
+        }
+      });
+    });
+  }
+
   getStatusClass(status: string): string {
     switch (status) {
       case 'Draft':
@@ -114,6 +159,9 @@ export class DeliveryNoteViewComponent implements OnInit {
         return 'bg-yellow-100 text-yellow-800';
       case 'Cancelled':
         return 'bg-red-100 text-red-800';
+      case 'Rejected':
+      case 'Partially Rejected':
+        return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
