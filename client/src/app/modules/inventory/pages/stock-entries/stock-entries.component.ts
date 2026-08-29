@@ -51,6 +51,7 @@ export class StockEntriesComponent implements OnInit {
   tableData = signal<StockEntry[]>([]);
   tableColumns: TableColumn[] = [];
   defaultColumns: string[] = ['itemCode', 'partNo', 'productDescription', 'targetWarehouse', 'quantity', 'uom', 'unitCost', 'totalCost', 'supplierName', 'dateOfPurchase', 'stockInDays', 'jobId', 'productCategory', 'productSegment', 'sellingPrice', 'blockedQuantities', 'remarks', 'actions'];
+  showQuarantineOnly = signal<boolean>(false);
   isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
@@ -347,6 +348,14 @@ export class StockEntriesComponent implements OnInit {
         }
       },
       {
+        key: 'quarantineReason',
+        label: 'Quarantine Reason',
+        type: 'text',
+        sortable: false,
+        filterable: false,
+        cellRenderer: (item: any) => item?.isQuarantined ? (item?.quarantineReason || '-') : ''
+      },
+      {
         key: 'remarks',
         label: 'Remarks',
         type: 'text',
@@ -380,6 +389,13 @@ export class StockEntriesComponent implements OnInit {
             action: 'blockItem',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-300 hover:border-orange-500 text-orange-600 text-sm rounded-full font-medium',
             condition: (item: any) => (item?.availableQuantity ?? item?.quantity ?? 0) > 0
+          },
+          {
+            icon: 'heroCheckCircle',
+            tooltip: 'Release from Quarantine',
+            action: 'releaseQuarantine',
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-green-200 hover:bg-green-50 flex justify-center items-center text-green-600',
+            condition: (item: any) => !!item?.isQuarantined
           }
         ]
       }
@@ -394,6 +410,7 @@ export class StockEntriesComponent implements OnInit {
       page: extraParams.page ?? paginationState.page,
       row: extraParams.row ?? paginationState.row,
       search: this.searchTerm || undefined,
+      isQuarantined: this.showQuarantineOnly() || undefined,
       ...this.appliedFilters,
       ...extraParams
     };
@@ -436,6 +453,31 @@ export class StockEntriesComponent implements OnInit {
     this.router.navigate(['/inventory/stock-entries/create']);
   }
 
+  toggleQuarantineView(): void {
+    this.showQuarantineOnly.set(!this.showQuarantineOnly());
+    const currentState = this.paginationService.paginationState();
+    this.paginationService.updatePaginationState({
+      page: 1,
+      row: currentState.row,
+      total: currentState.total
+    });
+    this.loadStockEntries({ page: 1 });
+  }
+
+  onReleaseFromQuarantine(item: StockEntry): void {
+    if (!item?._id) return;
+
+    this.stockEntryService.releaseFromQuarantine(item._id).subscribe({
+      next: () => {
+        this.toastr.success('Stock entry released from quarantine');
+        this.loadStockEntries();
+      },
+      error: (error) => {
+        this.toastr.error(error.error?.message || 'Failed to release stock entry from quarantine');
+      }
+    });
+  }
+
   onRowClick(row: StockEntry): void {
   }
 
@@ -448,6 +490,8 @@ export class StockEntriesComponent implements OnInit {
       this.onEditStockEntry(event.item);
     } else if (event.action === 'deleteItem') {
       this.onInlineDelete(event.item);
+    } else if (event.action === 'releaseQuarantine') {
+      this.onReleaseFromQuarantine(event.item);
     }
   }
 

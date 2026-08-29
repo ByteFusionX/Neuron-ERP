@@ -18,6 +18,10 @@
   <ng-template #sideColumn>
     <div class="flex flex-wrap items-center gap-3 justify-end">
       <data-search placeholder="Search part no or description" (searchSubmitted)="onSearch($event)"></data-search>
+      <app-btn [theme]="showQuarantineOnly() ? 'primary' : 'secondary'" (buttonClick)="toggleQuarantineView()">
+        <ng-icon name="heroExclamationTriangle"></ng-icon>
+        {{ showQuarantineOnly() ? 'Showing Quarantined Stock' : 'Show Quarantined Stock' }}
+      </app-btn>
       <app-btn theme="primary" (buttonClick)="onCreateStockEntry()">
         <ng-icon name="heroPlus"></ng-icon>
         Add Stock Entry

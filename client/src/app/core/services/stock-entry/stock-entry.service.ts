@@ -37,6 +37,11 @@ export interface StockEntry {
   availableQuantity?: number;
   blockedQuantity?: number;
   activeBlocks?: StockBlock[];
+  isQuarantined?: boolean;
+  quarantineReason?: string;
+  quarantinedAt?: Date | string;
+  quarantineReleasedAt?: Date | string;
+  sourceDnId?: any;
 }
 
 export interface StockBlock {
@@ -97,6 +102,7 @@ export interface StockEntryQueryParams {
   jobId?: string;
   fromDate?: string;
   toDate?: string;
+  isQuarantined?: boolean;
 }
 
 @Injectable({
@@ -140,6 +146,10 @@ export class StockEntryService {
 
   deleteStockEntry(id: string): Observable<any> {
     return this.http.delete(`${this.api}/stock-entry/${id}`, { context: context() });
+  }
+
+  releaseFromQuarantine(id: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/stock-entry/${id}/release-quarantine`, {}, { context: context() });
   }
 
   getAvailableQuantity(stockEntryId: string): Observable<AvailableQuantityResponse> {

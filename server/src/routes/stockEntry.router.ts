@@ -8,7 +8,8 @@ import {
     generateGRN,
     getAvailableQuantity,
     createStockBlock,
-    getStockBlocks
+    getStockBlocks,
+    releaseFromQuarantine
 } from "../controllers/stockEntry.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
@@ -23,6 +24,7 @@ stockEntryRouter.get('/', getStockEntries);
 stockEntryRouter.get('/:id', getStockEntryById);
 stockEntryRouter.post('/', createStockEntry);
 stockEntryRouter.post('/block', createStockBlock);
+stockEntryRouter.patch('/:id/release-quarantine', releaseFromQuarantine);
 stockEntryRouter.patch('/:id', updateStockEntry);
 stockEntryRouter.delete('/:id', deleteStockEntry);
 
