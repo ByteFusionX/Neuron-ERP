@@ -15,8 +15,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Subject } from 'rxjs';
 import { NgFor, NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
-import { NgSelectComponent } from '@ng-select/ng-select';
+import { NgSelectComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
+import { RouterLink } from '@angular/router';
 import { appNoNegativeNumber } from '../../directives/no-negative-number.directive';
+import { SupplierService } from 'src/app/core/services/supplier.service';
+import { QuoteItem } from '../../interfaces/quotation.interface';
 
 @Component({
   selector: 'optional-items',
@@ -29,6 +32,8 @@ import { appNoNegativeNumber } from '../../directives/no-negative-number.directi
     NgIf,
     NgIcon,
     NgSelectComponent,
+    NgFooterTemplateDirective,
+    RouterLink,
     appNoNegativeNumber,
   ],
 })
@@ -36,12 +41,20 @@ export class OptionalItemsComponent implements OnInit {
   @Input() optionalItems!: FormArray;
   @Input() submit!: boolean;
   @Input() oldOptionalItems!: any;
+  @Input() disabled: boolean = false;
   @Output() calculatedValues = new EventEmitter<{
     totalCost: number;
     sellingPrice: number;
     totalProfit: number;
     discount: number;
   }>();
+  @Output() addNewSupplierClicked = new EventEmitter<Event>();
+
+  onAddNewSupplierClick(event: Event, supplierSelect?: NgSelectComponent) {
+    event.preventDefault();
+    supplierSelect?.close();
+    this.addNewSupplierClicked.emit(event);
+  }
 
   selectedOption: number = 0;
   removedItems: any[] = [];
@@ -55,10 +68,12 @@ export class OptionalItemsComponent implements OnInit {
   ];
   availabiltyInput$ = new Subject<string>();
   removedOptions: any[] = [];
+  suppliers: { _id: string; supplierName: string }[] = [];
 
   constructor(
     private _fb: FormBuilder,
     private snackBar: MatSnackBar,
+    private _supplierService: SupplierService,
   ) {}
 
   ngOnInit() {
@@ -68,6 +83,11 @@ export class OptionalItemsComponent implements OnInit {
     }
     this.optionalItems.valueChanges.subscribe(() => {
       this.emitCalculatedValues();
+    });
+    this._supplierService.supplierList().subscribe({
+      next: (res) => {
+        this.suppliers = res?.data || [];
+      },
     });
   }
 
@@ -165,6 +185,8 @@ export class OptionalItemsComponent implements OnInit {
                   [Validators.required, Validators.min(0)],
                 ],
                 availability: ['', Validators.required],
+                supplierId: [''],
+                uom: [''],
               }),
             ]),
           }),
@@ -188,6 +210,8 @@ export class OptionalItemsComponent implements OnInit {
             profit: ['', [Validators.required, Validators.min(0)]],
             unitSellingPrice: ['', Validators.min(0)],
             availability: ['', Validators.required],
+            supplierId: [''],
+            uom: [''],
           }),
         ]),
       }),
@@ -202,11 +226,75 @@ export class OptionalItemsComponent implements OnInit {
       profit: ['', [Validators.required, Validators.min(0)]],
       unitSellingPrice: ['', Validators.min(0)],
       availability: ['', Validators.required],
+      supplierId: [''],
+      uom: [''],
     });
   }
 
   addItemDetail(i: number, j: number): void {
     this.getItemDetailsArrayControls(i, j)?.push(this.createItemDetail());
+  }
+
+  private isItemGroupEmpty(itemGroup: FormGroup): boolean {
+    const itemName = (itemGroup.get('itemName')?.value || '').toString().trim();
+    if (itemName) {
+      return false;
+    }
+    const itemDetailsArray = itemGroup.get('itemDetails') as FormArray;
+    return !itemDetailsArray?.controls.some((detail) => {
+      const detailValue = (detail.get('detail')?.value || '').toString().trim();
+      const quantity = detail.get('quantity')?.value;
+      const unitCost = detail.get('unitCost')?.value;
+      return !!detailValue || !!quantity || !!unitCost;
+    });
+  }
+
+  addItemsFromPreviousJobs(items: QuoteItem[]): void {
+    if (!items?.length) {
+      return;
+    }
+    const optionIndex = this.selectedOption ?? 0;
+
+    items.forEach((item) => {
+      const itemsArray = this.getItemAtOption(optionIndex);
+      const firstItemGroup =
+        itemsArray.length > 0 ? (itemsArray.at(0) as FormGroup) : null;
+
+      let newItemGroup: FormGroup;
+      if (firstItemGroup && this.isItemGroupEmpty(firstItemGroup)) {
+        newItemGroup = firstItemGroup;
+      } else {
+        this.addItemFormGroup(optionIndex, false);
+        newItemGroup = itemsArray.at(itemsArray.length - 1) as FormGroup;
+      }
+      newItemGroup.get('itemName')?.setValue(item.itemName);
+
+      const itemDetailsArray = newItemGroup.get('itemDetails') as FormArray;
+      (item.itemDetails || []).forEach((detail: any, index: number) => {
+        if (index > 0) {
+          itemDetailsArray.push(this.createItemDetail());
+        }
+        const unitCost = detail.unitCost;
+        const unitSellingPrice = detail.unitSellingPrice;
+        const profit =
+          unitCost && unitSellingPrice
+            ? (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(2)
+            : '';
+
+        itemDetailsArray.at(index).patchValue({
+          detail: detail.detail,
+          quantity: detail.quantity,
+          unitCost: detail.unitCost,
+          profit,
+          unitSellingPrice: detail.unitSellingPrice,
+          availability: detail.availability,
+          supplierId: detail.supplierId,
+          uom: detail.uom,
+        });
+      });
+    });
+
+    this.emitCalculatedValues();
   }
 
   removeOptions(i: number): void {
@@ -259,6 +347,8 @@ export class OptionalItemsComponent implements OnInit {
                 profit: detail.profit,
                 unitSellingPrice: detail.unitSellingPrice,
                 availability: detail.availability,
+                supplierId: detail.supplierId,
+                uom: detail.uom,
               }),
             ),
           ),
@@ -281,6 +371,8 @@ export class OptionalItemsComponent implements OnInit {
           profit: item.profit,
           unitSellingPrice: item.unitSellingPrice,
           availability: item.availability,
+          supplierId: item.supplierId,
+          uom: item.uom,
         }),
       );
       itemDetailsArray?.updateValueAndValidity();
@@ -309,6 +401,8 @@ export class OptionalItemsComponent implements OnInit {
                       Validators.required,
                     ],
                     availability: [detail.availability, Validators.required],
+                    supplierId: [detail.supplierId],
+                    uom: [detail.uom],
                   }),
                 ),
               ),

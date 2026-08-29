@@ -23,239 +23,245 @@
   </div>
   <form [formGroup]="quoteForm" (ngSubmit)="onQuoteSubmit()">
     <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
-      <div class="w-full">
-        <div class="flex flex-wrap -mx-3 mb-5">
-          <div class="w-full md:w-1/3 px-3 mb-6 md:mb-0">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="grid-first-name"
+      <div
+        class="w-full grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5"
+      >
+        <div class="flex flex-col">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="client"
+          >
+            Client
+          </label>
+          <ng-container *ngIf="!isEdit; else clientBlock">
+            <ng-container
+              *ngIf="enquiryData$ | async as enquiryData; else clientBlock"
             >
-              Client
-            </label>
-            <ng-container *ngIf="!isEdit; else clientBlock">
-              <ng-container
-                *ngIf="enquiryData$ | async as enquiryData; else clientBlock"
+              <p
+                class="block w-full bg-gray-100 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight truncate"
               >
-                <p class="border py-[11px] px-2">
-                  {{ enquiryData.client.companyName }}
-                </p>
-              </ng-container>
+                {{ enquiryData.client.companyName }}
+              </p>
             </ng-container>
-            <ng-template #clientBlock>
-              <ng-select
-                [class.border-red-500]="f['client'].invalid && submit"
-                class="form border"
-                bindLabel="companyName"
-                (change)="onChange($event)"
-                formControlName="client"
-              >
-                <ng-option
-                  *ngFor="let customer of customers$ | async"
-                  [value]="customer._id"
-                  >({{ customer.clientRef }}) {{ customer.companyName }}
-                </ng-option>
-                <ng-template ng-footer-tmp>
-                  <a
-                    class="text-violet-700 cursor-pointer flex justify-center items-center h-full w-full font-medium"
-                    routerLink="/customers/create"
-                  >
-                    + Create Customer
-                  </a>
-                </ng-template>
-              </ng-select>
-            </ng-template>
-          </div>
-          <div class="w-full md:w-1/3 px-3">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="grid-last-name"
-            >
-              Attention
-            </label>
-            <ng-container *ngIf="!isEdit; else attentionBlock">
-              <ng-container
-                *ngIf="enquiryData$ | async as enquiryData; else attentionBlock"
-              >
-                <p class="border py-[11px] px-2">
-                  {{
-                    enquiryData?.contact?.courtesyTitle +
-                      "." +
-                      enquiryData?.contact?.firstName +
-                      " " +
-                      enquiryData?.contact?.lastName
-                  }}
-                </p>
-              </ng-container>
-            </ng-container>
-            <ng-template #attentionBlock>
-              <ng-select
-                [class.border-red-500]="f['attention'].invalid && submit"
-                class="form border"
-                bindLabel="_id"
-                formControlName="attention"
-              >
-                <ng-option
-                  *ngFor="let contact of contacts"
-                  [value]="contact?._id"
-                  >{{
-                    contact?.courtesyTitle +
-                      "." +
-                      contact?.firstName +
-                      " " +
-                      contact?.lastName
-                  }}</ng-option
-                >
-              </ng-select>
-            </ng-template>
-          </div>
-          <div class="w-full md:w-1/3 px-3">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="department"
-            >
-              Department
-            </label>
-            <ng-container *ngIf="!isEdit; else departemntBlock">
-              <ng-container
-                *ngIf="
-                  enquiryData$ | async as enquiryData;
-                  else departemntBlock
-                "
-              >
-                <p class="border py-[11px] px-2">
-                  {{ enquiryData.department.departmentName }}
-                </p>
-              </ng-container>
-            </ng-container>
-
-            <ng-template #departemntBlock>
-              <ng-select
-                [class.border-red-500]="f['department'].invalid && submit"
-                id="department"
-                bindLabel="departmentName"
-                class="form border"
-                placeholder="Department"
-                appendTo="body"
-                formControlName="department"
-              >
-                <ng-option
-                  *ngFor="let department of departments"
-                  [value]="department._id"
-                  >{{ department.departmentName }}</ng-option
-                >
-              </ng-select>
-            </ng-template>
-          </div>
-        </div>
-        <div class="flex flex-wrap -mx-3 mb-5">
-          <div class="w-full md:w-1/3 px-3">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="quoteDate"
-            >
-              Quote Date
-            </label>
-            <input
-              appNoLeadingSpace
-              formControlName="date"
-              [class.border-red-500]="f['date'].invalid && submit"
-              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-              id="quoteDate"
-              type="date"
-              (click)="openDatePicker($event)"
-            />
-          </div>
-          <div class="w-full md:w-1/3 px-3">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="closingDate"
-            >
-              Closing Date
-            </label>
-            <input
-              formControlName="closingDate"
-              [class.border-red-500]="f['closingDate'].invalid && submit"
-              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-              id="closingDate"
-              type="date"
-              (click)="openDatePicker($event)"
-            />
-          </div>
-
-          <div class="w-full md:w-1/3 px-3 mb-6 md:mb-0">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="grid-first-name"
-            >
-              Currency
-            </label>
-            <ng-container *ngIf="!isEdit; else currencyBlock">
-              <ng-container
-                *ngIf="
-                  (enquiryData$ | async)?.preSale?.estimations
-                    ?.currency as currency;
-                  else currencyBlock
-                "
-              >
-                <p class="border py-[11px] px-2">
-                  {{ currency }}
-                </p>
-              </ng-container>
-            </ng-container>
-
-            <ng-template #currencyBlock>
-              <ng-select
-                [class.border-red-500]="f['currency'].invalid && submit"
-                class="form border"
-                bindLabel="currency"
-                formControlName="currency"
-              >
-                <ng-option value="QAR">QAR</ng-option>
-                <ng-option value="USD">USD</ng-option>
-              </ng-select>
-            </ng-template>
-          </div>
-        </div>
-        <div class="flex flex-wrap -mx-3">
-          <div class="w-full md:w-2/3 px-3">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="subject"
-            >
-              subject
-            </label>
-            <input
-              appNoLeadingSpace
-              formControlName="subject"
-              [class.border-red-500]="f['subject'].invalid && submit"
-              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-              id="subject"
-              type="text"
-              placeholder="Subject"
-            />
-          </div>
-          <div class="w-full md:w-1/3 px-3 mb-6 md:mb-0">
-            <label
-              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              for="grid-first-name"
-            >
-              Quoting Company
-            </label>
-
+          </ng-container>
+          <ng-template #clientBlock>
             <ng-select
-              [class.border-red-500]="f['quoteCompany'].invalid && submit"
+              [class.border-red-500]="f['client'].invalid && submit"
               class="form border"
-              bindLabel="quoteCompany"
-              formControlName="quoteCompany"
+              id="client"
+              bindLabel="companyName"
+              (change)="onChange($event)"
+              formControlName="client"
             >
-              <ng-option value="Neuron Technologies"
-                >Neuron Technologies</ng-option
+              <ng-option
+                *ngFor="let customer of customers$ | async"
+                [value]="customer._id"
+                >({{ customer.clientRef }}) {{ customer.companyName }}
+              </ng-option>
+              <ng-template ng-footer-tmp>
+                <a
+                  class="text-violet-700 cursor-pointer flex justify-center items-center h-full w-full font-medium"
+                  routerLink="/customers/create"
+                >
+                  + Create Customer
+                </a>
+              </ng-template>
+            </ng-select>
+          </ng-template>
+        </div>
+
+        <div class="flex flex-col">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="attention"
+          >
+            Attention
+          </label>
+          <ng-container *ngIf="!isEdit; else attentionBlock">
+            <ng-container
+              *ngIf="enquiryData$ | async as enquiryData; else attentionBlock"
+            >
+              <p
+                class="block w-full bg-gray-100 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight truncate"
               >
-              <ng-option value="Neuron Security System"
-                >Neuron Security System</ng-option
+                {{
+                  enquiryData?.contact?.courtesyTitle +
+                    "." +
+                    enquiryData?.contact?.firstName +
+                    " " +
+                    enquiryData?.contact?.lastName
+                }}
+              </p>
+            </ng-container>
+          </ng-container>
+          <ng-template #attentionBlock>
+            <ng-select
+              [class.border-red-500]="f['attention'].invalid && submit"
+              class="form border"
+              id="attention"
+              bindLabel="_id"
+              formControlName="attention"
+            >
+              <ng-option
+                *ngFor="let contact of contacts"
+                [value]="contact?._id"
+                >{{
+                  contact?.courtesyTitle +
+                    "." +
+                    contact?.firstName +
+                    " " +
+                    contact?.lastName
+                }}</ng-option
               >
             </ng-select>
-          </div>
+          </ng-template>
+        </div>
+
+        <div class="flex flex-col">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="department"
+          >
+            Department
+          </label>
+          <ng-container *ngIf="!isEdit; else departemntBlock">
+            <ng-container
+              *ngIf="enquiryData$ | async as enquiryData; else departemntBlock"
+            >
+              <p
+                class="block w-full bg-gray-100 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight truncate"
+              >
+                {{ enquiryData.department.departmentName }}
+              </p>
+            </ng-container>
+          </ng-container>
+          <ng-template #departemntBlock>
+            <ng-select
+              [class.border-red-500]="f['department'].invalid && submit"
+              id="department"
+              bindLabel="departmentName"
+              class="form border"
+              placeholder="Department"
+              appendTo="body"
+              formControlName="department"
+            >
+              <ng-option
+                *ngFor="let department of departments"
+                [value]="department._id"
+                >{{ department.departmentName }}</ng-option
+              >
+            </ng-select>
+          </ng-template>
+        </div>
+
+        <div class="flex flex-col">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="quoteDate"
+          >
+            Quote Date
+          </label>
+          <input
+            appNoLeadingSpace
+            formControlName="date"
+            [class.border-red-500]="f['date'].invalid && submit"
+            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            id="quoteDate"
+            type="date"
+            (click)="openDatePicker($event)"
+          />
+        </div>
+
+        <div class="flex flex-col">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="closingDate"
+          >
+            Closing Date
+          </label>
+          <input
+            formControlName="closingDate"
+            [class.border-red-500]="f['closingDate'].invalid && submit"
+            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            id="closingDate"
+            type="date"
+            (click)="openDatePicker($event)"
+          />
+        </div>
+
+        <div class="flex flex-col">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="currency"
+          >
+            Currency
+          </label>
+          <ng-container *ngIf="!isEdit; else currencyBlock">
+            <ng-container
+              *ngIf="
+                (enquiryData$ | async)?.preSale?.estimations
+                  ?.currency as currency;
+                else currencyBlock
+              "
+            >
+              <p
+                class="block w-full bg-gray-100 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight truncate"
+              >
+                {{ currency }}
+              </p>
+            </ng-container>
+          </ng-container>
+          <ng-template #currencyBlock>
+            <ng-select
+              [class.border-red-500]="f['currency'].invalid && submit"
+              class="form border"
+              id="currency"
+              bindLabel="currency"
+              formControlName="currency"
+            >
+              <ng-option value="QAR">QAR</ng-option>
+              <ng-option value="USD">USD</ng-option>
+            </ng-select>
+          </ng-template>
+        </div>
+
+        <div class="flex flex-col md:col-span-2">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="subject"
+          >
+            Subject
+          </label>
+          <input
+            appNoLeadingSpace
+            formControlName="subject"
+            [class.border-red-500]="f['subject'].invalid && submit"
+            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+            id="subject"
+            type="text"
+            placeholder="Subject"
+          />
+        </div>
+
+        <div class="flex flex-col">
+          <label
+            class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+            for="quoteCompany"
+          >
+            Quoting Company
+          </label>
+          <ng-select
+            [class.border-red-500]="f['quoteCompany'].invalid && submit"
+            class="form border"
+            id="quoteCompany"
+            bindLabel="quoteCompany"
+            formControlName="quoteCompany"
+          >
+            <ng-option value="Neuron Technologies">Neuron Technologies</ng-option>
+            <ng-option value="Neuron Security System"
+              >Neuron Security System</ng-option
+            >
+          </ng-select>
         </div>
       </div>
 
@@ -295,6 +301,14 @@
                       class="border-l border-r border-t text-center min-w-[66px]"
                     >
                       <div class="px-2 py-3">QTY</div>
+                    </th>
+                    <th
+                      scope="col"
+                      resizable
+                      key="uom"
+                      class="border-l border-r border-t text-center min-w-[80px]"
+                    >
+                      <div class="px-2 py-3">UOM</div>
                     </th>
                     <th
                       scope="col"
@@ -339,6 +353,14 @@
                     <th
                       scope="col"
                       resizable
+                      key="supplier"
+                      class="border-l border-r border-t text-center min-w-[220px]"
+                    >
+                      <div class="px-2 py-3">Supplier</div>
+                    </th>
+                    <th
+                      scope="col"
+                      resizable
                       key="avbl"
                       class="border-l border-r border-t text-center min-w-[90px]"
                     >
@@ -351,7 +373,7 @@
                     *ngFor="let item of optionItem.items; let j = index"
                   >
                     <tr>
-                      <td colspan="9" class="border px-6 py-2 bg-gray-50">
+                      <td colspan="10" class="border px-6 py-2 bg-gray-50">
                         <div
                           class="flex justify-center items-center text-md text-black font-medium uppercase"
                         >
@@ -401,6 +423,9 @@
                           {{ itemsDetail.quantity }}
                         </td>
                         <td class="px-2 py-2 border text-center">
+                          {{ itemsDetail.uom || '-' }}
+                        </td>
+                        <td class="px-2 py-2 border text-center">
                           {{ itemsDetail.unitCost | numberFormatter }}
                         </td>
                         <td class="py-2 text-center">
@@ -419,6 +444,9 @@
                           {{ calculateTotalPrice(i, j, k) | numberFormatter }}
                         </td>
                         <td class="px-2 py-2 border text-center">
+                          {{ itemsDetail.supplierName || '-' }}
+                        </td>
+                        <td class="px-2 py-2 border text-center">
                           {{ itemsDetail.availability }}
                         </td>
                       </tr>
@@ -431,10 +459,33 @@
         </ng-container>
       </ng-container>
       <ng-template #quoteItemBlock>
+        <div *ngIf="itemsTableEnabled" class="mt-6 flex justify-start">
+          <button
+            type="button"
+            [disabled]="isFetchingPreviousJobs"
+            class="border border-violet-700 text-violet-700 hover:bg-violet-50 disabled:opacity-60 font-medium py-2 px-4 rounded text-sm flex justify-center items-center gap-2 whitespace-nowrap"
+            (click)="openPreviousJobsModal()"
+          >
+            <ng-icon
+              *ngIf="isFetchingPreviousJobs"
+              class="spin"
+              name="heroArrowPath"
+            ></ng-icon>
+            Previous Jobs
+            <span
+              *ngIf="!isFetchingPreviousJobs && previousJobsFetched"
+              class="bg-violet-700 text-white rounded-full text-xs px-2 py-0.5"
+            >
+              {{ previousJobItemsCount }}
+            </span>
+          </button>
+        </div>
         <optional-items
           [optionalItems]="optionalItems"
           [submit]="submit"
+          [disabled]="!itemsTableEnabled"
           (calculatedValues)="onCalculatedValuesReceived($event)"
+          (addNewSupplierClicked)="onAddNewSupplierClick($event)"
           [oldOptionalItems]="estimatedOptionalItems"
         ></optional-items>
       </ng-template>
@@ -446,7 +497,7 @@
           <div class="mt-6" *ngIf="items && items.length > 1 && !isEdit">
             <label
               for="mainCalculationOption"
-              class="uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
+              class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
             >
               Select Option For Final Calculation (This will not reflect in
               database):
@@ -466,90 +517,86 @@
         </ng-container>
       </ng-container>
 
-      <div class="relative overflow-x-auto mt-6 w-full flex gap-6">
+      <div class="mt-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         <table
-          class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50"
+          class="w-full h-full text-black border border-gray-200 rounded overflow-hidden bg-gray-100"
         >
           <tbody>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
-                Total Cost
-              </td>
+            <tr class="border-b border-gray-200">
+              <td class="px-4 py-3 text-left font-medium text-lg">Total Cost</td>
               <td
-                class="px-2 py-2 border text-center uppercase text-xl font-medium"
+                class="px-4 py-3 text-right text-lg font-semibold tabular-nums whitespace-nowrap"
               >
                 {{ calculateTotalCost() | numberFormatter }}
               </td>
             </tr>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
-                Total Selling price
+            <tr class="border-b border-gray-200">
+              <td class="px-4 py-3 text-left font-medium text-lg">
+                Total Selling Price
               </td>
               <td
-                class="px-2 py-2 border text-center uppercase text-xl font-medium"
+                class="px-4 py-3 text-right text-lg font-semibold tabular-nums whitespace-nowrap"
               >
                 {{ calculateDiscountPrice() | numberFormatter }}
               </td>
             </tr>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
+            <tr class="border-b border-gray-200">
+              <td class="px-4 py-3 text-left font-medium text-lg">
                 Profit Margin
               </td>
               <td
-                class="px-2 py-2 border text-center uppercase text-xl font-medium"
+                class="px-4 py-3 text-right text-lg font-semibold tabular-nums whitespace-nowrap"
               >
                 {{ calculateProfitMarginAmount() | numberFormatter }}
               </td>
             </tr>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
-                Profit margin with %
+            <tr>
+              <td class="px-4 py-3 text-left font-medium text-lg">
+                Profit Margin %
               </td>
               <td
-                class="px-2 py-2 border text-center uppercase text-xl font-medium"
+                class="px-4 py-3 text-right text-lg font-semibold tabular-nums whitespace-nowrap"
               >
                 {{ calculateProfitMarginPercentage().toFixed(2) }}%
               </td>
             </tr>
           </tbody>
         </table>
-        <table
-          class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-100"
+        <div
+          class="w-full h-full flex flex-col text-black border border-gray-200 rounded overflow-hidden bg-gray-100"
         >
-          <tbody>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
-                Subtotal
-              </td>
-              <td
-                class="px-2 py-2 border text-center uppercase text-xl font-medium"
-              >
-                {{ calculateSubtotal() | numberFormatter }}
-              </td>
-            </tr>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
-                Discount
-              </td>
-              <td class="px-2 py-2 border text-center uppercase text-xl">
-                {{ calculatedValues.discount | numberFormatter }}
-              </td>
-            </tr>
-            <tr class="border-b">
-              <td class="px-2 py-3 border text-center font-medium text-xl">
-                Total Amount
-              </td>
-              <td
-                class="px-2 py-2 border text-center uppercase text-xl font-medium"
-              >
-                {{ calculateFinalTotalAmount() | numberFormatter }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          <div
+            class="flex-1 flex justify-between items-center px-4 py-3 border-b border-gray-200"
+          >
+            <span class="text-left font-medium text-lg">Subtotal</span>
+            <span
+              class="text-right text-lg font-semibold tabular-nums whitespace-nowrap"
+            >
+              {{ calculateSubtotal() | numberFormatter }}
+            </span>
+          </div>
+          <div
+            class="flex-1 flex justify-between items-center px-4 py-3 border-b border-gray-200"
+          >
+            <span class="text-left font-medium text-lg">Discount</span>
+            <span class="text-right text-lg tabular-nums whitespace-nowrap">
+              {{ calculatedValues.discount | numberFormatter }}
+            </span>
+          </div>
+          <div
+            class="flex-1 flex justify-between items-center px-4 py-3 border-t border-gray-200"
+          >
+            <span class="text-left font-semibold text-lg">Total Amount</span>
+            <span
+              class="text-right text-lg font-bold tabular-nums whitespace-nowrap"
+            >
+              {{ calculateFinalTotalAmount() | numberFormatter }}
+            </span>
+          </div>
+        </div>
       </div>
-      <div class="flex flex-wrap -mx-3 mt-6">
-        <div class="w-full md:w-2/5 px-3">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div class="flex flex-col">
           <label
             class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
             for="customerNote"
@@ -577,7 +624,7 @@
             placeholder="Customer Note"
           ></textarea>
         </div>
-        <div class="w-full md:w-3/5 px-3">
+        <div class="flex flex-col">
           <label
             class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
             for="termsAndCondition"
@@ -610,11 +657,13 @@
       </div>
     </div>
 
-    <div class="border-t py-6 px-9 flex justify-between gap-2">
-      <div class="flex w-80">
+    <div
+      class="border-t py-6 px-9 flex flex-wrap justify-between items-center gap-4"
+    >
+      <div class="flex flex-wrap gap-3">
         <button
           type="button"
-          class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded text-sm mr-3 w-full flex justify-center items-center gap-2"
+          class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded text-sm flex justify-center items-center gap-2 whitespace-nowrap"
           (click)="onPreviewPdf()"
         >
           <ng-icon
@@ -626,7 +675,7 @@
         </button>
         <button
           type="button"
-          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm mr-3 w-full flex justify-center items-center gap-2 whitespace-nowrap"
+          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm flex justify-center items-center gap-2 whitespace-nowrap"
           (click)="onDownloadPdf(true)"
         >
           <ng-icon
@@ -638,7 +687,7 @@
         </button>
         <button
           type="button"
-          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm w-full flex justify-center items-center gap-2 whitespace-nowrap"
+          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm flex justify-center items-center gap-2 whitespace-nowrap"
           (click)="onDownloadPdf(false)"
         >
           <ng-icon
@@ -650,18 +699,31 @@
         </button>
       </div>
 
-      <div class="flex w-40">
+      <div class="flex gap-3">
         <button
           type="button"
-          class="hover:bg-gray-100 text-black font-medium py-2 px-4 rounded text-sm mr-3 border border-gray-300"
+          class="hover:bg-gray-100 text-black font-medium py-2 px-6 rounded text-sm border border-gray-300 whitespace-nowrap"
           routerLink="/quotations"
         >
           Cancel
         </button>
         <button
+          type="button"
+          [disabled]="isSavingDraft"
+          class="hover:bg-gray-100 text-gray-700 disabled:opacity-60 font-medium py-2 px-6 rounded text-sm border border-gray-300 flex justify-center items-center gap-2 whitespace-nowrap"
+          (click)="onSaveAsDraft()"
+        >
+          <ng-icon
+            *ngIf="isSavingDraft"
+            class="spin"
+            name="heroArrowPath"
+          ></ng-icon>
+          Save as Draft
+        </button>
+        <button
           type="submit"
           [disabled]="isSaving"
-          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm w-full flex justify-center items-center gap-2"
+          class="bg-violet-700 hover:bg-violet-600 disabled:opacity-60 text-white font-medium py-2 px-6 rounded text-sm flex justify-center items-center gap-2 whitespace-nowrap"
         >
           <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
           Save

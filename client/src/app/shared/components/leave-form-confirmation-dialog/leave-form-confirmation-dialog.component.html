@@ -1,0 +1,36 @@
+<div class="bg-white rounded-lg overflow-hidden w-full sm:min-w-[440px] max-w-[520px]">
+    <!-- Header -->
+    <div class="px-5 py-3 border-b flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <span class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center border bg-orange-50 border-orange-100">
+                <ng-icon name="heroExclamationTriangle" class="text-lg text-orange-500"></ng-icon>
+            </span>
+            <h2 class="text-base font-semibold text-gray-900 truncate">{{ data.title }}</h2>
+        </div>
+        <button type="button" (click)="onClose()"
+            class="shrink-0 w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center">
+            <ng-icon name="heroXMark" class="w-4 h-4"></ng-icon>
+        </button>
+    </div>
+
+    <!-- Body -->
+    <div class="px-5 py-5">
+        <p class="text-sm text-gray-600 leading-relaxed break-words">{{ data.description }}</p>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-5 py-3 bg-gray-50 border-t flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <button type="button" (click)="onClose()"
+            class="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors">
+            Close
+        </button>
+        <button type="button" (click)="onDiscardAndContinue()"
+            class="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 transition-colors">
+            {{ data.discardButtonText || 'Redirect Without Saving' }}
+        </button>
+        <button type="button" (click)="onDraftAndContinue()"
+            class="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md text-white bg-violet-700 hover:bg-violet-600 transition-colors">
+            {{ data.draftButtonText || 'Save as Draft & Redirect' }}
+        </button>
+    </div>
+</div>

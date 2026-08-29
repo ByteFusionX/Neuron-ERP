@@ -1,4 +1,15 @@
-<div class="relative overflow-x-auto" [formGroup]="parentFormGroup">
+<div
+  class="relative overflow-x-auto"
+  [formGroup]="parentFormGroup"
+  [class.opacity-50]="disabled"
+  [class.pointer-events-none]="disabled"
+>
+  <p
+    *ngIf="disabled"
+    class="mt-6 text-sm text-orange-500 font-thin"
+  >
+    Select Client, Attention and Department to enable the items table.
+  </p>
   <div
     class="mt-6"
     *ngFor="let options of optionalItems.controls; let optionIndex = index"
@@ -33,6 +44,14 @@
             class="border-l border-r border-t text-center min-w-[66px]"
           >
             <div class="px-2 py-3">QTY</div>
+          </th>
+          <th
+            scope="col"
+            resizable
+            key="uom"
+            class="border-l border-r border-t text-center min-w-[80px]"
+          >
+            <div class="px-2 py-3">UOM</div>
           </th>
           <th
             scope="col"
@@ -77,11 +96,23 @@
           <th
             scope="col"
             resizable
+            key="supplier"
+            class="border-l border-r border-t text-center min-w-[220px]"
+          >
+            <div class="px-2 py-3">Supplier</div>
+          </th>
+          <th
+            scope="col"
+            resizable
             key="avbl"
             class="border-l border-r border-t text-center min-w-[90px]"
           >
             <div class="px-2 py-3">AVBL.</div>
           </th>
+          <th
+            scope="col"
+            class="border-l border-r border-t min-w-[36px]"
+          ></th>
         </tr>
       </thead>
       <tbody formGroupName="items">
@@ -93,7 +124,7 @@
           [formGroupName]="itemIndex"
         >
           <tr>
-            <td colspan="9" class="border px-6 py-3 bg-gray-50">
+            <td colspan="11" class="border px-6 py-3 bg-gray-50">
               <span
                 *ngIf="
                   getItemAtOption(optionIndex).at(itemIndex).get('isOptional')
@@ -137,7 +168,7 @@
                 </button>
                 <button
                   type="button"
-                  *ngIf="itemIndex !== 0"
+                  *ngIf="getItemAtOption(optionIndex).length > 1"
                   class="ml-2 bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded text-sm"
                   (click)="onRemoveItem(optionIndex, itemIndex)"
                 >
@@ -232,6 +263,15 @@
                         itemDetailIndex
                       )
                     "
+                  />
+                </td>
+                <td class="border px-2 py-2 text-center">
+                  <input
+                    appNoLeadingSpace
+                    formControlName="uom"
+                    class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    type="text"
+                    placeholder="UOM"
                   />
                 </td>
                 <td
@@ -334,6 +374,26 @@
                     }}
                   </p>
                 </td>
+                <td class="border px-2 py-2 text-center">
+                  <ng-select
+                    #supplierSelect
+                    [items]="suppliers"
+                    bindLabel="supplierName"
+                    bindValue="_id"
+                    placeholder="Select Supplier"
+                    formControlName="supplierId"
+                  >
+                    <ng-template ng-footer-tmp>
+                      <a
+                        href="javascript:void(0)"
+                        (click)="onAddNewSupplierClick($event, supplierSelect)"
+                        class="text-violet-700 cursor-pointer flex justify-center items-center h-full w-full font-medium"
+                      >
+                        + Add New Supplier
+                      </a>
+                    </ng-template>
+                  </ng-select>
+                </td>
                 <td
                   [class.border-red-500]="
                     getItemDetailsArrayControls(optionIndex, itemIndex)
@@ -354,11 +414,9 @@
                   >
                   </ng-select>
                 </td>
-                <td
-                  class="px-2 py-2 border text-center"
-                  *ngIf="itemDetailIndex !== 0"
-                >
+                <td class="px-2 py-2 border text-center">
                   <ng-icon
+                    *ngIf="itemDetailIndex !== 0"
                     name="heroXMark"
                     class="text-md p-0 m-0 cursor-pointer text-red-600 mx-2"
                     (click)="
@@ -377,7 +435,7 @@
       </tbody>
       <tbody>
         <tr>
-          <td colspan="9" class="border px-6 py-3 bg-gray-50">
+          <td colspan="11" class="border px-6 py-3 bg-gray-50">
             <div class="flex justify-end items-center">
               <label for="totalDiscount" class="font-semibold"
                 >Discount:
@@ -406,20 +464,20 @@
       </button>
       <button
         type="button"
-        class="bg-yellow-500 hover:bg-yellow-400 text-white font-medium py-2 px-4 rounded text-sm"
+        class="bg-yellow-500 hover:bg-orange-400 text-white font-medium py-2 px-4 rounded text-sm"
         (click)="addItemFormGroup(optionIndex, true)"
       >
         + Add Optional Item
       </button>
+      <button
+        type="button"
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm mt-2"
+        (click)="addOptionalItem()"
+      >
+        + Add Optional Quote
+      </button>
     </div>
   </div>
-  <button
-    type="button"
-    class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm mt-2"
-    (click)="addOptionalItem()"
-  >
-    + Add Optional Quote
-  </button>
   <div class="mt-6" *ngIf="optionalItems.controls.length > 1">
     <label
       for="mainCalculationOption"

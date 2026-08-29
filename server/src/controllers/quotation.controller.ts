@@ -23,7 +23,11 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         const createdBy = await getEmployeeData(userToken)
         quoteData.createdBy = createdBy._id
 
-        let quoteId: string = await generateQuoteId(quoteData.department, quoteData.createdBy, quoteData.date);
+        let quoteId: string | undefined = await generateQuoteId(quoteData.department, quoteData.createdBy, quoteData.date);
+        if (!quoteId && quoteData.status === quoteStatus.Draft) {
+            const draftIncrementedNum = await getNextSequence('quoteId', seedQuoteIdSequence);
+            quoteId = `DRAFT-${draftIncrementedNum}`;
+        }
         quoteData.quoteId = quoteId;
 
         const quote = new Quotation(quoteData)
@@ -857,6 +861,7 @@ const seedQuoteIdSequence = async (): Promise<number> => {
 
 const generateQuoteId = async (departmentId: string, employeeId: string, date: string) => {
     try {
+        if (!departmentId || !employeeId || !date) return undefined;
         const department = await Department.findById(departmentId);
         const employee = await Employee.findById(employeeId);
         let quoteId: string;

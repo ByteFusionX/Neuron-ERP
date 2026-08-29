@@ -23,12 +23,14 @@ import { ResizableComponent } from '../../../../shared/components/resizable/resi
 import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
+import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 
 @Component({
     selector: 'app-quotation-view',
     templateUrl: './quotation-view.component.html',
     styleUrls: ['./quotation-view.component.css'],
-    imports: [NgIcon, NgIf, NgFor, FormsModule, ResizableComponent, DecimalPipe, DatePipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe]
+    imports: [NgIcon, NgIf, NgFor, FormsModule, ResizableComponent, DecimalPipe, DatePipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe, ButtonComponent]
 })
 export class QuotationViewComponent {
   quoteData!: getQuotatation;
@@ -147,6 +149,38 @@ export class QuotationViewComponent {
       });
     });
 
+  }
+
+  viewAttachments(): void {
+    if (!this.quoteData?.enqId?.attachments?.length) {
+      this.toast.info('No attachments uploaded for this enquiry');
+      return;
+    }
+
+    const modalData: FileUploadModalData = {
+      title: `Enquiry Attachments - ${this.quoteData.enqId.enquiryId}`,
+      existingFiles: this.quoteData.enqId.attachments as any,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this._dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
+  }
+
+  viewPresaleFiles(): void {
+    if (!this.quoteData?.enqId?.preSale?.presaleFiles?.length) {
+      this.toast.info('No pre-sale files uploaded for this enquiry');
+      return;
+    }
+
+    const modalData: FileUploadModalData = {
+      title: `Pre-Sale Files - ${this.quoteData.enqId.enquiryId}`,
+      existingFiles: this.quoteData.enqId.preSale.presaleFiles as any,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this._dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
   }
 
   onDownloadClicks(file: any) {

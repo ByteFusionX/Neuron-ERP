@@ -2,7 +2,7 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, filter } from 'rxjs';
 import { getCreators } from 'src/app/shared/interfaces/employee.interface';
-import { JobStatus, JobTable, allocateType, filterJob, getJob } from 'src/app/shared/interfaces/job.interface';
+import { JobStatus, JobTable, allocateType, filterJob, getJob, PreviousJobItems } from 'src/app/shared/interfaces/job.interface';
 import { QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
@@ -81,5 +81,9 @@ export class JobService {
 
   getConvertibleJobs(): Observable<{ success: boolean; jobs: getJob[] }> {
     return this.http.get<{ success: boolean; jobs: getJob[] }>(`${this.apiUrl}/purchase/purchase-request/convertible-jobs`)
+  }
+
+  getPreviousJobItemsByClient(clientId: string): Observable<{ jobs: PreviousJobItems[] }> {
+    return this.http.get<{ jobs: PreviousJobItems[] }>(`${this.apiUrl}/job/previousJobItems/${clientId}`)
   }
 }

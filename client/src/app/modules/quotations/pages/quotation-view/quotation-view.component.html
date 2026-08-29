@@ -1,349 +1,249 @@
 <div class="bg-white m-6">
     <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">Quote - {{quoteData.quoteId}} </h3>
-        <div class="flex gap-2">
-            <button class="bg-gray-500 hover:bg-gray-400 text-white font-medium py-2.5 px-4 rounded text-sm"
-                (click)="onViewNote()" *ngIf="isNoteOwner">
-                <div class="flex justify-center items-center gap-2">
-                    <ng-icon name="heroDocumentText"></ng-icon>
-                    Note
-                </div>
-            </button>
-            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm disabled:bg-gray-400 disabled:hover:bg-gray-400 disabled:cursor-not-allowed"
-                (click)="onQuoteEdit()" [disabled]="isEditDisabled"
+        <h3 class="text-md font-medium">Quote <span class="uppercase text-purple-600">{{quoteData.quoteId}}</span></h3>
+        <div class="flex gap-3">
+            <app-btn theme="secondary" (buttonClick)="onViewNote()" *ngIf="isNoteOwner">
+                <ng-icon name="heroDocumentText"></ng-icon>
+                Note
+            </app-btn>
+            <app-btn theme="primary" (buttonClick)="onQuoteEdit()" [disabled]="isEditDisabled"
                 [title]="isEditDisabled ? 'Quote won' : ''">
-                <div class="flex justify-center items-center gap-2">
-                    <ng-icon name="heroPencilSquare"></ng-icon>
-                    Edit
-                </div>
-            </button>
-            <button class="bg-red-700 hover:bg-red-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-                (click)="deleteQuote()" *ngIf="isDeleteOption">
-                <div class="flex justify-center items-center gap-2">
-                    <ng-icon name="heroTrash"></ng-icon>
-                    Delete
-                </div>
-            </button>
+                <ng-icon name="heroPencilSquare"></ng-icon>
+                Edit
+            </app-btn>
+            <app-btn theme="danger" (buttonClick)="deleteQuote()" *ngIf="isDeleteOption">
+                <ng-icon name="heroTrash"></ng-icon>
+                Delete
+            </app-btn>
         </div>
     </div>
 
-    <div class="flex flex-col py-6 mx-auto w-full  text-gray-900 bg-white  px-9">
-        <div class="w-full ">
-            <div class="relative overflow-x-auto w-full flex gap-6">
-                <table class="w-full text-md text-left rtl:text-right text-black border bg-gray-50">
+    <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+
+        <!-- Quote details -->
+        <section class="rounded-md border border-gray-200 bg-white mb-8">
+            <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+                <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Quote Details</h4>
+                <div class="flex items-center gap-2" *ngIf="quoteData?.enqId">
+                    <button type="button" (click)="viewAttachments()"
+                        class="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50">
+                        <ng-icon name="heroDocumentText" class="text-sm"></ng-icon>
+                        Attachments
+                        <span class="rounded-full bg-gray-100 px-1.5 text-[11px] text-gray-600">{{ quoteData.enqId.attachments?.length || 0 }}</span>
+                    </button>
+                    <button type="button" (click)="viewPresaleFiles()"
+                        class="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50">
+                        <ng-icon name="heroDocumentText" class="text-sm"></ng-icon>
+                        Pre-Sale Files
+                        <span class="rounded-full bg-gray-100 px-1.5 text-[11px] text-gray-600">{{ quoteData.enqId.preSale?.presaleFiles?.length || 0 }}</span>
+                    </button>
+                </div>
+            </div>
+            <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
+                <div class="min-w-0">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Client</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
+                        {{(quoteData.client.companyName || 'N/A') +
+                        (quoteData.client.clientRef ? ' (' + quoteData.client.clientRef + ')' : '')}}
+                    </dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Attention</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
+                        {{((quoteData.attention.firstName || '') + ' ' + (quoteData.attention.lastName ||
+                        '')).trim() || 'N/A'}}
+                    </dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Date</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
+                        {{ quoteData.date ? (quoteData.date | date: 'dd/MM/yyyy') : 'N/A' }}
+                    </dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Closing Date</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
+                        {{ quoteData.closingDate ? (quoteData.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}
+                    </dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Subject</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{quoteData.subject || 'N/A'}}</dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Sales Person</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
+                        {{((quoteData.createdBy.firstName || '') + ' ' + (quoteData.createdBy.lastName ||
+                        '')).trim() || 'N/A'}}
+                    </dd>
+                </div>
+                <div class="min-w-0" *ngIf="quoteData?.enqId?.enquiryId">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Enq Ref Id</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{quoteData.enqId.enquiryId}}</dd>
+                </div>
+                <div class="min-w-0">
+                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Quoting Company</dt>
+                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{quoteData.quoteCompany || 'N/A'}}</dd>
+                </div>
+            </dl>
+        </section>
+
+        <!-- Items -->
+        <div class="w-full mb-8">
+            <div class="flex justify-between items-center gap-3 mb-3">
+                <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold">
+                    Items
+                </label>
+                <div *ngIf="quoteData.optionalItems.length > 1" class="flex items-center gap-2">
+                    <label for="mainCalculationOption" class="text-xs text-gray-500">Select Item Options:</label>
+                    <select id="mainCalculationOption" [(ngModel)]="selectedOption"
+                        class="bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-2 focus:ring-violet-500 focus:border-violet-500 py-1.5 px-2.5">
+                        <option *ngFor="let option of quoteData.optionalItems; let i = index" [value]="i">
+                            Option {{ i + 1 }}
+                        </option>
+                    </select>
+                </div>
+            </div>
+            <div class="relative overflow-x-auto">
+                <table class="w-full text-md text-left border">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th scope="col" resizable class="px-6 py-2 border w-96" key="itemDetail">Item Details</th>
+                            <th scope="col" resizable key="qty" class="px-2 py-2 border text-center min-w-[66px]">QTY</th>
+                            <th scope="col" resizable key="unitCost" class="px-6 py-2 border text-center">Unit Cost ({{quoteData.currency}})</th>
+                            <th scope="col" resizable key="totalCost" class="px-6 py-2 border text-center">Total Cost ({{quoteData.currency}})</th>
+                            <th scope="col" resizable key="profit" class="px-6 py-2 border text-center">Profit</th>
+                            <th scope="col" resizable key="unitPrice" class="px-6 py-2 border text-center">Unit Price ({{quoteData.currency}})</th>
+                            <th scope="col" resizable key="totalPrice" class="px-6 py-2 border text-center">Total Price ({{quoteData.currency}})</th>
+                            <th scope="col" resizable key="avbl" class="px-2 py-2 border text-center min-w-[90px]">AVBL.</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border text-left font-medium">
-                                Client
-                            </td>
-                            <td class="px-2 py-2 border text-start">
-                                {{(quoteData.client.companyName || 'N/A') +
-                                (quoteData.client.clientRef ? ' (' + quoteData.client.clientRef + ')' : '')}}
-                            </td>
-                            <td class="px-2 py-2 border text-start font-medium">
-                                Attention
-                            </td>
-                            <td class="px-2 py-2 border text-start">
-                                {{((quoteData.attention.firstName || '') + ' ' + (quoteData.attention.lastName ||
-                                '')).trim() || 'N/A'}}
-                            </td>
-                        </tr>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border text-start font-medium">
-                                Date
-                            </td>
-                            <td class="px-2 py-2 border text-start uppercase">
-                                {{ quoteData.date ? (quoteData.date | date: 'dd/MM/yyyy') : 'N/A' }}
-                            </td>
-                            <td class="px-2 py-2 border text-start font-medium">
-                                Closing Date
-                            </td>
-                            <td class="px-2 py-2 border text-start uppercase">
-                                {{ quoteData.closingDate ? (quoteData.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}
-                            </td>
-                        </tr>
-                        <tr class="border-b">
-                            <td class="px-2 py-2 border text-start font-medium">
-                                Subject
-                            </td>
-                            <td class="px-2 py-2 border text-start">
-                                {{quoteData.subject || 'N/A'}}
-                            </td>
-                            <td class="px-2 py-2 border text-start font-medium">
-                                Sales Person
-                            </td>
-                            <td class="px-2 py-2 border text-start">
-                                {{((quoteData.createdBy.firstName || '') + ' ' + (quoteData.createdBy.lastName ||
-                                '')).trim() || 'N/A'}}
-                            </td>
-                        </tr>
-                        <tr class="border-b">
-                            <td *ngIf="quoteData?.enqId?.enquiryId" class="px-2 py-2 border text-start font-medium">
-                                Enq Ref Id
-                            </td>
-                            <td *ngIf="quoteData?.enqId?.enquiryId" class="px-2 py-2 border text-start">
-                                {{quoteData.enqId.enquiryId}}
-                            </td>
-                            <td class="px-2 py-2 border text-start font-medium">
-                                Quoting Company
-                            </td>
-                            <td class="px-2 py-2 border text-start">
-                                {{quoteData.quoteCompany || 'N/A'}}
-                            </td>
-                        </tr>
+                        <ng-container *ngFor="let item of quoteData.optionalItems[selectedOption].items; let j = index">
+                            <tr>
+                                <td colspan="9" class="border px-6 py-2">
+                                    <div class="flex justify-center items-center text-md text-black font-medium uppercase">
+                                        {{item.itemName}}
+                                        <span *ngIf="item.isOptional"
+                                            class="ml-2 bg-yellow-500 text-white font-semibold py-1 px-2 rounded text-xs uppercase">
+                                            Optional
+                                        </span>
+                                        <label *ngIf="item.isOptional"
+                                            class="ml-2 inline-flex items-center gap-1 text-xs font-medium normal-case">
+                                            <input type="checkbox" [checked]="item.includeInTotal" disabled
+                                                class="w-3.5 h-3.5" />
+                                            Include in Total
+                                        </label>
+                                    </div>
+                                </td>
+                            </tr>
+                            <ng-container *ngFor="let itemsDetail of item.itemDetails; let k = index">
+                                <tr class="border-b">
+                                    <th scope="row"
+                                        class="px-6 border font-normal py-2 whitespace-normal break-words max-w-[28rem]">
+                                        <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
+                                    </th>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{itemsDetail.quantity}}
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{itemsDetail.unitCost | numberFormatter}}
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{calculateProfit(selectedOption,j,k) | number:'1.2-2' }}%
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{itemsDetail.unitSellingPrice | numberFormatter}}
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{calculateTotalPrice(selectedOption,j,k) | numberFormatter}}
+                                    </td>
+                                    <td class="px-2 py-2 border text-center">
+                                        {{itemsDetail.availability}}
+                                    </td>
+                                </tr>
+                            </ng-container>
+                        </ng-container>
                     </tbody>
                 </table>
             </div>
         </div>
-        <div class="mt-6 px-4">
-            <div class="space-y-4">
-                <div *ngIf="quoteData?.enqId" class="flex w-full">
-                    <!-- Attachments Section -->
-                    <div *ngIf="quoteData.enqId.attachments?.length" class="border-y py-4 w-1/2">
-                        <h5 class="text-lg font-semibold text-gray-800">Enquiry Attachments</h5>
-                        <ul class="list-disc pl-5 space-y-2">
-                            <li *ngFor="let file of quoteData.enqId.attachments"
-                                class="cursor-pointer text-blue-600 hover:underline">
-                                <p (click)="onDownloadClicks(file)">{{ file.originalname }}</p>
-                            </li>
-                        </ul>
-                    </div>
 
-                    <!-- Pre-Sale Files Section -->
-                    <div *ngIf="quoteData.enqId.preSale?.presaleFiles?.length" class="border-y py-4 w-1/2">
-                        <h5 class="text-lg font-semibold text-gray-800">Pre-Sale Files</h5>
-                        <ul class="list-disc pl-5 space-y-2">
-                            <li *ngFor="let file of quoteData.enqId.preSale.presaleFiles"
-                                class="cursor-pointer text-blue-600 hover:underline">
-                                <p (click)="onDownloadClicks(file)">{{ file.originalname }}</p>
-                            </li>
-                        </ul>
-                    </div>
+        <!-- Notes & Terms -->
+        <div class="flex flex-wrap gap-6 mb-8">
+            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
+                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Customer Notes</h4>
                 </div>
-
-                <!-- No Files Available -->
-                <div
-                    *ngIf="!quoteData?.enqId || (!quoteData.enqId.attachments?.length && !quoteData.enqId.preSale?.presaleFiles?.length)">
-                    <p class="text-gray-500">No files available.</p>
+                <p class="px-4 py-4 w-full whitespace-pre-line text-md text-gray-900">{{quoteData.customerNote}}</p>
+            </section>
+            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
+                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Terms and Conditions</h4>
                 </div>
-            </div>
+                <p class="px-4 py-4 w-full whitespace-pre-line text-md text-gray-900">{{quoteData.termsAndCondition}}</p>
+            </section>
         </div>
 
-        <div class=" mt-6">
-            <div class="mb-4" *ngIf="quoteData.optionalItems.length > 1">
-                <label for="mainCalculationOption" class="uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">
-                    Select Item Options:
-                </label>
-                <select id="mainCalculationOption" [(ngModel)]="selectedOption"
-                    class="w-52 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-transparent focus:border-violet-500 p-2.5 ">
-                    <option *ngFor="let option of quoteData.optionalItems; let i = index" [value]="i">
-                        Option {{ i + 1 }}
-                    </option>
-                </select>
-            </div>
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-2">
-                <thead class="text-xs text-gray-700 uppercase bg-violet-50  ">
-                    <tr>
-                        <th scope="col" resizable class=" w-96 border-l border-r border-t"
-                            key="itemDetail">
-                            <div class="px-6 py-3">Item Details</div>
-
-                        </th>
-                        <th scope="col" resizable key="qty"
-                            class=" border-l border-r border-t  text-center min-w-[66px]">
-                            <div class="px-2 py-3">QTY</div>
-                        </th>
-                        <th scope="col" resizable key="unitCost"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Unit Cost ({{quoteData.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="totalCost"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Total Cost ({{quoteData.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="profit"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Profit</div>
-                        </th>
-                        <th scope="col" resizable key="unitPrice"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Unit Price ({{quoteData.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="totalPrice"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Total Price ({{quoteData.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="avbl"
-                            class="border-l border-r border-t  text-center min-w-[90px]">
-                            <div class="px-2 py-3">AVBL.</div>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-
-
-                    <ng-container *ngFor="let item of quoteData.optionalItems[selectedOption].items; let j = index">
-                        <tr>
-                            <td colspan="9" class="border px-6 py-2 bg-gray-50 ">
-                                <div class="flex justify-center items-center text-md text-black font-medium uppercase">
-                                    {{item.itemName}}
-                                    <span *ngIf="item.isOptional"
-                                        class="ml-2 bg-yellow-500 text-white font-semibold py-1 px-2 rounded text-xs uppercase">
-                                        Optional
-                                    </span>
-                                    <label *ngIf="item.isOptional"
-                                        class="ml-2 inline-flex items-center gap-1 text-xs font-medium normal-case">
-                                        <input type="checkbox" [checked]="item.includeInTotal" disabled
-                                            class="w-3.5 h-3.5" />
-                                        Include in Total
-                                    </label>
-                                </div>
-                            </td>
-                        </tr>
-                        <ng-container *ngFor="let itemsDetail of item.itemDetails; let k = index">
-                            <tr class="bg-white border-b text-gray-800">
-                                <th scope="row"
-                                    class="px-6 border font-normal py-2 whitespace-normal break-words max-w-[28rem]">
-                                    <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
-                                </th>
-
-
-
-
-
-                                <td class="px-2  border text-center">
-                                    {{itemsDetail.quantity}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{itemsDetail.unitCost | numberFormatter}}
-                                </td>
-                                <td class=" py-2  text-center ">
-                                    {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{calculateProfit(selectedOption,j,k) | number:'1.2-2' }}%
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{itemsDetail.unitSellingPrice | numberFormatter}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{calculateTotalPrice(selectedOption,j,k) | numberFormatter}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{itemsDetail.availability}}
-                                </td>
-                            </tr>
-                        </ng-container>
-                    </ng-container>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="flex flex-wrap mt-6 ">
-            <div class="w-full md:w-2/5 px-4 border py-3">
-                <label class="block uppercase tracking-wide text-gray-700 text-md font-bold mb-2 border-b"
-                    for="grid-last-name">
-                    Customer Notes
-                </label>
-                <p class="w-full whitespace-pre-line">{{quoteData.customerNote}}</p>
-            </div>
-            <div class="w-full md:w-3/5 px-4 border py-3">
-                <label class="block uppercase tracking-wide text-gray-700 text-md font-bold mb-2 border-b"
-                    for="grid-last-name">
-                    Terms and Conditions
-                </label>
-                <p class="w-full whitespace-pre-line">{{quoteData.termsAndCondition}}</p>
-            </div>
-        </div>
-
-        <div class="relative overflow-x-auto mt-6 w-full flex gap-6">
-            <table class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50">
-                <tbody>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Total Cost
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateAllTotalCost()| numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Total Selling price
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateDiscoutPrice()| numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Profit Margin
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateProfitMargin()| numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Profit margin with %
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateTotalProfit().toFixed(2)}}%
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <table class="w-1/2  text-sm text-left rtl:text-right text-black border bg-gray-100">
-                <tbody>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Subtotal
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateSellingPrice() | numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Discount
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{(quoteData.optionalItems[selectedOption].totalDiscount) | numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Total Amount
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateDiscoutPrice() | numberFormatter }}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <!-- Totals -->
+        <div class="flex flex-wrap gap-6">
+            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
+                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Cost Summary</h4>
+                </div>
+                <dl class="divide-y divide-gray-100 px-4">
+                    <div class="flex items-center justify-between py-3">
+                        <dt class="font-medium text-gray-700">Total Cost</dt>
+                        <dd class="text-xl">{{calculateAllTotalCost()| numberFormatter}}</dd>
+                    </div>
+                    <div class="flex items-center justify-between py-3">
+                        <dt class="font-medium text-gray-700">Total Selling price</dt>
+                        <dd class="text-xl">{{calculateDiscoutPrice()| numberFormatter}}</dd>
+                    </div>
+                    <div class="flex items-center justify-between py-3">
+                        <dt class="font-medium text-gray-700">Profit Margin</dt>
+                        <dd class="text-xl">{{calculateProfitMargin()| numberFormatter}}</dd>
+                    </div>
+                    <div class="flex items-center justify-between py-3">
+                        <dt class="font-medium text-gray-700">Profit margin with %</dt>
+                        <dd class="text-xl">{{calculateTotalProfit().toFixed(2)}}%</dd>
+                    </div>
+                </dl>
+            </section>
+            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
+                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Price Summary</h4>
+                </div>
+                <dl class="divide-y divide-gray-100 px-4">
+                    <div class="flex items-center justify-between py-3">
+                        <dt class="font-medium text-gray-700">Subtotal</dt>
+                        <dd class="text-xl">{{calculateSellingPrice() | numberFormatter}}</dd>
+                    </div>
+                    <div class="flex items-center justify-between py-3">
+                        <dt class="font-medium text-gray-700">Discount</dt>
+                        <dd class="text-xl">{{(quoteData.optionalItems[selectedOption].totalDiscount) | numberFormatter}}</dd>
+                    </div>
+                    <div class="flex items-center justify-between py-3">
+                        <dt class="font-medium text-gray-700">Total Amount</dt>
+                        <dd class="text-xl">{{calculateDiscoutPrice() | numberFormatter }}</dd>
+                    </div>
+                </dl>
+            </section>
         </div>
     </div>
 
-    <div class=" border-t py-6 px-9 flex justify-end gap-2 ">
-        <div class="flex w-70">
-            <button type="button"
-                class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded text-sm  mr-3 w-full flex justify-center items-center gap-2"
-                (click)="onPreviewPdf()">
-                <ng-icon *ngIf="isPreviewing" class="spin" name="heroArrowPath"></ng-icon>
-                Preview
-            </button>
-            <button type="button"
-                class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm  mr-3 w-full flex justify-center items-center gap-2 whitespace-nowrap"
-                (click)="onDownloadPdf(true)">
-                <ng-icon *ngIf="isDownloadingStamped" class="spin" name="heroArrowPath"></ng-icon>
-                Download PDF (Stamped)
-            </button>
-            <button type="button"
-                class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm w-full flex justify-center items-center gap-2 whitespace-nowrap"
-                (click)="onDownloadPdf(false)">
-                <ng-icon *ngIf="isDownloading" class="spin" name="heroArrowPath"></ng-icon>
-                Download PDF
-            </button>
-        </div>
+    <div class="border-t py-6 px-9 flex justify-end gap-3">
+        <app-btn theme="orange" [loading]="isPreviewing" (buttonClick)="onPreviewPdf()">
+            Preview
+        </app-btn>
+        <app-btn theme="primary" [loading]="isDownloadingStamped" (buttonClick)="onDownloadPdf(true)">
+            Download PDF (Stamped)
+        </app-btn>
+        <app-btn theme="primary" [loading]="isDownloading" (buttonClick)="onDownloadPdf(false)">
+            Download PDF
+        </app-btn>
     </div>
 </div>

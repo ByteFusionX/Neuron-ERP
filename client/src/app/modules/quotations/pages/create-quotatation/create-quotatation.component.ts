@@ -33,6 +33,9 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
+import { JobService } from 'src/app/core/services/job/job.service';
+import { PreviousJobItems } from 'src/app/shared/interfaces/job.interface';
+import { PreviousJobsModalComponent } from 'src/app/shared/components/previous-jobs-modal/previous-jobs-modal.component';
 import {
   customerNotes,
   termsAndConditions,
@@ -47,6 +50,7 @@ import {
   OptionalItems,
   Quotatation,
   QuoteItem,
+  QuoteStatus,
   getQuotatation,
   quotatationForm,
 } from 'src/app/shared/interfaces/quotation.interface';
@@ -56,6 +60,7 @@ import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-p
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
+import { LeaveFormConfirmationDialogComponent } from 'src/app/shared/components/leave-form-confirmation-dialog/leave-form-confirmation-dialog.component';
 import { NgIf, NgFor, AsyncPipe, DecimalPipe } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
@@ -153,6 +158,7 @@ export class CreateQuotatationComponent {
 
   isEdit: boolean = false;
   isSaving: boolean = false;
+  isSavingDraft: boolean = false;
   submit: boolean = false;
   isDownloading: boolean = false;
   isDownloadingStamped: boolean = false;
@@ -161,6 +167,12 @@ export class CreateQuotatationComponent {
   estimatedOptionalItems!: OptionalItems[];
 
   @ViewChild('inputTextArea') inputTextArea!: ElementRef;
+  @ViewChild(OptionalItemsComponent) optionalItemsComponent!: OptionalItemsComponent;
+
+  previousJobItems: PreviousJobItems[] = [];
+  isFetchingPreviousJobs: boolean = false;
+  previousJobsFetched: boolean = false;
+  private lastFetchedClientId: string | null = null;
 
   private subscriptions = new Subscription();
 
@@ -174,6 +186,7 @@ export class CreateQuotatationComponent {
     private _employeeService: EmployeeService,
     private _router: Router,
     private _enquiryService: EnquiryService,
+    private _jobService: JobService,
     private toastr: ToastrService,
     private snackBar: MatSnackBar,
   ) {}
@@ -201,6 +214,7 @@ export class CreateQuotatationComponent {
       createdBy: [''],
       enqId: [''],
       closingDate: ['', Validators.required],
+      status: [QuoteStatus.WorkInProgress],
     });
 
     this.quoteForm.patchValue({ totalDiscount: '0' });
@@ -223,6 +237,10 @@ export class CreateQuotatationComponent {
           }
         }
       }),
+    );
+
+    this.subscriptions.add(
+      this.quoteForm.valueChanges.subscribe(() => this.maybeFetchPreviousJobs()),
     );
   }
   private toDateInputValue(value: string | Date): string {
@@ -300,6 +318,68 @@ export class CreateQuotatationComponent {
       this.quoteForm.controls['attention'].setValue(undefined);
       this.quoteForm.controls['department'].patchValue(null);
     }
+  }
+
+  get itemsTableEnabled(): boolean {
+    const { client, attention, department } = this.quoteForm?.value || {};
+    return !!(client && attention && department);
+  }
+
+  get previousJobItemsCount(): number {
+    return this.previousJobItems.reduce(
+      (sum, job) => sum + (job.items?.length || 0),
+      0,
+    );
+  }
+
+  private maybeFetchPreviousJobs(): void {
+    const { client, attention, department } = this.quoteForm.value;
+    if (client && attention && department) {
+      if (this.lastFetchedClientId !== client) {
+        this.fetchPreviousJobItems(client);
+      }
+    } else {
+      this.previousJobItems = [];
+      this.previousJobsFetched = false;
+      this.lastFetchedClientId = null;
+    }
+  }
+
+  private fetchPreviousJobItems(clientId: string): void {
+    this.isFetchingPreviousJobs = true;
+    this.previousJobsFetched = false;
+    this.lastFetchedClientId = clientId;
+
+    this._jobService.getPreviousJobItemsByClient(clientId).subscribe({
+      next: (res) => {
+        this.previousJobItems = res?.jobs || [];
+        this.isFetchingPreviousJobs = false;
+        this.previousJobsFetched = true;
+      },
+      error: () => {
+        this.previousJobItems = [];
+        this.isFetchingPreviousJobs = false;
+        this.previousJobsFetched = true;
+      },
+    });
+  }
+
+  openPreviousJobsModal(): void {
+    const items = this.previousJobItems.flatMap((job) =>
+      (job.items || []).map((item) => ({ jobId: job.jobId, item })),
+    );
+
+    const dialogRef = this._dialog.open(PreviousJobsModalComponent, {
+      data: { items },
+      width: '900px',
+      maxWidth: '95vw',
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.items?.length) {
+        this.optionalItemsComponent?.addItemsFromPreviousJobs(result.items);
+      }
+    });
   }
 
   async onDownloadPdf(includeStamp: boolean) {
@@ -449,8 +529,7 @@ export class CreateQuotatationComponent {
     }
   }
 
-  private saveQuote(saveNote: string) {
-    this.isSaving = true;
+  private buildSanitizedQuoteFormValue(saveNote: string): any {
     const quoteFormValue = this.quoteForm.value;
 
     // Create a deep copy of the form value
@@ -459,6 +538,9 @@ export class CreateQuotatationComponent {
     );
     if (!this.isEdit && this.estimatedOptionalItems?.length) {
       sanitizedQuoteFormValue.optionalItems = this.estimatedOptionalItems;
+    }
+    if (!sanitizedQuoteFormValue.optionalItems) {
+      sanitizedQuoteFormValue.optionalItems = [];
     }
     // Remove unitPrice from each item detail
     sanitizedQuoteFormValue.optionalItems.forEach((optionItem: any) => {
@@ -476,6 +558,14 @@ export class CreateQuotatationComponent {
 
     sanitizedQuoteFormValue.saveNote = saveNote;
 
+    return sanitizedQuoteFormValue;
+  }
+
+  private saveQuote(saveNote: string) {
+    this.isSaving = true;
+    const sanitizedQuoteFormValue = this.buildSanitizedQuoteFormValue(saveNote);
+    sanitizedQuoteFormValue.status = QuoteStatus.WorkInProgress;
+
     this._quoteService
       .saveQuotation(sanitizedQuoteFormValue)
       .subscribe({
@@ -487,6 +577,77 @@ export class CreateQuotatationComponent {
           this.isSaving = false;
         }
       });
+  }
+
+  onSaveAsDraft() {
+    this.saveAsDraft().subscribe({
+      next: () => this._router.navigate(['/quotations']),
+      error: () => {},
+    });
+  }
+
+  private saveAsDraft(): Observable<Quotatation> {
+    this.isSavingDraft = true;
+    const sanitizedQuoteFormValue = this.buildSanitizedQuoteFormValue('');
+    sanitizedQuoteFormValue.status = QuoteStatus.Draft;
+
+    const request$ = this._quoteService.saveQuotation(sanitizedQuoteFormValue);
+    request$.subscribe({
+      next: () => {
+        this.isSavingDraft = false;
+        this.toastr.success('Quotation saved as draft.', 'Draft saved');
+      },
+      error: () => {
+        this.isSavingDraft = false;
+      },
+    });
+    return request$;
+  }
+
+  private hasEnteredItemDetails(): boolean {
+    const optionalItems = this.optionalItems.value;
+    return (optionalItems || []).some((option: any) =>
+      (option.items || []).some((item: any) =>
+        (item.itemName && item.itemName.trim()) ||
+        (item.itemDetails || []).some(
+          (detail: any) =>
+            (detail.detail && detail.detail.trim()) ||
+            detail.quantity ||
+            detail.unitCost ||
+            detail.unitSellingPrice ||
+            (detail.availability && detail.availability.trim()) ||
+            detail.supplierId,
+        ),
+      ),
+    );
+  }
+
+  onAddNewSupplierClick(event: Event) {
+    event.preventDefault();
+
+    if (!this.hasEnteredItemDetails()) {
+      this._router.navigate(['/suppliers/create']);
+      return;
+    }
+
+    const dialogRef = this._dialog.open(LeaveFormConfirmationDialogComponent, {
+      data: {
+        title: 'Leave this quotation?',
+        description:
+          'This data will be lost if you leave without saving. You can save this quotation as a draft before continuing, redirect without saving, or close this dialog to stay here.',
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result === 'draft') {
+        this.saveAsDraft().subscribe({
+          next: () => this._router.navigate(['/suppliers/create']),
+          error: () => {},
+        });
+      } else if (result === 'discard') {
+        this._router.navigate(['/suppliers/create']);
+      }
+    });
   }
 
   patchValues(data: getEnquiry) {

@@ -1,4 +1,4 @@
-import { Quotatation } from "./quotation.interface";
+import { Quotatation, QuoteItem } from "./quotation.interface";
 
 export interface filterJob {
     search: string;
@@ -58,6 +58,14 @@ export enum allocateType {
     ProjectWithSupply = 'Project With Supply',
     ProjectsWithOutSupply = 'Projects With Out Supply',
     AMC = 'AMC'
+}
+
+export interface PreviousJobItems {
+    _id: string;
+    jobId: string;
+    status: string;
+    createdDate: string;
+    items: QuoteItem[];
 }
 
 export enum allocateStatus {

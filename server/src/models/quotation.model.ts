@@ -12,6 +12,7 @@ interface QuoteItemDetail {
     supplierId?: Types.ObjectId;
     dealSelected?: boolean;
     purchaseItemDetailId?: Types.ObjectId;
+    uom?: string;
 }
 
 interface QuoteItem {
@@ -73,6 +74,7 @@ interface Quotation extends Document {
 }
 
 export enum quoteStatus {
+    Draft = 'Draft',
     WorkInProgress = 'Work In Progress',
     QuoteSubmitted = 'Quote Submitted',
     UnderNegotiation = 'Under negotiation',
@@ -127,6 +129,10 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     },
     purchaseItemDetailId: {
         type: Schema.Types.ObjectId,
+        required: false,
+    },
+    uom: {
+        type: String,
         required: false,
     }
 });
@@ -238,28 +244,28 @@ const quotationSchema = new Schema<Quotation>({
     client: {
         type: Schema.Types.ObjectId,
         ref: 'Customer',
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     attention: {
         type: Schema.Types.ObjectId,
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     date: {
         type: Date,
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     department: {
         type: Schema.Types.ObjectId,
         ref: 'Department',
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     subject: {
         type: String,
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     currency: {
         type: String,
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     quoteCompany: {
         type: String,
@@ -270,11 +276,11 @@ const quotationSchema = new Schema<Quotation>({
     },
     customerNote: {
         type: String,
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     termsAndCondition: {
         type: String,
-        required: true,
+        required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
     status: {
         type: String,

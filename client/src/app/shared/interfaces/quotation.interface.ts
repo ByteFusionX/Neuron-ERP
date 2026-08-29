@@ -29,6 +29,7 @@ export interface QuoteItemDetail {
     phoneNo: string;
     unitSellingPrice: number;
     email: string;
+    uom?: string;
 }
 
 export interface File {
@@ -124,6 +125,7 @@ export interface quotatationForm {
 }
 
 export enum QuoteStatus {
+    Draft = 'Draft',
     WorkInProgress = 'Work In Progress',
     QuoteSubmitted = 'Quote Submitted',
     UnderNegotiation = 'Under negotiation',
@@ -210,6 +212,7 @@ export type PieChartOptions = {
 
 
 export const QuoteStatusColors: { [key in QuoteStatus]: string } = {
+    [QuoteStatus.Draft]: '#9CA3AF', // Gray
     [QuoteStatus.WorkInProgress]: '#FFA500',  // Orange
     [QuoteStatus.QuoteSubmitted]: '#00BFFF',  // Deep Sky Blue
     [QuoteStatus.UnderNegotiation]: '#FFD700', // Gold

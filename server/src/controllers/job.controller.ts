@@ -491,6 +491,41 @@ export const deleteJob = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
+export const getPreviousJobItemsByClient = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { clientId } = req.params;
+
+        const jobs = await jobModel.aggregate([
+            {
+                $match: {
+                    isDeleted: { $ne: true },
+                    status: { $in: ['Work In Progress', 'Completed'] }
+                }
+            },
+            {
+                $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
+            },
+            { $unwind: '$quotation' },
+            {
+                $match: { 'quotation.client': new ObjectId(clientId) }
+            },
+            {
+                $project: {
+                    jobId: 1,
+                    status: 1,
+                    createdDate: 1,
+                    items: { $ifNull: ['$quotation.dealData.updatedItems', []] }
+                }
+            },
+            { $sort: { createdDate: -1 } }
+        ]);
+
+        return res.status(200).json({ jobs });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export const jobSheets = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const jobs = await jobModel.find({
