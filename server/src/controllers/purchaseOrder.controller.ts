@@ -463,7 +463,8 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
           from: "employees",
           localField: "createdBy",
           foreignField: "_id",
-          as: "createdBy"
+          as: "createdBy",
+          pipeline: [{ $project: { password: 0 } }]
         }
       },
       { $unwind: { path: "$createdBy", preserveNullAndEmptyArrays: true } },
@@ -863,7 +864,8 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
           from: "employees",
           localField: "createdBy",
           foreignField: "_id",
-          as: "createdBy"
+          as: "createdBy",
+          pipeline: [{ $project: { password: 0 } }]
         }
       },
       { $unwind: { path: "$createdBy", preserveNullAndEmptyArrays: true } },
@@ -910,7 +912,7 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
       if (po.approvedHistory && po.approvedHistory.length > 0) {
         po.approvedHistory = await Promise.all(po.approvedHistory.map(async (history: any) => {
           if (history.approvedBy) {
-            const employee = await mongoose.model('Employee').findById(history.approvedBy);
+            const employee = await mongoose.model('Employee').findById(history.approvedBy).select('-password');
             history.approvedBy = employee;
           }
           return history;
@@ -919,7 +921,7 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
       if (po.rejectedHistory && po.rejectedHistory.length > 0) {
         po.rejectedHistory = await Promise.all(po.rejectedHistory.map(async (history: any) => {
           if (history.rejectedBy) {
-            const employee = await mongoose.model('Employee').findById(history.rejectedBy);
+            const employee = await mongoose.model('Employee').findById(history.rejectedBy).select('-password');
             history.rejectedBy = employee;
           }
           return history;
@@ -1108,6 +1110,13 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
+    if (purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot approve an LPO that you created",
+      });
+    }
+
     const approvalEntry = {
       approvedBy: employee._id,
       reason: comment || '',
@@ -1205,6 +1214,13 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         message: "Only LPOs with 'Pending for Approval' status can be rejected",
+      });
+    }
+
+    if (purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot reject an LPO that you created",
       });
     }
 

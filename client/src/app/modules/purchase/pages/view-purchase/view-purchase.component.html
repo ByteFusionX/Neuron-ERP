@@ -276,12 +276,12 @@
                         Revoke Merge
                     </app-btn>
                 }
+                @if(canApproveOrReject()){
                 <app-btn theme="danger" (click)="onReject()"
                     [loading]="isRejecting">
                     <ng-icon name="heroXCircle" class="mr-1"></ng-icon>
                     Reject
                 </app-btn>
-                @if(canApprovePR){
                 <app-btn theme="success" (click)="onApprove()"
                     [loading]="isApproving">
                     <ng-icon name="heroCheckCircle" class="mr-1"></ng-icon>

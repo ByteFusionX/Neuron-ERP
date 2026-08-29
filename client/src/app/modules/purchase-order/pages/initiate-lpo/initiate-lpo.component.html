@@ -45,7 +45,7 @@
                             <th class="px-4 py-2 border">Approved Vendor</th>
                             <th class="px-4 py-2 border">ETA Terms</th>
                             <th class="px-4 py-2 border">Payment Terms</th>
-                            <th class="px-4 py-2 border text-center">Issue History</th>
+                            <th class="px-4 py-2 border text-center">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -61,13 +61,24 @@
                                 <td class="px-4 py-2 border">{{item.etaTerms}}</td>
                                 <td class="px-4 py-2 border">{{item.paymentTerms}}</td>
                                 <td class="px-4 py-2 border text-center">
-                                    <button type="button"
-                                        class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        [disabled]="loadingIssueHistoryFor === (item.detail + '-' + item.partNo)"
-                                        (click)="viewItemIssueHistory(item)">
-                                        <ng-icon name="heroEye" class="text-base"></ng-icon>
-                                        View
-                                    </button>
+                                    <div class="flex items-center justify-center gap-2">
+                                        <button type="button"
+                                            class="w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                            [disabled]="loadingIssueHistoryFor === (item.detail + '-' + item.partNo)"
+                                            matTooltip="View Issue History"
+                                            matTooltipPosition="above"
+                                            (click)="viewItemIssueHistory(item)">
+                                            <ng-icon name="heroEye" color="currentColor"></ng-icon>
+                                        </button>
+                                        <button type="button"
+                                            class="w-8 h-8 rounded-full border border-green-500 hover:border-green-700 text-green-500 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                            [disabled]="!canIssueForSupplier(item.supplierId)"
+                                            matTooltip="Issue LPO"
+                                            matTooltipPosition="above"
+                                            (click)="onIssueLpoClickForItem(item)">
+                                            <ng-icon name="heroPaperAirplane" color="currentColor"></ng-icon>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </ng-container>
@@ -91,10 +102,6 @@
             </div>
         </div>
 
-        <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t gap-3">
-            <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                type="button" (click)="onIssueLpoClick()" [disabled]="!canIssueLpo()">Issue LPO</button>
-        </div>
     </div>
 </div>
 

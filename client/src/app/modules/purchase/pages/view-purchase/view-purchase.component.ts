@@ -43,6 +43,7 @@ export class ViewPurchaseComponent {
   purchaseId!: string;
   suppliersList = signal<any[]>([])
   canApprovePR = false;
+  currentEmployeeId: string | null = null;
 
   ngOnInit(): void {
     this.loadPurchase();
@@ -56,10 +57,20 @@ export class ViewPurchaseComponent {
     })
 
     this.employeeService.employeeData$.subscribe((data) => {
+      this.currentEmployeeId = data?._id || null;
       if (data?.category?.privileges) {
         this.canApprovePR = data.category.privileges.purchase?.canApprovePR || false;
       }
     });
+  }
+
+  isOwnRequest(): boolean {
+    const createdById = (this.purchase as any)?.createdBy?._id || (this.purchase as any)?.createdBy;
+    return !!this.currentEmployeeId && !!createdById && createdById === this.currentEmployeeId;
+  }
+
+  canApproveOrReject(): boolean {
+    return this.canApprovePR && !this.isOwnRequest();
   }
 
   loadPurchase() {
@@ -245,7 +256,7 @@ export class ViewPurchaseComponent {
   }
 
   onApprove() {
-    if (!this.purchase?._id) return;
+    if (!this.purchase?._id || !this.canApproveOrReject()) return;
 
     const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
       data: {
@@ -286,7 +297,7 @@ export class ViewPurchaseComponent {
   }
 
   onReject() {
-    if (!this.purchase?._id) return;
+    if (!this.purchase?._id || !this.canApproveOrReject()) return;
 
     const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
       data: {

@@ -287,7 +287,8 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
-                    as: 'createdBy'
+                    as: 'createdBy',
+                    pipeline: [{ $project: { password: 0 } }]
                 }
             },
             { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
@@ -626,7 +627,8 @@ export const getPurchaseRequestsByStatus = async (req: Request, res: Response, n
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
-                    as: 'createdBy'
+                    as: 'createdBy',
+                    pipeline: [{ $project: { password: 0 } }]
                 }
             },
             { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
@@ -1567,7 +1569,8 @@ export const getPurchaseRequestById = async (req: Request, res: Response, next: 
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
-                    as: 'createdBy'
+                    as: 'createdBy',
+                    pipeline: [{ $project: { password: 0 } }]
                 }
             },
             { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
@@ -1965,7 +1968,7 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             });
         }
 
-        const purchaseRequest = await PurchaseRequest.findById(id).populate('approvalStatus.role').populate('createdBy');
+        const purchaseRequest = await PurchaseRequest.findById(id).populate('approvalStatus.role').populate('createdBy', '-password');
         if (!purchaseRequest || purchaseRequest.isDeleted) {
             return res.status(404).json({
                 success: false,
@@ -1981,6 +1984,15 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
                     status: 400
                 });
             }
+
+        const createdById = (purchaseRequest.createdBy as any)?._id || purchaseRequest.createdBy;
+        if (createdById?.toString() === employee._id?.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: "You cannot approve or reject a purchase request that you created",
+                status: 403
+            });
+        }
 
         const updatedApprovalStatus = await updateApprovalStatus(status, purchaseRequest.approvalStatus, comment || '', employee);
         purchaseRequest.approvalStatus = updatedApprovalStatus;
@@ -2011,9 +2023,9 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
         await purchaseRequest.save();
 
         const updatedPurchaseRequest = await PurchaseRequest.findById(id)
-            .populate('createdBy')
+            .populate('createdBy', '-password')
             .populate('approvalStatus.role')
-            .populate('approvalStatus.updatedBy');
+            .populate('approvalStatus.updatedBy', '-password');
 
         const socket = req.app.get('io') as Server;
 
@@ -2414,6 +2426,12 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
         delete updateData.createdBy;
         delete updateData.isDeleted;
 
+        for (const key of Object.keys(updateData)) {
+            if (updateData[key] === '' && PurchaseRequest.schema.path(key)?.instance === 'ObjectId') {
+                delete updateData[key];
+            }
+        }
+
         const existingPurchaseRequest = await PurchaseRequest.findById(id);
         if (!existingPurchaseRequest || existingPurchaseRequest.isDeleted) {
             return res.status(404).json({
@@ -2734,7 +2752,8 @@ export const getPurchaseRequestsByJobId = async (req: Request, res: Response, ne
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
-                    as: 'createdBy'
+                    as: 'createdBy',
+                    pipeline: [{ $project: { password: 0 } }]
                 }
             },
             { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
