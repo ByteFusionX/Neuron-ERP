@@ -1,4 +1,4 @@
-<div class="bg-white">
+<div class="bg-white mx-5 mt-5 rounded-2xl" *ngIf="data">
     <div class="border-b p-3 px-6 flex justify-between items-center bg-white">
         <div class="flex items-center gap-3">
             <h3 class="text-md font-medium">{{ viewMode === 'po' ? 'Purchase Order' : 'Deal Sheet' }}</h3>
@@ -13,12 +13,9 @@
                 Back to Deal Sheet
             </button>
         </div>
-        <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
-            <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-        </button>
     </div>
 
-    <div class="flex flex-col py-6 mx-auto text-gray-900 bg-white px-6 overflow-y-scroll max-h-[77vh]">
+    <div class="flex flex-col py-6 mx-auto text-gray-900 bg-white px-6 overflow-y-scroll max-h-[77vh] no-scrollbar">
 
         <!-- Deal details -->
         <section class="rounded-md border border-gray-200 bg-white mb-8">
@@ -93,7 +90,7 @@
             <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-3">
                 Items
             </label>
-        <div class="max-h-[450px] overflow-y-scroll">
+        <div class="max-h-[450px] overflow-y-scroll no-scrollbar">
             <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-4 border-collapse bg-white">
                 <thead class="text-xs text-gray-700 uppercase bg-gray-50  sticky top-0 border">
                     <tr class="border">
@@ -222,20 +219,20 @@
                 </div>
                 <dl class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 px-4">
                     <div class="flex flex-col justify-center py-3 pr-4">
-                        <dt class="font-medium text-gray-700">Total Selling Price</dt>
-                        <dd class="text-xl">{{ data.priceDetails.totalSellingPrice | numberFormatter }} {{ data.quoteData.currency }}</dd>
+                        <dt class="font-medium text-gray-700">Profit</dt>
+                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryProfit : data.priceDetails.profit) | numberFormatter }} {{ data.quoteData.currency }}</dd>
+                    </div>
+                    <div class="flex flex-col justify-center py-3 px-4">
+                        <dt class="font-medium text-gray-700">Profit %</dt>
+                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryPerc : data.priceDetails.perc).toFixed(3) }}</dd>
                     </div>
                     <div class="flex flex-col justify-center py-3 px-4">
                         <dt class="font-medium text-gray-700">Total Cost</dt>
                         <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryTotalCost : data.priceDetails.totalCost) | numberFormatter }} {{ data.quoteData.currency }}</dd>
                     </div>
-                    <div class="flex flex-col justify-center py-3 px-4">
-                        <dt class="font-medium text-gray-700">Profit</dt>
-                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryProfit : data.priceDetails.profit) | numberFormatter }} {{ data.quoteData.currency }}</dd>
-                    </div>
                     <div class="flex flex-col justify-center py-3 pl-4">
-                        <dt class="font-medium text-gray-700">Profit %</dt>
-                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryPerc : data.priceDetails.perc).toFixed(3) }}</dd>
+                        <dt class="font-medium text-gray-700">Total Selling Price</dt>
+                        <dd class="text-xl">{{ data.priceDetails.totalSellingPrice | numberFormatter }} {{ data.quoteData.currency }}</dd>
                     </div>
                 </dl>
             </section>
@@ -246,6 +243,10 @@
         <div class="flex gap-2 ">
             <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onClose()">
                 Close
+            </button>
+            <button class="border text-white font-medium py-2 px-4 rounded text-sm bg-red-600" (click)="onReject()">
+                <ng-icon *ngIf="isRejecting" class="spin" name="heroArrowPath"></ng-icon>
+                Reject
             </button>
             <button class="border text-white font-medium py-2 px-4 rounded text-sm bg-green-600" (click)="onApprove()">
                 <ng-icon *ngIf="isApproving" class="spin" name="heroArrowPath"></ng-icon>
@@ -266,3 +267,4 @@
             </button>
         </div>
     </div>
+</div>

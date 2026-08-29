@@ -1,166 +1,260 @@
 <div class="bg-white mx-5 mt-5 rounded-2x max-h-[calc(100vh-70px)]">
-    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
+  <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
+    <div
+      class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3"
+    >
+      <h3 class="font-semibold">Approved Deals</h3>
+      <div class="flex items-center gap-2 justify-center">
+        <div class="flex items-center">
+          <span class="text-sm text-gray-500 mr-2">Search by:</span>
+          <select
+            [(ngModel)]="searchCriteria"
+            class="bg-white border border-gray/60 rounded-[6px] pl-[2px] pr-[2px] py-2 ml-2 text-[15px] text-gray-500"
+          >
+            <option value="dealId">Deal ID</option>
+            <option value="customer">Customer</option>
+            <option value="salesperson">Salesperson</option>
+          </select>
+        </div>
+        <div
+          class="h-10 inline-flex items-center justify-between bg-white border border-gray/60 rounded-[6px] px-2"
+        >
+          <input
+            type="text"
+            [(ngModel)]="searchQuery"
+            (ngModelChange)="ngModelChange()"
+            placeholder="Search & Enter"
+            (keyup.enter)="onSearch()"
+            class="bg-transparent border-none text-[15px] shadow-none text-black flex items-center focus:outline-none"
+          />
+          <div
+            class="bg-violet-100 hover:bg-violet-200 flex justify-center items-center rounded-full cursor-pointer"
+            (click)="onSearch()"
+          >
+            <ng-icon
+              name="heroMagnifyingGlass"
+              class="text-sm text-gray-600 hover:text-violet-700 m-1.5"
+            >
+            </ng-icon>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-            <h3 class="font-semibold">Approved Deals</h3>
-            <div class="flex items-center gap-2 justify-center">
-                <div class="flex items-center">
-                    <span class="text-sm text-gray-500 mr-2">Search by:</span>
-                    <select [(ngModel)]="searchCriteria"
-                        class="bg-white border border-gray/60 rounded-[6px] pl-[2px] pr-[2px] py-2 ml-2 text-[15px] text-gray-500 ">
-                        <option value="dealId">Deal ID</option>
-                        <option value="customer">Customer</option>
-                        <option value="salesperson">Salesperson</option>
-                    </select>
-                </div>
-                <div
-                    class="h-10 inline-flex items-center justify-between bg-white border border-gray/60 rounded-[6px] px-2">
-                    <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="ngModelChange()"
-                        placeholder="Search & Enter" (keyup.enter)="onSearch()"
-                        class="bg-transparent border-none text-[15px] shadow-none text-black flex items-center focus:outline-none">
-                    <div class="bg-violet-100 hover:bg-violet-200 flex justify-center items-center rounded-full cursor-pointer"
-                        (click)="onSearch()">
-                        <ng-icon name="heroMagnifyingGlass" class="text-sm text-gray-600 hover:text-violet-700 m-1.5">
-                        </ng-icon>
-                    </div>
-                </div>
+  <app-skelton-loading *ngIf="isLoading" [lineLength]="4"></app-skelton-loading>
+
+  <div class="m-8 overflow-y-auto">
+    <div
+      *ngIf="isEmpty && !isLoading"
+      class="w-full flex justify-center items-center pb-8"
+    >
+      <div class="p-3">
+        <img src="assets/images/empty.png" alt="" />
+        <p class="m-2 text-center text-gray-500">No Data</p>
+      </div>
+    </div>
+    <section
+      class="mat-elevation-z8 h-fit max-h-[57vh] overflow-auto"
+      tabindex="0"
+    >
+      <table
+        *ngIf="!isLoading && !isEmpty"
+        mat-table
+        [dataSource]="dataSource"
+        class="rounded-lg table-fixed"
+      >
+        <ng-container matColumnDef="dealId">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Deal Id
+          </th>
+          <td mat-cell *matCellDef="let element">
+            <div class="flex items-center gap-2">
+              <a
+                [ngClass]="{
+                  'text-orange-500': !element.dealData.seenByApprover,
+                }"
+                class="font-medium"
+                >{{ element.dealData.dealId }}</a
+              >
             </div>
+          </td>
+        </ng-container>
 
-        </div>
-    </div>
-</div>
+        <ng-container matColumnDef="quoteId">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Quote Id
+          </th>
+          <td
+            mat-cell
+            *matCellDef="let element"
+            #quoteItem
+            data-id="{{ element._id }}"
+          >
+            <a
+              class="text-violet-500 font-medium hover:text-purple-600 hover:font-semibold cursor-pointer"
+              matTooltip="Preview Quote"
+              matTooltipPosition="above"
+              matTooltipClass="mat-tooltip"
+              (click)="$event.stopPropagation(); onPreviewPdf(element)"
+              >{{ element.quoteId }}</a
+            >
+          </td>
+        </ng-container>
 
-<app-skelton-loading *ngIf="isLoading" [lineLength]="4"></app-skelton-loading>
+        <ng-container matColumnDef="customerName">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Customer
+          </th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.client.companyName }}
+          </td>
+        </ng-container>
 
-<div class="m-8  overflow-y-auto">
-    <div *ngIf="isEmpty && !isLoading" class="w-full flex justify-center items-center pb-8">
-        <div class="p-3">
-            <img src="assets/images/empty.png" alt="">
-            <p class="m-2 text-center text-gray-500">No Data</p>
-        </div>
-    </div>
-    <section class="mat-elevation-z8 h-fit max-h-[57vh] overflow-auto" tabindex="0">
-        <table *ngIf="!isLoading && !isEmpty" mat-table [dataSource]="dataSource" class="rounded-lg table-fixed">
+        <ng-container matColumnDef="description">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Description
+          </th>
+          <td mat-cell *matCellDef="let element">
+            <span
+              class="block max-w-[180px] truncate"
+              [matTooltip]="element.subject"
+              matTooltipPosition="above"
+              matTooltipClass="mat-tooltip"
+              >{{ element.subject }}</span
+            >
+          </td>
+        </ng-container>
 
+        <ng-container matColumnDef="salesPerson">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Sales Person
+          </th>
+          <td mat-cell *matCellDef="let element">
+            {{
+              element.createdBy.firstName +
+                "
+                    " +
+                element.createdBy.lastName
+            }}
+          </td>
+        </ng-container>
 
+        <ng-container matColumnDef="department">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Department
+          </th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.department.departmentName }}
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="paymentTerms">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Payment Terms
+          </th>
+          <td mat-cell *matCellDef="let element">
+            <span
+              class="block max-w-[180px] truncate"
+              [matTooltip]="element.dealData.paymentTerms"
+              matTooltipPosition="above"
+              matTooltipClass="mat-tooltip"
+              >{{ element.dealData.paymentTerms }}</span
+            >
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="lpo">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            LPO
+          </th>
+          <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
+            <div class="flex justify-center items-center gap-2">
+              <button type="button" *ngIf="element.lpoFiles?.length; else noLpoFiles"
+                (click)="openLpoFiles(element)"
+                class="w-7 h-7 rounded-full border border-violet-300 bg-violet-50 hover:bg-violet-100 hover:border-violet-500 flex justify-center items-center"
+                matTooltip="View LPO Files" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                <ng-icon name="heroDocumentText" class="text-violet-700 w-4 h-4"></ng-icon>
+              </button>
+              <ng-template #noLpoFiles>
+                <p class="text-gray-400">N/A</p>
+              </ng-template>
+            </div>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="action">
+          <th
+            *matHeaderCellDef
+            class="bg-gray-100 px-[12px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden"
+          >
+            Actions
+          </th>
+          <td mat-cell *matCellDef="let element; let i = index">
+            <div class="flex gap-2">
+              <div
+                [matTooltip]="
+                  canRevokeDeal(element)
+                    ? 'Revoke Approved Deal'
+                    : 'Cannot revoke: job has started'
+                "
+                matTooltipPosition="above"
+                matTooltipClass="mat-tooltip"
+                (click)="$event.stopPropagation(); canRevokeDeal(element) && revokeDeal(element, i)"
+                [class.opacity-50]="!canRevokeDeal(element)"
+                [class.cursor-not-allowed]="!canRevokeDeal(element)"
+                [class.cursor-pointer]="canRevokeDeal(element)"
+                class="w-8 h-8 rounded-full bg-red-600 flex justify-center items-center"
+              >
+                <ng-icon
+                  name="heroArrowUturnLeft"
+                  class="text-white text-sm"
+                ></ng-icon>
+              </div>
+            </div>
+          </td>
+        </ng-container>
 
-            <ng-container matColumnDef="dealId">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Deal Id </th>
-                <td mat-cell *matCellDef="let element">
-                    <div class="flex items-center gap-2">
-                        <a [ngClass]="{'text-orange-500': !element.dealData.seenByApprover, 'text-violet-500': element.dealData.seenByApprover}"
-                            class="font-medium">{{element.dealData.dealId}}</a>
-                    </div>
-                </td>
-            </ng-container>
-
-            <ng-container matColumnDef="quoteId">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Quote Id </th>
-                <td mat-cell *matCellDef="let element" #quoteItem data-id="{{element._id}}"> <a
-                        class="hover:text-purple-600 hover:font-semibold cursor-pointer" matTooltip="Preview Quote"
-                        matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                        (click)="onPreviewPdf(element)">{{element.quoteId}}</a> </td>
-            </ng-container>
-
-            <ng-container matColumnDef="customerName">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Customer </th>
-                <td mat-cell *matCellDef="let element"> {{element.client.companyName}} </td>
-            </ng-container>
-
-            <ng-container matColumnDef="description">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Description </th>
-                <td mat-cell *matCellDef="let element">
-                    <span class="block max-w-[180px] truncate" [matTooltip]="element.subject"
-                        matTooltipPosition="above" matTooltipClass="mat-tooltip">{{element.subject}}</span>
-                </td>
-            </ng-container>
-
-            <ng-container matColumnDef="salesPerson">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Sales Person </th>
-                <td mat-cell *matCellDef="let element"> {{element.createdBy.firstName+'
-                    '+element.createdBy.lastName}}
-                </td>
-            </ng-container>
-
-            <ng-container matColumnDef="department">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Department </th>
-                <td mat-cell *matCellDef="let element"> {{element.department.departmentName}} </td>
-            </ng-container>
-            <ng-container matColumnDef="paymentTerms">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Payment Terms </th>
-                <td mat-cell *matCellDef="let element">
-                    <span class="block max-w-[180px] truncate" [matTooltip]="element.dealData.paymentTerms"
-                        matTooltipPosition="above" matTooltipClass="mat-tooltip">{{element.dealData.paymentTerms}}</span>
-                </td>
-            </ng-container>
-            <ng-container matColumnDef="lpo">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    LPO </th>
-                <td mat-cell *matCellDef="let element">
-                    <div class="flex flex-col gap-2" *ngIf="element.lpoFiles">
-                        <div *ngFor="let file of element.lpoFiles; let i=index">
-                            <div class="flex" *ngIf="file.originalname">
-                                <p class="w-24 truncate ..." matTooltip="{{file.originalname}}"
-                                    matTooltipPosition="above" matTooltipClass="mat-tooltip">{{file.originalname}}
-                                </p>
-                                <button class="w-5 h-5 border rounded-full flex justify-center items-center"
-                                    (click)="onDownloadClicks(file)">
-                                    <ng-icon class="text-black" name="heroInboxArrowDown"></ng-icon>
-                                </button>
-                            </div>
-                            <div class="w-24" *ngIf="file.fileName && file.fileName === selectedFile">
-                                <mat-progress-bar mode="determinate" value="{{progress}}"></mat-progress-bar>
-                            </div>
-                        </div>
-                    </div>
-                </td>
-            </ng-container>
-            <ng-container matColumnDef="action">
-                <th *matHeaderCellDef
-                    class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                    Actions </th>
-                <td mat-cell *matCellDef="let element;let i=index">
-                    <div class="flex gap-2">
-                        <div matTooltip="View Deal Sheet" matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                            (click)="onPreviewDeal(false,element,i)"
-                            class="cursor-pointer w-8 h-8 rounded-full  border border-gray-300 hover:border-gray-500 hover:bg-white flex justify-center items-center">
-                            <ng-icon name="heroEye" class="text-black"></ng-icon>
-                        </div>
-
-                        <div [matTooltip]="canRevokeDeal(element) ? 'Revoke Approved Deal' : 'Cannot revoke: job has started'"
-                            matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                            (click)="canRevokeDeal(element) && revokeDeal(element,i)"
-                            [class.opacity-50]="!canRevokeDeal(element)"
-                            [class.cursor-not-allowed]="!canRevokeDeal(element)"
-                            [class.cursor-pointer]="canRevokeDeal(element)"
-                            class="w-8 h-8 rounded-full bg-red-600 flex justify-center items-center">
-                            <ng-icon name="heroArrowUturnLeft" class="text-white text-sm"></ng-icon>
-                        </div>
-                    </div>
-                </td>
-            </ng-container>
-
-            <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns;  let i= index"></tr>
-        </table>
+        <tr
+          mat-header-row
+          *matHeaderRowDef="displayedColumns; sticky: true"
+        ></tr>
+        <tr
+          mat-row
+          *matRowDef="let row; columns: displayedColumns; let i = index"
+          class="cursor-pointer hover:bg-gray-100"
+          (click)="onPreviewDeal(false, row, i)"
+        ></tr>
+      </table>
     </section>
     <div class="w-full bg-white" *ngIf="!isEmpty">
-        <app-pagination [page]="page" [row]="row" [total]="total"
-            (changeData)="onPageNumberClick($event)"></app-pagination>
+      <app-pagination
+        [page]="page"
+        [row]="row"
+        [total]="total"
+        (changeData)="onPageNumberClick($event)"
+      ></app-pagination>
     </div>
+  </div>
 </div>

@@ -7,7 +7,6 @@ import { BehaviorSubject, Subject, Subscription, takeUntil } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { getDealSheet, getQuotatation, getQuotation, Quotatation, QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
-import { ApproveDealComponent } from '../approve-deal/approve-deal.component';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { RejectDealComponent } from '../reject-deal/reject-deal.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -24,6 +23,7 @@ import { SkeltonLoadingComponent } from '../../../shared/components/skelton-load
 import { MatTooltip } from '@angular/material/tooltip';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination.component';
+import { FileUploadModalComponent, FileUploadModalData } from '../../../shared/components/file-upload-modal/file-upload-modal.component';
 
 @Component({
     selector: 'app-approved-deals',
@@ -267,12 +267,10 @@ export class ApprovedDealsComponent {
     priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
     priceDetails.perc = (priceDetails.profit / priceDetails.totalSellingPrice) * 100
 
-    
-    this._dialog.open(ApproveDealComponent,
-      {
-        data: { approval, quoteData, quoteItems, priceDetails },
-        width: '1200px'
-      });
+
+    this._router.navigate(['/deal-sheet/view', quoteData._id], {
+      state: { approval, quoteData, quoteItems, priceDetails, returnUrl: '/deal-sheet/approved' }
+    });
   }
 
   onPageNumberClick(event: { page: number, row: number }) {
@@ -368,6 +366,19 @@ export class ApprovedDealsComponent {
       this.selectedFile = undefined;
       this.progress = 0
     }, 1000)
+  }
+
+  openLpoFiles(element: any): void {
+    if (!element.lpoFiles?.length) return;
+
+    const modalData: FileUploadModalData = {
+      title: `LPO Files - ${element.dealData.dealId}`,
+      existingFiles: element.lpoFiles,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this._dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
   }
 
   onPreviewPdf(quotedData: getQuotatation) {

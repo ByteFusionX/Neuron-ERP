@@ -21,6 +21,7 @@ import { CreateQuotatationComponent } from './modules/quotations/pages/create-qu
 import { QuotationListComponent } from './modules/quotations/pages/quotation-list/quotation-list.component';
 import { PendingDealsComponent } from './modules/deal-sheet/pending-deals/pending-deals.component';
 import { ApprovedDealsComponent } from './modules/deal-sheet/approved-deals/approved-deals.component';
+import { ViewDealsheetComponent } from './modules/deal-sheet/view-dealsheet/view-dealsheet.component';
 import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.component';
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
 import { PendingSuppliersComponent } from './modules/suppliers/pages/pending-suppliers/pending-suppliers.component';
@@ -147,6 +148,7 @@ export const routes: Routes = [
       { path: '', redirectTo: 'pendings', pathMatch: 'full' },
       { path: 'pendings', canActivate: [RoleGuard], component: PendingDealsComponent },
       { path: 'approved', canActivate: [RoleGuard], component: ApprovedDealsComponent },
+      { path: 'view/:id', canActivate: [RoleGuard], component: ViewDealsheetComponent },
     ]
   },
   {

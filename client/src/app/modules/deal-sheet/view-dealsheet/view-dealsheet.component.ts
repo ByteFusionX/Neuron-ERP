@@ -1,5 +1,6 @@
-import { Component, Inject, OnInit } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { Component, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { Router, ActivatedRoute } from '@angular/router';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { dealData, priceDetails, Quotatation, QuoteItem, QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
 import { UpdatedealsheetComponent } from '../updatedealsheet-component/updatedealsheet-component.component';
@@ -25,23 +26,37 @@ import { PurchaseOrderService } from '../../../core/services/purchaseOrder/purch
 import { PurchaseOrder } from '../../../shared/interfaces/purchase.interface';
 import { FileUploadModalComponent, FileUploadModalData } from '../../../shared/components/file-upload-modal/file-upload-modal.component';
 
+interface ViewDealsheetNavState {
+  approval: boolean;
+  quoteData: Quotatation;
+  quoteItems: (QuoteItem | undefined)[];
+  priceDetails: priceDetails;
+  quoteView?: boolean;
+  jobId?: string;
+  returnUrl?: string;
+}
 
 @Component({
-  selector: 'app-approve-deal',
-  templateUrl: './approve-deal.component.html',
-  styleUrls: ['./approve-deal.component.css'],
+  selector: 'app-view-dealsheet',
+  templateUrl: './view-dealsheet.component.html',
+  styleUrls: ['./view-dealsheet.component.css'],
   standalone: true,
   imports: [DatePipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe, NgIconsModule, MatTooltipModule, CommonModule]
 })
-export class ApproveDealComponent implements OnInit {
+export class ViewDealsheetComponent implements OnInit {
   isApproving: boolean = false;
+  isRejecting: boolean = false;
   suppliers: Supplier[] = [];
 
   approvedPo: PurchaseOrder | null = null;
   viewMode: 'deal' | 'po' = 'deal';
 
+  data!: ViewDealsheetNavState;
+  private returnUrl: string = '/deal-sheet/pendings';
+
   constructor(
-    public dialogRef: MatDialogRef<ApproveDealComponent>,
+    private router: Router,
+    private route: ActivatedRoute,
     private _dialog: MatDialog,
     private _quoteService: QuotationService,
     private _employeeService: EmployeeService,
@@ -50,14 +65,23 @@ export class ApproveDealComponent implements OnInit {
     private _notificationService: NotificationService,
     private supplierService: SupplierService,
     private _purchaseOrderService: PurchaseOrderService,
-    @Inject(MAT_DIALOG_DATA) public data: { approval: boolean, quoteData: Quotatation, quoteItems: (QuoteItem | undefined)[], priceDetails: priceDetails, quoteView: boolean, jobId?: string }
   ) {
   }
 
   userId!: string
 
   ngOnInit(): void {
-    console.log(this.data.quoteData);
+    const state = history.state as ViewDealsheetNavState;
+
+    if (!state || !state.quoteData) {
+      this.toast.error('Deal sheet data is unavailable. Please open it again from the list.');
+      this.router.navigate([this.returnUrl]);
+      return;
+    }
+
+    this.data = state;
+    if (state.returnUrl) this.returnUrl = state.returnUrl;
+
     this.loadSuppliers();
     this.loadApprovedPo();
     this._employeeService.employeeData$.subscribe((data) => {
@@ -160,10 +184,8 @@ export class ApproveDealComponent implements OnInit {
     });
   }
 
-
-
   onClose() {
-    this.dialogRef.close()
+    this.router.navigate([this.returnUrl]);
   }
 
   openAttachments(): void {
@@ -186,7 +208,7 @@ export class ApproveDealComponent implements OnInit {
       if (dealData) {
         this._quoteService.saveDealSheet(dealData, this.data.quoteData._id).subscribe({
           next: (res) => {
-            this.dialogRef.close({ approve: false, updatedData: res })
+            this.router.navigate([this.returnUrl]);
           },
           error: (error) => {
             console.error('Error saving deal sheet:', error);
@@ -227,8 +249,6 @@ export class ApproveDealComponent implements OnInit {
     });
   }
 
-
-
   onApprove() {
     const rejectModal = this._dialog.open(RejectDealComponent, {
       data: { reject: false },
@@ -237,7 +257,44 @@ export class ApproveDealComponent implements OnInit {
     rejectModal.afterClosed().subscribe(({ submit, comment }) => {
       if (submit) {
         this.isApproving = true;
-        this.dialogRef.close({ approve: true, updating: false, comment })
+        this._quoteService.approveDeal(this.data.quoteData._id, comment, this.userId).subscribe({
+          next: (res) => {
+            this.isApproving = false;
+            if (res.success) {
+              this.router.navigate([this.returnUrl]);
+            }
+          },
+          error: (error) => {
+            this.isApproving = false;
+            console.error('Error approving deal:', error);
+            this.toast.error('Failed to approve deal');
+          }
+        })
+      }
+    })
+  }
+
+  onReject() {
+    const rejectModal = this._dialog.open(RejectDealComponent, {
+      data: { reject: true },
+      width: '500px'
+    })
+    rejectModal.afterClosed().subscribe(({ submit, comment }) => {
+      if (submit && comment) {
+        this.isRejecting = true;
+        this._quoteService.rejectDeal(comment, this.data.quoteData._id).subscribe({
+          next: (res) => {
+            this.isRejecting = false;
+            if (res) {
+              this.router.navigate([this.returnUrl]);
+            }
+          },
+          error: (error) => {
+            this.isRejecting = false;
+            console.error('Error rejecting deal:', error);
+            this.toast.error('Failed to reject deal');
+          }
+        })
       }
     })
   }
@@ -252,7 +309,6 @@ export class ApproveDealComponent implements OnInit {
 
   getSupplierName(supplierId: string): string {
     const supplier = this.getSupplierById(supplierId);
-    console.log(supplier)
     return supplier ? supplier.supplierName : '';
   }
 

@@ -7,9 +7,7 @@ import { BehaviorSubject, Subject, Subscription, takeUntil } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { getDealSheet, getQuotatation, getQuotation, Quotatation, QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
-import { ApproveDealComponent } from '../approve-deal/approve-deal.component';
 import { NotificationService } from 'src/app/core/services/notification.service';
-import { RejectDealComponent } from '../reject-deal/reject-deal.component';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { HttpEventType } from '@angular/common/http';
@@ -22,6 +20,7 @@ import { SkeltonLoadingComponent } from '../../../shared/components/skelton-load
 import { MatTooltip } from '@angular/material/tooltip';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination.component';
+import { FileUploadModalComponent, FileUploadModalData } from '../../../shared/components/file-upload-modal/file-upload-modal.component';
 
 @Component({
     selector: 'app-pending-deals',
@@ -46,7 +45,7 @@ export class PendingDealsComponent {
   private readonly destroy$ = new Subject<void>();
   private notViewedDealIds: Set<string> = new Set();
 
-  displayedColumns: string[] = ['dealId', 'quotations', 'customerName', 'description', 'salesPerson', 'department', 'paymentTerms', 'lpo', 'action'];
+  displayedColumns: string[] = ['dealId', 'quotations', 'customerName', 'description', 'salesPerson', 'department', 'paymentTerms', 'lpo'];
 
   dataSource = new MatTableDataSource<Quotatation>()
 
@@ -258,6 +257,18 @@ export class PendingDealsComponent {
     }, 1000)
   }
 
+  openLpoFiles(element: any): void {
+    if (!element.lpoFiles?.length) return;
+
+    const modalData: FileUploadModalData = {
+      title: `LPO Files - ${element.dealData.dealId}`,
+      existingFiles: element.lpoFiles,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this._dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
+  }
 
   onPreviewDeal(approval: boolean, quoteData: Quotatation, index: number) {
     let priceDetails = {
@@ -300,32 +311,9 @@ export class PendingDealsComponent {
     priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
     priceDetails.perc = (priceDetails.profit / priceDetails.totalSellingPrice) * 100
 
-    const dialogRef = this._dialog.open(ApproveDealComponent,
-      {
-        data: { approval, quoteData, quoteItems, priceDetails },
-        width: '1200px'
-      });
-
-    dialogRef.afterClosed().subscribe((actions: { approve: boolean, updating: boolean, comment: string }) => {
-      if (actions.approve && !actions.updating) {
-        this._quoteService.approveDeal(quoteData._id, actions.comment, this.userId).subscribe({
-          next: (res) => {
-            if (res.success) {
-              this.dataSource.data.splice(index, 1)
-              this.dataSource._updateChangeSubscription()
-              this.total = Math.max(0, this.total - 1);
-              if (this.dataSource.data.length == 0) {
-                this.isEmpty = true;
-              }
-            }
-          },
-          error: (error) => {
-            console.error('Error approving deal:', error);
-            this.toast.error('Failed to approve deal');
-          }
-        })
-      }
-    })
+    this._router.navigate(['/deal-sheet/view', quoteData._id], {
+      state: { approval, quoteData, quoteItems, priceDetails, returnUrl: '/deal-sheet/pendings' }
+    });
   }
 
   onPageNumberClick(event: { page: number, row: number }) {
@@ -346,27 +334,6 @@ export class PendingDealsComponent {
       queryParamsHandling: 'merge',
       replaceUrl: true
     });
-  }
-
-  onRejectDeal(quoteData: Quotatation, index: number) {
-    const rejectModal = this._dialog.open(RejectDealComponent, {
-      data: { reject: true },
-      width: '500px'
-    })
-    rejectModal.afterClosed().subscribe(({submit,comment}) => {
-      if (submit && comment) {
-        this._quoteService.rejectDeal(comment, quoteData._id).subscribe((res) => {
-          if (res) {
-            this.dataSource.data.splice(index, 1)
-            this.dataSource._updateChangeSubscription()
-            this.total = Math.max(0, this.total - 1);
-            if (this.dataSource.data.length <= 0) {
-              this.isEmpty = true;
-            }
-          }
-        })
-      }
-    })
   }
 
 }
