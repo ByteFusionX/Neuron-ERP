@@ -64,8 +64,9 @@ const deductInventoryForDn = async (dn: any, userId?: string): Promise<void> => 
             console.warn(`deductInventoryForDn: Stock shortfall for product "${item.partNo}" on DN "${dn.dnNo}" — requested ${qty}, only ${deductQty} available.`);
         }
 
-        // Reduce stock entry quantity
+        // Reduce stock entry quantity and keep total cost in step with the remaining qty
         stockEntry.quantity = stockAfter;
+        stockEntry.totalCost = stockAfter * (stockEntry.unitCost || 0);
         stockEntry.updatedDate = new Date();
         await stockEntry.save();
 
@@ -104,11 +105,14 @@ const reverseInventoryDeductions = async (dnId: string): Promise<void> => {
     });
 
     for (const deduction of deductions) {
-        // Restore stock entry quantity
-        await StockEntry.findByIdAndUpdate(deduction.stockEntryId, {
-            $inc: { quantity: deduction.quantityDeducted },
-            $set: { updatedDate: new Date() }
-        });
+        // Restore stock entry quantity and keep total cost in step with the restored qty
+        const stockEntry = await StockEntry.findById(deduction.stockEntryId);
+        if (stockEntry) {
+            stockEntry.quantity += deduction.quantityDeducted;
+            stockEntry.totalCost = stockEntry.quantity * (stockEntry.unitCost || 0);
+            stockEntry.updatedDate = new Date();
+            await stockEntry.save();
+        }
 
         // Mark deduction as reversed
         deduction.isReversed = true;
@@ -192,6 +196,57 @@ const calculateDnStatus = async (jobId: string, currentDnItems: any[], excludeDn
     return 'Draft';
 };
 
+/**
+ * Ensure no DN item's currentDeliveryQty pushes the item's cumulative
+ * delivered quantity (across all non-cancelled/draft DNs for the job) past
+ * its orderedQty. Returns a list of human-readable violation messages
+ * (empty if all items are within bounds).
+ */
+const validateDnItemQuantities = async (jobId: string, currentDnItems: any[], excludeDnId?: string): Promise<string[]> => {
+    if (!jobId || !mongoose.Types.ObjectId.isValid(jobId) || !currentDnItems || currentDnItems.length === 0) {
+        return [];
+    }
+
+    const query: any = {
+        jobId: new mongoose.Types.ObjectId(jobId),
+        status: { $nin: ['Cancelled', 'Draft'] }
+    };
+
+    if (excludeDnId && mongoose.Types.ObjectId.isValid(excludeDnId)) {
+        query._id = { $ne: new mongoose.Types.ObjectId(excludeDnId) };
+    }
+
+    const allDns = await DeliveryNote.find(query);
+    const violations: string[] = [];
+
+    for (const currentItem of currentDnItems) {
+        const itemId = currentItem.itemId;
+        const orderedQty = currentItem.orderedQty || 0;
+        const currentDeliveryQty = currentItem.currentDeliveryQty || 0;
+
+        if (currentDeliveryQty <= 0) continue;
+
+        let priorDelivered = 0;
+        for (const dn of allDns) {
+            if (dn.items && Array.isArray(dn.items)) {
+                const matchingItem = dn.items.find((i: any) => i.itemId === itemId);
+                if (matchingItem) {
+                    priorDelivered += matchingItem.currentDeliveryQty || 0;
+                }
+            }
+        }
+
+        const balance = orderedQty - priorDelivered;
+        if (currentDeliveryQty > balance) {
+            violations.push(
+                `${currentItem.description || currentItem.partNo || itemId}: current delivery qty ${currentDeliveryQty} exceeds remaining balance ${Math.max(0, balance)} (ordered ${orderedQty}, already delivered ${priorDelivered})`
+            );
+        }
+    }
+
+    return violations;
+};
+
 export const createDn = async (req: Request, res: Response) => {
     try {
         const { dnNo, dnDate, jobId, items, status } = req.body;
@@ -211,6 +266,17 @@ export const createDn = async (req: Request, res: Response) => {
         }
 
         console.log('Creating DN with items:', JSON.stringify(items, null, 2));
+
+        if (status !== 'Draft' && jobId && items && items.length > 0) {
+            const violations = await validateDnItemQuantities(jobId, items);
+            if (violations.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Delivery quantity exceeds remaining balance',
+                    details: violations
+                });
+            }
+        }
 
         let finalStatus = status || 'Draft';
 
@@ -410,6 +476,17 @@ export const updateDn = async (req: Request, res: Response) => {
                     item.serialNos = [];
                 }
             });
+        }
+
+        if (status !== 'Draft' && dn.jobId && items && items.length > 0) {
+            const violations = await validateDnItemQuantities(dn.jobId.toString(), items, id);
+            if (violations.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Delivery quantity exceeds remaining balance',
+                    details: violations
+                });
+            }
         }
 
         let finalStatus = status || 'Draft';
