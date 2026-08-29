@@ -27,6 +27,23 @@ export class PaginationComponent implements OnChanges {
     return Array.from({ length: this.maxPage }, (_, i) => i + 1);
   }
 
+  pageList(): (number | '...')[] {
+    this.totalLinksArray();
+    const current = this.selectedPage || 1;
+    const max = this.maxPage;
+    if (max <= 5) {
+      return Array.from({ length: max }, (_, i) => i + 1);
+    }
+    const shown = new Set<number>([1, max, current - 1, current, current + 1]);
+    const pages = Array.from(shown).filter(p => p >= 1 && p <= max).sort((a, b) => a - b);
+    const result: (number | '...')[] = [];
+    pages.forEach((p, i) => {
+      if (i > 0 && p - pages[i - 1] > 1) result.push('...');
+      result.push(p);
+    });
+    return result;
+  }
+
   onLinkClick(page: number) {
     this.selectedPage = page
     this.changeData.emit({ page: page, row: this.row })

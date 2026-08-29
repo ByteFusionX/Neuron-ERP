@@ -216,12 +216,12 @@
                   <!-- Text, Number, Boolean -->
                   <ng-container *ngIf="column.type === 'text' || column.type === 'number' || column.type === 'boolean'">
                     <div class="flex items-center gap-2">
-                      <span *ngIf="(!column.clickable || !isClickableValue(column, item)) && !column.truncateText">{{ getCellValue(item, column) }}</span>
+                      <span *ngIf="(!column.clickable || !isClickableValue(column, item)) && !column.truncateText">{{ getDisplayValue(item, column) }}</span>
                       <span *ngIf="(!column.clickable || !isClickableValue(column, item)) && column.truncateText"
                         class="block truncate max-w-[250px]"
                         [matTooltip]="getCellValue(item, column) || ''"
-                        matTooltipPosition="above">{{ getCellValue(item, column) }}</span>
-                      <span *ngIf="column.clickable && isClickableValue(column, item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getCellValue(item, column) }}</span>
+                        matTooltipPosition="above">{{ getDisplayValue(item, column) }}</span>
+                      <span *ngIf="column.clickable && isClickableValue(column, item)" class="text-purple-600 font-medium cursor-pointer hover:underline" (click)="onCellClick(column, item, $event)">{{ getDisplayValue(item, column) }}</span>
                       <button 
                         *ngIf="column.inlineButton && (!column.inlineButton.condition || column.inlineButton.condition(item))"
                         [ngClass]="column.inlineButton.buttonClass || 'cursor-pointer text-center flex justify-center items-center gap-1 px-1 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-full font-medium transition-colors'"
@@ -235,10 +235,13 @@
 
                   <!-- Date -->
                   <ng-container *ngIf="column.type === 'date'">
-                    {{
-                      getCellValue(item, column)
-                        | date : column.pipeParams || "dd/MM/yyyy"
-                    }}
+                    <ng-container *ngIf="getCellValue(item, column); else naDate">
+                      {{
+                        getCellValue(item, column)
+                          | date : column.pipeParams || "dd/MM/yyyy"
+                      }}
+                    </ng-container>
+                    <ng-template #naDate>N/A</ng-template>
                   </ng-container>
 
                   <!-- Currency -->
@@ -252,7 +255,7 @@
                       class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                       [ngClass]="getStatusColorClass(getCellValue(item, column))"
                     >
-                      {{ getCellValue(item, column) | titlecase }}
+                      {{ getCellValue(item, column) ? (getCellValue(item, column) | titlecase) : 'N/A' }}
                       <span
                         class="ml-1 cursor-pointer"
                         *ngIf="
@@ -274,7 +277,7 @@
                   <ng-container *ngIf="column.type === 'statusDropdown'">
                     <ng-container *ngIf="(column.key === 'status' || column.key === 'paymentStatus') && (item.status === 'Cancelled' || item.status === 'Reissued'); else editableStatusDropdown">
                       <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
-                        {{ getCellValue(item, column) || '-' }}
+                        {{ getDisplayValue(item, column) }}
                       </span>
                     </ng-container>
 

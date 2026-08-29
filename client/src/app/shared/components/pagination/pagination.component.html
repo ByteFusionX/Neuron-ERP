@@ -1,76 +1,62 @@
-<div class="flex items-center justify-between border-t border-gray-200 px-4 py-3 sm:px-6">
-    <div class="flex flex-1 justify-between sm:hidden">
-        <a href="#"
-            class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Previous</a>
-        <a href="#"
-            class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Next</a>
-    </div>
-    <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-        <div class="flex">
-            <p class="text-sm text-gray-700">
-                Showing
-                <span class="font-medium">{{((page - 1)*row )+1}}</span>
-                to
-                <span class="font-medium">
-                    {{row * page >= total? total:row * page}}
-                </span>
-                of
-                <span class="font-medium">{{total}}</span>
-                results
-            </p>
-        </div>
-        <div>
-            <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                <a class="relative text-center flex items-center px-3 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 hover:ring-violet-500 me-1 cursor-pointer"
-                    [ngClass]="{'custom-link':maxPage === 1 || this.selectedPage == 1}" (click)="onPreviousClick()">
-                    <span class="sr-only">Previous</span>
-                    <ng-icon name="heroChevronLeft"></ng-icon>
-                </a>
-                <!-- <a aria-current="page"
-                    class="relative text-center px-4 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 me-1 cursor-pointer"
-                    *ngIf="selectedPage == maxPage && maxPage > 2"
-                    (click)="onPageNumberClick(selectedPage-2)">{{selectedPage - 2}}</a> -->
-                <a aria-current="page"
-                    class="relative text-center px-4 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 me-1 cursor-pointer"
-                    *ngIf="selectedPage != 1" (click)="onPageNumberClick(selectedPage-1)">{{selectedPage - 1}}</a>
-                <a aria-current="page"
-                    class="relative text-center px-4 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 me-1 cursor-pointer active">{{selectedPage}}</a>
-                <a aria-current="page"
-                    class="relative text-center px-4 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 me-1 cursor-pointer"
-                    *ngIf="selectedPage != maxPage" (click)="onPageNumberClick(selectedPage+1)">{{selectedPage + 1}}</a>
-                <!-- <a aria-current="page"
-                    class="relative text-center px-4 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 me-1 cursor-pointer"
-                    *ngIf="selectedPage == 1 && maxPage > 2" (click)="onPageNumberClick(selectedPage+2)">{{selectedPage
-                    + 2}}</a> -->
-                <span *ngIf="maxPage > 3 && selectedPage < maxPage-2"
-                    class="relative text-center px-4 py-2 me-1">...</span>
-                <a aria-current="page"
-                    class="relative text-center px-4 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 me-1 cursor-pointer"
-                    *ngIf="selectedPage == 1 && maxPage > 2" (click)="onPageNumberClick(maxPage)">{{maxPage}}</a>
-                <!-- 
-                <div *ngFor="let page of totalLinksArray(); let i=index" class="flex">
-                    <a aria-current="page" *ngIf="page > maxPage - 2 && maxPage > 4"
-                        class="relative text-center px-4 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 me-1 cursor-pointer"
-                        (click)="onLinkClick(page)" [class.active]="page == selectedPage">{{page}}</a>
-                    <span *ngIf="page == 4" class="relative text-center px-4 py-2 me-1">...</span>
-                </div> -->
-                <a class="relative flex items-center text-center px-3 py-2 rounded ring-1 ring-inset ring-gray-200 hover:bg-gray-50 hover:ring-violet-500 me-1 cursor-pointer"
-                    [ngClass]="{'custom-link':maxPage === 1 || this.selectedPage == maxPage}" (click)="onNextClick()">
-                    <span class="sr-only">Next</span>
-                    <ng-icon name="heroChevronRight"></ng-icon>
-                </a>
-                <div>
-                    <select
-                        class="py-2 px-1 block w-full border border-gray-200 rounded ms-1 text-sm outline-none ring-1 ring-inset ring-gray-200 focus:border-none focus:ring-violet-500 disabled:opacity-50 disabled:pointer-events-none"
-                        (change)="onChangeSelect($event)" [value]="row" [disabled]="total<=6">
-                        <option value="5">5 / Pages</option>
-                        <option value="10">10 / Pages</option>
-                        <option value="15">15 / Pages</option>
-                        <option value="20">20 / Pages</option>
-                        <option value="30">30 / Pages</option>
-                    </select>
-                </div>
-            </nav>
+<div class="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:flex-row sm:items-center sm:justify-between border-t border-gray-200">
+
+    <!-- Rows per page -->
+    <div class="flex items-center gap-3 rounded-xl bg-gray-50 border border-gray-100 px-4 py-2 w-fit">
+        <span class="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Rows</span>
+        <div class="relative">
+            <select
+                class="appearance-none bg-white border border-gray-200 rounded-lg pl-3 pr-8 py-1.5 text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                (change)="onChangeSelect($event)" [value]="row" [disabled]="total<=6">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="15">15</option>
+                <option value="20">20</option>
+                <option value="30">30</option>
+            </select>
+            <ng-icon name="heroChevronDown"
+                class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></ng-icon>
         </div>
     </div>
+
+    <!-- Range summary -->
+    <p class="text-sm text-gray-500 whitespace-nowrap">
+        Showing
+        <span class="font-semibold text-violet-600">{{ total ? ((selectedPage - 1) * row) + 1 : 0 }}-{{ row * selectedPage >= total ? total : row * selectedPage }}</span>
+        of
+        <span class="font-semibold text-gray-900">{{ total }}</span>
+        items
+    </p>
+
+    <!-- Page controls -->
+    <nav class="flex items-center gap-1.5" aria-label="Pagination">
+        <button type="button" class="pg-btn" [disabled]="selectedPage === 1" (click)="onPageNumberClick(1)">
+            <span class="sr-only">First page</span>
+            <ng-icon name="heroChevronDoubleLeft" class="text-sm"></ng-icon>
+        </button>
+        <button type="button" class="pg-btn" [disabled]="selectedPage === 1" (click)="onPreviousClick()">
+            <span class="sr-only">Previous</span>
+            <ng-icon name="heroChevronLeft" class="text-sm"></ng-icon>
+        </button>
+
+        <ng-container *ngFor="let item of pageList()">
+            <span *ngIf="item === '...'"
+                class="w-9 h-9 flex items-center justify-center text-gray-400 tracking-widest select-none">•••</span>
+            <button *ngIf="item !== '...'" type="button"
+                class="w-9 h-9 rounded-full text-sm font-medium flex items-center justify-center transition-colors"
+                [ngClass]="item === selectedPage
+                    ? 'bg-violet-600 text-white shadow-sm shadow-violet-200'
+                    : 'text-gray-600 hover:bg-gray-100'"
+                [attr.aria-current]="item === selectedPage ? 'page' : null"
+                (click)="onPageNumberClick($any(item))">{{ item }}</button>
+        </ng-container>
+
+        <button type="button" class="pg-btn" [disabled]="selectedPage === maxPage" (click)="onNextClick()">
+            <span class="sr-only">Next</span>
+            <ng-icon name="heroChevronRight" class="text-sm"></ng-icon>
+        </button>
+        <button type="button" class="pg-btn" [disabled]="selectedPage === maxPage" (click)="onPageNumberClick(maxPage)">
+            <span class="sr-only">Last page</span>
+            <ng-icon name="heroChevronDoubleRight" class="text-sm"></ng-icon>
+        </button>
+    </nav>
 </div>

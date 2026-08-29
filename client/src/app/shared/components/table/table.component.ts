@@ -198,6 +198,14 @@ export class TableComponent implements OnInit, OnChanges {
       (obj && obj[key] !== undefined) ? obj[key] : null, item);
   }
 
+  getDisplayValue(item: any, column: TableColumn): any {
+    const value = this.getCellValue(item, column);
+    if (value === null || value === undefined || value === '') {
+      return 'N/A';
+    }
+    return value;
+  }
+
   getStatusColorClass(status: any): string {
     if (!status) return 'bg-slate-100 text-slate-700';
     
@@ -239,7 +247,7 @@ export class TableComponent implements OnInit, OnChanges {
 
   formatCurrencyWithSpace(item: any, column: TableColumn): string {
     const value = this.getCellValue(item, column);
-    if (value == null || value === undefined) return '';
+    if (value == null || value === undefined || value === '') return 'N/A';
     
     const currencyCode = column.pipeParams?.currency || 'USD';
     const formatted = new Intl.NumberFormat('en-US', {

@@ -1,77 +1,87 @@
-<div>
-    <div class="bg-black bg-opacity-50 flex items-center justify-center ">
-        <div class="bg-white rounded-lg shadow-lg max-w-lg w-full py-3">
-            <div class="flex justify-between items-center mb-4 px-6">
-                <h2 class="text-xl font-semibold">Open Events</h2>
-                <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center"
-                    (click)="onClose()">
-                    <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-                </button>
-            </div>
-            <div *ngIf="events$ | async as events, else noEvent" class="max-h-[80vh] overflow-y-scroll">
-                <div class="space-y-4 px-6 py-2 " *ngFor="let event of events">
-                    <div class="p-4 bg-gray-100 rounded">
-                        <div class="w-full flex justify-between">
-                            <p class="text-gray-900 text-lg"><ng-icon name="heroCalendarDays"></ng-icon> {{event.event}}
-                            </p>
-                            <div class="flex">
-                                <div class="">
-                                    <div >
-                                        <input type="checkbox" class="size-4 border border-violet-500" [disabled]="event.status === 'completed'"
-                                            (click)="onCheckboxClick($event, event._id)" [checked]="event.status === 'completed'">
-                                    </div>
-                                </div>
-                                <div *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)">
-                                    <button class="text-red-600 hover:text-red-800 px-2" matTooltip="Delete Event"
-                                        matTooltipPosition="above" (click)="onDeleteEvent(event._id)">
-                                        <ng-icon name="heroTrash" class="text-md"></ng-icon>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <p class="text-gray-600">{{event.summary}}</p>
-                        <p class="text-gray-600">{{formatDate(event.date)}}</p>
-                        <div *ngIf="event.eventFiles && event.eventFiles.length" class="mt-2 space-y-1">
-                            <div *ngFor="let file of event.eventFiles" class="flex items-center gap-1">
-                                <button type="button"
-                                    class="flex items-center gap-1 text-violet-600 hover:text-violet-800 text-sm underline"
-                                    matTooltip="Preview File" matTooltipPosition="above"
-                                    (click)="onPreviewFile(file.fileName)">
-                                    <ng-icon name="heroEye" class="text-md"></ng-icon>
-                                    {{file.originalname}}
-                                </button>
-                                <button *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)"
-                                    type="button" class="text-red-600 hover:text-red-800"
-                                    matTooltip="Delete File" matTooltipPosition="above"
-                                    (click)="onDeleteFile(event, file.fileName)">
-                                    <ng-icon name="heroTrash" class="text-sm"></ng-icon>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <ng-template #noEvent>
-                <div class="space-y-4 px-6 py-2">
-                    <div class="p-4 bg-gray-100 rounded">
-                        <p class="text-gray-700"></p>
-                        <p class="text-gray-700">No Events</p>
-                    </div>
-                </div>
-            </ng-template>
-            <div class="border border-white border-t-gray-300 flex justify-end gap-2 px-6 py-2">
-                <div *ngIf="!isReassigned">
-                    <button class="bg-orange-500 hover:bg-orange-400 text-white font-medium py-2 px-4 rounded text-sm"
-                        (click)="onNewEventClicks()">
-                        New Event
-                    </button>
-                </div>
-                <div>
-                    <button class="border text-black font-medium py-2 px-4 rounded text-sm mr-2" (click)="onClose()">
-                        Close
-                    </button>
-                </div>
-            </div>
+<div class="bg-white rounded-lg overflow-hidden w-full">
+
+    <!-- Header -->
+    <div class="border-b px-6 py-4 flex justify-between items-center bg-white">
+        <div>
+            <h2 class="text-base font-semibold text-gray-900">Open Events</h2>
+            <p class="text-xs text-gray-500 mt-0.5">Events linked to this record</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button *ngIf="!isReassigned" type="button"
+                class="bg-orange-500 hover:bg-orange-400 text-white font-medium py-1.5 px-3 rounded-lg text-sm flex items-center gap-1"
+                (click)="onNewEventClicks()">
+                <ng-icon name="heroPlus" class="text-sm"></ng-icon>
+                New Event
+            </button>
+            <button type="button"
+                class="bg-gray-100 hover:bg-gray-200 rounded-lg p-1 flex items-center justify-center text-gray-600"
+                (click)="onClose()">
+                <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+            </button>
         </div>
     </div>
+
+    <!-- Body -->
+    <div class="px-6 py-4 max-h-[65vh] overflow-y-auto">
+        <ng-container *ngIf="events$ | async as events">
+            <div *ngIf="events.length; else noEvent" class="space-y-4">
+                <div class="p-4 bg-gray-100 rounded" *ngFor="let event of events">
+                    <div class="w-full flex justify-between">
+                        <p class="text-gray-900 text-lg"><ng-icon name="heroCalendarDays"></ng-icon> {{event.event}}
+                        </p>
+                        <div class="flex">
+                            <div class="">
+                                <div>
+                                    <input type="checkbox" class="size-4 border border-violet-500"
+                                        [disabled]="event.status === 'completed'"
+                                        (click)="onCheckboxClick($event, event._id)"
+                                        [checked]="event.status === 'completed'">
+                                </div>
+                            </div>
+                            <div *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)">
+                                <button class="text-red-600 hover:text-red-800 px-2" matTooltip="Delete Event"
+                                    matTooltipPosition="above" (click)="onDeleteEvent(event._id)">
+                                    <ng-icon name="heroTrash" class="text-md"></ng-icon>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-gray-600">{{event.summary}}</p>
+                    <p class="text-gray-600">{{formatDate(event.date)}}</p>
+                    <div *ngIf="event.eventFiles && event.eventFiles.length" class="mt-2 space-y-1">
+                        <div *ngFor="let file of event.eventFiles" class="flex items-center gap-1">
+                            <button type="button"
+                                class="flex items-center gap-1 text-violet-600 hover:text-violet-800 text-sm underline"
+                                matTooltip="Preview File" matTooltipPosition="above"
+                                (click)="onPreviewFile(file.fileName)">
+                                <ng-icon name="heroEye" class="text-md"></ng-icon>
+                                {{file.originalname}}
+                            </button>
+                            <button
+                                *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)"
+                                type="button" class="text-red-600 hover:text-red-800" matTooltip="Delete File"
+                                matTooltipPosition="above" (click)="onDeleteFile(event, file.fileName)">
+                                <ng-icon name="heroTrash" class="text-sm"></ng-icon>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </ng-container>
+
+        <ng-template #noEvent>
+            <div class="flex flex-col items-center justify-center text-center py-10">
+                <span
+                    class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-3">
+                    <ng-icon name="heroCalendarDays" class="text-xl"></ng-icon>
+                </span>
+                <p class="text-sm font-medium text-gray-700">No events yet</p>
+                <p class="text-xs text-gray-500 mt-1">
+                    {{ isReassigned ? 'No events have been added to this record.' : 'Use “New Event” to add the first
+                    one.' }}
+                </p>
+            </div>
+        </ng-template>
+    </div>
+
 </div>

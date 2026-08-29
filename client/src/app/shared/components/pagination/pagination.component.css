@@ -1,8 +1,23 @@
-.custom-link {
-    pointer-events: none;
+.pg-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid #e5e7eb;
+    background-color: #ffffff;
+    color: #4b5563;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
 }
 
-.active {
-    background-color: #7c3aed;
-    color: white;
+.pg-btn:hover:not(:disabled) {
+    background-color: #f3f4f6;
+    border-color: #d1d5db;
+    color: #111827;
+}
+
+.pg-btn:disabled {
+    opacity: .4;
+    cursor: not-allowed;
 }
