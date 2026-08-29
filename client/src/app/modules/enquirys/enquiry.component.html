@@ -240,8 +240,14 @@
                     <td mat-cell *matCellDef="let element" class="text-center">
                         <div class="flex justify-center items-center gap-2" *ngIf="isDeleteOption">
                             <button type="button"
-                                class="w-7 h-7 rounded-full border border-red-300 bg-red-50 hover:bg-red-100 hover:border-red-500 flex justify-center items-center"
-                                (click)="deleteEnquiry(element._id,element.status)" matTooltip="Delete Enquiry"
+                                class="w-7 h-7 rounded-full border border-red-300 bg-red-50 flex justify-center items-center"
+                                [class.hover:bg-red-100]="!isAssignedToPresale(element.status)"
+                                [class.hover:border-red-500]="!isAssignedToPresale(element.status)"
+                                [class.opacity-50]="isAssignedToPresale(element.status)"
+                                [class.cursor-not-allowed]="isAssignedToPresale(element.status)"
+                                [disabled]="isAssignedToPresale(element.status)"
+                                (click)="deleteEnquiry(element._id,element.status)"
+                                [matTooltip]="isAssignedToPresale(element.status) ? 'This enquiry can\'t be deleted while it\'s assigned to Presales' : 'Delete Enquiry'"
                                 matTooltipPosition="above" matTooltipClass="mat-tooltip">
                                 <ng-icon name="heroTrash" class="text-red-600 w-4 h-4"></ng-icon>
                             </button>

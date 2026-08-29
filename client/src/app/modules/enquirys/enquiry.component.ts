@@ -481,14 +481,18 @@ export class EnquiryComponent implements OnInit, OnDestroy {
     this.subject.next(event);
   }
 
-  deleteEnquiry(enquiryId: string, status: string) {
-    this.isDeletedClicked = true;
-    if (
+  isAssignedToPresale(status: string): boolean {
+    return (
       status == 'Assigned To Presale Manager' ||
       status == 'Assigned To Presale Engineer' ||
       status == 'Assigned To Presales' ||
       status == 'Rejected by Presale Engineer'
-    ) {
+    );
+  }
+
+  deleteEnquiry(enquiryId: string, status: string) {
+    this.isDeletedClicked = true;
+    if (this.isAssignedToPresale(status)) {
       this.toaster.warning('Sorry,Selected enquiry assinged to presales');
       return;
     }
