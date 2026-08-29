@@ -23,6 +23,12 @@ interface StockEntry {
     updatedDate: Date;
     updatedBy?: Types.ObjectId;
     isDeleted: boolean;
+    isQuarantined: boolean;
+    quarantineReason?: string;
+    quarantinedAt?: Date;
+    quarantineReleasedAt?: Date;
+    quarantineReleasedBy?: Types.ObjectId;
+    sourceDnId?: Types.ObjectId;
 }
 
 const stockEntrySchema = new Schema<StockEntry>({
@@ -122,6 +128,28 @@ const stockEntrySchema = new Schema<StockEntry>({
     isDeleted: {
         type: Boolean,
         default: false,
+    },
+    isQuarantined: {
+        type: Boolean,
+        default: false,
+    },
+    quarantineReason: {
+        type: String,
+        trim: true,
+    },
+    quarantinedAt: {
+        type: Date,
+    },
+    quarantineReleasedAt: {
+        type: Date,
+    },
+    quarantineReleasedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+    },
+    sourceDnId: {
+        type: Schema.Types.ObjectId,
+        ref: 'DeliveryNote',
     },
 });
 
