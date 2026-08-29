@@ -77,6 +77,12 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 break;
         }
 
+        // A job must always be visible to the employee it's currently allocated to
+        // as procurement person, regardless of their broader viewReport scope.
+        if (userId && Object.keys(accessFilter).length > 0) {
+            accessFilter = { $or: [accessFilter, { 'procurementPerson._id': new ObjectId(userId) }] };
+        }
+
         const qatarUsdRate = await getUSDRated();
 
         const jobData = await jobModel.aggregate([
@@ -250,6 +256,10 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
             },
             {
+                $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' }
+            },
+            { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
+            {
                 $match: { $or: [{ 'quotation.createdBy': new ObjectId(salesPerson) }, { 'quotation.createdBy': { $exists: isSalesPerson } }] }
             },
             {
@@ -338,6 +348,12 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
                 break;
         }
 
+        // A job must always be visible to the employee it's currently allocated to
+        // as procurement person, regardless of their broader viewReport scope.
+        if (userId && Object.keys(accessFilter).length > 0) {
+            accessFilter = { $or: [accessFilter, { 'procurementPerson._id': new ObjectId(userId as string) }] };
+        }
+
         const jobTotal: { total: number }[] = await jobModel.aggregate([
             {
                 $match: { isDeleted: { $ne: true }, allocateStatus }
@@ -348,6 +364,10 @@ export const totalJob = async (req: Request, res: Response, next: NextFunction) 
             {
                 $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
             },
+            {
+                $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' }
+            },
+            { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
             {
                 $match: accessFilter
             },
