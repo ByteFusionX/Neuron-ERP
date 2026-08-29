@@ -3,6 +3,8 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
@@ -49,6 +51,7 @@ export class CreateGrnComponent implements OnInit {
   employees: any[] = [];
   lpoOptions: any[] = [];
   isLoading = signal<boolean>(true);
+  isLpoOptionsLoading = signal<boolean>(false);
   isSubmitting = signal<boolean>(false);
   isFormDisabled = signal<boolean>(false);
   isLpoPreselected = signal<boolean>(false);
@@ -88,17 +91,57 @@ export class CreateGrnComponent implements OnInit {
   }
 
   loadEligibleLpos(): void {
+    this.isLpoOptionsLoading.set(true);
     this.purchaseOrderService.getAllPurchaseOrders({ page: 1, row: 500, status: ['Approved', 'Closed'] }).subscribe({
       next: (response: any) => {
-        this.lpoOptions = (response?.success ? response.data : []).map((lpo: any) => ({
-          _id: lpo._id,
-          label: `${lpo.poNo || 'N/A'} - ${lpo.supplierId?.supplierName || 'N/A'}`
-        }));
+        const lpos: any[] = response?.success ? response.data : [];
+        if (!lpos.length) {
+          this.lpoOptions = [];
+          this.isLpoOptionsLoading.set(false);
+          return;
+        }
+
+        const grnChecks = lpos.map((lpo: any) =>
+          this.grnService.getAllGRNsByLpoId(lpo._id).pipe(catchError(() => of({ success: false, data: [] })))
+        );
+
+        forkJoin(grnChecks).subscribe((grnResponses: any[]) => {
+          this.lpoOptions = lpos
+            .filter((lpo: any, index: number) => !this.isLpoFullyReceived(lpo.items || [], grnResponses[index]?.data || []))
+            .map((lpo: any) => ({
+              _id: lpo._id,
+              label: `${lpo.poNo || 'N/A'} - ${lpo.supplierId?.supplierName || 'N/A'}`
+            }));
+          this.isLpoOptionsLoading.set(false);
+        });
       },
       error: (error) => {
         console.error('Error loading LPOs:', error);
         this.toastr.error('Failed to load LPOs');
+        this.isLpoOptionsLoading.set(false);
       }
+    });
+  }
+
+  private isLpoFullyReceived(lpoItems: any[], grns: any[]): boolean {
+    if (!lpoItems.length) return false;
+
+    return lpoItems.every((lpoItem: any) => {
+      const orderedQty = lpoItem.quantity || 0;
+      if (orderedQty === 0) return true;
+
+      let totalAcceptedQty = 0;
+      grns.forEach((grn: any) => {
+        (grn.items || []).forEach((grnItem: any) => {
+          const partNoMatch = this.matchPartNo(grnItem.partNo, lpoItem.partNo);
+          const descriptionMatch = grnItem.itemDescription === lpoItem.detail;
+          if (partNoMatch || descriptionMatch) {
+            totalAcceptedQty += grnItem.acceptedQty || 0;
+          }
+        });
+      });
+
+      return totalAcceptedQty >= orderedQty;
     });
   }
 
@@ -106,6 +149,10 @@ export class CreateGrnComponent implements OnInit {
     const id = Array.isArray(lpoId) ? lpoId[0] : lpoId;
     if (!id) return;
     this.lpoId = id;
+    this.lpo = null;
+    this.existingGRNs = [];
+    this.isFormDisabled.set(false);
+    (this.grnForm.get('items') as FormArray).clear();
     this.isLoading.set(true);
     this.loadLpo();
   }
@@ -250,9 +297,13 @@ export class CreateGrnComponent implements OnInit {
     });
 
     this.isFormDisabled.set(allBalancesZero);
-    
+    const selectedLpoControl = this.grnForm.get('selectedLpo');
+
     if (allBalancesZero) {
       this.grnForm.disable();
+      if (!this.isLpoPreselected()) {
+        selectedLpoControl?.enable();
+      }
       this.toastr.info('All quantities have been fully received. No new GRN can be created.');
     } else {
       this.grnForm.enable();
@@ -294,6 +345,7 @@ export class CreateGrnComponent implements OnInit {
         receivedQty: [orderedQty, [Validators.required, Validators.min(0)]],
         acceptedQty: [orderedQty, [Validators.required, Validators.min(0)]],
         rejectedQty: [0],
+        rejectionReason: [''],
         remarks: [''],
         date: ['']
       });
@@ -359,6 +411,16 @@ export class CreateGrnComponent implements OnInit {
     const acceptedQty = itemGroup.get('acceptedQty')?.value || 0;
     const rejectedQty = Math.max(0, receivedQty - acceptedQty);
     itemGroup.get('rejectedQty')?.setValue(rejectedQty, { emitEvent: false });
+
+    const rejectionReasonControl = itemGroup.get('rejectionReason');
+    if (rejectionReasonControl) {
+      if (rejectedQty > 0) {
+        rejectionReasonControl.setValidators([Validators.required]);
+      } else {
+        rejectionReasonControl.clearValidators();
+      }
+      rejectionReasonControl.updateValueAndValidity({ emitEvent: false });
+    }
   }
 
   getItemDisplayValue(itemGroup: FormGroup, fieldName: string): string {
@@ -376,6 +438,7 @@ export class CreateGrnComponent implements OnInit {
       receivedQty: [item.receivedQty || 0, [Validators.required, Validators.min(0)]],
       acceptedQty: [item.acceptedQty || 0, [Validators.required, Validators.min(0)]],
       rejectedQty: [0],
+      rejectionReason: [item.rejectionReason || ''],
       remarks: [item.remarks || ''],
       date: [item.date ? new Date(item.date).toISOString().split('T')[0] : '']
     });
@@ -469,6 +532,13 @@ export class CreateGrnComponent implements OnInit {
 
   get f() {
     return this.grnForm.controls;
+  }
+
+  getItemsTotal(field: string): number {
+    return this.items.controls.reduce(
+      (sum: number, itemGroup: any) => sum + (Number(itemGroup.get(field)?.value) || 0),
+      0
+    );
   }
 
   openDeliveryNoteUpload(): void {
@@ -569,6 +639,10 @@ export class CreateGrnComponent implements OnInit {
       itemsArray.controls.forEach((itemGroup: any) => {
         const receivedQty = itemGroup.get('receivedQty');
         const acceptedQty = itemGroup.get('acceptedQty');
+        const rejectionReason = itemGroup.get('rejectionReason');
+        if (rejectionReason?.errors?.['required']) {
+          this.toastr.error('Rejection reason is required when a quantity is rejected');
+        }
         if (receivedQty?.errors?.['max']) {
           this.toastr.error('Received quantity cannot exceed balance quantity');
         }
@@ -602,6 +676,8 @@ export class CreateGrnComponent implements OnInit {
         orderedQty: item.orderedQty,
         receivedQty: item.receivedQty,
         acceptedQty: item.acceptedQty,
+        rejectedQty: item.rejectedQty || 0,
+        rejectionReason: item.rejectionReason || undefined,
         remarks: item.remarks || undefined,
         date: item.date || undefined
       }))

@@ -1,187 +1,280 @@
 <div class="bg-white m-6 rounded-lg">
     <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">Create Good Receipt Note (GRN)</h3>
+        <h3 class="text-md font-medium">
+            Create Good Receipt Note (GRN)
+            <span *ngIf="f['grnNo'].value" class="uppercase text-purple-600">{{ f['grnNo'].value }}</span>
+        </h3>
     </div>
     <form [formGroup]="grnForm">
         <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
-            @if(isLoading()) {
+            @if(isLoading() && isLpoPreselected()) {
                 <div class="text-center py-8">
                     <p>Loading LPO details...</p>
                 </div>
             } @else {
-                <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                    @if(!isLpoPreselected()) {
-                        <app-select-dropdown
-                            label="Select LPO Number"
-                            [options]="lpoOptions"
-                            optionLabel="label"
-                            optionValue="_id"
-                            formControlName="selectedLpo"
-                            placeholder="Select LPO to create GRN against"
-                            [isSubmitted]="isSubmitting()"
-                            (onSelected)="onLpoSelected($event)"
-                            class="w-full">
-                        </app-select-dropdown>
+                <div class="rounded-md border border-gray-200 bg-white p-5 mb-6">
+                    <div class="flex flex-col md:flex-row md:mb-5 gap-3">
+                        @if(!isLpoPreselected()) {
+                            <app-select-dropdown
+                                label="Select LPO Number"
+                                [options]="lpoOptions"
+                                optionLabel="label"
+                                optionValue="_id"
+                                formControlName="selectedLpo"
+                                [placeholder]="isLpoOptionsLoading() ? 'Loading LPOs...' : 'Select LPO to create GRN against'"
+                                [isSubmitted]="isSubmitting()"
+                                (onSelected)="onLpoSelected($event)"
+                                class="w-full">
+                            </app-select-dropdown>
+                        }
+                        <app-form-field label="GRN Number" [control]="f['grnNo']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                        </app-form-field>
+                        <app-form-field label="GRN Date" [control]="f['grnDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
+                        </app-form-field>
+                    </div>
+
+                    @if(isLoading()) {
+                        <div class="animate-pulse space-y-4">
+                            <div class="flex gap-3">
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                                <div class="h-11 w-full bg-gray-100 rounded"></div>
+                            </div>
+                        </div>
+                    } @else if(lpo) {
+                        <div class="flex flex-col md:flex-row md:mb-5 gap-3">
+                            <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                            </app-form-field>
+                            <app-form-field label="Linked LPO Number" [control]="f['linkedLpoNo']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                            </app-form-field>
+                            <app-form-field *ngIf="!isJobLess" label="Job ID" [control]="f['jobId']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                            </app-form-field>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row md:mb-5 gap-3">
+                            <app-form-field label="Supplier Invoice Date" [control]="f['supplierInvoiceDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
+                            </app-form-field>
+
+                            <div class="mb-1 w-full">
+                                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierInvoiceNo">
+                                    Supplier Invoice No.
+                                </label>
+                                <div class="flex items-stretch gap-2">
+                                    <input id="supplierInvoiceNo" formControlName="supplierInvoiceNo"
+                                        [class.border-red-500]="f['supplierInvoiceNo'].invalid && isSubmitting()"
+                                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                                        type="text"/>
+                                    <button type="button"
+                                        (click)="openInvoiceUpload()"
+                                        class="cursor-pointer flex justify-center items-center px-3 rounded border border-violet-500 hover:border-violet-600 text-violet-500 hover:text-violet-600 shrink-0"
+                                        [matTooltip]="invoiceFiles.length ? invoiceFiles.length + ' file(s) selected' : 'Upload Supplier Invoice'">
+                                        <ng-icon name="heroDocumentText" class="text-xl"></ng-icon>
+                                    </button>
+                                </div>
+                                <span *ngIf="invoiceFiles.length" class="text-xs text-gray-500">
+                                    {{ invoiceFiles.length }} file(s) attached
+                                </span>
+                            </div>
+
+                            <div class="mb-1 w-full">
+                                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierDeliveryNoteNo">
+                                    Supplier Delivery Note No.
+                                </label>
+                                <div class="flex items-stretch gap-2">
+                                    <input id="supplierDeliveryNoteNo" formControlName="supplierDeliveryNoteNo"
+                                        [class.border-red-500]="f['supplierDeliveryNoteNo'].invalid && isSubmitting()"
+                                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                                        type="text"/>
+                                    <button type="button"
+                                        (click)="openDeliveryNoteUpload()"
+                                        class="cursor-pointer flex justify-center items-center px-3 rounded border border-orange-500 hover:border-orange-600 text-orange-500 hover:text-orange-600 shrink-0"
+                                        [matTooltip]="deliveryNoteFiles.length ? deliveryNoteFiles.length + ' file(s) selected' : 'Upload Supplier DN'">
+                                        <ng-icon name="heroDocumentArrowUp" class="text-xl"></ng-icon>
+                                    </button>
+                                </div>
+                                <span *ngIf="deliveryNoteFiles.length" class="text-xs text-gray-500">
+                                    {{ deliveryNoteFiles.length }} file(s) attached
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row gap-3">
+                            <app-select-dropdown
+                                label="Received By"
+                                [options]="employees"
+                                optionLabel="name"
+                                optionValue="_id"
+                                formControlName="receivedBy"
+                                placeholder="Select employee"
+                                [isSubmitted]="isSubmitting()"
+                                class="w-full">
+                            </app-select-dropdown>
+                            <app-select-dropdown
+                                label="Location / Warehouse"
+                                [options]="warehouses"
+                                optionLabel="wareHouseName"
+                                optionValue="_id"
+                                formControlName="warehouse"
+                                placeholder="Select warehouse"
+                                [isSubmitted]="isSubmitting()"
+                                footerLabel="+ Add warehouse"
+                                (footerAction)="onAddWarehouse()"
+                                class="w-full">
+                            </app-select-dropdown>
+                        </div>
                     }
-                    <app-form-field label="GRN Number" [control]="f['grnNo']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
-                    </app-form-field>
-                    <app-form-field label="GRN Date" [control]="f['grnDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
-                    </app-form-field>
                 </div>
 
-                <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                    <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
-                    </app-form-field>
-                    <app-form-field label="Supplier Invoice Date" [control]="f['supplierInvoiceDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
-                    </app-form-field>
-                    <div class="mb-1 w-full">
-                        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierInvoiceNo">
-                            Supplier Invoice No.
-                        </label>
-                        <div class="flex items-stretch gap-2">
-                            <input id="supplierInvoiceNo" formControlName="supplierInvoiceNo"
-                                [class.border-red-500]="f['supplierInvoiceNo'].invalid && isSubmitting()"
-                                class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                type="text"/>
-                            <button type="button"
-                                (click)="openInvoiceUpload()"
-                                class="cursor-pointer flex justify-center items-center px-3 rounded-full border border-violet-500 hover:border-violet-600 text-violet-500 hover:text-violet-600 shrink-0"
-                                [matTooltip]="invoiceFiles.length ? invoiceFiles.length + ' file(s) selected' : 'Upload Supplier Invoice'">
-                                <ng-icon name="heroDocumentText" class="text-xl"></ng-icon>
-                            </button>
-                        </div>
+                @if(isLoading()) {
+                    <div class="animate-pulse">
+                        <div class="h-4 w-28 bg-gray-100 rounded mb-3"></div>
+                        <div class="h-56 bg-gray-100 rounded"></div>
                     </div>
-                </div>
-
-                <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                    <app-form-field label="Linked LPO Number" [control]="f['linkedLpoNo']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
-                    </app-form-field>
-                    <app-form-field *ngIf="!isJobLess" label="Job ID" [control]="f['jobId']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
-                    </app-form-field>
-                    <div class="mb-1 w-full">
-                        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierDeliveryNoteNo">
-                            Supplier Delivery Note No.
-                        </label>
-                        <div class="flex items-stretch gap-2">
-                            <input id="supplierDeliveryNoteNo" formControlName="supplierDeliveryNoteNo"
-                                [class.border-red-500]="f['supplierDeliveryNoteNo'].invalid && isSubmitting()"
-                                class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                type="text"/>
-                            <button type="button"
-                                (click)="openDeliveryNoteUpload()"
-                                class="cursor-pointer flex justify-center items-center px-3 rounded-full border border-orange-500 hover:border-orange-600 text-orange-500 hover:text-orange-600 shrink-0"
-                                [matTooltip]="deliveryNoteFiles.length ? deliveryNoteFiles.length + ' file(s) selected' : 'Upload Supplier DN'">
-                                <ng-icon name="heroDocumentArrowUp" class="text-xl"></ng-icon>
-                            </button>
-                        </div>
+                } @else if(!lpo) {
+                    <div class="border border-dashed border-gray-300 rounded-lg py-16 flex flex-col items-center justify-center text-center">
+                        <ng-icon name="heroDocumentText" class="text-3xl text-gray-300"></ng-icon>
+                        <p class="mt-3 text-sm font-medium text-gray-600">No LPO selected</p>
+                        <p class="mt-1 text-xs text-gray-400">
+                            Choose an LPO number above to load its supplier, job and item details.
+                        </p>
                     </div>
-                </div>
+                } @else {
+                    <div class="flex justify-between items-center gap-3 mb-3">
+                        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold">
+                            Items <span class="text-gray-400 font-normal">({{ items.controls.length }})</span>
+                        </label>
+                        <span *ngIf="isFormDisabled()" class="text-xs font-medium text-red-600">
+                            Fully received - no new GRN can be created
+                        </span>
+                    </div>
 
-                <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                    <app-select-dropdown
-                        label="Received By"
-                        [options]="employees"
-                        optionLabel="name"
-                        optionValue="_id"
-                        formControlName="receivedBy"
-                        placeholder="Select employee"
-                        [isSubmitted]="isSubmitting()"
-                        class="w-full">
-                    </app-select-dropdown>
-                    <app-select-dropdown
-                        label="Location / Warehouse"
-                        [options]="warehouses"
-                        optionLabel="wareHouseName"
-                        optionValue="_id"
-                        formControlName="warehouse"
-                        placeholder="Select warehouse"
-                        [isSubmitted]="isSubmitting()"
-                        footerLabel="+ Add warehouse"
-                        (footerAction)="onAddWarehouse()"
-                        class="w-full">
-                    </app-select-dropdown>
-                </div>
-
-                <div class="mb-5">
-                    <table class="w-full text-sm text-left border">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-2 border text-center">SL.NO</th>
-                                <th class="px-4 py-2 border text-center">Part No.</th>
-                                <th class="px-4 py-2 border text-center">Item Description</th>
-                                <th class="px-4 py-2 border text-center">UOM</th>
-                                <th class="px-4 py-2 border text-center">Ordered Qty</th>
-                                <th class="px-4 py-2 border text-center">Balance Qty to be Received</th>
-                                <th class="px-4 py-2 border text-center">Received Qty</th>
-                                <th class="px-4 py-2 border text-center">Accepted Qty</th>
-                                <th class="px-4 py-2 border text-center">Rejected Qty</th>
-                                <th class="px-4 py-2 border text-center">Remarks</th>
-                                <th class="px-4 py-2 border text-center">Date</th>
-                            </tr>
-                        </thead>
-                        <tbody formArrayName="items">
-                            <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
-                                <tr class="border-b">
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('slNo')?.value || i + 1 }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('partNo')?.value || '-' }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('itemDescription')?.value || '-' }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('uom')" [isSubmitted]="isSubmitting()" placeholder="Enter UOM" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                        </app-form-field>
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('orderedQty')?.value || 0 }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <span [class.text-red-600]="(item.get('balanceQty')?.value || 0) === 0" [class.font-semibold]="(item.get('balanceQty')?.value || 0) === 0">
-                                            {{ item.get('balanceQty')?.value || 0 }}
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('receivedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                        </app-form-field>
-                                        @if(item.get('receivedQty')?.errors?.['max']) {
-                                            <span class="text-xs text-red-600">Cannot exceed balance</span>
-                                        }
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('acceptedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                        </app-form-field>
-                                        @if(item.get('acceptedQty')?.errors?.['max']) {
-                                            <span class="text-xs text-red-600">Cannot exceed received</span>
-                                        }
-                                        @if(item.get('acceptedQty')?.errors?.['maxBalance']) {
-                                            <span class="text-xs text-red-600">Cannot exceed balance</span>
-                                        }
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('rejectedQty')?.value || 0 }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('remarks')" [isSubmitted]="isSubmitting()" placeholder="Enter remarks" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                        </app-form-field>
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <app-form-field [control]="item.get('date')" [isSubmitted]="isSubmitting()" type="date" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                        </app-form-field>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left border">
+                            <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 border text-center">SL.NO</th>
+                                    <th class="px-4 py-2 border text-center">Part No.</th>
+                                    <th class="px-4 py-2 border text-center">Item Description</th>
+                                    <th class="px-4 py-2 border text-center">UOM</th>
+                                    <th class="px-4 py-2 border text-center">Ordered Qty</th>
+                                    <th class="px-4 py-2 border text-center">Balance Qty to be Received</th>
+                                    <th class="px-4 py-2 border text-center">Received Qty</th>
+                                    <th class="px-4 py-2 border text-center">Accepted Qty</th>
+                                    <th class="px-4 py-2 border text-center">Rejected Qty</th>
+                                    <th class="px-4 py-2 border text-center">Rejection Reason</th>
+                                    <th class="px-4 py-2 border text-center">Remarks</th>
+                                    <th class="px-4 py-2 border text-center">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody formArrayName="items">
+                                <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
+                                    <tr class="border-b hover:bg-gray-50"
+                                        [class.bg-gray-50]="(item.get('balanceQty')?.value || 0) === 0"
+                                        [class.text-gray-400]="(item.get('balanceQty')?.value || 0) === 0">
+                                        <td class="px-4 py-2 border text-center">
+                                            {{ item.get('slNo')?.value || i + 1 }}
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            {{ item.get('partNo')?.value || '-' }}
+                                        </td>
+                                        <td class="px-4 py-2 border">
+                                            {{ item.get('itemDescription')?.value || '-' }}
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            <app-form-field [control]="item.get('uom')" [isSubmitted]="isSubmitting()" placeholder="Enter UOM" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            </app-form-field>
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            {{ item.get('orderedQty')?.value || 0 }}
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            <span [class.text-red-600]="(item.get('balanceQty')?.value || 0) === 0" [class.font-semibold]="(item.get('balanceQty')?.value || 0) === 0">
+                                                {{ item.get('balanceQty')?.value || 0 }}
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            <app-form-field [control]="item.get('receivedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            </app-form-field>
+                                            @if(item.get('receivedQty')?.errors?.['max']) {
+                                                <span class="text-xs text-red-600">Cannot exceed balance</span>
+                                            }
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            <app-form-field [control]="item.get('acceptedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            </app-form-field>
+                                            @if(item.get('acceptedQty')?.errors?.['max']) {
+                                                <span class="text-xs text-red-600">Cannot exceed received</span>
+                                            }
+                                            @if(item.get('acceptedQty')?.errors?.['maxBalance']) {
+                                                <span class="text-xs text-red-600">Cannot exceed balance</span>
+                                            }
+                                        </td>
+                                        <td class="px-4 py-2 border text-center"
+                                            [class.text-red-600]="(item.get('rejectedQty')?.value || 0) > 0"
+                                            [class.font-medium]="(item.get('rejectedQty')?.value || 0) > 0">
+                                            {{ item.get('rejectedQty')?.value || 0 }}
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            @if((item.get('rejectedQty')?.value || 0) > 0) {
+                                                <app-form-field [control]="item.get('rejectionReason')" [isSubmitted]="isSubmitting()" placeholder="Enter rejection reason" class="w-full" [readonly]="isFormDisabled()">
+                                                </app-form-field>
+                                                @if(item.get('rejectionReason')?.errors?.['required']) {
+                                                    <span class="text-xs text-red-600">Required</span>
+                                                }
+                                            } @else {
+                                                <span>-</span>
+                                            }
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            <app-form-field [control]="item.get('remarks')" [isSubmitted]="isSubmitting()" placeholder="Enter remarks" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            </app-form-field>
+                                        </td>
+                                        <td class="px-4 py-2 border text-center">
+                                            <app-form-field [control]="item.get('date')" [isSubmitted]="isSubmitting()" type="date" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            </app-form-field>
+                                        </td>
+                                    </tr>
+                                </ng-container>
+                                <tr *ngIf="!items.controls.length">
+                                    <td colspan="12" class="px-4 py-6 border text-center text-sm text-gray-500">
+                                        No items on this LPO
                                     </td>
                                 </tr>
-                            </ng-container>
-                        </tbody>
-                    </table>
-                </div>
+                            </tbody>
+                            <tfoot *ngIf="items.controls.length">
+                                <tr class="bg-gray-50 font-semibold text-xs uppercase text-gray-700">
+                                    <td class="px-4 py-2 border" colspan="4">Total</td>
+                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('orderedQty') }}</td>
+                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('balanceQty') }}</td>
+                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('receivedQty') }}</td>
+                                    <td class="px-4 py-2 border text-center">{{ getItemsTotal('acceptedQty') }}</td>
+                                    <td class="px-4 py-2 border text-center" [class.text-red-600]="getItemsTotal('rejectedQty') > 0">
+                                        {{ getItemsTotal('rejectedQty') }}
+                                    </td>
+                                    <td class="px-4 py-2 border"></td>
+                                    <td class="px-4 py-2 border"></td>
+                                    <td class="px-4 py-2 border"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
             }
         </div>
         <div class="w-full flex md:justify-end mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
                 <app-btn theme="cancel" type="button" (buttonClick)="onDiscard()">Discard</app-btn>
-                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled() || !lpo" (buttonClick)="onSave()">Save & Exit</app-btn>
+                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled() || !lpo" (buttonClick)="onSave()">Save &amp; Exit</app-btn>
             </div>
         </div>
     </form>

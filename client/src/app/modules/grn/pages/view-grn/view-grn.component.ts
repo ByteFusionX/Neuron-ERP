@@ -4,17 +4,18 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
+import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
+import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 
 @Component({
   selector: 'app-view-grn',
   standalone: true,
   imports: [
     CommonModule,
-    ButtonComponent,
-    IconsModule
+    IconsModule,
+    ButtonComponent
   ],
   templateUrl: './view-grn.component.html',
   styleUrl: './view-grn.component.css'
@@ -33,16 +34,19 @@ export class ViewGrnComponent implements OnInit {
   selectedItems = new Set<number>();
   isGenerating = signal<boolean>(false);
 
+  headerSubtitle = '';
+  detailFields: { label: string; value: string }[] = [];
+
+  /** Where "Back" should land, when the caller passed one (e.g. the GRN list). */
+  private returnUrl = '';
+
   ngOnInit(): void {
     this.grnId = <string>this.route.snapshot.paramMap.get('id');
+    this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '';
+
     if (!this.grnId) {
       this.toastr.error('Invalid GRN ID');
-      const purchaseIdFromRoute = this.route.snapshot.queryParams['purchaseId'] || this.route.snapshot.paramMap.get('purchaseId');
-      if (purchaseIdFromRoute) {
-        this.router.navigate(['/purchase/initiate-lpo', purchaseIdFromRoute]);
-      } else {
-        this.router.navigate(['/purchase/approves']);
-      }
+      this.navigateAway();
       return;
     }
     this.loadGRN();
@@ -55,44 +59,95 @@ export class ViewGrnComponent implements OnInit {
         if (response.success && response.data) {
           this.grn = response.data;
           this.purchaseId = this.grn.purchaseOrderId?._id || this.grn.purchaseOrderId || '';
+          this.buildDetails();
           this.isLoading.set(false);
         } else {
           this.toastr.error('GRN not found');
           this.isLoading.set(false);
-          const purchaseIdFromRoute = this.route.snapshot.queryParams['purchaseId'] || this.route.snapshot.paramMap.get('purchaseId');
-          const purchaseIdFromGrn = response.data?.purchaseOrderId?._id || response.data?.purchaseOrderId || '';
-          const finalPurchaseId = this.purchaseId || purchaseIdFromRoute || purchaseIdFromGrn;
-          if (finalPurchaseId) {
-            this.router.navigate(['/purchase/initiate-lpo', finalPurchaseId]);
-          } else {
-            this.router.navigate(['/purchase/approves']);
-          }
+          this.purchaseId = this.purchaseId || response.data?.purchaseOrderId?._id || response.data?.purchaseOrderId || '';
+          this.navigateAway();
         }
       },
       error: (error) => {
         this.toastr.error('Failed to load GRN details');
         console.error('Error loading GRN:', error);
         this.isLoading.set(false);
-        const purchaseIdFromRoute = this.route.snapshot.queryParams['purchaseId'] || this.route.snapshot.paramMap.get('purchaseId');
-        const purchaseIdFromGrn = this.grn?.purchaseOrderId?._id || this.grn?.purchaseOrderId || '';
-        const purchaseIdFromError = error?.error?.data?.purchaseOrderId?._id || error?.error?.data?.purchaseOrderId || '';
-        const finalPurchaseId = this.purchaseId || purchaseIdFromRoute || purchaseIdFromGrn || purchaseIdFromError;
-        if (finalPurchaseId) {
-          this.router.navigate(['/purchase/initiate-lpo', finalPurchaseId]);
-        } else {
-          this.router.navigate(['/purchase/approves']);
-        }
+        this.purchaseId = this.purchaseId
+          || this.grn?.purchaseOrderId?._id || this.grn?.purchaseOrderId
+          || error?.error?.data?.purchaseOrderId?._id || error?.error?.data?.purchaseOrderId
+          || '';
+        this.navigateAway();
       }
     });
   }
 
+  private buildDetails(): void {
+    const supplier = this.grn?.purchaseOrderId?.supplierId?.supplierName;
+    const grnDate = this.formatDate(this.grn?.grnDate);
+    const lpoNo = this.grn?.purchaseOrderId?.poNo;
 
-  onBack(): void {
-    if (this.purchaseId) {
+    this.headerSubtitle = [supplier, lpoNo ? 'LPO ' + lpoNo : '', grnDate]
+      .filter(Boolean)
+      .join('  •  ');
+
+    this.detailFields = [
+      { label: 'GRN Date', value: grnDate },
+      { label: 'Supplier Name', value: supplier || 'N/A' },
+      { label: 'Linked LPO Number', value: lpoNo || 'N/A' },
+      { label: 'Job ID', value: this.grn?.jobId?.jobId || this.grn?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
+      { label: 'Location / Warehouse', value: this.grn?.warehouse?.wareHouseName || 'N/A' },
+      { label: 'Received By', value: this.formatEmployeeName(this.grn?.receivedBy) || 'N/A' },
+      { label: 'Supplier Invoice No.', value: this.grn?.supplierInvoiceNo || 'N/A' },
+      { label: 'Supplier Invoice Date', value: this.formatDate(this.grn?.supplierInvoiceDate) },
+      { label: 'Supplier Delivery Note No.', value: this.grn?.supplierDeliveryNoteNo || 'N/A' },
+      { label: 'Created By', value: this.formatEmployeeName(this.grn?.createdBy) || 'N/A' },
+    ];
+  }
+
+  private navigateAway(): void {
+    if (this.returnUrl) {
+      this.router.navigateByUrl(this.returnUrl);
+    } else if (this.purchaseId) {
       this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
     } else {
       this.router.navigate(['/purchase/approves']);
     }
+  }
+
+  onBack(): void {
+    this.navigateAway();
+  }
+
+  viewInvoices(): void {
+    if (!this.grn?.supplierInvoices?.length) {
+      this.toastr.info('No invoices uploaded for this GRN');
+      return;
+    }
+
+    const modalData: FileUploadModalData = {
+      title: `Supplier Invoices - ${this.grn.grnNo}`,
+      existingFiles: this.grn.supplierInvoices,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
+  }
+
+  viewDeliveryNotes(): void {
+    if (!this.grn?.supplierDeliveryNotes?.length) {
+      this.toastr.info('No delivery notes uploaded for this GRN');
+      return;
+    }
+
+    const modalData: FileUploadModalData = {
+      title: `Supplier Delivery Notes - ${this.grn.grnNo}`,
+      existingFiles: this.grn.supplierDeliveryNotes,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
   }
 
   formatPartNumber(partNo: any): string {
@@ -105,7 +160,7 @@ export class ViewGrnComponent implements OnInit {
   formatDate(date: any): string {
     if (!date) return 'N/A';
     const d = new Date(date);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   formatEmployeeName(employee: any): string {
@@ -117,6 +172,34 @@ export class ViewGrnComponent implements OnInit {
     if (employee.firstName) return employee.firstName;
     if (employee.lastName) return employee.lastName;
     return '';
+  }
+
+  getRejectedQty(item: any): number {
+    if (item?.rejectedQty !== undefined && item?.rejectedQty !== null) {
+      return item.rejectedQty;
+    }
+    return Math.max(0, (item?.receivedQty || 0) - (item?.acceptedQty || 0));
+  }
+
+  private sumItems(selector: (item: any) => number): number {
+    if (!this.grn?.items || !Array.isArray(this.grn.items)) return 0;
+    return this.grn.items.reduce((sum: number, item: any) => sum + (selector(item) || 0), 0);
+  }
+
+  getTotalOrderedQty(): number {
+    return this.sumItems(item => item.orderedQty);
+  }
+
+  getTotalReceivedQty(): number {
+    return this.sumItems(item => item.receivedQty);
+  }
+
+  getTotalAcceptedQty(): number {
+    return this.sumItems(item => item.acceptedQty);
+  }
+
+  getTotalRejectedQty(): number {
+    return this.sumItems(item => this.getRejectedQty(item));
   }
 
   toggleItemSelection(index: number): void {
@@ -131,6 +214,19 @@ export class ViewGrnComponent implements OnInit {
     return this.selectedItems.has(index);
   }
 
+  areAllItemsSelected(): boolean {
+    const count = this.grn?.items?.length || 0;
+    return count > 0 && this.selectedItems.size === count;
+  }
+
+  toggleAllItems(): void {
+    if (this.areAllItemsSelected()) {
+      this.selectedItems.clear();
+      return;
+    }
+    this.selectedItems = new Set((this.grn?.items || []).map((_: any, index: number) => index));
+  }
+
   hasSelectedItems(): boolean {
     return this.selectedItems.size > 0;
   }
@@ -143,7 +239,7 @@ export class ViewGrnComponent implements OnInit {
 
     this.isGenerating.set(true);
     const selectedItemsData = Array.from(this.selectedItems).map(index => this.grn.items[index]);
-    
+
     this.grnService.generateGRNReceiptPDF(this.grn, selectedItemsData).then((pdf) => {
       pdf.getBlob((blob: Blob) => {
         const url = window.URL.createObjectURL(blob);

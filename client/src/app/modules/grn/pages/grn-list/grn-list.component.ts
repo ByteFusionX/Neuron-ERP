@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
@@ -9,7 +9,6 @@ import { TableComponent } from 'src/app/shared/components/table/table.component'
 import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ViewGrnDetailsModalComponent, ViewGrnDetailsModalData } from '../view-grn-details-modal/view-grn-details-modal.component';
 import { ViewPurchaseRequestDetailsModalComponent, ViewPurchaseRequestDetailsModalData } from '../view-purchase-request-details-modal/view-purchase-request-details-modal.component';
 
 @Component({
@@ -24,6 +23,7 @@ export class GrnListComponent implements OnInit {
   private paginationService = inject(PaginationService);
   private grnService = inject(GrnService);
   private notificationService = inject(ToastrService);
+  private router = inject(Router);
 
   tableData = signal<any[]>([]);
   tableColumns: TableColumn[] = [];
@@ -97,26 +97,13 @@ export class GrnListComponent implements OnInit {
         key: 'createdBy.firstName',
         label: 'Created By',
         type: 'text',
-      },
-      {
-        key: 'actions',
-        label: 'View',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: [
-          {
-            icon: 'heroEye',
-            tooltip: 'GRN Details',
-            action: 'viewDetails',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray-300 hover:border-gray-500 text-sm rounded-full font-medium',
-          },
-        ]
+        cellRenderer: (item: any) => this.formatEmployeeName(item?.createdBy),
       },
     ];
 
     this.defaultColumns = [
       'grnDate', 'grnNo', 'purchaseOrderId.poNo', 'purchaseOrderId.purchaseId.purchaseNo', 'purchaseOrderId.supplierId.supplierName',
-      'jobId.jobId', 'warehouse.wareHouseName', 'acceptedQty', 'createdBy.firstName', 'actions'
+      'jobId.jobId', 'warehouse.wareHouseName', 'acceptedQty', 'createdBy.firstName'
     ];
   }
 
@@ -146,15 +133,15 @@ export class GrnListComponent implements OnInit {
     });
   }
 
-  onRowClick(row: any): void {}
+  formatEmployeeName(employee: any): string {
+    if (!employee) return 'N/A';
+    if (typeof employee === 'string') return employee;
+    const name = [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim();
+    return name || employee.userName || employee.email || 'N/A';
+  }
 
-  onActionClick(event: { action: string; item: any }): void {
-    const { action, item } = event;
-    switch (action) {
-      case 'viewDetails':
-        this.viewDetails(item);
-        break;
-    }
+  onRowClick(row: any): void {
+    this.viewDetails(row);
   }
 
   viewPurchaseRequestDetails(grn: any): void {
@@ -178,11 +165,14 @@ export class GrnListComponent implements OnInit {
   }
 
   viewDetails(grn: any): void {
-    const modalData: ViewGrnDetailsModalData = { grn };
-    this._dialog.open(ViewGrnDetailsModalComponent, {
-      data: modalData,
-      width: '900px',
-      maxHeight: '90vh'
+    const grnId = grn?._id;
+    if (!grnId) {
+      this.notificationService.info('Unable to open this GRN');
+      return;
+    }
+
+    this.router.navigate(['/grn/view-grn', grnId], {
+      queryParams: { returnUrl: this.router.url }
     });
   }
 
