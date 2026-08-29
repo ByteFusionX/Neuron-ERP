@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, Inject, Optional, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -16,7 +16,7 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { AddWarehouseComponent } from '../../../all-products/modals/add-warehouse/add-warehouse.component';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
@@ -48,6 +48,7 @@ export class CreateStockEntryComponent implements OnInit {
   private router = inject(Router);
   isSubmitting = false;
   isLoadingGRN = false;
+  isEditMode = false;
 
   departments: getDepartment[] = [];
   categories: any[] = [];
@@ -76,10 +77,17 @@ export class CreateStockEntryComponent implements OnInit {
     serialNumbers: this.fb.array([])
   });
 
-  constructor() {}
+  constructor(
+    @Optional() public dialogRef: MatDialogRef<CreateStockEntryComponent> | null,
+    @Optional() @Inject(MAT_DIALOG_DATA) public data: any
+  ) {
+    this.isEditMode = !!this.data?.stockEntry;
+  }
 
   ngOnInit(): void {
-    this.loadGRN();
+    if (!this.isEditMode) {
+      this.loadGRN();
+    }
     this.loadDepartments();
     this.loadCategories();
     this.loadWarehouses();
@@ -87,8 +95,41 @@ export class CreateStockEntryComponent implements OnInit {
     this.loadSuppliers();
     this.loadJobIds();
     this.setupTotalCostCalculation();
-    // Add one initial serial number input
-    this.addSerialNumber();
+
+    if (this.isEditMode) {
+      this.patchFormForEdit(this.data.stockEntry);
+    } else {
+      // Add one initial serial number input
+      this.addSerialNumber();
+    }
+  }
+
+  private patchFormForEdit(entry: any): void {
+    const serialNumbers = Array.isArray(entry?.serialNumbers) && entry.serialNumbers.length
+      ? entry.serialNumbers
+      : [''];
+    serialNumbers.forEach((sn: string) => {
+      this.serialNumbersArray.push(this.fb.control(sn || ''));
+    });
+
+    this.stockEntryForm.patchValue({
+      grn: entry?.grn || '',
+      partNo: entry?.partNo?._id || entry?.partNo || '',
+      dateOfPurchase: entry?.dateOfPurchase ? new Date(entry.dateOfPurchase).toISOString().split('T')[0] : '',
+      jobId: entry?.jobId?._id || entry?.jobId || '',
+      supplierName: entry?.supplierName?._id || entry?.supplierName || '',
+      supplierLpoNo: entry?.supplierLpoNo || '',
+      productDescription: entry?.productDescription || '',
+      productSegment: entry?.productSegment?._id || entry?.productSegment || '',
+      productCategory: entry?.productCategory?._id || entry?.productCategory || '',
+      targetWarehouse: entry?.targetWarehouse?._id || entry?.targetWarehouse || '',
+      quantity: entry?.quantity ?? '',
+      uom: entry?.uom || '',
+      unitCost: entry?.unitCost ?? '',
+      totalCost: entry?.totalCost ?? '',
+      sellingPrice: entry?.sellingPrice ?? '',
+      remarks: entry?.remarks || ''
+    });
   }
 
   loadGRN(): void {
@@ -164,6 +205,17 @@ export class CreateStockEntryComponent implements OnInit {
       next: (response: any) => {
         const suppliers = response.data || response || [];
         this.suppliers = suppliers;
+
+        // The supplier list only returns approved/unblocked suppliers, so an
+        // entry's existing supplier may be missing from it (e.g. blocked since).
+        // Ensure it's still present so the dropdown can resolve its name.
+        const currentSupplier = this.isEditMode ? this.data?.stockEntry?.supplierName : null;
+        if (currentSupplier && typeof currentSupplier === 'object' && currentSupplier._id) {
+          const exists = this.suppliers.some((s: any) => s._id === currentSupplier._id);
+          if (!exists) {
+            this.suppliers = [...this.suppliers, currentSupplier];
+          }
+        }
       },
       error: () => {
         this.toastr.error('Failed to load suppliers');
@@ -266,6 +318,21 @@ export class CreateStockEntryComponent implements OnInit {
     };
 
     this.isSubmitting = true;
+
+    if (this.isEditMode) {
+      this.stockEntryService.updateStockEntry(this.data.stockEntry._id, payload).subscribe({
+        next: (stockEntry) => {
+          this.toastr.success('Stock entry updated successfully');
+          this.dialogRef?.close(stockEntry);
+        },
+        error: (error) => {
+          this.toastr.error(error.error?.message || 'Failed to update stock entry');
+          this.isSubmitting = false;
+        }
+      });
+      return;
+    }
+
     this.stockEntryService.createStockEntry(payload).subscribe({
       next: (stockEntry) => {
         this.toastr.success('Stock entry created successfully');
@@ -279,6 +346,10 @@ export class CreateStockEntryComponent implements OnInit {
   }
 
   onCancel(): void {
+    if (this.isEditMode) {
+      this.dialogRef?.close();
+      return;
+    }
     this.router.navigate(['/inventory/stock-entries']);
   }
 }

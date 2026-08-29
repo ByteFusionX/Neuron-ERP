@@ -1,10 +1,10 @@
 <app-modal-layout
-  title="New Product"
+  [title]="isEditMode ? 'Edit Product' : 'New Product'"
   [onClose]="onCancel.bind(this)"
   [footerButtons]="[
-    { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Close', onClick: onCancel.bind(this), theme: 'cancel' },
     {
-      label: 'Save & Exit',
+      label: isEditMode ? 'Update' : 'Save & Exit',
       onClick: onSubmit.bind(this),
       theme: 'primary',
       loading: isSubmitting,
@@ -17,6 +17,7 @@
     <div class="space-y-3">
       <div class="grid grid-cols-2 gap-5">
         <app-form-field
+          *ngIf="!isEditMode"
           label="Date"
           [control]="productForm.get('createdDate')"
           [isSubmitted]="isSubmitting"
@@ -25,9 +26,18 @@
         </app-form-field>
 
         <app-form-field
+          *ngIf="isEditMode"
+          label="Created By"
+          [control]="createdByDisplay"
+          [readonly]="true"
+        >
+        </app-form-field>
+
+        <app-form-field
           label="Item Code"
           [control]="productForm.get('itemCode')"
           [isSubmitted]="isSubmitting"
+          [readonly]="isEditMode"
           placeholder="Manual Entry"
         >
         </app-form-field>

@@ -1,11 +1,11 @@
-import { Component, OnInit, inject, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { TableColumn, TableFilter, InlineEditConfig } from 'src/app/shared/components/table/table.model';
+import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { StockEntryService, StockEntry, StockEntryQueryParams } from 'src/app/core/services/stock-entry/stock-entry.service';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { NgIcon } from '@ng-icons/core';
@@ -19,6 +19,7 @@ import { SearchComponent } from 'src/app/shared/components/search/search.compone
 import { BlockItemComponent } from './modals/block-item/block-item.component';
 import { ViewBlockedItemsComponent } from './modals/view-blocked-items/view-blocked-items.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CreateStockEntryComponent } from './modals/create-stock-entry/create-stock-entry.component';
 
 @Component({
   selector: 'app-stock-entries',
@@ -49,7 +50,7 @@ export class StockEntriesComponent implements OnInit {
 
   tableData = signal<StockEntry[]>([]);
   tableColumns: TableColumn[] = [];
-  defaultColumns: string[] = ['rowNo', 'partNo', 'productDescription', 'targetWarehouse', 'quantity', 'uom', 'unitCost', 'totalCost', 'supplierName', 'dateOfPurchase', 'stockInDays', 'jobId', 'productCategory', 'productSegment', 'sellingPrice', 'blockedQuantities', 'remarks', 'actions'];
+  defaultColumns: string[] = ['itemCode', 'partNo', 'productDescription', 'targetWarehouse', 'quantity', 'uom', 'unitCost', 'totalCost', 'supplierName', 'dateOfPurchase', 'stockInDays', 'jobId', 'productCategory', 'productSegment', 'sellingPrice', 'blockedQuantities', 'remarks', 'actions'];
   isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
@@ -58,13 +59,7 @@ export class StockEntriesComponent implements OnInit {
   warehouseOptions = signal<{ label: string; value: string }[]>([]);
   productOptions = signal<{ label: string; value: string }[]>([]);
   supplierOptions = signal<{ label: string; value: string }[]>([]);
-  inlineEditConfig: InlineEditConfig | null = null;
 
-  private categorySelectOptions: { label: string; value: string }[] = [];
-  private segmentSelectOptions: { label: string; value: string }[] = [];
-  private warehouseSelectOptions: { label: string; value: string }[] = [];
-  private productSelectOptions: { label: string; value: string }[] = [];
-  private supplierSelectOptions: { label: string; value: string }[] = [];
   private jobSelectOptions: { label: string; value: string }[] = [];
 
   private appliedFilters: Record<string, any> = {};
@@ -72,7 +67,6 @@ export class StockEntriesComponent implements OnInit {
 
   ngOnInit(): void {
     this.setupTableColumns();
-    this.refreshInlineEditConfig();
     this.loadFilterOptions();
     this.loadStockEntries();
   }
@@ -92,10 +86,8 @@ export class StockEntriesComponent implements OnInit {
           label: category.categoryName,
           value: category._id as string
         }));
-        this.categorySelectOptions = options;
         this.categoryOptions.set(options);
         this.updateColumnFilterOptions('productCategory', options);
-        this.refreshInlineEditConfig();
       },
       error: () => {
         this.toastr.error('Failed to load product categories');
@@ -108,10 +100,8 @@ export class StockEntriesComponent implements OnInit {
           label: department.departmentName,
           value: department._id as string
         }));
-        this.segmentSelectOptions = options;
         this.segmentOptions.set(options);
         this.updateColumnFilterOptions('productSegment', options);
-        this.refreshInlineEditConfig();
       },
       error: () => {
         this.toastr.error('Failed to load product segments');
@@ -124,10 +114,8 @@ export class StockEntriesComponent implements OnInit {
           label: wh.wareHouseName,
           value: wh._id as string
         }));
-        this.warehouseSelectOptions = options;
         this.warehouseOptions.set(options);
         this.updateColumnFilterOptions('targetWarehouse', options);
-        this.refreshInlineEditConfig();
       },
       error: () => {
         this.toastr.error('Failed to load warehouses');
@@ -141,10 +129,8 @@ export class StockEntriesComponent implements OnInit {
           label: `${product.partNo} - ${product.productDescription}`,
           value: product._id as string
         }));
-        this.productSelectOptions = options;
         this.productOptions.set(options);
         this.updateColumnFilterOptions('partNo', options);
-        this.refreshInlineEditConfig();
       },
       error: () => {
         this.toastr.error('Failed to load products');
@@ -158,10 +144,8 @@ export class StockEntriesComponent implements OnInit {
           label: supplier.supplierName,
           value: supplier._id as string
         }));
-        this.supplierSelectOptions = options;
         this.supplierOptions.set(options);
         this.updateColumnFilterOptions('supplierName', options);
-        this.refreshInlineEditConfig();
       },
       error: () => {
         this.toastr.error('Failed to load suppliers');
@@ -179,7 +163,6 @@ export class StockEntriesComponent implements OnInit {
         }));
         this.jobSelectOptions = options;
         this.updateColumnFilterOptions('jobId', options);
-        this.refreshInlineEditConfig();
       },
       error: () => {
         this.toastr.error('Failed to load job ids');
@@ -197,12 +180,12 @@ export class StockEntriesComponent implements OnInit {
   setupTableColumns(): void {
     this.tableColumns = [
       {
-        key: 'rowNo',
-        label: 'No',
+        key: 'itemCode',
+        label: 'Item Code',
         type: 'text',
         sortable: false,
         filterable: false,
-        cellClass: 'w-16'
+        cellRenderer: (item: any) => item?.partNo?.itemCode || ''
       },
       {
         key: 'partNo',
@@ -222,11 +205,12 @@ export class StockEntriesComponent implements OnInit {
         sortable: true,
         filterable: true,
         filterType: 'text',
-        filterPlaceholder: 'Search description...'
+        filterPlaceholder: 'Search description...',
+        truncateText: true
       },
       {
         key: 'targetWarehouse',
-        label: 'Target Warehouse',
+        label: 'Warehouse',
         type: 'text',
         sortable: true,
         filterable: true,
@@ -237,7 +221,7 @@ export class StockEntriesComponent implements OnInit {
       },
       {
         key: 'quantity',
-        label: 'QTY',
+        label: 'Quantity',
         type: 'number',
         sortable: true,
         filterable: true,
@@ -309,7 +293,7 @@ export class StockEntriesComponent implements OnInit {
       },
       {
         key: 'productCategory',
-        label: 'Pro. Category',
+        label: 'Category',
         type: 'text',
         sortable: true,
         filterable: true,
@@ -320,7 +304,7 @@ export class StockEntriesComponent implements OnInit {
       },
       {
         key: 'productSegment',
-        label: 'P. Segment',
+        label: 'Segment',
         type: 'text',
         sortable: true,
         filterable: true,
@@ -379,39 +363,23 @@ export class StockEntriesComponent implements OnInit {
         headerClass: '!text-center',
         actions: [
           {
-            icon: 'heroCheck',
-            tooltip: 'Save',
-            action: 'saveItem',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-green-200 hover:bg-green-50 flex justify-center items-center text-green-600',
-            condition: (item: any) => this.tableComponent?.isRowEditing(item) ?? false
-          },
-          {
-            icon: 'heroXMark',
-            tooltip: 'Cancel',
-            action: 'cancelEditItem',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-gray-200 hover:bg-gray-50 flex justify-center items-center text-gray-600',
-            condition: (item: any) => this.tableComponent?.isRowEditing(item) ?? false
-          },
-          {
             icon: 'heroPencilSquare',
             tooltip: 'Edit Stock',
             action: 'editItem',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600',
-            condition: (item: any) => !(this.tableComponent?.isRowEditing(item) ?? false)
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600'
           },
           {
             icon: 'heroTrash',
             tooltip: 'Delete Stock',
             action: 'deleteItem',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-red-200 hover:bg-red-50 flex justify-center items-center text-red-600',
-            condition: (item: any) => !(this.tableComponent?.isRowEditing(item) ?? false)
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-red-200 hover:bg-red-50 flex justify-center items-center text-red-600'
           },
           {
             icon: 'heroLockClosed',
             tooltip: 'Block Stock',
             action: 'blockItem',
             buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-300 hover:border-orange-500 text-orange-600 text-sm rounded-full font-medium',
-            condition: (item: any) => (item?.availableQuantity ?? item?.quantity ?? 0) > 0 && !(this.tableComponent?.isRowEditing(item) ?? false)
+            condition: (item: any) => (item?.availableQuantity ?? item?.quantity ?? 0) > 0
           }
         ]
       }
@@ -471,28 +439,31 @@ export class StockEntriesComponent implements OnInit {
   onRowClick(row: StockEntry): void {
   }
 
-  @ViewChild(TableComponent) tableComponent!: TableComponent;
-
   onActionClick(event: { action: string, item: any, event: Event }): void {
     if (event.action === 'blockItem') {
       this.openBlockItemModal(event.item);
     } else if (event.action === 'viewBlocked') {
       this.viewBlockedItems(event.item);
     } else if (event.action === 'editItem') {
-      if (this.tableComponent) {
-        this.tableComponent.startInlineEdit(event.item, event.event);
-      }
-    } else if (event.action === 'saveItem') {
-      if (this.tableComponent) {
-        this.tableComponent.saveInlineEdit(event.event);
-      }
-    } else if (event.action === 'cancelEditItem') {
-      if (this.tableComponent) {
-        this.tableComponent.cancelInlineEdit(event.event);
-      }
+      this.onEditStockEntry(event.item);
     } else if (event.action === 'deleteItem') {
       this.onInlineDelete(event.item);
     }
+  }
+
+  onEditStockEntry(stockEntry: StockEntry): void {
+    const dialogRef = this.dialog.open(CreateStockEntryComponent, {
+      disableClose: true,
+      maxHeight: '90vh',
+      width: '70vw',
+      data: { stockEntry }
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.loadStockEntries();
+      }
+    });
   }
 
   viewBlockedItems(stockEntry: StockEntry): void {
@@ -577,27 +548,6 @@ export class StockEntriesComponent implements OnInit {
     this.loadStockEntries({ page: 1 });
   }
 
-  onInlineEditSave(event: { rowId: string; updated: any }): void {
-    if (!event.rowId) return;
-
-    const payload = this.buildUpdatePayload(event.updated);
-    if (payload.quantity !== undefined && payload.unitCost !== undefined) {
-      const qty = Number(payload.quantity) || 0;
-      const cost = Number(payload.unitCost) || 0;
-      payload.totalCost = Number((qty * cost).toFixed(2));
-    }
-
-    this.stockEntryService.updateStockEntry(event.rowId, payload).subscribe({
-      next: () => {
-        this.toastr.success('Stock entry updated');
-        this.loadStockEntries();
-      },
-      error: (error) => {
-        this.toastr.error(error.error?.message || 'Failed to update stock entry');
-      }
-    });
-  }
-
   onInlineDelete(item: StockEntry): void {
     if (!item?._id) return;
 
@@ -625,61 +575,11 @@ export class StockEntriesComponent implements OnInit {
     });
   }
 
-  private buildUpdatePayload(updated: any): any {
-    const payload: any = {};
-    const referenceFields = ['partNo', 'supplierName', 'productSegment', 'productCategory', 'targetWarehouse', 'jobId'];
-
-    referenceFields.forEach((field) => {
-      if (updated[field] !== undefined) {
-        const value = updated[field];
-        payload[field] = typeof value === 'object' ? value?._id || value?.value || value : value;
-      }
-    });
-
-    const directFields = ['productDescription', 'quantity', 'uom', 'unitCost', 'totalCost', 'sellingPrice', 'remarks'];
-    directFields.forEach((field) => {
-      if (updated[field] !== undefined) {
-        payload[field] = updated[field];
-      }
-    });
-
-    if (updated.dateOfPurchase !== undefined) {
-      payload.dateOfPurchase = updated.dateOfPurchase;
-    }
-
-    return payload;
-  }
-
   private calculateStockInDays(date: Date | string): number {
     if (!date) return 0;
     const purchaseDate = new Date(date);
     const now = new Date();
     const diff = now.getTime() - purchaseDate.getTime();
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
-  }
-
-  private refreshInlineEditConfig(): void {
-    this.inlineEditConfig = {
-      enabled: true,
-      allowDelete: true,
-      showActionsColumn: false,
-      rowIdentityKey: '_id',
-      columns: {
-        partNo: { type: 'select', options: this.productSelectOptions },
-        productDescription: { type: 'textarea', placeholder: 'Update description' },
-        targetWarehouse: { type: 'select', options: this.warehouseSelectOptions },
-        quantity: { type: 'number', min: 1, step: 1 },
-        uom: { type: 'text', placeholder: 'Enter UOM' },
-        unitCost: { type: 'number', min: 0, step: 0.01 },
-        totalCost: { type: 'number', min: 0, step: 0.01, disabled: true },
-        supplierName: { type: 'select', options: this.supplierSelectOptions },
-        dateOfPurchase: { type: 'date' },
-        jobId: { type: 'select', options: this.jobSelectOptions },
-        productCategory: { type: 'select', options: this.categorySelectOptions },
-        productSegment: { type: 'select', options: this.segmentSelectOptions },
-        sellingPrice: { type: 'number', min: 0, step: 0.01 },
-        remarks: { type: 'textarea', placeholder: 'Add remarks' }
-      }
-    };
   }
 }

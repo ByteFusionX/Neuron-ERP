@@ -1,5 +1,5 @@
 import { Component, Inject, inject, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -41,6 +41,8 @@ export class CreateProductComponent implements OnInit {
   private dialog = inject(MatDialog);
   private router = inject(Router);
   isSubmitting = false;
+  isEditMode = false;
+  createdByDisplay = new FormControl({ value: '', disabled: true });
 
   departments: getDepartment[] = [];
   categories: any[] = [];
@@ -59,12 +61,37 @@ export class CreateProductComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<CreateProductComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any
-  ) {}
+  ) {
+    this.isEditMode = !!this.data?.product;
+  }
 
   ngOnInit(): void {
     this.loadDepartments();
     this.loadCategories();
     this.loadWarehouses();
+
+    if (this.isEditMode) {
+      this.patchFormForEdit(this.data.product);
+    }
+  }
+
+  private patchFormForEdit(product: any): void {
+    const createdByName = product?.createdBy
+      ? `${product.createdBy.firstName || ''} ${product.createdBy.lastName || ''}`.trim()
+      : '';
+    this.createdByDisplay.setValue(createdByName);
+
+    this.productForm.patchValue({
+      partNo: product.partNo || '',
+      itemCode: product.itemCode || '',
+      createdDate: product.createdDate ? new Date(product.createdDate).toISOString().split('T')[0] : '',
+      productDescription: product.productDescription || '',
+      productSegment: product.productSegment?._id || product.productSegment || '',
+      productCategory: product.productCategory?._id || product.productCategory || '',
+      warehouse: product.warehouse?._id || product.warehouse || ''
+    });
+
+    this.productForm.get('itemCode')?.disable();
   }
 
   loadDepartments(): void {
@@ -130,7 +157,23 @@ export class CreateProductComponent implements OnInit {
     }
 
     this.isSubmitting = true;
-    this.productService.createProduct(this.productForm.value).subscribe({
+    const formValue = this.productForm.getRawValue();
+
+    if (this.isEditMode) {
+      this.productService.updateProduct(this.data.product._id, formValue).subscribe({
+        next: (product) => {
+          this.toastr.success('Product updated successfully');
+          this.dialogRef.close(product);
+        },
+        error: (error) => {
+          this.toastr.error(error.error?.message || 'Failed to update product');
+          this.isSubmitting = false;
+        }
+      });
+      return;
+    }
+
+    this.productService.createProduct(formValue).subscribe({
       next: (product) => {
         this.toastr.success('Product created successfully');
         this.dialogRef.close(product);

@@ -1,9 +1,9 @@
 <app-modal-layout
-  title="Stock Entry"
+  [title]="isEditMode ? 'Edit Stock Entry' : 'Stock Entry'"
   [onClose]="onCancel.bind(this)"
   [footerButtons]="[
     { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
-    { label: 'Save & Exit', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+    { label: isEditMode ? 'Update' : 'Save & Exit', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
   ]"
   contentClass="py-6 px-9">
   <form [formGroup]="stockEntryForm" (ngSubmit)="onSubmit()">
@@ -65,14 +65,6 @@
           </app-form-field>
         </div>
 
-        <app-form-field
-          label="Product Description"
-          [control]="stockEntryForm.get('productDescription')"
-          [isSubmitted]="isSubmitting"
-          type="textarea"
-          placeholder="Enter product description (Auto fill)">
-        </app-form-field>
-
         <div class="grid grid-cols-3 gap-4">
           <app-select-dropdown
             label="Product Segment"
@@ -97,7 +89,7 @@
           </app-select-dropdown>
 
           <app-select-dropdown
-            label="Target Warehouse"
+            label="Warehouse"
             [options]="warehouses"
             optionLabel="wareHouseName"
             optionValue="_id"
@@ -136,7 +128,7 @@
           </app-form-field>
         </div>
 
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-2 gap-4">
           <app-form-field
             label="UOM"
             [control]="stockEntryForm.get('uom')"
@@ -151,14 +143,23 @@
             type="number"
             placeholder="Enter selling price">
           </app-form-field>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <app-form-field
+            label="Product Description"
+            [control]="stockEntryForm.get('productDescription')"
+            [isSubmitted]="isSubmitting"
+            type="textarea"
+            placeholder="Enter product description (Auto fill)">
+          </app-form-field>
 
           <app-form-field
             label="Remarks"
             [control]="stockEntryForm.get('remarks')"
             [isSubmitted]="isSubmitting"
             type="textarea"
-            placeholder="Enter remarks (optional)"
-            class="col-span-3 md:col-span-3">
+            placeholder="Enter remarks (optional)">
           </app-form-field>
         </div>
 

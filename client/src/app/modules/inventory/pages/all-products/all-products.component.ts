@@ -39,7 +39,7 @@ export class AllProductsComponent implements OnInit {
 
   tableData = signal<Product[]>([]);
   tableColumns: TableColumn[] = [];
-  defaultColumns: string[] = ['partNo', 'productDescription', 'productCategory', 'productSegment', 'warehouse', 'createdBy'];
+  defaultColumns: string[] = ['itemCode', 'partNo', 'productDescription', 'productCategory', 'productSegment', 'warehouse', 'createdBy', 'actions'];
   isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
@@ -110,6 +110,15 @@ export class AllProductsComponent implements OnInit {
   setupTableColumns(): void {
     this.tableColumns = [
       {
+        key: 'itemCode',
+        label: 'Item Code',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search item code...'
+      },
+      {
         key: 'partNo',
         label: 'Part No',
         type: 'text',
@@ -120,12 +129,13 @@ export class AllProductsComponent implements OnInit {
       },
       {
         key: 'productDescription',
-        label: 'Product Description',
+        label: 'Description',
         type: 'text',
         sortable: true,
         filterable: true,
         filterType: 'text',
-        filterPlaceholder: 'Search description...'
+        filterPlaceholder: 'Search description...',
+        truncateText: true
       },
       {
         key: 'productCategory',
@@ -174,6 +184,20 @@ export class AllProductsComponent implements OnInit {
           }
           return '';
         }
+      },
+      {
+        key: 'actions',
+        label: 'Actions',
+        type: 'action',
+        headerClass: '!text-center',
+        actions: [
+          {
+            icon: 'heroPencilSquare',
+            tooltip: 'Edit Product',
+            action: 'editProduct',
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600'
+          }
+        ]
       }
     ];
   }
@@ -235,6 +259,24 @@ export class AllProductsComponent implements OnInit {
   }
 
   onActionClick(event: { action: string, item: any, event: Event }): void {
+    if (event.action === 'editProduct') {
+      this.onEditProduct(event.item);
+    }
+  }
+
+  onEditProduct(product: Product): void {
+    const dialogRef = this.dialog.open(CreateProductComponent, {
+      disableClose: true,
+      maxHeight: '90vh',
+      width: '50vw',
+      data: { product }
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.loadProducts();
+      }
+    });
   }
 
   onFilterChange(filters: TableFilter[]): void {

@@ -9,12 +9,10 @@
   [tableId]="'stock-entries-table'"
   [title]="'Stock Entries'"
   [enableExport]="true"
-  [inlineEditConfig]="inlineEditConfig"
   (rowClick)="onRowClick($event)"
   (actionClick)="onActionClick($event)"
   (filterChange)="onFilterChange($event)"
   (paginationChange)="onPaginationChange($event)"
-  (inlineEditSave)="onInlineEditSave($event)"
   (inlineDelete)="onInlineDelete($event)">
 
   <ng-template #sideColumn>
