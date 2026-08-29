@@ -38,7 +38,8 @@ const deductInventoryForDn = async (dn: any, userId?: string): Promise<void> => 
             partNo: product._id,
             jobId: dn.jobId,
             quantity: { $gt: 0 },
-            isDeleted: { $ne: true }
+            isDeleted: { $ne: true },
+            isQuarantined: { $ne: true }
         }).sort({ createdDate: 1 });
 
         // Fallback: any stock entry for this product with available quantity
@@ -46,7 +47,8 @@ const deductInventoryForDn = async (dn: any, userId?: string): Promise<void> => 
             stockEntry = await StockEntry.findOne({
                 partNo: product._id,
                 quantity: { $gt: 0 },
-                isDeleted: { $ne: true }
+                isDeleted: { $ne: true },
+                isQuarantined: { $ne: true }
             }).sort({ createdDate: 1 });
         }
 
@@ -562,6 +564,164 @@ export const cancelDn = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Cancel DN Error:", error);
         res.status(500).json({ message: 'Error cancelling DN', error });
+    }
+};
+
+/**
+ * Restore a rejected quantity into a quarantined StockEntry (pending QC release),
+ * rather than straight back into available/sellable stock. Reuses the cost/warehouse
+ * context of the original inventory deduction for this DN+part, when available.
+ */
+const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: number, reason: string, userId?: string): Promise<string | null> => {
+    if (!item.isInventoryItem || rejectedQty <= 0) return null;
+
+    const product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } });
+    if (!product) {
+        return `Item "${item.description || item.partNo}": Product not found for part number "${item.partNo}" — rejection recorded, but stock was not restored to quarantine`;
+    }
+
+    const deduction = await InventoryDeduction.findOne({
+        dnId: dn._id,
+        partNo: item.partNo,
+        isReversed: false
+    }).sort({ deductedDate: -1 });
+
+    let unitCost = 0;
+    let targetWarehouse: any = undefined;
+    let supplierName: any = undefined;
+    let supplierLpoNo: string | undefined;
+
+    if (deduction) {
+        const sourceStockEntry = await StockEntry.findById(deduction.stockEntryId);
+        if (sourceStockEntry) {
+            unitCost = sourceStockEntry.unitCost || 0;
+            targetWarehouse = sourceStockEntry.targetWarehouse;
+            supplierName = sourceStockEntry.supplierName;
+            supplierLpoNo = sourceStockEntry.supplierLpoNo;
+        }
+    }
+
+    if (!targetWarehouse || !supplierName) {
+        return `Item "${item.description || item.partNo}": Could not determine original warehouse/supplier context — rejection recorded, but stock was not restored to quarantine`;
+    }
+
+    await StockEntry.create({
+        grn: `DN-REJ-${dn.dnNo}-${item._id || item.itemId}-${Date.now()}`,
+        partNo: product._id,
+        dateOfPurchase: new Date(),
+        jobId: dn.jobId,
+        supplierName,
+        supplierLpoNo,
+        productDescription: item.description || product.productDescription || '',
+        productSegment: product.productSegment,
+        productCategory: product.productCategory,
+        targetWarehouse,
+        quantity: rejectedQty,
+        uom: item.uom,
+        unitCost,
+        totalCost: unitCost * rejectedQty,
+        sourceDnId: dn._id,
+        isQuarantined: true,
+        quarantineReason: reason,
+        quarantinedAt: new Date(),
+        createdBy: userId && mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : undefined,
+        createdDate: new Date(),
+        updatedDate: new Date(),
+        isDeleted: false
+    });
+
+    return null;
+};
+
+export interface RejectDnItemInput {
+    itemId: string;
+    rejectedQty: number;
+    reason?: string;
+}
+
+/**
+ * Core DN item-rejection logic, shared by the direct dispatch-side reject endpoint
+ * and the invoice rejection cascade (rejectInvoiceByCustomer).
+ * Throws an Error with a user-facing message on validation failure.
+ */
+export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[], fallbackReason: string | undefined, userId?: string): Promise<string[]> => {
+    if (dn.status === 'Cancelled') {
+        throw new Error('Cannot reject items on a cancelled Delivery Note');
+    }
+
+    const warnings: string[] = [];
+
+    for (const rejectInput of items) {
+        const { itemId, rejectedQty, reason: itemReason } = rejectInput;
+        const qty = Number(rejectedQty);
+
+        if (!itemId || isNaN(qty) || qty <= 0) {
+            throw new Error('Each item requires a valid itemId and a positive rejectedQty');
+        }
+
+        const dnItem: any = (dn.items as any[]).find((it: any) => it._id?.toString() === itemId || it.itemId === itemId);
+        if (!dnItem) {
+            throw new Error(`Item "${itemId}" not found on this Delivery Note`);
+        }
+
+        const alreadyRejected = dnItem.rejectedQty || 0;
+        const deliveredQty = dnItem.deliveredQty || 0;
+
+        if (alreadyRejected + qty > deliveredQty) {
+            throw new Error(`Item "${dnItem.description || dnItem.partNo}": rejected qty (${alreadyRejected + qty}) cannot exceed delivered qty (${deliveredQty})`);
+        }
+
+        const effectiveReason = itemReason || fallbackReason;
+        if (!effectiveReason) {
+            throw new Error(`A rejection reason is required for item "${dnItem.description || dnItem.partNo}"`);
+        }
+
+        dnItem.rejectedQty = alreadyRejected + qty;
+        dnItem.rejectionReason = effectiveReason;
+
+        const warning = await restoreRejectedItemToQuarantine(dn, dnItem, qty, effectiveReason, userId);
+        if (warning) {
+            warnings.push(warning);
+        }
+    }
+
+    const totalDelivered = (dn.items as any[]).reduce((sum: number, it: any) => sum + (it.deliveredQty || 0), 0);
+    const totalRejected = (dn.items as any[]).reduce((sum: number, it: any) => sum + (it.rejectedQty || 0), 0);
+
+    dn.status = totalRejected > 0 && totalRejected >= totalDelivered ? 'Rejected' : 'Partially Rejected';
+
+    (dn.rejectedHistory as any[]).push({
+        rejectedBy: userId,
+        reason: fallbackReason,
+        date: new Date()
+    });
+
+    dn.updatedDate = new Date();
+    await dn.save();
+
+    return warnings;
+};
+
+export const rejectDnItems = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { items, reason } = req.body;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, message: 'items array is required' });
+        }
+
+        const dn = await DeliveryNote.findById(id);
+        if (!dn) {
+            return res.status(404).json({ success: false, message: 'Delivery Note not found' });
+        }
+
+        const warnings = await applyDnItemRejections(dn, items, reason, (req as any).user?._id);
+
+        return res.status(200).json({ success: true, data: dn, warnings });
+    } catch (error: any) {
+        console.error("Reject DN Items Error:", error);
+        res.status(400).json({ success: false, message: error.message || 'Error rejecting Delivery Note items' });
     }
 };
 

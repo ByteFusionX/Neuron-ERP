@@ -150,7 +150,8 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
             targetWarehouse,
             jobId,
             fromDate,
-            toDate
+            toDate,
+            isQuarantined
         } = req.query;
 
         const tokenData = (req as any).user;
@@ -171,10 +172,18 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
         const rowNum = Math.max(parseInt(row as string, 10) || 10, 1);
         const skip = (pageNum - 1) * rowNum;
 
-        const filter: any = { 
+        const filter: any = {
             isDeleted: { $ne: true },
             ...accessFilter
         };
+
+        // By default, exclude quarantined (rejected-pending-QC) stock from the normal
+        // sellable-stock listing. Pass isQuarantined=true to view only quarantined items.
+        if (isQuarantined === 'true') {
+            filter.isQuarantined = true;
+        } else {
+            filter.isQuarantined = { $ne: true };
+        }
 
         if (grn) {
             filter.grn = { $regex: grn as string, $options: 'i' };
@@ -273,8 +282,8 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
             const entryId = entry._id.toString();
             const blocks = blocksByEntryId.get(entryId) || [];
             const blockedQuantity = blocks.reduce((sum, block) => sum + (block.quantity || 0), 0);
-            const availableQuantity = Math.max(0, entry.quantity - blockedQuantity);
-            
+            const availableQuantity = entry.isQuarantined ? 0 : Math.max(0, entry.quantity - blockedQuantity);
+
             return {
                 ...entry.toObject(),
                 availableQuantity,
@@ -412,6 +421,39 @@ export const deleteStockEntry = async (req: Request, res: Response, next: NextFu
         
         if (!deleted) return res.status(404).json({ message: "Stock entry not found or already deleted" });
         return res.status(200).json({ success: true, message: "Stock entry deleted" });
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+};
+
+export const releaseFromQuarantine = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) return res.status(400).json({ success: false, message: "Invalid id" });
+
+        const tokenData = (req as any).user;
+        const employee = await getEmployeeData(tokenData);
+        if (!employee) {
+            return res.status(401).json({ success: false, message: "Employee not found" });
+        }
+
+        const stockEntry = await StockEntry.findOne({ _id: id, isDeleted: { $ne: true } });
+        if (!stockEntry) {
+            return res.status(404).json({ success: false, message: "Stock entry not found" });
+        }
+
+        if (!stockEntry.isQuarantined) {
+            return res.status(400).json({ success: false, message: "Stock entry is not quarantined" });
+        }
+
+        stockEntry.isQuarantined = false;
+        stockEntry.quarantineReleasedAt = new Date();
+        stockEntry.quarantineReleasedBy = employee._id;
+        stockEntry.updatedDate = new Date();
+        await stockEntry.save();
+
+        return res.status(200).json({ success: true, message: "Stock entry released from quarantine", data: stockEntry });
     } catch (error) {
         console.error(error);
         next(error);

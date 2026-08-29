@@ -19,8 +19,15 @@ export interface IDeliveryNote extends Document {
         itemId: string; // Ref to original Item ID in Job/Quote
         isInventoryItem: boolean;
         unitSellingPrice: number;
+        rejectedQty: number;
+        rejectionReason?: string;
     }[];
     status: string;
+    rejectedHistory: {
+        rejectedBy: mongoose.Types.ObjectId;
+        reason: string;
+        date: Date;
+    }[];
     createdBy: mongoose.Types.ObjectId;
     createdDate: Date;
     updatedDate: Date;
@@ -44,13 +51,20 @@ const DeliveryNoteSchema: Schema = new Schema({
         status: String,
         itemId: String,
         isInventoryItem: Boolean,
-        unitSellingPrice: Number
+        unitSellingPrice: Number,
+        rejectedQty: { type: Number, default: 0 },
+        rejectionReason: String
     }],
     status: {
         type: String,
-        enum: ['Draft', 'Delivered', 'Cancelled'],
+        enum: ['Draft', 'Delivered', 'Cancelled', 'Rejected', 'Partially Rejected'],
         default: 'Draft'
     },
+    rejectedHistory: [{
+        rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        reason: String,
+        date: { type: Date, default: Date.now }
+    }],
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     createdDate: { type: Date, default: Date.now },
     updatedDate: { type: Date }

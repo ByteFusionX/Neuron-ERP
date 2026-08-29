@@ -19,8 +19,15 @@ export interface DeliveryNote {
         status: string;
         itemId: string;
         isInventoryItem: boolean;
+        rejectedQty?: number;
+        rejectionReason?: string;
     }[];
     status: string;
+    rejectedHistory?: {
+        rejectedBy: any;
+        reason: string;
+        date: string;
+    }[];
     createdBy: {
         _id: string;
         firstName: string;
@@ -40,5 +47,7 @@ export interface GetDeliveryNoteResponse {
 export const DnStatus = {
     DRAFT: 'Draft',
     DELIVERED: 'Delivered',
-    CANCELLED: 'Cancelled'
+    CANCELLED: 'Cancelled',
+    REJECTED: 'Rejected',
+    PARTIALLY_REJECTED: 'Partially Rejected'
 };
