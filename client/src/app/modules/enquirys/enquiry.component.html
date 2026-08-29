@@ -61,7 +61,7 @@
                             <ng-select appNoLeadingSpace [(ngModel)]="selectedStatus" class=" filter"
                                 placeholder="Status" appendTo="body" (change)="onfilterApplied()">
                                 <ng-option *ngFor="let customer of status"
-                                    [value]="customer.name">{{customer.name}}</ng-option>
+                                    [value]="customer.name">{{customer.label}}</ng-option>
                             </ng-select>
                         </div>
                         <button *ngIf="isFiltered"
@@ -90,24 +90,36 @@
                 <ng-container matColumnDef="enquiryId">
                     <th *matHeaderCellDef
                         class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Enquiry ID </th>
+                        Enquiry No. </th>
                     <td mat-cell *matCellDef="let element">
                         <p class="text-purple-600 font-medium">{{element.enquiryId}}</p>
+                    </td>
+                </ng-container>
+
+                <ng-container matColumnDef="date">
+                    <th *matHeaderCellDef
+                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
+                        Date </th>
+                    <td mat-cell *matCellDef="let element">
+                        <span class="whitespace-nowrap">{{element.date | date: 'dd MMM yyyy'}}</span>
                     </td>
                 </ng-container>
 
                 <ng-container matColumnDef="customerName">
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Customer Name </th>
+                        Customer </th>
                     <td mat-cell *matCellDef="let element"> {{element.client.companyName}}</td>
                 </ng-container>
 
                 <ng-container matColumnDef="enquiryDescription">
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Enquiry Description </th>
-                    <td mat-cell *matCellDef="let element"> {{element.title}} </td>
+                        Description </th>
+                    <td mat-cell *matCellDef="let element">
+                        <span class="block max-w-[180px] truncate" [matTooltip]="element.title"
+                            matTooltipPosition="above" matTooltipClass="mat-tooltip">{{element.title}}</span>
+                    </td>
                 </ng-container>
 
                 <ng-container matColumnDef="salesPersonName">
@@ -128,10 +140,10 @@
                 <ng-container matColumnDef="attachedFiles">
                     <th *matHeaderCellDef
                         class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden ">
-                        Attached Files </th>
+                        Attachments </th>
                     <td mat-cell *matCellDef="let element" class="hover:bg-white" (click)="preventClick($event)">
                         <div *ngIf="element.attachments.length == 0, else elseBlock">
-                            <p class="text-red-500">No Files Attached</p>
+                            <p class="text-gray-400">N/A</p>
                         </div>
                         <ng-template #elseBlock>
                             <div *ngFor="let file of element.attachments">
@@ -150,16 +162,18 @@
                     <td mat-cell *matCellDef="let element" class="hover:bg-white" (click)="preventClick($event)">
                         <div [ngSwitch]="element.status">
                             <p class="w-fit bg-orange-100 rounded-full px-2 text-orange-600 whitespace-nowrap"
-                                *ngSwitchCase="'Work In Progress'">{{element.status}}</p>
+                                *ngSwitchCase="'Work In Progress'">In Progress</p>
                             <p class="w-fit bg-red-100 rounded-full px-2 text-red-600 whitespace-nowrap flex justify-center items-center gap-1"
                                 *ngSwitchCase="'Rejected by Presale Manager'"
                                 (click)="openReview(element.preSale.rejectionHistory)">{{element.status}}<ng-icon
                                     name="heroInformationCircle" class="text-center text-gray-700 text-md"></ng-icon>
                             </p>
                             <p class="w-fit bg-yellow-100 rounded-full px-2 text-yellow-600 whitespace-nowrap"
-                                *ngSwitchCase="'Rejected by Presale Engineer'">Assigned To Presale Manager</p>
+                                *ngSwitchCase="'Rejected by Presale Engineer'">In Presales</p>
                             <p class="w-fit bg-yellow-100 rounded-full px-2 text-yellow-600 whitespace-nowrap"
-                                *ngSwitchCase="'Assigned To Presale Engineer'">Assigned To Presale Manager</p>
+                                *ngSwitchCase="'Assigned To Presale Engineer'">In Presales</p>
+                            <p class="w-fit bg-yellow-100 rounded-full px-2 text-yellow-600 whitespace-nowrap"
+                                *ngSwitchCase="'Assigned To Presale Manager'">In Presales</p>
                             <p class="w-fit bg-yellow-100 rounded-full px-2 text-yellow-600 whitespace-nowrap"
                                 *ngSwitchDefault="">{{element.status}}</p>
                         </div>
@@ -167,24 +181,39 @@
                 </ng-container>
                 <ng-container matColumnDef="presale">
                     <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
+                        class="bg-gray-100  px-[20px] py-[16px] text-center text-dark  text-[15px] font-medium border-none before:hidden">
                         Presales </th>
                     <td mat-cell *matCellDef="let element;let i=index" class="hover:bg-white"
                         (click)="preventClick($event)">
-                        <button type="button"
-                            *ngIf="element.preSale && element.preSale.presalePerson && (element.status !== 'Assigned To Presale Manager' && element.status !== 'Assigned To Presale Engineer') && element.preSale.estimations"
-                            (click)="onViewPresale($event,i,element)"
-                            class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-2 rounded text-sm whitespace-nowrap relative">View
-                            Estimations
-                            <span *ngIf="element.preSale.seenbySalesPerson === false"
-                                class="absolute top-0 right-0 -mt-1 -mr-1 h-2.5 w-2.5 rounded-full bg-orange-500"></span>
-                        </button>
-                        <button type="button"
-                            *ngIf="!element.preSale?.presalePerson || element.status == 'Rejected by Presale Manager'"
-                            (click)="onAssignPresale($event,element.preSale,element._id,i)"
-                            class="bg-orange-500 hover:bg-orange-400 text-white font-medium p-2 rounded text-sm whitespace-nowrap ">
-                            <ng-icon *ngIf="assigningPresale && assigningPresaleIndex == i" class="spin" name="heroArrowPath"></ng-icon>
-                            Assign to Presale</button>
+                        <div class="flex justify-center items-center gap-2">
+                            <button type="button"
+                                *ngIf="element.preSale && element.preSale.presalePerson && (element.status !== 'Assigned To Presale Manager' && element.status !== 'Assigned To Presale Engineer') && element.preSale.estimations"
+                                (click)="onViewPresale($event,i,element)"
+                                class="w-7 h-7 rounded-full border border-violet-300 bg-violet-50 hover:bg-violet-100 hover:border-violet-500 flex justify-center items-center relative"
+                                matTooltip="View Estimations" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                <ng-icon name="heroEye" class="text-violet-700 w-4 h-4"></ng-icon>
+                                <span *ngIf="element.preSale.seenbySalesPerson === false"
+                                    class="absolute top-0 right-0 -mt-1 -mr-1 h-2.5 w-2.5 rounded-full bg-orange-500"></span>
+                            </button>
+                            <button type="button"
+                                *ngIf="element.preSale?.presalePerson && !element.preSale?.estimations"
+                                (click)="openPresaleHistory($event,element)"
+                                class="w-7 h-7 rounded-full border border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-500 flex justify-center items-center"
+                                matTooltip="Presale Progress" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                <ng-icon name="heroClock" class="text-blue-600 w-4 h-4"></ng-icon>
+                            </button>
+
+                            <button type="button"
+                                *ngIf="!element.preSale?.presalePerson || element.status == 'Rejected by Presale Manager'"
+                                (click)="onAssignPresale($event,element.preSale,element._id,i)"
+                                class="w-7 h-7 rounded-full border border-orange-300 bg-orange-50 hover:bg-orange-100 hover:border-orange-500 flex justify-center items-center"
+                                matTooltip="Assign to Presale" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                <ng-icon *ngIf="assigningPresale && assigningPresaleIndex == i" class="spin text-orange-600 w-4 h-4"
+                                    name="heroArrowPath"></ng-icon>
+                                <ng-icon *ngIf="!(assigningPresale && assigningPresaleIndex == i)" name="heroUserPlus"
+                                    class="text-orange-600 w-4 h-4"></ng-icon>
+                            </button>
+                        </div>
                     </td>
                 </ng-container>
 
@@ -193,11 +222,11 @@
                         class="bg-gray-100 px-[20px] py-[16px] text-center text-dark text-[15px] font-medium border-none before:hidden">
                         Events </th>
                     <td mat-cell *matCellDef="let element">
-                        <div class="flex justify-center items-center gap-3">
+                        <div class="flex justify-center items-center gap-2">
                             <button (click)="onEventClicks(element._id)"
                                 class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
                                 matTooltip="View Events" matTooltipPosition="above" matTooltipClass="mat-tooltip">
-                                <ng-icon name="heroCalendarDays" class="text-black"></ng-icon>
+                                <ng-icon name="heroCalendarDays" class="text-black w-4 h-4"></ng-icon>
                             </button>
                         </div>
                     </td>
@@ -206,14 +235,15 @@
                 <ng-container matColumnDef="action">
                     <th *matHeaderCellDef
                         class="bg-gray-100 text-center px-[4px] py-[16px] text-dark text-[15px] font-medium border-none before:hidden">
-                        Action
+                        Actions
                     </th>
                     <td mat-cell *matCellDef="let element" class="text-center">
-                        <div class="flex" *ngIf="isDeleteOption">
-                            <button class="text-red-600 hover:text-red-800 p-2"
+                        <div class="flex justify-center items-center gap-2" *ngIf="isDeleteOption">
+                            <button type="button"
+                                class="w-7 h-7 rounded-full border border-red-300 bg-red-50 hover:bg-red-100 hover:border-red-500 flex justify-center items-center"
                                 (click)="deleteEnquiry(element._id,element.status)" matTooltip="Delete Enquiry"
-                                matTooltipPosition="above">
-                                <ng-icon name="heroTrash" class="text-lg"></ng-icon>
+                                matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                <ng-icon name="heroTrash" class="text-red-600 w-4 h-4"></ng-icon>
                             </button>
                         </div>
                     </td>

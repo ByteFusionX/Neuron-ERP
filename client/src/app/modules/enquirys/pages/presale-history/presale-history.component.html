@@ -1,0 +1,103 @@
+<div class="bg-white rounded-lg overflow-hidden w-full">
+
+    <!-- Header -->
+    <div class="border-b px-6 py-4 flex justify-between items-center bg-white">
+        <div>
+            <h3 class="text-base font-semibold text-gray-900">Presale Progress</h3>
+            <p class="text-xs text-gray-500 mt-0.5">Assignment history for this enquiry</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button type="button"
+                class="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100"
+                matTooltip="Ask the presales team for an update" matTooltipPosition="above"
+                (click)="onFollowUp()">
+                <ng-icon name="heroChatBubbleLeftRight" class="text-sm"></ng-icon>
+                Follow Up
+            </button>
+            <button type="button"
+                class="bg-gray-100 hover:bg-gray-200 rounded-lg p-1 flex items-center justify-center text-gray-600"
+                (click)="closeModal()">
+                <ng-icon name="heroXMark" class="w-4 h-4"></ng-icon>
+            </button>
+        </div>
+    </div>
+
+    <div class="px-6 py-4 bg-gray-50 border-b flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div>
+            <p class="text-[11px] uppercase tracking-wide text-gray-400">Enquiry No.</p>
+            <p class="text-sm font-medium text-purple-600">{{ data?.enquiryId || '-' }}</p>
+        </div>
+        <div class="min-w-0">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400">Customer</p>
+            <p class="text-sm font-medium text-gray-800 truncate">{{ data?.client?.companyName || '-' }}</p>
+        </div>
+        <div class="ml-auto">
+            <span class="bg-yellow-100 text-yellow-700 text-xs rounded-full px-3 py-1 whitespace-nowrap">
+                {{ statusText }}
+            </span>
+        </div>
+    </div>
+    <!-- Body -->
+    <div class="bg-white px-6 py-6 max-h-[60vh] overflow-y-auto">
+        <div *ngIf="steps.length === 0" class="flex flex-col items-center justify-center text-center py-10">
+            <span class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-3">
+                <ng-icon name="heroClock" class="text-xl"></ng-icon>
+            </span>
+            <p class="text-sm font-medium text-gray-700">No presale activity yet</p>
+            <p class="text-xs text-gray-500 mt-1">Progress will appear here once the enquiry is assigned.</p>
+        </div>
+
+        <div class="relative" *ngIf="steps.length > 0">
+            <div class="absolute left-[15px] top-3 bottom-3 w-px bg-gray-200"></div>
+
+            <div *ngFor="let step of steps; let last = last" class="relative flex gap-3"
+                [class.mb-4]="!last">
+                <span
+                    class="relative z-10 shrink-0 w-8 h-8 rounded-full flex items-center justify-center border"
+                    [class.bg-green-50]="step.state === 'done'"
+                    [class.border-green-200]="step.state === 'done'"
+                    [class.text-green-600]="step.state === 'done'"
+                    [class.bg-red-50]="step.state === 'rejected'"
+                    [class.border-red-200]="step.state === 'rejected'"
+                    [class.text-red-600]="step.state === 'rejected'"
+                    [class.bg-orange-50]="step.state === 'current'"
+                    [class.border-orange-200]="step.state === 'current'"
+                    [class.text-orange-500]="step.state === 'current'">
+                    <ng-icon [name]="step.icon" class="w-4 h-4"></ng-icon>
+                </span>
+
+                <div class="flex-1 min-w-0 rounded-lg border bg-white px-4 py-3"
+                    [class.border-gray-200]="step.state !== 'rejected'"
+                    [class.border-red-100]="step.state === 'rejected'"
+                    [class.bg-red-50]="step.state === 'rejected'">
+                    <div class="flex justify-between items-start gap-3">
+                        <p class="text-sm font-semibold text-gray-900 break-words">{{ step.title }}</p>
+                        <p *ngIf="step.date" class="text-[11px] text-gray-500 whitespace-nowrap mt-0.5">
+                            {{ step.date | date: 'dd MMM yyyy, h:mm a' }}
+                        </p>
+                    </div>
+                    <p *ngIf="step.role" class="text-xs text-gray-500 mt-0.5">{{ step.role }}</p>
+                    <p *ngIf="step.person" class="text-xs text-gray-600 mt-0.5">{{ step.person }}</p>
+                    <p *ngIf="step.note" class="text-xs mt-1"
+                        [class.text-red-600]="step.state === 'rejected'"
+                        [class.text-gray-500]="step.state !== 'rejected'">{{ step.note }}</p>
+                    <p *ngIf="!step.date && step.state === 'done'" class="text-[11px] text-gray-400 mt-1">
+                        Date not recorded
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-3">
+        <p class="text-xs text-gray-500">
+            {{ steps.length }} {{ steps.length === 1 ? 'activity' : 'activities' }} recorded
+        </p>
+        <button type="button"
+            class="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            (click)="closeModal()">
+            Close
+        </button>
+    </div>
+</div>

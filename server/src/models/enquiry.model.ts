@@ -19,6 +19,8 @@ interface Enquiry extends Document {
     attachments: []
     isDeleted: boolean,
     reAssignedSeen: boolean,
+    reAssignedDate: Date,
+    assignmentHistory: { employee: Types.ObjectId, employeeName: string, action: string, role: string, assignedBy: Types.ObjectId, assignedByName: string, date: Date }[],
     reAssigned: any,
     eventId: string,
 }
@@ -136,6 +138,39 @@ const preSaleSchema = new Schema({
 })
 
 
+const assignmentHistorySchema = new Schema({
+    _id: {
+        type: Schema.Types.ObjectId,
+        default: () => new Types.ObjectId()
+    },
+    employee: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    employeeName: {
+        type: String
+    },
+    action: {
+        type: String,
+        enum: ['assigned', 'reassigned'],
+        default: 'assigned'
+    },
+    role: {
+        type: String
+    },
+    assignedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    assignedByName: {
+        type: String
+    },
+    date: {
+        type: Date,
+        default: Date.now
+    }
+});
+
 const enquirySchema = new Schema<Enquiry>({
     client: {
         type: Schema.Types.ObjectId,
@@ -188,10 +223,14 @@ const enquirySchema = new Schema<Enquiry>({
     reAssigned: {
         type: Schema.Types.ObjectId,
     },
+    reAssignedDate: {
+        type: Date,
+    },
     reAssignedSeen: {
         type: Boolean,
         default: false
     },
+    assignmentHistory: [assignmentHistorySchema],
     eventId: {
         type: String,
     }

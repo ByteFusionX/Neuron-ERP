@@ -12,6 +12,19 @@ import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
 const { ObjectId } = require('mongodb')
 
+const buildAssignmentEntry = async (employeeId: any, action: 'assigned' | 'reassigned', assignedBy: any) => {
+    const employee: any = employeeId ? await Employee.findById(employeeId).populate('category') : null;
+    return {
+        employee: employeeId,
+        employeeName: employee ? `${employee.firstName || ''} ${employee.lastName || ''}`.trim() : '',
+        action,
+        role: employee?.category?.role || employee?.designation || '',
+        assignedBy: assignedBy?._id || null,
+        assignedByName: assignedBy ? `${assignedBy.firstName || ''} ${assignedBy.lastName || ''}`.trim() : '',
+        date: new Date()
+    };
+};
+
 export const createEnquiry = async (req: any, res: Response, next: NextFunction) => {
     try {
         if (!req.files) return res.status(204).json({ err: 'No data' })
@@ -126,6 +139,11 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
             return res.status(404).json({ success: false, message: 'Enquiry not found' });
         }
 
+        const assigner = await getEmployeeData(req.user);
+        const assignmentEntry = presale.presalePerson
+            ? await buildAssignmentEntry(presale.presalePerson, 'assigned', assigner)
+            : null;
+
         // Update the enquiry with presale data
         const update = await enquiryModel.updateOne(
             { _id: enquiryId },
@@ -139,6 +157,7 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
                     },
                     status: 'Assigned To Presale Manager',
                 },
+                ...(assignmentEntry ? { $push: { assignmentHistory: assignmentEntry } } : {})
             }
         );
 
@@ -1264,7 +1283,15 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
         if (!employeeId) {
             return res.status(404).json({ message: 'Something went wrong' });
         }
-        const enquiryUpdate = await enquiryModel.findOneAndUpdate({ _id: enquiryId }, { $set: { reAssigned: employeeId, status: 'Assigned To Presale Engineer', reAssignedSeen: false } })
+        const reAssigner = await getEmployeeData(req.user);
+        const reAssignEntry = await buildAssignmentEntry(employeeId, 'reassigned', reAssigner);
+        const enquiryUpdate = await enquiryModel.findOneAndUpdate(
+            { _id: enquiryId },
+            {
+                $set: { reAssigned: employeeId, reAssignedDate: reAssignEntry.date, status: 'Assigned To Presale Engineer', reAssignedSeen: false },
+                $push: { assignmentHistory: reAssignEntry }
+            }
+        )
         const socket = req.app.get('io') as Server;
         const enquiry = await enquiryModel.findById(enquiryId);
         const userData = await getEmployeeData(req.user);

@@ -36,6 +36,7 @@ import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ViewRejectsComponent } from './pages/view-rejects/view-rejects.component';
+import { PresaleHistoryComponent } from './pages/presale-history/presale-history.component';
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
@@ -49,6 +50,7 @@ import {
   NgSwitchCase,
   NgSwitchDefault,
   AsyncPipe,
+  DatePipe,
 } from '@angular/common';
 import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
 import { appNoLeadingSpace } from '../../shared/directives/trim-validator.directive';
@@ -88,6 +90,7 @@ import { PaginationComponent } from '../../shared/components/pagination/paginati
     MatRow,
     PaginationComponent,
     AsyncPipe,
+    DatePipe,
   ],
 })
 export class EnquiryComponent implements OnInit, OnDestroy {
@@ -103,11 +106,12 @@ export class EnquiryComponent implements OnInit, OnDestroy {
   isDeleteOption: boolean = false;
   createEnquiry: boolean | undefined = false;
 
-  status: { name: string }[] = [
-    { name: 'Work In Progress' },
-    { name: 'Assigned To Presale Manager' },
+  status: { name: string; label: string }[] = [
+    { name: 'Work In Progress', label: 'In Progress' },
+    { name: 'Assigned To Presale Manager', label: 'In Presales' },
   ];
   displayedColumns: string[] = [
+    'date',
     'enquiryId',
     'customerName',
     'enquiryDescription',
@@ -448,6 +452,16 @@ export class EnquiryComponent implements OnInit, OnDestroy {
         this.toaster.warning('Sorry,Selected enquiry assinged to presales');
       }
     }
+  }
+
+  openPresaleHistory(event: Event, element: any) {
+    event.stopPropagation();
+    this.dialog.open(PresaleHistoryComponent, {
+      data: element,
+      width: '680px',
+      maxWidth: '95vw',
+      autoFocus: false,
+    });
   }
 
   openReview(rejectionHistory: any) {
