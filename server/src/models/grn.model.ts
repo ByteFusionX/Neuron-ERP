@@ -25,6 +25,8 @@ interface GRN extends Document {
     orderedQty: number;
     receivedQty: number;
     acceptedQty: number;
+    rejectedQty: number;
+    rejectionReason?: string;
     remarks?: string;
     date?: Date;
   }[];
@@ -61,6 +63,16 @@ const itemSchema = new Schema({
     type: Number,
     required: true,
     min: 0
+  },
+  rejectedQty: {
+    type: Number,
+    required: true,
+    min: 0,
+    default: 0
+  },
+  rejectionReason: {
+    type: String,
+    trim: true
   },
   remarks: {
     type: String,

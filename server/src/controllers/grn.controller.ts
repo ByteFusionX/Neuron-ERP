@@ -93,7 +93,7 @@ export const createGRN = async (req: Request, res: Response) => {
       const orderedQty = Number(item.orderedQty);
       const receivedQty = Number(item.receivedQty);
       const acceptedQty = Number(item.acceptedQty);
-      
+
       if (!item.itemDescription || isNaN(orderedQty) || isNaN(receivedQty) || isNaN(acceptedQty) ||
           orderedQty < 0 || receivedQty < 0 || acceptedQty < 0) {
         return res.status(400).json({
@@ -101,6 +101,23 @@ export const createGRN = async (req: Request, res: Response) => {
           message: "Invalid item structure. Each item must have itemDescription, and valid numeric values for orderedQty, receivedQty, and acceptedQty"
         });
       }
+
+      if (acceptedQty > receivedQty) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid item "${item.itemDescription}": acceptedQty cannot exceed receivedQty`
+        });
+      }
+
+      const rejectedQty = receivedQty - acceptedQty;
+      if (rejectedQty > 0 && !item.rejectionReason) {
+        return res.status(400).json({
+          success: false,
+          message: `Item "${item.itemDescription}" has a rejected quantity of ${rejectedQty} but no rejectionReason was provided`
+        });
+      }
+
+      item.rejectedQty = rejectedQty;
     }
 
     const existingGRNs = await GRN.find({
@@ -495,6 +512,81 @@ export const getAllGRNsByLpoId = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch GRNs",
+      error: error.message,
+    });
+  }
+};
+
+export const getGRNRejections = async (req: Request, res: Response) => {
+  try {
+    const { purchaseOrderId, supplierId } = req.query;
+
+    const filter: any = { isDeleted: { $ne: true } };
+
+    if (purchaseOrderId) {
+      if (!mongoose.Types.ObjectId.isValid(purchaseOrderId as string)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid Purchase Order ID"
+        });
+      }
+      filter.purchaseOrderId = purchaseOrderId;
+    }
+
+    let grnQuery = GRN.find(filter)
+      .populate('warehouse')
+      .populate('receivedBy')
+      .populate({
+        path: 'purchaseOrderId',
+        populate: [{ path: 'supplierId' }]
+      })
+      .populate('createdBy')
+      .sort({ createdAt: -1 });
+
+    let grns = await grnQuery;
+
+    if (supplierId) {
+      if (!mongoose.Types.ObjectId.isValid(supplierId as string)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid Supplier ID"
+        });
+      }
+      grns = grns.filter((grn: any) => {
+        const po = grn.purchaseOrderId as any;
+        const grnSupplierId = po?.supplierId?._id || po?.supplierId;
+        return grnSupplierId && grnSupplierId.toString() === supplierId;
+      });
+    }
+
+    const rejections = grns
+      .map((grn: any) => {
+        const rejectedItems = (grn.items || []).filter((item: any) => Number(item.rejectedQty) > 0);
+        if (rejectedItems.length === 0) {
+          return null;
+        }
+        return {
+          grnId: grn._id,
+          grnNo: grn.grnNo,
+          grnDate: grn.grnDate,
+          purchaseOrderId: grn.purchaseOrderId,
+          warehouse: grn.warehouse,
+          receivedBy: grn.receivedBy,
+          createdBy: grn.createdBy,
+          items: rejectedItems
+        };
+      })
+      .filter((entry: any) => entry !== null);
+
+    return res.status(200).json({
+      success: true,
+      data: rejections
+    });
+  } catch (error: any) {
+    console.error("Get GRN rejections error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch GRN rejections",
       error: error.message,
     });
   }

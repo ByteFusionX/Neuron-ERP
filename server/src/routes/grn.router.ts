@@ -6,6 +6,7 @@ import {
   getAllGRNsByLpoId,
   getGRNById,
   getAllGRNs,
+  getGRNRejections,
   updateGRNSupplierInvoices,
   updateGRNSupplierDeliveryNotes
 } from "../controllers/grn.controller";
@@ -21,6 +22,7 @@ router.post("/", createGRN);
 router.get("/", getAllGRNs);
 router.patch("/:id/supplier-invoices", requirePrivilege("grn", "canUploadInvoice"), upload.array('files'), updateGRNSupplierInvoices);
 router.patch("/:id/supplier-delivery-notes", requirePrivilege("grn", "canUploadInvoice"), upload.array('files'), updateGRNSupplierDeliveryNotes);
+router.get("/rejections", getGRNRejections);
 router.get("/purchase-order/:lpoId/all", getAllGRNsByLpoId);
 router.get("/purchase-order/:lpoId", getGRNByLpoId);
 router.get("/:id", getGRNById);
