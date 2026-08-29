@@ -22,7 +22,8 @@ import {
     deleteEstimation,
     RejectPresaleJob,
     reAssignJob,
-    markAsSeenReAssingedJob
+    markAsSeenReAssingedJob,
+    updateEnquiryAttachments
 } from "../controllers/enquiry.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const equiRouter = Router()
@@ -33,6 +34,7 @@ equiRouter.post('/create', requirePrivilege("enquiry", "create"), upload.fields(
 equiRouter.post('/get', getEnquiries);
 equiRouter.get('/presales', getPreSaleJobs);
 equiRouter.patch('/presales/:enquiryId', upload.fields([{ name: 'newPresaleFile' }]), assignPresale);
+equiRouter.patch('/:enquiryId/attachments', upload.array('files'), updateEnquiryAttachments);
 equiRouter.put('/update', updateEnquiryStatus);
 equiRouter.get('/monthly', monthlyEnquiries);
 equiRouter.patch('/feedback-request', sendFeedbackRequest);

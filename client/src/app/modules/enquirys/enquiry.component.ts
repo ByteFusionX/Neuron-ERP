@@ -43,6 +43,7 @@ import { CustomerService } from 'src/app/core/services/customer/customer.service
 import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
 import { NgIcon } from '@ng-icons/core';
 import { dateFutureDirective } from '../../shared/directives/date-future.directive';
+import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import {
   NgIf,
   NgFor,
@@ -105,6 +106,7 @@ export class EnquiryComponent implements OnInit, OnDestroy {
   isFiltered: boolean = false;
   isDeleteOption: boolean = false;
   createEnquiry: boolean | undefined = false;
+  currentEmployeeId: string | undefined;
 
   status: { name: string; label: string }[] = [
     { name: 'Work In Progress', label: 'In Progress' },
@@ -166,6 +168,7 @@ export class EnquiryComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((employee) => {
         this.customers$ = this._customerService.getAllCustomers(employee?._id);
+        this.currentEmployeeId = employee?._id;
         if (employee?.category.role == 'superAdmin') {
           this.isDeleteOption = true;
         }
@@ -287,6 +290,61 @@ export class EnquiryComponent implements OnInit, OnDestroy {
         },
       }),
     );
+  }
+
+  canUploadAttachments(element: any): boolean {
+    return this.isDeleteOption || element?.salesPerson?._id === this.currentEmployeeId;
+  }
+
+  openAttachmentView(element: any): void {
+    if (!element?.attachments?.length) {
+      return;
+    }
+
+    const modalData: FileUploadModalData = {
+      title: `Files - ${element.enquiryId}`,
+      existingFiles: element.attachments,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
+  }
+
+  openAttachmentUpload(element: any): void {
+    if (!this.canUploadAttachments(element)) {
+      return;
+    }
+
+    const modalData: FileUploadModalData = {
+      title: `Files - ${element.enquiryId}`,
+      allowMultiple: true,
+      showActions: { upload: true, download: false, view: false, delete: true }
+    };
+
+    const dialogRef = this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result && result.action === 'save') {
+        const newFiles = result.files.filter((file: any) => file.file).map((file: any) => file.file);
+        if (!newFiles.length) {
+          return;
+        }
+
+        const formData = new FormData();
+        newFiles.forEach((file: File) => formData.append('files', file));
+
+        this._enquiryService.updateEnquiryAttachments(element._id, formData).subscribe({
+          next: (res) => {
+            element.attachments = res.data?.attachments || [];
+            this.toaster.success('Files uploaded successfully');
+          },
+          error: () => {
+            this.toaster.error('Failed to upload files');
+          }
+        });
+      }
+    });
   }
 
   onDownloadClicks(file: any) {

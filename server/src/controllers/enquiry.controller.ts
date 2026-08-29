@@ -201,6 +201,53 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
     }
 };
 
+export const updateEnquiryAttachments = async (req: any, res: Response) => {
+    try {
+        const { enquiryId } = req.params;
+
+        const enquiry = await enquiryModel.findById(enquiryId);
+        if (!enquiry) {
+            return res.status(404).json({ success: false, message: 'Enquiry not found' });
+        }
+
+        const employee = req.employee;
+        const role = employee?.category?.role;
+        const isOwner = enquiry.salesPerson?.toString() === employee?._id?.toString();
+        if (role !== 'admin' && role !== 'superAdmin' && !isOwner) {
+            return res.status(403).json({ success: false, message: 'Forbidden' });
+        }
+
+        let attachments = [];
+        if (req.files && req.files.length > 0) {
+            attachments = await Promise.all(req.files.map(async (file: any) => {
+                await uploadFileToAws(file.filename, file.path);
+                return { fileName: file.filename, originalname: file.originalname };
+            }));
+        }
+
+        if (req.body.existingFiles) {
+            try {
+                const existingFiles = typeof req.body.existingFiles === 'string'
+                    ? JSON.parse(req.body.existingFiles)
+                    : req.body.existingFiles;
+                attachments = [...attachments, ...existingFiles];
+            } catch (error) {
+                console.error('Error parsing existingFiles:', error);
+            }
+        }
+
+        const updatedEnquiry = await enquiryModel.findByIdAndUpdate(
+            enquiryId,
+            { $set: { attachments } },
+            { new: true, runValidators: true }
+        );
+
+        return res.status(200).json({ success: true, message: 'Attachments updated successfully', data: updatedEnquiry });
+    } catch (error: any) {
+        console.error('Error in updateEnquiryAttachments:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+    }
+};
 
 export const getEnquiries = async (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -135,4 +135,8 @@ export class EnquiryService {
     return this.http.put<any>(`${this.api}/enquiry/reassignjob`, data)
   }
 
+  updateEnquiryAttachments(enquiryId: string, formData: FormData): Observable<any> {
+    return this.http.patch<any>(`${this.api}/enquiry/${enquiryId}/attachments`, formData)
+  }
+
 }

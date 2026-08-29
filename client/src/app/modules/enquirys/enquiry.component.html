@@ -80,8 +80,11 @@
             </div>
         </div>
     </div>
-    <p class="text-right text-xs text-violet-600 -mb-2 pt-2 mr-8">*To quote enquiry click on the row of the enquiry</p>
-
+    <div class="flex justify-start items-center -mb-2 pt-2 ml-8">
+        <ng-icon name="heroInformationCircle" class="text-violet-600 w-4 h-4 cursor-pointer"
+            matTooltip="Select an enquiry row to proceed with quotation" matTooltipPosition="above"
+            matTooltipClass="mat-tooltip"></ng-icon>
+    </div>
 
     <app-skelton-loading *ngIf="isLoading && !isEmpty" [lineLength]="4"></app-skelton-loading>
     <div class="mx-8 mb-8 mt-4 overflow-y-auto overflow-x-auto">
@@ -140,18 +143,25 @@
                 <ng-container matColumnDef="attachedFiles">
                     <th *matHeaderCellDef
                         class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden ">
-                        Attachments </th>
+                        Files </th>
                     <td mat-cell *matCellDef="let element" class="hover:bg-white" (click)="preventClick($event)">
-                        <div *ngIf="element.attachments.length == 0, else elseBlock">
-                            <p class="text-gray-400">N/A</p>
+                        <div class="flex justify-center items-center gap-2">
+                            <button type="button" *ngIf="element.attachments.length; else noFiles"
+                                (click)="openAttachmentView(element)"
+                                class="w-7 h-7 rounded-full border border-violet-300 bg-violet-50 hover:bg-violet-100 hover:border-violet-500 flex justify-center items-center"
+                                matTooltip="View Files" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                <ng-icon name="heroDocumentText" class="text-violet-700 w-4 h-4"></ng-icon>
+                            </button>
+                            <ng-template #noFiles>
+                                <button type="button" *ngIf="canUploadAttachments(element)"
+                                    (click)="openAttachmentUpload(element)"
+                                    class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
+                                    matTooltip="Upload Files" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                    <ng-icon name="heroArrowUpTray" class="text-black w-4 h-4"></ng-icon>
+                                </button>
+                                <p *ngIf="!canUploadAttachments(element)" class="text-gray-400">N/A</p>
+                            </ng-template>
                         </div>
-                        <ng-template #elseBlock>
-                            <div *ngFor="let file of element.attachments">
-                                <p class="w-32 truncate ... hover:text-violet-600" matTooltip="Download File"
-                                    (click)="onDownloadClicks(file)" matTooltipPosition="right"
-                                    matTooltipClass="mat-tooltip">{{file.originalname}}</p>
-                            </div>
-                        </ng-template>
                     </td>
                 </ng-container>
 
