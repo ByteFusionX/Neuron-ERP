@@ -117,6 +117,7 @@ export class QuotationEditComponent {
       attention: [null, Validators.required],
       date: ['', Validators.required],
       department: [null, Validators.required],
+      departments: [[] as string[], Validators.required],
       subject: ['', Validators.required],
       currency: [null, Validators.required],
       quoteCompany: [null, Validators.required],
@@ -146,6 +147,11 @@ export class QuotationEditComponent {
       this.quoteData.client = (this.quoteData.client as getCustomer)?._id
       this.quoteData.attention = (this.quoteData?.attention as ContactDetail)?._id
       this.quoteData.department = (this.quoteData.department as getDepartment)?._id
+      this.quoteData.departments = (this.quoteData.departments?.length
+        ? this.quoteData.departments
+        : [this.quoteData.department])
+        .map((dept) => (dept as getDepartment)?._id ?? (dept as string))
+        .filter((id): id is string => !!id)
       this.quoteData.createdBy = (this.quoteData.createdBy as getEmployee)?._id
     } else {
       this._router.navigate(['/quotations']);
@@ -177,6 +183,22 @@ export class QuotationEditComponent {
     })
   }
 
+  /**
+   * The quotation can target several departments. `department` stays the primary one
+   * (it drives the quote id and the list filters) and is always the first selection.
+   */
+  onDepartmentsChange(): void {
+    const selected: string[] =
+      this.quoteForm.controls['departments'].value || [];
+    this.quoteForm.controls['department'].patchValue(selected[0] ?? null);
+  }
+
+  private setDepartments(departmentIds: (string | null | undefined)[]): void {
+    const selected = departmentIds.filter((id): id is string => !!id);
+    this.quoteForm.controls['departments'].patchValue(selected);
+    this.quoteForm.controls['department'].patchValue(selected[0] ?? null);
+  }
+
   getNotes() {
     this._profileService.getNotes().subscribe((res: Notes) => {
       this.customerNotes = res.customerNotes
@@ -195,7 +217,11 @@ export class QuotationEditComponent {
       const departmentId =
         (customer.department as getDepartment)?._id ??
         (customer.department as unknown as string);
-      this.quoteForm.controls['department'].patchValue(departmentId ?? null);
+      if (fromTemplate) {
+        // Only reset the departments when the user actually picks a different customer,
+        // otherwise the saved multi-selection would be wiped on load.
+        this.setDepartments([departmentId]);
+      }
     }
   }
 

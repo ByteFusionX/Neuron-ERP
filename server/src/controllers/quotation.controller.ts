@@ -22,6 +22,7 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         
         const createdBy = await getEmployeeData(userToken)
         quoteData.createdBy = createdBy._id
+        normalizeQuoteDepartments(quoteData)
 
         let quoteId: string | undefined = await generateQuoteId(quoteData.department, quoteData.createdBy, quoteData.date);
         if (!quoteId && quoteData.status === quoteStatus.Draft) {
@@ -174,6 +175,14 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             },
             {
                 $unwind: '$department',
+            },
+            {
+                $lookup: {
+                    from: 'departments',
+                    localField: 'departments',
+                    foreignField: '_id',
+                    as: 'departments'
+                }
             },
             {
                 $lookup: {
@@ -373,6 +382,14 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
             },
             {
                 $unwind: '$department',
+            },
+            {
+                $lookup: {
+                    from: 'departments',
+                    localField: 'departments',
+                    foreignField: '_id',
+                    as: 'departments'
+                }
             },
             {
                 $lookup: {
@@ -632,6 +649,14 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             },
             {
                 $unwind: '$department',
+            },
+            {
+                $lookup: {
+                    from: 'departments',
+                    localField: 'departments',
+                    foreignField: '_id',
+                    as: 'departments'
+                }
             },
             {
                 $lookup: {
@@ -936,6 +961,7 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
     try {
         const quoteData = req.body;
         const { quoteId } = req.params;
+        normalizeQuoteDepartments(quoteData)
 
         const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, quoteData)
 
@@ -1500,4 +1526,26 @@ export const removeLpo = async (req: Request, res: Response, next: NextFunction)
         console.log(error)
         next(error);
     }
+}
+
+/**
+ * Keeps the legacy single `department` field and the new `departments` array in sync.
+ * `department` stays the primary one (it drives quote id generation, list filters and
+ * the existing aggregations), and is always the first entry of `departments`.
+ */
+export const normalizeQuoteDepartments = (quoteData: any) => {
+    if (!quoteData) return quoteData;
+
+    const departments: string[] = Array.isArray(quoteData.departments)
+        ? quoteData.departments.filter((id: string) => !!id).map((id: any) => id?._id ?? id)
+        : [];
+
+    if (departments.length) {
+        quoteData.departments = [...new Set(departments.map(String))];
+        quoteData.department = quoteData.departments[0];
+    } else if (quoteData.department) {
+        quoteData.departments = [String(quoteData.department?._id ?? quoteData.department)];
+    }
+
+    return quoteData;
 }

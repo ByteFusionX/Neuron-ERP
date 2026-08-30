@@ -205,6 +205,7 @@ export class CreateQuotatationComponent {
       attention: [null, Validators.required],
       date: ['', Validators.required],
       department: [null, Validators.required],
+      departments: [[] as string[], Validators.required],
       subject: ['', Validators.required],
       currency: [null, Validators.required],
       quoteCompany: [null, Validators.required],
@@ -230,6 +231,11 @@ export class CreateQuotatationComponent {
             enqId: data._id,
             currency: data?.preSale?.estimations?.currency,
           });
+
+          this.setDepartments([
+            (data.department as unknown as getDepartment)?._id ??
+              (data.department as unknown as string),
+          ]);
 
           if (data?.preSale?.estimations?.optionalItems?.length) {
             this.estimatedOptionalItems = data.preSale.estimations.optionalItems;
@@ -274,6 +280,22 @@ export class CreateQuotatationComponent {
     });
   }
 
+  /**
+   * The quotation can target several departments. `department` stays the primary one
+   * (it drives the quote id and the list filters) and is always the first selection.
+   */
+  onDepartmentsChange(): void {
+    const selected: string[] =
+      this.quoteForm.controls['departments'].value || [];
+    this.quoteForm.controls['department'].patchValue(selected[0] ?? null);
+  }
+
+  private setDepartments(departmentIds: (string | null | undefined)[]): void {
+    const selected = departmentIds.filter((id): id is string => !!id);
+    this.quoteForm.controls['departments'].patchValue(selected);
+    this.quoteForm.controls['department'].patchValue(selected[0] ?? null);
+  }
+
   getNotes() {
     this._profileService.getNotes().subscribe((res: Notes) => {
       this.customerNotes = res.customerNotes;
@@ -306,9 +328,7 @@ export class CreateQuotatationComponent {
             const departmentId =
               (customer.department as getDepartment)?._id ??
               (customer.department as unknown as string);
-            this.quoteForm.controls['department'].patchValue(
-              departmentId ?? null,
-            );
+            this.setDepartments([departmentId]);
           }
         }),
       );
@@ -316,7 +336,7 @@ export class CreateQuotatationComponent {
       this.config.notFoundText = 'Select a client first..';
       this.contacts = [];
       this.quoteForm.controls['attention'].setValue(undefined);
-      this.quoteForm.controls['department'].patchValue(null);
+      this.setDepartments([]);
     }
   }
 
@@ -653,10 +673,10 @@ export class CreateQuotatationComponent {
   patchValues(data: getEnquiry) {
     this.quoteForm.patchValue({
       client: data?.client._id,
-      department: data?.department._id,
       enqId: data?._id,
     });
 
+    this.setDepartments([data?.department._id as string]);
     this.onChange(data?.client._id as string);
     this.quoteForm.patchValue({
       attention: data?.contact._id,

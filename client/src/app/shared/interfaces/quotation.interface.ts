@@ -44,6 +44,7 @@ export interface Quotatation {
     attention: ContactDetail;
     date: string;
     department: getDepartment;
+    departments?: getDepartment[];
     subject: string;
     currency: string;
     quoteCompany: string;
@@ -71,6 +72,7 @@ export interface getQuotatation {
     attention: ContactDetail;
     date: string;
     department: getDepartment;
+    departments?: getDepartment[];
     subject: string;
     currency: string;
     quoteCompany: string;
@@ -111,6 +113,7 @@ export interface quotatationForm {
     attention: string | ContactDetail | undefined;
     date: string | null;
     department: string | getDepartment | undefined;
+    departments?: (string | getDepartment)[];
     subject: string;
     currency: string;
     quoteCompany: string;

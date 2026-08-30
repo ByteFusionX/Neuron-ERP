@@ -183,12 +183,11 @@
                         '+element.createdBy.lastName}}
                     </td>
                 </ng-container>
-
                 <ng-container matColumnDef="department">
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[12px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
                         Department </th>
-                    <td mat-cell *matCellDef="let element"> {{element.department.departmentName}} </td>
+                    <td mat-cell *matCellDef="let element"> {{departmentNames(element)}} </td>
                 </ng-container>
                 <ng-container matColumnDef="totalCost">
                     <th *matHeaderCellDef
@@ -202,7 +201,7 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100 text-center  px-[4px] py-[16px]  text-dark  text-[15px] font-medium border-none before:hidden">
                         Status </th>
-                    <td mat-cell *matCellDef="let element;let i= index" class="hover:bg-white"
+                    <td mat-cell *matCellDef="let element;let i= index"
                         (click)="preventClick($event)">
                         <div (click)="onStatus($event,element.status)"
                             *ngIf="element.status !== 'Expired' && (!element.lpoFiles.length || isSuperAdmin)"
@@ -243,7 +242,7 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100 text-center  px-[4px] py-[16px]  text-dark  text-[15px] font-medium border-none before:hidden">
                         Deal Status </th>
-                    <td mat-cell *matCellDef="let element;let i= index" class="hover:bg-white"
+                    <td mat-cell *matCellDef="let element;let i= index"
                         (click)="preventClick($event)">
                         <div class="w-full flex justify-center items-center" *ngIf="element?.dealData?.status">
                             <div [ngSwitch]="element?.dealData?.status" class="flex items-center space-x-2">
@@ -287,7 +286,7 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[12px] py-[16px] text-center  text-dark  text-[15px] font-medium border-none before:hidden">
                         Action </th>
-                    <td mat-cell *matCellDef="let element; let i=index" class="hover:bg-white"
+                    <td mat-cell *matCellDef="let element; let i=index"
                         (click)="preventClick($event)">
                         <div class="flex justify-end items-center gap-2">
                             <ng-container *ngIf="element.status !== 'Expired'">

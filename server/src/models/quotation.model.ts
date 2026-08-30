@@ -55,6 +55,7 @@ interface Quotation extends Document {
     attention: Types.ObjectId;
     date: Date;
     department: Types.ObjectId;
+    departments: Types.ObjectId[];
     subject: string;
     currency: string;
     quoteCompany: string;
@@ -258,6 +259,10 @@ const quotationSchema = new Schema<Quotation>({
         type: Schema.Types.ObjectId,
         ref: 'Department',
         required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
+    },
+    departments: {
+        type: [{ type: Schema.Types.ObjectId, ref: 'Department' }],
+        default: [],
     },
     subject: {
         type: String,

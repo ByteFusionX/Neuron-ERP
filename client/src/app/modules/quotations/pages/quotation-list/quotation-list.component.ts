@@ -622,4 +622,13 @@ export class QuotationListComponent {
       this.isEventClicked = false;
     });
   }
+
+  departmentNames(element: { department?: getDepartment; departments?: getDepartment[] }): string {
+    const departments = element?.departments?.length
+      ? element.departments
+      : element?.department
+        ? [element.department]
+        : [];
+    return departments.map((dept) => dept?.departmentName).filter(Boolean).join(', ');
+  }
 }

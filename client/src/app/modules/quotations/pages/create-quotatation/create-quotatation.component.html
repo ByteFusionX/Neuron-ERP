@@ -124,34 +124,24 @@
           >
             Department
           </label>
-          <ng-container *ngIf="!isEdit; else departemntBlock">
-            <ng-container
-              *ngIf="enquiryData$ | async as enquiryData; else departemntBlock"
+          <ng-select
+            [class.border-red-500]="f['departments'].invalid && submit"
+            id="department"
+            bindLabel="departmentName"
+            class="form border"
+            placeholder="Select one or more departments"
+            appendTo="body"
+            formControlName="departments"
+            [multiple]="true"
+            [closeOnSelect]="false"
+            (change)="onDepartmentsChange()"
+          >
+            <ng-option
+              *ngFor="let department of departments"
+              [value]="department._id"
+              >{{ department.departmentName }}</ng-option
             >
-              <p
-                class="block w-full bg-gray-100 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight truncate"
-              >
-                {{ enquiryData.department.departmentName }}
-              </p>
-            </ng-container>
-          </ng-container>
-          <ng-template #departemntBlock>
-            <ng-select
-              [class.border-red-500]="f['department'].invalid && submit"
-              id="department"
-              bindLabel="departmentName"
-              class="form border"
-              placeholder="Department"
-              appendTo="body"
-              formControlName="department"
-            >
-              <ng-option
-                *ngFor="let department of departments"
-                [value]="department._id"
-                >{{ department.departmentName }}</ng-option
-              >
-            </ng-select>
-          </ng-template>
+          </ng-select>
         </div>
 
         <div class="flex flex-col">

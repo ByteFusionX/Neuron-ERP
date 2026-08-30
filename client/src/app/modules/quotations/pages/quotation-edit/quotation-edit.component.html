@@ -41,9 +41,11 @@
                             for="department">
                             Department
                         </label>
-                        <ng-select [class.border-red-500]="f['department'].invalid && submit" bindLabel="departmentName"
-                            id="department" class="form border" placeholder="Department" appendTo="body"
-                            formControlName="department">
+                        <ng-select [class.border-red-500]="f['departments'].invalid && submit"
+                            bindLabel="departmentName" id="department" class="form border"
+                            placeholder="Select one or more departments" appendTo="body"
+                            formControlName="departments" [multiple]="true" [closeOnSelect]="false"
+                            (change)="onDepartmentsChange()">
                             <ng-option *ngFor="let department of departments"
                                 [value]="department._id">{{department.departmentName}}</ng-option>
                         </ng-select>
