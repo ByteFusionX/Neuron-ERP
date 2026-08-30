@@ -3,13 +3,14 @@ import { CreateCustomerDialog } from '../create-customer/create-customer.compone
 import { getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
-import { NavigationExtras, Router, ActivatedRoute, RouterLink } from '@angular/router';
+import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { BehaviorSubject, Observable, share, Subscription } from 'rxjs';
 import { getCreators, getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { MatDialog } from '@angular/material/dialog';
 import { ShareTransferCustomerComponent } from '../share-transfer-customer/share-transfer-customer.component';
 import { SharedWithListComponent } from '../shared-with-list/shared-with-list.component';
+import { CustomerViewComponent, CustomerViewModalData } from '../customer-view/customer-view.component';
 import { FormsModule } from '@angular/forms';
 import { NgIcon } from '@ng-icons/core';
 import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
@@ -219,11 +220,22 @@ export class CustomersListComponent {
   }
 
   onRowClicks(index: number) {
-    let data = this.dataSource.data[index];
-    const navigationExtras: NavigationExtras = {
-      state: data
+    const data = this.dataSource.data[index];
+    const modalData: CustomerViewModalData = {
+      customerId: data.clientRef
     };
-    this._router.navigate([`/customers/view/${data.clientRef}`], navigationExtras);
+
+    const viewDialog = this.dialog.open(CustomerViewComponent, {
+      data: modalData,
+      width: '1100px',
+      maxHeight: '90vh'
+    });
+
+    viewDialog.afterClosed().subscribe((result) => {
+      if (result === 'deleted') {
+        this.getAllCustomers();
+      }
+    });
   }
 
   checkPermission() {

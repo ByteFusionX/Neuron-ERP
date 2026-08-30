@@ -1,133 +1,81 @@
-<div class="bg-white m-6">
-    <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">Customer - <span class="uppercase">{{customerData.companyName}}</span></h3>
-        
-        <div class="flex gap-2">
-            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-                (click)="onCustomerEdit()">
-                <div class="flex justify-center items-center gap-2">
-                    <ng-icon name="heroPencilSquare"></ng-icon>
-                    Edit
-                </div>
-            </button>
-            <button class="bg-red-700 hover:bg-red-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-                (click)="deleteCustomer()">
-                <div class="flex justify-center items-center gap-2">
-                    <ng-icon name="heroTrash"></ng-icon>
-                    Delete
-                </div>
-            </button>
+<app-modal-layout
+  [title]="'Customer - ' + (customerData ? customerData.companyName.toUpperCase() : '')"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="footerButtons"
+  [showFooter]="!isLoading"
+  contentClass="p-6"
+  contentMaxHeight="80vh">
+
+  @if (isLoading) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else if (customerData) {
+
+    <section class="rounded-md border border-gray-200 bg-white mb-6">
+      <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+        <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Customer Details</h4>
+      </div>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Client Ref Id</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ customerData.clientRef }}</dd>
         </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Company Name</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ customerData.companyName }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Department</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ customerData.department.departmentName }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Customer Type</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ customerData.customerType.customerTypeName | formatString }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Customer Email Id</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ customerData.customerEmailId }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Contact No.</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words uppercase">{{ customerData.contactNo }}</dd>
+        </div>
+        <div class="min-w-0 col-span-2 sm:col-span-3 lg:col-span-2">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Company Address</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ customerData.companyAddress }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <div class="w-full">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">Contact Details</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-64 overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th scope="col" class="px-6 py-3 border">Name</th>
+              <th scope="col" class="px-6 py-3 border">Email</th>
+              <th scope="col" class="px-6 py-3 border">Phone No.</th>
+              <th scope="col" class="px-6 py-3 border">Department</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (contact of customerData.contactDetails; track contact.email) {
+              <tr class="bg-white border-b">
+                <td class="border px-6 py-3 font-medium text-gray-800">
+                  {{ contact.courtesyTitle + '.' + contact.firstName + ' ' + contact.lastName }}
+                </td>
+                <td class="border px-6 py-3 font-medium text-gray-800">{{ contact.email }}</td>
+                <td class="border px-6 py-3 font-medium text-gray-800">{{ contact.phoneNo }}</td>
+                <td class="border px-6 py-3 font-medium text-gray-800">{{ contact.department.departmentName }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td class="px-6 py-3 border text-center text-gray-400" colspan="4">No contact details found</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
-
-    <div class="flex flex-col py-6 mx-auto w-full  text-gray-900 bg-white  px-9">
-
-        <div class="w-full ">
-            <div class="relative overflow-x-auto mt-6 w-full flex gap-6">
-                <table class="w-full text-md text-left rtl:text-right text-black border ">
-                    <tbody>
-                        <tr class=" border-b ">
-                            <td class="px-2 py-2  border text-left font-medium bg-gray-50">
-                                Client Ref Id
-                            </td>
-                            <td class="px-2 py-2 border text-start ">
-                                {{customerData.clientRef}}
-                            </td>
-                            
-                            <td class="px-2 py-2  border text-start font-medium bg-gray-50">
-                                Company Name
-                            </td>
-                            <td class="px-2 py-2 border text-start">
-                                {{customerData.companyName}}
-                            </td>
-                           
-                        </tr>
-                        <tr class=" border-b ">
-                            <td class="px-2 py-2  border text-left font-medium bg-gray-50">
-                                Department
-                            </td>
-                            <td class="px-2 py-2 border text-start ">
-                                {{customerData.department.departmentName}}
-                            </td>
-                            
-                            <td class="px-2 py-2  border text-left font-medium bg-gray-50">
-                                Customer Type
-                            </td>
-                            <td class="px-2 py-2 border text-start ">
-                                {{customerData.customerType.customerTypeName | formatString}}
-                            </td>
-                           
-                        </tr>
-
-                        <tr class=" border-b ">
-                            
-                            <td class="px-2 py-2  border text-start font-medium bg-gray-50">
-                                Customer Email Id
-                            </td>
-                            <td class="px-2 py-2 border text-start ">
-                                {{customerData.customerEmailId}}
-                            </td>
-                            <td class="px-2 py-2  border text-start font-medium bg-gray-50">
-                                Contact No.
-                            </td>
-                            <td class="px-2 py-2 border text-start uppercase">
-                                {{customerData.contactNo}}
-                            </td>
-                        </tr>
-                        <tr class=" border-b ">
-                            <td class="px-2 py-2  border text-start font-medium bg-gray-50">
-                                Company Address
-                            </td>
-                            <td class="px-2 py-2 border text-start ">
-                                {{customerData.companyAddress}}
-                            </td>
-                        </tr>
-                        
-                        
-                    </tbody>
-                </table>
-                </div>
-
-        </div>
-        <div class="relative overflow-x-auto mt-6">
-        <p class="text-sm uppercase font-semibold mb-2">Contact Details</p>
-
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border">
-                <thead class="text-xs text-gray-700 uppercase bg-gray-50  ">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 w-96 border">
-                            Name
-                        </th>
-                        <th scope="col" class="px-6 py-3 border">
-                            Email
-                        </th>
-                        <th scope="col" class="px-6 py-3 border">
-                            Phone No.
-                        </th>
-                        <th scope="col" class="px-6 py-3 border">
-                            Depatment
-                        </th>
-                        
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr class="bg-white border-b " *ngFor="let contact of customerData.contactDetails">
-                        <td class=" border px-6 py-3  font-medium text-gray-800 text-base">
-                            {{contact.courtesyTitle + '.' + contact.firstName + ' ' + contact.lastName}}
-                        </td>
-                        <td class="border px-6 py-3  font-medium text-gray-800 text-base">
-                           {{contact.email}}
-                        </td>
-                        <td class="border px-6 py-3  font-medium text-gray-800 text-base">
-                           {{contact.phoneNo}}
-                        </td>
-                        <td class="border px-6 py-3  font-medium text-gray-800 text-base">
-                           {{contact.department.departmentName}}
-                        </td>
-                    </tr>
-                    
-                </tbody>
-            </table>
-        </div>
-      
-</div>
+  }
+</app-modal-layout>

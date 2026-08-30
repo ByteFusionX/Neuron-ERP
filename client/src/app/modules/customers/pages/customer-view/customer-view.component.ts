@@ -1,73 +1,72 @@
-import { Component } from '@angular/core';
-import { ActivatedRoute, NavigationExtras, Router } from '@angular/router';
+import { Component, Inject, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { NgIcon } from '@ng-icons/core';
-import { NgFor } from '@angular/common';
+import { ModalLayoutComponent, ModalFooterButton } from 'src/app/shared/components/modal-layout/modal-layout.component';
 import { FormatStringPipe } from '../../../../shared/pipes/formatString.pipe';
 
+export interface CustomerViewModalData {
+  customerId: string;
+}
+
 @Component({
-    selector: 'app-customer-view',
-    templateUrl: './customer-view.component.html',
-    styleUrls: ['./customer-view.component.css'],
-    imports: [NgIcon, NgFor, FormatStringPipe]
+  selector: 'app-customer-view',
+  standalone: true,
+  templateUrl: './customer-view.component.html',
+  styleUrls: ['./customer-view.component.css'],
+  imports: [CommonModule, FormatStringPipe, ModalLayoutComponent]
 })
-export class CustomerViewComponent {
+export class CustomerViewComponent implements OnInit {
   customerData!: getCustomer;
+  isLoading: boolean = true;
+  footerButtons: ModalFooterButton[] = [];
 
   constructor(
+    public dialogRef: MatDialogRef<CustomerViewComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: CustomerViewModalData,
     private _router: Router,
     private _employeeService: EmployeeService,
     private _customerService: CustomerService,
-    private route: ActivatedRoute,
     public _toast: ToastrService,
     private dialog: MatDialog
-  ) {
-    const navigation = this._router.getCurrentNavigation();
-    if (navigation && navigation.extras.state) {
-      this.customerData = navigation.extras.state as getCustomer
-    } else {
-      const customerId = this.route.snapshot.paramMap.get('customerId');
-      if (customerId) {
-        let access;
-        let userId;
-        this._employeeService.employeeData$.subscribe((employee) => {
-          access = employee?.category.privileges.customer.viewReport
-          userId = employee?._id
-        })
-        this._customerService.getCustomerByClientRef(customerId, access, userId).subscribe((res) => {
-          if (res) {
-            if (res.access) {
-              this.customerData = res.customerData;
-            } else {
-              this._toast.warning('This user detail cannot be displayed to you due to the permissions assigned')
-              this._router.navigate(['/customers'])
-            }
-          } else {
-            this._router.navigate(['/customers'])
-          }
-        })
+  ) { }
+
+  ngOnInit(): void {
+    let access;
+    let userId;
+    this._employeeService.employeeData$.subscribe((employee) => {
+      access = employee?.category.privileges.customer.viewReport;
+      userId = employee?._id;
+    });
+
+    this._customerService.getCustomerByClientRef(this.data.customerId, access, userId).subscribe((res) => {
+      this.isLoading = false;
+      if (res && res.access) {
+        this.customerData = res.customerData;
+        this.footerButtons = [
+          { label: 'Edit', theme: 'primary', icon: 'heroPencilSquare', onClick: () => this.onCustomerEdit() },
+          { label: 'Delete', theme: 'danger', icon: 'heroTrash', onClick: () => this.deleteCustomer() }
+        ];
       } else {
-        this._router.navigate(['/customers'])
+        this._toast.warning('This user detail cannot be displayed to you due to the permissions assigned');
+        this.dialogRef.close();
       }
-    }
+    });
   }
 
   onCustomerEdit() {
-    const navigationExtras: NavigationExtras = {
-      state: this.customerData
-    };
-    this._router.navigate(['/customers/edit'], navigationExtras);
-
+    this.dialogRef.close();
+    this._router.navigate(['/customers/edit'], { state: this.customerData });
   }
 
   deleteCustomer() {
-    const employee = this._employeeService.employeeToken()
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+    const employee = this._employeeService.employeeToken();
+    const confirmDialog = this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Delete Customer',
         description: `Are you sure you want to delete "${this.customerData.companyName}"?`,
@@ -76,12 +75,12 @@ export class CustomerViewComponent {
       }
     });
 
-    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+    confirmDialog.afterClosed().subscribe((confirmed: boolean) => {
       if (confirmed) {
         this._customerService.deleteCustomer({ dataId: this.customerData._id, employeeId: employee.id }).subscribe({
           next: () => {
             this._toast.success('Customer deleted successfully');
-            this._router.navigate(['/customers']);
+            this.dialogRef.close('deleted');
           },
           error: (error) => {
             this._toast.error(error.error.message || 'Failed to delete customer');
@@ -91,4 +90,7 @@ export class CustomerViewComponent {
     });
   }
 
+  onClose() {
+    this.dialogRef.close();
+  }
 }

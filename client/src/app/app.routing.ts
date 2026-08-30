@@ -9,7 +9,6 @@ import { EmployeesComponent } from './modules/employees/employees.component';
 import { HomeLandingComponent } from './modules/home/pages/home-landing/home-landing.component';
 import { CustomersListComponent } from './modules/customers/pages/customers-list/customers-list.component';
 import { CreateCustomerDialog } from './modules/customers/pages/create-customer/create-customer.component';
-import { CustomerViewComponent } from './modules/customers/pages/customer-view/customer-view.component';
 import { CustomerEditComponent } from './modules/customers/pages/customer-edit/customer-edit.component';
 import { AssignedJobsListComponent } from './modules/assigned-jobs/pages/assigned-jobs-list/assigned-jobs-list.component';
 import { UploadEstimationComponent } from './modules/assigned-jobs/pages/upload-estimation/upload-estimation.component';
@@ -107,7 +106,6 @@ export const routes: Routes = [
     children: [
       { path: '', canActivate: [RoleGuard], component: CustomersListComponent },
       { path: 'create', canActivate: [RoleGuard], component: CreateCustomerDialog },
-      { path: 'view/:customerId', canActivate: [RoleGuard], component: CustomerViewComponent },
       { path: 'edit', canActivate: [RoleGuard], component: CustomerEditComponent }
     ]
   },
