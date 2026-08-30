@@ -144,7 +144,7 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden ">
                         Files </th>
-                    <td mat-cell *matCellDef="let element" class="hover:bg-white" (click)="preventClick($event)">
+                    <td mat-cell *matCellDef="let element" (click)="preventClick($event)">
                         <div class="flex justify-center items-center gap-2">
                             <button type="button" *ngIf="element.attachments.length; else noFiles"
                                 (click)="openAttachmentView(element)"
@@ -169,7 +169,7 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
                         Status </th>
-                    <td mat-cell *matCellDef="let element" class="hover:bg-white" (click)="preventClick($event)">
+                    <td mat-cell *matCellDef="let element" (click)="preventClick($event)">
                         <div [ngSwitch]="element.status">
                             <p class="w-fit bg-orange-100 rounded-full px-2 text-orange-600 whitespace-nowrap"
                                 *ngSwitchCase="'Work In Progress'">In Progress</p>
@@ -193,7 +193,7 @@
                     <th *matHeaderCellDef
                         class="bg-gray-100  px-[20px] py-[16px] text-center text-dark  text-[15px] font-medium border-none before:hidden">
                         Presales </th>
-                    <td mat-cell *matCellDef="let element;let i=index" class="hover:bg-white"
+                    <td mat-cell *matCellDef="let element;let i=index"
                         (click)="preventClick($event)">
                         <div class="flex justify-center items-center gap-2">
                             <button type="button"
