@@ -17,6 +17,11 @@ import { NgFor, NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { NgSelectComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 import { RouterLink } from '@angular/router';
+import {
+  DragDropModule,
+  CdkDragDrop,
+  moveItemInArray,
+} from '@angular/cdk/drag-drop';
 import { appNoNegativeNumber } from '../../directives/no-negative-number.directive';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { QuoteItem } from '../../interfaces/quotation.interface';
@@ -35,6 +40,7 @@ import { QuoteItem } from '../../interfaces/quotation.interface';
     NgFooterTemplateDirective,
     RouterLink,
     appNoNegativeNumber,
+    DragDropModule,
   ],
 })
 export class OptionalItemsComponent implements OnInit {
@@ -69,6 +75,8 @@ export class OptionalItemsComponent implements OnInit {
   availabiltyInput$ = new Subject<string>();
   removedOptions: any[] = [];
   suppliers: { _id: string; supplierName: string }[] = [];
+  activeBoldSelections: Record<string, boolean> = {};
+  activeHighlightSelections: Record<string, boolean> = {};
 
   constructor(
     private _fb: FormBuilder,
@@ -313,8 +321,87 @@ export class OptionalItemsComponent implements OnInit {
     (
       (this.optionalItems.at(i) as FormGroup)?.get('items') as FormArray
     )?.removeAt(j);
+    this.clearFormattingActiveStateForOption(i);
 
     this.showUndoOption('item');
+  }
+
+  dropItemDetail(event: CdkDragDrop<AbstractControl[] | undefined>, i: number, j: number): void {
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
+    const itemDetailsArray = this.getItemDetailsArrayControls(i, j);
+    if (!itemDetailsArray) {
+      return;
+    }
+    moveItemInArray(
+      itemDetailsArray.controls,
+      event.previousIndex,
+      event.currentIndex,
+    );
+    itemDetailsArray.updateValueAndValidity();
+    itemDetailsArray.markAsDirty();
+    itemDetailsArray.markAsTouched();
+    this.clearFormattingActiveState(i, j);
+    this.emitCalculatedValues();
+  }
+
+  private clearFormattingActiveStateForOption(i: number): void {
+    const prefix = `${i}-`;
+    for (const key of Object.keys(this.activeBoldSelections)) {
+      if (key.startsWith(prefix)) {
+        delete this.activeBoldSelections[key];
+      }
+    }
+    for (const key of Object.keys(this.activeHighlightSelections)) {
+      if (key.startsWith(prefix)) {
+        delete this.activeHighlightSelections[key];
+      }
+    }
+  }
+
+  private clearFormattingActiveState(i: number, j: number): void {
+    const prefix = `${i}-${j}-`;
+    for (const key of Object.keys(this.activeBoldSelections)) {
+      if (key.startsWith(prefix)) {
+        delete this.activeBoldSelections[key];
+      }
+    }
+    for (const key of Object.keys(this.activeHighlightSelections)) {
+      if (key.startsWith(prefix)) {
+        delete this.activeHighlightSelections[key];
+      }
+    }
+  }
+
+  isItemDetailFilled(i: number, j: number, k: number): boolean {
+    const detailGroup = this.getItemDetailsArrayControls(i, j)?.at(k) as FormGroup;
+    if (!detailGroup) {
+      return false;
+    }
+    const rawValue = detailGroup.getRawValue() || {};
+    return Object.keys(rawValue).some((key) => {
+      const value = rawValue[key];
+      return value !== null && value !== undefined && value.toString().trim() !== '';
+    });
+  }
+
+  onClearItemDetail(i: number, j: number, k: number): void {
+    const detailGroup = this.getItemDetailsArrayControls(i, j)?.at(k) as FormGroup;
+    if (!detailGroup) {
+      return;
+    }
+    detailGroup.reset({
+      detail: '',
+      quantity: '',
+      unitCost: '',
+      profit: '',
+      unitSellingPrice: '',
+      availability: '',
+      supplierId: '',
+      uom: '',
+    });
+    this.emitCalculatedValues();
   }
 
   onRemoveItemDetail(i: number, j: number, k: number): void {
@@ -323,6 +410,7 @@ export class OptionalItemsComponent implements OnInit {
     ).value;
     this.removedItemDetails.push({ item: removedItemDetail, i, j, k });
     this.getItemDetailsArrayControls(i, j)?.removeAt(k);
+    this.clearFormattingActiveState(i, j);
 
     this.showUndoOption('item detail');
   }
@@ -587,6 +675,15 @@ export class OptionalItemsComponent implements OnInit {
     }
 
     control.setValue(newText);
+    this.activeBoldSelections[`${i}-${j}-${k}`] = !isBold;
+  }
+
+  isBoldActive(i: number, j: number, k: number): boolean {
+    return !!this.activeBoldSelections[`${i}-${j}-${k}`];
+  }
+
+  isHighlightActive(i: number, j: number, k: number): boolean {
+    return !!this.activeHighlightSelections[`${i}-${j}-${k}`];
   }
 
   applyHighlighter(
@@ -605,10 +702,10 @@ export class OptionalItemsComponent implements OnInit {
 
     const selectedText = currentValue.substring(selectionStart, selectionEnd);
 
-    const isBold = /^\{.*\}$/.test(selectedText);
+    const isHighlighted = /^\{.*\}$/.test(selectedText);
 
     let newText: string;
-    if (isBold) {
+    if (isHighlighted) {
       newText =
         currentValue.substring(0, selectionStart) +
         selectedText.substring(1, selectedText.length - 1) +
@@ -623,6 +720,7 @@ export class OptionalItemsComponent implements OnInit {
     }
 
     control.setValue(newText);
+    this.activeHighlightSelections[`${i}-${j}-${k}`] = !isHighlighted;
   }
 
   nonNegativeProfitValidator(): ValidatorFn {

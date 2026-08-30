@@ -115,7 +115,7 @@
           ></th>
         </tr>
       </thead>
-      <tbody formGroupName="items">
+      <ng-container formGroupName="items">
         <ng-container
           *ngFor="
             let item of getItemAtOption(optionIndex).controls;
@@ -123,6 +123,7 @@
           "
           [formGroupName]="itemIndex"
         >
+        <tbody>
           <tr>
             <td colspan="11" class="border px-6 py-3 bg-gray-50">
               <span
@@ -177,7 +178,14 @@
               </div>
             </td>
           </tr>
-          <ng-container formArrayName="itemDetails">
+        </tbody>
+        <tbody
+          formArrayName="itemDetails"
+          cdkDropList
+          [cdkDropListData]="getItemDetailsArrayControls(optionIndex, itemIndex)?.controls"
+          [cdkDropListDisabled]="(getItemDetailsArrayControls(optionIndex, itemIndex)?.length || 0) <= 1"
+          (cdkDropListDropped)="dropItemDetail($event, optionIndex, itemIndex)"
+        >
             <ng-container
               *ngFor="
                 let detail of getItemDetailsArrayControls(
@@ -187,7 +195,13 @@
                 let itemDetailIndex = index
               "
             >
-              <tr [formGroupName]="itemDetailIndex">
+              <tr
+                [formGroupName]="itemDetailIndex"
+                cdkDrag
+                [cdkDragData]="detail"
+                [cdkDragDisabled]="(getItemDetailsArrayControls(optionIndex, itemIndex)?.length || 0) <= 1"
+                cdkDragHandle
+              >
                 <td
                   [class.border-red-500]="
                     getItemDetailsArrayControls(optionIndex, itemIndex)
@@ -216,6 +230,34 @@
                         )
                       "
                       class="text-bold hover:bg-gray-300 rounded-full px-2 text-black text-lg"
+                      [class.outline]="
+                        isBoldActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.outline-2]="
+                        isBoldActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.outline-blue-500]="
+                        isBoldActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.bg-gray-300]="
+                        isBoldActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
                       matTooltip="Bold"
                       matTooltipPosition="above"
                     >
@@ -233,6 +275,34 @@
                         )
                       "
                       class="text-bold hover:bg-gray-300 rounded-full px-2 text-black text-lg"
+                      [class.outline]="
+                        isHighlightActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.outline-2]="
+                        isHighlightActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.outline-blue-500]="
+                        isHighlightActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.bg-gray-300]="
+                        isHighlightActive(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
                       matTooltip="Highlight"
                       matTooltipPosition="above"
                     >
@@ -414,25 +484,78 @@
                   >
                   </ng-select>
                 </td>
-                <td class="px-2 py-2 border text-center">
-                  <ng-icon
-                    *ngIf="itemDetailIndex !== 0"
-                    name="heroXMark"
-                    class="text-md p-0 m-0 cursor-pointer text-red-600 mx-2"
-                    (click)="
-                      onRemoveItemDetail(
-                        optionIndex,
-                        itemIndex,
-                        itemDetailIndex
-                      )
-                    "
-                  ></ng-icon>
+                <td class="px-2 py-2 border text-center whitespace-nowrap">
+                  <div class="flex flex-col items-center gap-1">
+                    <ng-icon
+                      [class.cursor-pointer]="
+                        isItemDetailFilled(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.text-gray-500]="
+                        isItemDetailFilled(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.text-gray-300]="
+                        !isItemDetailFilled(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      [class.cursor-not-allowed]="
+                        !isItemDetailFilled(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                      name="heroArrowPath"
+                      class="text-md p-0 m-0"
+                      matTooltip="Clear row"
+                      matTooltipPosition="above"
+                      (click)="
+                        isItemDetailFilled(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        ) &&
+                          onClearItemDetail(
+                            optionIndex,
+                            itemIndex,
+                            itemDetailIndex
+                          )
+                      "
+                    ></ng-icon>
+                    <ng-icon
+                      *ngIf="
+                        (getItemDetailsArrayControls(optionIndex, itemIndex)
+                          ?.length || 0) > 1
+                      "
+                      name="heroXMark"
+                      class="text-md p-0 m-0 cursor-pointer text-red-600"
+                      matTooltip="Remove row"
+                      matTooltipPosition="above"
+                      (click)="
+                        onRemoveItemDetail(
+                          optionIndex,
+                          itemIndex,
+                          itemDetailIndex
+                        )
+                      "
+                    ></ng-icon>
+                  </div>
                 </td>
               </tr>
             </ng-container>
-          </ng-container>
+        </tbody>
         </ng-container>
-      </tbody>
+      </ng-container>
       <tbody>
         <tr>
           <td colspan="11" class="border px-6 py-3 bg-gray-50">
@@ -457,21 +580,21 @@
     <div class="w-full flex justify-start items-center mt-3 gap-3">
       <button
         type="button"
-        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
+        class="bg-violet-700 hover:bg-violet-500 text-white font-medium py-2 px-4 rounded text-sm"
         (click)="addItemFormGroup(optionIndex)"
       >
         + Add Item
       </button>
       <button
         type="button"
-        class="bg-yellow-500 hover:bg-orange-400 text-white font-medium py-2 px-4 rounded text-sm"
+        class="bg-orange-400 hover:bg-orange-300 text-white font-medium py-2 px-4 rounded text-sm"
         (click)="addItemFormGroup(optionIndex, true)"
       >
         + Add Optional Item
       </button>
       <button
         type="button"
-        class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm mt-2"
+        class="bg-violet-700 hover:bg-violet-500 text-white font-medium py-2 px-4 rounded text-sm mt-2"
         (click)="addOptionalItem()"
       >
         + Add Optional Quote

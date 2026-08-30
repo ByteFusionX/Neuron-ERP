@@ -8,3 +8,38 @@ input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+.cdk-drag-preview {
+  background-color: #fff;
+  box-shadow: 0 5px 5px -3px rgba(0, 0, 0, 0.2),
+    0 8px 10px 1px rgba(0, 0, 0, 0.14), 0 3px 14px 2px rgba(0, 0, 0, 0.12);
+  display: table;
+}
+
+.cdk-drag-preview td {
+  background-color: #fff;
+  padding: 8px;
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.4;
+}
+
+.cdk-drop-list-dragging tr:not(.cdk-drag-placeholder) {
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+tbody tr {
+  background-color: #fff;
+}
+
+tbody tr[cdkDragHandle]:not(.cdk-drag-disabled) {
+  cursor: move;
+}
+
+tbody tr[cdkDragHandle]:not(.cdk-drag-disabled) input,
+tbody tr[cdkDragHandle]:not(.cdk-drag-disabled) textarea,
+tbody tr[cdkDragHandle]:not(.cdk-drag-disabled) select,
+tbody tr[cdkDragHandle]:not(.cdk-drag-disabled) .ng-select {
+  cursor: auto;
+}
