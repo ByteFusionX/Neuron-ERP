@@ -19,6 +19,7 @@ import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-l
 import { MatTooltip } from '@angular/material/tooltip';
 import { NgIcon } from '@ng-icons/core';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
+import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 
 @Component({
     selector: 'app-completed-jobs-list',
@@ -105,6 +106,21 @@ export class CompletedJobsListComponent implements OnInit, OnDestroy {
 
   onDateChange(event: { page: number, row: number }) {
     this.subject.next(event)
+  }
+
+  openAttachmentView(element: any): void {
+    if (!element?.preSale?.presaleFiles?.length) {
+      return;
+    }
+
+    const modalData: FileUploadModalData = {
+      title: `Files - ${element.enquiryId}`,
+      existingFiles: element.preSale.presaleFiles,
+      allowMultiple: true,
+      showActions: { upload: false, download: true, view: true, delete: false }
+    };
+
+    this._dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
   }
 
   onDownloadClicks(file: any) {

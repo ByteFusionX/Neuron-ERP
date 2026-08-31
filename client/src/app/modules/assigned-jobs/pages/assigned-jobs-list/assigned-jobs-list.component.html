@@ -65,23 +65,25 @@
                         Reassign. To </th>
                     <td mat-cell *matCellDef="let element">
                         <div *ngIf="element.reAssigned.length > 0; else elseButton"
-                            class="flex justify-between items-center">
+                            class="flex justify-center items-center gap-3">
                             <div>
                                 {{element.reAssigned[0].firstName}}
                                 {{element.reAssigned[0].lastName}}
                             </div>
-                            <button matTooltip="Reassign to Engineer" matTooltipPosition="above" *ngIf="element.status !== 'Assigned To Presale Engineer'"
-                                matTooltipClass="mat-tooltip" class="cursor-pointer flex justify-center items-center"
+                            <button type="button" matTooltip="Reassign to Engineer" matTooltipPosition="above" *ngIf="element.status !== 'Assigned To Presale Engineer'"
+                                matTooltipClass="mat-tooltip" class="w-8 h-8 rounded-full border border-orange-300 bg-orange-50 hover:bg-orange-100 hover:border-orange-500 flex justify-center items-center"
                                 (click)="onReassignClicks(element._id)">
-                                <ng-icon name="heroUserPlus" class="text-gray-600 text-2xl"></ng-icon>
+                                <ng-icon name="heroUserPlus" class="text-orange-600 w-4 h-4"></ng-icon>
                             </button>
                         </div>
                         <ng-template #elseButton>
-                            <button matTooltip="Select Person" matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                                class="cursor-pointer w-8 h-8 rounded-full bg-gray-400 flex justify-center items-center"
-                                (click)="onReassignClicks(element._id)">
-                                <ng-icon name="heroUserPlus" class="text-white text-xl"></ng-icon>
-                            </button>
+                            <div class="flex justify-center items-center">
+                                <button type="button" matTooltip="Select Person" matTooltipPosition="above" matTooltipClass="mat-tooltip"
+                                    class="w-8 h-8 rounded-full border border-orange-300 bg-orange-50 hover:bg-orange-100 hover:border-orange-500 flex justify-center items-center"
+                                    (click)="onReassignClicks(element._id)">
+                                    <ng-icon name="heroUserPlus" class="text-orange-600 w-4 h-4"></ng-icon>
+                                </button>
+                            </div>
                         </ng-template>
                     </td>
                 </ng-container>
@@ -119,7 +121,7 @@
                     <td mat-cell *matCellDef="let element">
                         <div class="flex justify-center items-center gap-3">
                             <button (click)="onViewComment(element.preSale.comment,element.preSale.revisionComment)"
-                                class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
+                                class="w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
                                 matTooltip="View Comment" matTooltipPosition="above" matTooltipClass="mat-tooltip">
                                 <ng-icon name="heroEye" class="text-black"></ng-icon>
                             </button>
@@ -134,7 +136,7 @@
                     <td mat-cell *matCellDef="let element">
                         <div class="flex justify-center items-center gap-3">
                             <button (click)="onEventClicks(element._id)"
-                                class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
+                                class="w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
                                 matTooltip="View Events" matTooltipPosition="above" matTooltipClass="mat-tooltip">
                                 <ng-icon name="heroCalendarDays" class="text-black"></ng-icon>
                             </button>
@@ -145,18 +147,15 @@
                 <ng-container matColumnDef="download">
                     <th *matHeaderCellDef
                         class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Download </th>
+                        Files </th>
                     <td mat-cell *matCellDef="let element">
-                        <div class="flex flex-col gap-2" *ngIf="element.preSale">
-                            <div class="flex" *ngFor="let file of element.preSale.presaleFiles; let i=index">
-                                <p class="w-24 truncate ..." matTooltip="{{file.originalname}}"
-                                    matTooltipPosition="above" matTooltipClass="mat-tooltip">{{file.originalname}}</p>
-                                <button class="w-5 h-5 border rounded-full flex justify-center items-center"
-                                    matTooltip="Download" matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                                    (click)="onDownloadClicks(file)">
-                                    <ng-icon class="text-black" name="heroInboxArrowDown"></ng-icon>
-                                </button>
-                            </div>
+                        <div class="flex justify-center items-center gap-2">
+                            <button type="button" *ngIf="element.preSale?.presaleFiles?.length"
+                                (click)="openAttachmentView(element)"
+                                class="w-8 h-8 rounded-full border border-violet-300 bg-violet-50 hover:bg-violet-100 hover:border-violet-500 flex justify-center items-center"
+                                matTooltip="View Files" matTooltipPosition="above" matTooltipClass="mat-tooltip">
+                                <ng-icon name="heroDocumentText" class="text-violet-700"></ng-icon>
+                            </button>
                         </div>
                     </td>
                 </ng-container>
@@ -174,7 +173,7 @@
                                 <ng-icon name="heroDocumentArrowUp" class="text-white"></ng-icon>
                             </button>
                             <button
-                                class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
+                                class="w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
                                 *ngIf="element?.preSale?.estimations" matTooltip="View Estimations"
                                 matTooltipPosition="above" matTooltipClass="mat-tooltip"
                                 (click)="onViewEstimation(element.preSale.estimations,element._id)">
