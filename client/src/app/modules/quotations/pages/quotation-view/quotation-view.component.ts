@@ -15,6 +15,7 @@ import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { Quotatation, getQuotatation, quotatationForm } from 'src/app/shared/interfaces/quotation.interface';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { QuoteNoteModalComponent } from 'src/app/shared/components/quote-note-modal/quote-note-modal.component';
+import { EditHistoryModalComponent } from 'src/app/shared/components/edit-history-modal/edit-history-modal.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { NgIcon } from '@ng-icons/core';
 import { NgIf, NgFor, DecimalPipe, DatePipe } from '@angular/common';
@@ -96,6 +97,15 @@ export class QuotationViewComponent {
     this._dialog.open(QuoteNoteModalComponent, {
       data: { quoteId: this.quoteData._id },
       width: '500px'
+    });
+  }
+
+  onViewEditHistory() {
+    this._dialog.open(EditHistoryModalComponent, {
+      data: { editHistory: this.quoteData.editHistory || [] },
+      width: '680px',
+      maxWidth: '95vw',
+      autoFocus: false
     });
   }
 

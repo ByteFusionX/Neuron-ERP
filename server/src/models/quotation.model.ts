@@ -34,6 +34,15 @@ interface AdditionalCost {
     value: number;
 }
 
+interface EditHistoryEntry {
+    editedBy: Types.ObjectId;
+    editedAt: Date;
+    action: string;
+    fromStatus?: string;
+    toStatus?: string;
+    reason?: string;
+}
+
 interface Deal {
     dealId: string;
     paymentTerms: string;
@@ -72,6 +81,7 @@ interface Quotation extends Document {
     closingDate: Date;
     eventId: any;
     saveNote: string;
+    editHistory: EditHistoryEntry[];
 }
 
 export enum quoteStatus {
@@ -236,6 +246,35 @@ const dealDatas = new Schema<Deal>({
     },
 });
 
+const editHistoryEntrySchema = new Schema<EditHistoryEntry>({
+    editedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+        required: true,
+    },
+    editedAt: {
+        type: Date,
+        default: Date.now,
+    },
+    action: {
+        type: String,
+        enum: ['Created', 'Updated', 'StatusChanged', 'DealApproved', 'DealRejected', 'DealRevoked'],
+        required: true,
+    },
+    fromStatus: {
+        type: String,
+        required: false,
+    },
+    toStatus: {
+        type: String,
+        required: false,
+    },
+    reason: {
+        type: String,
+        required: false,
+    },
+}, { _id: false });
+
 const quotationSchema = new Schema<Quotation>({
     quoteId: {
         type: String,
@@ -320,6 +359,10 @@ const quotationSchema = new Schema<Quotation>({
     saveNote: {
         type: String,
         required: false,
+    },
+    editHistory: {
+        type: [editHistoryEntrySchema],
+        default: [],
     },
 });
 

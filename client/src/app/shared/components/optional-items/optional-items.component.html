@@ -151,15 +151,33 @@
               </label>
               <div class="flex justify-center items-center">
                 <label for="">ITEM NAME : </label>
-                <input
-                  formControlName="itemName"
-                  type="text"
-                  [class.border-red-500]="
-                    getItemAtOption(optionIndex).at(itemIndex).get('itemName')
-                      ?.invalid && submit
-                  "
-                  class="appearance-none block bg-white text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 ml-2 w-3/6"
-                />
+                <div class="relative ml-2 w-3/6">
+                  <input
+                    formControlName="itemName"
+                    type="text"
+                    autocomplete="off"
+                    [class.border-red-500]="
+                      getItemAtOption(optionIndex).at(itemIndex).get('itemName')
+                        ?.invalid && submit
+                    "
+                    class="appearance-none block bg-white text-gray-700 border border-gray-200 rounded py-2 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 w-full"
+                    (input)="onItemNameInput($any($event.target).value, optionIndex, itemIndex)"
+                    (blur)="closeItemSuggestions(optionIndex, itemIndex)"
+                  />
+                  <ul
+                    *ngIf="isSuggestionKeyActive(optionIndex, itemIndex) && getItemSuggestions(optionIndex, itemIndex).length"
+                    class="absolute z-10 top-full left-0 min-w-[420px] w-max max-w-[560px] max-h-56 overflow-auto bg-white border border-gray-200 rounded shadow-lg text-left"
+                  >
+                    <li
+                      *ngFor="let suggestion of getItemSuggestions(optionIndex, itemIndex)"
+                      (mousedown)="selectItemSuggestion(optionIndex, itemIndex, suggestion)"
+                      class="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
+                    >
+                      <div class="font-medium text-gray-800">{{ suggestion.productCategory?.categoryName }}</div>
+                      <div class="text-gray-500 truncate">{{ suggestion.productDescription }}</div>
+                    </li>
+                  </ul>
+                </div>
                 <button
                   type="button"
                   class="ml-2 bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
@@ -210,14 +228,37 @@
                   "
                   class="border px-6 py-3"
                 >
-                  <textarea
-                    appNoLeadingSpace
-                    formControlName="detail"
-                    class="w-full font-normal appearance-none block rounded py-3 px-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                    type="text"
-                    placeholder="Type / copy the item here."
-                    #inputTextArea
-                  ></textarea>
+                  <div class="relative w-full">
+                    <textarea
+                      appNoLeadingSpace
+                      formControlName="detail"
+                      class="w-full font-normal appearance-none block rounded py-3 px-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                      type="text"
+                      placeholder="Type / copy the item here."
+                      #inputTextArea
+                      (input)="onItemDetailInput($any($event.target).value, optionIndex, itemIndex, itemDetailIndex)"
+                      (blur)="closeItemDetailSuggestions(optionIndex, itemIndex, itemDetailIndex)"
+                    ></textarea>
+                    <ul
+                      *ngIf="isDetailSuggestionKeyActive(optionIndex, itemIndex, itemDetailIndex)"
+                      class="absolute z-10 top-full left-0 w-full max-h-56 overflow-auto bg-white border border-gray-200 rounded shadow-lg text-left"
+                    >
+                      <li
+                        *ngFor="let suggestion of getItemDetailSuggestions(optionIndex, itemIndex, itemDetailIndex)"
+                        (mousedown)="selectItemDetailSuggestion(optionIndex, itemIndex, itemDetailIndex, suggestion)"
+                        class="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100"
+                      >
+                        <div class="font-medium text-gray-800 truncate">{{ suggestion.productDescription }}</div>
+                        <div class="text-gray-500 text-xs">{{ suggestion.productCategory?.categoryName }}</div>
+                      </li>
+                      <li
+                        (mousedown)="onAddProductFromItemDetail(optionIndex, itemIndex, itemDetailIndex)"
+                        class="px-4 py-2 text-sm cursor-pointer text-violet-700 font-medium hover:bg-gray-100 border-t border-gray-200 sticky bottom-0 bg-white"
+                      >
+                        + Add as new Product
+                      </li>
+                    </ul>
+                  </div>
                   <div class="h-5 w-full">
                     <button
                       type="button"

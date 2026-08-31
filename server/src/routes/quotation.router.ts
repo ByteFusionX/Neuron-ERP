@@ -4,6 +4,7 @@ import {
     getApprovedDealSheet,
     getDealSheet,
     getNextQuoteId,
+    getProductSuggestions,
     getQuotations,
     getQuoteNote,
     getReportDetails,
@@ -41,6 +42,7 @@ quoteRouter.post('/deal/revoke', requirePrivilege("dealSheet"), revokeDeal)
 quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
 quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprovedDealSheet)
 quoteRouter.post('/get', getQuotations)
+quoteRouter.get('/product-suggestions', getProductSuggestions)
 quoteRouter.get('/note/:quoteId', getQuoteNote)
 quoteRouter.post('/report', getReportDetails)
 quoteRouter.get('/total', totalQuotation)

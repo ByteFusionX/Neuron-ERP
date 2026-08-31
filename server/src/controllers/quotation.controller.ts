@@ -4,6 +4,8 @@ import Job, { allocateStatus } from '../models/job.model';
 import Department from '../models/department.model';
 import Employee from '../models/employee.model'
 import Enquiry from "../models/enquiry.model";
+import Product from "../models/products.model";
+import ProductCategory from "../models/productCategory.model";
 import { Server } from "socket.io";
 import { calculateDiscountPrice, getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
@@ -30,6 +32,12 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
             quoteId = `DRAFT-${draftIncrementedNum}`;
         }
         quoteData.quoteId = quoteId;
+        quoteData.editHistory = [{
+            editedBy: createdBy._id,
+            editedAt: new Date(),
+            action: 'Created',
+            toStatus: quoteData.status,
+        }];
 
         const quote = new Quotation(quoteData)
 
@@ -923,6 +931,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         type UpdateQuery = {
             $set?: { status: string; lpoFiles?: any[] };
             $unset?: { [key: string]: number };
+            $push?: { editHistory: any };
         };
 
         let updateObject: UpdateQuery = {
@@ -940,6 +949,17 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
                 }
             };
         }
+
+        const editorData = await getEmployeeData(req.user);
+        updateObject.$push = {
+            editHistory: {
+                editedBy: editorData?._id,
+                editedAt: new Date(),
+                action: 'StatusChanged',
+                fromStatus: statusCheck.status,
+                toStatus: status,
+            }
+        };
 
         const quoteUpdated = await Quotation.findByIdAndUpdate(
             quoteId,
@@ -961,9 +981,25 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
     try {
         const quoteData = req.body;
         const { quoteId } = req.params;
+        const { editReason } = req.body;
+        delete quoteData.editReason;
         normalizeQuoteDepartments(quoteData)
 
-        const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, quoteData)
+        const editorData = await getEmployeeData(req.user);
+        const historyEntry: any = {
+            editedBy: editorData?._id,
+            editedAt: new Date(),
+            action: 'Updated',
+            toStatus: quoteData.status,
+        };
+        if (editReason) {
+            historyEntry.reason = editReason;
+        }
+
+        const quoteUpdated = await Quotation.findByIdAndUpdate(
+            quoteId,
+            { $set: quoteData, $push: { editHistory: historyEntry } },
+        )
 
         if (quoteUpdated) {
             return res.status(200).json(quoteUpdated)
@@ -1060,7 +1096,13 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
         const job = new Job(jobData);
         const saveJob = await job.save()
         if (saveJob) {
-            const quoteUpdate = await Quotation.updateOne({ _id: jobData.quoteId }, { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(req.body.userId) })
+            const quoteUpdate = await Quotation.updateOne(
+                { _id: jobData.quoteId },
+                {
+                    $set: { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(req.body.userId) },
+                    $push: { editHistory: { editedBy: req.body.userId, editedAt: new Date(), action: 'DealApproved' } }
+                }
+            )
             if (quoteUpdate) {
                 const socket = req.app.get('io') as Server;
                 const quotation = await Quotation.findById(jobData.quoteId);
@@ -1107,10 +1149,16 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         deal.dealData.status = 'rejected';
         deal.dealData.seenedBySalsePerson = false
         deal.dealData.comments.push(comment);
+        const userData = await getEmployeeData(req.user);
+        deal.editHistory.push({
+            editedBy: userData?._id,
+            editedAt: new Date(),
+            action: 'DealRejected',
+            reason: comment,
+        } as any);
         const savedDeal = await deal.save();
 
         const socket = req.app.get('io') as Server;
-        const userData = await getEmployeeData(req.user);
         await createNotificationWithPrivileges(
             {
                 type: 'DealSheetResponse',
@@ -1156,6 +1204,12 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
 
         deal.dealData.status = 'pending';
         deal.dealData.seenByApprover = false;
+        const revokerData = await getEmployeeData(req.user);
+        deal.editHistory.push({
+            editedBy: revokerData?._id,
+            editedAt: new Date(),
+            action: 'DealRevoked',
+        } as any);
         await deal.save();
         const jobDelete = await Job.deleteOne({ quoteId: quoteId })
 
@@ -1497,6 +1551,59 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
         next(error);
     }
 }
+export const getProductSuggestions = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { search = '', departments = '', limit = '20', category = '' } = req.query;
+        const filter: any = { isDeleted: { $ne: true } };
+
+        const departmentIds = (typeof departments === 'string' && departments.trim())
+            ? departments.split(',').map((d) => d.trim()).filter(Boolean)
+            : [];
+        if (departmentIds.length) {
+            filter.productSegment = { $in: departmentIds };
+        }
+
+        if (typeof category === 'string' && category.trim()) {
+            const escapeRegexValue = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const categoryRegex = new RegExp(escapeRegexValue(category.trim()), 'i');
+            const matchingItemNameCategories = await ProductCategory.find({ categoryName: categoryRegex, isDeleted: { $ne: true } }).select('_id');
+            filter.productCategory = { $in: matchingItemNameCategories.map((c) => c._id) };
+        }
+
+        if (typeof search === 'string' && search.trim()) {
+            const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+            filter.$and = await Promise.all(tokens.map(async (token) => {
+                const tokenRegex = new RegExp(escapeRegex(token), 'i');
+                const matchingCategories = await ProductCategory.find({ categoryName: tokenRegex, isDeleted: { $ne: true } }).select('_id');
+                return {
+                    $or: [
+                        { productDescription: tokenRegex },
+                        { productCategory: { $in: matchingCategories.map((c) => c._id) } },
+                    ],
+                };
+            }));
+        }
+
+        const limitValue = Math.min(Math.max(parseInt(limit as string, 10) || 20, 1), 50);
+
+        const suggestions = await Product.find(filter)
+            .select('productCategory productDescription')
+            .populate('productCategory', 'categoryName')
+            .limit(limitValue);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Product suggestions fetched successfully',
+            data: suggestions,
+        });
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+};
+
 export const getQuoteNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { quoteId } = req.params;

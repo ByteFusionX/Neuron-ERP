@@ -6,6 +6,10 @@
                 <ng-icon name="heroDocumentText"></ng-icon>
                 Note
             </app-btn>
+            <app-btn theme="secondary" (buttonClick)="onViewEditHistory()" *ngIf="isSuperAdmin">
+                <ng-icon name="heroClock"></ng-icon>
+                History
+            </app-btn>
             <app-btn theme="primary" (buttonClick)="onQuoteEdit()" [disabled]="isEditDisabled"
                 [title]="isEditDisabled ? 'Quote won' : ''">
                 <ng-icon name="heroPencilSquare"></ng-icon>

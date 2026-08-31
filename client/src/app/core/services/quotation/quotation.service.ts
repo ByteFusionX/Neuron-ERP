@@ -49,6 +49,17 @@ export class QuotationService {
     return this.http.post<{ quoteId: string }>(`${this.api}/quotation/nextQuoteId`, quoteData)
   }
 
+  getProductSuggestions(params: { search: string; departments?: string[]; category?: string }): Observable<{ success: boolean; message: string; data: { _id: string; productCategory: { _id: string; categoryName: string }; productDescription: string }[] }> {
+    let httpParams: any = { search: params.search || '' };
+    if (params.departments?.length) {
+      httpParams.departments = params.departments.join(',');
+    }
+    if (params.category?.trim()) {
+      httpParams.category = params.category.trim();
+    }
+    return this.http.get<{ success: boolean; message: string; data: any[] }>(`${this.api}/quotation/product-suggestions`, { params: httpParams })
+  }
+
   updateQuoteStatus(quoteId: string, status: QuoteStatus): Observable<QuoteStatus> {
     return this.http.patch<QuoteStatus>(`${this.api}/quotation/status/${quoteId}`, { status })
   }

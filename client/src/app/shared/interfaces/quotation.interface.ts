@@ -37,6 +37,15 @@ export interface File {
     originalname: string;
 }
 
+export interface EditHistoryEntry {
+    editedBy: getEmployee;
+    editedAt: string;
+    action: 'Created' | 'Updated' | 'StatusChanged' | 'DealApproved' | 'DealRejected' | 'DealRevoked';
+    fromStatus?: string;
+    toStatus?: string;
+    reason?: string;
+}
+
 export interface Quotatation {
     _id?: string;
     quoteId?: string;
@@ -63,6 +72,7 @@ export interface Quotatation {
     eventId?: any;
     saveNote?: string;
     job?: { allocateStatus?: string };
+    editHistory?: EditHistoryEntry[];
 }
 
 export interface getQuotatation {
@@ -89,6 +99,7 @@ export interface getQuotatation {
     closingDate: string;
     eventId?: any;
     saveNote?: string;
+    editHistory?: EditHistoryEntry[];
 }
 
 export interface DefaultAndText {
@@ -125,6 +136,7 @@ export interface quotatationForm {
     rfqNo: string;
     closingDate: string;
     saveNote?: string;
+    editHistory?: EditHistoryEntry[];
 }
 
 export enum QuoteStatus {

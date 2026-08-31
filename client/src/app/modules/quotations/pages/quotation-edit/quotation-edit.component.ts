@@ -33,7 +33,7 @@ import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe'
     styleUrls: ['./quotation-edit.component.css'],
     animations: [fadeInOut],
     providers:[DatePipe],
-    imports: [FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, appBulletList, OptionalItemsComponent, NgIf, NgIcon, AsyncPipe, NumberFormatterPipe]
+    imports: [FormsModule, ReactiveFormsModule, NgSelectComponent, NgFor, NgOptionComponent, NgFooterTemplateDirective, RouterLink, appNoLeadingSpace, appBulletList, OptionalItemsComponent, NgIf, NgIcon, AsyncPipe, NumberFormatterPipe, DatePipe]
 })
 export class QuotationEditComponent {
   customers$!: Observable<getCustomer[]>;
@@ -411,6 +411,7 @@ export class QuotationEditComponent {
     });
 
     sanitizedQuoteFormValue.saveNote = saveNote;
+    sanitizedQuoteFormValue.editReason = saveNote;
 
     this._quoteService.updateQuotation(sanitizedQuoteFormValue, this.quoteData._id).subscribe({
       next: (res: Quotatation) => {

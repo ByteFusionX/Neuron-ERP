@@ -72,6 +72,29 @@ export class CreateProductComponent implements OnInit {
 
     if (this.isEditMode) {
       this.patchFormForEdit(this.data.product);
+    } else if (this.data?.prefill) {
+      this.applyPrefill(this.data.prefill);
+    }
+  }
+
+  private applyPrefill(prefill: { productSegment?: string; productCategoryName?: string; productDescription?: string }): void {
+    this.productForm.patchValue({
+      productSegment: prefill.productSegment || '',
+      productDescription: prefill.productDescription || ''
+    });
+    this.matchPrefillCategory(prefill.productCategoryName);
+  }
+
+  private matchPrefillCategory(productCategoryName?: string): void {
+    if (!productCategoryName) {
+      return;
+    }
+    const categoryName = productCategoryName.trim().toLowerCase();
+    const matchedCategory = this.categories.find(
+      (category) => (category.categoryName || '').trim().toLowerCase() === categoryName
+    );
+    if (matchedCategory) {
+      this.productForm.patchValue({ productCategory: matchedCategory._id });
     }
   }
 
@@ -111,6 +134,8 @@ export class CreateProductComponent implements OnInit {
         this.categories = categories;
         if (selectedId) {
           this.productForm.patchValue({ productCategory: selectedId });
+        } else if (!this.isEditMode && this.data?.prefill?.productCategoryName) {
+          this.matchPrefillCategory(this.data.prefill.productCategoryName);
         }
       },
       error: () => {

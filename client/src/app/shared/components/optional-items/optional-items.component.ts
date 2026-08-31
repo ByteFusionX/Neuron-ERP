@@ -12,7 +12,9 @@ import {
 } from '@angular/forms';
 import { FormBuilder } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { NgFor, NgIf } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
 import { NgSelectComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
@@ -24,7 +26,15 @@ import {
 } from '@angular/cdk/drag-drop';
 import { appNoNegativeNumber } from '../../directives/no-negative-number.directive';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { QuoteItem } from '../../interfaces/quotation.interface';
+import { CreateProductComponent } from 'src/app/modules/inventory/pages/all-products/modals/create-product/create-product.component';
+
+interface ProductSuggestion {
+  _id: string;
+  productCategory: { _id: string; categoryName: string };
+  productDescription: string;
+}
 
 @Component({
   selector: 'optional-items',
@@ -78,10 +88,20 @@ export class OptionalItemsComponent implements OnInit {
   activeBoldSelections: Record<string, boolean> = {};
   activeHighlightSelections: Record<string, boolean> = {};
 
+  itemNameInput$ = new Subject<{ term: string; i: number; j: number }>();
+  itemSuggestions: Record<string, ProductSuggestion[]> = {};
+  activeSuggestionKey: string | null = null;
+
+  itemDetailInput$ = new Subject<{ term: string; i: number; j: number; k: number; itemName: string }>();
+  itemDetailSuggestions: Record<string, ProductSuggestion[]> = {};
+  activeDetailSuggestionKey: string | null = null;
+
   constructor(
     private _fb: FormBuilder,
     private snackBar: MatSnackBar,
     private _supplierService: SupplierService,
+    private _quotationService: QuotationService,
+    private _dialog: MatDialog,
   ) {}
 
   ngOnInit() {
@@ -96,6 +116,164 @@ export class OptionalItemsComponent implements OnInit {
       next: (res) => {
         this.suppliers = res?.data || [];
       },
+    });
+
+    this.itemNameInput$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(
+          (prev, curr) => prev.term === curr.term && prev.i === curr.i && prev.j === curr.j,
+        ),
+        switchMap(({ term, i, j }) => {
+          if (!term || term.trim().length < 2) {
+            return [];
+          }
+          return this._quotationService
+            .getProductSuggestions({ search: term.trim(), departments: this.selectedDepartmentIds })
+            .pipe(
+              switchMap((res) => [{ key: `${i}-${j}`, data: res?.data || [] }]),
+            );
+        }),
+      )
+      .subscribe((result) => {
+        if (result && 'key' in result) {
+          this.itemSuggestions[result.key] = result.data;
+          this.activeSuggestionKey = result.key;
+        }
+      });
+
+    this.itemDetailInput$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(
+          (prev, curr) =>
+            prev.term === curr.term &&
+            prev.i === curr.i &&
+            prev.j === curr.j &&
+            prev.k === curr.k &&
+            prev.itemName === curr.itemName,
+        ),
+        switchMap(({ term, i, j, k, itemName }) => {
+          if (!term || term.trim().length < 2) {
+            return [];
+          }
+          return this._quotationService
+            .getProductSuggestions({
+              search: term.trim(),
+              departments: this.selectedDepartmentIds,
+              category: itemName,
+            })
+            .pipe(
+              switchMap((res) => [{ key: `${i}-${j}-${k}`, data: res?.data || [] }]),
+            );
+        }),
+      )
+      .subscribe((result) => {
+        if (result && 'key' in result) {
+          this.itemDetailSuggestions[result.key] = result.data;
+          this.activeDetailSuggestionKey = result.key;
+        }
+      });
+  }
+
+  get selectedDepartmentIds(): string[] {
+    const departments = this.parentFormGroup?.get('departments')?.value || [];
+    return (departments as any[])
+      .map((d) => (typeof d === 'string' ? d : d?._id))
+      .filter(Boolean);
+  }
+
+  onItemNameInput(term: string, i: number, j: number): void {
+    this.itemNameInput$.next({ term, i, j });
+  }
+
+  getItemSuggestions(i: number, j: number): ProductSuggestion[] {
+    return this.itemSuggestions[`${i}-${j}`] || [];
+  }
+
+  isSuggestionKeyActive(i: number, j: number): boolean {
+    return this.activeSuggestionKey === `${i}-${j}`;
+  }
+
+  selectItemSuggestion(i: number, j: number, suggestion: ProductSuggestion): void {
+    const itemGroup = this.getItemAtOption(i)?.at(j) as FormGroup;
+    if (!itemGroup) {
+      return;
+    }
+    itemGroup.get('itemName')?.setValue(suggestion.productCategory?.categoryName || '');
+    const itemDetailsArray = this.getItemDetailsArrayControls(i, j);
+    itemDetailsArray?.at(0)?.get('detail')?.setValue(suggestion.productDescription || '');
+    this.itemSuggestions[`${i}-${j}`] = [];
+    this.activeSuggestionKey = null;
+  }
+
+  closeItemSuggestions(i: number, j: number): void {
+    if (this.activeSuggestionKey === `${i}-${j}`) {
+      this.activeSuggestionKey = null;
+    }
+  }
+
+  onItemDetailInput(term: string, i: number, j: number, k: number): void {
+    const itemGroup = this.getItemAtOption(i)?.at(j) as FormGroup;
+    const itemName = (itemGroup?.get('itemName')?.value || '').toString().trim();
+    this.itemDetailInput$.next({ term, i, j, k, itemName });
+  }
+
+  getItemDetailSuggestions(i: number, j: number, k: number): ProductSuggestion[] {
+    return this.itemDetailSuggestions[`${i}-${j}-${k}`] || [];
+  }
+
+  isDetailSuggestionKeyActive(i: number, j: number, k: number): boolean {
+    return this.activeDetailSuggestionKey === `${i}-${j}-${k}`;
+  }
+
+  selectItemDetailSuggestion(i: number, j: number, k: number, suggestion: ProductSuggestion): void {
+    const itemGroup = this.getItemAtOption(i)?.at(j) as FormGroup;
+    if (!itemGroup) {
+      return;
+    }
+    const itemNameControl = itemGroup.get('itemName');
+    if (itemNameControl && !(itemNameControl.value || '').toString().trim()) {
+      itemNameControl.setValue(suggestion.productCategory?.categoryName || '');
+    }
+    const itemDetailsArray = this.getItemDetailsArrayControls(i, j);
+    itemDetailsArray?.at(k)?.get('detail')?.setValue(suggestion.productDescription || '');
+    this.itemDetailSuggestions[`${i}-${j}-${k}`] = [];
+    this.activeDetailSuggestionKey = null;
+  }
+
+  closeItemDetailSuggestions(i: number, j: number, k: number): void {
+    if (this.activeDetailSuggestionKey === `${i}-${j}-${k}`) {
+      this.activeDetailSuggestionKey = null;
+    }
+  }
+
+  onAddProductFromItemDetail(i: number, j: number, k: number): void {
+    const itemGroup = this.getItemAtOption(i)?.at(j) as FormGroup;
+    const itemName = (itemGroup?.get('itemName')?.value || '').toString().trim();
+    const detailValue = (
+      this.getItemDetailsArrayControls(i, j)?.at(k)?.get('detail')?.value || ''
+    ).toString().trim();
+    const productSegment = this.selectedDepartmentIds[0] || '';
+
+    const dialogRef = this._dialog.open(CreateProductComponent, {
+      disableClose: true,
+      maxHeight: '90vh',
+      width: '50vw',
+      data: {
+        prefill: {
+          productSegment,
+          productCategoryName: itemName,
+          productDescription: detailValue,
+        },
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result) {
+        this.itemDetailSuggestions[`${i}-${j}-${k}`] = [];
+        this.activeDetailSuggestionKey = null;
+      }
     });
   }
 
