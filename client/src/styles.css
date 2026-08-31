@@ -73,34 +73,31 @@ th {
   font-size: 16px;
 }
 
-/* ng-select: replace default theme's blue "selected" color with violet,
-   to match the app's violet accent (e.g. department multi-select on the
-   dashboard filter). */
 .ng-select .ng-value-container .ng-value {
-  color: #5b21b6;
-  background-color: #ede9fe;
+  color: #374151;
+  background-color: #e5e7eb;
 }
 
 .ng-select .ng-value-container .ng-value .ng-value-icon:hover {
-  background-color: #ddd6fe;
+  background-color: #d1d5db;
 }
 
 .ng-select .ng-value-container .ng-value .ng-value-icon.left {
-  border-right: 1px solid #c4b5fd;
+  border-right: 1px solid #d1d5db;
 }
 
 .ng-select .ng-value-container .ng-value .ng-value-icon.right {
-  border-left: 1px solid #c4b5fd;
+  border-left: 1px solid #d1d5db;
 }
 
 .ng-select .ng-option.ng-option-selected,
 .ng-select .ng-dropdown-panel .ng-dropdown-panel-items .ng-option.ng-option-selected.ng-option-marked {
   color: #333;
-  background-color: #ede9fe;
+  background-color: #e5e7eb;
 }
 
 .ng-select .ng-option.ng-option-marked {
-  background-color: #f3f0fd;
+  background-color: #f3f4f6;
   color: #333;
 }
 
