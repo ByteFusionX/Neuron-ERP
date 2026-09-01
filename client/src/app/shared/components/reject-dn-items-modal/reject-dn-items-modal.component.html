@@ -28,13 +28,13 @@
               <input type="number" [(ngModel)]="row.rejectedQty" [disabled]="!row.selected"
                 min="0" [max]="maxRejectable(row)"
                 class="w-20 border rounded px-2 py-1 text-center"
-                [class.border-red-500]="touched && row.selected && !isRowValid(row)" />
+                [class.border-orange-500]="touched && row.selected && !isRowValid(row)" />
             </td>
             <td class="px-3 py-2 border">
               <input type="text" [(ngModel)]="row.reason" [disabled]="!row.selected"
                 placeholder="Reason"
                 class="w-full border rounded px-2 py-1"
-                [class.border-red-500]="touched && row.selected && !row.reason.trim()" />
+                [class.border-orange-500]="touched && row.selected && !row.reason.trim()" />
             </td>
           </tr>
         }
@@ -49,7 +49,7 @@
       placeholder="Enter the overall reason for this rejection"
       rows="3"
       class="appearance-none block w-full bg-gray-100 text-gray-700 border rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white"
-      [class.border-red-500]="touched && !overallReason.trim()">
+      [class.border-orange-500]="touched && !overallReason.trim()">
     </textarea>
     @if(touched && !overallReason.trim()) {
       <span class="text-xs text-red-600">Overall reason is required</span>

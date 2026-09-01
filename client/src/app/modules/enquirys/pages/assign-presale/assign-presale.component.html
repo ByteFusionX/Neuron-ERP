@@ -20,7 +20,7 @@
                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="comment">
                     Comment <span class="text-red-500">*</span>
                 </label>
-                <textarea appNoLeadingSpace [(ngModel)]="comment" name="comment" (ngModelChange)="validateComment()" [ngClass]="{'border-red-500':commentError}"
+                <textarea appNoLeadingSpace [(ngModel)]="comment" name="comment" (ngModelChange)="validateComment()" [ngClass]="{'border-orange-500':commentError}"
                     class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white "
                     id="comment"></textarea>
                 <div *ngIf="commentError" class="text-red-500 mt-1 text-sm">

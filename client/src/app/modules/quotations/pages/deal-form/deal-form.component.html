@@ -91,7 +91,7 @@
               </th>
 
               <td
-                [class.border-red-500]="getItemDetailsControls(i).controls[j].get('quantity')?.invalid && isSubmitted"
+                [class.border-orange-500]="getItemDetailsControls(i).controls[j].get('quantity')?.invalid && isSubmitted"
                 class="border px-2 py-2 text-center">
                 <input appNoLeadingSpace formControlName="quantity" *ngIf="detail.get('dealSelected')?.value"
                   class="w-10 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
@@ -100,7 +100,7 @@
               </td>
 
               <td
-                [class.border-red-500]="getItemDetailsControls(i).controls[j].get('unitCost')?.invalid && isSubmitted"
+                [class.border-orange-500]="getItemDetailsControls(i).controls[j].get('unitCost')?.invalid && isSubmitted"
                 class="border px-6 py-3">
                 <input appNoLeadingSpace formControlName="unitCost" *ngIf="detail.get('dealSelected')?.value"
                   class="w-24 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
@@ -112,7 +112,7 @@
                 <p>{{ calculateTotalCost(i,j) }}</p>
               </td>
 
-              <td [class.border-red-500]="getItemDetailsControls(i).controls[j].get('profit')?.invalid && isSubmitted"
+              <td [class.border-orange-500]="getItemDetailsControls(i).controls[j].get('profit')?.invalid && isSubmitted"
                 class="border py-2 px-6 text-center">
                 <div class="flex justify-center items-center">
                   <input appNoLeadingSpace formControlName="profit" *ngIf="detail.get('dealSelected')?.value"
@@ -135,7 +135,7 @@
               </td>
 
               <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                <ng-select [class.border-red-500]="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted" class="form border"
+                <ng-select [class.border-orange-500]="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted" class="form border"
                   bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
                   <ng-option *ngFor="let supplier of suppliers" [value]="supplier._id">
                     {{ supplier.supplierName }}
@@ -162,7 +162,7 @@
             <div *ngIf="cost.get('type')?.value === 'Additional Cost'" class="w-4/6">
               <input type="text" 
                 formControlName="name"
-                [class.border-red-500]="cost.get('name')?.invalid && isSubmitted"
+                [class.border-orange-500]="cost.get('name')?.invalid && isSubmitted"
                 class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                 placeholder="Cost Name">
               <div *ngIf="cost.get('name')?.hasError('required') && isSubmitted" 
@@ -171,7 +171,7 @@
               </div>
             </div>
             <div *ngIf="cost.get('type')?.value === 'Supplier Discount'" class="w-4/6">
-              <ng-select [class.border-red-500]="cost.get('supplierId')?.invalid && isSubmitted" class="form border"
+              <ng-select [class.border-orange-500]="cost.get('supplierId')?.invalid && isSubmitted" class="form border"
                 bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
                 <ng-option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
                   {{supplier.supplierName}}
@@ -185,7 +185,7 @@
             <div [class]="cost.get('type')?.value !== 'Customer Discount' ? 'w-4/6' : 'w-5/6'">
               <input type="number" 
                 formControlName="value"
-                [class.border-red-500]="cost.get('value')?.invalid && isSubmitted"
+                [class.border-orange-500]="cost.get('value')?.invalid && isSubmitted"
                 class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                 [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost' : 'Discount Amount'">
               <div *ngIf="cost.get('value')?.hasError('required') && isSubmitted" 
@@ -223,7 +223,7 @@
           </label>
           <div class="flex gap-2">
             <div class="w-full" [ngClass]="{'w-1/2':selectedFiles.length}">
-              <div [class.border-red-500]="!this.selectedFiles.length && isSubmitted"
+              <div [class.border-orange-500]="!this.selectedFiles.length && isSubmitted"
                 class="flex border items-center justify-start px-3 mt-2 bg-gray-200 py-2 cursor-pointer h-fit"
                 (click)="fileInput.click()">
                 <div class="font-medium flex items-center text-sm py-1">

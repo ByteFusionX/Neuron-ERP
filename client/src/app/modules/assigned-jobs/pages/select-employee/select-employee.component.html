@@ -20,7 +20,7 @@
         </div>
         <div class="mt-3">
           <label for="comment" class="block text-sm font-medium text-gray-700">Comment</label>
-          <textarea id="comment" name="comment" rows="4" [(ngModel)]="comment" (ngModelChange)="validateComment()" [ngClass]="{'border-red-500':showError}"
+          <textarea id="comment" name="comment" rows="4" [(ngModel)]="comment" (ngModelChange)="validateComment()" [ngClass]="{'border-orange-500':showError}"
               class="p-2 mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               placeholder="Enter your comment here"></textarea>
           <div *ngIf="showError" class="text-red-500 mt-1 text-sm">

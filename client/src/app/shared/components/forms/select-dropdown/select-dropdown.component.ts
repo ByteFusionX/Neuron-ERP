@@ -30,6 +30,7 @@ export class SelectDropdownComponent {
   @Input() clearable = true;
   @Input() defaultClass = true;
   @Input() footerLabel = '';
+  @Input() invalidBorderClass = 'border-orange-500';
 
   @Input() value: any = '';
   disabled = false;

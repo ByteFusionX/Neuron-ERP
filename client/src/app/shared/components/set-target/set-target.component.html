@@ -72,7 +72,7 @@
                     <td class="px-4 py-3" formGroupName="salesRevenue">
                         <div class="relative flex space-x-2">
                             <input type="number" placeholder="To" formControlName="criticalRange"
-                            [ngClass]="{'border-red-500': targetForm.get('salesRevenue.criticalRange')?.hasError('invalidCriticalRange') && submitted}"
+                            [ngClass]="{'border-orange-500': targetForm.get('salesRevenue.criticalRange')?.hasError('invalidCriticalRange') && submitted}"
                                 class="w-full p-2 border border-gray-300 rounded pr-10" required />
                             <span class="absolute right-2 top-2 text-gray-700">QAR</span>
                         </div>
@@ -84,7 +84,7 @@
                     <td class="px-4 py-3" formGroupName="grossProfit">
                         <div class="relative flex space-x-2">
                             <input type="number" placeholder="To" formControlName="criticalRange"
-                            [ngClass]="{'border-red-500': targetForm.get('grossProfit')?.hasError('invalidCriticalRange') && submitted}"
+                            [ngClass]="{'border-orange-500': targetForm.get('grossProfit')?.hasError('invalidCriticalRange') && submitted}"
                                 class="w-full p-2 border border-gray-300 rounded pr-10" required />
                             <span class="absolute right-2 top-2 text-gray-700">QAR</span>
                         </div>
@@ -101,7 +101,7 @@
                     <td class="px-4 py-3" formGroupName="salesRevenue">
                         <div class="relative flex space-x-2">
                             <input type="number" placeholder="To" formControlName="moderateRange"
-                            [ngClass]="{'border-red-500': targetForm.get('salesRevenue')?.hasError('invalidModerateRange') && submitted}"
+                            [ngClass]="{'border-orange-500': targetForm.get('salesRevenue')?.hasError('invalidModerateRange') && submitted}"
                                 class="w-full p-2 border border-gray-300 rounded pr-10" required />
                             <span class="absolute right-2 top-2 text-gray-700">QAR</span>
                         </div>
@@ -112,7 +112,7 @@
                     <td class="px-4 py-3" formGroupName="grossProfit">
                         <div class="relative flex space-x-2">
                             <input type="number" placeholder="To" formControlName="moderateRange"
-                            [ngClass]="{'border-red-500': targetForm.get('grossProfit')?.hasError('invalidModerateRange') && submitted}"
+                            [ngClass]="{'border-orange-500': targetForm.get('grossProfit')?.hasError('invalidModerateRange') && submitted}"
                                 class="w-full p-2 border border-gray-300 rounded pr-10" required />
                             <span class="absolute right-2 top-2 text-gray-700">QAR</span>
                         </div>

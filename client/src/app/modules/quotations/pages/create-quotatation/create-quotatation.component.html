@@ -46,7 +46,7 @@
           </ng-container>
           <ng-template #clientBlock>
             <ng-select
-              [class.border-red-500]="f['client'].invalid && submit"
+              [class.border-orange-500]="f['client'].invalid && submit"
               class="form border"
               id="client"
               bindLabel="companyName"
@@ -96,7 +96,7 @@
           </ng-container>
           <ng-template #attentionBlock>
             <ng-select
-              [class.border-red-500]="f['attention'].invalid && submit"
+              [class.border-orange-500]="f['attention'].invalid && submit"
               class="form border"
               id="attention"
               bindLabel="_id"
@@ -125,7 +125,7 @@
             Department
           </label>
           <ng-select
-            [class.border-red-500]="f['departments'].invalid && submit"
+            [class.border-orange-500]="f['departments'].invalid && submit"
             id="department"
             bindLabel="departmentName"
             class="form border"
@@ -154,7 +154,7 @@
           <input
             appNoLeadingSpace
             formControlName="date"
-            [class.border-red-500]="f['date'].invalid && submit"
+            [class.border-orange-500]="f['date'].invalid && submit"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
             id="quoteDate"
             type="date"
@@ -171,7 +171,7 @@
           </label>
           <input
             formControlName="closingDate"
-            [class.border-red-500]="f['closingDate'].invalid && submit"
+            [class.border-orange-500]="f['closingDate'].invalid && submit"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
             id="closingDate"
             type="date"
@@ -203,7 +203,7 @@
           </ng-container>
           <ng-template #currencyBlock>
             <ng-select
-              [class.border-red-500]="f['currency'].invalid && submit"
+              [class.border-orange-500]="f['currency'].invalid && submit"
               class="form border"
               id="currency"
               bindLabel="currency"
@@ -225,7 +225,7 @@
           <input
             appNoLeadingSpace
             formControlName="subject"
-            [class.border-red-500]="f['subject'].invalid && submit"
+            [class.border-orange-500]="f['subject'].invalid && submit"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
             id="subject"
             type="text"
@@ -241,7 +241,7 @@
             Quoting Company
           </label>
           <ng-select
-            [class.border-red-500]="f['quoteCompany'].invalid && submit"
+            [class.border-orange-500]="f['quoteCompany'].invalid && submit"
             class="form border"
             id="quoteCompany"
             bindLabel="quoteCompany"
@@ -453,7 +453,7 @@
           <button
             type="button"
             [disabled]="isFetchingPreviousJobs"
-            class="border border-violet-700 text-violet-700 hover:bg-violet-50 disabled:opacity-60 font-medium py-2 px-4 rounded text-sm flex justify-center items-center gap-2 whitespace-nowrap"
+            class="border border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 disabled:opacity-60 font-medium py-2 px-4 rounded text-sm flex justify-center items-center gap-2 whitespace-nowrap"
             (click)="openPreviousJobsModal()"
           >
             <ng-icon
@@ -464,7 +464,7 @@
             Previous Jobs
             <span
               *ngIf="!isFetchingPreviousJobs && previousJobsFetched"
-              class="bg-violet-700 text-white rounded-full text-xs px-2 py-0.5"
+              class="bg-orange-600 text-white rounded-full text-xs px-2 py-0.5"
             >
               {{ previousJobItemsCount }}
             </span>
@@ -607,7 +607,7 @@
             appNoLeadingSpace
             appBulletList
             formControlName="customerNote"
-            [class.border-red-500]="f['customerNote'].invalid && submit"
+            [class.border-orange-500]="f['customerNote'].invalid && submit"
             rows="6"
             class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"
             id="customerNote"
@@ -636,7 +636,7 @@
           <textarea
             appNoLeadingSpace
             appBulletList
-            [class.border-red-500]="f['termsAndCondition'].invalid && submit"
+            [class.border-orange-500]="f['termsAndCondition'].invalid && submit"
             formControlName="termsAndCondition"
             rows="6"
             class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"

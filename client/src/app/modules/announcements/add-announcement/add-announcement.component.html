@@ -13,7 +13,7 @@
         <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-first-name">
           Title
         </label>
-        <input appNoLeadingSpace formControlName="title"  [class.border-red-500]="f.title.invalid&&submit"
+        <input appNoLeadingSpace formControlName="title"  [class.border-orange-500]="f.title.invalid&&submit"
           class="appearance-none block w-full bg-gray-200 text-gray-700 border rounded py-3 px-4 mb-4 leading-tight focus:outline-none focus:bg-white"
           id="grid-first-name" type="text" placeholder="Title">
       </div>
@@ -21,7 +21,7 @@
         <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="description">
           Description
         </label>
-        <textarea appNoLeadingSpace formControlName="description"  [class.border-red-500]="f.description.invalid&&submit"
+        <textarea appNoLeadingSpace formControlName="description"  [class.border-orange-500]="f.description.invalid&&submit"
           class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-2 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
           id="description" type="text" placeholder="Description"></textarea>
       </div>
@@ -54,7 +54,7 @@
         <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-password">
           Date
         </label>
-        <input datePastDirective formControlName="date"  [class.border-red-500]="f.date.invalid&&submit"
+        <input datePastDirective formControlName="date"  [class.border-orange-500]="f.date.invalid&&submit"
           class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-2 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
           id="grid-password" type="date">
         <div class="text-red-700 mt-[-5px]" *ngIf="formData.get('date')?.hasError('pastDate')">

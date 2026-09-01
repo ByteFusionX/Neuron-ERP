@@ -131,7 +131,7 @@
                                                 class="w-full border rounded px-3 py-2 text-center focus:outline-none focus:ring-1"
                                                 [class.border-gray-300]="!item.get('currentDeliveryQty')?.errors"
                                                 [class.focus:ring-violet-500]="!item.get('currentDeliveryQty')?.errors"
-                                                [class.border-red-500]="item.get('currentDeliveryQty')?.errors"
+                                                [class.border-orange-500]="item.get('currentDeliveryQty')?.errors"
                                                 [class.focus:ring-red-500]="item.get('currentDeliveryQty')?.errors"
                                                 [class.bg-gray-100]="!isItemSelected(i) || item.get('currentDeliveryQty')?.disabled"
                                                 [class.cursor-not-allowed]="!isItemSelected(i) || item.get('currentDeliveryQty')?.disabled"

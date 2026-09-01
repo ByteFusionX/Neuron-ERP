@@ -3,21 +3,21 @@
         {{ label }}
     </label>
     @if(type == 'textarea') {
-        <textarea [id]="id" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted" 
+        <textarea [id]="id" [placeholder]="placeholder" [class]="(control?.invalid && isSubmitted) ? invalidBorderClass : ''"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-            [formControl]="control" 
+            [formControl]="control"
             [readonly]="readonly"
             [rows]="rows"></textarea>
     }@else if(type == 'date') {
-        <input [id]="id" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted" 
+        <input [id]="id" [placeholder]="placeholder" [class]="(control?.invalid && isSubmitted) ? invalidBorderClass : ''"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-            [formControl]="control" 
+            [formControl]="control"
             [readonly]="readonly"
             type="date"/>
     }@else {
-        <input [id]="id" [placeholder]="placeholder" [class.border-red-500]="control?.invalid && isSubmitted" 
+        <input [id]="id" [placeholder]="placeholder" [class]="(control?.invalid && isSubmitted) ? invalidBorderClass : ''"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-            [formControl]="control" 
+            [formControl]="control"
             [readonly]="readonly"
             [type]="type"/>
     }

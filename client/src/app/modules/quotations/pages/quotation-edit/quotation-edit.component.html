@@ -1,7 +1,6 @@
 <div class="bg-white m-6">
-    <div class="  border-b p-3 px-9 flex justify-between">
+    <div class="  border-b p-3 px-9 flex justify-between items-center">
         <h3 class="text-md font-medium">Create Quote</h3>
-
     </div>
     <form [formGroup]="quoteForm" (ngSubmit)="onQuoteSaveSubmit()">
         <div class="flex flex-col py-6 mx-auto w-full  text-gray-900 bg-white  px-9">
@@ -13,7 +12,7 @@
                             for="grid-first-name">
                             Client
                         </label>
-                        <ng-select [class.border-red-500]="f['client'].invalid && submit" class="form border"
+                        <ng-select [class.border-orange-500]="f['client'].invalid && submit" class="form border"
                             (change)="onCustomerChange($event,true)" formControlName="client" bindLabel="companyName">
                             <ng-option *ngFor="let customer of customers$ | async"
                                 [value]="customer._id">{{customer.companyName}}</ng-option>
@@ -30,7 +29,7 @@
                             for="grid-last-name">
                             Attention
                         </label>
-                        <ng-select [class.border-red-500]="f['attention'].invalid && submit" class="form border"
+                        <ng-select [class.border-orange-500]="f['attention'].invalid && submit" class="form border"
                             formControlName="attention" bindLabel="courtesyTitle">
                             <ng-option *ngFor="let contact of contacts" [value]="contact._id">{{contact.courtesyTitle +
                                 '.' + contact.firstName + ' ' + contact.lastName}}</ng-option>
@@ -41,7 +40,7 @@
                             for="department">
                             Department
                         </label>
-                        <ng-select [class.border-red-500]="f['departments'].invalid && submit"
+                        <ng-select [class.border-orange-500]="f['departments'].invalid && submit"
                             bindLabel="departmentName" id="department" class="form border"
                             placeholder="Select one or more departments" appendTo="body"
                             formControlName="departments" [multiple]="true" [closeOnSelect]="false"
@@ -61,7 +60,7 @@
                             Quote Date
                         </label>
                         <input appNoLeadingSpace formControlName="date"
-                            [class.border-red-500]="f['date'].invalid && submit"
+                            [class.border-orange-500]="f['date'].invalid && submit"
                             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                             id="quoteDate" type="date">
                     </div>
@@ -71,7 +70,7 @@
                             Closing Date
                         </label>
                         <input formControlName="closingDate"
-                        [class.border-red-500]="f['closingDate'].invalid && submit"
+                        [class.border-orange-500]="f['closingDate'].invalid && submit"
                             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                             id="closingDate" type="date">
                     </div>
@@ -81,7 +80,7 @@
                             for="grid-first-name">
                             Currency
                         </label>
-                        <ng-select [class.border-red-500]="f['currency'].invalid && submit" class="form border"
+                        <ng-select [class.border-orange-500]="f['currency'].invalid && submit" class="form border"
                             formControlName="currency" bindLabel="currency">
                             <ng-option value="QAR">QAR</ng-option>
                             <ng-option value="USD">USD</ng-option>
@@ -96,7 +95,7 @@
                             subject
                         </label>
                         <input appNoLeadingSpace formControlName="subject"
-                            [class.border-red-500]="f['subject'].invalid && submit"
+                            [class.border-orange-500]="f['subject'].invalid && submit"
                             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                             id="subject" type="text" placeholder="Subject">
                     </div>
@@ -107,7 +106,7 @@
                             Quoting Company
                         </label>
 
-                        <ng-select [class.border-red-500]="f['quoteCompany'].invalid && submit" class="form border"
+                        <ng-select [class.border-orange-500]="f['quoteCompany'].invalid && submit" class="form border"
                             bindLabel="quoteCompany" formControlName="quoteCompany">
                             <ng-option value="Neuron Technologies">Neuron Technologies</ng-option>
                             <ng-option value="Neuron Security System">Neuron Security System</ng-option>
@@ -200,7 +199,7 @@
                         <ng-option *ngFor="let note of customerNotes" [value]="note">{{note.note}}</ng-option>
                     </ng-select>
                     <textarea appNoLeadingSpace appBulletList formControlName="customerNote"
-                        [class.border-red-500]="f['customerNote'].invalid && submit" rows="6"
+                        [class.border-orange-500]="f['customerNote'].invalid && submit" rows="6"
                         class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"
                         id="customerNote" placeholder="Customer Note"></textarea>
 
@@ -214,7 +213,7 @@
                         placeholder="Default Terms & Condition" appendTo="body">
                         <ng-option *ngFor="let terms of termsAndConditions" [value]="terms">{{terms.note}}</ng-option>
                     </ng-select>
-                    <textarea appNoLeadingSpace appBulletList [class.border-red-500]="f['termsAndCondition'].invalid && submit"
+                    <textarea appNoLeadingSpace appBulletList [class.border-orange-500]="f['termsAndCondition'].invalid && submit"
                         formControlName="termsAndCondition" rows="6"
                         class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-7 focus:outline-none focus:bg-white focus:border-gray-500"
                         id="termsAndCondition" placeholder="Terms and Conditions"></textarea>

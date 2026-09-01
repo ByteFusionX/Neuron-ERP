@@ -4,7 +4,7 @@
       <input 
         formControlName="streetNo"
         class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-        [class.border-red-500]="addressForm.get('streetNo')?.invalid && addressForm.get('streetNo')?.touched"
+        [class.border-orange-500]="addressForm.get('streetNo')?.invalid && addressForm.get('streetNo')?.touched"
         type="text" 
         placeholder="Street Number">
       <div class="text-red-600 text-xs mt-1" *ngIf="addressForm.get('streetNo')?.invalid && addressForm.get('streetNo')?.touched">
@@ -17,7 +17,7 @@
       <input 
         formControlName="zoneNo"
         class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-        [class.border-red-500]="addressForm.get('zoneNo')?.invalid && addressForm.get('zoneNo')?.touched"
+        [class.border-orange-500]="addressForm.get('zoneNo')?.invalid && addressForm.get('zoneNo')?.touched"
         type="text" 
         placeholder="Zone Number">
       <div class="text-red-600 text-xs mt-1" *ngIf="addressForm.get('zoneNo')?.invalid && addressForm.get('zoneNo')?.touched">
@@ -30,7 +30,7 @@
       <input 
         formControlName="buildingNo"
         class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-        [class.border-red-500]="addressForm.get('buildingNo')?.invalid && addressForm.get('buildingNo')?.touched"
+        [class.border-orange-500]="addressForm.get('buildingNo')?.invalid && addressForm.get('buildingNo')?.touched"
         type="text" 
         placeholder="Building Number">
       <div class="text-red-600 text-xs mt-1" *ngIf="addressForm.get('buildingNo')?.invalid && addressForm.get('buildingNo')?.touched">
@@ -52,7 +52,7 @@
       <input 
         formControlName="location"
         class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-        [class.border-red-500]="addressForm.get('location')?.invalid && addressForm.get('location')?.touched"
+        [class.border-orange-500]="addressForm.get('location')?.invalid && addressForm.get('location')?.touched"
         type="text" 
         placeholder="Location">
       <div class="text-red-600 text-xs mt-1" *ngIf="addressForm.get('location')?.invalid && addressForm.get('location')?.touched">

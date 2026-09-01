@@ -11,7 +11,7 @@
       [placeholder]="data.placeholder || 'Enter reason'"
       rows="4"
       class="appearance-none block w-full bg-gray-100 text-gray-700 border rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white"
-      [class.border-red-500]="touched && !reason.trim()"
+      [class.border-orange-500]="touched && !reason.trim()"
       [class.border-gray-200]="!(touched && !reason.trim())">
     </textarea>
     @if(touched && !reason.trim()) {

@@ -196,7 +196,7 @@
     <div *ngIf="showRevision" class="mb-4">
       <h3 class="text-lg font-medium text-gray-700 mb-2">Revision</h3>
       <textarea [(ngModel)]="revisionComment" (ngModelChange)="validateComments()"
-        class="w-full border rounded p-2 bg-gray-50 text-gray-700" rows="4"  [ngClass]="{'border-red-500':showError}"
+        class="w-full border rounded p-2 bg-gray-50 text-gray-700" rows="4"  [ngClass]="{'border-orange-500':showError}"
         placeholder="Provide your revision comments here..."></textarea>
       <div *ngIf="showError" class="text-red-500 mt-1 text-sm">
         Please provide your revision comments.

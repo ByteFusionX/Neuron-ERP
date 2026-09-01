@@ -21,7 +21,7 @@
           placeholder="Select engineer..." 
           appendTo="body" 
           [(ngModel)]="selectedEmployee"
-          [ngClass]="{'border-red-500': showError}">
+          [ngClass]="{'border-orange-500': showError}">
           <ng-option *ngFor="let employee of employees$ | async"
             [value]="employee._id">
             {{ employee.firstName }} {{ employee.lastName }}

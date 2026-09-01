@@ -13,7 +13,7 @@
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="customers">
             Client
           </label>
-          <ng-select [class.border-red-500]="f.client.invalid&&submit" id="client" class="form capitalize border"
+          <ng-select [class.border-orange-500]="f.client.invalid&&submit" id="client" class="form capitalize border"
             placeholder="Customer" appendTo="body" (change)="onChange($event)" formControlName="client">
             <ng-option *ngFor="let customer of customers$ | async" [value]="customer._id"
               class="capitalize">{{customer.companyName}}</ng-option>
@@ -30,7 +30,7 @@
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="contact">
             Point of Contact
           </label>
-          <ng-select [class.border-red-500]="f.contact.invalid&&submit" id="contact" class="form capitalize border"
+          <ng-select [class.border-orange-500]="f.contact.invalid&&submit" id="contact" class="form capitalize border"
             placeholder="Contact" appendTo="body" notFoundText="Select Client" formControlName="contact"
             [loading]="isLoadingContacts">
             <ng-template ng-loadingspinner-tmp>
@@ -49,7 +49,7 @@
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="department">
             Department
           </label>
-          <ng-select [class.border-red-500]="f.department.invalid&&submit" id="department" class="form border"
+          <ng-select [class.border-orange-500]="f.department.invalid&&submit" id="department" class="form border"
             placeholder="Department" appendTo="body" formControlName="department" (change)="getDepartment($event)">
             <ng-option *ngFor="let department of departments$ | async"
               [value]="department._id">{{department.departmentName}}</ng-option>
@@ -59,7 +59,7 @@
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="sales-person-name">
             Sales Person Name
           </label>
-          <input appNoLeadingSpace [class.border-red-500]="f.salesPerson.invalid&&submit"
+          <input appNoLeadingSpace [class.border-orange-500]="f.salesPerson.invalid&&submit"
             class="appearance-none  block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white"
             id="sales-person-name" type="text" placeholder="John Doe" formControlName="salesPerson" readonly>
         </div>
@@ -69,7 +69,7 @@
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold" for="grid-password">
             Enquiry title
           </label>
-          <input appNoLeadingSpace [class.border-red-500]="f.title.invalid&&submit"
+          <input appNoLeadingSpace [class.border-orange-500]="f.title.invalid&&submit"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white"
             id="grid-password" placeholder="Title" type="text" formControlName="title">
         </div>
@@ -79,7 +79,7 @@
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-city">
             Date
           </label>
-          <input [class.border-red-500]="f.date.invalid&&submit" formControlName="date" type="date" id="grid-password"
+          <input [class.border-orange-500]="f.date.invalid&&submit" formControlName="date" type="date" id="grid-password"
             placeholder="Title"
             class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white">
         </div>
@@ -88,7 +88,7 @@
           <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold " for="grid-zip">
             Attachment
           </label>
-          <div [class.border-red-500]="f.attachments.invalid&&submit"
+          <div [class.border-orange-500]="f.attachments.invalid&&submit"
             class="flex border items-center justify-start px-3 mt-2 bg-gray-200 py-2 cursor-pointer"
             (click)="fileInput.click()">
             <div class="font-medium flex items-center text-sm py-1">

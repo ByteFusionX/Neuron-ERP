@@ -28,7 +28,7 @@
                     </label>
                     <input type="datetime-local" id="date" name="date" [(ngModel)]="selectedDate"
                         (ngModelChange)="validateDate()"
-                        [ngClass]="{'border-red-500': dateError}"
+                        [ngClass]="{'border-orange-500': dateError}"
                         class="w-full border px-2 py-2 bg-gray-200 placeholder:text-gray-300 outline-none rounded">
                     <p class="text-sm mt-1 text-red-500" *ngIf="dateError">Select Date</p>
                 </div>
@@ -50,7 +50,7 @@
                     Summary *
                 </label>
                 <textarea appNoLeadingSpace [(ngModel)]="summary" name="summary" (ngModelChange)="validateComment()"
-                    [ngClass]="{'border-red-500':commentError}" placeholder="Write Summary here"
+                    [ngClass]="{'border-orange-500':commentError}" placeholder="Write Summary here"
                     class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-3 leading-tight focus:ring-1 focus:ring-inset focus:ring-violet-300 focus:outline-none focus:bg-white "
                     id="summary"></textarea>
                 <div *ngIf="commentError" class="text-red-500 mt-1 text-sm">

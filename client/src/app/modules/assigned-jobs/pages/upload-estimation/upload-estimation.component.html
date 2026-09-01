@@ -10,7 +10,7 @@
             <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-first-name">
                 Currency
             </label>
-            <ng-select [class.border-red-500]="f['currency'].invalid && submit" class="form border"
+            <ng-select [class.border-orange-500]="f['currency'].invalid && submit" class="form border"
                 formControlName="currency">
                 <ng-option value="QAR">QAR</ng-option>
                 <ng-option value="USD">USD</ng-option>
@@ -92,7 +92,7 @@
                 </label>
 
                 <textarea appNoLeadingSpace formControlName="presaleNote"
-                    [class.border-red-500]="f['presaleNote'].invalid && submit" rows="3"
+                    [class.border-orange-500]="f['presaleNote'].invalid && submit" rows="3"
                     class="mt-2 appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                     id="customerNote" placeholder="Presale Note"></textarea>
 

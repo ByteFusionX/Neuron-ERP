@@ -67,7 +67,7 @@
                                 <label for="id" class="block mb-2 text-sm font-medium text-gray-900 ">Employee
                                     ID</label>
                                 <input formControlName="employeeId" type="text" name="id" id="email" appNoLeadingSpace
-                                    [class.border-red-500]="submit&&(loginForm.controls['employeeId'].hasError('required')||employeeNotFoundError)"
+                                    [class.border-orange-500]="submit&&(loginForm.controls['employeeId'].hasError('required')||employeeNotFoundError)"
                                     class="bg-gray-50 border outline-none border-gray-300 text-gray-900 sm:text-sm rounded-lg  block w-full p-2.5 "
                                     placeholder="NT-1100" required="">
 
@@ -75,7 +75,7 @@
                             <div>
                                 <label for="password"
                                     class="block mb-2 text-sm font-medium text-gray-900 ">Password</label>
-                                <div [class.border-red-500]="submit&&loginForm.controls['password'].hasError('required')"
+                                <div [class.border-orange-500]="submit&&loginForm.controls['password'].hasError('required')"
                                     class="flex justify-center items-center   w-full text-gray-700  rounded leading-tight bg-gray-50 border border-gray-300">
                                     <input formControlName="password" [type]="passwordType" name="password"
                                         id="password" placeholder="••••••••" appNoLeadingSpace

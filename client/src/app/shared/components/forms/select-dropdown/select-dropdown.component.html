@@ -7,7 +7,7 @@
     }
     <ng-select 
       [id]="id"
-      [class.border-red-500]="!value && isSubmitted"
+      [class]="(!value && isSubmitted) ? invalidBorderClass : ''"
       class=" capitalize  {{ defaultClass ? 'form-component border' : '' }}"
       [placeholder]="placeholder"
       appendTo="body"

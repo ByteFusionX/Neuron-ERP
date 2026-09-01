@@ -64,7 +64,7 @@
                   <input 
                     type="text"
                     formControlName="itemName"
-                    [class.border-red-500]="materialRequest.get('itemName')?.invalid && (materialRequest.get('itemName')?.touched || isSubmitted)"
+                    [class.border-orange-500]="materialRequest.get('itemName')?.invalid && (materialRequest.get('itemName')?.touched || isSubmitted)"
                     class="w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                     placeholder="Enter item name">
                   <div *ngIf="materialRequest.get('itemName')?.invalid && (materialRequest.get('itemName')?.touched || isSubmitted)" 
@@ -77,7 +77,7 @@
                   <input 
                     type="number"
                     formControlName="quantity"
-                    [class.border-red-500]="materialRequest.get('quantity')?.invalid && (materialRequest.get('quantity')?.touched || isSubmitted)"
+                    [class.border-orange-500]="materialRequest.get('quantity')?.invalid && (materialRequest.get('quantity')?.touched || isSubmitted)"
                     class="w-20 bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 text-center"
                     min="1">
                   <div *ngIf="materialRequest.get('quantity')?.invalid && (materialRequest.get('quantity')?.touched || isSubmitted)" 
@@ -90,7 +90,7 @@
                   <input 
                     type="number"
                     formControlName="estimatedCost"
-                    [class.border-red-500]="materialRequest.get('estimatedCost')?.invalid && (materialRequest.get('estimatedCost')?.touched || isSubmitted)"
+                    [class.border-orange-500]="materialRequest.get('estimatedCost')?.invalid && (materialRequest.get('estimatedCost')?.touched || isSubmitted)"
                     class="w-24 bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500 text-center"
                     min="0"
                     step="0.01">
@@ -108,7 +108,7 @@
                   <input 
                     type="date"
                     formControlName="requiredOn"
-                    [class.border-red-500]="materialRequest.get('requiredOn')?.invalid && (materialRequest.get('requiredOn')?.touched || isSubmitted)"
+                    [class.border-orange-500]="materialRequest.get('requiredOn')?.invalid && (materialRequest.get('requiredOn')?.touched || isSubmitted)"
                     class="bg-gray-200 text-gray-700 border border-gray-200 rounded py-2 px-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500">
                   <div *ngIf="materialRequest.get('requiredOn')?.invalid && (materialRequest.get('requiredOn')?.touched || isSubmitted)" 
                        class="text-red-500 text-xs mt-1">

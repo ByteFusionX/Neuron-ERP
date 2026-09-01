@@ -19,7 +19,7 @@
                                     <ng-select 
                                         formControlName="supplierId"
                                         (change)="onSupplierSelected($event)"
-                                        [class.border-red-500]="f['supplierId'].invalid && isSubmitted()"
+                                        [class.border-orange-500]="f['supplierId'].invalid && isSubmitted()"
                                         class="w-full form-component border capitalize"
                                         placeholder="Select Supplier Id"
                                         appendTo="body"
@@ -66,7 +66,7 @@
                                     <div class="flex items-center gap-2">
                                         <ng-select 
                                             formControlName="placeOfDelivery"
-                                            [class.border-red-500]="f['placeOfDelivery'].invalid && isSubmitted()"
+                                            [class.border-orange-500]="f['placeOfDelivery'].invalid && isSubmitted()"
                                             class="w-full form border capitalize"
                                             placeholder="Select or enter place of delivery"
                                             appendTo="body"
@@ -136,7 +136,7 @@
                                     <div class="flex items-center gap-2">
                                         <ng-select 
                                             formControlName="shippingTerms"
-                                            [class.border-red-500]="f['shippingTerms'].invalid && isSubmitted()"
+                                            [class.border-orange-500]="f['shippingTerms'].invalid && isSubmitted()"
                                             class="w-full form border"
                                             placeholder="Select or enter shipping terms"
                                             appendTo="body"
@@ -326,7 +326,7 @@
                                             [disabled]="(isIssued && !isReissueMode) || !isItemSelected(itemId)"
                                             class="w-20 px-2 py-1 border rounded text-center"
                                             [class.border-gray-300]="!getItemQuantityError(itemId)"
-                                            [class.border-red-500]="getItemQuantityError(itemId)"
+                                            [class.border-orange-500]="getItemQuantityError(itemId)"
                                             placeholder="0"
                                         />
                                         <span *ngIf="getItemQuantityError(itemId)" class="text-xs text-red-600 mt-1">

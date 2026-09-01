@@ -18,6 +18,7 @@ export class FormFieldComponent {
   @Input() readonly = false;
   @Input() class = '';
   @Input() rows = 2;
+  @Input() invalidBorderClass = 'border-orange-500';
 
   ngOnInit() {
     if (!this.id) {
