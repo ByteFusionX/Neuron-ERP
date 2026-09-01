@@ -11,11 +11,12 @@
                 History
             </app-btn>
             <app-btn theme="primary" (buttonClick)="onQuoteEdit()" [disabled]="isEditDisabled"
-                [title]="isEditDisabled ? 'Quote won' : ''">
+                [title]="isEditDisabled ? (isDealApproved ? 'Deal approved' : 'Quote won') : ''">
                 <ng-icon name="heroPencilSquare"></ng-icon>
                 Edit
             </app-btn>
-            <app-btn theme="danger" (buttonClick)="deleteQuote()" *ngIf="isDeleteOption">
+            <app-btn theme="danger" (buttonClick)="deleteQuote()" *ngIf="isDeleteOption" [disabled]="isDealApproved"
+                [title]="isDealApproved ? 'Deal approved' : ''">
                 <ng-icon name="heroTrash"></ng-icon>
                 Delete
             </app-btn>

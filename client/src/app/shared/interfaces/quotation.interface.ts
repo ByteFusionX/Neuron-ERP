@@ -18,6 +18,7 @@ export interface OptionalItems {
 
 export interface QuoteItemDetail {
     _id: string;
+    itemCode?: string;
     detail: string;
     quantity: number;
     unitCost: number;

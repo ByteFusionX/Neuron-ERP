@@ -61,6 +61,16 @@ export class QuotationListComponent {
 
   quoteStatuses = Object.values(QuoteStatus);
   selectableQuoteStatuses = Object.values(QuoteStatus).filter(status => status !== QuoteStatus.Expired);
+  statusOrder = [
+    QuoteStatus.Draft,
+    QuoteStatus.WorkInProgress,
+    QuoteStatus.QuoteSubmitted,
+    QuoteStatus.UnderNegotiation,
+    QuoteStatus.UnderReview,
+    QuoteStatus.ReadyForSubmission,
+    QuoteStatus.Won,
+    QuoteStatus.Lost,
+  ];
   dealStatuses = ['pending','approved','rejected'];
   displayedColumns: string[] = ['date', 'quoteId', 'customerName', 'description', 'salesPerson', 'department', 'totalCost', 'status', 'dealStatus', 'events', 'action'];
 
@@ -311,6 +321,20 @@ export class QuotationListComponent {
 
   preventClick(event: Event) {
     event.stopPropagation();
+  }
+
+  isStatusLocked(element: Quotatation): boolean {
+    return !!element.dealData?.status && element.dealData.status !== 'rejected';
+  }
+
+  canSelectStatus(currentStatus: QuoteStatus, targetStatus: QuoteStatus): boolean {
+    const negotiationIndex = this.statusOrder.indexOf(QuoteStatus.UnderNegotiation);
+    const targetIndex = this.statusOrder.indexOf(targetStatus);
+    if (targetIndex === -1 || targetIndex >= negotiationIndex) {
+      return true;
+    }
+    const currentIndex = this.statusOrder.indexOf(currentStatus);
+    return currentIndex === -1 || targetIndex >= currentIndex;
   }
 
   updateStatus(i: number, quoteId: string, status: QuoteStatus) {

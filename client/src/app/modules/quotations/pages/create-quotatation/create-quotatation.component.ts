@@ -225,6 +225,7 @@ export class CreateQuotatationComponent {
         if (data) {
           this.quoteForm.patchValue({
             ...data,
+            client: data.client?._id,
             subject: data.title,
             date: data.date ? this.toDateInputValue(data.date) : '',
             attention: data.contact?._id,

@@ -32,6 +32,14 @@
           <th
             scope="col"
             resizable
+            key="itemCode"
+            class="border-l border-r border-t text-center min-w-[110px]"
+          >
+            <div class="px-2 py-3">Item Code</div>
+          </th>
+          <th
+            scope="col"
+            resizable
             class="w-96 border-l border-r border-t"
             key="itemDetail"
           >
@@ -111,7 +119,7 @@
           </th>
           <th
             scope="col"
-            class="border-l border-r border-t min-w-[36px]"
+            class="border-l border-r border-t min-w-[48px]"
           ></th>
         </tr>
       </thead>
@@ -125,7 +133,7 @@
         >
         <tbody>
           <tr>
-            <td colspan="11" class="border px-6 py-3 bg-gray-50">
+            <td colspan="12" class="border px-6 py-3 bg-gray-50">
               <span
                 *ngIf="
                   getItemAtOption(optionIndex).at(itemIndex).get('isOptional')
@@ -156,7 +164,7 @@
                     formControlName="itemName"
                     type="text"
                     autocomplete="off"
-                    [class.border-red-500]="
+                    [class.border-orange-500]="
                       getItemAtOption(optionIndex).at(itemIndex).get('itemName')
                         ?.invalid && submit
                     "
@@ -220,8 +228,17 @@
                 [cdkDragDisabled]="(getItemDetailsArrayControls(optionIndex, itemIndex)?.length || 0) <= 1"
                 cdkDragHandle
               >
+                <td class="border px-2 py-2 text-center">
+                  <input
+                    appNoLeadingSpace
+                    formControlName="itemCode"
+                    class="font-normal appearance-none block w-full text-center rounded py-5 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                    type="text"
+                    placeholder="Item Code"
+                  />
+                </td>
                 <td
-                  [class.border-red-500]="
+                  [class.border-orange-500]="
                     getItemDetailsArrayControls(optionIndex, itemIndex)
                       ?.at(itemDetailIndex)
                       ?.get('detail')?.invalid && submit
@@ -255,7 +272,7 @@
                         (mousedown)="onAddProductFromItemDetail(optionIndex, itemIndex, itemDetailIndex)"
                         class="px-4 py-2 text-sm cursor-pointer text-violet-700 font-medium hover:bg-gray-100 border-t border-gray-200 sticky bottom-0 bg-white"
                       >
-                        + Add as new Product
+                        + New Product
                       </li>
                     </ul>
                   </div>
@@ -352,7 +369,7 @@
                   </div>
                 </td>
                 <td
-                  [class.border-red-500]="
+                  [class.border-orange-500]="
                     getItemDetailsArrayControls(optionIndex, itemIndex)
                       ?.at(itemDetailIndex)
                       ?.get('quantity')?.invalid && submit
@@ -386,7 +403,7 @@
                   />
                 </td>
                 <td
-                  [class.border-red-500]="
+                  [class.border-orange-500]="
                     getItemDetailsArrayControls(optionIndex, itemIndex)
                       ?.at(itemDetailIndex)
                       ?.get('unitCost')?.invalid && submit
@@ -422,7 +439,7 @@
                   </p>
                 </td>
                 <td
-                  [class.border-red-500]="
+                  [class.border-orange-500]="
                     getItemDetailsArrayControls(optionIndex, itemIndex)
                       ?.at(itemDetailIndex)
                       ?.get('profit')?.invalid && submit
@@ -506,7 +523,7 @@
                   </ng-select>
                 </td>
                 <td
-                  [class.border-red-500]="
+                  [class.border-orange-500]="
                     getItemDetailsArrayControls(optionIndex, itemIndex)
                       ?.at(itemDetailIndex)
                       ?.get('availability')?.invalid && submit
@@ -525,61 +542,37 @@
                   >
                   </ng-select>
                 </td>
-                <td class="px-2 py-2 border text-center whitespace-nowrap">
-                  <div class="flex flex-col items-center gap-1">
-                    <ng-icon
-                      [class.cursor-pointer]="
-                        isItemDetailFilled(
-                          optionIndex,
-                          itemIndex,
-                          itemDetailIndex
-                        )
-                      "
-                      [class.text-gray-500]="
-                        isItemDetailFilled(
-                          optionIndex,
-                          itemIndex,
-                          itemDetailIndex
-                        )
-                      "
-                      [class.text-gray-300]="
+                <td class="px-2 py-2 border text-center whitespace-nowrap align-middle">
+                  <div class="flex flex-col items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      class="row-action-btn row-action-clear"
+                      [disabled]="
                         !isItemDetailFilled(
                           optionIndex,
                           itemIndex,
                           itemDetailIndex
                         )
                       "
-                      [class.cursor-not-allowed]="
-                        !isItemDetailFilled(
-                          optionIndex,
-                          itemIndex,
-                          itemDetailIndex
-                        )
-                      "
-                      name="heroArrowPath"
-                      class="text-md p-0 m-0"
                       matTooltip="Clear row"
                       matTooltipPosition="above"
                       (click)="
-                        isItemDetailFilled(
+                        onClearItemDetail(
                           optionIndex,
                           itemIndex,
                           itemDetailIndex
-                        ) &&
-                          onClearItemDetail(
-                            optionIndex,
-                            itemIndex,
-                            itemDetailIndex
-                          )
+                        )
                       "
-                    ></ng-icon>
-                    <ng-icon
+                    >
+                      <ng-icon name="heroArrowPath" class="text-sm"></ng-icon>
+                    </button>
+                    <button
+                      type="button"
                       *ngIf="
                         (getItemDetailsArrayControls(optionIndex, itemIndex)
                           ?.length || 0) > 1
                       "
-                      name="heroXMark"
-                      class="text-md p-0 m-0 cursor-pointer text-red-600"
+                      class="row-action-btn row-action-remove"
                       matTooltip="Remove row"
                       matTooltipPosition="above"
                       (click)="
@@ -589,7 +582,9 @@
                           itemDetailIndex
                         )
                       "
-                    ></ng-icon>
+                    >
+                      <ng-icon name="heroXMark" class="text-sm"></ng-icon>
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -599,7 +594,7 @@
       </ng-container>
       <tbody>
         <tr>
-          <td colspan="11" class="border px-6 py-3 bg-gray-50">
+          <td colspan="12" class="border px-6 py-3 bg-gray-50">
             <div class="flex justify-end items-center">
               <label for="totalDiscount" class="font-semibold"
                 >Discount:

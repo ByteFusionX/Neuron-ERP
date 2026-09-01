@@ -355,6 +355,7 @@ export class OptionalItemsComponent implements OnInit {
             includeInTotal: [false],
             itemDetails: this._fb.array([
               this._fb.group({
+                itemCode: [''],
                 detail: ['', Validators.required],
                 quantity: ['', [Validators.required, Validators.min(0)]],
                 unitCost: ['', [Validators.required, Validators.min(0)]],
@@ -390,6 +391,7 @@ export class OptionalItemsComponent implements OnInit {
         includeInTotal: [false],
         itemDetails: this._fb.array([
           this._fb.group({
+            itemCode: [''],
             detail: ['', Validators.required],
             quantity: ['', [Validators.required, Validators.min(0)]],
             unitCost: ['', [Validators.required, Validators.min(0)]],
@@ -406,6 +408,7 @@ export class OptionalItemsComponent implements OnInit {
 
   createItemDetail(): FormGroup {
     return this._fb.group({
+      itemCode: [''],
       detail: ['', Validators.required],
       quantity: ['', [Validators.required, Validators.min(0)]],
       unitCost: ['', [Validators.required, Validators.min(0)]],
@@ -468,6 +471,7 @@ export class OptionalItemsComponent implements OnInit {
             : '';
 
         itemDetailsArray.at(index).patchValue({
+          itemCode: detail.itemCode,
           detail: detail.detail,
           quantity: detail.quantity,
           unitCost: detail.unitCost,
@@ -570,6 +574,7 @@ export class OptionalItemsComponent implements OnInit {
       return;
     }
     detailGroup.reset({
+      itemCode: '',
       detail: '',
       quantity: '',
       unitCost: '',
@@ -607,6 +612,7 @@ export class OptionalItemsComponent implements OnInit {
           itemDetails: this._fb.array(
             item.itemDetails.map((detail: any) =>
               this._fb.group({
+                itemCode: detail.itemCode,
                 detail: detail.detail,
                 quantity: detail.quantity,
                 unitCost: detail.unitCost,
@@ -631,6 +637,7 @@ export class OptionalItemsComponent implements OnInit {
       itemDetailsArray?.insert(
         k,
         this._fb.group({
+          itemCode: item.itemCode,
           detail: item.detail,
           quantity: item.quantity,
           unitCost: item.unitCost,

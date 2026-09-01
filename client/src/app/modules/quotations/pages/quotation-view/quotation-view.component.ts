@@ -73,7 +73,11 @@ export class QuotationViewComponent {
   }
 
   get isEditDisabled(): boolean {
-    return this.quoteData?.status === 'Won' && !this.isSuperAdmin;
+    return this.isDealApproved || (this.quoteData?.status === 'Won' && !this.isSuperAdmin);
+  }
+
+  get isDealApproved(): boolean {
+    return this.quoteData?.dealData?.status?.toLowerCase() === 'approved';
   }
 
   getQuoteData() {
@@ -308,6 +312,9 @@ export class QuotationViewComponent {
   }
 
   deleteQuote() {
+    if (this.isDealApproved) {
+      return;
+    }
     const employee = this._employeeService.employeeToken()
     const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
       data: {
