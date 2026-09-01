@@ -4,6 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { JobService } from 'src/app/core/services/job/job.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -241,9 +243,53 @@ export class CreateDnComponent implements OnInit {
   loadJobIds(): void {
     this.jobService.getJobIdsWithApprovedPR().subscribe({
       next: (response: any) => {
-        this.jobIds = Array.isArray(response) ? response : response.jobs || [];
+        const jobs = Array.isArray(response) ? response : response.jobs || [];
+        this.filterJobsWithPendingItems(jobs);
       },
       error: () => this.toastr.error('Failed to load Job IDs')
+    });
+  }
+
+  // Jobs whose entire item list is already delivered shouldn't show up in the
+  // dropdown - only jobs with at least one item still pending delivery.
+  private filterJobsWithPendingItems(jobs: any[]): void {
+    if (!jobs.length) {
+      this.jobIds = [];
+      return;
+    }
+
+    const checks = jobs.map(job => {
+      const jobId = job._id;
+      return forkJoin({
+        items: this.deliveryNoteService.getDnItemsForJob(jobId).pipe(catchError(() => of({ data: [] }))),
+        dns: this.deliveryNoteService.getDnsByJobId(jobId).pipe(catchError(() => of([])))
+      }).pipe(
+        map(({ items, dns }) => {
+          const allItems = items?.data || [];
+          const previousDns = (dns || []).filter((d: any) => d.status !== 'Cancelled' && d.status !== 'Draft');
+
+          const hasPending = allItems.some((item: any) => {
+            const delivered = previousDns.reduce((total: number, dn: any) => {
+              const matchedItem = dn.items?.find((i: any) => i.itemId === item._id);
+              return total + (matchedItem?.currentDeliveryQty || 0);
+            }, 0);
+            const remaining = (item.orderedQty || 0) - delivered;
+            return remaining > 0;
+          });
+
+          return { job, hasPending };
+        })
+      );
+    });
+
+    forkJoin(checks).subscribe({
+      next: (results) => {
+        this.jobIds = results.filter(r => r.hasPending).map(r => r.job);
+      },
+      error: () => {
+        this.toastr.error('Failed to load Job IDs');
+        this.jobIds = jobs;
+      }
     });
   }
 

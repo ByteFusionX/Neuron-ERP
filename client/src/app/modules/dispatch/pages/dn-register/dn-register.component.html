@@ -17,6 +17,12 @@
 >
   <ng-template #sideColumn>
     <div class="flex items-center gap-3">
+      <ng-container *ngIf="canCreateDn()">
+        <app-btn theme="primary" routerLink="/dispatch/delivery-note-register/create">
+          <ng-icon name="heroPlus" class="mr-1"></ng-icon>
+          Create DN
+        </app-btn>
+      </ng-container>
       <ng-container *ngIf="canSwitchDispatchView()">
         <button
           type="button"
@@ -41,12 +47,6 @@
             Inventory Deduction
           </button>
         </mat-menu>
-      </ng-container>
-      <ng-container *ngIf="canCreateDn()">
-        <app-btn theme="primary" routerLink="/dispatch/delivery-note-register/create">
-          <ng-icon name="heroPlus" class="mr-1"></ng-icon>
-          Create DN
-        </app-btn>
       </ng-container>
     </div>
   </ng-template>

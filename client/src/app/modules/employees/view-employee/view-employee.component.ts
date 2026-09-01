@@ -27,6 +27,7 @@ export class ViewEmployeeComponent {
   isTargetLoading: boolean = true;
   isEmpty: boolean = false;
   isDeleteOption: boolean = false;
+  isSuperAdmin: boolean = false;
   currentEmployeeId?: string;
 
   targets: Target[] = [];
@@ -46,6 +47,7 @@ export class ViewEmployeeComponent {
       this.currentEmployeeId = employee?._id;
       if (employee?.category.role == 'superAdmin') {
         this.isDeleteOption = true
+        this.isSuperAdmin = true
       }
 
     })
@@ -181,6 +183,19 @@ export class ViewEmployeeComponent {
       ]);
     }
     return
+  }
+
+  toggleBlockStatus() {
+    const wasBlocked = this.employeeData.isBlocked;
+    this.employeeService.blockEmployee(this.employeeData._id!).subscribe({
+      next: () => {
+        this.employeeData.isBlocked = !wasBlocked;
+        this._toast.success(wasBlocked ? 'Employee Unblocked Successfully' : 'Employee Blocked Successfully');
+      },
+      error: (error) => {
+        this._toast.error(error.error?.message || 'Failed to update block status');
+      }
+    });
   }
 
   deleteEmployee() {

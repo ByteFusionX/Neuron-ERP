@@ -312,16 +312,16 @@
                       <ng-container *ngFor="let action of column.actions">
                         <button
                           *ngIf="!action.condition || action.condition(item)"
-                          [ngClass]="
-                            action.buttonClass ||
-                            'w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'
-                          "
-                          [matTooltip]="action.tooltip || ''"
+                          [ngClass]="getActionButtonClass(action, item)"
+                          [class.opacity-40]="isActionDisabled(action, item)"
+                          [class.cursor-not-allowed]="isActionDisabled(action, item)"
+                          [disabled]="isActionDisabled(action, item)"
+                          [matTooltip]="getActionTooltip(action, item)"
                           matTooltipPosition="above"
-                          (click)="onActionClick(action.action, item, $event)"
+                          (click)="!isActionDisabled(action, item) && onActionClick(action.action, item, $event)"
                         >
                           <ng-icon
-                            [name]="action.icon"
+                            [name]="getActionIcon(action, item)"
                             [color]="action.color || 'currentColor'"
                           ></ng-icon>
                         </button>

@@ -7,7 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { NgIconsModule } from '@ng-icons/core';
 import { NgSelectModule } from '@ng-select/ng-select';
 
-import { TableColumn, TableFilter, DateRange, ApprovalRejectionList, InlineEditConfig, InlineEditColumnConfig } from './table.model';
+import { TableColumn, TableFilter, DateRange, ApprovalRejectionList, InlineEditConfig, InlineEditColumnConfig, TableAction } from './table.model';
 import { SkeltonLoadingComponent } from '../skelton-loading/skelton-loading.component';
 import { PaginationComponent } from '../pagination/pagination.component';
 import { PaginationService } from 'src/app/core/services/pagination.service'; 
@@ -155,6 +155,24 @@ export class TableComponent implements OnInit, OnChanges {
   onActionClick(action: string, item: any, event: Event): void {
     event.stopPropagation();
     this.actionClick.emit({ action, item, event });
+  }
+
+  getActionIcon(action: TableAction, item: any): string {
+    return typeof action.icon === 'function' ? action.icon(item) : action.icon;
+  }
+
+  getActionTooltip(action: TableAction, item: any): string {
+    const tooltip = typeof action.tooltip === 'function' ? action.tooltip(item) : action.tooltip;
+    return tooltip || '';
+  }
+
+  getActionButtonClass(action: TableAction, item: any): string {
+    const buttonClass = typeof action.buttonClass === 'function' ? action.buttonClass(item) : action.buttonClass;
+    return buttonClass || 'w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center';
+  }
+
+  isActionDisabled(action: TableAction, item: any): boolean {
+    return !!action.disabled?.(item);
   }
 
   toggleColumnVisibility(column: TableColumn): void {

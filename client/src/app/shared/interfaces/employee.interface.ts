@@ -33,6 +33,7 @@ export interface getEmployeeDetails {
   salesValue: number;
   profitValue: number;
   targets: Target[];
+  isBlocked?: boolean;
 }
 
 

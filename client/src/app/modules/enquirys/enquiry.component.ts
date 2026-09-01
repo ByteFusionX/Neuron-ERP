@@ -123,7 +123,6 @@ export class EnquiryComponent implements OnInit, OnDestroy {
     'status',
     'presale',
     'events',
-    'action',
   ];
 
   dataSource = new MatTableDataSource<getEnquiry>();
@@ -171,6 +170,9 @@ export class EnquiryComponent implements OnInit, OnDestroy {
         this.currentEmployeeId = employee?._id;
         if (employee?.category.role == 'superAdmin') {
           this.isDeleteOption = true;
+          if (!this.displayedColumns.includes('action')) {
+            this.displayedColumns.push('action');
+          }
         }
       }),
     );
@@ -293,6 +295,9 @@ export class EnquiryComponent implements OnInit, OnDestroy {
   }
 
   canUploadAttachments(element: any): boolean {
+    if (this.isAssignedToPresale(element?.status) && element?.preSale?.presalePerson) {
+      return false;
+    }
     return this.isDeleteOption || element?.salesPerson?._id === this.currentEmployeeId;
   }
 

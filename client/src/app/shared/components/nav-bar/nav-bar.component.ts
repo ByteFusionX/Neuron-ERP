@@ -15,6 +15,7 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { ButtonComponent } from '../button/button.component';
 import { MsalService } from '@azure/msal-angular';
 import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
+import { ThemeService } from 'src/app/core/services/theme.service';
 
 @Component({
     selector: 'app-nav-bar',
@@ -41,7 +42,8 @@ export class NavBarComponent {
     private msalService: MsalService,
     private dialog: MatDialog,
     private bugReportScreenshotService: BugReportScreenshotService,
-    private sidebarPrefs: SidebarPreferencesService
+    private sidebarPrefs: SidebarPreferencesService,
+    public themeService: ThemeService
   ) { }
 
   ngOnInit() {
@@ -96,6 +98,10 @@ export class NavBarComponent {
 
   onAnnouncementsClick() {
     this._router.navigate(['/announcements']);
+  }
+
+  toggleTheme() {
+    this.themeService.toggleTheme();
   }
 
   onReportBug() {

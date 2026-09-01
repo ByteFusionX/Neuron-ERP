@@ -42,6 +42,11 @@ body {
   height: 100%;
 }
 
+html.dark body {
+  background-color: #111827;
+  color: #f3f4f6;
+}
+
 body,
 td,
 th {

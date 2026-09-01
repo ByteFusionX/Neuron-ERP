@@ -56,12 +56,13 @@ export interface InlineEditConfig {
 }
 
 export interface TableAction {
-    icon: string; // NgIcon name
-    tooltip?: string;
+    icon: string | ((item: any) => string); // NgIcon name
+    tooltip?: string | ((item: any) => string);
     color?: string;
     condition?: (item: any) => boolean; // Show action only if this returns true
+    disabled?: (item: any) => boolean; // Disable the button (still shown) if this returns true
     action: string; // Identifier for the action
-    buttonClass?: string;
+    buttonClass?: string | ((item: any) => string);
 }
 
 export interface TableEvent {

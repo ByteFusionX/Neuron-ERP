@@ -26,6 +26,7 @@ import {
   heroArrowUp,
   heroClipboardDocumentList,
   heroShieldCheck,
+  heroFlag,
   heroCube,
   heroArrowDown,
   heroCalendarDays,
@@ -97,9 +98,12 @@ import {
   heroArrowLeftCircle,
   heroTableCells,
   heroLockClosed,
+  heroLockOpen,
   heroDocumentArrowDown,
   heroExclamationTriangle,
-  heroMegaphone
+  heroMegaphone,
+  heroMoon,
+  heroSun
 } from '@ng-icons/heroicons/outline';
 
 import { heroBellSolid } from '@ng-icons/heroicons/solid'
@@ -133,6 +137,7 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroArrowDown,
       heroClipboardDocumentList,
       heroShieldCheck,
+      heroFlag,
       heroCube,
       heroCalendarDays,
       heroBellAlert,
@@ -204,9 +209,12 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroArrowLeftCircle,
       heroTableCells,
       heroLockClosed,
+      heroLockOpen,
       heroDocumentArrowDown,
       heroExclamationTriangle,
-      heroMegaphone
+      heroMegaphone,
+      heroMoon,
+      heroSun
     }),
   ],
   exports: [NgIconsModule]

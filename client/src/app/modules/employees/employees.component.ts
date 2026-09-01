@@ -26,7 +26,6 @@ export class EmployeesComponent {
   isEnter: boolean = false;
   isEmpty: boolean = false;
   createEmployee: boolean | undefined = false;
-  isSuperAdmin: boolean = false;
   displayedColumns: string[] = ['employeeId', 'name', 'department', 'email', 'contactNo'];
 
   dataSource = new MatTableDataSource<getEmployee>()
@@ -50,9 +49,6 @@ export class EmployeesComponent {
 
   ngOnInit() {
     this.checkPermission();
-    if (this.isSuperAdmin) {
-      this.displayedColumns.push('action');
-    }
     this.subscriptions.add(
       this.subject.subscribe((data) => {
         this.page = data.page
@@ -150,30 +146,6 @@ export class EmployeesComponent {
     // })
   }
 
-  toggleBlockStatus(employeeId: string, isBlocked: boolean, event: Event) {
-    event.stopPropagation()
-    this._employeeService.blockEmployee(employeeId).subscribe((res) => {
-      if (res) {
-        const message = isBlocked ? 'Employee Unblocked Successfully' : 'Employee Blocked Successfully';
-        this._toast.success(message);
-        
-        const employeeIndex = this.dataSource.data.findIndex(emp => emp._id === employeeId);
-        if (employeeIndex !== -1) {
-          this.dataSource.data[employeeIndex].isBlocked = !isBlocked;
-          this.dataSource._updateChangeSubscription();
-        }
-      }
-    })
-  }
-
-  blockEmployee(employeeId: string) {
-    this._employeeService.blockEmployee(employeeId).subscribe((res) => {
-      if (res) {
-        this._toast.success('Employee Blocked Successfully')
-      }
-    })
-  }
-
   onSetProfitTarget(event: Event, userId: string, index: number) {
     event.stopPropagation()
     // const dialogRef = this.dialog.open(SetTargetComponent);
@@ -214,7 +186,6 @@ export class EmployeesComponent {
   checkPermission() {
     this._employeeService.employeeData$.subscribe((data) => {
       this.createEmployee = data?.category.privileges.employee.create;
-      this.isSuperAdmin = data?.category.role === 'superAdmin';
     })
   }
 
