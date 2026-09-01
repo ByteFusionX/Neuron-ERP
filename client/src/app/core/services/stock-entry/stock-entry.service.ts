@@ -10,8 +10,9 @@ const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 export interface StockEntry {
   _id?: string;
-  grn: string;
+  grn?: any;
   partNo: any;
+  itemCode?: string;
   dateOfPurchase: Date;
   jobId?: any;
   supplierName: any;
@@ -41,7 +42,9 @@ export interface StockEntry {
   quarantineReason?: string;
   quarantinedAt?: Date | string;
   quarantineReleasedAt?: Date | string;
-  sourceDnId?: any;
+  dn?: any;
+  supplierReturnStatus?: string | null;
+  isHoldResolved?: boolean;
 }
 
 export interface StockBlock {
@@ -112,10 +115,6 @@ export class StockEntryService {
   private api: string = environment.api;
 
   constructor(private http: HttpClient) { }
-
-  generateGRN(): Observable<{ grn: string }> {
-    return this.http.get<{ grn: string }>(`${this.api}/stock-entry/generate-grn`, { context: context() });
-  }
 
   getStockEntries(params: StockEntryQueryParams = {}): Observable<StockEntryListResponse> {
     let httpParams = new HttpParams();

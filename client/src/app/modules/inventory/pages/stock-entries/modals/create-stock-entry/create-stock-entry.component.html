@@ -1,3 +1,4 @@
+<div [class.m-6]="!isEditMode" class="rounded-lg overflow-hidden">
 <app-modal-layout
   [title]="isEditMode ? 'Edit Stock Entry' : 'Stock Entry'"
   [onClose]="onCancel.bind(this)"
@@ -9,6 +10,17 @@
   <form [formGroup]="stockEntryForm" (ngSubmit)="onSubmit()">
       <div class="space-y-4">
         <div class="grid grid-cols-3 gap-4">
+          <app-select-dropdown
+            label="Item Code"
+            [options]="products"
+            optionLabel="itemCode"
+            optionValue="itemCode"
+            formControlName="itemCode"
+            placeholder="Choose from this list"
+            [isSubmitted]="isSubmitting"
+            (onSelected)="onItemCodeChange($event)">
+          </app-select-dropdown>
+
           <app-select-dropdown
             label="Part Nos"
             [options]="products"
@@ -27,16 +39,16 @@
             placeholder="NO (Automatically generate)"
             [readonly]="true">
           </app-form-field>
+        </div>
 
+        <div class="grid grid-cols-3 gap-4">
           <app-form-field
             label="Date Of Purchase"
             [control]="stockEntryForm.get('dateOfPurchase')"
             [isSubmitted]="isSubmitting"
             type="date">
           </app-form-field>
-        </div>
 
-        <div class="grid grid-cols-3 gap-4">
           <app-select-dropdown
             label="Job Id"
             [options]="jobIds"
@@ -56,16 +68,16 @@
             placeholder="Select supplier"
             [isSubmitted]="isSubmitting">
           </app-select-dropdown>
+        </div>
 
+        <div class="grid grid-cols-3 gap-4">
           <app-form-field
             label="Supplier LPO No"
             [control]="stockEntryForm.get('supplierLpoNo')"
             [isSubmitted]="isSubmitting"
             placeholder="Enter LPO number">
           </app-form-field>
-        </div>
 
-        <div class="grid grid-cols-3 gap-4">
           <app-select-dropdown
             label="Product Segment"
             [options]="departments"
@@ -87,7 +99,9 @@
             footerLabel="+ Add category"
             (footerAction)="onAddCategory()">
           </app-select-dropdown>
+        </div>
 
+        <div class="grid grid-cols-3 gap-4">
           <app-select-dropdown
             label="Warehouse"
             [options]="warehouses"
@@ -99,9 +113,7 @@
             footerLabel="+ Add warehouse"
             (footerAction)="onAddWarehouse()">
           </app-select-dropdown>
-        </div>
 
-        <div class="grid grid-cols-3 gap-4">
           <app-form-field
             label="Quantity"
             [control]="stockEntryForm.get('quantity')"
@@ -117,7 +129,9 @@
             type="number"
             placeholder="Enter unit cost">
           </app-form-field>
+        </div>
 
+        <div class="grid grid-cols-3 gap-4">
           <app-form-field
             label="Total Cost"
             [control]="stockEntryForm.get('totalCost')"
@@ -126,9 +140,7 @@
             placeholder="Auto calculated"
             [readonly]="true">
           </app-form-field>
-        </div>
 
-        <div class="grid grid-cols-2 gap-4">
           <app-form-field
             label="UOM"
             [control]="stockEntryForm.get('uom')"
@@ -199,4 +211,5 @@
 
     </form>
 </app-modal-layout>
+</div>
 

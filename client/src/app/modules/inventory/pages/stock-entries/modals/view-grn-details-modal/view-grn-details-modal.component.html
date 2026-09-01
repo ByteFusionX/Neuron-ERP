@@ -1,0 +1,78 @@
+<app-modal-layout
+  [title]="'GRN Details - ' + (grn?.grnNo || '')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6 flex flex-col"
+  contentMaxHeight="85vh">
+
+  @if (isLoading()) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else {
+    <div class="w-full mb-6">
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">GRN No</td>
+              <td class="px-2 py-2 border text-start">{{ grn?.grnNo || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">GRN Date</td>
+              <td class="px-2 py-2 border text-start">{{ formatDate(grn?.grnDate) }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Supplier Name</td>
+              <td class="px-2 py-2 border text-start">{{ grn?.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Linked LPO Number</td>
+              <td class="px-2 py-2 border text-start">{{ grn?.purchaseOrderId?.poNo || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Warehouse</td>
+              <td class="px-2 py-2 border text-start">{{ grn?.warehouse?.wareHouseName || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Received By</td>
+              <td class="px-2 py-2 border text-start">{{ formatEmployeeName(grn?.receivedBy) || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Supplier Invoice No.</td>
+              <td class="px-2 py-2 border text-start">{{ grn?.supplierInvoiceNo || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Supplier Delivery Note No.</td>
+              <td class="px-2 py-2 border text-start">{{ grn?.supplierDeliveryNoteNo || 'N/A' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="w-full">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">GRN Items</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-[50vh] overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 border text-center">SL.NO</th>
+              <th class="px-3 py-2 border text-center">Part No.</th>
+              <th class="px-3 py-2 border text-center">Ordered Qty</th>
+              <th class="px-3 py-2 border text-center">Received Qty</th>
+              <th class="px-3 py-2 border text-center">Accepted Qty</th>
+              <th class="px-3 py-2 border text-center">Rejected Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of grn?.items; track $index) {
+              <tr class="border-b">
+                <td class="px-3 py-2 border text-center">{{ $index + 1 }}</td>
+                <td class="px-3 py-2 border text-center">{{ formatPartNumber(item.partNo) }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.orderedQty || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.receivedQty || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.acceptedQty || 0 }}</td>
+                <td class="px-3 py-2 border text-center" [class.text-red-600]="getRejectedQty(item) > 0" [class.font-medium]="getRejectedQty(item) > 0">{{ getRejectedQty(item) }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td class="px-3 py-2 border text-center text-gray-400" colspan="6">No items found</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</app-modal-layout>

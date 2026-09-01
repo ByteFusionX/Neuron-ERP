@@ -1,0 +1,44 @@
+<app-modal-layout
+  [title]="'Job Details - ' + (job?.jobId || '')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-5 flex flex-col"
+  contentMaxHeight="80vh">
+
+  @if (isLoading()) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else {
+    <div class="w-full">
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Job ID</td>
+              <td class="px-2 py-2 border text-start">{{ job?.jobId || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Status</td>
+              <td class="px-2 py-2 border text-start">{{ job?.status || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Client Name</td>
+              <td class="px-2 py-2 border text-start">{{ job?.clientDetails?.companyName || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Sales Person</td>
+              <td class="px-2 py-2 border text-start">{{ formatEmployeeName(job?.salesPersonDetails?.[0] || job?.salesPersonDetails) }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Allocate Type</td>
+              <td class="px-2 py-2 border text-start">{{ job?.allocateType || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Allocate Status</td>
+              <td class="px-2 py-2 border text-start">{{ job?.allocateStatus || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Procurement Person</td>
+              <td class="px-2 py-2 border text-start">{{ formatEmployeeName(job?.procurementPerson) }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Created Date</td>
+              <td class="px-2 py-2 border text-start">{{ formatDate(job?.createdDate) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</app-modal-layout>

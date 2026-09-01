@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getJobSalesPerson, jobList, totalJob, updateJobStatus, deleteJob, jobSheets, oneJobSheet, updateAllocateType, getDropdownListForTechnical, getUnassignedProjectAndAMCJobs, transferProcurementPerson, getJobHistory, jobSheetsWithCompletedPO, jobSheetsWithApprovedPR, getPreviousJobItemsByClient } from "../controllers/job.controller";
+import { getJobSalesPerson, jobList, totalJob, updateJobStatus, deleteJob, jobSheets, oneJobSheet, updateAllocateType, getDropdownListForTechnical, getUnassignedProjectAndAMCJobs, transferProcurementPerson, getJobHistory, jobSheetsWithCompletedPO, jobSheetsWithApprovedPR, jobSheetsWithApprovedPOAndNoGRN, getPreviousJobItemsByClient } from "../controllers/job.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const jobRouter = Router()
 
@@ -9,6 +9,7 @@ const jobRouter = Router()
 jobRouter.get('/jobIds', jobSheets)
 jobRouter.get('/jobIdsWithCompletedPO', jobSheetsWithCompletedPO)
 jobRouter.get('/jobIdsWithApprovedPR', jobSheetsWithApprovedPR)
+jobRouter.get('/jobIdsWithApprovedPOAndNoGRN', jobSheetsWithApprovedPOAndNoGRN)
 jobRouter.get('/previousJobItems/:clientId', getPreviousJobItemsByClient)
 
 jobRouter.use(requirePrivilege("jobSheet"));

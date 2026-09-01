@@ -60,6 +60,10 @@ export class JobService {
     return this.http.get<any>(`${this.apiUrl}/job/jobIdsWithApprovedPR`)
   }
 
+  getJobIdsWithApprovedPOAndNoGRN(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/job/jobIdsWithApprovedPOAndNoGRN`)
+  }
+
   getOneJob(jobId: string): Observable<getJob[]> {
     return this.http.get<getJob[]>(`${this.apiUrl}/job/jobIdDatas/${jobId}`)
   }

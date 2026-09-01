@@ -12,64 +12,28 @@ import jobModel from "../models/job.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
-import { getNextSequence } from "../models/counter.model";
+import { SupplierReturn } from "../models/supplierReturn.model";
+import GRN from "../models/grn.model";
 
-// grn values can carry a per-line suffix (e.g. GRN-2026-0009-1, -2, -3 for multiple
-// stock entries filed under the same GRN), so the main sequence must be read from the
-// digits immediately after the prefix, and the max must be taken across all matching
-// entries rather than the most recently created one.
-const seedStockEntryGrnSequence = (prefix: string) => async (): Promise<number> => {
-    const entries = await StockEntry.find({
-        grn: new RegExp(`^${prefix}-\\d+`)
-    }).select('grn').lean();
-
-    let maxNum = 0;
-    const pattern = new RegExp(`^${prefix}-(\\d+)`);
-    for (const entry of entries) {
-        const match = entry.grn.match(pattern);
-        if (match) {
-            maxNum = Math.max(maxNum, parseInt(match[1], 10));
-        }
-    }
-    return maxNum;
-};
-
-export const generateGRN = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const currentYear = new Date().getFullYear();
-        const prefix = `GRN-${currentYear}`;
-
-        const sequence = await getNextSequence(`stockEntryGrn-${currentYear}`, seedStockEntryGrnSequence(prefix));
-        const grn = `${prefix}-${sequence.toString().padStart(4, '0')}`;
-
-        return res.status(200).json({ grn });
-    } catch (error) {
-        console.error(error);
-        next(error);
-    }
-};
-
+// Manual (non-GRN-receipt) stock entry creation is hidden from the UI pending a rework;
+// this endpoint is kept functional but no longer generates/requires a grn value.
 export const createStockEntry = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const data: any = req.body;
         const token = (req as any).user;
 
-        if (!data.grn || !data.partNo || !data.dateOfPurchase || !data.supplierName || 
-            !data.productDescription || !data.productSegment || !data.productCategory || 
+        if (!data.partNo || !data.dateOfPurchase || !data.supplierName ||
+            !data.productDescription || !data.productSegment || !data.productCategory ||
             !data.targetWarehouse || !data.quantity || !data.unitCost || !data.totalCost) {
             return res.status(400).json({ message: "Missing required fields" });
         }
 
         const refIds = [data.partNo, data.supplierName, data.productSegment, data.productCategory, data.targetWarehouse];
         if (data.jobId) refIds.push(data.jobId);
+        if (data.grn) refIds.push(data.grn);
 
         if (!refIds.every((id: string) => ObjectId.isValid(id))) {
             return res.status(400).json({ message: "Invalid reference id(s) provided" });
-        }
-
-        const existing = await StockEntry.findOne({ grn: data.grn, isDeleted: { $ne: true } });
-        if (existing) {
-            return res.status(409).json({ message: "Stock entry with this GRN already exists" });
         }
 
         const [productExist, supplierExist, segmentExist, categoryExist, warehouseExist] = await Promise.all([
@@ -97,8 +61,9 @@ export const createStockEntry = async (req: Request, res: Response, next: NextFu
         }
 
         const stockEntry = await StockEntry.create({
-            grn: data.grn.trim(),
+            grn: data.grn || undefined,
             partNo: data.partNo,
+            itemCode: data.itemCode?.trim() || productExist.itemCode || undefined,
             dateOfPurchase: data.dateOfPurchase,
             jobId: data.jobId || undefined,
             supplierName: data.supplierName,
@@ -127,6 +92,8 @@ export const createStockEntry = async (req: Request, res: Response, next: NextFu
             .populate('productCategory')
             .populate('targetWarehouse')
             .populate('jobId')
+            .populate('dn', 'dnNo')
+            .populate('grn', 'grnNo')
             .populate('createdBy', 'firstName lastName');
 
         return res.status(201).json(populated);
@@ -186,7 +153,8 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
         }
 
         if (grn) {
-            filter.grn = { $regex: grn as string, $options: 'i' };
+            const matchingGrns = await GRN.find({ grnNo: { $regex: grn as string, $options: 'i' } }).select('_id');
+            filter.grn = { $in: matchingGrns.map(g => g._id) };
         }
 
         if (partNo && ObjectId.isValid(partNo as string)) {
@@ -228,16 +196,22 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
         const searchTerm = typeof search === 'string' ? search.trim() : '';
         if (searchTerm) {
             const regex = new RegExp(searchTerm, 'i');
-            const productMatches = await Product.find({ partNo: regex }).select('_id');
+            const [productMatches, grnMatches] = await Promise.all([
+                Product.find({ partNo: regex }).select('_id'),
+                GRN.find({ grnNo: regex }).select('_id')
+            ]);
 
             const searchConditions: any[] = [
-                { grn: regex },
                 { productDescription: regex },
                 { supplierLpoNo: regex }
             ];
 
             if (productMatches.length) {
                 searchConditions.push({ partNo: { $in: productMatches.map(product => product._id) } });
+            }
+
+            if (grnMatches.length) {
+                searchConditions.push({ grn: { $in: grnMatches.map(g => g._id) } });
             }
 
             filter.$or = searchConditions;
@@ -251,6 +225,8 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
                 .populate('productCategory', 'categoryName')
                 .populate('targetWarehouse', 'wareHouseName')
                 .populate('jobId', 'jobId')
+                .populate('dn', 'dnNo')
+                .populate('grn', 'grnNo')
                 .populate('createdBy', 'firstName lastName')
                 .sort({ createdDate: -1 })
                 .skip(skip)
@@ -278,18 +254,33 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
             blocksByEntryId.get(entryId)!.push(block);
         });
 
+        const supplierReturns = await SupplierReturn.find({
+            quarantineStockEntryId: { $in: stockEntryIds },
+            isDeleted: { $ne: true }
+        }).select('quarantineStockEntryId status').lean();
+
+        const supplierReturnStatusByEntryId = new Map<string, string>();
+        supplierReturns.forEach(supplierReturn => {
+            if (supplierReturn.quarantineStockEntryId) {
+                supplierReturnStatusByEntryId.set(supplierReturn.quarantineStockEntryId.toString(), supplierReturn.status);
+            }
+        });
+
         const enrichedEntries = stockEntries.map((entry: any) => {
             const entryId = entry._id.toString();
             const blocks = blocksByEntryId.get(entryId) || [];
             const blockedQuantity = blocks.reduce((sum, block) => sum + (block.quantity || 0), 0);
             const availableQuantity = entry.isQuarantined ? 0 : Math.max(0, entry.quantity - blockedQuantity);
+            const supplierReturnStatus = supplierReturnStatusByEntryId.get(entryId);
 
             return {
                 ...entry.toObject(),
                 availableQuantity,
                 blockedQuantity,
                 activeBlocks: blocks.filter(block => new Date(block.toDate) >= now),
-                remarks: entry.remarks || ''
+                remarks: entry.remarks || '',
+                supplierReturnStatus: supplierReturnStatus || null,
+                isHoldResolved: supplierReturnStatus ? ['Resolved', 'Disposed'].includes(supplierReturnStatus) : true
             };
         });
 
@@ -324,6 +315,8 @@ export const getStockEntryById = async (req: Request, res: Response, next: NextF
             .populate('productCategory')
             .populate('targetWarehouse')
             .populate('jobId')
+            .populate('dn', 'dnNo')
+            .populate('grn', 'grnNo')
             .populate('createdBy', 'firstName lastName');
         
         if (!stockEntry) return res.status(404).json({ message: "Stock entry not found" });
@@ -342,10 +335,9 @@ export const updateStockEntry = async (req: Request, res: Response, next: NextFu
 
         if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
 
-        if (data.grn) {
-            const exist = await StockEntry.findOne({ _id: { $ne: id }, grn: new RegExp(`^${data.grn}$`, 'i'), isDeleted: { $ne: true } });
-            if (exist) return res.status(409).json({ message: "Stock entry with this GRN already exists" });
-        }
+        const existingEntry = await StockEntry.findOne({ _id: id, isDeleted: { $ne: true } });
+        if (!existingEntry) return res.status(404).json({ message: "Stock entry not found" });
+        if (existingEntry.isQuarantined) return res.status(400).json({ message: "Quarantined stock entries cannot be edited. Release from quarantine first." });
 
         const refChecks: Promise<any>[] = [];
         if (data.partNo) refChecks.push(Product.findById(data.partNo));
@@ -357,9 +349,11 @@ export const updateStockEntry = async (req: Request, res: Response, next: NextFu
             refChecks.push(jobModel.findById(data.jobId));
         }
 
+        let partNoProduct: any = null;
         if (refChecks.length) {
             const checks = await Promise.all(refChecks);
             if (checks.some((c) => !c)) return res.status(400).json({ message: "Invalid references provided" });
+            if (data.partNo) partNoProduct = checks[0];
         }
 
         const employee = await getEmployeeData(token);
@@ -369,8 +363,9 @@ export const updateStockEntry = async (req: Request, res: Response, next: NextFu
             { _id: id, isDeleted: { $ne: true } },
             {
                 $set: {
-                    ...(data.grn ? { grn: data.grn.trim() } : {}),
+                    ...(data.grn ? { grn: data.grn } : {}),
                     ...(data.partNo ? { partNo: data.partNo } : {}),
+                    ...(data.itemCode !== undefined ? { itemCode: data.itemCode?.trim() || null } : (partNoProduct?.itemCode ? { itemCode: partNoProduct.itemCode } : {})),
                     ...(data.dateOfPurchase ? { dateOfPurchase: data.dateOfPurchase } : {}),
                     ...(data.jobId !== undefined ? { jobId: data.jobId || null } : {}),
                     ...(data.supplierName ? { supplierName: data.supplierName } : {}),
@@ -398,6 +393,8 @@ export const updateStockEntry = async (req: Request, res: Response, next: NextFu
             .populate('productCategory')
             .populate('targetWarehouse')
             .populate('jobId')
+            .populate('dn', 'dnNo')
+            .populate('grn', 'grnNo')
             .populate('createdBy', 'firstName lastName');
 
         if (!updated) return res.status(404).json({ message: "Stock entry not found" });
@@ -445,6 +442,15 @@ export const releaseFromQuarantine = async (req: Request, res: Response, next: N
 
         if (!stockEntry.isQuarantined) {
             return res.status(400).json({ success: false, message: "Stock entry is not quarantined" });
+        }
+
+        const linkedSupplierReturn = await SupplierReturn.findOne({
+            quarantineStockEntryId: stockEntry._id,
+            isDeleted: { $ne: true }
+        }).select('status').lean();
+
+        if (linkedSupplierReturn && !['Resolved', 'Disposed'].includes(linkedSupplierReturn.status)) {
+            return res.status(400).json({ success: false, message: "Cannot release from hold: the linked supplier return is not resolved" });
         }
 
         stockEntry.isQuarantined = false;

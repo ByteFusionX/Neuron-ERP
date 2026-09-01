@@ -60,6 +60,7 @@ export class CreateStockEntryComponent implements OnInit {
   stockEntryForm: FormGroup = this.fb.group({
     grn: ['', [Validators.required]],
     partNo: ['', [Validators.required]],
+    itemCode: [''],
     dateOfPurchase: [new Date().toISOString().split('T')[0], [Validators.required]],
     jobId: [''],
     supplierName: ['', [Validators.required]],
@@ -115,6 +116,7 @@ export class CreateStockEntryComponent implements OnInit {
     this.stockEntryForm.patchValue({
       grn: entry?.grn || '',
       partNo: entry?.partNo?._id || entry?.partNo || '',
+      itemCode: entry?.itemCode || entry?.partNo?.itemCode || '',
       dateOfPurchase: entry?.dateOfPurchase ? new Date(entry.dateOfPurchase).toISOString().split('T')[0] : '',
       jobId: entry?.jobId?._id || entry?.jobId || '',
       supplierName: entry?.supplierName?._id || entry?.supplierName || '',
@@ -132,18 +134,10 @@ export class CreateStockEntryComponent implements OnInit {
     });
   }
 
+  // Manual stock entry creation is being reworked; grn is no longer an auto-generated
+  // string (it's now a reference to a real GRN document), so this no longer applies.
   loadGRN(): void {
-    this.isLoadingGRN = true;
-    this.stockEntryService.generateGRN().subscribe({
-      next: (response) => {
-        this.stockEntryForm.patchValue({ grn: response.grn });
-        this.isLoadingGRN = false;
-      },
-      error: () => {
-        this.toastr.error('Failed to generate GRN');
-        this.isLoadingGRN = false;
-      }
-    });
+    this.isLoadingGRN = false;
   }
 
   loadDepartments(): void {
@@ -224,12 +218,23 @@ export class CreateStockEntryComponent implements OnInit {
   }
 
   loadJobIds(): void {
-    this.jobService.getJobids().subscribe({
+    this.jobService.getJobIdsWithApprovedPOAndNoGRN().subscribe({
       next: (response) => {
         const jobs = Array.isArray(response)
           ? response
           : (response as any)?.jobs || (response as any)?.data || [];
         this.jobIds = jobs;
+
+        // The list only contains jobs with an approved PO and no GRN yet, so an
+        // entry being edited may reference a job that no longer qualifies.
+        // Ensure it's still present so the dropdown can resolve its value.
+        const currentJob = this.isEditMode ? this.data?.stockEntry?.jobId : null;
+        if (currentJob && typeof currentJob === 'object' && currentJob._id) {
+          const exists = this.jobIds.some((j: any) => j._id === currentJob._id);
+          if (!exists) {
+            this.jobIds = [...this.jobIds, currentJob];
+          }
+        }
       },
       error: () => {
         this.toastr.error('Failed to load job IDs');
@@ -240,14 +245,27 @@ export class CreateStockEntryComponent implements OnInit {
   onProductChange(productId: string | string[]): void {
     const id = Array.isArray(productId) ? productId[0] : productId;
     const product = this.products.find(p => p._id === id);
-    if (product) {
-      this.stockEntryForm.patchValue({
-        productDescription: product.productDescription || '',
-        productSegment: product.productSegment?._id || product.productSegment || '',
-        productCategory: product.productCategory?._id || product.productCategory || '',
-        targetWarehouse: product.warehouse?._id || product.warehouse || product.targetWarehouse?._id || product.targetWarehouse || ''
-      });
+    this.applyProduct(product);
+  }
+
+  onItemCodeChange(itemCode: string | string[]): void {
+    const code = Array.isArray(itemCode) ? itemCode[0] : itemCode;
+    const product = this.products.find(p => p.itemCode === code);
+    this.applyProduct(product);
+  }
+
+  private applyProduct(product: any): void {
+    if (!product) {
+      return;
     }
+    this.stockEntryForm.patchValue({
+      partNo: product._id || '',
+      itemCode: product.itemCode || '',
+      productDescription: product.productDescription || '',
+      productSegment: product.productSegment?._id || product.productSegment || '',
+      productCategory: product.productCategory?._id || product.productCategory || '',
+      targetWarehouse: product.warehouse?._id || product.warehouse || product.targetWarehouse?._id || product.targetWarehouse || ''
+    });
   }
 
   setupTotalCostCalculation(): void {

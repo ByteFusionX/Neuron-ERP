@@ -589,6 +589,47 @@ export const jobSheetsWithCompletedPO = async (req: Request, res: Response, next
     }
 }
 
+export const jobSheetsWithApprovedPOAndNoGRN = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const approvedPOs = await PurchaseOrder.find({
+            poStatus: 'Approved'
+        }).select('_id jobId');
+
+        if (!approvedPOs.length) {
+            return res.status(200).json({ jobs: [] });
+        }
+
+        const poIds = approvedPOs.map(po => po._id);
+
+        const grnsForPOs = await GRN.find({
+            purchaseOrderId: { $in: poIds }
+        }).select('purchaseOrderId');
+
+        const poIdsWithGRN = new Set(grnsForPOs.map(g => g.purchaseOrderId.toString()));
+
+        const jobIdSet = new Set<string>();
+        approvedPOs.forEach(po => {
+            if (po.jobId && !poIdsWithGRN.has(po._id.toString())) {
+                jobIdSet.add(po.jobId.toString());
+            }
+        });
+
+        if (!jobIdSet.size) {
+            return res.status(200).json({ jobs: [] });
+        }
+
+        const jobs = await jobModel.find({
+            _id: { $in: Array.from(jobIdSet) },
+            isDeleted: { $ne: true }
+        }).select('_id jobId').sort({ createdDate: -1 });
+
+        return res.status(200).json({ jobs });
+    } catch (error) {
+        next(error);
+        console.error(error);
+    }
+}
+
 export const jobSheetsWithApprovedPR = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const approvedPRs = await PurchaseRequest.find({

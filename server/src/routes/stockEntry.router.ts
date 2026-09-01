@@ -5,7 +5,6 @@ import {
     getStockEntryById,
     updateStockEntry,
     deleteStockEntry,
-    generateGRN,
     getAvailableQuantity,
     createStockBlock,
     getStockBlocks,
@@ -17,7 +16,6 @@ const stockEntryRouter = Router();
 
 stockEntryRouter.use(requirePrivilege("inventory.stockEntries"));
 
-stockEntryRouter.get('/generate-grn', generateGRN);
 stockEntryRouter.get('/available-quantity', getAvailableQuantity);
 stockEntryRouter.get('/blocks', getStockBlocks);
 stockEntryRouter.get('/', getStockEntries);

@@ -1,0 +1,74 @@
+<app-modal-layout
+  [title]="'DN Details - ' + (dn?.dnNo || '')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6 flex flex-col"
+  contentMaxHeight="85vh">
+
+  @if (isLoading()) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else {
+    <div class="w-full mb-6">
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">DN No</td>
+              <td class="px-2 py-2 border text-start">{{ dn?.dnNo || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">DN Date</td>
+              <td class="px-2 py-2 border text-start">{{ formatDate(dn?.dnDate) }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Client Name</td>
+              <td class="px-2 py-2 border text-start">{{ dn?.clientName || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Job ID</td>
+              <td class="px-2 py-2 border text-start">{{ dn?.jobId?.jobId || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Customer LPO Number</td>
+              <td class="px-2 py-2 border text-start">{{ dn?.customerLpoNumber || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Status</td>
+              <td class="px-2 py-2 border text-start">{{ dn?.status || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Subject</td>
+              <td class="px-2 py-2 border text-start" colspan="3">{{ dn?.subject || 'N/A' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="w-full">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">DN Items</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-[50vh] overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 border text-center">SL.NO</th>
+              <th class="px-3 py-2 border text-center">Part No.</th>
+              <th class="px-3 py-2 border text-center">Ordered Qty</th>
+              <th class="px-3 py-2 border text-center">Delivered Qty</th>
+              <th class="px-3 py-2 border text-center">Rejected Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of dn?.items; track $index) {
+              <tr class="border-b">
+                <td class="px-3 py-2 border text-center">{{ item.slNo || $index + 1 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.partNo || '-' }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.orderedQty || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.deliveredQty || 0 }}</td>
+                <td class="px-3 py-2 border text-center" [class.text-red-600]="item.rejectedQty > 0" [class.font-medium]="item.rejectedQty > 0">{{ item.rejectedQty || 0 }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td class="px-3 py-2 border text-center text-gray-400" colspan="5">No items found</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</app-modal-layout>

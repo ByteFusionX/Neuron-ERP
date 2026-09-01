@@ -1,0 +1,78 @@
+<app-modal-layout
+  [title]="'Purchase Order Details - ' + (po?.poNo || '')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6 flex flex-col"
+  contentMaxHeight="85vh">
+
+  @if (isLoading()) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else {
+    <div class="w-full mb-6">
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">PO Number</td>
+              <td class="px-2 py-2 border text-start">{{ po?.poNo || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">PO Date</td>
+              <td class="px-2 py-2 border text-start">{{ formatDate(po?.poDate) }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Supplier Name</td>
+              <td class="px-2 py-2 border text-start">{{ po?.supplierId?.supplierName || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Status</td>
+              <td class="px-2 py-2 border text-start">{{ po?.poStatus || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Job ID</td>
+              <td class="px-2 py-2 border text-start">{{ po?.jobId?.jobId || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Subject</td>
+              <td class="px-2 py-2 border text-start">{{ po?.subject || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Payment Terms</td>
+              <td class="px-2 py-2 border text-start">{{ po?.paymentTerms || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Delivery Terms</td>
+              <td class="px-2 py-2 border text-start">{{ po?.deliveryTerms || 'N/A' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="w-full">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">PO Items</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-[50vh] overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 border text-center">SL.NO</th>
+              <th class="px-3 py-2 border text-center">Part No.</th>
+              <th class="px-3 py-2 border text-center">Description</th>
+              <th class="px-3 py-2 border text-center">Quantity</th>
+              <th class="px-3 py-2 border text-center">Unit Cost</th>
+              <th class="px-3 py-2 border text-center">Total Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of po?.items; track $index) {
+              <tr class="border-b">
+                <td class="px-3 py-2 border text-center">{{ $index + 1 }}</td>
+                <td class="px-3 py-2 border text-center">{{ formatPartNumber(item.partNo) }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.detail || '-' }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.quantity || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ formatPlainNumber(item.unitCost) }}</td>
+                <td class="px-3 py-2 border text-center">{{ formatPlainNumber(item.totalCost) }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td class="px-3 py-2 border text-center text-gray-400" colspan="6">No items found</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</app-modal-layout>

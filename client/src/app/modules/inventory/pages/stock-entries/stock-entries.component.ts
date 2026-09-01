@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { TableComponent } from 'src/app/shared/components/table/table.component';
@@ -14,12 +14,14 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { ProductService } from 'src/app/core/services/product/product.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { JobService } from 'src/app/core/services/job/job.service';
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
 import { BlockItemComponent } from './modals/block-item/block-item.component';
 import { ViewBlockedItemsComponent } from './modals/view-blocked-items/view-blocked-items.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateStockEntryComponent } from './modals/create-stock-entry/create-stock-entry.component';
+import { ViewGrnDetailsModalComponent } from './modals/view-grn-details-modal/view-grn-details-modal.component';
+import { ViewDnDetailsModalComponent } from './modals/view-dn-details-modal/view-dn-details-modal.component';
+import { ViewPoDetailsModalComponent } from './modals/view-po-details-modal/view-po-details-modal.component';
 
 @Component({
   selector: 'app-stock-entries',
@@ -38,6 +40,7 @@ import { CreateStockEntryComponent } from './modals/create-stock-entry/create-st
 export class StockEntriesComponent implements OnInit {
   private stockEntryService = inject(StockEntryService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private toastr = inject(ToastrService);
   private dialog = inject(MatDialog);
   private paginationService = inject(PaginationService);
@@ -46,11 +49,10 @@ export class StockEntriesComponent implements OnInit {
   private warehouseService = inject(WarehouseService);
   private productService = inject(ProductService);
   private supplierService = inject(SupplierService);
-  private jobService = inject(JobService);
 
   tableData = signal<StockEntry[]>([]);
   tableColumns: TableColumn[] = [];
-  defaultColumns: string[] = ['itemCode', 'partNo', 'productDescription', 'targetWarehouse', 'quantity', 'uom', 'unitCost', 'totalCost', 'supplierName', 'dateOfPurchase', 'stockInDays', 'jobId', 'productCategory', 'productSegment', 'sellingPrice', 'blockedQuantities', 'remarks', 'actions'];
+  defaultColumns: string[] = ['itemCode', 'partNo', 'jobId', 'grn', 'dn', 'supplierLpoNo', 'productDescription', 'targetWarehouse', 'quantity', 'uom', 'supplierName', 'dateOfPurchase', 'stockInDays', 'productCategory', 'productSegment', 'blockedQuantities', 'remarks', 'actions'];
   showQuarantineOnly = signal<boolean>(false);
   isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
@@ -61,7 +63,6 @@ export class StockEntriesComponent implements OnInit {
   productOptions = signal<{ label: string; value: string }[]>([]);
   supplierOptions = signal<{ label: string; value: string }[]>([]);
 
-  private jobSelectOptions: { label: string; value: string }[] = [];
 
   private appliedFilters: Record<string, any> = {};
   private searchTerm: string = '';
@@ -69,15 +70,9 @@ export class StockEntriesComponent implements OnInit {
   ngOnInit(): void {
     this.setupTableColumns();
     this.loadFilterOptions();
+    const onHold = this.route.snapshot.queryParams['onHold'] === 'true';
+    if (onHold) this.showQuarantineOnly.set(true);
     this.loadStockEntries();
-  }
-
-  formatPlainNumber(value: any): string {
-    if (value == null) return '';
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value);
   }
 
   loadFilterOptions(): void {
@@ -152,23 +147,6 @@ export class StockEntriesComponent implements OnInit {
         this.toastr.error('Failed to load suppliers');
       }
     });
-
-    this.jobService.getJobids().subscribe({
-      next: (response: any) => {
-        const jobs = Array.isArray(response)
-          ? response
-          : response?.jobs || response?.data || [];
-        const options = (jobs ?? []).map((job: any) => ({
-          label: job.jobId,
-          value: job._id as string
-        }));
-        this.jobSelectOptions = options;
-        this.updateColumnFilterOptions('jobId', options);
-      },
-      error: () => {
-        this.toastr.error('Failed to load job ids');
-      }
-    });
   }
 
   private updateColumnFilterOptions(columnKey: string, options: { label: string; value: string }[]): void {
@@ -186,7 +164,7 @@ export class StockEntriesComponent implements OnInit {
         type: 'text',
         sortable: false,
         filterable: false,
-        cellRenderer: (item: any) => item?.partNo?.itemCode || ''
+        cellRenderer: (item: any) => item?.itemCode || item?.partNo?.itemCode || ''
       },
       {
         key: 'partNo',
@@ -198,6 +176,81 @@ export class StockEntriesComponent implements OnInit {
         filterOptions: this.productOptions(),
         filterPlaceholder: 'Select part no...',
         cellRenderer: (item: any) => item?.partNo?.partNo || ''
+      },
+      {
+        key: 'jobId',
+        label: 'Job ID',
+        type: 'text',
+        sortable: false,
+        filterable: false,
+        cellRenderer: (item: any) => item?.jobId?.jobId || ''
+      },
+      {
+        key: 'grn',
+        label: 'GRN No',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search GRN...',
+        cellClass: 'text-violet-600 font-medium',
+        cellRenderer: (item: any) => item?.grn?.grnNo || '-',
+        clickable: true,
+        clickableValue: (item: any) => !!item?.grn?._id,
+        clickFunction: (item: any) => {
+          if (item?.grn?._id) {
+            this.dialog.open(ViewGrnDetailsModalComponent, {
+              data: { grnId: item.grn._id },
+              width: '1200px',
+              maxWidth: '95vw',
+              maxHeight: '90vh'
+            });
+          }
+        }
+      },
+      {
+        key: 'dn',
+        label: 'DN No',
+        type: 'text',
+        sortable: false,
+        filterable: false,
+        cellClass: 'text-violet-600 font-medium',
+        cellRenderer: (item: any) => item?.isQuarantined ? (item?.dn?.dnNo || '-') : '',
+        clickable: true,
+        clickableValue: (item: any) => item?.isQuarantined && !!item?.dn?._id,
+        clickFunction: (item: any) => {
+          if (item?.dn?._id) {
+            this.dialog.open(ViewDnDetailsModalComponent, {
+              data: { dnId: item.dn._id },
+              width: '1200px',
+              maxWidth: '95vw',
+              maxHeight: '90vh'
+            });
+          }
+        }
+      },
+      {
+        key: 'supplierLpoNo',
+        label: 'PO Number',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search PO number...',
+        cellRenderer: (item: any) => item?.supplierLpoNo || '',
+        cellClass: 'text-violet-600 font-medium',
+        clickable: true,
+        clickableValue: (item: any) => !!item?.supplierLpoNo,
+        clickFunction: (item: any) => {
+          if (item?.supplierLpoNo) {
+            this.dialog.open(ViewPoDetailsModalComponent, {
+              data: { poNo: item.supplierLpoNo },
+              width: '1200px',
+              maxWidth: '95vw',
+              maxHeight: '90vh'
+            });
+          }
+        }
       },
       {
         key: 'productDescription',
@@ -239,22 +292,6 @@ export class StockEntriesComponent implements OnInit {
         filterPlaceholder: 'Search UOM...'
       },
       {
-        key: 'unitCost',
-        label: 'Unit Cost',
-        type: 'text',
-        sortable: true,
-        filterable: false,
-        cellRenderer: (item: any) => this.formatPlainNumber(item?.unitCost)
-      },
-      {
-        key: 'totalCost',
-        label: 'Total Cost',
-        type: 'text',
-        sortable: true,
-        filterable: false,
-        cellRenderer: (item: any) => this.formatPlainNumber(item?.totalCost)
-      },
-      {
         key: 'supplierName',
         label: 'Supplier Name',
         type: 'text',
@@ -282,17 +319,6 @@ export class StockEntriesComponent implements OnInit {
         filterable: false
       },
       {
-        key: 'jobId',
-        label: 'Job ID',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'select',
-        filterOptions: this.jobSelectOptions,
-        filterPlaceholder: 'Select job id...',
-        cellRenderer: (item: any) => item?.jobId?.jobId || ''
-      },
-      {
         key: 'productCategory',
         label: 'Category',
         type: 'text',
@@ -313,14 +339,6 @@ export class StockEntriesComponent implements OnInit {
         filterOptions: this.segmentOptions(),
         filterPlaceholder: 'Select segment...',
         cellRenderer: (item: any) => item?.productSegment?.departmentName || ''
-      },
-      {
-        key: 'sellingPrice',
-        label: 'Selling Price',
-        type: 'text',
-        sortable: true,
-        filterable: false,
-        cellRenderer: (item: any) => this.formatPlainNumber(item?.sellingPrice)
       },
       {
         key: 'blockedQuantities',
@@ -349,7 +367,7 @@ export class StockEntriesComponent implements OnInit {
       },
       {
         key: 'quarantineReason',
-        label: 'Quarantine Reason',
+        label: 'Hold Reason',
         type: 'text',
         sortable: false,
         filterable: false,
@@ -375,7 +393,8 @@ export class StockEntriesComponent implements OnInit {
             icon: 'heroPencilSquare',
             tooltip: 'Edit Stock',
             action: 'editItem',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600'
+            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600',
+            condition: (item: any) => !item?.isQuarantined
           },
           {
             icon: 'heroTrash',
@@ -391,10 +410,13 @@ export class StockEntriesComponent implements OnInit {
             condition: (item: any) => (item?.availableQuantity ?? item?.quantity ?? 0) > 0
           },
           {
-            icon: 'heroCheckCircle',
-            tooltip: 'Release from Quarantine',
+            icon: (item: any) => item?.isHoldResolved === false ? 'heroLockClosed' : 'heroLockOpen',
+            tooltip: (item: any) => item?.isHoldResolved === false ? 'Not resolved' : 'Release from Hold',
             action: 'releaseQuarantine',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-green-200 hover:bg-green-50 flex justify-center items-center text-green-600',
+            buttonClass: (item: any) => item?.isHoldResolved === false
+              ? 'w-9 h-9 rounded-full border border-gray-200 flex justify-center items-center text-gray-400'
+              : 'cursor-pointer w-9 h-9 rounded-full border border-green-200 hover:bg-green-50 flex justify-center items-center text-green-600',
+            disabled: (item: any) => item?.isHoldResolved === false,
             condition: (item: any) => !!item?.isQuarantined
           }
         ]
@@ -461,6 +483,12 @@ export class StockEntriesComponent implements OnInit {
       row: currentState.row,
       total: currentState.total
     });
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { onHold: this.showQuarantineOnly() || null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
     this.loadStockEntries({ page: 1 });
   }
 
@@ -469,11 +497,11 @@ export class StockEntriesComponent implements OnInit {
 
     this.stockEntryService.releaseFromQuarantine(item._id).subscribe({
       next: () => {
-        this.toastr.success('Stock entry released from quarantine');
+        this.toastr.success('Stock entry released from hold');
         this.loadStockEntries();
       },
       error: (error) => {
-        this.toastr.error(error.error?.message || 'Failed to release stock entry from quarantine');
+        this.toastr.error(error.error?.message || 'Failed to release stock entry from hold');
       }
     });
   }
