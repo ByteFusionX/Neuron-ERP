@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { MatMenuModule } from '@angular/material/menu';
 import { Router, RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { PaginationService } from 'src/app/core/services/pagination.service';
@@ -14,7 +15,7 @@ import { ViewPurchaseRequestDetailsModalComponent, ViewPurchaseRequestDetailsMod
 @Component({
   selector: 'app-grn-list',
   standalone: true,
-  imports: [TableComponent, CommonModule, RouterModule, ButtonComponent, IconsModule],
+  imports: [TableComponent, CommonModule, RouterModule, ButtonComponent, IconsModule, MatMenuModule],
   templateUrl: './grn-list.component.html',
   styleUrl: './grn-list.component.css',
   providers: [PaginationService]

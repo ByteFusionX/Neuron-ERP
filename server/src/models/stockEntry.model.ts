@@ -1,8 +1,9 @@
 import { Schema, model, Types } from "mongoose";
 
 interface StockEntry {
-    grn: string;
+    grn?: Types.ObjectId;
     partNo: Types.ObjectId;
+    itemCode?: string;
     dateOfPurchase: Date;
     jobId?: Types.ObjectId;
     supplierName: Types.ObjectId;
@@ -28,19 +29,22 @@ interface StockEntry {
     quarantinedAt?: Date;
     quarantineReleasedAt?: Date;
     quarantineReleasedBy?: Types.ObjectId;
-    sourceDnId?: Types.ObjectId;
+    dn?: Types.ObjectId;
 }
 
 const stockEntrySchema = new Schema<StockEntry>({
     grn: {
-        type: String,
-        required: true,
-        unique: true,
+        type: Schema.Types.ObjectId,
+        ref: 'GRN',
     },
     partNo: {
         type: Schema.Types.ObjectId,
         ref: 'Product',
         required: true,
+    },
+    itemCode: {
+        type: String,
+        trim: true,
     },
     dateOfPurchase: {
         type: Date,
@@ -147,7 +151,7 @@ const stockEntrySchema = new Schema<StockEntry>({
         type: Schema.Types.ObjectId,
         ref: 'Employee',
     },
-    sourceDnId: {
+    dn: {
         type: Schema.Types.ObjectId,
         ref: 'DeliveryNote',
     },

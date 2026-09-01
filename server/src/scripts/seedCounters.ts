@@ -139,23 +139,6 @@ const seedClientRefSequence = async (): Promise<number> => {
     return lastClientId.length ? lastClientId[0].slNo : 0;
 };
 
-// grn values can carry a per-line suffix (e.g. GRN-2026-0009-1, -2, -3 for multiple
-// stock entries filed under the same GRN), so the main sequence must be read from the
-// digits immediately after the prefix, and the max must be taken across all matching
-// entries rather than the most recently created one.
-const seedStockEntryGrnSequence = async (prefix: string): Promise<number> => {
-    const entries = await StockEntry.find({ grn: new RegExp(`^${prefix}-\\d+`) }).select('grn').lean();
-    let maxNum = 0;
-    const pattern = new RegExp(`^${prefix}-(\\d+)`);
-    for (const entry of entries) {
-        const match = entry.grn.match(pattern);
-        if (match) {
-            maxNum = Math.max(maxNum, parseInt(match[1], 10));
-        }
-    }
-    return maxNum;
-};
-
 const seedSupplierIdSequence = async (deptCode: string): Promise<number> => {
     const lastSupplier = await Supplier.findOne({
         supplierId: { $regex: `^NT-SP-${deptCode}-\\d{3}$` }
@@ -201,7 +184,6 @@ const run = async () => {
     await seedCounter('dealId', seedDealIdSequence);
     await seedCounter('jobId', seedJobIdSequence);
     await seedCounter('clientRef', seedClientRefSequence);
-    await seedCounter(`stockEntryGrn-${currentYear}`, () => seedStockEntryGrnSequence(`GRN-${currentYear}`));
 
     // Supplier ID counters are scoped per department, so there is no single global
     // key to pre-seed; each department's key is created lazily on its first use

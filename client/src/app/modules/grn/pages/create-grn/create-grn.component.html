@@ -22,14 +22,14 @@
                                 optionValue="_id"
                                 formControlName="selectedLpo"
                                 [placeholder]="isLpoOptionsLoading() ? 'Loading LPOs...' : 'Select LPO to create GRN against'"
-                                [isSubmitted]="isSubmitting()"
+                                [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500"
                                 (onSelected)="onLpoSelected($event)"
                                 class="w-full">
                             </app-select-dropdown>
                         }
-                        <app-form-field label="GRN Number" [control]="f['grnNo']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                        <app-form-field label="GRN Number" [control]="f['grnNo']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
                         </app-form-field>
-                        <app-form-field label="GRN Date" [control]="f['grnDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
+                        <app-form-field label="GRN Date" [control]="f['grnDate']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="date" class="w-full">
                         </app-form-field>
                     </div>
 
@@ -53,16 +53,16 @@
                         </div>
                     } @else if(lpo) {
                         <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                            <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
                             </app-form-field>
-                            <app-form-field label="Linked LPO Number" [control]="f['linkedLpoNo']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                            <app-form-field label="Linked LPO Number" [control]="f['linkedLpoNo']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
                             </app-form-field>
-                            <app-form-field *ngIf="!isJobLess" label="Job ID" [control]="f['jobId']" [isSubmitted]="isSubmitting()" class="w-full" [readonly]="true">
+                            <app-form-field *ngIf="!isJobLess" label="Job ID" [control]="f['jobId']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
                             </app-form-field>
                         </div>
 
                         <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <app-form-field label="Supplier Invoice Date" [control]="f['supplierInvoiceDate']" [isSubmitted]="isSubmitting()" type="date" class="w-full">
+                            <app-form-field label="Supplier Invoice Date" [control]="f['supplierInvoiceDate']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="date" class="w-full">
                             </app-form-field>
 
                             <div class="mb-1 w-full">
@@ -71,7 +71,7 @@
                                 </label>
                                 <div class="flex items-stretch gap-2">
                                     <input id="supplierInvoiceNo" formControlName="supplierInvoiceNo"
-                                        [class.border-red-500]="f['supplierInvoiceNo'].invalid && isSubmitting()"
+                                        [class.border-orange-500]="f['supplierInvoiceNo'].invalid && formSubmitted()"
                                         class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                                         type="text"/>
                                     <button type="button"
@@ -92,7 +92,7 @@
                                 </label>
                                 <div class="flex items-stretch gap-2">
                                     <input id="supplierDeliveryNoteNo" formControlName="supplierDeliveryNoteNo"
-                                        [class.border-red-500]="f['supplierDeliveryNoteNo'].invalid && isSubmitting()"
+                                        [class.border-orange-500]="f['supplierDeliveryNoteNo'].invalid && formSubmitted()"
                                         class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                                         type="text"/>
                                     <button type="button"
@@ -109,16 +109,14 @@
                         </div>
 
                         <div class="flex flex-col md:flex-row gap-3">
-                            <app-select-dropdown
-                                label="Received By"
-                                [options]="employees"
-                                optionLabel="name"
-                                optionValue="_id"
-                                formControlName="receivedBy"
-                                placeholder="Select employee"
-                                [isSubmitted]="isSubmitting()"
-                                class="w-full">
-                            </app-select-dropdown>
+                            <div class="mb-1 w-full">
+                                <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="receivedByDisplay">
+                                    Received By
+                                </label>
+                                <input id="receivedByDisplay" [value]="receivedByName" readonly
+                                    class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+                                    type="text"/>
+                            </div>
                             <app-select-dropdown
                                 label="Location / Warehouse"
                                 [options]="warehouses"
@@ -126,7 +124,7 @@
                                 optionValue="_id"
                                 formControlName="warehouse"
                                 placeholder="Select warehouse"
-                                [isSubmitted]="isSubmitting()"
+                                [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500"
                                 footerLabel="+ Add warehouse"
                                 (footerAction)="onAddWarehouse()"
                                 class="w-full">
@@ -191,7 +189,7 @@
                                             {{ item.get('itemDescription')?.value || '-' }}
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('uom')" [isSubmitted]="isSubmitting()" placeholder="Enter UOM" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            <app-form-field [control]="item.get('uom')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" placeholder="Enter UOM" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                             </app-form-field>
                                         </td>
                                         <td class="px-4 py-2 border text-center">
@@ -203,30 +201,27 @@
                                             </span>
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('receivedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            <app-form-field [control]="item.get('receivedQty')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                             </app-form-field>
                                             @if(item.get('receivedQty')?.errors?.['max']) {
                                                 <span class="text-xs text-red-600">Cannot exceed balance</span>
                                             }
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('acceptedQty')" [isSubmitted]="isSubmitting()" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                            </app-form-field>
-                                            @if(item.get('acceptedQty')?.errors?.['max']) {
-                                                <span class="text-xs text-red-600">Cannot exceed received</span>
-                                            }
-                                            @if(item.get('acceptedQty')?.errors?.['maxBalance']) {
-                                                <span class="text-xs text-red-600">Cannot exceed balance</span>
-                                            }
+                                            {{ item.get('acceptedQty')?.value || 0 }}
                                         </td>
                                         <td class="px-4 py-2 border text-center"
                                             [class.text-red-600]="(item.get('rejectedQty')?.value || 0) > 0"
                                             [class.font-medium]="(item.get('rejectedQty')?.value || 0) > 0">
-                                            {{ item.get('rejectedQty')?.value || 0 }}
+                                            <app-form-field [control]="item.get('rejectedQty')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            </app-form-field>
+                                            @if(item.get('rejectedQty')?.errors?.['max']) {
+                                                <span class="text-xs text-red-600">Cannot exceed balance</span>
+                                            }
                                         </td>
                                         <td class="px-4 py-2 border text-center">
                                             @if((item.get('rejectedQty')?.value || 0) > 0) {
-                                                <app-form-field [control]="item.get('rejectionReason')" [isSubmitted]="isSubmitting()" placeholder="Enter rejection reason" class="w-full" [readonly]="isFormDisabled()">
+                                                <app-form-field [control]="item.get('rejectionReason')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" placeholder="Enter rejection reason" class="w-full" [readonly]="isFormDisabled()">
                                                 </app-form-field>
                                                 @if(item.get('rejectionReason')?.errors?.['required']) {
                                                     <span class="text-xs text-red-600">Required</span>
@@ -236,11 +231,11 @@
                                             }
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('remarks')" [isSubmitted]="isSubmitting()" placeholder="Enter remarks" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            <app-form-field [control]="item.get('remarks')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" placeholder="Enter remarks" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                             </app-form-field>
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('date')" [isSubmitted]="isSubmitting()" type="date" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            <app-form-field [control]="item.get('date')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="date" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                             </app-form-field>
                                         </td>
                                     </tr>

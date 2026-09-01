@@ -9,6 +9,9 @@ import { getEmployeeData } from "../common/utils/util";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { uploadFileToAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
+import { createNotificationWithPrivileges } from "./notification.controller";
+import { Server } from "socket.io";
+import { SupplierReturn } from "../models/supplierReturn.model";
 
 const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
   const lastEntry = await GRN.findOne({
@@ -17,8 +20,8 @@ const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
 
   if (lastEntry && lastEntry.grnNo) {
     const parts = lastEntry.grnNo.split('-');
-    if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
-      return parseInt(parts[2]);
+    if (parts.length >= 4 && !isNaN(parseInt(parts[3]))) {
+      return parseInt(parts[3]);
     }
   }
   return 0;
@@ -26,10 +29,12 @@ const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
 
 export const generateGRNNumber = async (req: Request, res: Response) => {
   try {
-    const currentYear = new Date().getFullYear();
-    const prefix = `GRN-${currentYear}`;
+    const now = new Date();
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const yy = now.getFullYear().toString().slice(-2);
+    const prefix = `GRN-${mm}-${yy}`;
 
-    const sequence = await getNextSequence(`grnNo-${currentYear}`, seedGRNSequence(prefix));
+    const sequence = await getNextSequence(`grnNo-${mm}-${yy}`, seedGRNSequence(prefix));
     const grn = `${prefix}-${sequence.toString().padStart(4, '0')}`;
 
     return res.status(200).json({ grn });
@@ -92,24 +97,16 @@ export const createGRN = async (req: Request, res: Response) => {
     for (const item of items) {
       const orderedQty = Number(item.orderedQty);
       const receivedQty = Number(item.receivedQty);
-      const acceptedQty = Number(item.acceptedQty);
+      const rejectedQty = Number(item.rejectedQty) || 0;
 
-      if (!item.itemDescription || isNaN(orderedQty) || isNaN(receivedQty) || isNaN(acceptedQty) ||
-          orderedQty < 0 || receivedQty < 0 || acceptedQty < 0) {
+      if (!item.itemDescription || isNaN(orderedQty) || isNaN(receivedQty) ||
+          orderedQty < 0 || receivedQty < 0 || rejectedQty < 0) {
         return res.status(400).json({
           success: false,
-          message: "Invalid item structure. Each item must have itemDescription, and valid numeric values for orderedQty, receivedQty, and acceptedQty"
+          message: "Invalid item structure. Each item must have itemDescription, and valid numeric values for orderedQty, receivedQty, and rejectedQty"
         });
       }
 
-      if (acceptedQty > receivedQty) {
-        return res.status(400).json({
-          success: false,
-          message: `Invalid item "${item.itemDescription}": acceptedQty cannot exceed receivedQty`
-        });
-      }
-
-      const rejectedQty = receivedQty - acceptedQty;
       if (rejectedQty > 0 && !item.rejectionReason) {
         return res.status(400).json({
           success: false,
@@ -118,6 +115,7 @@ export const createGRN = async (req: Request, res: Response) => {
       }
 
       item.rejectedQty = rejectedQty;
+      item.acceptedQty = receivedQty;
     }
 
     const existingGRNs = await GRN.find({
@@ -264,21 +262,21 @@ export const createGRN = async (req: Request, res: Response) => {
       const jobId = populatedPurchaseOrder?.purchaseId?.jobId?._id || populatedPurchaseOrder?.purchaseId?.jobId || 
                     populatedPurchaseOrder?.jobId?._id || populatedPurchaseOrder?.jobId || undefined;
 
-      const stockEntryGrn = `${grnNo}-${i + 1}`;
-      
-      const existingStockEntry = await StockEntry.findOne({ 
-        grn: stockEntryGrn, 
-        isDeleted: { $ne: true } 
+      const existingStockEntry = await StockEntry.findOne({
+        grn: grn._id,
+        partNo: product._id,
+        isDeleted: { $ne: true }
       });
 
       if (existingStockEntry) {
-        warnings.push(`Item "${grnItem.itemDescription}" (index ${i + 1}) skipped: Stock entry with GRN "${stockEntryGrn}" already exists`);
+        warnings.push(`Item "${grnItem.itemDescription}" (index ${i + 1}) skipped: Stock entry for GRN "${grnNo}" and this part already exists`);
         continue;
       }
 
       const stockEntryData: any = {
-        grn: stockEntryGrn,
+        grn: grn._id,
         partNo: product._id,
+        itemCode: product.itemCode || undefined,
         dateOfPurchase: supplierInvoiceDate ? new Date(supplierInvoiceDate) : new Date(grnDate),
         supplierName: populatedPurchaseOrder?.supplierId?._id || populatedPurchaseOrder?.supplierId,
         supplierLpoNo: populatedPurchaseOrder?.poNo || undefined,
@@ -389,6 +387,27 @@ export const createGRN = async (req: Request, res: Response) => {
       if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
         await checkAndUpdateJobCompletionStatus(jobId.toString());
       }
+    }
+
+    const rejectedItems = (items || []).filter((item: any) => Number(item.rejectedQty) > 0);
+    if (rejectedItems.length > 0) {
+      const socket = req.app.get('io') as Server;
+      await createNotificationWithPrivileges(
+        {
+          type: 'GrnItemsRejected',
+          referenceModel: 'GRN',
+          title: 'GRN items rejected',
+          message: `GRN ${grnNo} has ${rejectedItems.length} rejected item(s) from supplier ${populatedPurchaseOrder?.supplierId?.supplierName || ''}`.trim(),
+          sentBy: employee._id?.toString(),
+          referenceId: grn._id,
+          additionalData: { grnId: grn._id.toString(), purchaseOrderId: purchaseOrderId?.toString() }
+        },
+        {
+          privilegeKey: 'grn',
+          checkFunction: (p: any) => p.grn?.viewReport && p.grn.viewReport !== 'none'
+        },
+        socket
+      );
     }
 
     const response: any = {
@@ -559,9 +578,23 @@ export const getGRNRejections = async (req: Request, res: Response) => {
       });
     }
 
+    const grnIds = grns.map((grn: any) => grn._id);
+    const existingReturns = await SupplierReturn.find({ grnId: { $in: grnIds }, isDeleted: { $ne: true } });
+    const initiatedByGrnAndItem = new Map<string, number>();
+    existingReturns.forEach((r: any) => {
+      const key = `${r.grnId.toString()}_${r.itemId}`;
+      initiatedByGrnAndItem.set(key, (initiatedByGrnAndItem.get(key) || 0) + (r.rejectedQty || 0));
+    });
+
     const rejections = grns
       .map((grn: any) => {
-        const rejectedItems = (grn.items || []).filter((item: any) => Number(item.rejectedQty) > 0);
+        const rejectedItems = (grn.items || [])
+          .map((item: any, itemIndex: number) => ({ ...(item.toObject ? item.toObject() : item), itemIndex }))
+          .map((item: any) => {
+            const alreadyInitiated = initiatedByGrnAndItem.get(`${grn._id.toString()}_${item.itemIndex}`) || 0;
+            return { ...item, rejectedQty: Number(item.rejectedQty || 0) - alreadyInitiated };
+          })
+          .filter((item: any) => Number(item.rejectedQty) > 0);
         if (rejectedItems.length === 0) {
           return null;
         }
