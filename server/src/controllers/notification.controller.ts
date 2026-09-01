@@ -420,6 +420,30 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
         case 'BugReportResolved':
             return { routePath: '/bug-reports' };
 
+        case 'GrnItemsRejected': {
+            const grnId = additionalData?.grnId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+            return {
+                routePath: '/grn/rejections',
+                routeData: { grnId }
+            };
+        }
+
+        case 'DnItemsRejected': {
+            const dnId = additionalData?.dnId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+            return {
+                routePath: '/dispatch/delivery-note-register/view',
+                routeData: { dnId }
+            };
+        }
+
+        case 'InvoiceRejected': {
+            const invoiceId = additionalData?.invoiceId || referenceId?._id?.toString?.() || referenceId?.toString?.();
+            return {
+                routePath: '/invoice/invoice-register/view',
+                routeData: { invoiceId }
+            };
+        }
+
         case 'Event':
             if (referenceId?.collectionId) {
                 const from = referenceId.from;

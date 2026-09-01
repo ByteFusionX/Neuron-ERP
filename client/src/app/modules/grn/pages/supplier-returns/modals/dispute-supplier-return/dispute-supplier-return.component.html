@@ -1,0 +1,41 @@
+<app-modal-layout
+  title="Mark Supplier Disputed"
+  [subtitle]="supplierReturn?.supplierReturnNo"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Mark Disputed', onClick: onSubmit.bind(this), theme: 'danger', loading: isSubmitting }
+  ]"
+  contentClass="p-6">
+  <form [formGroup]="disputeForm" (ngSubmit)="onSubmit()">
+    <div class="space-y-4">
+
+      <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-gray-900 truncate">{{ supplierReturn?.itemDescription }}</p>
+          <p class="text-xs text-gray-500">{{ supplierReturn?.supplierId?.supplierName }}</p>
+        </div>
+        <p class="text-sm font-semibold text-amber-600 shrink-0">
+          {{ supplierReturn?.unresolvedQty }} unresolved
+        </p>
+      </div>
+
+      <div class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-3">
+        <span class="material-icons text-red-500 text-xl leading-none">warning</span>
+        <p class="text-sm text-red-700">
+          Any pending financial resolution for this return will be held until the dispute is resolved.
+        </p>
+      </div>
+
+      <app-form-field
+        label="Reason for dispute"
+        [control]="disputeForm.get('disputeNote')"
+        [isSubmitted]="formSubmitted"
+        type="textarea"
+        [rows]="4"
+        placeholder="Explain why the supplier is disputing this rejection">
+      </app-form-field>
+
+    </div>
+  </form>
+</app-modal-layout>

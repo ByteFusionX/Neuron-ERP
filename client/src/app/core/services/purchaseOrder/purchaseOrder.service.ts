@@ -29,6 +29,10 @@ export class PurchaseOrderService {
     return this.http.get<PurchaseOrder>(`${this.baseUrl}/${id}`, { context: context() });
   }
 
+  getPurchaseOrderByPoNo(poNo: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/by-po-no/${encodeURIComponent(poNo)}`, { context: context() });
+  }
+
   getAllPurchaseOrders(params?: {
     page?: number;
     row?: number;

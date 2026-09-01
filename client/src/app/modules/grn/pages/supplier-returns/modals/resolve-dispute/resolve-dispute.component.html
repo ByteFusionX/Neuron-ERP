@@ -1,0 +1,46 @@
+<app-modal-layout
+  title="Resolve Dispute"
+  [subtitle]="supplierReturn?.supplierReturnNo"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Resolve Dispute', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+  ]"
+  contentClass="p-6">
+  <form [formGroup]="resolveForm" (ngSubmit)="onSubmit()">
+    <div class="space-y-4">
+
+      <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-gray-900 truncate">{{ supplierReturn?.itemDescription }}</p>
+          <p class="text-xs text-gray-500">{{ supplierReturn?.supplierId?.supplierName }}</p>
+        </div>
+        <p class="text-sm font-semibold text-amber-600 shrink-0">
+          {{ supplierReturn?.unresolvedQty }} unresolved
+        </p>
+      </div>
+
+      <div *ngIf="supplierReturn?.disputeNote" class="border-l-4 border-red-300 bg-red-50/60 rounded-r-lg px-3 py-2">
+        <p class="text-[11px] uppercase tracking-wide text-red-700 font-medium mb-0.5">Dispute Reason</p>
+        <p class="text-sm text-gray-800 break-words">{{ supplierReturn?.disputeNote }}</p>
+      </div>
+
+      <div class="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <span class="material-icons text-blue-500 text-xl leading-none">info</span>
+        <p class="text-sm text-blue-700">
+          Resolving lets this return's pending financial adjustment (pre-invoice adjustment or debit note) proceed.
+        </p>
+      </div>
+
+      <app-form-field
+        label="Resolution note"
+        [control]="resolveForm.get('disputeNote')"
+        [isSubmitted]="formSubmitted"
+        type="textarea"
+        [rows]="4"
+        placeholder="Explain how the dispute was resolved">
+      </app-form-field>
+
+    </div>
+  </form>
+</app-modal-layout>

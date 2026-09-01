@@ -1,0 +1,69 @@
+<app-modal-layout
+  title="Resolve Supplier Return"
+  [onClose]="onCancel.bind(this)"
+  [footerButtons]="[
+    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
+    { label: 'Resolve', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+  ]"
+  contentClass="p-6">
+  <form [formGroup]="resolveForm" (ngSubmit)="onSubmit()">
+    <div class="space-y-4">
+      <p class="text-sm text-gray-500">
+        {{ supplierReturn?.itemDescription }} — unresolved qty: {{ supplierReturn?.unresolvedQty }}
+      </p>
+
+      <app-form-field
+        label="Quantity to resolve now"
+        [control]="resolveForm.get('qty')"
+        [isSubmitted]="isSubmitting"
+        type="number"
+        placeholder="Enter quantity">
+      </app-form-field>
+
+      <app-select-dropdown
+        class="resolution-type-select"
+        label="Resolution Type"
+        [options]="resolutionOptions"
+        optionLabel="label"
+        optionValue="value"
+        formControlName="resolutionType"
+        placeholder="Select how this qty is being resolved"
+        [isSubmitted]="isSubmitting">
+      </app-select-dropdown>
+
+      <app-form-field
+        *ngIf="isPhysicalResolution"
+        label="Replacement Purchase Order ID (optional)"
+        [control]="resolveForm.get('replacementPoId')"
+        [isSubmitted]="isSubmitting"
+        placeholder="Paste the replacement/alternate-supplier PO's ID">
+      </app-form-field>
+
+      <ng-container *ngIf="isFinancialResolution">
+        <label class="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" formControlName="invoiced" />
+          This PO has already been invoiced by the supplier (issue a Debit Note instead of a pre-invoice adjustment)
+        </label>
+
+        <app-form-field
+          *ngIf="resolveForm.get('invoiced')?.value"
+          label="Purchase Order ID"
+          [control]="resolveForm.get('poId')"
+          [isSubmitted]="isSubmitting"
+          placeholder="Paste the invoiced PO's ID">
+        </app-form-field>
+
+        <p *ngIf="resolveForm.get('invoiced')?.value && !canIssueDebitNote" class="text-xs text-red-600">
+          You don't have permission to issue a Debit Note — this action will be rejected server-side.
+        </p>
+      </ng-container>
+
+      <app-form-field
+        label="Note"
+        [control]="resolveForm.get('note')"
+        [isSubmitted]="isSubmitting"
+        placeholder="Optional note for the audit trail">
+      </app-form-field>
+    </div>
+  </form>
+</app-modal-layout>

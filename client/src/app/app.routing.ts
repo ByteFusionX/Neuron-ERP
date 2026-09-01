@@ -42,6 +42,8 @@ import { ViewLpoComponent } from './modules/purchase-order/pages/view-lpo/view-l
 import { CreateGrnComponent } from './modules/grn/pages/create-grn/create-grn.component';
 import { ViewGrnComponent } from './modules/grn/pages/view-grn/view-grn.component';
 import { GrnListComponent } from './modules/grn/pages/grn-list/grn-list.component';
+import { GrnRejectionsComponent } from './modules/grn/pages/grn-rejections/grn-rejections.component';
+import { SupplierReturnsComponent } from './modules/grn/pages/supplier-returns/supplier-returns.component';
 import { MrApprovalRequestsComponent } from './modules/technical/mr-approval-requests/mr-approval-requests.component';
 import { ViewMaterialRequestComponent } from './modules/technical/view-material-request/view-material-request.component';
 import { ProjectsComponent } from './modules/technical/projects/projects.component';
@@ -253,7 +255,9 @@ export const routes: Routes = [
       { path: 'create-grn', component: CreateGrnComponent },
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
       { path: 'view-grn/:id', component: ViewGrnComponent },
-      { path: 'grn-list', component: GrnListComponent }
+      { path: 'grn-list', component: GrnListComponent },
+      { path: 'rejections', component: GrnRejectionsComponent },
+      { path: 'supplier-returns', component: SupplierReturnsComponent }
     ]
   },
   {

@@ -42,6 +42,8 @@ interface PurchaseOrder extends Document {
     updatedAt: Date;
     createdBy: any;
     currency?: string;
+    originalPoId?: any;
+    supplierReturnId?: any;
 }
 
 const purchaseOrderItemSchema = new Schema({
@@ -191,6 +193,14 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         },
         currency: {
             type: String
+        },
+        originalPoId: {
+            type: Schema.Types.ObjectId,
+            ref: "PurchaseOrder",
+        },
+        supplierReturnId: {
+            type: Schema.Types.ObjectId,
+            ref: "SupplierReturn",
         },
     },
     { timestamps: true }

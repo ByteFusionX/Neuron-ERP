@@ -32,6 +32,8 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       termsAndCondition,
       discount,
       poStatus,
+      originalPoId,
+      supplierReturnId,
     } = req.body;
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
@@ -139,6 +141,12 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     if (currency) {
       purchaseOrderData.currency = currency;
+    }
+    if (originalPoId && mongoose.Types.ObjectId.isValid(originalPoId)) {
+      purchaseOrderData.originalPoId = originalPoId;
+    }
+    if (supplierReturnId && mongoose.Types.ObjectId.isValid(supplierReturnId)) {
+      purchaseOrderData.supplierReturnId = supplierReturnId;
     }
 
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
@@ -348,6 +356,29 @@ export const reissuePurchaseOrder = async (req: Request, res: Response) => {
       message: "Failed to re-issue purchase order",
       error: error.message,
     });
+  }
+};
+
+export const getPurchaseOrderByPoNo = async (req: Request, res: Response) => {
+  try {
+    const { poNo } = req.params;
+
+    const purchaseOrder = await PurchaseOrder.findOne({ poNo })
+      .populate("supplierId")
+      .populate("items.partNo")
+      .populate("jobId", "jobId");
+
+    if (!purchaseOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase order not found",
+      });
+    }
+
+    return res.status(200).json({ success: true, data: purchaseOrder });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Failed to fetch purchase order" });
   }
 };
 

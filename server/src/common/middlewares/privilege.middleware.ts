@@ -33,7 +33,22 @@ export const requirePrivilege = (moduleKey: string, action?: string) => {
       return next();
     }
 
-    const privilege = resolvePrivilege(employee.category?.privileges, moduleKey);
+    let privilege = resolvePrivilege(employee.category?.privileges, moduleKey);
+
+    // supplierReturn privileges aren't yet assignable in category management, so
+    // fall back to full supplierReturn access for anyone with GRN view access.
+    if (moduleKey === "supplierReturn" && privilege == null) {
+      const grnPrivilege = employee.category?.privileges?.grn;
+      const hasGrnView = grnPrivilege && grnPrivilege.viewReport && grnPrivilege.viewReport !== "none";
+      if (hasGrnView) {
+        privilege = {
+          viewReport: grnPrivilege.viewReport,
+          canInitiateReturn: true,
+          canIssueDebitNote: true,
+          canCreateReplacementLPO: true
+        };
+      }
+    }
 
     if (privilege == null) {
       return res.status(403).json({ message: "Forbidden" });

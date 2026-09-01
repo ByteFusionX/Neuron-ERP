@@ -4,6 +4,7 @@ import {
   updatePurchaseOrder,
   reissuePurchaseOrder,
   getPurchaseOrderById,
+  getPurchaseOrderByPoNo,
   getAllPurchaseOrders,
   getPurchaseOrderByPurchaseId,
   generateLpoNo,
@@ -32,6 +33,7 @@ router.patch("/:id/supplier-invoices",upload.array('files'), updateSupplierInvoi
 router.get("/generate-po-no", generateLpoNo);
 router.get("/suppliers/:purchaseId", getSuppliersForPurchaseRequest);
 router.get("/items/:purchaseId/:supplierId", getItemsForPurchaseRequest);
+router.get("/by-po-no/:poNo", getPurchaseOrderByPoNo);
 router.delete("/:id/revoke", requirePrivilege("purchaseOrder", "canReissueAndRevoke"), revokePurchaseOrder);
 router.get("/:id", getPurchaseOrderById);
 router.get("purchase/:id", getPurchaseOrderByPurchaseId);

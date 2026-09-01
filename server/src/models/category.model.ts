@@ -96,6 +96,12 @@ export interface Privileges {
     viewReport: string;
     canApprove: boolean;
   };
+  supplierReturn: {
+    viewReport: string;
+    canInitiateReturn: boolean;
+    canIssueDebitNote: boolean;
+    canCreateReplacementLPO: boolean;
+  };
   portalManagement: {
     department: boolean;
     notesAndTerms: boolean;

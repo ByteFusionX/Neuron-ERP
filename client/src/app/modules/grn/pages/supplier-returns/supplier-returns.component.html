@@ -1,0 +1,33 @@
+<data-table
+[data]="tableData()"
+[columns]="tableColumns"
+[defaultColumns]="defaultColumns"
+[isLoading]="isLoading()"
+[isEmpty]="isEmpty()"
+[totalItems]="totalItems()"
+(rowClick)="onRowClick($event)"
+(actionClick)="onActionClick($event)"
+[title]="'Supplier Returns'"
+>
+  <ng-template #sideColumn>
+    <button
+      type="button"
+      [matMenuTriggerFor]="grnViewMenu"
+      class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
+    >
+      <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
+      Switch Table
+      <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
+    </button>
+    <mat-menu #grnViewMenu="matMenu">
+      <button mat-menu-item routerLink="/grn/grn-list">
+        <ng-icon name="heroInboxArrowDown" class="mr-2 text-slate-500"></ng-icon>
+        GRN List
+      </button>
+      <button mat-menu-item routerLink="/grn/rejections">
+        <ng-icon name="heroExclamationTriangle" class="mr-2 text-slate-500"></ng-icon>
+        GRN Rejections
+      </button>
+    </mat-menu>
+  </ng-template>
+</data-table>
