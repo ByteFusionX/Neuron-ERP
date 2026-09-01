@@ -7,6 +7,8 @@ import { getEmployeeData } from '../common/utils/util';
 import { getNextSequence } from '../models/counter.model';
 import { applyDnItemRejections, RejectDnItemInput } from './deliveryNote.controller';
 import { createCreditNote } from './creditNote.controller';
+import { createNotificationWithPrivileges } from './notification.controller';
+import { Server } from 'socket.io';
 
 export const getInvoices = async (req: Request, res: Response) => {
     try {
@@ -424,6 +426,7 @@ export const rejectInvoiceByCustomer = async (req: Request, res: Response) => {
         }
 
         const warnings: string[] = [];
+        const socket = req.app.get('io') as Server;
 
         // Cascade into the linked DeliveryNote(s): resolve rejection targets per item via
         // dnRefs (split-DN items) or the single dnId, then apply the DN-side rejection.
@@ -456,7 +459,7 @@ export const rejectInvoiceByCustomer = async (req: Request, res: Response) => {
                     warnings.push(`Linked Delivery Note "${dnId}" not found — could not cascade rejection to stock`);
                     continue;
                 }
-                const dnWarnings = await applyDnItemRejections(dn, dnItems, reason, employee._id);
+                const dnWarnings = await applyDnItemRejections(dn, dnItems, reason, employee._id, socket);
                 warnings.push(...dnWarnings);
             } catch (dnError: any) {
                 warnings.push(`Delivery Note "${dnId}": ${dnError.message || 'failed to apply rejection'}`);
@@ -504,6 +507,23 @@ export const rejectInvoiceByCustomer = async (req: Request, res: Response) => {
             status: 'Rejected',
             actionDate: new Date()
         });
+
+        await createNotificationWithPrivileges(
+            {
+                type: 'InvoiceRejected',
+                referenceModel: 'Invoice',
+                title: 'Invoice rejected by customer',
+                message: `Invoice ${invoice.invoiceNo} was rejected by the customer`,
+                sentBy: employee._id?.toString(),
+                referenceId: invoice._id,
+                additionalData: { invoiceId: invoice._id.toString() }
+            },
+            {
+                privilegeKey: 'invoice',
+                checkFunction: (p: any) => p.invoice?.viewReport && p.invoice.viewReport !== 'none'
+            },
+            socket
+        );
 
         res.status(200).json({
             success: true,

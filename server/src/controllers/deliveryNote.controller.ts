@@ -12,6 +12,9 @@ import { getNextSequence } from '../models/counter.model';
 import GRN from '../models/grn.model';
 import { Invoice } from '../models/invoice.model';
 import { checkAndUpdateJobCompletionStatus } from './job.controller';
+import { createNotificationWithPrivileges } from './notification.controller';
+import { getEmployeeData } from '../common/utils/util';
+import { Server } from 'socket.io';
 
 /**
  * Deduct inventory (StockEntry) for each inventory item in a posted DN.
@@ -252,6 +255,7 @@ const validateDnItemQuantities = async (jobId: string, currentDnItems: any[], ex
 export const createDn = async (req: Request, res: Response) => {
     try {
         const { dnNo, dnDate, jobId, items, status } = req.body;
+        const employee = await getEmployeeData((req as any).user);
 
         if (items && Array.isArray(items)) {
             items.forEach((item: any, index: number) => {
@@ -289,7 +293,7 @@ export const createDn = async (req: Request, res: Response) => {
         const newDn = new DeliveryNote({
             ...req.body,
             status: finalStatus,
-            createdBy: (req as any).user?._id
+            createdBy: employee?._id
         });
         const savedDn = await newDn.save();
 
@@ -300,7 +304,7 @@ export const createDn = async (req: Request, res: Response) => {
 
         // Deduct from inventory if DN is posted (not Draft)
         if (finalStatus !== 'Draft') {
-            await deductInventoryForDn(savedDn, (req as any).user?._id);
+            await deductInventoryForDn(savedDn, employee?._id);
         }
 
         if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
@@ -509,7 +513,8 @@ export const updateDn = async (req: Request, res: Response) => {
 
         // Deduct from inventory if transitioning from Draft to non-Draft
         if (previousStatus === 'Draft' && finalStatus !== 'Draft') {
-            await deductInventoryForDn(updatedDn, (req as any).user?._id);
+            const employee = await getEmployeeData((req as any).user);
+            await deductInventoryForDn(updatedDn, employee?._id);
         }
 
         if (dn.jobId && mongoose.Types.ObjectId.isValid(dn.jobId.toString())) {
@@ -590,6 +595,7 @@ const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: 
     let targetWarehouse: any = undefined;
     let supplierName: any = undefined;
     let supplierLpoNo: string | undefined;
+    let sourceGrnId: any = undefined;
 
     if (deduction) {
         const sourceStockEntry = await StockEntry.findById(deduction.stockEntryId);
@@ -598,6 +604,9 @@ const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: 
             targetWarehouse = sourceStockEntry.targetWarehouse;
             supplierName = sourceStockEntry.supplierName;
             supplierLpoNo = sourceStockEntry.supplierLpoNo;
+            if (sourceStockEntry.grn) {
+                sourceGrnId = sourceStockEntry.grn;
+            }
         }
     }
 
@@ -605,8 +614,20 @@ const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: 
         return `Item "${item.description || item.partNo}": Could not determine original warehouse/supplier context — rejection recorded, but stock was not restored to quarantine`;
     }
 
+    // Fall back to resolving the originating GRN by jobId + part when the
+    // inventory-deduction trail doesn't directly point at one.
+    if (!sourceGrnId && dn.jobId) {
+        const jobGrns = await GRN.find({ jobId: dn.jobId, isDeleted: { $ne: true } }).sort({ createdAt: -1 });
+        const matchingGrn = jobGrns.find((grnDoc: any) =>
+            (grnDoc.items || []).some((it: any) => it.partNo && item.partNo && it.partNo === item.partNo)
+        ) || jobGrns[0];
+        if (matchingGrn) {
+            sourceGrnId = matchingGrn._id;
+        }
+    }
+
     await StockEntry.create({
-        grn: `DN-REJ-${dn.dnNo}-${item._id || item.itemId}-${Date.now()}`,
+        grn: sourceGrnId || undefined,
         partNo: product._id,
         dateOfPurchase: new Date(),
         jobId: dn.jobId,
@@ -620,7 +641,7 @@ const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: 
         uom: item.uom,
         unitCost,
         totalCost: unitCost * rejectedQty,
-        sourceDnId: dn._id,
+        dn: dn._id,
         isQuarantined: true,
         quarantineReason: reason,
         quarantinedAt: new Date(),
@@ -644,7 +665,7 @@ export interface RejectDnItemInput {
  * and the invoice rejection cascade (rejectInvoiceByCustomer).
  * Throws an Error with a user-facing message on validation failure.
  */
-export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[], fallbackReason: string | undefined, userId?: string): Promise<string[]> => {
+export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[], fallbackReason: string | undefined, userId?: string, socket?: Server): Promise<string[]> => {
     if (dn.status === 'Cancelled') {
         throw new Error('Cannot reject items on a cancelled Delivery Note');
     }
@@ -699,6 +720,23 @@ export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[],
     dn.updatedDate = new Date();
     await dn.save();
 
+    await createNotificationWithPrivileges(
+        {
+            type: 'DnItemsRejected',
+            referenceModel: 'DeliveryNote',
+            title: 'Delivery Note items rejected',
+            message: `Delivery Note ${dn.dnNo || dn._id} has rejected items and requires quarantine review`,
+            sentBy: userId,
+            referenceId: dn._id,
+            additionalData: { dnId: dn._id.toString() }
+        },
+        {
+            privilegeKey: 'dispatch',
+            checkFunction: (p: any) => p.dispatch?.viewReport && p.dispatch.viewReport !== 'none'
+        },
+        socket
+    );
+
     return warnings;
 };
 
@@ -716,7 +754,9 @@ export const rejectDnItems = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: 'Delivery Note not found' });
         }
 
-        const warnings = await applyDnItemRejections(dn, items, reason, (req as any).user?._id);
+        const socket = req.app.get('io') as Server;
+        const employee = await getEmployeeData((req as any).user);
+        const warnings = await applyDnItemRejections(dn, items, reason, employee?._id, socket);
 
         return res.status(200).json({ success: true, data: dn, warnings });
     } catch (error: any) {

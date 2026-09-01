@@ -89,12 +89,14 @@
               <th class="px-4 py-3 border text-center">Delivered Qty</th>
               <th class="px-4 py-3 border text-center">Current Delivery</th>
               <th class="px-4 py-3 border">Serial Numbers</th>
+              <th class="px-4 py-3 border text-center">Rejected Qty</th>
+              <th class="px-4 py-3 border">Rejected Reason</th>
             </tr>
           </thead>
           <tbody>
             @if(deliveryItems.length === 0){
               <tr>
-                <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                <td colspan="9" class="px-4 py-8 text-center text-gray-500">
                   No items in this delivery note.
                 </td>
               </tr>
@@ -118,6 +120,8 @@
                   <span class="text-gray-400">-</span>
                 }
               </td>
+              <td class="px-4 py-3 border text-center" [ngClass]="item.rejectedQty ? 'font-semibold text-red-600' : 'text-gray-400'">{{item.rejectedQty || '-'}}</td>
+              <td class="px-4 py-3 border">{{item.rejectionReason || '-'}}</td>
             </tr>
             }
           </tbody>
