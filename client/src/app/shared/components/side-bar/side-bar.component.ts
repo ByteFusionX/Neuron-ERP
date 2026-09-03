@@ -121,6 +121,41 @@ export class SideBarComponent
           notificationKey: 'enquiryCount',
         },
         {
+          id: 'jobs',
+          label: 'Presale',
+          icon: 'heroBriefcase',
+          hasDropdown: true,
+          privilegeKey: 'assignedJob',
+          privilegeValue: 'none',
+          notificationKey: 'assignedJobCount',
+          children: [
+            {
+              id: 'assignedJobs',
+              label: 'Assigned Jobs',
+              route: '/assigned-jobs',
+              privilegeKey: 'assignedJob',
+              privilegeValue: 'all',
+              notificationKey: 'assignedJobCount',
+            },
+            {
+              id: 'reassignedJobs',
+              label: 'Reassigned Jobs',
+              route: '/assigned-jobs/reassigned',
+              privilegeKey: 'assignedJob',
+              privilegeValue: 'none',
+              notificationKey: 'reAssignedJobCount',
+              alternateLabel: 'Assigned Jobs',
+              alternateCondition: (privileges) =>
+                privileges?.assignedJob?.viewReport !== 'all',
+            },
+            {
+              id: 'completedJobs',
+              label: 'Completed Jobs',
+              route: '/assigned-jobs/completed',
+            },
+          ],
+        },
+        {
           id: 'quotations',
           label: 'Quotations',
           icon: 'heroNewspaper',
@@ -159,41 +194,6 @@ export class SideBarComponent
       label: 'Jobs',
       items: [
         {
-          id: 'jobs',
-          label: 'Jobs',
-          icon: 'heroBriefcase',
-          hasDropdown: true,
-          privilegeKey: 'assignedJob',
-          privilegeValue: 'none',
-          notificationKey: 'assignedJobCount',
-          children: [
-            {
-              id: 'assignedJobs',
-              label: 'Assigned Jobs',
-              route: '/assigned-jobs',
-              privilegeKey: 'assignedJob',
-              privilegeValue: 'all',
-              notificationKey: 'assignedJobCount',
-            },
-            {
-              id: 'reassignedJobs',
-              label: 'Reassigned Jobs',
-              route: '/assigned-jobs/reassigned',
-              privilegeKey: 'assignedJob',
-              privilegeValue: 'none',
-              notificationKey: 'reAssignedJobCount',
-              alternateLabel: 'Assigned Jobs',
-              alternateCondition: (privileges) =>
-                privileges?.assignedJob?.viewReport !== 'all',
-            },
-            {
-              id: 'completedJobs',
-              label: 'Completed Jobs',
-              route: '/assigned-jobs/completed',
-            },
-          ],
-        },
-        {
           id: 'jobSheet',
           label: 'Job Sheet',
           icon: 'heroClipboardDocument',
@@ -228,49 +228,6 @@ export class SideBarComponent
               route: '/job-sheet/completed',
               privilegeKey: 'jobSheet',
               privilegeValue: 'none',
-            },
-          ],
-        },
-        {
-          id: 'technical',
-          label: 'Technical',
-          icon: 'heroWrenchScrewdriver',
-          hasDropdown: true,
-          privilegeKey: 'technical',
-          privilegeValue: 'none',
-          notificationKey: 'purchaseCount',
-          children: [
-            {
-              id: 'pendingJobs',
-              label: 'Open To Work',
-              route: '/technical/open-to-work-project',
-              privilegeKey: 'technical',
-              privilegeValue: 'canViewOpenToWorkAndAssign',
-              notificationKey: 'purchaseCount',
-            },
-            {
-              id: 'projects',
-              label: 'Pending Projects',
-              route: '/technical/project',
-              privilegeKey: 'technical',
-              privilegeValue: 'none',
-              notificationKey: 'purchaseCount',
-            },
-            {
-              id: 'amc',
-              label: 'Pending AMC',
-              route: '/technical/amc',
-              privilegeKey: 'technical',
-              privilegeValue: 'none',
-              notificationKey: 'purchaseCount',
-            },
-            {
-              id: 'mrApprovalRequests',
-              label: 'MR Approval Requests',
-              route: '/technical/mr-approval-requests',
-              privilegeKey: 'technical',
-              privilegeValue: 'canApproveMRRequests',
-              notificationKey: 'purchaseCount',
             },
           ],
         },
@@ -352,6 +309,55 @@ export class SideBarComponent
       ],
     },
     {
+      id: 'technicalCategory',
+      label: 'Technical',
+      items: [
+        {
+          id: 'technical',
+          label: 'Technical',
+          icon: 'heroWrenchScrewdriver',
+          hasDropdown: true,
+          privilegeKey: 'technical',
+          privilegeValue: 'none',
+          notificationKey: 'purchaseCount',
+          children: [
+            {
+              id: 'pendingJobs',
+              label: 'Open To Work',
+              route: '/technical/open-to-work-project',
+              privilegeKey: 'technical',
+              privilegeValue: 'canViewOpenToWorkAndAssign',
+              notificationKey: 'purchaseCount',
+            },
+            {
+              id: 'projects',
+              label: 'Pending Projects',
+              route: '/technical/project',
+              privilegeKey: 'technical',
+              privilegeValue: 'none',
+              notificationKey: 'purchaseCount',
+            },
+            {
+              id: 'amc',
+              label: 'Pending AMC',
+              route: '/technical/amc',
+              privilegeKey: 'technical',
+              privilegeValue: 'none',
+              notificationKey: 'purchaseCount',
+            },
+            {
+              id: 'mrApprovalRequests',
+              label: 'MR Approval Requests',
+              route: '/technical/mr-approval-requests',
+              privilegeKey: 'technical',
+              privilegeValue: 'canApproveMRRequests',
+              notificationKey: 'purchaseCount',
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: 'inventory',
       label: 'Inventory',
       items: [
@@ -381,7 +387,7 @@ export class SideBarComponent
     },
     {
       id: 'administration',
-      label: 'Administration',
+      label: 'Logistics',
       items: [
         {
           id: 'grn',
