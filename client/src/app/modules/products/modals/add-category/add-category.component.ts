@@ -43,7 +43,7 @@ export class AddCategoryComponent {
     this.productCategoryService.createProductCategory(this.categoryForm.value).subscribe({
       next: (category) => {
         this.toastr.success('Category created successfully');
-        this.router.navigate(['/inventory/products']);
+        this.router.navigate(['/products']);
       },
       error: (error) => {
         this.toastr.error(error.error?.message || 'Failed to create category');
@@ -53,7 +53,7 @@ export class AddCategoryComponent {
   }
 
   onCancel(): void {
-    this.router.navigate(['/inventory/products']);
+    this.router.navigate(['/products']);
   }
 }
 

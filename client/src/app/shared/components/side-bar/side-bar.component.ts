@@ -40,6 +40,7 @@ interface MenuItem {
   hasDropdown?: boolean;
   notificationKey?: string;
   children?: SubMenuItem[];
+  inventorySubKey?: 'products' | 'stockEntries';
 }
 
 interface SubMenuItem {
@@ -362,26 +363,23 @@ export class SideBarComponent
       label: 'Inventory',
       items: [
         {
-          id: 'inventory',
-          label: 'Inventory',
+          id: 'Products',
+          label: 'Products',
           icon: 'heroCube',
-          route: '/inventory',
+          route: '/products',
           privilegeKey: 'inventory',
-          hasDropdown: true,
           privilegeValue: 'none',
-          children: [
-            {
-              id: 'Products',
-              label: 'All Products',
-              route: '/inventory/products',
-              notificationKey: 'dealSheetCount',
-            },
-            {
-              id: 'stockEntries',
-              label: 'Stock Entries',
-              route: '/inventory/stock-entries',
-            },
-          ],
+          inventorySubKey: 'products',
+          notificationKey: 'dealSheetCount',
+        },
+        {
+          id: 'stockEntries',
+          label: 'Stocks',
+          icon: 'heroCube',
+          route: '/stocks',
+          privilegeKey: 'inventory',
+          privilegeValue: 'none',
+          inventorySubKey: 'stockEntries',
         },
       ],
     },
@@ -675,6 +673,16 @@ export class SideBarComponent
       'products' in privilegeObj
     ) {
       const inventoryPrivilege = privilegeObj as any;
+
+      // Products / Stocks are now separate top-level tabs, each gated on
+      // its own nested viewReport instead of the combined inventory check.
+      if ('inventorySubKey' in item && item.inventorySubKey) {
+        const subPrivilege = inventoryPrivilege[item.inventorySubKey];
+        return item.privilegeValue === 'none'
+          ? subPrivilege?.viewReport !== 'none'
+          : subPrivilege?.viewReport === item.privilegeValue;
+      }
+
       return item.privilegeValue === 'none'
         ? inventoryPrivilege.products?.viewReport !== 'none' ||
             inventoryPrivilege.stockEntries?.viewReport !== 'none'

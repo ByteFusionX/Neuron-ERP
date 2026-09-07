@@ -28,7 +28,7 @@ import { appNoNegativeNumber } from '../../directives/no-negative-number.directi
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { QuoteItem } from '../../interfaces/quotation.interface';
-import { CreateProductComponent } from 'src/app/modules/inventory/pages/all-products/modals/create-product/create-product.component';
+import { CreateProductComponent } from 'src/app/modules/products/modals/create-product/create-product.component';
 
 interface ProductSuggestion {
   _id: string;

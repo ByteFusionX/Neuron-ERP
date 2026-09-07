@@ -18,7 +18,7 @@ import { NgIcon } from '@ng-icons/core';
 import { MatTooltip } from '@angular/material/tooltip';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
-import { CreateProductComponent } from 'src/app/modules/inventory/pages/all-products/modals/create-product/create-product.component';
+import { CreateProductComponent } from 'src/app/modules/products/modals/create-product/create-product.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 

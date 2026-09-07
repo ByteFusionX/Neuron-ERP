@@ -19,7 +19,7 @@ import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { AddWarehouseComponent } from 'src/app/modules/inventory/pages/all-products/modals/add-warehouse/add-warehouse.component';
+import { AddWarehouseComponent } from 'src/app/modules/products/modals/add-warehouse/add-warehouse.component';
 import {
   FileUploadModalComponent,
   FileUploadModalData,

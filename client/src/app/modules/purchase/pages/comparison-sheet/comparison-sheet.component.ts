@@ -12,7 +12,7 @@ import { ComparisonFormComponent } from '../comparison-form/comparison-form.comp
 import { Subscription } from 'rxjs';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ToastrService } from 'ngx-toastr';
-import { CreateProductComponent } from 'src/app/modules/inventory/pages/all-products/modals/create-product/create-product.component';
+import { CreateProductComponent } from 'src/app/modules/products/modals/create-product/create-product.component';
 
 interface PartNumberDropdownOption {
   label: string;

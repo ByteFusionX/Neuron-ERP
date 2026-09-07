@@ -175,8 +175,13 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                         router.navigate(['/home']);
                         return false;
                     }
-                } else if (url.startsWith('/inventory')) {
-                    if (privileges?.inventory?.products?.viewReport == 'none' && privileges?.inventory?.stockEntries?.viewReport == 'none') {
+                } else if (url.startsWith('/products')) {
+                    if (privileges?.inventory?.products?.viewReport == 'none') {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/stocks')) {
+                    if (privileges?.inventory?.stockEntries?.viewReport == 'none') {
                         router.navigate(['/home']);
                         return false;
                     }

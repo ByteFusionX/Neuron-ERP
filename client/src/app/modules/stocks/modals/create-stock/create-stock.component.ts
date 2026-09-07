@@ -13,14 +13,14 @@ import { JobService } from 'src/app/core/services/job/job.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { AddWarehouseComponent } from '../../../all-products/modals/add-warehouse/add-warehouse.component';
+import { AddWarehouseComponent } from '../../../products/modals/add-warehouse/add-warehouse.component';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
-  selector: 'app-create-stock-entry',
+  selector: 'app-create-stock',
   standalone: true,
   imports: [
     CommonModule,
@@ -31,10 +31,10 @@ import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/mod
     IconsModule,
     ModalLayoutComponent
   ],
-  templateUrl: './create-stock-entry.component.html',
-  styleUrl: './create-stock-entry.component.css'
+  templateUrl: './create-stock.component.html',
+  styleUrl: './create-stock.component.css'
 })
-export class CreateStockEntryComponent implements OnInit {
+export class CreateStockComponent implements OnInit {
   private fb = inject(FormBuilder);
   private stockEntryService = inject(StockEntryService);
   private productCategoryService = inject(ProductCategoryService);
@@ -79,7 +79,7 @@ export class CreateStockEntryComponent implements OnInit {
   });
 
   constructor(
-    @Optional() public dialogRef: MatDialogRef<CreateStockEntryComponent> | null,
+    @Optional() public dialogRef: MatDialogRef<CreateStockComponent> | null,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any
   ) {
     this.isEditMode = !!this.data?.stockEntry;
@@ -286,7 +286,7 @@ export class CreateStockEntryComponent implements OnInit {
   }
 
   onAddCategory(): void {
-    this.router.navigate(['/inventory/products/category/add']);
+    this.router.navigate(['/products/category/add']);
   }
 
   onAddWarehouse(): void {
@@ -354,7 +354,7 @@ export class CreateStockEntryComponent implements OnInit {
     this.stockEntryService.createStockEntry(payload).subscribe({
       next: (stockEntry) => {
         this.toastr.success('Stock entry created successfully');
-        this.router.navigate(['/inventory/stock-entries']);
+        this.router.navigate(['/stocks']);
       },
       error: (error) => {
         this.toastr.error(error.error?.message || 'Failed to create stock entry');
@@ -368,7 +368,7 @@ export class CreateStockEntryComponent implements OnInit {
       this.dialogRef?.close();
       return;
     }
-    this.router.navigate(['/inventory/stock-entries']);
+    this.router.navigate(['/stocks']);
   }
 }
 

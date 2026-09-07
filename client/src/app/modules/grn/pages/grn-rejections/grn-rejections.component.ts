@@ -12,8 +12,8 @@ import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CreateSupplierReturnComponent } from './modals/create-supplier-return/create-supplier-return.component';
-import { ViewGrnDetailsModalComponent } from 'src/app/modules/inventory/pages/stock-entries/modals/view-grn-details-modal/view-grn-details-modal.component';
-import { ViewPoDetailsModalComponent } from 'src/app/modules/inventory/pages/stock-entries/modals/view-po-details-modal/view-po-details-modal.component';
+import { ViewGrnDetailsModalComponent } from 'src/app/modules/stocks/modals/view-grn-details-modal/view-grn-details-modal.component';
+import { ViewPoDetailsModalComponent } from 'src/app/modules/stocks/modals/view-po-details-modal/view-po-details-modal.component';
 
 @Component({
   selector: 'app-grn-rejections',

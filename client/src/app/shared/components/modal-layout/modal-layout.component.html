@@ -12,13 +12,15 @@
           <p class="text-sm text-gray-500 mt-1">{{ subtitle }}</p>
         }
       </div>
-      <button
-        (click)="onClose()"
-        (mousedown)="$event.stopPropagation()"
-        class="bg-gray-200 rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center hover:bg-gray-300 transition-colors flex-shrink-0"
-        type="button">
-        <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-      </button>
+      <div class="flex items-center gap-2 flex-shrink-0" (mousedown)="$event.stopPropagation()">
+        <ng-content select="[modalHeaderActions]"></ng-content>
+        <button
+          (click)="onClose()"
+          class="bg-gray-200 rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center hover:bg-gray-300 transition-colors flex-shrink-0"
+          type="button">
+          <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
+        </button>
+      </div>
     </div>
   }
 

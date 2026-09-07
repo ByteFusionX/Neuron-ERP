@@ -14,7 +14,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ResolveSupplierReturnComponent } from './modals/resolve-supplier-return/resolve-supplier-return.component';
 import { DisputeSupplierReturnComponent } from './modals/dispute-supplier-return/dispute-supplier-return.component';
 import { ResolveDisputeComponent } from './modals/resolve-dispute/resolve-dispute.component';
-import { ViewGrnDetailsModalComponent } from 'src/app/modules/inventory/pages/stock-entries/modals/view-grn-details-modal/view-grn-details-modal.component';
+import { ViewGrnDetailsModalComponent } from 'src/app/modules/stocks/modals/view-grn-details-modal/view-grn-details-modal.component';
 
 @Component({
   selector: 'app-supplier-returns',

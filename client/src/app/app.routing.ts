@@ -58,9 +58,9 @@ import { ViewProjectUpdateComponent } from './modules/technical/projects/add-pro
 import { ClaimsComponent } from './modules/claims/claims.component';
 import { BillingSummaryComponent } from './modules/technical/projects/add-project/billing-summary/billing-summary.component';
 import { RequestForApprovalsComponent } from './modules/claims/request-for-approvals/request-for-approvals.component';
-import { AllProductsComponent } from './modules/inventory/pages/all-products/all-products.component';
-import { StockEntriesComponent } from './modules/inventory/pages/stock-entries/stock-entries.component';
-import { CreateStockEntryComponent } from './modules/inventory/pages/stock-entries/modals/create-stock-entry/create-stock-entry.component';
+import { AllProductsComponent } from './modules/products/all-products.component';
+import { StocksComponent } from './modules/stocks/stocks.component';
+import { CreateStockComponent } from './modules/stocks/modals/create-stock/create-stock.component';
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
 import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
 import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
@@ -292,14 +292,19 @@ export const routes: Routes = [
     ]
   },
   {
-    path: 'inventory',
+    path: 'products',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/inventory/inventory.component').then((c) => c.InventoryComponent),
     children: [
-      { path: 'products', component: AllProductsComponent },
-      { path: 'products/category/add', loadComponent: () => import('./modules/inventory/pages/all-products/modals/add-category/add-category.component').then((c) => c.AddCategoryComponent) },
-      { path: 'stock-entries', component: StockEntriesComponent },
-      { path: 'stock-entries/create', component: CreateStockEntryComponent }
+      { path: '', component: AllProductsComponent },
+      { path: 'category/add', loadComponent: () => import('./modules/products/modals/add-category/add-category.component').then((c) => c.AddCategoryComponent) }
+    ]
+  },
+  {
+    path: 'stocks',
+    canActivate: [AuthGuard],
+    children: [
+      { path: '', component: StocksComponent },
+      { path: 'create', component: CreateStockComponent }
     ]
   },
   {

@@ -159,7 +159,7 @@ export class CreateProductComponent implements OnInit {
   }
 
   onAddCategory(): void {
-    this.router.navigate(['/inventory/products/category/add']);
+    this.router.navigate(['/products/category/add']);
   }
 
   onAddWarehouse(): void {

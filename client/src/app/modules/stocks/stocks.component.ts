@@ -18,13 +18,13 @@ import { SearchComponent } from 'src/app/shared/components/search/search.compone
 import { BlockItemComponent } from './modals/block-item/block-item.component';
 import { ViewBlockedItemsComponent } from './modals/view-blocked-items/view-blocked-items.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { CreateStockEntryComponent } from './modals/create-stock-entry/create-stock-entry.component';
+import { CreateStockComponent } from './modals/create-stock/create-stock.component';
 import { ViewGrnDetailsModalComponent } from './modals/view-grn-details-modal/view-grn-details-modal.component';
 import { ViewDnDetailsModalComponent } from './modals/view-dn-details-modal/view-dn-details-modal.component';
 import { ViewPoDetailsModalComponent } from './modals/view-po-details-modal/view-po-details-modal.component';
 
 @Component({
-  selector: 'app-stock-entries',
+  selector: 'app-stocks',
   standalone: true,
   imports: [
     CommonModule,
@@ -33,11 +33,11 @@ import { ViewPoDetailsModalComponent } from './modals/view-po-details-modal/view
     NgIcon,
     SearchComponent
   ],
-  templateUrl: './stock-entries.component.html',
-  styleUrl: './stock-entries.component.css',
+  templateUrl: './stocks.component.html',
+  styleUrl: './stocks.component.css',
   providers: [PaginationService]
 })
-export class StockEntriesComponent implements OnInit {
+export class StocksComponent implements OnInit {
   private stockEntryService = inject(StockEntryService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -472,7 +472,7 @@ export class StockEntriesComponent implements OnInit {
   }
 
   onCreateStockEntry(): void {
-    this.router.navigate(['/inventory/stock-entries/create']);
+    this.router.navigate(['/stocks/create']);
   }
 
   toggleQuarantineView(): void {
@@ -524,7 +524,7 @@ export class StockEntriesComponent implements OnInit {
   }
 
   onEditStockEntry(stockEntry: StockEntry): void {
-    const dialogRef = this.dialog.open(CreateStockEntryComponent, {
+    const dialogRef = this.dialog.open(CreateStockComponent, {
       disableClose: true,
       maxHeight: '90vh',
       width: '70vw',
