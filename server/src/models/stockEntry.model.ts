@@ -37,6 +37,10 @@ const stockEntrySchema = new Schema<StockEntry>({
         type: Schema.Types.ObjectId,
         ref: 'GRN',
     },
+    dn: {
+        type: Schema.Types.ObjectId,
+        ref: 'DeliveryNote',
+    },
     partNo: {
         type: Schema.Types.ObjectId,
         ref: 'Product',
@@ -150,11 +154,7 @@ const stockEntrySchema = new Schema<StockEntry>({
     quarantineReleasedBy: {
         type: Schema.Types.ObjectId,
         ref: 'Employee',
-    },
-    dn: {
-        type: Schema.Types.ObjectId,
-        ref: 'DeliveryNote',
-    },
+    }
 });
 
 export default model<StockEntry>('StockEntry', stockEntrySchema);
