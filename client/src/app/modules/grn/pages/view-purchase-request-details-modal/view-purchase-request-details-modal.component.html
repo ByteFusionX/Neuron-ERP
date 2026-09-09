@@ -2,38 +2,43 @@
   [title]="'PR Details - ' + (purchaseRequest?.purchaseNo || '')"
   [onClose]="onClose.bind(this)"
   [showFooter]="false"
-  contentClass="p-5 flex flex-col"
+  contentClass="p-6"
   contentMaxHeight="80vh">
 
   @if (isLoading()) {
     <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
   } @else {
-    <div class="w-full mb-6">
-      <div class="relative overflow-x-auto">
-        <table class="w-full text-sm text-left border">
-          <tbody>
-            <tr class="border-b">
-              <td class="px-2 py-2 border text-left font-medium">PR Number</td>
-              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.purchaseNo || 'N/A' }}</td>
-              <td class="px-2 py-2 border text-start font-medium">Status</td>
-              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.status || 'N/A' }}</td>
-            </tr>
-            <tr class="border-b">
-              <td class="px-2 py-2 border text-left font-medium">Job ID</td>
-              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.jobId?.jobId || 'N/A' }}</td>
-              <td class="px-2 py-2 border text-start font-medium">Customer</td>
-              <td class="px-2 py-2 border text-start">{{ purchaseRequest?.customerId?.customerName || 'N/A' }}</td>
-            </tr>
-            <tr class="border-b">
-              <td class="px-2 py-2 border text-left font-medium">Created By</td>
-              <td class="px-2 py-2 border text-start">{{ formatEmployeeName(purchaseRequest?.createdBy) || 'N/A' }}</td>
-              <td class="px-2 py-2 border text-start font-medium">Created Date</td>
-              <td class="px-2 py-2 border text-start">{{ formatDate(purchaseRequest?.createdAt) }}</td>
-            </tr>
-          </tbody>
-        </table>
+    <section class="rounded-md border border-gray-200 bg-white mb-6">
+      <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+        <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">PR Details</h4>
       </div>
-    </div>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">PR Number</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseRequest?.purchaseNo || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Status</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseRequest?.status || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Job ID</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseRequest?.jobId?.jobId || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Customer</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseRequest?.customerId?.customerName || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Created By</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ formatEmployeeName(purchaseRequest?.createdBy) || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Created Date</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ formatDate(purchaseRequest?.createdAt) }}</dd>
+        </div>
+      </dl>
+    </section>
 
     <div class="w-full mb-6">
       <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">PR Items</label>

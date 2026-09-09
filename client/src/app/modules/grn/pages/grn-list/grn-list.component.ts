@@ -11,6 +11,7 @@ import { TableColumn } from 'src/app/shared/components/table/table.model';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ViewPurchaseRequestDetailsModalComponent, ViewPurchaseRequestDetailsModalData } from '../view-purchase-request-details-modal/view-purchase-request-details-modal.component';
+import { ViewLpoDetailsModalComponent, ViewLpoDetailsModalData } from '../view-lpo-details-modal/view-lpo-details-modal.component';
 
 @Component({
   selector: 'app-grn-list',
@@ -51,33 +52,36 @@ export class GrnListComponent implements OnInit {
         sortable: true,
       },
       {
-        key: 'grnNo',
-        label: 'GRN Number',
+        key: 'jobId.jobId',
+        label: 'Job No',
         type: 'text',
+        cellRenderer: (item: any) => item?.jobId?.jobId || 'N/A',
       },
       {
-        key: 'purchaseOrderId.poNo',
-        label: 'LPO Number',
+        key: 'grnNo',
+        label: 'GRN No',
         type: 'text',
       },
       {
         key: 'purchaseOrderId.purchaseId.purchaseNo',
-        label: 'PR Number',
+        label: 'PR No',
         type: 'text',
         clickable: true,
         clickFunction: (item: any) => this.viewPurchaseRequestDetails(item),
         clickableValue: (item: any) => !!item?.purchaseOrderId?.purchaseId,
       },
       {
+        key: 'purchaseOrderId.poNo',
+        label: 'LPO No',
+        type: 'text',
+        clickable: true,
+        clickFunction: (item: any) => this.viewLpoDetails(item),
+        clickableValue: (item: any) => !!item?.purchaseOrderId,
+      },
+      {
         key: 'purchaseOrderId.supplierId.supplierName',
         label: 'Supplier Name',
         type: 'text',
-      },
-      {
-        key: 'jobId.jobId',
-        label: 'Job ID',
-        type: 'text',
-        cellRenderer: (item: any) => item?.jobId?.jobId || 'N/A',
       },
       {
         key: 'warehouse.wareHouseName',
@@ -95,6 +99,16 @@ export class GrnListComponent implements OnInit {
         }
       },
       {
+        key: 'rejectedQty',
+        label: 'Rejected Qty',
+        type: 'text',
+        cellRenderer: (item: any) => {
+          if (!item.items || !Array.isArray(item.items)) return '0';
+          const totalQty = item.items.reduce((sum: number, i: any) => sum + (i.rejectedQty || 0), 0);
+          return totalQty.toString();
+        }
+      },
+      {
         key: 'createdBy.firstName',
         label: 'Created By',
         type: 'text',
@@ -103,8 +117,8 @@ export class GrnListComponent implements OnInit {
     ];
 
     this.defaultColumns = [
-      'grnDate', 'grnNo', 'purchaseOrderId.poNo', 'purchaseOrderId.purchaseId.purchaseNo', 'purchaseOrderId.supplierId.supplierName',
-      'jobId.jobId', 'warehouse.wareHouseName', 'acceptedQty', 'createdBy.firstName'
+      'grnDate', 'jobId.jobId', 'grnNo', 'purchaseOrderId.purchaseId.purchaseNo', 'purchaseOrderId.poNo',
+      'purchaseOrderId.supplierId.supplierName', 'warehouse.wareHouseName', 'acceptedQty', 'rejectedQty', 'createdBy.firstName'
     ];
   }
 
@@ -159,6 +173,22 @@ export class GrnListComponent implements OnInit {
       purchaseOrderId: grn?.purchaseOrderId?._id || grn?.purchaseOrderId
     };
     this._dialog.open(ViewPurchaseRequestDetailsModalComponent, {
+      data: modalData,
+      width: '1000px',
+      maxHeight: '90vh'
+    });
+  }
+
+  viewLpoDetails(grn: any): void {
+    const purchaseOrderId = grn?.purchaseOrderId?._id || grn?.purchaseOrderId;
+
+    if (!purchaseOrderId) {
+      this.notificationService.info('No LPO linked to this GRN');
+      return;
+    }
+
+    const modalData: ViewLpoDetailsModalData = { purchaseOrderId };
+    this._dialog.open(ViewLpoDetailsModalComponent, {
       data: modalData,
       width: '1000px',
       maxHeight: '90vh'

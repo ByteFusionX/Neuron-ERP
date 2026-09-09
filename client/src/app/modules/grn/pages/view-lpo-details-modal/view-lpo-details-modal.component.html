@@ -1,0 +1,90 @@
+<app-modal-layout
+  [title]="'LPO Details - ' + (purchaseOrder?.poNo || '')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6"
+  contentMaxHeight="80vh">
+
+  @if (isLoading()) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else if (purchaseOrder) {
+
+    <section class="rounded-md border border-gray-200 bg-white mb-6">
+      <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+        <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">LPO Details</h4>
+      </div>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">LPO Number</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseOrder.poNo || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Status</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseOrder.poStatus || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">PO Date</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ formatDate(purchaseOrder.poDate) }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Supplier Name</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseOrder.supplierId?.supplierName || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Job ID</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ purchaseOrder.jobId?.jobId || 'N/A' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">LPO Value</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ (purchaseOrder.totalLpoValue || 0) | number : '1.2-2' }} {{ purchaseOrder.currency || 'QAR' }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Created By</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ formatEmployeeName(purchaseOrder.createdBy) }}</dd>
+        </div>
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Created Date</dt>
+          <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ formatDate(purchaseOrder.createdAt) }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <div class="w-full">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">LPO Items</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-64 overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 border text-center">SL.NO</th>
+              <th class="px-3 py-2 border text-center">Part No.</th>
+              <th class="px-3 py-2 border text-center">Description</th>
+              <th class="px-3 py-2 border text-center">Ordered Qty</th>
+              <th class="px-3 py-2 border text-center">Issued Qty</th>
+              <th class="px-3 py-2 border text-center">Pending Qty</th>
+              <th class="px-3 py-2 border text-center">Unit Cost</th>
+              <th class="px-3 py-2 border text-center">Total Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of purchaseOrder?.items; track $index) {
+              <tr class="border-b">
+                <td class="px-3 py-2 border text-center">{{ $index + 1 }}</td>
+                <td class="px-3 py-2 border text-center">{{ formatPartNumber(item.partNo) }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.detail || '-' }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.quantity || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.issuedQty || 0 }}</td>
+                <td class="px-3 py-2 border text-center" [class.text-red-600]="item.pendingQty > 0" [class.font-medium]="item.pendingQty > 0">{{ item.pendingQty || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.unitCost || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.totalCost || 0 }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td class="px-3 py-2 border text-center text-gray-400" colspan="8">No items found</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</app-modal-layout>
