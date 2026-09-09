@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getInvoices, createInvoice, generateInvoiceNumber, getInvoiceDnLinkingReport, getCancelledAdjustedInvoices, getInvoiceById, updateInvoice, getCancelledAndReissuedInvoices, getJobItemInvoicedQty, cancelInvoice, cancelAndReissueInvoice, rejectInvoiceByCustomer } from '../controllers/invoice.controller';
+import { getInvoices, createInvoice, generateInvoiceNumber, getInvoiceDnLinkingReport, getCancelledAdjustedInvoices, getInvoiceById, getInvoiceByInvoiceNo, updateInvoice, getCancelledAndReissuedInvoices, getJobItemInvoicedQty, cancelInvoice, cancelAndReissueInvoice, rejectInvoiceByCustomer } from '../controllers/invoice.controller';
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
 const router = Router();
@@ -11,6 +11,7 @@ router.get('/cancelled-reissued-report', requirePrivilege("invoice", "viewReissu
 router.get('/audit', requirePrivilege("invoice", "viewCancelledAdjusted"), getCancelledAdjustedInvoices);
 router.get('/generate-number', generateInvoiceNumber);
 router.get('/item-invoiced-qty/:jobId', getJobItemInvoicedQty);
+router.get('/by-invoice-no/:invoiceNo', getInvoiceByInvoiceNo);
 router.patch('/:id/cancel', cancelInvoice);
 router.patch('/:id/reject', rejectInvoiceByCustomer);
 router.post('/:id/cancel-reissue', cancelAndReissueInvoice);

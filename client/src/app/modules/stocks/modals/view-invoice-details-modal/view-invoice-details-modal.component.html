@@ -1,0 +1,74 @@
+<app-modal-layout
+  [title]="'Invoice Details - ' + (invoice?.invoiceNo || '')"
+  [onClose]="onClose.bind(this)"
+  [showFooter]="false"
+  contentClass="p-6 flex flex-col"
+  contentMaxHeight="85vh">
+
+  @if (isLoading()) {
+    <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
+  } @else {
+    <div class="w-full mb-6">
+      <div class="relative overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <tbody>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Invoice Number</td>
+              <td class="px-2 py-2 border text-start">{{ invoice?.invoiceNo || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Invoice Date</td>
+              <td class="px-2 py-2 border text-start">{{ formatDate(invoice?.date) }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Customer</td>
+              <td class="px-2 py-2 border text-start">{{ invoice?.customer?.companyName || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Status</td>
+              <td class="px-2 py-2 border text-start">{{ invoice?.status || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Job ID</td>
+              <td class="px-2 py-2 border text-start">{{ invoice?.jobId?.jobId || 'N/A' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Payment Status</td>
+              <td class="px-2 py-2 border text-start">{{ invoice?.paymentStatus || 'N/A' }}</td>
+            </tr>
+            <tr class="border-b">
+              <td class="px-2 py-2 border text-left font-medium">Salesperson</td>
+              <td class="px-2 py-2 border text-start">{{ invoice?.salesperson?.firstName || '' }} {{ invoice?.salesperson?.lastName || '' }}</td>
+              <td class="px-2 py-2 border text-start font-medium">Total Amount</td>
+              <td class="px-2 py-2 border text-start">{{ formatPlainNumber(invoice?.amount) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="w-full">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">Invoice Items</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-[50vh] overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 border text-center">SL.NO</th>
+              <th class="px-3 py-2 border text-center">Description</th>
+              <th class="px-3 py-2 border text-center">Quantity</th>
+              <th class="px-3 py-2 border text-center">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of invoice?.items; track $index) {
+              <tr class="border-b">
+                <td class="px-3 py-2 border text-center">{{ $index + 1 }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.description || '-' }}</td>
+                <td class="px-3 py-2 border text-center">{{ item.quantity || 0 }}</td>
+                <td class="px-3 py-2 border text-center">{{ formatPlainNumber(item.amount) }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td class="px-3 py-2 border text-center text-gray-400" colspan="4">No items found</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</app-modal-layout>

@@ -28,6 +28,10 @@ export class InvoiceService {
         return this.http.get<any>(`${this.api}/invoice/dn-linking-report`, { params, context: context() });
     }
 
+    getInvoiceByInvoiceNo(invoiceNo: string): Observable<any> {
+        return this.http.get<any>(`${this.api}/invoice/by-invoice-no/${invoiceNo}`, { context: context() });
+    }
+
   getJobItemInvoicedQty(jobId: string, excludeInvoiceId?: string): Observable<any> {
       const params: any = {};
       if (excludeInvoiceId) {
