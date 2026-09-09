@@ -81,39 +81,6 @@
                     <td mat-cell *matCellDef="let element"> {{element.department.departmentName}} </td>
                 </ng-container>
 
-                <ng-container>
-                    <ng-container matColumnDef="share">
-                        <th *matHeaderCellDef
-                            class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                            Share / Transfer </th>
-                        <td mat-cell *matCellDef="let element;let i=index"
-                            (click)="preventClick($event)">
-                            <div class="flex justify-center items-center gap-2"  >
-
-                                <ng-container  *ngIf="shareAccess">
-                                    <div *ngIf="element?.sharedWith?.length" matTooltip="View shared customer"
-                                        matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                                        (click)="onSharedList(element.sharedWith,element._id,i)"
-                                        class="border border-gray-300 hover:border-gray-500 cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2  text-white text-sm rounded-full font-medium">
-                                        <ng-icon name="heroEye" class="text-black"></ng-icon>
-                                    </div>
-                                    <div matTooltip="Share customer" matTooltipPosition="above"
-                                        matTooltipClass="mat-tooltip" (click)="onShareOrTransfer('Share',element._id,i)"
-                                        class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-violet-700 hover:bg-violet-600 text-white text-sm rounded-full font-medium">
-                                        <ng-icon name="heroShare"></ng-icon>
-                                    </div>
-                                </ng-container>
-                                <div matTooltip="Trnsfer customer" matTooltipPosition="above"
-                                    *ngIf="userId == element.createdBy._id || transferAccess" matTooltipClass="mat-tooltip"
-                                    (click)="onShareOrTransfer('Transfer',element._id,i)"
-                                    class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-full font-medium">
-                                    <ng-icon name="heroArrowsRightLeft"></ng-icon>
-                                </div>
-                            </div>
-                        </td>
-                    </ng-container>
-                </ng-container>
-
                 <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
                 <tr mat-row *matRowDef="let row; columns: displayedColumns;  let i= index"
                     class="cursor-pointer hover:bg-gray-100" (click)="onRowClicks(i)"></tr>

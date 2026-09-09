@@ -8,8 +8,6 @@ import { BehaviorSubject, Observable, share, Subscription } from 'rxjs';
 import { getCreators, getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { MatDialog } from '@angular/material/dialog';
-import { ShareTransferCustomerComponent } from '../share-transfer-customer/share-transfer-customer.component';
-import { SharedWithListComponent } from '../shared-with-list/shared-with-list.component';
 import { CustomerViewComponent, CustomerViewModalData } from '../customer-view/customer-view.component';
 import { FormsModule } from '@angular/forms';
 import { NgIcon } from '@ng-icons/core';
@@ -17,14 +15,13 @@ import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 import { NgFor, NgIf, AsyncPipe } from '@angular/common';
 import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
-import { MatTooltip } from '@angular/material/tooltip';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-customers-list',
     templateUrl: './customers-list.component.html',
     styleUrls: ['./customers-list.component.css'],
-    imports: [FormsModule, NgIcon, NgSelectComponent, appNoLeadingSpace, NgFor, NgOptionComponent, NgIf, RouterLink, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe]
+    imports: [FormsModule, NgIcon, NgSelectComponent, appNoLeadingSpace, NgFor, NgOptionComponent, NgIf, RouterLink, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe]
 })
 export class CustomersListComponent {
 
@@ -37,7 +34,7 @@ export class CustomersListComponent {
   isEnter: boolean = false;
   createCustomer: boolean | undefined = false;
 
-  displayedColumns: string[] = ['position', 'clientRef', 'name', 'createdBy', 'department', 'share'];
+  displayedColumns: string[] = ['position', 'clientRef', 'name', 'createdBy', 'department'];
   dataSource = new MatTableDataSource<getCustomer>()
   filteredData = new MatTableDataSource<getCustomer>()
 
@@ -85,10 +82,6 @@ export class CustomersListComponent {
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
-  }
-
-  preventClick(event: Event) {
-    event.stopPropagation();
   }
 
   updateUrlParams() {
@@ -158,46 +151,6 @@ export class CustomersListComponent {
     this.getAllCustomers();
   }
 
-  onShareOrTransfer(type: String, customerId: string, index: number) {
-    const shareDialog = this.dialog.open(ShareTransferCustomerComponent, {
-      data: {
-        type: type,
-        customerId: customerId
-      },
-      width: '500px'
-    });
-
-    shareDialog.afterClosed().subscribe((res) => {
-      if (res) {
-        this._customerService.shareOrTransferCustomer({
-          customerId: customerId,
-          employees: res.employees,
-          type: res.type
-        }).subscribe((res) => {
-          this.dataSource.data[index].createdBy = res.createdBy;
-          this.dataSource.data[index].sharedWith = res.sharedWith;
-          this.dataSource._updateChangeSubscription();
-        });
-      }
-    });
-  }
-
-  onSharedList(sharedWith: any, customerId: string, index: number) {
-    const shareDialog = this.dialog.open(SharedWithListComponent, {
-      data: {
-        sharedWith,
-        customerId
-      },
-      disableClose: true,
-      width: '500px'
-    });
-
-    shareDialog.afterClosed().subscribe((res) => {
-      this.dataSource.data[index].sharedWith = res;
-      this.dataSource._updateChangeSubscription();
-    });
-  }
-
   ngModelChange() {
     if (this.searchQuery == '' && this.isEnter) {
       this.onSearch();
@@ -232,7 +185,7 @@ export class CustomersListComponent {
     });
 
     viewDialog.afterClosed().subscribe((result) => {
-      if (result === 'deleted') {
+      if (result === 'deleted' || result === 'updated') {
         this.getAllCustomers();
       }
     });

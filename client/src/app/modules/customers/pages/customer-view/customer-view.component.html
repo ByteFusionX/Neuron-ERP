@@ -6,6 +6,44 @@
   contentClass="p-6"
   contentMaxHeight="80vh">
 
+  @if (!isLoading && customerData) {
+    <div modalHeaderActions class="flex items-center gap-2">
+      @if (shareAccess) {
+        @if (customerData.sharedWith?.length) {
+          <button
+            type="button"
+            matTooltip="View shared customer"
+            matTooltipPosition="above"
+            matTooltipClass="mat-tooltip"
+            (click)="onSharedList()"
+            class="bg-gray-200 rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center hover:bg-gray-300 transition-colors flex-shrink-0">
+            <ng-icon name="heroEye" class="text-md p-0 m-0"></ng-icon>
+          </button>
+        }
+        <button
+          type="button"
+          matTooltip="Share customer"
+          matTooltipPosition="above"
+          matTooltipClass="mat-tooltip"
+          (click)="onShareOrTransfer('Share')"
+          class="bg-violet-700 hover:bg-violet-600 text-white rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center transition-colors flex-shrink-0">
+          <ng-icon name="heroShare" class="text-md p-0 m-0"></ng-icon>
+        </button>
+      }
+      @if (userId === $any(customerData.createdBy)?._id || transferAccess) {
+        <button
+          type="button"
+          matTooltip="Transfer customer"
+          matTooltipPosition="above"
+          matTooltipClass="mat-tooltip"
+          (click)="onShareOrTransfer('Transfer')"
+          class="bg-orange-500 hover:bg-orange-600 text-white rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center transition-colors flex-shrink-0">
+          <ng-icon name="heroArrowsRightLeft" class="text-md p-0 m-0"></ng-icon>
+        </button>
+      }
+    </div>
+  }
+
   @if (isLoading) {
     <div class="w-full flex justify-center items-center py-10 text-sm text-gray-500">Loading...</div>
   } @else if (customerData) {

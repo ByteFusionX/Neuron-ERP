@@ -9,6 +9,10 @@ import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dial
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ModalLayoutComponent, ModalFooterButton } from 'src/app/shared/components/modal-layout/modal-layout.component';
 import { FormatStringPipe } from '../../../../shared/pipes/formatString.pipe';
+import { ShareTransferCustomerComponent } from '../share-transfer-customer/share-transfer-customer.component';
+import { SharedWithListComponent } from '../shared-with-list/shared-with-list.component';
+import { NgIcon } from '@ng-icons/core';
+import { MatTooltip } from '@angular/material/tooltip';
 
 export interface CustomerViewModalData {
   customerId: string;
@@ -19,12 +23,17 @@ export interface CustomerViewModalData {
   standalone: true,
   templateUrl: './customer-view.component.html',
   styleUrls: ['./customer-view.component.css'],
-  imports: [CommonModule, FormatStringPipe, ModalLayoutComponent]
+  imports: [CommonModule, FormatStringPipe, ModalLayoutComponent, NgIcon, MatTooltip]
 })
 export class CustomerViewComponent implements OnInit {
   customerData!: getCustomer;
   isLoading: boolean = true;
   footerButtons: ModalFooterButton[] = [];
+
+  userId: string | undefined;
+  shareAccess: boolean | undefined = false;
+  transferAccess: boolean | undefined = false;
+  wasUpdated: boolean = false;
 
   constructor(
     public dialogRef: MatDialogRef<CustomerViewComponent>,
@@ -38,13 +47,14 @@ export class CustomerViewComponent implements OnInit {
 
   ngOnInit(): void {
     let access;
-    let userId;
     this._employeeService.employeeData$.subscribe((employee) => {
       access = employee?.category.privileges.customer.viewReport;
-      userId = employee?._id;
+      this.shareAccess = employee?.category.privileges.customer.share;
+      this.transferAccess = employee?.category.privileges.customer.transfer;
+      this.userId = employee?._id;
     });
 
-    this._customerService.getCustomerByClientRef(this.data.customerId, access, userId).subscribe((res) => {
+    this._customerService.getCustomerByClientRef(this.data.customerId, access, this.userId).subscribe((res) => {
       this.isLoading = false;
       if (res && res.access) {
         this.customerData = res.customerData;
@@ -56,6 +66,46 @@ export class CustomerViewComponent implements OnInit {
         this._toast.warning('This user detail cannot be displayed to you due to the permissions assigned');
         this.dialogRef.close();
       }
+    });
+  }
+
+  onShareOrTransfer(type: string) {
+    const shareDialog = this.dialog.open(ShareTransferCustomerComponent, {
+      data: {
+        type: type,
+        customerId: this.customerData._id
+      },
+      width: '500px'
+    });
+
+    shareDialog.afterClosed().subscribe((res) => {
+      if (res) {
+        this._customerService.shareOrTransferCustomer({
+          customerId: this.customerData._id,
+          employees: res.employees,
+          type: res.type
+        }).subscribe((result) => {
+          this.customerData.createdBy = result.createdBy;
+          this.customerData.sharedWith = result.sharedWith;
+          this.wasUpdated = true;
+        });
+      }
+    });
+  }
+
+  onSharedList() {
+    const shareDialog = this.dialog.open(SharedWithListComponent, {
+      data: {
+        sharedWith: this.customerData.sharedWith,
+        customerId: this.customerData._id
+      },
+      disableClose: true,
+      width: '500px'
+    });
+
+    shareDialog.afterClosed().subscribe((res) => {
+      this.customerData.sharedWith = res;
+      this.wasUpdated = true;
     });
   }
 
@@ -91,6 +141,6 @@ export class CustomerViewComponent implements OnInit {
   }
 
   onClose() {
-    this.dialogRef.close();
+    this.dialogRef.close(this.wasUpdated ? 'updated' : undefined);
   }
 }
