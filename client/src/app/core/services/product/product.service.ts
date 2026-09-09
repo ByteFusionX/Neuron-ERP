@@ -16,6 +16,7 @@ export interface Product {
   productCategory: any;
   productSegment: any;
   warehouse: any;
+  brand: string;
   createdBy?: any;
   createdDate: Date;
   updatedDate?: Date;
@@ -49,6 +50,7 @@ export interface ProductQueryParams {
   productCategory?: string;
   productSegment?: string;
   warehouse?: string;
+  brand?: string;
   createdBy?: string;
 }
 
@@ -56,6 +58,7 @@ export interface PartNumberOption {
   _id: string;
   partNo: string;
   productDescription?: string;
+  brand?: string;
 }
 
 export interface PartNumberResponse {
@@ -101,6 +104,17 @@ export class ProductService {
 
   deleteProduct(id: string): Observable<any> {
     return this.http.delete(`${this.api}/product/${id}`);
+  }
+
+  generateItemCode(departmentId?: string): Observable<{ success: boolean; itemCode: string }> {
+    let params = new HttpParams();
+    if (departmentId) {
+      params = params.set('departmentId', departmentId);
+    }
+    return this.http.get<{ success: boolean; itemCode: string }>(`${this.api}/product/generate-item-code`, {
+      params,
+      context: context()
+    });
   }
 
   getPartNumbers(params: { search?: string; limit?: number } = {}): Observable<PartNumberResponse> {

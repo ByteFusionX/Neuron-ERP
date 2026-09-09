@@ -7,6 +7,7 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { ProductService, Product, ProductQueryParams } from 'src/app/core/services/product/product.service';
 import { CreateProductComponent } from './modals/create-product/create-product.component';
+import { ProductViewComponent } from './modals/product-view/product-view.component';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { NgIcon } from '@ng-icons/core';
 import { SearchComponent } from 'src/app/shared/components/search/search.component';
@@ -39,7 +40,7 @@ export class AllProductsComponent implements OnInit {
 
   tableData = signal<Product[]>([]);
   tableColumns: TableColumn[] = [];
-  defaultColumns: string[] = ['itemCode', 'partNo', 'productDescription', 'productCategory', 'productSegment', 'warehouse', 'createdBy', 'actions'];
+  defaultColumns: string[] = ['createdDate', 'itemCode', 'partNo', 'productDescription', 'productCategory', 'productSegment', 'warehouse', 'brand', 'createdBy'];
   isLoading = signal<boolean>(false);
   isEmpty = signal<boolean>(false);
   totalItems = signal<number>(0);
@@ -110,6 +111,14 @@ export class AllProductsComponent implements OnInit {
   setupTableColumns(): void {
     this.tableColumns = [
       {
+        key: 'createdDate',
+        label: 'Created Date',
+        type: 'date',
+        sortable: true,
+        filterable: true,
+        filterType: 'date'
+      },
+      {
         key: 'itemCode',
         label: 'Item Code',
         type: 'text',
@@ -171,6 +180,15 @@ export class AllProductsComponent implements OnInit {
         cellRenderer: (item: any) => item?.warehouse?.wareHouseName || ''
       },
       {
+        key: 'brand',
+        label: 'Brand',
+        type: 'text',
+        sortable: true,
+        filterable: true,
+        filterType: 'text',
+        filterPlaceholder: 'Search brand...'
+      },
+      {
         key: 'createdBy',
         label: 'Created By',
         type: 'text',
@@ -184,20 +202,6 @@ export class AllProductsComponent implements OnInit {
           }
           return '';
         }
-      },
-      {
-        key: 'actions',
-        label: 'Actions',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: [
-          {
-            icon: 'heroPencilSquare',
-            tooltip: 'Edit Product',
-            action: 'editProduct',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600'
-          }
-        ]
       }
     ];
   }
@@ -256,12 +260,17 @@ export class AllProductsComponent implements OnInit {
   }
 
   onRowClick(row: Product): void {
-  }
+    const viewDialog = this.dialog.open(ProductViewComponent, {
+      data: { product: row },
+      width: '1100px',
+      maxHeight: '90vh'
+    });
 
-  onActionClick(event: { action: string, item: any, event: Event }): void {
-    if (event.action === 'editProduct') {
-      this.onEditProduct(event.item);
-    }
+    viewDialog.afterClosed().subscribe((result) => {
+      if (result === 'edit') {
+        this.onEditProduct(row);
+      }
+    });
   }
 
   onEditProduct(product: Product): void {

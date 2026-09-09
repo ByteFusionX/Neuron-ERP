@@ -50,12 +50,13 @@ export class CreateProductComponent implements OnInit {
 
   productForm: FormGroup = this.fb.group({
     partNo: ['', [Validators.required]],
-    itemCode: ['', [Validators.required]],
+    itemCode: [{ value: '', disabled: true }, [Validators.required]],
     createdDate: [new Date().toISOString().split('T')[0], [Validators.required]],
     productDescription: ['', [Validators.required]],
     productSegment: ['', [Validators.required]],
     productCategory: ['', [Validators.required]],
-    warehouse: ['', [Validators.required]]
+    warehouse: ['', [Validators.required]],
+    brand: ['', [Validators.required]]
   });
 
   constructor(
@@ -75,6 +76,25 @@ export class CreateProductComponent implements OnInit {
     } else if (this.data?.prefill) {
       this.applyPrefill(this.data.prefill);
     }
+
+    if (!this.isEditMode) {
+      this.productForm.get('productSegment')?.valueChanges.subscribe((departmentId) => {
+        this.generateItemCode(departmentId || undefined);
+      });
+
+      this.generateItemCode(this.productForm.get('productSegment')?.value || undefined);
+    }
+  }
+
+  private generateItemCode(departmentId?: string): void {
+    this.productService.generateItemCode(departmentId).subscribe({
+      next: (response) => {
+        this.productForm.get('itemCode')?.setValue(response.itemCode);
+      },
+      error: () => {
+        this.toastr.error('Failed to generate item code');
+      }
+    });
   }
 
   private applyPrefill(prefill: { productSegment?: string; productCategoryName?: string; productDescription?: string }): void {
@@ -111,10 +131,18 @@ export class CreateProductComponent implements OnInit {
       productDescription: product.productDescription || '',
       productSegment: product.productSegment?._id || product.productSegment || '',
       productCategory: product.productCategory?._id || product.productCategory || '',
-      warehouse: product.warehouse?._id || product.warehouse || ''
+      warehouse: product.warehouse?._id || product.warehouse || '',
+      brand: product.brand || ''
     });
 
     this.productForm.get('itemCode')?.disable();
+
+    if (!product.itemCode) {
+      const departmentId = product.productSegment?._id || product.productSegment;
+      if (departmentId) {
+        this.generateItemCode(departmentId);
+      }
+    }
   }
 
   loadDepartments(): void {

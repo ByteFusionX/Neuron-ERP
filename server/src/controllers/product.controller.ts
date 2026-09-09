@@ -6,13 +6,68 @@ import Warehouse from "../models/warehouse.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
+const getDepartmentCode = (departmentName?: string): string => {
+    const words = (departmentName || '').trim().split(/\s+/).filter(Boolean);
+
+    if (words.length >= 3) {
+        return words.slice(0, 3).map((word) => word[0]).join('').toUpperCase();
+    }
+
+    if (words.length === 2) {
+        const [first, second] = words;
+        const code = first.slice(0, 2) + second.slice(0, 1);
+        return code.toUpperCase();
+    }
+
+    if (words.length === 1) {
+        return words[0].slice(0, 3).toUpperCase();
+    }
+
+    return 'DEP';
+};
+
+export const generateItemCode = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { departmentId } = req.query;
+        let deptCode = 'DEP';
+
+        if (departmentId) {
+            if (!ObjectId.isValid(departmentId as string)) {
+                return res.status(400).json({ message: "Invalid departmentId" });
+            }
+            const department = await Department.findById(departmentId);
+            if (!department) {
+                return res.status(404).json({ message: "Department not found" });
+            }
+            deptCode = getDepartmentCode(department.departmentName);
+        }
+
+        const pattern = /^NR-ITM-[A-Z]+-(\d+)$/i;
+        const products = await Product.find({ itemCode: { $regex: pattern } }).select('itemCode').lean();
+
+        let maxNum = 0;
+        for (const product of products) {
+            const match = (product.itemCode || '').match(pattern);
+            if (match) {
+                maxNum = Math.max(maxNum, parseInt(match[1], 10));
+            }
+        }
+
+        const itemCode = `NR-ITM-${deptCode}-${(maxNum + 1).toString().padStart(4, '0')}`;
+
+        return res.status(200).json({ success: true, itemCode });
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+};
 
 export const createProduct = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const data: any = req.body;
         const token = (req as any).user;
 
-        if (!data.partNo || !data.itemCode || !data.productDescription || !data.productCategory || !data.productSegment || !data.warehouse || !data.createdDate) {
+        if (!data.partNo || !data.itemCode || !data.productDescription || !data.productCategory || !data.productSegment || !data.warehouse || !data.brand || !data.createdDate) {
             return res.status(400).json({ message: "Missing required fields" });
         }
 
@@ -56,6 +111,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
             productCategory: data.productCategory,
             productSegment: data.productSegment,
             warehouse: data.warehouse,
+            brand: data.brand.trim(),
             createdBy: employee._id,
             createdDate: data.createdDate,
             updatedDate: new Date(),
@@ -87,6 +143,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             productCategory,
             productSegment,
             warehouse,
+            brand,
             createdBy
         } = req.query;
 
@@ -100,7 +157,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
         }
 
         const privileges = employee.category?.privileges;
-        const accessFilter = privileges?.inventory?.products?.viewReport 
+        const accessFilter = privileges?.inventory?.products?.viewReport
             ? await buildPrivilegeAccessFilter(employee._id, privileges.inventory.products.viewReport, 'createdBy')
             : {};
 
@@ -108,7 +165,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
         const rowNum = Math.max(parseInt(row as string, 10) || 10, 1);
         const skip = (pageNum - 1) * rowNum;
 
-        const filter: any = { 
+        const filter: any = {
             isDeleted: { $ne: true },
             ...accessFilter
         };
@@ -137,13 +194,18 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             filter.warehouse = new ObjectId(warehouse as string);
         }
 
+        if (brand) {
+            filter.brand = { $regex: brand as string, $options: 'i' };
+        }
+
         const searchTerm = typeof search === 'string' ? search.trim() : '';
         if (searchTerm) {
             const regex = new RegExp(searchTerm, 'i');
             filter.$or = [
                 { partNo: regex },
                 { itemCode: regex },
-                { productDescription: regex }
+                { productDescription: regex },
+                { brand: regex }
             ];
         }
 
@@ -269,6 +331,7 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
                     ...(data.productCategory ? { productCategory: data.productCategory } : {}),
                     ...(data.productSegment ? { productSegment: data.productSegment } : {}),
                     ...(data.warehouse ? { warehouse: data.warehouse } : {}),
+                    ...(data.brand ? { brand: data.brand.trim() } : {}),
                     updatedBy: employee._id,
                     updatedDate: new Date()
                 }
@@ -312,14 +375,15 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
             filter.$or = [
                 { partNo: regex },
                 { itemCode: regex },
-                { productDescription: regex }
+                { productDescription: regex },
+                { brand: regex }
             ];
         }
 
         const limitValue = Math.min(Math.max(parseInt(limit as string, 10) || 25, 1), 100);
 
         const partNumbers = await Product.find(filter)
-            .select('partNo itemCode productDescription')
+            .select('partNo itemCode productDescription brand')
             .sort({ partNo: 1 })
             .limit(limitValue);
 
@@ -333,5 +397,4 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
         next(error);
     }
 };
-
 

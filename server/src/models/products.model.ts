@@ -7,6 +7,7 @@ interface Product {
     productCategory: Types.ObjectId;
     productSegment: Types.ObjectId;
     warehouse: Types.ObjectId;
+    brand: string;
     createdBy: Types.ObjectId;
     createdDate: Date;
     updatedDate: Date;
@@ -41,6 +42,10 @@ const productSchema = new Schema<Product>({
     warehouse: {
         type: Schema.Types.ObjectId,
         ref: 'Warehouse',
+        required: true,
+    },
+    brand: {
+        type: String,
         required: true,
     },
     createdBy: {
