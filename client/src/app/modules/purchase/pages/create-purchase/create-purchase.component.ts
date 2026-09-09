@@ -1105,10 +1105,12 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     );
   }
 
-  private composePartNumberLabel(option: { partNo?: string; productDescription?: string }): string {
+  private composePartNumberLabel(option: { partNo?: string; productDescription?: string; brand?: string }): string {
     const code = option.partNo || '';
     const description = option.productDescription || '';
-    return description ? `${code} (${description})` : code;
+    const brandName = option.brand || '';
+    const details = [brandName, description].filter(Boolean).join(' - ');
+    return details ? `${code} (${details})` : code;
   }
 
   getPartNumberValue(partNo: any): string {
