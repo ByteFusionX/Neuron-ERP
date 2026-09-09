@@ -12,8 +12,9 @@ import jobModel from "../models/job.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
-import { SupplierReturn } from "../models/supplierReturn.model";
+import { StockHold } from "../models/stockHold.model";
 import GRN from "../models/grn.model";
+import { Invoice } from "../models/invoice.model";
 
 // Manual (non-GRN-receipt) stock entry creation is hidden from the UI pending a rework;
 // this endpoint is kept functional but no longer generates/requires a grn value.
@@ -224,7 +225,22 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
                 .populate('productSegment', 'departmentName')
                 .populate('productCategory', 'categoryName')
                 .populate('targetWarehouse', 'wareHouseName')
-                .populate('jobId', 'jobId')
+                .populate({
+                    path: 'jobId',
+                    select: 'jobId quoteId',
+                    populate: {
+                        path: 'quoteId',
+                        select: 'enqId',
+                        populate: {
+                            path: 'enqId',
+                            select: 'client',
+                            populate: {
+                                path: 'client',
+                                select: 'companyName'
+                            }
+                        }
+                    }
+                })
                 .populate('dn', 'dnNo')
                 .populate('grn', 'grnNo')
                 .populate('createdBy', 'firstName lastName')
@@ -254,16 +270,49 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
             blocksByEntryId.get(entryId)!.push(block);
         });
 
-        const supplierReturns = await SupplierReturn.find({
-            quarantineStockEntryId: { $in: stockEntryIds },
+        const stockHolds = await StockHold.find({
+            stockEntryId: { $in: stockEntryIds },
             isDeleted: { $ne: true }
-        }).select('quarantineStockEntryId status').lean();
+        }).select('stockEntryId status').lean();
 
-        const supplierReturnStatusByEntryId = new Map<string, string>();
-        supplierReturns.forEach(supplierReturn => {
-            if (supplierReturn.quarantineStockEntryId) {
-                supplierReturnStatusByEntryId.set(supplierReturn.quarantineStockEntryId.toString(), supplierReturn.status);
+        const stockHoldStatusByEntryId = new Map<string, string>();
+        stockHolds.forEach(stockHold => {
+            if (stockHold.stockEntryId) {
+                stockHoldStatusByEntryId.set(stockHold.stockEntryId.toString(), stockHold.status);
             }
+        });
+
+        const dnIds = stockEntries
+            .map((entry: any) => entry.dn?._id)
+            .filter((dnId: any) => !!dnId);
+
+        const invoicesForDns = dnIds.length
+            ? await Invoice.find({
+                isDeleted: false,
+                $or: [
+                    { 'items.dnId': { $in: dnIds } },
+                    { 'items.dnRefs.dnId': { $in: dnIds } }
+                ]
+            }).select('invoiceNo items.dnId items.dnRefs.dnId').lean()
+            : [];
+
+        const invoiceNosByDnId = new Map<string, Set<string>>();
+        invoicesForDns.forEach((invoice: any) => {
+            (invoice.items || []).forEach((item: any) => {
+                const relatedDnIds: any[] = [];
+                if (item.dnId) relatedDnIds.push(item.dnId);
+                (item.dnRefs || []).forEach((ref: any) => {
+                    if (ref.dnId) relatedDnIds.push(ref.dnId);
+                });
+
+                relatedDnIds.forEach((dnId) => {
+                    const key = dnId.toString();
+                    if (!invoiceNosByDnId.has(key)) {
+                        invoiceNosByDnId.set(key, new Set());
+                    }
+                    invoiceNosByDnId.get(key)!.add(invoice.invoiceNo);
+                });
+            });
         });
 
         const enrichedEntries = stockEntries.map((entry: any) => {
@@ -271,7 +320,9 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
             const blocks = blocksByEntryId.get(entryId) || [];
             const blockedQuantity = blocks.reduce((sum, block) => sum + (block.quantity || 0), 0);
             const availableQuantity = entry.isQuarantined ? 0 : Math.max(0, entry.quantity - blockedQuantity);
-            const supplierReturnStatus = supplierReturnStatusByEntryId.get(entryId);
+            const stockHoldStatus = stockHoldStatusByEntryId.get(entryId);
+            const dnId = entry.dn?._id?.toString();
+            const invoiceNos = dnId ? Array.from(invoiceNosByDnId.get(dnId) || []) : [];
 
             return {
                 ...entry.toObject(),
@@ -279,8 +330,9 @@ export const getStockEntries = async (req: Request, res: Response, next: NextFun
                 blockedQuantity,
                 activeBlocks: blocks.filter(block => new Date(block.toDate) >= now),
                 remarks: entry.remarks || '',
-                supplierReturnStatus: supplierReturnStatus || null,
-                isHoldResolved: supplierReturnStatus ? ['Resolved', 'Disposed'].includes(supplierReturnStatus) : true
+                stockHoldStatus: stockHoldStatus || null,
+                isHoldResolved: stockHoldStatus ? ['Resolved', 'Disposed'].includes(stockHoldStatus) : true,
+                invoiceNos
             };
         });
 
@@ -444,13 +496,13 @@ export const releaseFromQuarantine = async (req: Request, res: Response, next: N
             return res.status(400).json({ success: false, message: "Stock entry is not quarantined" });
         }
 
-        const linkedSupplierReturn = await SupplierReturn.findOne({
-            quarantineStockEntryId: stockEntry._id,
+        const linkedStockHold = await StockHold.findOne({
+            stockEntryId: stockEntry._id,
             isDeleted: { $ne: true }
         }).select('status').lean();
 
-        if (linkedSupplierReturn && !['Resolved', 'Disposed'].includes(linkedSupplierReturn.status)) {
-            return res.status(400).json({ success: false, message: "Cannot release from hold: the linked supplier return is not resolved" });
+        if (linkedStockHold && !['Resolved', 'Disposed'].includes(linkedStockHold.status)) {
+            return res.status(400).json({ success: false, message: "Cannot release from hold: the linked stock hold is not resolved" });
         }
 
         stockEntry.isQuarantined = false;

@@ -43,8 +43,20 @@ export interface StockEntry {
   quarantinedAt?: Date | string;
   quarantineReleasedAt?: Date | string;
   dn?: any;
-  supplierReturnStatus?: string | null;
+  invoiceNos?: string[];
+  stockHoldStatus?: string | null;
   isHoldResolved?: boolean;
+}
+
+export interface StockEntryJobRef {
+  jobId?: string;
+  quoteId?: {
+    enqId?: {
+      client?: {
+        companyName?: string;
+      };
+    };
+  };
 }
 
 export interface StockBlock {

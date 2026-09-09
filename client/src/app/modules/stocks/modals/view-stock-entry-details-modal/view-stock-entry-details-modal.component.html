@@ -1,0 +1,179 @@
+<app-modal-layout
+  [title]="'Stock Details - ' + (stockEntry?.itemCode || stockEntry?.partNo?.partNo || '')"
+  [onClose]="onClose.bind(this)"
+  [footerButtons]="footerButtons"
+  [showFooter]="footerButtons.length > 0"
+  contentClass="p-6 flex flex-col"
+  contentMaxHeight="85vh">
+
+  <div modalHeaderActions class="flex items-center gap-2">
+    @if (!stockEntry?.isQuarantined) {
+      <button
+        type="button"
+        matTooltip="Edit Stock"
+        matTooltipPosition="above"
+        matTooltipClass="mat-tooltip"
+        (click)="onEdit()"
+        class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center transition-colors flex-shrink-0">
+        <ng-icon name="heroPencilSquare" class="text-md p-0 m-0"></ng-icon>
+      </button>
+    }
+    @if ((stockEntry?.availableQuantity ?? stockEntry?.quantity ?? 0) > 0) {
+      <button
+        type="button"
+        matTooltip="Block Stock"
+        matTooltipPosition="above"
+        matTooltipClass="mat-tooltip"
+        (click)="onBlock()"
+        class="bg-orange-500 hover:bg-orange-600 text-white rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center transition-colors flex-shrink-0">
+        <ng-icon name="heroLockClosed" class="text-md p-0 m-0"></ng-icon>
+      </button>
+    }
+    @if (stockEntry?.isQuarantined) {
+      <button
+        type="button"
+        [matTooltip]="stockEntry?.isHoldResolved === false ? 'Not resolved' : 'Release from Hold'"
+        matTooltipPosition="above"
+        matTooltipClass="mat-tooltip"
+        [disabled]="stockEntry?.isHoldResolved === false"
+        (click)="onReleaseQuarantine()"
+        [class.bg-gray-300]="stockEntry?.isHoldResolved === false"
+        [class.text-gray-500]="stockEntry?.isHoldResolved === false"
+        [class.bg-green-600]="stockEntry?.isHoldResolved !== false"
+        [class.hover:bg-green-500]="stockEntry?.isHoldResolved !== false"
+        [class.text-white]="stockEntry?.isHoldResolved !== false"
+        class="rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center transition-colors flex-shrink-0">
+        <ng-icon [name]="stockEntry?.isHoldResolved === false ? 'heroLockClosed' : 'heroLockOpen'" class="text-md p-0 m-0"></ng-icon>
+      </button>
+    }
+    <button
+      type="button"
+      matTooltip="Delete Stock"
+      matTooltipPosition="above"
+      matTooltipClass="mat-tooltip"
+      (click)="onDelete()"
+      class="bg-red-600 hover:bg-red-500 text-white rounded-lg w-8 h-8 p-0 text-center flex items-center justify-center transition-colors flex-shrink-0">
+      <ng-icon name="heroTrash" class="text-md p-0 m-0"></ng-icon>
+    </button>
+  </div>
+
+  <section class="rounded-md border border-gray-200 bg-white mb-6">
+    <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+      <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Item Details</h4>
+    </div>
+    <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Date Of Purchase</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ formatDate(stockEntry?.dateOfPurchase) }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Item Code</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.itemCode || stockEntry?.partNo?.itemCode || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Part No</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.partNo?.partNo || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0 col-span-2 sm:col-span-2 lg:col-span-2">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Description</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.productDescription || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Job No</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.jobId?.jobId || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">PO No</dt>
+        <dd class="mt-0.5 text-md leading-snug text-violet-600 font-medium break-words">{{ stockEntry?.supplierLpoNo || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">GRN No</dt>
+        <dd class="mt-0.5 text-md leading-snug text-violet-600 font-medium break-words">{{ stockEntry?.grn?.grnNo || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Supplier</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.supplierName?.supplierName || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Warehouse</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.targetWarehouse?.wareHouseName || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Category</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.productCategory?.categoryName || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Segment</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.productSegment?.departmentName || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">UOM</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.uom || 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Stock In (Days)</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.stockInDays ?? 'N/A' }}</dd>
+      </div>
+      <div class="min-w-0 col-span-2 sm:col-span-3 lg:col-span-4">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Remarks</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.remarks || 'N/A' }}</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="rounded-md border border-gray-200 bg-white mb-6">
+    <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+      <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Quantity Details</h4>
+    </div>
+    <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Total Quantity</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.quantity ?? 0 }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Available Quantity</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.availableQuantity ?? 0 }}</dd>
+      </div>
+      <div class="min-w-0">
+        <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Blocked Quantity</dt>
+        <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{ stockEntry?.blockedQuantity ?? 0 }}</dd>
+      </div>
+      @if (stockEntry?.isQuarantined) {
+        <div class="min-w-0">
+          <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">On Hold</dt>
+          <dd class="mt-0.5 text-md leading-snug text-red-600 font-medium break-words">Yes</dd>
+        </div>
+      }
+    </dl>
+  </section>
+
+  @if (stockEntry?.activeBlocks?.length) {
+    <div class="w-full">
+      <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">Active Blocks</label>
+      <div class="relative overflow-x-auto border rounded-lg max-h-64 overflow-y-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+            <tr>
+              <th scope="col" class="px-4 py-2 border">Salesperson</th>
+              <th scope="col" class="px-4 py-2 border">Customer</th>
+              <th scope="col" class="px-4 py-2 border">Quantity</th>
+              <th scope="col" class="px-4 py-2 border">From Date</th>
+              <th scope="col" class="px-4 py-2 border">To Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (block of stockEntry?.activeBlocks; track $index) {
+              <tr class="bg-white border-b">
+                <td class="border px-4 py-2 font-medium text-gray-800">{{ block.salesPersonName }}</td>
+                <td class="border px-4 py-2 font-medium text-gray-800">{{ block.customerName }}</td>
+                <td class="border px-4 py-2 font-medium text-gray-800">{{ block.quantity }}</td>
+                <td class="border px-4 py-2 font-medium text-gray-800">{{ formatDate(block.fromDate) }}</td>
+                <td class="border px-4 py-2 font-medium text-gray-800">{{ formatDate(block.toDate) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</app-modal-layout>
