@@ -3,13 +3,13 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { SupplierReturnService } from 'src/app/core/services/supplier-return/supplier-return.service';
+import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
-  selector: 'app-create-supplier-return',
+  selector: 'app-create-stock-hold',
   standalone: true,
   imports: [
     CommonModule,
@@ -18,24 +18,25 @@ import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/mod
     SelectDropdownComponent,
     ModalLayoutComponent
   ],
-  templateUrl: './create-supplier-return.component.html'
+  templateUrl: './create-stock-hold.component.html'
 })
-export class CreateSupplierReturnComponent implements OnInit {
+export class CreateStockHoldComponent implements OnInit {
   private fb = inject(FormBuilder);
-  private supplierReturnService = inject(SupplierReturnService);
+  private stockHoldService = inject(StockHoldService);
   private toastr = inject(ToastrService);
-  private dialogRef = inject(MatDialogRef<CreateSupplierReturnComponent>);
+  private dialogRef = inject(MatDialogRef<CreateStockHoldComponent>);
   data = inject(MAT_DIALOG_DATA);
 
   isSubmitting = false;
 
   logisticsOptions = [
+    { label: 'Physical Return', value: 'PhysicalReturn' },
     { label: 'Supplier Pickup', value: 'SupplierPickup' },
     { label: 'Courier / 3rd Party', value: 'Courier' },
     { label: 'No Physical Return (waived/disposed)', value: 'NoPhysicalReturn' }
   ];
 
-  returnForm: FormGroup = this.fb.group({
+  holdForm: FormGroup = this.fb.group({
     logisticsType: ['', [Validators.required]],
     trackingRef: [''],
     courierName: [''],
@@ -44,11 +45,11 @@ export class CreateSupplierReturnComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.returnForm.patchValue({ qty: this.data?.rejectedQty || 1 });
+    this.holdForm.patchValue({ qty: this.data?.rejectedQty || 1 });
 
-    this.returnForm.get('logisticsType')?.valueChanges.subscribe((value) => {
-      const trackingRef = this.returnForm.get('trackingRef');
-      const courierName = this.returnForm.get('courierName');
+    this.holdForm.get('logisticsType')?.valueChanges.subscribe((value) => {
+      const trackingRef = this.holdForm.get('trackingRef');
+      const courierName = this.holdForm.get('courierName');
       if (value === 'Courier') {
         trackingRef?.setValidators([Validators.required]);
         courierName?.setValidators([Validators.required]);
@@ -62,8 +63,8 @@ export class CreateSupplierReturnComponent implements OnInit {
   }
 
   onSubmit(): void {
-    if (this.returnForm.invalid) {
-      this.returnForm.markAllAsTouched();
+    if (this.holdForm.invalid) {
+      this.holdForm.markAllAsTouched();
       return;
     }
     if (!this.data?.grnId || this.data?.itemIndex === undefined) {
@@ -71,31 +72,31 @@ export class CreateSupplierReturnComponent implements OnInit {
       return;
     }
 
-    const qty = Number(this.returnForm.value.qty);
+    const qty = Number(this.holdForm.value.qty);
     if (qty > (this.data?.rejectedQty || 0)) {
       this.toastr.error(`Quantity cannot exceed the unresolved rejected qty (${this.data?.rejectedQty})`);
       return;
     }
 
     this.isSubmitting = true;
-    this.supplierReturnService.createSupplierReturn({
+    this.stockHoldService.createStockHold({
       grnId: this.data.grnId,
       itemIndex: this.data.itemIndex,
       qty,
-      logisticsType: this.returnForm.value.logisticsType,
-      trackingRef: this.returnForm.value.trackingRef || undefined,
-      courierName: this.returnForm.value.courierName || undefined,
-      dispatchDate: this.returnForm.value.dispatchDate || undefined
+      logisticsType: this.holdForm.value.logisticsType,
+      trackingRef: this.holdForm.value.trackingRef || undefined,
+      courierName: this.holdForm.value.courierName || undefined,
+      dispatchDate: this.holdForm.value.dispatchDate || undefined
     }).subscribe({
       next: (response) => {
         if (response.success) {
-          this.toastr.success('Supplier return initiated');
+          this.toastr.success('Stock hold initiated');
           this.dialogRef.close(true);
         }
         this.isSubmitting = false;
       },
       error: (error) => {
-        this.toastr.error(error.error?.message || 'Failed to initiate supplier return');
+        this.toastr.error(error.error?.message || 'Failed to initiate stock hold');
         this.isSubmitting = false;
       }
     });

@@ -1,0 +1,85 @@
+<div class="mb-4 flex items-center gap-2 border-b border-slate-200">
+  <button
+    type="button"
+    class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+    [class.border-violet-600]="activeTab() === 'pending'"
+    [class.text-violet-600]="activeTab() === 'pending'"
+    [class.border-transparent]="activeTab() !== 'pending'"
+    [class.text-slate-500]="activeTab() !== 'pending'"
+    (click)="setTab('pending')"
+  >
+    Pending Rejections
+  </button>
+  <button
+    type="button"
+    class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+    [class.border-violet-600]="activeTab() === 'holds'"
+    [class.text-violet-600]="activeTab() === 'holds'"
+    [class.border-transparent]="activeTab() !== 'holds'"
+    [class.text-slate-500]="activeTab() !== 'holds'"
+    (click)="setTab('holds')"
+  >
+    Stock Holds
+  </button>
+</div>
+
+<data-table
+  *ngIf="activeTab() === 'pending'"
+  [data]="pendingTableData()"
+  [columns]="pendingTableColumns"
+  [defaultColumns]="pendingDefaultColumns"
+  [isLoading]="pendingIsLoading()"
+  [isEmpty]="pendingIsEmpty()"
+  [totalItems]="pendingTotalItems()"
+  (actionClick)="onPendingActionClick($event)"
+  [title]="'Pending Rejections'"
+>
+  <ng-template #sideColumn>
+    <button
+      type="button"
+      [matMenuTriggerFor]="grnViewMenu"
+      class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
+    >
+      <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
+      Switch Table
+      <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
+    </button>
+    <mat-menu #grnViewMenu="matMenu">
+      <button mat-menu-item routerLink="/grn/grn-list">
+        <ng-icon name="heroInboxArrowDown" class="mr-2 text-slate-500"></ng-icon>
+        GRN List
+      </button>
+    </mat-menu>
+  </ng-template>
+</data-table>
+
+<data-table
+  *ngIf="activeTab() === 'holds'"
+  [data]="holdsTableData()"
+  [columns]="holdsTableColumns"
+  [defaultColumns]="holdsDefaultColumns"
+  [isLoading]="holdsIsLoading()"
+  [isEmpty]="holdsIsEmpty()"
+  [totalItems]="holdsTotalItems()"
+  (rowClick)="onRowClick($event)"
+  (actionClick)="onHoldsActionClick($event)"
+  [title]="'Stock Holds'"
+>
+  <ng-template #sideColumn>
+    <button
+      type="button"
+      [matMenuTriggerFor]="grnViewMenu2"
+      class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
+    >
+      <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
+      Switch Table
+      <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
+    </button>
+    <mat-menu #grnViewMenu2="matMenu">
+      <button mat-menu-item routerLink="/grn/grn-list">
+        <ng-icon name="heroInboxArrowDown" class="mr-2 text-slate-500"></ng-icon>
+        GRN List
+      </button>
+    </mat-menu>
+  </ng-template>
+</data-table>

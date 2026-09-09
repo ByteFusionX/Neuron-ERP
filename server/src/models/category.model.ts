@@ -96,10 +96,10 @@ export interface Privileges {
     viewReport: string;
     canApprove: boolean;
   };
-  supplierReturn: {
+  stockHold: {
     viewReport: string;
-    canInitiateReturn: boolean;
-    canIssueDebitNote: boolean;
+    canInitiateHold: boolean;
+    canIssueCreditNote: boolean;
     canCreateReplacementLPO: boolean;
   };
   portalManagement: {

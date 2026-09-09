@@ -43,7 +43,7 @@ interface PurchaseOrder extends Document {
     createdBy: any;
     currency?: string;
     originalPoId?: any;
-    supplierReturnId?: any;
+    stockHoldId?: any;
 }
 
 const purchaseOrderItemSchema = new Schema({
@@ -198,9 +198,9 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
             type: Schema.Types.ObjectId,
             ref: "PurchaseOrder",
         },
-        supplierReturnId: {
+        stockHoldId: {
             type: Schema.Types.ObjectId,
-            ref: "SupplierReturn",
+            ref: "StockHold",
         },
     },
     { timestamps: true }

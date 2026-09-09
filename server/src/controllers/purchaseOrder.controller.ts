@@ -33,7 +33,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       discount,
       poStatus,
       originalPoId,
-      supplierReturnId,
+      stockHoldId,
     } = req.body;
     const tokenData = req.user;
     const employee = await getEmployeeData(tokenData);
@@ -145,8 +145,8 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     if (originalPoId && mongoose.Types.ObjectId.isValid(originalPoId)) {
       purchaseOrderData.originalPoId = originalPoId;
     }
-    if (supplierReturnId && mongoose.Types.ObjectId.isValid(supplierReturnId)) {
-      purchaseOrderData.supplierReturnId = supplierReturnId;
+    if (stockHoldId && mongoose.Types.ObjectId.isValid(stockHoldId)) {
+      purchaseOrderData.stockHoldId = stockHoldId;
     }
 
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);

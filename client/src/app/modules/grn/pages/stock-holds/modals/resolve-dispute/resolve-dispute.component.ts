@@ -3,7 +3,7 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { SupplierReturnService } from 'src/app/core/services/supplier-return/supplier-return.service';
+import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
@@ -20,7 +20,7 @@ import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/mod
 })
 export class ResolveDisputeComponent {
   private fb = inject(FormBuilder);
-  private supplierReturnService = inject(SupplierReturnService);
+  private stockHoldService = inject(StockHoldService);
   private toastr = inject(ToastrService);
   private dialogRef = inject(MatDialogRef<ResolveDisputeComponent>);
   private data = inject(MAT_DIALOG_DATA);
@@ -32,8 +32,8 @@ export class ResolveDisputeComponent {
     disputeNote: ['', [Validators.required, Validators.minLength(3)]]
   });
 
-  get supplierReturn() {
-    return this.data?.supplierReturn;
+  get stockHold() {
+    return this.data?.stockHold;
   }
 
   onSubmit(): void {
@@ -45,10 +45,9 @@ export class ResolveDisputeComponent {
     }
 
     this.isSubmitting = true;
-    this.supplierReturnService.disputeSupplierReturn(this.supplierReturn._id, {
-      disputeStatus: 'DisputeResolved',
-      disputeNote: this.resolveForm.value.disputeNote
-    }).subscribe({
+    const payload = { disputeStatus: 'DisputeResolved' as const, disputeNote: this.resolveForm.value.disputeNote };
+
+    this.stockHoldService.disputeStockHold(this.stockHold._id, payload).subscribe({
       next: (response) => {
         if (response.success) {
           this.toastr.success('Dispute resolved');

@@ -53,7 +53,7 @@ import deliveryNoteRouter from './routes/deliveryNote.router';
 import invoiceRouter from './routes/invoice.router';
 import scanSessionRouter from './routes/scanSession.router';
 import bugReportRouter from './routes/bugReport.router';
-import supplierReturnRouter from './routes/supplierReturn.router';
+import stockHoldRouter from './routes/stockHold.router';
 
 const app = express();
 app.set('etag', false); // API responses are dynamic per request; conditional 304s were silently breaking notification/celebration polling
@@ -141,7 +141,7 @@ app.use('/delivery-note', deliveryNoteRouter);
 app.use('/invoice', invoiceRouter);
 app.use('/scan-session', scanSessionRouter);
 app.use('/bug-reports', bugReportRouter);
-app.use('/supplier-return', supplierReturnRouter);
+app.use('/stock-hold', stockHoldRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');

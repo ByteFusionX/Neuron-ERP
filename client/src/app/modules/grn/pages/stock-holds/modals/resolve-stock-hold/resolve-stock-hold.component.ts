@@ -3,14 +3,14 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { SupplierReturnService } from 'src/app/core/services/supplier-return/supplier-return.service';
+import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
-  selector: 'app-resolve-supplier-return',
+  selector: 'app-resolve-stock-hold',
   standalone: true,
   imports: [
     CommonModule,
@@ -19,19 +19,19 @@ import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/mod
     SelectDropdownComponent,
     ModalLayoutComponent
   ],
-  templateUrl: './resolve-supplier-return.component.html',
-  styleUrl: './resolve-supplier-return.component.css'
+  templateUrl: './resolve-stock-hold.component.html',
+  styleUrl: './resolve-stock-hold.component.css'
 })
-export class ResolveSupplierReturnComponent implements OnInit {
+export class ResolveStockHoldComponent implements OnInit {
   private fb = inject(FormBuilder);
-  private supplierReturnService = inject(SupplierReturnService);
+  private stockHoldService = inject(StockHoldService);
   private employeeService = inject(EmployeeService);
   private toastr = inject(ToastrService);
-  private dialogRef = inject(MatDialogRef<ResolveSupplierReturnComponent>);
+  private dialogRef = inject(MatDialogRef<ResolveStockHoldComponent>);
   private data = inject(MAT_DIALOG_DATA);
 
   isSubmitting = false;
-  canIssueDebitNote = false;
+  canIssueCreditNote = false;
 
   resolutionOptions = [
     { label: 'Replacement (same supplier)', value: 'Replacement' },
@@ -49,17 +49,17 @@ export class ResolveSupplierReturnComponent implements OnInit {
     note: ['']
   });
 
-  get supplierReturn() {
-    return this.data?.supplierReturn;
+  get stockHold() {
+    return this.data?.stockHold;
   }
 
   ngOnInit(): void {
-    this.resolveForm.patchValue({ qty: this.supplierReturn?.unresolvedQty || 1 });
+    this.resolveForm.patchValue({ qty: this.stockHold?.unresolvedQty || 1 });
 
     this.employeeService.employeeData$.subscribe((employee) => {
       const privileges = employee?.category?.privileges as any;
       const hasGrnView = privileges?.grn?.viewReport && privileges.grn.viewReport !== 'none';
-      this.canIssueDebitNote = privileges?.supplierReturn?.canIssueDebitNote || hasGrnView || false;
+      this.canIssueCreditNote = privileges?.stockHold?.canIssueCreditNote || hasGrnView || false;
     });
   }
 
@@ -80,19 +80,20 @@ export class ResolveSupplierReturnComponent implements OnInit {
     }
 
     const qty = Number(this.resolveForm.value.qty);
-    if (qty > (this.supplierReturn?.unresolvedQty || 0)) {
-      this.toastr.error(`Quantity cannot exceed the unresolved qty (${this.supplierReturn?.unresolvedQty})`);
+    if (qty > (this.stockHold?.unresolvedQty || 0)) {
+      this.toastr.error(`Quantity cannot exceed the unresolved qty (${this.stockHold?.unresolvedQty})`);
       return;
     }
 
     const invoiced = !!this.resolveForm.value.invoiced;
     if (invoiced && !this.resolveForm.value.poId) {
-      this.toastr.error('A Purchase Order ID is required to issue a debit note against an invoiced PO');
+      this.toastr.error('A Purchase Order ID is required to issue a credit note against an invoiced PO');
       return;
     }
 
     this.isSubmitting = true;
-    this.supplierReturnService.resolveSupplierReturn(this.supplierReturn._id, {
+
+    this.stockHoldService.resolveStockHold(this.stockHold._id, {
       qty,
       resolutionType: this.resolveForm.value.resolutionType,
       replacementPoId: this.resolveForm.value.replacementPoId || undefined,
@@ -102,13 +103,13 @@ export class ResolveSupplierReturnComponent implements OnInit {
     }).subscribe({
       next: (response) => {
         if (response.success) {
-          this.toastr.success('Supplier return resolved');
+          this.toastr.success('Stock hold resolved');
           this.dialogRef.close(true);
         }
         this.isSubmitting = false;
       },
       error: (error) => {
-        this.toastr.error(error.error?.message || 'Failed to resolve supplier return');
+        this.toastr.error(error.error?.message || 'Failed to resolve');
         this.isSubmitting = false;
       }
     });

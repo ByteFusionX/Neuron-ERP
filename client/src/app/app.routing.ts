@@ -42,8 +42,7 @@ import { ViewLpoComponent } from './modules/purchase-order/pages/view-lpo/view-l
 import { CreateGrnComponent } from './modules/grn/pages/create-grn/create-grn.component';
 import { ViewGrnComponent } from './modules/grn/pages/view-grn/view-grn.component';
 import { GrnListComponent } from './modules/grn/pages/grn-list/grn-list.component';
-import { GrnRejectionsComponent } from './modules/grn/pages/grn-rejections/grn-rejections.component';
-import { SupplierReturnsComponent } from './modules/grn/pages/supplier-returns/supplier-returns.component';
+import { GrnStockHoldsComponent } from './modules/grn/pages/stock-holds/stock-holds.component';
 import { MrApprovalRequestsComponent } from './modules/technical/mr-approval-requests/mr-approval-requests.component';
 import { ViewMaterialRequestComponent } from './modules/technical/view-material-request/view-material-request.component';
 import { ProjectsComponent } from './modules/technical/projects/projects.component';
@@ -59,7 +58,8 @@ import { ClaimsComponent } from './modules/claims/claims.component';
 import { BillingSummaryComponent } from './modules/technical/projects/add-project/billing-summary/billing-summary.component';
 import { RequestForApprovalsComponent } from './modules/claims/request-for-approvals/request-for-approvals.component';
 import { AllProductsComponent } from './modules/products/all-products.component';
-import { StocksComponent } from './modules/stocks/stocks.component';
+import { StockEntriesComponent } from './modules/stocks/pages/stock-entries/stock-entries.component';
+import { StockHoldsComponent } from './modules/stocks/pages/stock-holds/stock-holds.component';
 import { CreateStockComponent } from './modules/stocks/modals/create-stock/create-stock.component';
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
 import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
@@ -256,8 +256,7 @@ export const routes: Routes = [
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
       { path: 'view-grn/:id', component: ViewGrnComponent },
       { path: 'grn-list', component: GrnListComponent },
-      { path: 'rejections', component: GrnRejectionsComponent },
-      { path: 'supplier-returns', component: SupplierReturnsComponent }
+      { path: 'stock-holds', component: GrnStockHoldsComponent }
     ]
   },
   {
@@ -301,9 +300,17 @@ export const routes: Routes = [
   },
   {
     path: 'stocks',
+    pathMatch: 'full',
+    redirectTo: 'stock/stock-entries'
+  },
+  {
+    path: 'stock',
     canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/stocks/stocks.component').then((c) => c.StocksComponent),
     children: [
-      { path: '', component: StocksComponent },
+      { path: '', pathMatch: 'full', redirectTo: 'stock-entries' },
+      { path: 'stock-entries', component: StockEntriesComponent },
+      { path: 'stock-holds', component: StockHoldsComponent },
       { path: 'create', component: CreateStockComponent }
     ]
   },

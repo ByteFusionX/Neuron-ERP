@@ -180,7 +180,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                         router.navigate(['/home']);
                         return false;
                     }
-                } else if (url.startsWith('/stocks')) {
+                } else if (url.startsWith('/stock')) {
                     if (privileges?.inventory?.stockEntries?.viewReport == 'none') {
                         router.navigate(['/home']);
                         return false;

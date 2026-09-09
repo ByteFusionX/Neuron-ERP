@@ -1,27 +1,27 @@
 <app-modal-layout
-  title="Resolve Rejected Item — Initiate Supplier Return"
+  title="Resolve Rejected Item — Initiate Stock Hold"
   [onClose]="onCancel.bind(this)"
   [footerButtons]="[
     { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
-    { label: 'Initiate Return', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+    { label: 'Initiate Hold', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
   ]"
   contentClass="p-6">
-  <form [formGroup]="returnForm" (ngSubmit)="onSubmit()">
+  <form [formGroup]="holdForm" (ngSubmit)="onSubmit()">
     <div class="space-y-4">
       <p class="text-sm text-gray-500">
         {{ data?.itemDescription }} — rejected qty available to resolve: {{ data?.rejectedQty }}
       </p>
 
       <app-form-field
-        label="Quantity to return"
-        [control]="returnForm.get('qty')"
+        label="Quantity to hold"
+        [control]="holdForm.get('qty')"
         [isSubmitted]="isSubmitting"
         type="number"
         placeholder="Enter quantity">
       </app-form-field>
 
       <app-select-dropdown
-        label="Return Supplier"
+        label="Return Logistics"
         [options]="logisticsOptions"
         optionLabel="label"
         optionValue="value"
@@ -30,17 +30,17 @@
         [isSubmitted]="isSubmitting">
       </app-select-dropdown>
 
-      <div class="grid grid-cols-2 gap-4" *ngIf="returnForm.get('logisticsType')?.value === 'Courier'">
+      <div class="grid grid-cols-2 gap-4" *ngIf="holdForm.get('logisticsType')?.value === 'Courier'">
         <app-form-field
           label="Courier Name"
-          [control]="returnForm.get('courierName')"
+          [control]="holdForm.get('courierName')"
           [isSubmitted]="isSubmitting"
           placeholder="Courier / 3rd party name">
         </app-form-field>
 
         <app-form-field
           label="Tracking Reference"
-          [control]="returnForm.get('trackingRef')"
+          [control]="holdForm.get('trackingRef')"
           [isSubmitted]="isSubmitting"
           placeholder="Tracking number">
         </app-form-field>
@@ -48,7 +48,7 @@
 
       <app-form-field
         label="Dispatch Date"
-        [control]="returnForm.get('dispatchDate')"
+        [control]="holdForm.get('dispatchDate')"
         [isSubmitted]="isSubmitting"
         type="date"
         placeholder="Select dispatch date">

@@ -5,30 +5,28 @@ import GRN from "../models/grn.model";
 import Product from "../models/products.model";
 import StockEntry from "../models/stockEntry.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
-import { SupplierReturn } from "../models/supplierReturn.model";
-import { DebitNote } from "../models/debitNote.model";
+import { StockHold } from "../models/stockHold.model";
+import { CreditNote } from "../models/creditNote.model";
 import { getNextSequence } from "../models/counter.model";
 import { getEmployeeData } from "../common/utils/util";
 import { createNotificationWithPrivileges } from "./notification.controller";
 
-// supplierReturn privileges aren't yet assignable in category management, so
-// fall back to full supplierReturn access for anyone with GRN view access.
-const hasSupplierReturnPrivilege = (employee: any, action: 'canInitiateReturn' | 'canIssueDebitNote' | 'canCreateReplacementLPO'): boolean => {
+const hasStockHoldPrivilege = (employee: any, action: 'canInitiateHold' | 'canIssueCreditNote' | 'canCreateReplacementLPO'): boolean => {
   const privileges = employee.category?.privileges;
-  if (privileges?.supplierReturn?.[action]) {
+  if (privileges?.stockHold?.[action]) {
     return true;
   }
   const grnPrivilege = privileges?.grn;
   return !!(grnPrivilege?.viewReport && grnPrivilege.viewReport !== 'none');
 };
 
-const seedSupplierReturnSequence = (prefix: string) => async (): Promise<number> => {
-  const lastEntry = await SupplierReturn.findOne({
-    supplierReturnNo: new RegExp(`^${prefix}`)
+const seedHoldSequence = (prefix: string) => async (): Promise<number> => {
+  const lastEntry = await StockHold.findOne({
+    holdNo: new RegExp(`^${prefix}`)
   }).sort({ createdAt: -1 });
 
-  if (lastEntry && (lastEntry as any).supplierReturnNo) {
-    const parts = (lastEntry as any).supplierReturnNo.split('-');
+  if (lastEntry && (lastEntry as any).holdNo) {
+    const parts = (lastEntry as any).holdNo.split('-');
     if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
       return parseInt(parts[2]);
     }
@@ -36,13 +34,13 @@ const seedSupplierReturnSequence = (prefix: string) => async (): Promise<number>
   return 0;
 };
 
-const seedDebitNoteSequence = (prefix: string) => async (): Promise<number> => {
-  const lastEntry = await DebitNote.findOne({
-    debitNoteNo: new RegExp(`^${prefix}`)
+const seedCreditNoteSequence = (prefix: string) => async (): Promise<number> => {
+  const lastEntry = await CreditNote.findOne({
+    creditNoteNo: new RegExp(`^${prefix}`)
   }).sort({ createdAt: -1 });
 
-  if (lastEntry && (lastEntry as any).debitNoteNo) {
-    const parts = (lastEntry as any).debitNoteNo.split('-');
+  if (lastEntry && (lastEntry as any).creditNoteNo) {
+    const parts = (lastEntry as any).creditNoteNo.split('-');
     if (parts.length >= 3 && !isNaN(parseInt(parts[2]))) {
       return parseInt(parts[2]);
     }
@@ -50,12 +48,6 @@ const seedDebitNoteSequence = (prefix: string) => async (): Promise<number> => {
   return 0;
 };
 
-/**
- * Creates a quarantined StockEntry representing rejected-and-awaiting-return
- * GRN stock. Unlike the DN-rejection quarantine restore, there is no prior
- * StockEntry to draw from — rejected GRN qty never entered stock (see grn.controller
- * createGRN, which only stocks acceptedQty) — so this is a fresh quarantine record.
- */
 const resolveUnitCost = (po: any, product: any, grnItem: any): number => {
   const matchingLpoItem = (po?.items || []).find((lpoItem: any) => {
     const lpoPartNoId = typeof lpoItem.partNo === 'object' ? lpoItem.partNo?._id : lpoItem.partNo;
@@ -65,6 +57,11 @@ const resolveUnitCost = (po: any, product: any, grnItem: any): number => {
   return Number(matchingLpoItem?.unitCost) || 0;
 };
 
+/**
+ * Creates a quarantined StockEntry representing rejected-and-awaiting-return
+ * GRN stock. Rejected GRN qty never entered stock (see grn.controller createGRN,
+ * which only stocks acceptedQty), so this is a fresh quarantine record.
+ */
 const createQuarantineStockEntry = async (grn: any, grnItem: any, qty: number, userId: string) => {
   let product: any = null;
   if (grnItem.partNo) {
@@ -108,7 +105,7 @@ const createQuarantineStockEntry = async (grn: any, grnItem: any, qty: number, u
   return stockEntry;
 };
 
-export const createSupplierReturn = async (req: Request, res: Response) => {
+export const createStockHold = async (req: Request, res: Response) => {
   try {
     const { grnId, itemIndex, qty, logisticsType, trackingRef, courierName, dispatchDate } = req.body;
 
@@ -118,7 +115,7 @@ export const createSupplierReturn = async (req: Request, res: Response) => {
     if (typeof itemIndex !== 'number') {
       return res.status(400).json({ success: false, message: 'itemIndex is required' });
     }
-    if (!['SupplierPickup', 'Courier', 'NoPhysicalReturn'].includes(logisticsType)) {
+    if (!['PhysicalReturn', 'SupplierPickup', 'Courier', 'NoPhysicalReturn'].includes(logisticsType)) {
       return res.status(400).json({ success: false, message: 'Invalid logisticsType' });
     }
 
@@ -126,8 +123,8 @@ export const createSupplierReturn = async (req: Request, res: Response) => {
     if (!employee) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
-    if (!hasSupplierReturnPrivilege(employee, 'canInitiateReturn')) {
-      return res.status(403).json({ success: false, message: 'You do not have permission to initiate a supplier return' });
+    if (!hasStockHoldPrivilege(employee, 'canInitiateHold')) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to initiate a stock hold' });
     }
 
     const grn = await GRN.findById(grnId).populate({ path: 'purchaseOrderId', populate: [{ path: 'supplierId' }] });
@@ -144,8 +141,8 @@ export const createSupplierReturn = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'This GRN item has no rejected quantity' });
     }
 
-    const existingReturns = await SupplierReturn.find({ grnId, itemId: String(itemIndex), isDeleted: { $ne: true } });
-    const alreadyInitiated = existingReturns.reduce((sum, r: any) => sum + (r.rejectedQty || 0), 0);
+    const existingHolds = await StockHold.find({ grnId, itemId: String(itemIndex), isDeleted: { $ne: true } });
+    const alreadyInitiated = existingHolds.reduce((sum, h: any) => sum + (h.rejectedQty || 0), 0);
     const requestedQty = qty ? Number(qty) : rejectedQty - alreadyInitiated;
 
     if (requestedQty <= 0 || alreadyInitiated + requestedQty > rejectedQty) {
@@ -175,15 +172,15 @@ export const createSupplierReturn = async (req: Request, res: Response) => {
     }
 
     const currentYear = new Date().getFullYear();
-    const prefix = `SR-${currentYear}`;
-    const sequence = await getNextSequence(`supplierReturnNo-${currentYear}`, seedSupplierReturnSequence(prefix));
-    const supplierReturnNo = `${prefix}-${sequence.toString().padStart(4, '0')}`;
+    const prefix = `SH-${currentYear}`;
+    const sequence = await getNextSequence(`stockHoldNo-${currentYear}`, seedHoldSequence(prefix));
+    const holdNo = `${prefix}-${sequence.toString().padStart(4, '0')}`;
 
-    let quarantineStockEntryId: any = undefined;
+    let stockEntryId: any = undefined;
     let unitCost = 0;
     if (logisticsType !== 'NoPhysicalReturn') {
       const stockEntry = await createQuarantineStockEntry(grn, grnItem, requestedQty, employee._id);
-      quarantineStockEntryId = stockEntry._id;
+      stockEntryId = stockEntry._id;
       unitCost = stockEntry.unitCost || 0;
     } else {
       let product: any = null;
@@ -196,21 +193,23 @@ export const createSupplierReturn = async (req: Request, res: Response) => {
       unitCost = resolveUnitCost(po, product, grnItem);
     }
 
-    const supplierReturn = await SupplierReturn.create({
-      supplierReturnNo,
+    const partNo = typeof grnItem.partNo === 'string' ? grnItem.partNo : undefined;
+
+    const stockHold = await StockHold.create({
+      holdNo,
+      stockEntryId,
       grnId,
       itemId: String(itemIndex),
-      partNo: typeof grnItem.partNo === 'string' ? grnItem.partNo : undefined,
+      partNo,
       itemDescription: grnItem.itemDescription,
-      rejectedQty: requestedQty,
-      unresolvedQty: requestedQty,
-      unitCost,
       supplierId,
       logisticsType,
       trackingRef: logisticsType === 'Courier' ? trackingRef : undefined,
       courierName: logisticsType === 'Courier' ? courierName : undefined,
       dispatchDate: dispatchDate ? new Date(dispatchDate) : undefined,
-      quarantineStockEntryId,
+      rejectedQty: requestedQty,
+      unresolvedQty: requestedQty,
+      unitCost,
       status: logisticsType === 'NoPhysicalReturn' ? 'AwaitingReplacement' : 'AwaitingReturn',
       initiatedBy: employee._id
     });
@@ -218,37 +217,38 @@ export const createSupplierReturn = async (req: Request, res: Response) => {
     const socket = req.app.get('io') as Server;
     await createNotificationWithPrivileges(
       {
-        type: 'SupplierReturnInitiated',
-        referenceModel: 'SupplierReturn',
-        title: 'Supplier return initiated',
-        message: `Supplier return ${supplierReturnNo} initiated for GRN ${grn.grnNo}`,
+        type: 'StockHoldInitiated',
+        referenceModel: 'StockHold',
+        title: 'Stock hold initiated',
+        message: `Stock hold ${holdNo} initiated for GRN ${grn.grnNo}`,
         sentBy: employee._id?.toString(),
-        referenceId: supplierReturn._id,
-        additionalData: { supplierReturnId: supplierReturn._id.toString() }
+        referenceId: stockHold._id,
+        additionalData: { stockHoldId: stockHold._id.toString() }
       },
       {
-        privilegeKey: 'supplierReturn',
-        checkFunction: (p: any) => p.supplierReturn?.viewReport && p.supplierReturn.viewReport !== 'none'
+        privilegeKey: 'stockHold',
+        checkFunction: (p: any) => p.stockHold?.viewReport && p.stockHold.viewReport !== 'none'
       },
       socket
     );
 
-    res.status(201).json({ success: true, data: supplierReturn });
+    res.status(201).json({ success: true, data: stockHold });
   } catch (error: any) {
-    console.error('Error creating supplier return:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to create supplier return' });
+    console.error('Error creating stock hold:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to create stock hold' });
   }
 };
 
-export const getSupplierReturns = async (req: Request, res: Response) => {
+export const getStockHolds = async (req: Request, res: Response) => {
   try {
-    const { grnId, supplierId, status } = req.query;
+    const { stockEntryId, grnId, supplierId, status } = req.query;
     const filter: any = { isDeleted: { $ne: true } };
+    if (stockEntryId && mongoose.Types.ObjectId.isValid(stockEntryId as string)) filter.stockEntryId = stockEntryId;
     if (grnId && mongoose.Types.ObjectId.isValid(grnId as string)) filter.grnId = grnId;
     if (supplierId && mongoose.Types.ObjectId.isValid(supplierId as string)) filter.supplierId = supplierId;
     if (status) filter.status = status;
 
-    const returns = await SupplierReturn.find(filter)
+    const holds = await StockHold.find(filter)
       .populate('supplierId')
       .populate('grnId')
       .populate('replacementPoId')
@@ -257,44 +257,44 @@ export const getSupplierReturns = async (req: Request, res: Response) => {
       .populate('disputeResolvedBy')
       .sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, data: returns });
+    res.status(200).json({ success: true, data: holds });
   } catch (error: any) {
-    console.error('Error fetching supplier returns:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch supplier returns' });
+    console.error('Error fetching stock holds:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch stock holds' });
   }
 };
 
-export const getSupplierReturnById = async (req: Request, res: Response) => {
+export const getStockHoldById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid ID' });
     }
-    const supplierReturn = await SupplierReturn.findById(id)
+    const hold = await StockHold.findById(id)
       .populate('supplierId')
       .populate('grnId')
       .populate('replacementPoId')
       .populate('initiatedBy')
       .populate('disputedBy')
       .populate('disputeResolvedBy');
-    if (!supplierReturn || (supplierReturn as any).isDeleted) {
-      return res.status(404).json({ success: false, message: 'Supplier return not found' });
+    if (!hold || (hold as any).isDeleted) {
+      return res.status(404).json({ success: false, message: 'Stock hold not found' });
     }
-    res.status(200).json({ success: true, data: supplierReturn });
+    res.status(200).json({ success: true, data: hold });
   } catch (error: any) {
-    console.error('Error fetching supplier return:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch supplier return' });
+    console.error('Error fetching stock hold:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch stock hold' });
   }
 };
 
 /**
- * Applies one resolution pass to a SupplierReturn (may be partial — see S6).
+ * Applies one resolution pass to a StockHold (may be partial).
  * resolutionType: Replacement | AlternateSupplierSourcing | CreditOnly | Disposed
  */
-export const resolveSupplierReturn = async (req: Request, res: Response) => {
+export const resolveStockHold = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { qty, resolutionType, replacementPoId, note, financialType, poId, invoiced } = req.body;
+    const { qty, resolutionType, replacementPoId, note, poId, invoiced } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid ID' });
@@ -307,23 +307,23 @@ export const resolveSupplierReturn = async (req: Request, res: Response) => {
     if (!employee) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
-    if (!hasSupplierReturnPrivilege(employee, 'canInitiateReturn')) {
-      return res.status(403).json({ success: false, message: 'You do not have permission to resolve a supplier return' });
+    if (!hasStockHoldPrivilege(employee, 'canInitiateHold')) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to resolve a stock hold' });
     }
 
-    const supplierReturn: any = await SupplierReturn.findById(id);
-    if (!supplierReturn || supplierReturn.isDeleted) {
-      return res.status(404).json({ success: false, message: 'Supplier return not found' });
+    const hold: any = await StockHold.findById(id);
+    if (!hold || hold.isDeleted) {
+      return res.status(404).json({ success: false, message: 'Stock hold not found' });
     }
-    if (supplierReturn.disputeStatus === 'SupplierDisputed') {
-      return res.status(400).json({ success: false, message: 'Cannot resolve a return while the supplier dispute is unresolved' });
+    if (hold.disputeStatus === 'SupplierDisputed') {
+      return res.status(400).json({ success: false, message: 'Cannot resolve a hold while the supplier dispute is unresolved' });
     }
 
-    const resolveQty = qty ? Number(qty) : supplierReturn.unresolvedQty;
-    if (resolveQty <= 0 || resolveQty > supplierReturn.unresolvedQty) {
+    const resolveQty = qty ? Number(qty) : hold.unresolvedQty;
+    if (resolveQty <= 0 || resolveQty > hold.unresolvedQty) {
       return res.status(400).json({
         success: false,
-        message: `resolveQty must be between 1 and ${supplierReturn.unresolvedQty} (remaining unresolved qty)`
+        message: `resolveQty must be between 1 and ${hold.unresolvedQty} (remaining unresolved qty)`
       });
     }
 
@@ -335,113 +335,101 @@ export const resolveSupplierReturn = async (req: Request, res: Response) => {
       if (!po) {
         return res.status(404).json({ success: false, message: 'Replacement Purchase Order not found' });
       }
-      supplierReturn.replacementPoId = replacementPoId;
+      hold.replacementPoId = replacementPoId;
     }
 
     // CreditOnly / Disposed settle the financial side immediately; Replacement / AlternateSupplierSourcing
     // may also carry a financial component if the resolveQty isn't fully covered by physical replacement.
     if (resolutionType === 'CreditOnly' || resolutionType === 'Disposed') {
-      const unitPrice = supplierReturn.unitCost || 0;
+      const unitPrice = hold.unitCost || 0;
       const amount = unitPrice * resolveQty;
 
       if (invoiced && poId) {
         if (!mongoose.Types.ObjectId.isValid(poId)) {
-          return res.status(400).json({ success: false, message: 'Valid poId is required to issue a DebitNote' });
+          return res.status(400).json({ success: false, message: 'Valid poId is required to issue a CreditNote' });
         }
-        if (!hasSupplierReturnPrivilege(employee, 'canIssueDebitNote')) {
-          return res.status(403).json({ success: false, message: 'You do not have permission to issue a debit note' });
+        if (!hasStockHoldPrivilege(employee, 'canIssueCreditNote')) {
+          return res.status(403).json({ success: false, message: 'You do not have permission to issue a credit note' });
         }
         const currentYear = new Date().getFullYear();
-        const prefix = `DN-SR-${currentYear}`;
-        const sequence = await getNextSequence(`debitNoteNo-${currentYear}`, seedDebitNoteSequence(prefix));
-        const debitNoteNo = `${prefix}-${sequence.toString().padStart(4, '0')}`;
+        const prefix = `CN-SH-${currentYear}`;
+        const sequence = await getNextSequence(`creditNoteNo-${currentYear}`, seedCreditNoteSequence(prefix));
+        const creditNoteNo = `${prefix}-${sequence.toString().padStart(4, '0')}`;
 
-        const debitNote = await DebitNote.create({
-          debitNoteNo,
+        const creditNote = await CreditNote.create({
+          creditNoteNo,
           poId,
-          grnId: supplierReturn.grnId,
-          supplierId: supplierReturn.supplierId,
-          supplierReturnId: supplierReturn._id,
+          grnId: hold.grnId,
+          supplierId: hold.supplierId,
           items: [{
-            itemId: supplierReturn.itemId,
-            description: supplierReturn.itemDescription,
+            itemId: hold.itemId,
+            description: hold.itemDescription,
             rejectedQty: resolveQty,
             unitPrice,
             amount
           }],
           totalAmount: amount,
-          reason: note || `Supplier return ${supplierReturn.supplierReturnNo} — ${resolutionType}`,
+          reason: note || `Stock hold ${hold.holdNo} — ${resolutionType}`,
           createdBy: employee._id
         });
 
-        supplierReturn.financialResolution = {
-          type: 'DebitNote',
-          debitNoteId: debitNote._id,
+        hold.financialResolution = {
+          type: 'CreditNote',
+          creditNoteId: creditNote._id,
           adjustedAmount: amount,
           date: new Date()
         };
       } else {
         // Pre-invoice: reduce amount owed for reporting purposes without mutating the PO itself —
-        // the SupplierReturn record is the audit trail (mirrors CreditNote's non-mutation principle).
-        supplierReturn.financialResolution = {
+        // the StockHold record is the audit trail (mirrors CreditNote's non-mutation principle).
+        hold.financialResolution = {
           type: 'PreInvoiceAdjustment',
           adjustedAmount: amount,
           date: new Date()
         };
       }
+    }
 
-      if (supplierReturn.quarantineStockEntryId) {
-        const stockEntry = await StockEntry.findById(supplierReturn.quarantineStockEntryId);
-        if (stockEntry) {
-          stockEntry.quantity = Math.max(0, (stockEntry.quantity || 0) - resolveQty);
-          (stockEntry as any).quarantineReleasedAt = new Date();
-          (stockEntry as any).quarantineReleasedBy = employee._id;
-          await stockEntry.save();
-        }
+    if (['Replacement', 'AlternateSupplierSourcing', 'CreditOnly', 'Disposed'].includes(resolutionType) && hold.stockEntryId) {
+      // Physical resolution: replacement goods will be received against a new/linked GRN separately,
+      // or rejected stock leaves the warehouse (returned to supplier/disposed). Either way, the
+      // quarantined qty is consumed here rather than restored to sellable stock. Only "add back to
+      // stock entries" (a manual release) restores sellable stock — a separate action.
+      const stockEntry = await StockEntry.findById(hold.stockEntryId);
+      if (stockEntry) {
+        stockEntry.quantity = Math.max(0, (stockEntry.quantity || 0) - resolveQty);
+        (stockEntry as any).quarantineReleasedAt = new Date();
+        (stockEntry as any).quarantineReleasedBy = employee._id;
+        await stockEntry.save();
       }
     }
 
-    if (resolutionType === 'Replacement' || resolutionType === 'AlternateSupplierSourcing') {
-      // Physical resolution: replacement goods will be received against a new/linked GRN separately.
-      // The quarantined qty represents rejected stock leaving the warehouse (returned to supplier),
-      // so it's consumed here rather than restored to sellable stock.
-      if (supplierReturn.quarantineStockEntryId) {
-        const stockEntry = await StockEntry.findById(supplierReturn.quarantineStockEntryId);
-        if (stockEntry) {
-          stockEntry.quantity = Math.max(0, (stockEntry.quantity || 0) - resolveQty);
-          (stockEntry as any).quarantineReleasedAt = new Date();
-          (stockEntry as any).quarantineReleasedBy = employee._id;
-          await stockEntry.save();
-        }
-      }
-    }
-
-    supplierReturn.resolutionType = resolutionType;
-    supplierReturn.resolvedQty = (supplierReturn.resolvedQty || 0) + resolveQty;
-    supplierReturn.unresolvedQty = Math.max(0, supplierReturn.unresolvedQty - resolveQty);
-    supplierReturn.resolutionHistory.push({
+    hold.resolutionType = resolutionType;
+    hold.resolvedQty = (hold.resolvedQty || 0) + resolveQty;
+    hold.unresolvedQty = Math.max(0, hold.unresolvedQty - resolveQty);
+    hold.resolutionHistory.push({
       qty: resolveQty,
       resolutionType,
       actionBy: employee._id,
       date: new Date(),
       note
     });
-    supplierReturn.status = resolutionType === 'Disposed' && supplierReturn.unresolvedQty === 0
+    hold.status = resolutionType === 'Disposed' && hold.unresolvedQty === 0
       ? 'Disposed'
-      : supplierReturn.unresolvedQty === 0
+      : hold.unresolvedQty === 0
         ? 'Resolved'
         : 'PartiallyResolved';
 
-    await supplierReturn.save();
+    await hold.save();
 
-    res.status(200).json({ success: true, data: supplierReturn });
+    res.status(200).json({ success: true, data: hold });
   } catch (error: any) {
-    console.error('Error resolving supplier return:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to resolve supplier return' });
+    console.error('Error resolving stock hold:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to resolve stock hold' });
   }
 };
 
-export const disputeSupplierReturn = async (req: Request, res: Response) => {
+export const disputeStockHold = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { disputeStatus, disputeNote } = req.body;
@@ -457,30 +445,30 @@ export const disputeSupplierReturn = async (req: Request, res: Response) => {
     if (!employee) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
-    if (!hasSupplierReturnPrivilege(employee, 'canInitiateReturn')) {
-      return res.status(403).json({ success: false, message: 'You do not have permission to update this supplier return' });
+    if (!hasStockHoldPrivilege(employee, 'canInitiateHold')) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to update this stock hold' });
     }
 
-    const supplierReturn: any = await SupplierReturn.findById(id);
-    if (!supplierReturn || supplierReturn.isDeleted) {
-      return res.status(404).json({ success: false, message: 'Supplier return not found' });
+    const hold: any = await StockHold.findById(id);
+    if (!hold || hold.isDeleted) {
+      return res.status(404).json({ success: false, message: 'Stock hold not found' });
     }
 
-    supplierReturn.disputeStatus = disputeStatus;
+    hold.disputeStatus = disputeStatus;
     if (disputeStatus === 'SupplierDisputed') {
-      supplierReturn.disputeNote = disputeNote;
-      supplierReturn.disputedBy = employee._id;
-      supplierReturn.disputedAt = new Date();
+      hold.disputeNote = disputeNote;
+      hold.disputedBy = employee._id;
+      hold.disputedAt = new Date();
     } else if (disputeStatus === 'DisputeResolved') {
-      supplierReturn.disputeResolutionNote = disputeNote;
-      supplierReturn.disputeResolvedBy = employee._id;
-      supplierReturn.disputeResolvedAt = new Date();
+      hold.disputeResolutionNote = disputeNote;
+      hold.disputeResolvedBy = employee._id;
+      hold.disputeResolvedAt = new Date();
     }
-    await supplierReturn.save();
+    await hold.save();
 
-    res.status(200).json({ success: true, data: supplierReturn });
+    res.status(200).json({ success: true, data: hold });
   } catch (error: any) {
-    console.error('Error updating supplier return dispute status:', error);
+    console.error('Error updating stock hold dispute status:', error);
     res.status(500).json({ success: false, message: 'Failed to update dispute status' });
   }
 };

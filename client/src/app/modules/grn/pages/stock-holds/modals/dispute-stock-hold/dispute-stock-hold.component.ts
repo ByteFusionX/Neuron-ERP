@@ -3,12 +3,12 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { SupplierReturnService } from 'src/app/core/services/supplier-return/supplier-return.service';
+import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
 import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
-  selector: 'app-dispute-supplier-return',
+  selector: 'app-dispute-stock-hold',
   standalone: true,
   imports: [
     CommonModule,
@@ -16,13 +16,13 @@ import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/mod
     FormFieldComponent,
     ModalLayoutComponent
   ],
-  templateUrl: './dispute-supplier-return.component.html'
+  templateUrl: './dispute-stock-hold.component.html'
 })
-export class DisputeSupplierReturnComponent {
+export class DisputeStockHoldComponent {
   private fb = inject(FormBuilder);
-  private supplierReturnService = inject(SupplierReturnService);
+  private stockHoldService = inject(StockHoldService);
   private toastr = inject(ToastrService);
-  private dialogRef = inject(MatDialogRef<DisputeSupplierReturnComponent>);
+  private dialogRef = inject(MatDialogRef<DisputeStockHoldComponent>);
   private data = inject(MAT_DIALOG_DATA);
 
   isSubmitting = false;
@@ -32,8 +32,8 @@ export class DisputeSupplierReturnComponent {
     disputeNote: ['', [Validators.required, Validators.minLength(3)]]
   });
 
-  get supplierReturn() {
-    return this.data?.supplierReturn;
+  get stockHold() {
+    return this.data?.stockHold;
   }
 
   onSubmit(): void {
@@ -45,19 +45,18 @@ export class DisputeSupplierReturnComponent {
     }
 
     this.isSubmitting = true;
-    this.supplierReturnService.disputeSupplierReturn(this.supplierReturn._id, {
-      disputeStatus: 'SupplierDisputed',
-      disputeNote: this.disputeForm.value.disputeNote
-    }).subscribe({
+    const payload = { disputeStatus: 'SupplierDisputed' as const, disputeNote: this.disputeForm.value.disputeNote };
+
+    this.stockHoldService.disputeStockHold(this.stockHold._id, payload).subscribe({
       next: (response) => {
         if (response.success) {
-          this.toastr.success('Supplier return marked as disputed');
+          this.toastr.success('Stock hold marked as disputed');
           this.dialogRef.close(true);
         }
         this.isSubmitting = false;
       },
       error: (error) => {
-        this.toastr.error(error.error?.message || 'Failed to mark supplier return as disputed');
+        this.toastr.error(error.error?.message || 'Failed to mark as disputed');
         this.isSubmitting = false;
       }
     });

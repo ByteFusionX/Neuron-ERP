@@ -54,13 +54,14 @@ const notificationSchema = new Schema<Notification>({
             'GrnItemsRejected',
             'DnItemsRejected',
             'InvoiceRejected',
-            'SupplierReturnInitiated'
+            'SupplierReturnInitiated',
+            'StockHoldInitiated'
         ],
     },
     referenceModel: {
         type: String,
         required: true,
-        enum: ['Event', 'Announcement', 'Enquiry', 'Quotation', 'Job', 'Purchase', 'Technical', 'PurchaseOrder', 'Supplier', 'Claim', 'BugReport', 'GRN', 'DeliveryNote', 'Invoice', 'SupplierReturn'],
+        enum: ['Event', 'Announcement', 'Enquiry', 'Quotation', 'Job', 'Purchase', 'Technical', 'PurchaseOrder', 'Supplier', 'Claim', 'BugReport', 'GRN', 'DeliveryNote', 'Invoice', 'SupplierReturn', 'StockHold'],
     },
     title: {
         type: String,

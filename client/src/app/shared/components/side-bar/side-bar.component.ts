@@ -376,10 +376,22 @@ export class SideBarComponent
           id: 'stockEntries',
           label: 'Stocks',
           icon: 'heroCube',
-          route: '/stocks',
+          hasDropdown: true,
           privilegeKey: 'inventory',
           privilegeValue: 'none',
           inventorySubKey: 'stockEntries',
+          children: [
+            {
+              id: 'stockEntriesList',
+              label: 'Stock Entries',
+              route: '/stock/stock-entries',
+            },
+            {
+              id: 'stockOnHold',
+              label: 'Stock Holds',
+              route: '/stock/stock-holds',
+            },
+          ],
         },
       ],
     },
@@ -441,6 +453,18 @@ export class SideBarComponent
               privilegeValue: 'viewReissued',
             },
           ],
+        },
+      ],
+    },
+    {
+      id: 'finance',
+      label: 'Finance',
+      items: [
+        {
+          id: 'finance',
+          label: 'Finance',
+          icon: 'heroBanknotes',
+          route: '/finance',
         },
       ],
     },

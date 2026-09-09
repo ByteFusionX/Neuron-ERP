@@ -1,5 +1,5 @@
 <app-modal-layout
-  title="Resolve Supplier Return"
+  title="Resolve Stock Hold"
   [onClose]="onCancel.bind(this)"
   [footerButtons]="[
     { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
@@ -9,7 +9,7 @@
   <form [formGroup]="resolveForm" (ngSubmit)="onSubmit()">
     <div class="space-y-4">
       <p class="text-sm text-gray-500">
-        {{ supplierReturn?.itemDescription }} — unresolved qty: {{ supplierReturn?.unresolvedQty }}
+        {{ stockHold?.itemDescription }} — unresolved qty: {{ stockHold?.unresolvedQty }}
       </p>
 
       <app-form-field
@@ -42,7 +42,7 @@
       <ng-container *ngIf="isFinancialResolution">
         <label class="flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" formControlName="invoiced" />
-          This PO has already been invoiced by the supplier (issue a Debit Note instead of a pre-invoice adjustment)
+          This PO has already been invoiced by the supplier (issue a Credit Note instead of a pre-invoice adjustment)
         </label>
 
         <app-form-field
@@ -53,8 +53,8 @@
           placeholder="Paste the invoiced PO's ID">
         </app-form-field>
 
-        <p *ngIf="resolveForm.get('invoiced')?.value && !canIssueDebitNote" class="text-xs text-red-600">
-          You don't have permission to issue a Debit Note — this action will be rejected server-side.
+        <p *ngIf="resolveForm.get('invoiced')?.value && !canIssueCreditNote" class="text-xs text-red-600">
+          You don't have permission to issue a Credit Note — this action will be rejected server-side.
         </p>
       </ng-container>
 

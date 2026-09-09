@@ -12,35 +12,47 @@ const resolutionHistoryEntrySchema = new Schema({
     note: String
 }, { _id: false });
 
-const supplierReturnSchema = new Schema({
-    supplierReturnNo: { type: String, required: true, unique: true },
-    grnId: { type: Schema.Types.ObjectId, ref: 'GRN', required: true },
+const stockHoldSchema = new Schema({
+    holdNo: { type: String, required: true, unique: true },
+    // Only set for holds with a physical quarantine (logisticsType !== 'NoPhysicalReturn')
+    stockEntryId: { type: Schema.Types.ObjectId, ref: 'StockEntry' },
+    grnId: { type: Schema.Types.ObjectId, ref: 'GRN' },
     itemId: { type: String },
     partNo: { type: String },
     itemDescription: { type: String },
-    rejectedQty: { type: Number, required: true },
-    resolvedQty: { type: Number, default: 0 },
-    unresolvedQty: { type: Number, required: true },
-    unitCost: { type: Number, default: 0 },
-    supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier', required: true },
+    supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier' },
 
     logisticsType: {
         type: String,
-        enum: ['SupplierPickup', 'Courier', 'NoPhysicalReturn'],
-        required: true
+        enum: ['PhysicalReturn', 'SupplierPickup', 'Courier', 'NoPhysicalReturn'],
+        default: 'PhysicalReturn'
     },
     trackingRef: String,
     courierName: String,
     dispatchDate: Date,
 
+    rejectedQty: { type: Number, required: true },
+    resolvedQty: { type: Number, default: 0 },
+    unresolvedQty: { type: Number, required: true },
+    unitCost: { type: Number, default: 0 },
+
     resolutionType: {
         type: String,
-        enum: ['Replacement', 'AlternateSupplierSourcing', 'CreditOnly', 'Disposed'],
+        enum: ['Replacement', 'AlternateSupplierSourcing', 'CreditOnly', 'Disposed']
     },
     replacementPoId: { type: Schema.Types.ObjectId, ref: 'PurchaseOrder' },
     resolutionHistory: {
         type: [resolutionHistoryEntrySchema],
         default: []
+    },
+    financialResolution: {
+        type: {
+            type: String,
+            enum: ['PreInvoiceAdjustment', 'CreditNote']
+        },
+        creditNoteId: { type: Schema.Types.ObjectId, ref: 'CreditNote' },
+        adjustedAmount: Number,
+        date: Date
     },
 
     disputeStatus: {
@@ -55,23 +67,10 @@ const supplierReturnSchema = new Schema({
     disputeResolvedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     disputeResolvedAt: Date,
 
-    financialResolution: {
-        type: {
-            type: String,
-            enum: ['PreInvoiceAdjustment', 'DebitNote']
-        },
-        debitNoteId: { type: Schema.Types.ObjectId, ref: 'DebitNote' },
-        adjustedAmount: Number,
-        date: Date
-    },
-    relatedCreditNoteId: { type: Schema.Types.ObjectId, ref: 'CreditNote' },
-
-    quarantineStockEntryId: { type: Schema.Types.ObjectId, ref: 'StockEntry' },
-
     status: {
         type: String,
-        enum: ['Initiated', 'AwaitingReturn', 'AwaitingReplacement', 'PartiallyResolved', 'Resolved', 'Disposed'],
-        default: 'Initiated'
+        enum: ['AwaitingReturn', 'AwaitingReplacement', 'PartiallyResolved', 'Resolved', 'Disposed'],
+        default: 'AwaitingReturn'
     },
     initiatedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
     isDeleted: { type: Boolean, default: false }
@@ -79,4 +78,7 @@ const supplierReturnSchema = new Schema({
     timestamps: true
 });
 
-export const SupplierReturn = model('SupplierReturn', supplierReturnSchema);
+stockHoldSchema.index({ stockEntryId: 1 });
+stockHoldSchema.index({ grnId: 1, itemId: 1 });
+
+export const StockHold = model('StockHold', stockHoldSchema);

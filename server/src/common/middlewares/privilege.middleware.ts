@@ -35,16 +35,16 @@ export const requirePrivilege = (moduleKey: string, action?: string) => {
 
     let privilege = resolvePrivilege(employee.category?.privileges, moduleKey);
 
-    // supplierReturn privileges aren't yet assignable in category management, so
-    // fall back to full supplierReturn access for anyone with GRN view access.
-    if (moduleKey === "supplierReturn" && privilege == null) {
+    // stockHold privileges aren't yet assignable in category management, so
+    // fall back to full access for anyone with GRN view access.
+    if (moduleKey === "stockHold" && privilege == null) {
       const grnPrivilege = employee.category?.privileges?.grn;
       const hasGrnView = grnPrivilege && grnPrivilege.viewReport && grnPrivilege.viewReport !== "none";
       if (hasGrnView) {
         privilege = {
           viewReport: grnPrivilege.viewReport,
-          canInitiateReturn: true,
-          canIssueDebitNote: true,
+          canInitiateHold: true,
+          canIssueCreditNote: true,
           canCreateReplacementLPO: true
         };
       }

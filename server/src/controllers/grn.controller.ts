@@ -11,7 +11,7 @@ import { uploadFileToAws } from "../common/aws-connect";
 import { getNextSequence } from "../models/counter.model";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { Server } from "socket.io";
-import { SupplierReturn } from "../models/supplierReturn.model";
+import { StockHold } from "../models/stockHold.model";
 
 const seedGRNSequence = (prefix: string) => async (): Promise<number> => {
   const lastEntry = await GRN.findOne({
@@ -579,9 +579,9 @@ export const getGRNRejections = async (req: Request, res: Response) => {
     }
 
     const grnIds = grns.map((grn: any) => grn._id);
-    const existingReturns = await SupplierReturn.find({ grnId: { $in: grnIds }, isDeleted: { $ne: true } });
+    const existingHolds = await StockHold.find({ grnId: { $in: grnIds }, isDeleted: { $ne: true } });
     const initiatedByGrnAndItem = new Map<string, number>();
-    existingReturns.forEach((r: any) => {
+    existingHolds.forEach((r: any) => {
       const key = `${r.grnId.toString()}_${r.itemId}`;
       initiatedByGrnAndItem.set(key, (initiatedByGrnAndItem.get(key) || 0) + (r.rejectedQty || 0));
     });

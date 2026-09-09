@@ -1,0 +1,17 @@
+<data-table
+  #tableComponent
+  [data]="tableData()"
+  [columns]="tableColumns"
+  [defaultColumns]="defaultColumns"
+  [isLoading]="isLoading()"
+  [isEmpty]="isEmpty()"
+  [totalItems]="totalItems()"
+  [tableId]="tableId"
+  [title]="title"
+  [enableExport]="true"
+  (rowClick)="onRowClick($event)"
+  (actionClick)="onActionClick($event)"
+  (filterChange)="onFilterChange($event)"
+  (paginationChange)="onPaginationChange($event)"
+  (inlineDelete)="onInlineDelete($event)">
+</data-table>

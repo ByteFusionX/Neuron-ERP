@@ -354,7 +354,7 @@ export class CreateStockComponent implements OnInit {
     this.stockEntryService.createStockEntry(payload).subscribe({
       next: (stockEntry) => {
         this.toastr.success('Stock entry created successfully');
-        this.router.navigate(['/stocks']);
+        this.router.navigate(['/stock/stock-entries']);
       },
       error: (error) => {
         this.toastr.error(error.error?.message || 'Failed to create stock entry');
@@ -368,7 +368,7 @@ export class CreateStockComponent implements OnInit {
       this.dialogRef?.close();
       return;
     }
-    this.router.navigate(['/stocks']);
+    this.router.navigate(['/stock/stock-entries']);
   }
 }
 

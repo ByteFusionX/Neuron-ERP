@@ -2,7 +2,13 @@ import { Schema, model } from 'mongoose';
 
 const creditNoteSchema = new Schema({
     creditNoteNo: { type: String, required: true, unique: true },
-    invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice', required: true },
+    // Supplier-side (supplier return / GRN rejection) fields
+    poId: { type: Schema.Types.ObjectId, ref: 'PurchaseOrder' },
+    grnId: { type: Schema.Types.ObjectId, ref: 'GRN' },
+    supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier' },
+    supplierReturnId: { type: Schema.Types.ObjectId, ref: 'SupplierReturn' },
+    // Customer-side (invoice/job rejection reconciliation) fields
+    invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
     dnId: { type: Schema.Types.ObjectId, ref: 'DeliveryNote' },
     jobId: { type: Schema.Types.ObjectId, ref: 'Job' },
     customer: { type: Schema.Types.ObjectId, ref: 'Customer' },

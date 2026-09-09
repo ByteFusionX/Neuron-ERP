@@ -6,17 +6,17 @@ import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/er
 
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
-export interface CreateSupplierReturnPayload {
+export interface CreateStockHoldPayload {
   grnId: string;
   itemIndex: number;
   qty?: number;
-  logisticsType: 'SupplierPickup' | 'Courier' | 'NoPhysicalReturn';
+  logisticsType: 'PhysicalReturn' | 'SupplierPickup' | 'Courier' | 'NoPhysicalReturn';
   trackingRef?: string;
   courierName?: string;
   dispatchDate?: string;
 }
 
-export interface ResolveSupplierReturnPayload {
+export interface ResolveStockHoldPayload {
   qty?: number;
   resolutionType: 'Replacement' | 'AlternateSupplierSourcing' | 'CreditOnly' | 'Disposed';
   replacementPoId?: string;
@@ -28,28 +28,28 @@ export interface ResolveSupplierReturnPayload {
 @Injectable({
   providedIn: 'root'
 })
-export class SupplierReturnService {
-  private baseUrl = `${environment.api}/supplier-return`;
+export class StockHoldService {
+  private baseUrl = `${environment.api}/stock-hold`;
 
   constructor(private http: HttpClient) {}
 
-  createSupplierReturn(payload: CreateSupplierReturnPayload): Observable<any> {
+  createStockHold(payload: CreateStockHoldPayload): Observable<any> {
     return this.http.post<any>(this.baseUrl, payload, { context: context() });
   }
 
-  getSupplierReturns(params?: { grnId?: string; supplierId?: string; status?: string }): Observable<any> {
+  getStockHolds(params?: { grnId?: string; stockEntryId?: string; supplierId?: string; status?: string }): Observable<any> {
     return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
   }
 
-  getSupplierReturnById(id: string): Observable<any> {
+  getStockHoldById(id: string): Observable<any> {
     return this.http.get<any>(`${this.baseUrl}/${id}`, { context: context() });
   }
 
-  resolveSupplierReturn(id: string, payload: ResolveSupplierReturnPayload): Observable<any> {
+  resolveStockHold(id: string, payload: ResolveStockHoldPayload): Observable<any> {
     return this.http.patch<any>(`${this.baseUrl}/${id}/resolve`, payload, { context: context() });
   }
 
-  disputeSupplierReturn(id: string, payload: { disputeStatus: 'None' | 'SupplierDisputed' | 'DisputeResolved'; disputeNote?: string }): Observable<any> {
+  disputeStockHold(id: string, payload: { disputeStatus: 'None' | 'SupplierDisputed' | 'DisputeResolved'; disputeNote?: string }): Observable<any> {
     return this.http.patch<any>(`${this.baseUrl}/${id}/dispute`, payload, { context: context() });
   }
 }
