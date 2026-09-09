@@ -207,6 +207,14 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/recycle/recycle.component').then((c) => c.RecycleComponent)
   },
   {
+    path: 'finance',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/finance/finance.component').then((c) => c.FinanceComponent),
+    children: [
+      { path: '', pathMatch: 'full', loadComponent: () => import('./modules/finance/pages/finance-home/finance-home.component').then((c) => c.FinanceHomeComponent) },
+    ]
+  },
+  {
     path: 'suppliers',
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/suppliers/suppliers.component').then((c) => c.SuppliersComponent),
