@@ -15,9 +15,9 @@
 }
 
 :host-context(html.dark) .dg-th {
-  background: #1c1930;
-  border-bottom-color: #2a2640;
-  color: #9ca3af;
+  background: #1a1a1a;
+  border-bottom-color: #262626;
+  color: #a1a1a1;
 }
 
 .dg-th.text-right {
@@ -38,8 +38,8 @@
 }
 
 :host-context(html.dark) .dg-td {
-  border-bottom-color: #2a2640;
-  color: #9ca3af;
+  border-bottom-color: #262626;
+  color: #a1a1a1;
 }
 
 .dg-row {
@@ -62,21 +62,25 @@
 }
 
 :host-context(html.dark) .dg-row {
-  background: #15131f;
+  background: #111111;
 }
 
 :host-context(html.dark) .dg-row:hover {
-  background: #1c1930;
+  background: #1a1a1a;
 }
 
 :host-context(html.dark) .dg-row-selected,
 :host-context(html.dark) .dg-row-selected:hover {
-  background: rgba(124, 58, 237, 0.12);
+  background: #1f1f1f;
 }
 
 :host-context(html.dark) .dg-row-active,
 :host-context(html.dark) .dg-row-active:hover {
-  background: rgba(124, 58, 237, 0.18);
+  background: #242424;
+}
+
+:host-context(html.dark) .dg-td {
+  color: #d4d4d4;
 }
 
 .dg-compact .dg-td {
@@ -109,9 +113,9 @@
 }
 
 :host-context(html.dark) .dg-tf {
-  background: #1c1930;
-  border-top-color: #2a2640;
-  color: #f3f4f6;
+  background: #1a1a1a;
+  border-top-color: #262626;
+  color: #ededed;
 }
 
 td.dg-tf.dg-sticky-right {
@@ -157,7 +161,7 @@ tr:hover .dg-editable {
 }
 
 :host-context(html.dark) tr:hover .dg-editable {
-  border-bottom-color: #4b5563;
+  border-bottom-color: #525252;
 }
 
 .dg-input {
@@ -173,8 +177,8 @@ tr:hover .dg-editable {
 }
 
 :host-context(html.dark) .dg-input {
-  background: #1c1930;
-  color: #f3f4f6;
+  background: #1a1a1a;
+  color: #ededed;
 }
 
 .dg-page-btn {
@@ -208,16 +212,22 @@ tr:hover .dg-editable {
   color: #fff;
 }
 
-:host-context(html.dark) .dg-page-btn {
-  color: #9ca3af;
+:host-context(html.dark) .dg-page-active,
+:host-context(html.dark) .dg-page-active:hover:not(:disabled) {
+  background: #ededed;
+  color: #0a0a0a;
+}
+
+:host-context(html.dark) .dg-page-btn:not(.dg-page-active) {
+  color: #a1a1a1;
 }
 
 :host-context(html.dark) .dg-page-btn:hover:not(:disabled) {
-  background: #2a2640;
+  background: #262626;
 }
 
 :host-context(html.dark) .dg-page-btn:disabled {
-  color: #4b5563;
+  color: #525252;
 }
 
 .dg-tool-btn,
@@ -245,13 +255,13 @@ tr:hover .dg-editable {
 }
 
 :host-context(html.dark) .dg-tool-btn {
-  color: #d1d5db;
-  background: #15131f;
-  border-color: #2a2640;
+  color: #d4d4d4;
+  background: #111111;
+  border-color: #262626;
 }
 
 :host-context(html.dark) .dg-tool-btn:hover {
-  background: #1c1930;
+  background: #1a1a1a;
 }
 
 .dg-primary-btn {
@@ -300,14 +310,14 @@ tr:hover .dg-editable {
 
 :host-context(html.dark) .dg-search,
 :host-context(html.dark) .dg-field {
-  color: #d1d5db;
-  background: #15131f;
-  border-color: #2a2640;
+  color: #d4d4d4;
+  background: #111111;
+  border-color: #262626;
 }
 
 :host-context(html.dark) .dg-search::placeholder,
 :host-context(html.dark) .dg-field::placeholder {
-  color: #6b7280;
+  color: #8f8f8f;
 }
 
 .dg-pop {
@@ -360,16 +370,16 @@ tr:hover .dg-editable {
 }
 
 :host-context(html.dark) .dg-scroll {
-  scrollbar-color: #3a3650 #1c1930;
+  scrollbar-color: #3a3a3a #1a1a1a;
 }
 
 :host-context(html.dark) .dg-scroll::-webkit-scrollbar-track {
-  background: #1c1930;
+  background: #1a1a1a;
 }
 
 :host-context(html.dark) .dg-scroll::-webkit-scrollbar-thumb {
-  background-color: #3a3650;
-  border: 2px solid #1c1930;
+  background-color: #3a3a3a;
+  border: 2px solid #1a1a1a;
 }
 
 
@@ -416,25 +426,26 @@ tr:hover .dg-editable {
 }
 
 :host-context(html.dark) .dg-view-tab {
-  color: #9ca3af;
+  color: #a1a1a1;
 }
 
 :host-context(html.dark) .dg-view-tab:hover {
-  color: #f3f4f6;
+  color: #ededed;
 }
 
 :host-context(html.dark) .dg-view-active {
-  color: #f3f4f6;
+  color: #fafafa;
+  border-bottom-color: #fafafa;
 }
 
 :host-context(html.dark) .dg-view-count {
-  color: #9ca3af;
-  background: #2a2640;
+  color: #a1a1a1;
+  background: #262626;
 }
 
 :host-context(html.dark) .dg-view-active .dg-view-count {
-  color: #c4b5fd;
-  background: rgba(124, 58, 237, 0.2);
+  color: #0a0a0a;
+  background: #ededed;
 }
 
 /* ---- row quick actions: shown on hover/focus, hidden on touch where the menu is enough ---- */
@@ -482,16 +493,16 @@ tr:hover .dg-editable {
 }
 
 :host-context(html.dark) .dg-icon-btn {
-  color: #9ca3af;
+  color: #a1a1a1;
 }
 
 :host-context(html.dark) .dg-icon-btn:hover:not(:disabled) {
-  background: #2a2640;
-  color: #f3f4f6;
+  background: #262626;
+  color: #ededed;
 }
 
 :host-context(html.dark) .dg-icon-btn:disabled {
-  color: #4b5563;
+  color: #525252;
 }
 
 :host-context(html.dark) .dg-icon-danger:hover:not(:disabled) {
@@ -510,7 +521,7 @@ tr:hover .dg-editable {
 }
 
 :host-context(html.dark) .dg-skel {
-  background: linear-gradient(90deg, #2a2640 25%, #342f52 37%, #2a2640 63%);
+  background: linear-gradient(90deg, #262626 25%, #303030 37%, #262626 63%);
   background-size: 400% 100%;
 }
 

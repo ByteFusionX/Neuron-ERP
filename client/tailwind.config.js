@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const grayVar = (step) => `rgb(var(--erp-gray-${step}) / <alpha-value>)`;
+
 module.exports = {
   darkMode: 'class',
   content: [
@@ -12,21 +14,30 @@ module.exports = {
         '5xl': '2560px',
       },
       colors: {
-        // Premium ERP surface palette — violet/orange accents on a warm
-        // off-white (light) / violet-tinted charcoal (dark), rather than
-        // flat white/gray-900. Used on the sidebar and navbar shell.
+        // gray resolves through CSS vars: Tailwind defaults in light, neutral (hue-free) scale in dark — see styles.css
+        gray: {
+          50: grayVar(50),
+          100: grayVar(100),
+          200: grayVar(200),
+          300: grayVar(300),
+          400: grayVar(400),
+          500: grayVar(500),
+          600: grayVar(600),
+          700: grayVar(700),
+          800: grayVar(800),
+          900: grayVar(900),
+          950: grayVar(950),
+        },
         erp: {
           bg: '#FAFAFA',
           surface: '#FFFFFF',
-          'surface-dark': '#15131F',
-          'surface-dark-alt': '#1C1930',
+          'surface-dark': '#111111',
+          'surface-dark-alt': '#1A1A1A',
           border: '#F3F4F6',
-          'border-dark': '#2A2640',
+          'border-dark': '#262626',
         },
       },
     },
   },
   plugins: [],
 }
-
-

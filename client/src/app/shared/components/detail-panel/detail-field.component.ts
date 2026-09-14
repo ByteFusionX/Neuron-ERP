@@ -22,7 +22,7 @@ import { DetailPanelIconComponent } from './detail-panel-icon.component';
     :host { display: flex; align-items: center; gap: 0.75rem; min-height: 2.25rem; padding: 0.375rem 0.625rem;
       margin: 0 -0.625rem; border-radius: 0.5rem; font-size: 0.8125rem; transition: background-color 120ms ease; }
     :host(:not(.dpf-stacked):hover) { background: #f7f7f8; }
-    :host-context(html.dark):host(:not(.dpf-stacked):hover) { background: #1c1930; }
+    :host-context(html.dark):host(:not(.dpf-stacked):hover) { background: #1a1a1a; }
     :host(:not(.dpf-stacked)) .dpf-label { width: 8rem; flex-shrink: 0; }
     :host(.dpf-stacked) { flex-direction: column; align-items: stretch; gap: 0.125rem; min-height: 0;
       padding: 0; margin: 0; }

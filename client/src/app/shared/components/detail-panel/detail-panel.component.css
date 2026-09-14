@@ -17,8 +17,8 @@
 }
 
 :host-context(html.dark) {
-  background: #15131f;
-  border-left-color: #2a2640;
+  background: #111111;
+  border-left-color: #262626;
   box-shadow: -12px 0 32px -16px rgb(0 0 0 / 0.5);
 }
 
@@ -44,12 +44,12 @@
 }
 
 :host-context(html.dark) .dp-icon-btn {
-  color: #9ca3af;
+  color: #a1a1a1;
 }
 
 :host-context(html.dark) .dp-icon-btn:hover {
-  background: #2a2640;
-  color: #f3f4f6;
+  background: #262626;
+  color: #ededed;
 }
 
 /* Key facts: bordered strip of label/value cells */
@@ -63,7 +63,7 @@
 }
 
 :host-context(html.dark) .dp-meta {
-  border-color: #2a2640;
+  border-color: #262626;
 }
 
 .dp-footer {
@@ -78,8 +78,8 @@
 }
 
 :host-context(html.dark) .dp-footer {
-  border-top-color: #2a2640;
-  background: #1c1930;
+  border-top-color: #262626;
+  background: #1a1a1a;
 }
 
 /* tablet and below: full-screen overlay; the list underneath keeps its scroll position */

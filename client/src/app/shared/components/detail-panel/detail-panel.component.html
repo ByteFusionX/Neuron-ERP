@@ -37,7 +37,7 @@
     <button *ngFor="let t of tabs" type="button" role="tab" (click)="selectTab(t.id)"
       [attr.aria-selected]="activeTab === t.id"
       class="flex items-center gap-1.5 py-2.5 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors"
-      [ngClass]="activeTab === t.id ? 'border-violet-600 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
+      [ngClass]="activeTab === t.id ? 'border-violet-600 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-medium' : 'border-transparent text-gray-500 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'">
       <app-dp-icon *ngIf="t.icon" [name]="t.icon" size="w-3.5 h-3.5"></app-dp-icon>
       {{ t.label }}
     </button>

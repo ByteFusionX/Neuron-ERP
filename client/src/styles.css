@@ -42,9 +42,82 @@ body {
   height: 100%;
 }
 
+:root {
+  --erp-gray-50: 249 250 251;
+  --erp-gray-100: 243 244 246;
+  --erp-gray-200: 229 231 235;
+  --erp-gray-300: 209 213 219;
+  --erp-gray-400: 156 163 175;
+  --erp-gray-500: 107 114 128;
+  --erp-gray-600: 75 85 99;
+  --erp-gray-700: 55 65 81;
+  --erp-gray-800: 31 41 55;
+  --erp-gray-900: 17 24 39;
+  --erp-gray-950: 3 7 18;
+}
+
+/* Dark: neutral scale. 100–300 are kept close together so primary text reads as one white;
+   500/600 are lifted so secondary text and icons stay legible on near-black. */
+html.dark {
+  color-scheme: dark;
+  --erp-gray-50: 250 250 250;
+  --erp-gray-100: 237 237 237;
+  --erp-gray-200: 229 229 229;
+  --erp-gray-300: 212 212 212;
+  --erp-gray-400: 161 161 161;
+  --erp-gray-500: 143 143 143;
+  --erp-gray-600: 115 115 115;
+  --erp-gray-700: 46 46 46;
+  --erp-gray-800: 26 26 26;
+  --erp-gray-900: 10 10 10;
+  --erp-gray-950: 0 0 0;
+
+  --mdc-dialog-container-color: #111111;
+  --mdc-dialog-subhead-color: #ededed;
+  --mdc-dialog-supporting-text-color: #a1a1a1;
+  --mat-menu-container-color: #111111;
+  --mat-menu-item-label-text-color: #ededed;
+  --mat-menu-item-icon-color: #a1a1a1;
+  --mat-menu-item-hover-state-layer-color: rgba(255, 255, 255, 0.06);
+  --mat-select-panel-background-color: #111111;
+  --mat-option-label-text-color: #ededed;
+}
+
 html.dark body {
-  background-color: #111827;
-  color: #f3f4f6;
+  background-color: #0a0a0a;
+  color: #ededed;
+}
+
+html.dark .mat-mdc-menu-panel {
+  border: 1px solid #262626;
+}
+
+html.dark .ng-select .ng-select-container,
+html.dark .ng-dropdown-panel {
+  background-color: #111111;
+  border-color: #262626;
+  color: #ededed;
+}
+
+html.dark .ng-select .ng-value-container .ng-value,
+html.dark .ng-select .ng-option.ng-option-selected,
+html.dark .ng-select .ng-dropdown-panel .ng-dropdown-panel-items .ng-option.ng-option-selected.ng-option-marked {
+  color: #ededed;
+  background-color: #262626;
+}
+
+html.dark .ng-dropdown-panel .ng-dropdown-panel-items .ng-option {
+  background-color: #111111;
+  color: #d4d4d4;
+}
+
+html.dark .ng-select .ng-option.ng-option-marked {
+  background-color: #1a1a1a;
+  color: #ededed;
+}
+
+html.dark ::selection {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 body,

@@ -60,8 +60,8 @@ import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.comp
     .dgf-value:hover, .dgf-value:focus-visible { background: #f3f4f6; outline: none; }
     .dgf-input { width: 100%; height: 1.875rem; padding: 0 0.5rem; font-size: 0.8125rem; border: 1px solid #7c3aed;
       border-radius: 0.375rem; outline: none; box-shadow: 0 0 0 3px rgb(124 58 237 / 0.15); background: #fff; }
-    :host-context(html.dark) .dgf-value:hover, :host-context(html.dark) .dgf-value:focus-visible { background: #2a2640; }
-    :host-context(html.dark) .dgf-input { background: #1c1930; color: #f3f4f6; }
+    :host-context(html.dark) .dgf-value:hover, :host-context(html.dark) .dgf-value:focus-visible { background: #262626; }
+    :host-context(html.dark) .dgf-input { background: #1a1a1a; color: #ededed; }
   `],
 })
 export class DataGridFieldComponent<T extends Record<string, any> = any> {

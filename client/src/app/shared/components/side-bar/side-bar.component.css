@@ -13,8 +13,8 @@
 }
 
 :host-context(html.dark) .dropDown {
-    background-color: #1c1930;
-    border: 1px solid #2a2640;
+    background-color: #1a1a1a;
+    border: 1px solid #262626;
     box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.5);
 }
 
@@ -31,12 +31,12 @@
 }
 
 :host-context(html.dark) .active {
-    background: rgb(46 16 101 / 0.5);
-    color: #ddd6fe;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fafafa;
 }
 
 :host-context(html.dark) .active ng-icon {
-    color: #c4b5fd;
+    color: #fafafa;
 }
 
 ng-icon {
@@ -44,6 +44,6 @@ ng-icon {
 }
 
 :host-context(html.dark) ng-icon {
-    color: rgb(209, 213, 219);
+    color: #a1a1a1;
 }
 

@@ -132,6 +132,14 @@
         </ng-container>
       </div>
 
+      <!-- Excel export -->
+      <button *ngIf="exportable" type="button" class="dg-tool-btn" (click)="exportToExcel()" [disabled]="loading">
+        <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14" />
+        </svg>
+        Export
+      </button>
+
       <!-- Column visibility -->
       <div class="relative">
         <button type="button" (click)="columnMenuOpen = !columnMenuOpen" class="dg-tool-btn"
@@ -222,11 +230,11 @@
           <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
       </span>
-      <ng-container *ngFor="let g of filterGroups(); let gi = index">
+      <ng-container *ngFor="let g of filterGroups(); let gi = index; trackBy: trackByGroupIndex">
         <button *ngIf="gi" type="button" (click)="toggleConnector(g[0])"
           class="px-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 hover:text-violet-600 dark:hover:text-violet-400 hover:underline">and</button>
         <span class="inline-flex items-center gap-1 flex-wrap" [ngClass]="g.length > 1 ? 'p-0.5 rounded-full border border-dashed border-violet-300 dark:border-violet-800' : ''">
-          <ng-container *ngFor="let f of g; let fi = index">
+          <ng-container *ngFor="let f of g; let fi = index; trackBy: trackByFilterId">
             <button *ngIf="fi" type="button" (click)="toggleConnector(f)"
               class="px-1 text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400 hover:underline">or</button>
             <span class="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 text-xs rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-800 dark:text-violet-300 ring-1 ring-inset ring-violet-200 dark:ring-violet-900">

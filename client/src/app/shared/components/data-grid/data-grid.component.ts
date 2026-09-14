@@ -1,6 +1,6 @@
 import {
   Component, ContentChild, ElementRef, EventEmitter, HostBinding, HostListener, Input, OnChanges,
-  Output, SimpleChanges, TemplateRef,
+  Output, SimpleChanges, TemplateRef, booleanAttribute,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -81,6 +81,9 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() density: 'comfortable' | 'compact' = 'comfortable';
   /** Left-edge accent for rows that need attention (overdue, blocked) */
   @Input() rowAccent?: (row: T) => 'danger' | 'warning' | 'info' | null | undefined;
+  /** Shows an Export button that downloads the filtered rows (visible columns) as .xlsx. Defaults to `<title>.xlsx`. */
+  @Input({ transform: booleanAttribute }) exportable = false;
+  @Input() exportFileName = '';
 
   @HostBinding('class.dg-fill-height') get hostFillHeight(): boolean {
     return this.fillHeight;
@@ -516,6 +519,14 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.page = 1;
   }
 
+  trackByGroupIndex(i: number): number {
+    return i;
+  }
+
+  trackByFilterId(_: number, f: DataGridFilter): number {
+    return f.id;
+  }
+
   /** Flip the AND/OR connector between a filter and the one before it. */
   toggleConnector(f: DataGridFilter): void {
     this.filters = this.filters.map((x) => (x.id === f.id ? { ...x, or: !x.or } : x));
@@ -860,6 +871,28 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     else if (this.saveViewOpen) this.saveViewOpen = false;
     else if (this.columnMenuOpen) this.columnMenuOpen = false;
     else this.closeDetail();
+  }
+
+  /** Downloads rows (default: all filtered rows) as .xlsx using the visible columns in their current order. */
+  async exportToExcel(rows: T[] = this.filteredData): Promise<void> {
+    if (!rows.length) {
+      this.notify('Nothing to export', 'info');
+      return;
+    }
+    const XLSX = await import('xlsx');
+    const cols = this.visibleColumns;
+    const sheetRows = rows.map((row) => {
+      const out: Record<string, any> = {};
+      cols.forEach((c) => {
+        const v = this.rawValue(row, c);
+        out[c.label] = c.type === 'date' && v ? new Date(v) : v ?? '';
+      });
+      return out;
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows, { cellDates: true }), (this.title || 'Sheet1').slice(0, 31));
+    XLSX.writeFile(wb, this.exportFileName || `${this.title || 'export'}.xlsx`);
+    this.notify(`${rows.length} row${rows.length === 1 ? '' : 's'} exported`);
   }
 
   // ---- rendering helpers ----

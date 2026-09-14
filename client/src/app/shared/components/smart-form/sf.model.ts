@@ -30,10 +30,10 @@ export const SF_STYLES = `
   :host(.ng-invalid.ng-touched) .sf-check { border-color: #ef4444; }
 
   /* Dark mode */
-  :host-context(html.dark) .sf-input { color: #f3f4f6; background: #15131f; border-color: #2a2640; }
-  :host-context(html.dark) .sf-input::placeholder, :host-context(html.dark) .sf-bare::placeholder { color: #6b7280; }
-  :host-context(html.dark) .sf-input:hover { border-color: #4b5563; }
+  :host-context(html.dark) .sf-input { color: #ededed; background: #111111; border-color: #262626; }
+  :host-context(html.dark) .sf-input::placeholder, :host-context(html.dark) .sf-bare::placeholder { color: #8f8f8f; }
+  :host-context(html.dark) .sf-input:hover { border-color: #525252; }
   :host-context(html.dark) .sf-input:focus, :host-context(html.dark) .sf-input:focus-within { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25); }
-  :host-context(html.dark) .sf-input:disabled, :host-context(html.dark) .sf-input.sf-disabled { background: #1c1930; color: #6b7280; border-color: #2a2640; }
-  :host-context(html.dark) .sf-check, :host-context(html.dark) .sf-radio { background: #15131f; border-color: #4b5563; }
+  :host-context(html.dark) .sf-input:disabled, :host-context(html.dark) .sf-input.sf-disabled { background: #1a1a1a; color: #8f8f8f; border-color: #262626; }
+  :host-context(html.dark) .sf-check, :host-context(html.dark) .sf-radio { background: #111111; border-color: #525252; }
 `;

@@ -18,7 +18,7 @@ import { CommonModule } from '@angular/common';
     :host { display: block; padding: 1.25rem 0; border-bottom: 1px solid #f3f4f6; }
     :host(:first-of-type) { padding-top: 0; }
     :host(:last-of-type) { border-bottom: 0; }
-    :host-context(html.dark) { border-bottom-color: #2a2640; }
+    :host-context(html.dark) { border-bottom-color: #262626; }
   `],
 })
 export class SfSectionComponent {
