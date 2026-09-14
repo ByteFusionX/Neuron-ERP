@@ -16,6 +16,10 @@ export class NotificationService {
     textNotificationsSubject$ = this.textNotificationsSubject.asObservable();
     api: string = environment.api
 
+    private readonly markedUnreadStorageKey = 'markedUnreadNotificationIds';
+    markedUnreadIdsSubject = new BehaviorSubject<Set<string>>(this.loadMarkedUnreadIds());
+    markedUnreadIds$ = this.markedUnreadIdsSubject.asObservable();
+
     constructor(
         private http: HttpClient,
         private socket: Socket,
@@ -23,6 +27,55 @@ export class NotificationService {
         private router: Router,
         private sameRouteNavigation: SameRouteNavigationService
     ) { }
+
+    private loadMarkedUnreadIds(): Set<string> {
+        try {
+            const raw = localStorage.getItem(this.markedUnreadStorageKey);
+            return raw ? new Set(JSON.parse(raw)) : new Set();
+        } catch {
+            return new Set();
+        }
+    }
+
+    private persistMarkedUnreadIds(ids: Set<string>): void {
+        try {
+            localStorage.setItem(this.markedUnreadStorageKey, JSON.stringify(Array.from(ids)));
+        } catch {
+            // ignore storage errors
+        }
+    }
+
+    isMarkedUnread(notificationId?: string): boolean {
+        return !!notificationId && this.markedUnreadIdsSubject.value.has(notificationId);
+    }
+
+    markAsUnread(notificationId?: string): void {
+        if (!notificationId) {
+            return;
+        }
+        const ids = this.markedUnreadIdsSubject.value;
+        if (ids.has(notificationId)) {
+            return;
+        }
+        const updated = new Set(ids);
+        updated.add(notificationId);
+        this.markedUnreadIdsSubject.next(updated);
+        this.persistMarkedUnreadIds(updated);
+    }
+
+    clearMarkedUnread(notificationId?: string): void {
+        if (!notificationId) {
+            return;
+        }
+        const ids = this.markedUnreadIdsSubject.value;
+        if (!ids.has(notificationId)) {
+            return;
+        }
+        const updated = new Set(ids);
+        updated.delete(notificationId);
+        this.markedUnreadIdsSubject.next(updated);
+        this.persistMarkedUnreadIds(updated);
+    }
 
     private calculateRoutePath(notification: any): { routePath: string; routeData?: any } {
         const type = notification.type;
@@ -227,6 +280,72 @@ export class NotificationService {
                 }
             })
         );
+    }
+
+    // Some notification types deep-link to a page outside their sidebar list route
+    // (e.g. PurchaseApprovalRequest opens /purchase/view-purchase/:id), so a plain
+    // routePath-prefix match against calculateRoutePath() never fires when the user
+    // instead visits the sidebar list page (/purchase/pendings, /purchase/approves).
+    // This maps those types to the extra list-route prefixes that should also clear them.
+    private readonly badgeClearRoutePrefixes: Record<string, string[]> = {
+        JobAllocated: ['/purchase'],
+        ProcurementTransferred: ['/purchase'],
+        MrApproved: ['/purchase'],
+        PurchaseApprovalRequest: ['/purchase'],
+        PurchaseProcurementNotice: ['/purchase'],
+        PurchaseApproved: ['/purchase'],
+        PurchaseRejected: ['/purchase'],
+        LpoApprovalRequest: ['/purchase'],
+        LpoApproved: ['/purchase'],
+        LpoRejected: ['/purchase'],
+    };
+
+    /**
+     * Marks every unviewed notification whose type resolves to routePath as read,
+     * and updates local state so sidebar/navbar badges clear immediately.
+     * Called on navigation so visiting a module's page clears its own badge automatically.
+     */
+    markAsReadForRoute(routePath: string): void {
+        const current = this.textNotificationsSubject.value;
+        if (!current.unviewed?.length) {
+            return;
+        }
+
+        const normalizedRoutePath = routePath.split('?')[0].split('#')[0];
+        const matching = current.unviewed.filter(notification => {
+            const notifRoutePath = notification.routePath || this.calculateRoutePath(notification).routePath;
+            if (notifRoutePath && normalizedRoutePath.startsWith(notifRoutePath)) {
+                return true;
+            }
+            const extraPrefixes = this.badgeClearRoutePrefixes[notification.type];
+            return !!extraPrefixes?.some(prefix => normalizedRoutePath.startsWith(prefix));
+        });
+
+        if (!matching.length) {
+            return;
+        }
+
+        const types = Array.from(new Set(matching.map(notification => notification.type)));
+
+        this.employeeService.employeeData$.pipe(take(1)).subscribe(employeeData => {
+            if (!employeeData) {
+                return;
+            }
+            this.http.patch(`${this.api}/notification/mark-as-read-by-types`, {
+                types,
+                recipientId: employeeData._id
+            }).subscribe({
+                error: (error) => console.error('Error marking notifications as read for route:', error)
+            });
+        });
+
+        const matchingIds = new Set(matching.map(notification => notification._id));
+        const updatedUnviewed = current.unviewed.filter(notification => !matchingIds.has(notification._id));
+        const updatedViewed = [...matching, ...current.viewed];
+        this.textNotificationsSubject.next({
+            viewed: updatedViewed,
+            unviewed: updatedUnviewed
+        });
     }
 
     private resolveNotificationNavigation(

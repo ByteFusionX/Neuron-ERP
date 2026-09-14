@@ -1,101 +1,79 @@
-<div class="m-6">
-  <div class="text-lg bg-white font-medium p-4 border-b border-b-gray-300 px-8">
-    <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-      <h3 class="text-xl font-medium text-gray-800">Announcement</h3>
-      <div class="flex justify-end gap-4 h-10">
-        <button *ngIf="createAnnouncement"
-          class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-0.5 px-4 rounded text-sm"
-          (click)="openDialog()">
-          + Create Announcement
-        </button>
-      </div>
+<div class="w-full min-w-96">
+  <!-- Header Section -->
+  <div class="flex items-center justify-between p-4 border-b">
+    <div class="flex items-center">
+      <ng-icon name="heroMegaphone" class="text-lg"></ng-icon>
+      <span class="ml-2 text-sm font-semibold">Announcements</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button *ngIf="createAnnouncement" type="button"
+        class="bg-violet-700 hover:bg-violet-600 text-white font-medium px-2.5 py-1 rounded-full text-xs"
+        (click)="openDialog()">
+        + New
+      </button>
+      <ng-icon *ngIf="closeSidenav.observed" name="heroXMark" class="cursor-pointer text-lg hover:text-red-500" (click)="onClose()"></ng-icon>
     </div>
   </div>
+
   <app-skelton-loading *ngIf="isLoading"></app-skelton-loading>
 
-  <div *ngIf="(page === 1 && recentData) || (announcementData && announcementData.length > 0)">
-    <div *ngIf="recentData" class="relative h-fit w-full bg-white mt-5 font-medium p-4 rounded-md"
-      [ngClass]="{'border border-orange-500': recentData && !recentData.viewedBy.includes(userId)}" #announcementItem
-      [attr.data-id]="recentData._id">
-      <div *ngIf="recentData.celeb" class="confetti-container">
+  <!-- Announcement item template, reused by recent + list -->
+  <ng-template #announcementRow let-item="item" let-isRecent="isRecent">
+    <div class="relative flex flex-col bg-white hover:bg-gray-50 transition duration-200 border-b px-4 py-2.5"
+      [class.bg-orange-50]="!item.viewedBy.includes(userId)"
+      [class.opacity-50]="isMuted(item)"
+      [class.grayscale]="isMuted(item)"
+      #announcementItem [attr.data-id]="item._id">
+      <div *ngIf="item.celeb" class="confetti-container">
         <app-confetti-component></app-confetti-component>
       </div>
-      <div class="flex gap-2 justify-between">
-        <div class="flex gap-2">
-          <i><ng-icon name="heroBellAlert" class="text-orange-400 text-lg"></ng-icon></i>
-          <p class="text-orange-400 text-sm">Recent Announcement</p>
+
+      <div class="flex justify-between items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span *ngIf="isRecent" class="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600 whitespace-nowrap flex items-center gap-1">
+            <ng-icon name="heroBellAlert" class="text-xs"></ng-icon>
+            Recent
+          </span>
+          <h3 class="text-sm font-semibold text-violet-700">{{ item.title }}</h3>
         </div>
-        <div class="flex gap-2 justify-center items-center">
-          <i><ng-icon name="heroCalendarDays" class="text-lg mt-[4px]"></ng-icon></i>
-          <p>{{recentData.date | date: 'MMM d, y'}}</p>
-        </div>
-      </div>
-      <div class="flex gap-1">
-        <i><ng-icon name="heroCalendarDays" class="text-sm mb-[2px] text-gray-400"></ng-icon></i>
-        <time class="block mt-1 text-xs font-normal leading-none text-gray-400">{{recentData.createdDate | date: 'MMM d,
-          y'}}</time>
-      </div>
-      <h1 class="text-xl text-violet-700">{{recentData.title}}</h1>
-      <div class="flex justify-between items-center">
-        <p class="text-sm text-gray-600">{{recentData.description}}</p>
-        <div class="flex gap-2" *ngIf="deleteOrEditAnnouncement">
-          <div (click)="editAnnouncement(recentData)"
-            class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray/60  text-sm rounded-full  font-medium hover:bg-white">
-            <ng-icon name="heroPencilSquare"></ng-icon>
-          </div>
-          <div (click)="deleteAnnouncement(recentData)"
-            class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray/60  text-sm rounded-full  font-medium hover:bg-white">
-            <ng-icon class="text-red-500" name="heroTrash"></ng-icon>
-          </div>
+        <div class="flex items-center gap-2" *ngIf="deleteOrEditAnnouncement">
+          <ng-icon name="heroPencilSquare" class="text-sm cursor-pointer text-gray-500 hover:text-gray-800" (click)="editAnnouncement(item)"></ng-icon>
+          <ng-icon name="heroTrash" class="text-sm cursor-pointer text-red-400 hover:text-red-600" (click)="deleteAnnouncement(item)"></ng-icon>
         </div>
       </div>
+
+      <p class="text-xs text-gray-600 mt-1 break-words whitespace-normal leading-relaxed">{{ item.description }}</p>
+
+      <div class="flex items-center justify-between mt-2">
+        <span class="text-xs text-gray-400 flex items-center gap-1">
+          <ng-icon name="heroCalendarDays" class="text-xs"></ng-icon>
+          Posted {{ item.createdDate | date: 'MMM d, y' }}
+        </span>
+        <span class="text-xs text-gray-500 flex items-center gap-1">
+          <ng-icon name="heroCalendarDays" class="text-xs"></ng-icon>
+          {{ item.date | date: 'MMM d, y' }}
+        </span>
+      </div>
+    </div>
+  </ng-template>
+
+  <!-- Announcements Content -->
+  <div>
+    <h2 class="text-sm font-semibold text-gray-700 px-4 py-2 border-b" *ngIf="!isEmpty">All Announcements</h2>
+
+    <div *ngIf="recentData">
+      <ng-container *ngTemplateOutlet="announcementRow; context: { item: recentData, isRecent: true }"></ng-container>
     </div>
 
     <div *ngFor="let item of announcementData; trackBy: trackByIdFn">
-      <div class="relative h-fit w-full bg-white mt-5 font-medium p-4 rounded-md"
-        [ngClass]="{'border border-orange-500': !item.viewedBy.includes(userId)}" #announcementItem
-        [attr.data-id]="item._id">
-        <div *ngIf="item.celeb" class="confetti-container">
-          <app-confetti-component></app-confetti-component>
-        </div>
-        <div class="flex gap-1 justify-between">
-          <div class="flex gap-1">
-            <i><ng-icon name="heroCalendarDays" class="text-sm mb-[2px] text-gray-400"></ng-icon></i>
-            <time class="block mt-1 text-xs font-normal leading-none text-gray-400">{{item.createdDate | date: 'MMM d,
-              y'}}</time>
-          </div>
-          <div class="flex gap-2 justify-center items-center">
-            <i><ng-icon name="heroCalendarDays" class="text-lg mt-[4px]"></ng-icon></i>
-            <p>{{item.date | date: 'MMM d, y'}}</p>
-          </div>
-        </div>
-        <h1 class="text-xl text-violet-700">{{item.title}}</h1>
-        <div class="flex justify-between items-center">
-          <p class="text-sm text-gray-600">{{item.description}}</p>
-          <div class="flex gap-2" *ngIf="deleteOrEditAnnouncement">
-            <div (click)="editAnnouncement(item)"
-              class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray/60  text-sm rounded-full  font-medium hover:bg-white">
-              <ng-icon name="heroPencilSquare"></ng-icon>
-            </div>
-            <div (click)="deleteAnnouncement(item)"
-              class="cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-gray/60  text-sm rounded-full  font-medium hover:bg-white">
-              <ng-icon class="text-red-500" name="heroTrash"></ng-icon>
-            </div>
-          </div>
-        </div>
+      <ng-container *ngTemplateOutlet="announcementRow; context: { item: item, isRecent: false }"></ng-container>
+    </div>
+
+    <div *ngIf="isEmpty" class="w-full flex justify-center items-center">
+      <div class="p-3">
+        <img src="assets/images/empty.png" alt="">
+        <p class="m-2 text-center text-sm text-gray-500">No announcements.</p>
       </div>
     </div>
-  </div>
-
-
-  <div *ngIf="isEmpty" class="w-full flex justify-center items-center">
-    <div class="p-3">
-      <img src="assets/images/empty.png" alt="">
-      <p class="m-2 text-center text-gray-500">No Data</p>
-    </div>
-  </div>
-
-  <div class="w-full mt-4" *ngIf="!isEmpty">
-    <app-pagination [page]="page" [row]="row" [total]="total" (changeData)="onPageNumberClick($event)"></app-pagination>
   </div>
 </div>

@@ -7,7 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { ReportBugComponent } from '../report-bug/report-bug.component';
 import { BugReportScreenshotService } from 'src/app/core/diagnostics/bug-report-screenshot.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { Observable, map } from 'rxjs';
+import { combineLatest, Observable, map } from 'rxjs';
 import { getEmployee } from '../../interfaces/employee.interface';
 import { Router, RouterModule } from '@angular/router';
 import { TextNotification } from '../../interfaces/notification.interface';
@@ -16,15 +16,17 @@ import { ButtonComponent } from '../button/button.component';
 import { MsalService } from '@azure/msal-angular';
 import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
 import { ThemeService } from 'src/app/core/services/theme.service';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 @Component({
     selector: 'app-nav-bar',
     templateUrl: './nav-bar.component.html',
     styleUrls: ['./nav-bar.component.css'],
-    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent]
+    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent,MatTooltipModule]
 })
 export class NavBarComponent {
   textNotificationCount$!: Observable<{viewed:TextNotification[],unviewed:TextNotification[]}>;
+  textNotificationBadgeCount$!: Observable<number>;
   announcementNotificationCount$!: Observable<number>;
   @Output() reduce = new EventEmitter<boolean>()
   showFullBar: boolean = true
@@ -34,6 +36,7 @@ export class NavBarComponent {
   employee!: { id: string, employeeId: string };
   employeeData$!: Observable<getEmployee | undefined>
   @Output() toggleDrawer = new EventEmitter<void>();
+  @Output() toggleAnnouncementDrawer = new EventEmitter<void>();
 
   constructor(
     private _employeeService: EmployeeService,
@@ -51,6 +54,17 @@ export class NavBarComponent {
     this.textNotificationCount$ = this._notificationService.textNotificationsSubject$;
     this.announcementNotificationCount$ = this.textNotificationCount$.pipe(
       map((notifications) => notifications.unviewed.filter((n) => n.type === 'Announcement').length)
+    );
+    this.textNotificationBadgeCount$ = combineLatest([
+      this.textNotificationCount$,
+      this._notificationService.markedUnreadIds$,
+    ]).pipe(
+      map(([{ viewed, unviewed }, markedUnreadIds]) => {
+        const reMarkedUnread = (viewed || []).filter(
+          (notification) => notification._id && markedUnreadIds.has(notification._id)
+        ).length;
+        return unviewed.length + reMarkedUnread;
+      })
     );
     this.getEmployeeData()
   }
@@ -97,7 +111,7 @@ export class NavBarComponent {
   }
 
   onAnnouncementsClick() {
-    this._router.navigate(['/announcements']);
+    this.toggleAnnouncementDrawer.emit();
   }
 
   toggleTheme() {

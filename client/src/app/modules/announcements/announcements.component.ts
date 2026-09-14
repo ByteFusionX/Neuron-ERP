@@ -1,27 +1,27 @@
-import { Component, OnDestroy, OnInit, AfterViewInit, ElementRef, ViewChildren, QueryList } from '@angular/core';
+import { Component, OnDestroy, OnInit, AfterViewInit, ElementRef, ViewChildren, QueryList, Output, EventEmitter } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { AddAnnouncementComponent } from './add-announcement/add-announcement.component';
 import { AnnouncementService } from 'src/app/core/services/announcement/announcement.service';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { Subject } from 'rxjs';
 import { announcementGetData } from 'src/app/shared/interfaces/announcement.interface';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { takeUntil } from 'rxjs/operators';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { NgIf, NgClass, NgFor, DatePipe } from '@angular/common';
+import { NgIf, NgFor, NgTemplateOutlet, DatePipe } from '@angular/common';
 import { SkeltonLoadingComponent } from 'src/app/shared/components/skelton-loading/skelton-loading.component';
 import { ConfettiComponentComponent } from 'src/app/shared/components/confetti-component/confetti-component.component';
 import { NgIcon } from '@ng-icons/core';
-import { PaginationComponent } from 'src/app/shared/components/pagination/pagination.component';
 
 @Component({
     selector: 'app-announcements',
     templateUrl: './announcements.component.html',
     styleUrls: ['./announcements.component.css'],
-    imports: [NgIf, SkeltonLoadingComponent, NgClass, ConfettiComponentComponent, NgIcon, NgFor, PaginationComponent, DatePipe]
+    imports: [NgIf, SkeltonLoadingComponent, ConfettiComponentComponent, NgIcon, NgFor, NgTemplateOutlet, DatePipe]
 })
 export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit {
+  @Output() closeSidenav = new EventEmitter<void>();
   createAnnouncement: boolean | undefined = false;
   deleteOrEditAnnouncement: boolean | undefined = false;
   private readonly destroy$ = new Subject<void>(); // Subject to manage component lifecycle
@@ -30,12 +30,11 @@ export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit 
   isLoading: boolean = true;
   isEmpty: boolean = false;
   total: number = 0;
-  page: number = 1;
-  row: number = 10;
+  readonly page: number = 1;
+  readonly row: number = 1000;
   userId!: string;
   userCategoryId!: string;
 
-  private subject = new BehaviorSubject<{ page: number, row: number }>({ page: this.page, row: this.row });
   @ViewChildren('announcementItem') announcementItems!: QueryList<ElementRef>;
 
   private notViewedIds: Set<string> = new Set(); // Track IDs of not viewed announcements
@@ -50,11 +49,7 @@ export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit 
 
   ngOnInit(): void {
     this.checkPermission();
-    this.subject.pipe(takeUntil(this.destroy$)).subscribe((data) => {
-      this.page = data.page;
-      this.row = data.row;
-      this.getAnnouncementData();
-    });
+    this.getAnnouncementData();
   }
 
   ngAfterViewInit() {
@@ -82,11 +77,7 @@ export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit 
           this.updateNotViewedIds();
 
           this.isEmpty = this.announcementData.length === 0;
-          if (this.page === 1) {
-            this.recentData = this.announcementData.shift() || null;
-          } else {
-            this.recentData = null;
-          }
+          this.recentData = this.announcementData.shift() || null;
         } else {
           this.isLoading = false;
           this.isEmpty = true;
@@ -177,6 +168,10 @@ export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit 
     return item._id;
   }
 
+  isMuted(item: announcementGetData): boolean {
+    return !!item.date && new Date(item.date).getTime() < Date.now();
+  }
+
   checkPermission() {
     this._employeeService.employeeData$.pipe(takeUntil(this.destroy$)).subscribe((data) => {
       this.userId = data?._id || '';
@@ -191,7 +186,7 @@ export class AnnouncementsComponent implements OnDestroy, OnInit, AfterViewInit 
     this.destroy$.complete();
   }
 
-  onPageNumberClick(event: { page: number, row: number }) {
-    this.subject.next(event);
+  onClose() {
+    this.closeSidenav.emit();
   }
 }

@@ -209,6 +209,22 @@ export const markAsRead = async (req: Request, res: Response, next: NextFunction
     }
 };
 
+export const markAsReadByTypes = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { types, recipientId } = req.body;
+        if (!Array.isArray(types) || types.length === 0 || !recipientId) {
+            return res.status(400).json({ success: false, message: 'types[] and recipientId are required' });
+        }
+        const result = await Notification.updateMany(
+            { type: { $in: types }, recipients: { $elemMatch: { objectId: recipientId, status: { $ne: "read" } } } },
+            { $set: { "recipients.$.status": "read" } }
+        );
+        return res.status(200).json({ success: true, modifiedCount: result.modifiedCount });
+    } catch (error) {
+        next(error);
+    }
+};
+
 interface PrivilegeFilter {
     privilegeKey: keyof Privileges;
     privilegeValue?: string | boolean;
