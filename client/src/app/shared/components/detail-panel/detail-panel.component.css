@@ -1,0 +1,94 @@
+/* Fixed sidebar docked to the right edge, between the app nav bar (4rem) and the bottom of the screen. */
+:host {
+  position: fixed;
+  top: var(--dp-top, 4rem);
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: var(--dp-width, 34rem);
+  max-width: 100vw;
+  overflow: hidden;
+  background: #fff;
+  border-left: 1px solid #f3f4f6;
+  box-shadow: -12px 0 32px -16px rgb(17 24 39 / 0.18);
+  animation: dp-slide-in 200ms ease-out;
+}
+
+:host-context(html.dark) {
+  background: #15131f;
+  border-left-color: #2a2640;
+  box-shadow: -12px 0 32px -16px rgb(0 0 0 / 0.5);
+}
+
+@keyframes dp-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.dp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 0.5rem;
+  color: #6b7280;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.dp-icon-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+:host-context(html.dark) .dp-icon-btn {
+  color: #9ca3af;
+}
+
+:host-context(html.dark) .dp-icon-btn:hover {
+  background: #2a2640;
+  color: #f3f4f6;
+}
+
+/* Key facts: bordered strip of label/value cells */
+.dp-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  margin-top: 1rem;
+  border: 1px solid #f3f4f6;
+  border-radius: 0.625rem;
+  overflow: hidden;
+}
+
+:host-context(html.dark) .dp-meta {
+  border-color: #2a2640;
+}
+
+.dp-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid #f3f4f6;
+  background: #fafafa;
+}
+
+:host-context(html.dark) .dp-footer {
+  border-top-color: #2a2640;
+  background: #1c1930;
+}
+
+/* tablet and below: full-screen overlay; the list underneath keeps its scroll position */
+@media (max-width: 1024px) {
+  :host {
+    top: 0;
+    width: auto;
+    left: 0;
+    border: 0;
+    z-index: 40;
+  }
+}

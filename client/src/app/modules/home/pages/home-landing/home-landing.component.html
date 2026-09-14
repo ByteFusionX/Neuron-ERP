@@ -1,3 +1,247 @@
-<div class="p-6">
-  <h1 class="text-xl font-semibold text-gray-800">Welcome</h1>
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <!-- Sample data preview of the shared data grid (pending design approval) -->
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    title="Projects"
+    [breadcrumbs]="breadcrumbs"
+    createLabel="New project"
+    searchPlaceholder="Search projects…"
+    storageKey="home-projects"
+    [views]="views"
+    [loading]="loading"
+    [detailLoading]="detailLoading"
+    (rowOpen)="onRowOpen()"
+    (create)="formOpen = true"
+    [rowActions]="rowActions"
+    (rowAction)="onRowAction($event, grid)"
+    [data]="projects"
+    [columns]="columns"
+    [bulkActions]="bulkActions"
+    [detailTabs]="detailTabs"
+    [detailTitle]="projectTitle"
+    [detailSubtitle]="projectSubtitle"
+    [fillHeight]="true"
+    (cellEdit)="onCellEdit($event)"
+    (bulkAction)="onBulkAction($event, grid)">
+
+    <!-- Copy link: disabled/hidden for now
+    <ng-template #detailActionsTemplate>
+      <button type="button" class="hl-icon-btn" aria-label="Copy link" matTooltip="Copy link"><app-dp-icon name="link"></app-dp-icon></button>
+    </ng-template>
+    -->
+
+    <ng-template #detailAsideTemplate let-row>
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
+        [ngClass]="statusClasses[row.status]">{{ row.status }}</span>
+    </ng-template>
+
+    <ng-template #detailMetaTemplate let-row>
+      <div class="hl-meta">
+        <p class="hl-meta-label">Customer</p>
+        <p class="hl-meta-value">{{ row.customer }}</p>
+      </div>
+      <div class="hl-meta">
+        <p class="hl-meta-label">Budget</p>
+        <p class="hl-meta-value">{{ row.budget | currency: 'QAR' : 'symbol-narrow' : '1.0-0' }}</p>
+      </div>
+      <div class="hl-meta">
+        <p class="hl-meta-label">Due date</p>
+        <p class="hl-meta-value" [class.text-red-600]="daysToDue(row) < 0 && row.status !== 'Completed'">{{ row.dueDate | date: 'dd MMM yyyy' }}</p>
+      </div>
+      <div class="hl-meta">
+        <p class="hl-meta-label">Progress</p>
+        <p class="hl-meta-value">{{ row.progress }}%</p>
+      </div>
+    </ng-template>
+
+    <ng-template #detailFooterTemplate let-row>
+      <button type="button" class="hl-btn hl-btn-secondary" *ngIf="row.status !== 'On Hold' && row.status !== 'Completed' && row.status !== 'Cancelled'"
+        (click)="onRowAction({ action: rowActions[1], row: row }, grid)">Put on Hold</button>
+      <button type="button" class="hl-btn hl-btn-primary">Open project</button>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <ng-container *ngSwitchCase="'overview'">
+          <app-detail-section title="General" columns="2">
+            <app-detail-field stacked label="Project #"><span class="tabular-nums">{{ row.id }}</span></app-detail-field>
+            <app-dg-field stacked [grid]="grid" [row]="row" key="status"></app-dg-field>
+            <app-detail-field stacked label="Customer">{{ row.customer }}</app-detail-field>
+            <app-dg-field stacked [grid]="grid" [row]="row" key="priority"></app-dg-field>
+            <app-dg-field stacked [grid]="grid" [row]="row" key="manager" label="Project manager"></app-dg-field>
+          </app-detail-section>
+
+          <app-detail-section title="Schedule" columns="2">
+            <app-detail-field stacked label="Start date">{{ row.startDate | date: 'dd MMM yyyy' }}</app-detail-field>
+            <div>
+              <app-dg-field stacked [grid]="grid" [row]="row" key="dueDate"></app-dg-field>
+              <p *ngIf="row.status !== 'Completed' && row.status !== 'Cancelled'" class="mt-0.5 text-xs"
+                [ngClass]="daysToDue(row) < 0 ? 'text-red-600' : 'text-gray-500'">
+                {{ daysToDue(row) < 0 ? (-daysToDue(row)) + 'd overdue' : daysToDue(row) + 'd left' }}
+              </p>
+            </div>
+          </app-detail-section>
+
+          <app-detail-section title="Progress">
+            <div class="flex items-center justify-between text-[13px] mb-1.5">
+              <span class="text-gray-500">Completion</span>
+              <span class="font-medium tabular-nums">{{ row.progress }}%</span>
+            </div>
+            <div class="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+              <div class="h-full rounded-full bg-violet-600" [style.width.%]="row.progress"></div>
+            </div>
+          </app-detail-section>
+        </ng-container>
+
+        <ng-container *ngSwitchCase="'financials'">
+          <app-detail-section title="Budget">
+            <app-dg-field [grid]="grid" [row]="row" key="budget" label="Approved budget"></app-dg-field>
+            <app-detail-field label="Spent"><span class="tabular-nums">{{ row.spent | currency: 'QAR' : 'symbol-narrow' }}</span></app-detail-field>
+            <app-detail-field label="Remaining">
+              <span class="font-medium tabular-nums" [class.text-red-600]="row.budget - row.spent < 0">{{ row.budget - row.spent | currency: 'QAR' : 'symbol-narrow' }}</span>
+            </app-detail-field>
+          </app-detail-section>
+
+          <app-detail-section title="Utilization">
+            <div class="flex items-center justify-between text-[13px] mb-1.5">
+              <span class="text-gray-500">Budget used</span>
+              <span class="font-medium tabular-nums" [class.text-red-600]="budgetUsed(row) > 100">{{ budgetUsed(row) }}%</span>
+            </div>
+            <div class="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+              <div class="h-full rounded-full" [ngClass]="budgetUsed(row) > 100 ? 'bg-red-500' : 'bg-emerald-500'"
+                [style.width.%]="budgetUsed(row) > 100 ? 100 : budgetUsed(row)"></div>
+            </div>
+          </app-detail-section>
+        </ng-container>
+
+        <ol *ngSwitchCase="'activity'" class="relative ml-1 border-l border-gray-200 dark:border-erp-border-dark">
+          <li *ngFor="let a of row.activity" class="relative pl-5 pb-5 last:pb-0">
+            <span class="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-white dark:bg-erp-surface-dark ring-2 ring-violet-500"></span>
+            <p class="text-[13px] text-gray-800 dark:text-gray-100">{{ a.text }}</p>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ a.by }} · {{ a.date | date: 'dd MMM yyyy' }}</p>
+          </li>
+        </ol>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+
+  <app-sf-drawer title="New project" subtitle="Fields marked * are required. Your progress is saved as a draft."
+    [open]="formOpen" [dirty]="projectForm.dirty" (closed)="closeForm($event, draft)">
+
+    <span sfDrawerHeader *ngIf="draft.savedAt" class="text-xs text-gray-400">Draft saved {{ draft.savedAt | date: 'HH:mm' }}</span>
+
+    <div *ngIf="draft.pending" class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[13px] text-violet-900">
+      <span>You have an unsaved draft from {{ draft.pending.savedAt | date: 'dd MMM, HH:mm' }}.</span>
+      <span class="flex gap-3">
+        <button type="button" class="font-medium hover:underline" (click)="draft.restore()">Restore</button>
+        <button type="button" class="text-violet-700 hover:underline" (click)="draft.discard()">Discard</button>
+      </span>
+    </div>
+
+    <form id="new-project-form" [formGroup]="projectForm" sfDraft="home-projects-new" [sfDraftExclude]="['attachments']" #draft="sfDraft"
+      (ngSubmit)="submitProject(grid, draft)" novalidate>
+      <app-sf-section title="Basics" columns="2">
+        <app-sf-field full label="Project name" [control]="projectForm.controls.name">
+          <app-sf-input formControlName="name" placeholder="e.g. CCTV Installation – Phase 1" [maxlength]="80" clearable></app-sf-input>
+        </app-sf-field>
+        <app-sf-field label="Customer" hint="Search by name" [control]="projectForm.controls.customer">
+          <app-sf-combobox formControlName="customer" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
+        </app-sf-field>
+        <app-sf-field label="Project type" [control]="projectForm.controls.type">
+          <app-sf-select formControlName="type" [options]="typeOptions" placeholder="Select type"></app-sf-select>
+        </app-sf-field>
+        <app-sf-field label="Customer PO / reference" optional>
+          <app-sf-input formControlName="reference" prefix="#" placeholder="PO-00000"></app-sf-input>
+        </app-sf-field>
+        <app-sf-field label="Priority">
+          <app-sf-radio-group formControlName="priority" variant="segmented" [options]="priorityOptions"></app-sf-radio-group>
+        </app-sf-field>
+      </app-sf-section>
+
+      <app-sf-section title="Team & contact" columns="2">
+        <app-sf-field label="Project manager" [control]="projectForm.controls.manager">
+          <app-sf-combobox formControlName="manager" [options]="managerOptions"></app-sf-combobox>
+        </app-sf-field>
+        <app-sf-field label="Team members" optional>
+          <app-sf-combobox formControlName="team" [options]="managerOptions" multiple placeholder="Add members"></app-sf-combobox>
+        </app-sf-field>
+        <app-sf-field label="Customer contact email" optional [control]="projectForm.controls.contactEmail">
+          <app-sf-input type="email" formControlName="contactEmail" placeholder="name@company.com"></app-sf-input>
+        </app-sf-field>
+        <app-sf-field label="Contact phone" optional [control]="projectForm.controls.contactPhone" [messages]="{ pattern: 'Enter a valid phone number' }">
+          <app-sf-input type="tel" formControlName="contactPhone" prefix="+974" placeholder="5555 1234"></app-sf-input>
+        </app-sf-field>
+      </app-sf-section>
+
+      <app-sf-section title="Schedule" columns="3">
+        <app-sf-field label="Start date" [control]="projectForm.controls.startDate">
+          <app-sf-date formControlName="startDate"></app-sf-date>
+        </app-sf-field>
+        <app-sf-field label="Due date" [control]="projectForm.controls.dueDate">
+          <app-sf-date formControlName="dueDate" [min]="projectForm.controls.startDate.value"></app-sf-date>
+        </app-sf-field>
+        <app-sf-field label="Kick-off time" optional>
+          <app-sf-date type="time" formControlName="kickoffTime"></app-sf-date>
+        </app-sf-field>
+      </app-sf-section>
+
+      <app-sf-section title="Financials" description="Billing type decides which fields are needed." columns="2">
+        <app-sf-field label="Approved budget" [control]="projectForm.controls.budget" [messages]="{ min: 'Budget must be at least QAR 1,000' }">
+          <app-sf-currency formControlName="budget"></app-sf-currency>
+        </app-sf-field>
+        <app-sf-field label="Contingency" [control]="projectForm.controls.contingency"
+          [hint]="contingencyAmount ? '≈ QAR ' + (contingencyAmount | number: '1.0-0') : ''">
+          <app-sf-number formControlName="contingency" suffix="%" [min]="0" [max]="50"></app-sf-number>
+        </app-sf-field>
+        <app-sf-field full label="Billing type">
+          <app-sf-radio-group formControlName="billing" variant="cards" [columns]="3" [options]="billingOptions"></app-sf-radio-group>
+        </app-sf-field>
+        <app-sf-field *ngIf="projectForm.controls.billing.value === 'milestone'" label="Number of milestones"
+          hint="Between 2 and 12" [control]="projectForm.controls.milestones">
+          <app-sf-number formControlName="milestones" [min]="2" [max]="12"></app-sf-number>
+        </app-sf-field>
+      </app-sf-section>
+
+      <app-sf-section title="Scope" columns="2">
+        <app-sf-field full label="Services included" optional>
+          <app-sf-checkbox-group formControlName="services" [options]="serviceOptions" [columns]="3"></app-sf-checkbox-group>
+        </app-sf-field>
+        <app-sf-field label="Risk level">
+          <app-sf-slider formControlName="risk" suffix="%" [stepSize]="5" [labels]="['Low', 'Medium', 'High']"></app-sf-slider>
+        </app-sf-field>
+        <app-sf-field label="Tags" optional hint="Press Enter to add">
+          <app-sf-tags formControlName="tags" placeholder="e.g. government, urgent" [max]="8"></app-sf-tags>
+        </app-sf-field>
+        <app-sf-field full label="Description" optional [control]="projectForm.controls.description">
+          <app-sf-textarea formControlName="description" [maxlength]="500" autoresize placeholder="Scope summary, site notes, special requirements…"></app-sf-textarea>
+        </app-sf-field>
+      </app-sf-section>
+
+      <app-sf-section title="Settings" columns="2">
+        <app-sf-field full>
+          <app-sf-checkbox formControlName="siteSurvey" label="Site survey required" description="A survey date must be scheduled before work starts"></app-sf-checkbox>
+        </app-sf-field>
+        <app-sf-field *ngIf="projectForm.controls.siteSurvey.value" label="Survey date" [control]="projectForm.controls.surveyDate">
+          <app-sf-date type="datetime-local" formControlName="surveyDate"></app-sf-date>
+        </app-sf-field>
+        <app-sf-field full>
+          <app-sf-switch formControlName="notifyCustomer" label="Notify customer" description="Email the contact when the project is created"></app-sf-switch>
+        </app-sf-field>
+      </app-sf-section>
+
+      <app-sf-section title="Attachments">
+        <app-sf-field>
+          <app-sf-file formControlName="attachments" accept=".pdf,.docx,.xlsx,.png,.jpg" [maxSizeMb]="10"></app-sf-file>
+        </app-sf-field>
+      </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+      <span *ngIf="projectForm.invalid && projectForm.touched" class="mr-auto text-xs text-red-600">Fix the highlighted fields</span>
+      <button type="button" class="hl-btn hl-btn-secondary" (click)="formOpen = false">Cancel</button>
+      <button type="submit" form="new-project-form" class="hl-btn hl-btn-primary disabled:opacity-60" [disabled]="saving">
+        {{ saving ? 'Creating…' : 'Create project' }}
+      </button>
+    </ng-container>
+  </app-sf-drawer>
 </div>

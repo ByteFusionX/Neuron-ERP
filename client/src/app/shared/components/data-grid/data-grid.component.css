@@ -1,0 +1,556 @@
+.dg-th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fafafa;
+  border-bottom: 1px solid #f3f4f6;
+  padding: 0.75rem 0.875rem;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+:host-context(html.dark) .dg-th {
+  background: #1c1930;
+  border-bottom-color: #2a2640;
+  color: #9ca3af;
+}
+
+.dg-th.text-right {
+  text-align: right;
+}
+
+.dg-th.text-center {
+  text-align: center;
+}
+
+.dg-td {
+  border-bottom: 1px solid #f1f2f4;
+  padding: 0.625rem 0.875rem;
+  color: #4b5563;
+  vertical-align: middle;
+  max-width: 280px;
+  background: inherit;
+}
+
+:host-context(html.dark) .dg-td {
+  border-bottom-color: #2a2640;
+  color: #9ca3af;
+}
+
+.dg-row {
+  background: #fff;
+  transition: background-color 120ms ease;
+}
+
+.dg-row:hover {
+  background: #fafafa;
+}
+
+.dg-row-selected,
+.dg-row-selected:hover {
+  background: #faf7ff;
+}
+
+.dg-row-active,
+.dg-row-active:hover {
+  background: #f5f0ff;
+}
+
+:host-context(html.dark) .dg-row {
+  background: #15131f;
+}
+
+:host-context(html.dark) .dg-row:hover {
+  background: #1c1930;
+}
+
+:host-context(html.dark) .dg-row-selected,
+:host-context(html.dark) .dg-row-selected:hover {
+  background: rgba(124, 58, 237, 0.12);
+}
+
+:host-context(html.dark) .dg-row-active,
+:host-context(html.dark) .dg-row-active:hover {
+  background: rgba(124, 58, 237, 0.18);
+}
+
+.dg-compact .dg-td {
+  padding-top: 0.4375rem;
+  padding-bottom: 0.4375rem;
+}
+
+.dg-compact .dg-th {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+/* row accent: left edge bar on the first cell (active row keeps the violet bar) */
+.dg-row[data-accent='danger'] .dg-accent-cell { box-shadow: inset 3px 0 0 #ef4444; }
+.dg-row[data-accent='warning'] .dg-accent-cell { box-shadow: inset 3px 0 0 #f59e0b; }
+.dg-row[data-accent='info'] .dg-accent-cell { box-shadow: inset 3px 0 0 #0ea5e9; }
+.dg-row-active .dg-accent-cell.dg-active-bar { box-shadow: inset 3px 0 0 #7c3aed; }
+
+.dg-tf {
+  position: sticky;
+  bottom: 0;
+  z-index: 9;
+  background: #fafafa;
+  border-top: 1px solid #f3f4f6;
+  padding: 0.625rem 0.875rem;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+:host-context(html.dark) .dg-tf {
+  background: #1c1930;
+  border-top-color: #2a2640;
+  color: #f3f4f6;
+}
+
+td.dg-tf.dg-sticky-right {
+  z-index: 10;
+}
+
+tbody tr:last-child .dg-td {
+  border-bottom: 0;
+}
+
+/* action column stays visible when the table scrolls horizontally */
+.dg-sticky-right {
+  position: sticky;
+  right: 0;
+}
+
+td.dg-sticky-right {
+  z-index: 1;
+}
+
+th.dg-sticky-right {
+  z-index: 11;
+}
+
+.dg-active-bar {
+  box-shadow: inset 3px 0 0 #7c3aed;
+}
+
+.dg-checkbox {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #7c3aed;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.dg-editable {
+  border-bottom: 1px dashed transparent;
+}
+
+tr:hover .dg-editable {
+  border-bottom-color: #d1d5db;
+}
+
+:host-context(html.dark) tr:hover .dg-editable {
+  border-bottom-color: #4b5563;
+}
+
+.dg-input {
+  width: 100%;
+  min-width: 6rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid #7c3aed;
+  border-radius: 0.5rem;
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(124 58 237 / 0.15);
+  background: #fff;
+}
+
+:host-context(html.dark) .dg-input {
+  background: #1c1930;
+  color: #f3f4f6;
+}
+
+.dg-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #4b5563;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.dg-page-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.dg-page-btn:disabled {
+  color: #c4c8cf;
+  cursor: default;
+}
+
+.dg-page-active,
+.dg-page-active:hover:not(:disabled) {
+  background: #7c3aed;
+  color: #fff;
+}
+
+:host-context(html.dark) .dg-page-btn {
+  color: #9ca3af;
+}
+
+:host-context(html.dark) .dg-page-btn:hover:not(:disabled) {
+  background: #2a2640;
+}
+
+:host-context(html.dark) .dg-page-btn:disabled {
+  color: #4b5563;
+}
+
+.dg-tool-btn,
+.dg-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  white-space: nowrap;
+  transition: background-color 120ms ease;
+}
+
+.dg-tool-btn {
+  color: #374151;
+  background: #fff;
+}
+
+.dg-tool-btn:hover {
+  background: #f9fafb;
+}
+
+:host-context(html.dark) .dg-tool-btn {
+  color: #d1d5db;
+  background: #15131f;
+  border-color: #2a2640;
+}
+
+:host-context(html.dark) .dg-tool-btn:hover {
+  background: #1c1930;
+}
+
+.dg-primary-btn {
+  color: #fff;
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+
+.dg-primary-btn:hover:not(:disabled) {
+  background: #6d28d9;
+}
+
+.dg-primary-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dg-search {
+  width: 14rem;
+  height: 2rem;
+  padding: 0 0.75rem 0 2rem;
+  font-size: 0.8125rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  outline: none;
+  background: #fff;
+}
+
+.dg-search:focus,
+.dg-field:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgb(124 58 237 / 0.15);
+}
+
+.dg-field {
+  width: 100%;
+  height: 2.125rem;
+  padding: 0 0.625rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  outline: none;
+  background: #fff;
+}
+
+:host-context(html.dark) .dg-search,
+:host-context(html.dark) .dg-field {
+  color: #d1d5db;
+  background: #15131f;
+  border-color: #2a2640;
+}
+
+:host-context(html.dark) .dg-search::placeholder,
+:host-context(html.dark) .dg-field::placeholder {
+  color: #6b7280;
+}
+
+.dg-pop {
+  animation: dg-pop-in 120ms ease-out;
+}
+
+@keyframes dg-pop-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+:host {
+  display: block;
+}
+
+:host.dg-fill-height {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+:host.dg-fill-height .dg-root,
+:host.dg-fill-height .dg-card {
+  height: 100%;
+  min-height: 0;
+}
+
+:host.dg-fill-height .dg-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dg-scroll {
+  scrollbar-color: #d1d5db #f9fafb;
+}
+
+.dg-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.dg-scroll::-webkit-scrollbar-track {
+  background: #f9fafb;
+}
+
+.dg-scroll::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 9999px;
+  border: 2px solid #f9fafb;
+}
+
+:host-context(html.dark) .dg-scroll {
+  scrollbar-color: #3a3650 #1c1930;
+}
+
+:host-context(html.dark) .dg-scroll::-webkit-scrollbar-track {
+  background: #1c1930;
+}
+
+:host-context(html.dark) .dg-scroll::-webkit-scrollbar-thumb {
+  background-color: #3a3650;
+  border: 2px solid #1c1930;
+}
+
+
+/* ---- views ---- */
+.dg-view-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2.5rem;
+  padding: 0 0.125rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 120ms ease;
+}
+
+.dg-view-tab:hover {
+  color: #111827;
+}
+
+.dg-view-active {
+  color: #111827;
+  font-weight: 500;
+  border-bottom-color: #7c3aed;
+}
+
+.dg-view-count {
+  min-width: 1.25rem;
+  padding: 0 0.375rem;
+  font-size: 11px;
+  line-height: 1.125rem;
+  text-align: center;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 9999px;
+}
+
+.dg-view-active .dg-view-count {
+  color: #6d28d9;
+  background: #ede9fe;
+}
+
+:host-context(html.dark) .dg-view-tab {
+  color: #9ca3af;
+}
+
+:host-context(html.dark) .dg-view-tab:hover {
+  color: #f3f4f6;
+}
+
+:host-context(html.dark) .dg-view-active {
+  color: #f3f4f6;
+}
+
+:host-context(html.dark) .dg-view-count {
+  color: #9ca3af;
+  background: #2a2640;
+}
+
+:host-context(html.dark) .dg-view-active .dg-view-count {
+  color: #c4b5fd;
+  background: rgba(124, 58, 237, 0.2);
+}
+
+/* ---- row quick actions: shown on hover/focus, hidden on touch where the menu is enough ---- */
+.dg-quick {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.dg-row:hover .dg-quick,
+.dg-row:focus-within .dg-quick,
+.dg-row-active .dg-quick {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .dg-quick {
+    display: none;
+  }
+}
+
+.dg-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 0.5rem;
+  color: #6b7280;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.dg-icon-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.dg-icon-btn:disabled {
+  color: #d1d5db;
+  cursor: default;
+}
+
+.dg-icon-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+:host-context(html.dark) .dg-icon-btn {
+  color: #9ca3af;
+}
+
+:host-context(html.dark) .dg-icon-btn:hover:not(:disabled) {
+  background: #2a2640;
+  color: #f3f4f6;
+}
+
+:host-context(html.dark) .dg-icon-btn:disabled {
+  color: #4b5563;
+}
+
+:host-context(html.dark) .dg-icon-danger:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.15);
+  color: #f87171;
+}
+
+/* ---- loading ---- */
+.dg-skel {
+  height: 0.75rem;
+  max-width: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #f1f2f4 25%, #e7e8eb 37%, #f1f2f4 63%);
+  background-size: 400% 100%;
+  animation: dg-shimmer 1.4s ease infinite;
+}
+
+:host-context(html.dark) .dg-skel {
+  background: linear-gradient(90deg, #2a2640 25%, #342f52 37%, #2a2640 63%);
+  background-size: 400% 100%;
+}
+
+@keyframes dg-shimmer {
+  from { background-position: 100% 50%; }
+  to { background-position: 0 50%; }
+}
+
+.dg-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  z-index: 12;
+}
+
+.dg-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: #7c3aed;
+  animation: dg-progress 1.1s ease-in-out infinite;
+}
+
+@keyframes dg-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+.dg-refreshing {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dg-skel,
+  .dg-progress::after {
+    animation: none;
+  }
+}

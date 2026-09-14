@@ -1,0 +1,526 @@
+<div class="dg-root flex" [class.dg-detail-open]="!!activeRow">
+  <!-- ============ TABLE CARD ============ -->
+  <div class="dg-card flex-1 min-w-0 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl overflow-hidden flex flex-col">
+
+    <!-- Toolbar / bulk bar -->
+    <div class="relative shrink-0 flex items-center justify-between gap-3 px-5 h-16 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
+      [ngClass]="selectedKeys.size > 0 ? 'bg-violet-50 dark:bg-violet-950/40' : ''">
+      <div *ngIf="loading && data.length" class="dg-progress" role="progressbar" aria-label="Loading"></div>
+      <ng-container *ngIf="selectedKeys.size === 0; else bulkBar">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <nav *ngIf="breadcrumbs.length" aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
+            <ng-container *ngFor="let b of breadcrumbs">
+              <a *ngIf="b.link; else crumbText" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+              <ng-template #crumbText><span class="truncate max-w-40">{{ b.label }}</span></ng-template>
+              <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" /></svg>
+            </ng-container>
+          </nav>
+          <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" [attr.aria-current]="breadcrumbs.length ? 'page' : null">{{ title }}</h2>
+          <!-- view tabs carry the counts when views are configured -->
+          <span *ngIf="!allViews.length" class="px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full tabular-nums">{{ isFiltered ? filteredData.length + ' / ' + data.length : data.length }}</span>
+        </div>
+      </ng-container>
+
+      <ng-template #bulkBar>
+        <div class="flex items-center gap-3 min-w-0 flex-wrap">
+          <button type="button" (click)="clearSelection()" aria-label="Clear selection"
+            class="p-1 rounded-md text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+          <span class="text-sm font-semibold text-violet-900 dark:text-violet-200 tabular-nums">{{ selectedKeys.size }} selected</span>
+          <button *ngIf="selectedKeys.size < filteredData.length" type="button" (click)="selectAll()"
+            class="text-xs font-medium text-violet-700 dark:text-violet-300 hover:underline">Select all {{ filteredData.length }}</button>
+          <span class="h-5 w-px bg-violet-200 dark:bg-violet-800"></span>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button *ngFor="let a of bulkActions" type="button" (click)="runBulkAction(a)"
+              class="h-8 px-3 text-xs font-medium rounded-lg border transition-colors"
+              [ngClass]="{
+                'bg-violet-600 border-violet-600 text-white hover:bg-violet-700': a.variant === 'primary',
+                'bg-white dark:bg-erp-surface-dark border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40': a.variant === 'danger',
+                'bg-white dark:bg-erp-surface-dark border-gray-100 dark:border-erp-border-dark text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800': !a.variant || a.variant === 'default'
+              }">{{ a.label }}</button>
+          </div>
+        </div>
+      </ng-template>
+
+      <div *ngIf="selectedKeys.size === 0" class="flex items-center gap-2 shrink-0">
+      <!-- Search -->
+      <div class="relative">
+        <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="M20 20l-3.5-3.5" />
+        </svg>
+        <input type="search" class="dg-search" [placeholder]="searchPlaceholder" [attr.aria-label]="'Search ' + title"
+          [ngModel]="searchTerm" (ngModelChange)="onSearch($event)" />
+      </div>
+
+      <!-- Filter builder -->
+      <div class="relative">
+        <button type="button" (click)="toggleFilterMenu()" class="dg-tool-btn"
+          [ngClass]="filterMenuOpen ? 'ring-2 ring-violet-100 dark:ring-violet-900' : ''">
+          <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 5h16l-6 7.5V19l-4-2v-4.5L4 5z" />
+          </svg>
+          Filter
+          <span *ngIf="filters.length" class="px-1.5 rounded-full bg-violet-600 text-white text-[10px] tabular-nums">{{ filters.length }}</span>
+        </button>
+        <ng-container *ngIf="filterMenuOpen">
+          <div class="fixed inset-0 z-20" (click)="filterMenuOpen = false"></div>
+          <div class="dg-pop absolute right-0 mt-2 w-72 z-30 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg p-3 space-y-2">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">{{ editingFilterId != null ? 'Edit filter' : 'Add filter' }}</p>
+            <div *ngIf="editingFilterId == null && filters.length" class="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800" role="radiogroup" aria-label="Combine with existing filters">
+              <button *ngFor="let j of [false, true]" type="button" role="radio" [attr.aria-checked]="!!draftFilter.or === j"
+                (click)="draftFilter.or = j" class="h-7 text-xs font-medium rounded-md transition-colors"
+                [ngClass]="!!draftFilter.or === j ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+                {{ j ? 'OR with last' : 'AND' }}
+              </button>
+            </div>
+            <select class="dg-field" [ngModel]="draftFilter.key" (ngModelChange)="onDraftColumnChange($event)" aria-label="Field">
+              <option *ngFor="let c of columns" [ngValue]="c.key">{{ c.label }}</option>
+            </select>
+            <select class="dg-field" [(ngModel)]="draftFilter.op" aria-label="Operator">
+              <option *ngFor="let o of operatorsFor(draftColumn)" [ngValue]="o.value">{{ o.label }}</option>
+            </select>
+            <ng-container *ngIf="draftFilter.op !== 'empty'">
+              <select *ngIf="optionsFor(draftColumn).length; else freeValue" class="dg-field" [(ngModel)]="draftFilter.value" aria-label="Value">
+                <option value="" disabled>Select value</option>
+                <option *ngFor="let o of optionsFor(draftColumn)" [ngValue]="o.value">{{ o.label }}</option>
+              </select>
+              <ng-template #freeValue>
+                <input class="dg-field" [(ngModel)]="draftFilter.value" placeholder="Value" aria-label="Value"
+                  [type]="draftColumn?.type === 'date' ? 'date' : (draftColumn?.type === 'number' || draftColumn?.type === 'currency') ? 'number' : 'text'"
+                  (keydown.enter)="applyDraftFilter()" />
+              </ng-template>
+            </ng-container>
+            <div class="flex justify-end gap-2 pt-1">
+              <button type="button" class="dg-tool-btn" (click)="filterMenuOpen = false">Cancel</button>
+              <button type="button" class="dg-primary-btn" [disabled]="!canApplyDraft" (click)="applyDraftFilter()">{{ editingFilterId != null ? 'Update' : 'Apply' }}</button>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Sort -->
+      <div *ngIf="sortableColumns.length" class="relative">
+        <button type="button" (click)="sortMenuOpen = !sortMenuOpen" class="dg-tool-btn"
+          [ngClass]="sortMenuOpen ? 'ring-2 ring-violet-100 dark:ring-violet-900' : ''">
+          <app-dp-icon name="sort" class="text-gray-500 dark:text-gray-400"></app-dp-icon>
+          <ng-container *ngIf="sort.key; else sortPlain">
+            <span class="max-w-28 truncate">{{ sortLabel }}</span>
+            <span class="text-gray-400 dark:text-gray-500">{{ sort.direction === 'asc' ? '↑' : '↓' }}</span>
+          </ng-container>
+          <ng-template #sortPlain>Sort</ng-template>
+        </button>
+        <ng-container *ngIf="sortMenuOpen">
+          <div class="fixed inset-0 z-20" (click)="sortMenuOpen = false"></div>
+          <div class="dg-pop absolute right-0 mt-2 w-60 z-30 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg p-3 space-y-2">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">Sort by</p>
+            <select class="dg-field" [ngModel]="sort.key" (ngModelChange)="setSort($event)" aria-label="Sort field">
+              <option [ngValue]="null">None</option>
+              <option *ngFor="let c of sortableColumns" [ngValue]="c.key">{{ c.label }}</option>
+            </select>
+            <div class="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800" role="radiogroup" aria-label="Sort direction">
+              <button *ngFor="let d of ['asc', 'desc']" type="button" role="radio" [disabled]="!sort.key"
+                [attr.aria-checked]="sort.direction === d" (click)="setSort(sort.key, $any(d))"
+                class="h-7 text-xs font-medium rounded-md transition-colors disabled:opacity-50"
+                [ngClass]="sort.key && sort.direction === d ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'">
+                {{ d === 'asc' ? 'Ascending' : 'Descending' }}
+              </button>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Column visibility -->
+      <div class="relative">
+        <button type="button" (click)="columnMenuOpen = !columnMenuOpen" class="dg-tool-btn"
+          [ngClass]="columnMenuOpen ? 'ring-2 ring-violet-100 dark:ring-violet-900' : ''">
+          <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16M9 4v4M15 10v4M11 16v4" />
+          </svg>
+          Columns
+        </button>
+        <ng-container *ngIf="columnMenuOpen">
+          <div class="fixed inset-0 z-20" (click)="columnMenuOpen = false"></div>
+          <div class="dg-pop absolute right-0 mt-2 w-64 z-30 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg py-1">
+            <div class="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-100 dark:border-erp-border-dark">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">Columns</span>
+              <span class="flex items-center gap-3">
+                <button type="button" class="text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline" (click)="showAllColumns()">Show all</button>
+                <button type="button" class="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:underline" (click)="resetColumns()">Reset</button>
+              </span>
+            </div>
+            <p class="px-3 pt-2 text-xs text-gray-500 dark:text-gray-500">Drag to reorder.</p>
+            <div class="max-h-80 overflow-y-auto py-1">
+              <div *ngFor="let c of columns; let i = index; let last = last; trackBy: trackColumnKey" draggable="true"
+                (dragstart)="onColumnDragStart(c, $event)" (dragover)="onColumnDragOver(c, $event)"
+                (drop)="onColumnDrop(c, $event)" (dragend)="onColumnDragEnd()"
+                class="group/col flex items-center gap-1.5 mx-1 pl-1 pr-1 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800"
+                [ngClass]="dragOverKey === c.key ? 'bg-violet-50 dark:bg-violet-950/40' : ''">
+                <app-dp-icon name="grip" class="text-gray-300 dark:text-gray-600 cursor-grab"></app-dp-icon>
+                <label class="flex flex-1 min-w-0 items-center gap-2.5 text-sm text-gray-700 dark:text-gray-300"
+                  [class.opacity-50]="c.locked" [class.cursor-pointer]="!c.locked">
+                  <input type="checkbox" class="dg-checkbox" [checked]="c.visible" [disabled]="c.locked"
+                    (change)="toggleColumn(c)" />
+                  <span class="truncate">{{ c.label }}</span>
+                  <svg *ngIf="c.locked" class="w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 118 0v3" />
+                  </svg>
+                </label>
+                <span class="flex opacity-0 group-hover/col:opacity-100 focus-within:opacity-100">
+                  <button type="button" class="dg-icon-btn !w-6 !h-6" [disabled]="i === 0" (click)="moveColumnBy(c, -1)"
+                    [attr.aria-label]="'Move ' + c.label + ' up'"><app-dp-icon name="chevronUp" size="w-3.5 h-3.5"></app-dp-icon></button>
+                  <button type="button" class="dg-icon-btn !w-6 !h-6" [disabled]="last" (click)="moveColumnBy(c, 1)"
+                    [attr.aria-label]="'Move ' + c.label + ' down'"><app-dp-icon name="chevronDown" size="w-3.5 h-3.5"></app-dp-icon></button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- Primary action -->
+      <button *ngIf="createLabel" type="button" class="dg-primary-btn" (click)="create.emit()">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14" /></svg>
+        {{ createLabel }}
+      </button>
+      </div>
+    </div>
+
+    <!-- Views -->
+    <div *ngIf="allViews.length" role="tablist" [attr.aria-label]="title + ' views'"
+      class="dg-view-tabs shrink-0 flex flex-wrap items-center gap-x-5 gap-y-1 px-5 border-b border-gray-100 dark:border-erp-border-dark">
+      <button *ngFor="let v of allViews" type="button" role="tab" class="dg-view-tab group/view"
+        [class.dg-view-active]="v.id === activeViewId" [attr.aria-selected]="v.id === activeViewId" (click)="selectView(v)">
+        {{ v.label }}
+        <span *ngIf="!loading || data.length; else countSkel" class="dg-view-count tabular-nums">{{ viewCount(v) }}</span>
+        <ng-template #countSkel><span class="dg-skel !h-3 w-5"></span></ng-template>
+        <span *ngIf="v.custom" role="button" tabindex="0" [attr.aria-label]="'Delete view ' + v.label" matTooltip="Delete view"
+          class="-mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 dark:text-gray-500 opacity-0 group-hover/view:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
+          (click)="deleteView(v, $event)" (keydown.enter)="deleteView(v, $event)">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+        </span>
+      </button>
+    </div>
+
+    <!-- Applied search & filter pills -->
+    <div *ngIf="isFiltered || scopedView" class="shrink-0 flex items-center gap-2 flex-wrap px-5 py-2.5 border-b border-gray-100 dark:border-erp-border-dark">
+      <span *ngIf="scopedView as v" class="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 text-xs rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-800 dark:text-violet-300 ring-1 ring-inset ring-violet-200 dark:ring-violet-900">
+        <span class="text-violet-500 dark:text-violet-400">View</span>
+        <span class="font-medium max-w-40 truncate">{{ v.label }}</span>
+        <button type="button" (click)="clearView()" [attr.aria-label]="'Remove ' + v.label + ' view'"
+          class="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-violet-100 dark:hover:bg-violet-900/50">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </span>
+      <span *ngIf="searchTerm.trim()" class="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 text-xs rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 ring-1 ring-inset ring-gray-200 dark:ring-gray-700">
+        <span class="text-gray-500 dark:text-gray-400">Search</span>
+        <span class="font-medium max-w-40 truncate">"{{ searchTerm.trim() }}"</span>
+        <button type="button" (click)="onSearch('')" aria-label="Clear search"
+          class="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </span>
+      <ng-container *ngFor="let g of filterGroups(); let gi = index">
+        <button *ngIf="gi" type="button" (click)="toggleConnector(g[0])"
+          class="px-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 hover:text-violet-600 dark:hover:text-violet-400 hover:underline">and</button>
+        <span class="inline-flex items-center gap-1 flex-wrap" [ngClass]="g.length > 1 ? 'p-0.5 rounded-full border border-dashed border-violet-300 dark:border-violet-800' : ''">
+          <ng-container *ngFor="let f of g; let fi = index">
+            <button *ngIf="fi" type="button" (click)="toggleConnector(f)"
+              class="px-1 text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400 hover:underline">or</button>
+            <span class="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 text-xs rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-800 dark:text-violet-300 ring-1 ring-inset ring-violet-200 dark:ring-violet-900">
+              <button type="button" class="inline-flex items-center gap-1 hover:underline" (click)="editFilter(f)"
+                [attr.aria-label]="'Edit ' + filterLabel(f).field + ' filter'">
+                <span class="font-medium">{{ filterLabel(f).field }}</span>
+                <span class="text-violet-500 dark:text-violet-400">{{ filterLabel(f).op }}</span>
+                <span *ngIf="filterLabel(f).value" class="font-medium max-w-40 truncate">{{ filterLabel(f).value }}</span>
+              </button>
+              <button type="button" (click)="removeFilter(f)" [attr.aria-label]="'Remove ' + filterLabel(f).field + ' filter'"
+                class="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-violet-100 dark:hover:bg-violet-900/50">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+            </span>
+          </ng-container>
+        </span>
+      </ng-container>
+      <button *ngIf="isFiltered" type="button" class="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:underline" (click)="clearFilters()">Clear all</button>
+
+      <div *ngIf="canSaveView" class="relative ml-auto">
+        <button type="button" class="text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline" (click)="openSaveView()">Save as view</button>
+        <ng-container *ngIf="saveViewOpen">
+          <div class="fixed inset-0 z-20" (click)="saveViewOpen = false"></div>
+          <form class="dg-pop absolute right-0 mt-2 w-64 z-30 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg p-3 space-y-2"
+            (ngSubmit)="saveCurrentView()">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">Save view</p>
+            <input class="dg-field" name="viewName" [(ngModel)]="newViewName" dgAutofocus maxlength="30"
+              placeholder="e.g. High priority overdue" aria-label="View name" />
+            <p class="text-xs text-gray-500 dark:text-gray-500">Keeps the current search, filters, sort and columns.</p>
+            <div class="flex justify-end gap-2 pt-1">
+              <button type="button" class="dg-tool-btn" (click)="saveViewOpen = false">Cancel</button>
+              <button type="submit" class="dg-primary-btn" [disabled]="!newViewName.trim()">Save</button>
+            </div>
+          </form>
+        </ng-container>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="dg-scroll overflow-auto" [style.maxHeight]="fillHeight ? null : maxHeight" (scroll)="closeActionMenu()">
+      <table class="w-full text-sm border-separate border-spacing-0" [class.dg-compact]="density === 'compact'">
+        <thead>
+          <tr>
+            <th *ngIf="selectable" class="dg-th w-12 !pl-5">
+              <input type="checkbox" class="dg-checkbox" [checked]="pageAllSelected"
+                [indeterminate]="pageSomeSelected" (change)="togglePage()" aria-label="Select page" />
+            </th>
+            <th *ngFor="let c of visibleColumns" class="dg-th group/th" [style.width]="c.width"
+              [ngClass]="{ 'text-right': alignOf(c) === 'right', 'text-center': alignOf(c) === 'center',
+                           'cursor-pointer select-none hover:text-gray-800 dark:hover:text-gray-200': c.sortable,
+                           '!text-gray-900 dark:!text-gray-100': sort.key === c.key }"
+              (click)="toggleSort(c)" [attr.aria-sort]="sort.key === c.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : null">
+              <span class="inline-flex items-center gap-1" [class.flex-row-reverse]="alignOf(c) === 'right'">
+                {{ c.label }}
+                <svg *ngIf="c.sortable" class="w-3.5 h-3.5 shrink-0 transition"
+                  [ngClass]="sort.key === c.key ? 'text-violet-600 dark:text-violet-400' : 'text-gray-300 dark:text-gray-600 opacity-0 group-hover/th:opacity-100'"
+                  fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path *ngIf="sort.key !== c.key" stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+                  <path *ngIf="sort.key === c.key && sort.direction === 'asc'" stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M6 11l6-6 6 6" />
+                  <path *ngIf="sort.key === c.key && sort.direction === 'desc'" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M6 13l6 6 6-6" />
+                </svg>
+              </span>
+            </th>
+            <th *ngIf="rowActions.length" class="dg-th dg-sticky-right !pr-5 text-right">
+              Actions
+            </th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <!-- Loading -->
+          <!-- Loading: skeleton on first load; on refresh the current rows stay (dimmed) under a progress bar -->
+          <ng-container *ngIf="loading && !data.length">
+            <tr *ngFor="let r of skeletonRows" aria-hidden="true">
+              <td *ngIf="selectable" class="dg-td !pl-5"><div class="dg-skel !h-4 w-4 !rounded"></div></td>
+              <td *ngFor="let c of visibleColumns; let j = index" class="dg-td">
+                <div class="dg-skel" [class.ml-auto]="alignOf(c) === 'right'" [class.mx-auto]="alignOf(c) === 'center'"
+                  [ngClass]="{ '!h-5 !rounded-md': c.type === 'badge' }"
+                  [style.width]="skeletonWidth(c, r, j)"></div>
+              </td>
+              <td *ngIf="rowActions.length" class="dg-td !pr-5"><div class="dg-skel !h-6 w-6 ml-auto !rounded-md"></div></td>
+            </tr>
+          </ng-container>
+
+          <!-- Empty -->
+          <tr *ngIf="!loading && !filteredData.length">
+            <td [attr.colspan]="colCount" class="py-16 text-center">
+              <div class="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500">
+                <svg *ngIf="data.length" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="M20 20l-3.5-3.5" />
+                </svg>
+                <svg *ngIf="!data.length" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h10" />
+                </svg>
+              </div>
+              <ng-container *ngIf="data.length; else noData">
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">No matching results</p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Try a different search term or remove some filters.</p>
+                <button type="button" class="dg-tool-btn mt-4" (click)="clearFilters()">Clear search &amp; filters</button>
+              </ng-container>
+              <ng-template #noData>
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ emptyMessage }}</p>
+                <button *ngIf="createLabel" type="button" class="dg-primary-btn mt-4" (click)="create.emit()">{{ createLabel }}</button>
+              </ng-template>
+            </td>
+          </tr>
+
+          <!-- Rows -->
+          <ng-container *ngIf="!loading || data.length">
+            <tr *ngFor="let row of pagedData; trackBy: trackRow" (click)="openRow(row)" [attr.data-row-key]="row[rowKey]"
+              class="dg-row group cursor-pointer" [class.dg-refreshing]="loading"
+              [class.dg-row-active]="isActive(row)"
+              [class.dg-row-selected]="!isActive(row) && isSelected(row)"
+              [attr.data-accent]="rowAccent?.(row) || null">
+              <td *ngIf="selectable" class="dg-td dg-accent-cell !pl-5" (click)="$event.stopPropagation()"
+                [class.dg-active-bar]="isActive(row)">
+                <input type="checkbox" class="dg-checkbox" [checked]="isSelected(row)" (change)="toggleRow(row)"
+                  aria-label="Select row" />
+              </td>
+
+              <td *ngFor="let c of visibleColumns; let first = first" class="dg-td"
+                [class.dg-active-bar]="first && !selectable && isActive(row)"
+                [class.dg-accent-cell]="first && !selectable"
+                [ngClass]="(alignOf(c) === 'right' ? 'text-right tabular-nums ' : alignOf(c) === 'center' ? 'text-center ' : '')
+                           + (first ? 'font-medium !text-gray-900 dark:!text-gray-100 ' : '') + (c.cellClass?.(row) || '')">
+
+                <span class="inline-flex items-center gap-1.5 max-w-full" [class.flex-row-reverse]="alignOf(c) === 'right'">
+                  <ng-container [ngSwitch]="c.type">
+                    <span *ngSwitchCase="'badge'"
+                      class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap"
+                      [ngClass]="badgeClass(c, rawValue(row, c))">
+                      <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
+                      {{ rawValue(row, c) }}
+                    </span>
+                    <span *ngSwitchCase="'date'" class="whitespace-nowrap">{{ rawValue(row, c) | date: 'dd MMM yyyy' }}</span>
+                    <span *ngSwitchCase="'currency'" class="whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{{ c.currencyCode || 'QAR' }} {{ rawValue(row, c) | currency: (c.currencyCode || 'QAR') : '' : '1.2-2' }}</span>
+                    <span *ngSwitchCase="'number'">{{ rawValue(row, c) | number }}</span>
+                    <span *ngSwitchDefault class="truncate">{{ rawValue(row, c) ?? '—' }}</span>
+                  </ng-container>
+                </span>
+              </td>
+
+              <!-- Row actions -->
+              <td *ngIf="rowActions.length" class="dg-td dg-sticky-right !pr-5 text-right whitespace-nowrap" (click)="$event.stopPropagation()">
+                <span *ngIf="quickActionSlots.length" class="dg-quick inline-flex items-center gap-0.5 mr-0.5 align-middle">
+                  <button *ngFor="let a of quickActionSlots" type="button" class="dg-icon-btn"
+                    [class.dg-icon-danger]="a.variant === 'danger'" [class.invisible]="isActionHidden(a, row)"
+                    [disabled]="isActionHidden(a, row)" [matTooltip]="a.label" [attr.aria-label]="a.label"
+                    (click)="runQuickAction(a, row)">
+                    <app-dp-icon [name]="a.icon || 'check'"></app-dp-icon>
+                  </button>
+                </span>
+                <button type="button" (click)="openActionMenu(row, $event)" aria-label="Row actions"
+                  class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  [ngClass]="{ '!bg-gray-100 dark:!bg-gray-800 !text-gray-800 dark:!text-gray-200': isMenuOpen(row) }">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="5" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="12" cy="19" r="1.8" />
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="shrink-0 flex flex-col gap-3 px-5 py-3 border-t border-gray-100 dark:border-erp-border-dark sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-500">
+        <span class="tabular-nums">Showing <span class="font-medium text-gray-800 dark:text-gray-200">{{ rangeStart }}–{{ rangeEnd }}</span> of <span class="font-medium text-gray-800 dark:text-gray-200">{{ filteredData.length }}</span></span>
+        <label class="flex items-center gap-2">
+          <span>Rows</span>
+          <select class="h-8 border border-gray-100 dark:border-erp-border-dark rounded-lg px-2 text-xs text-gray-700 dark:text-gray-300 bg-white dark:bg-erp-surface-dark focus:outline-none focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-900"
+            [ngModel]="pageSize" (ngModelChange)="changePageSize($event)">
+            <option *ngFor="let s of pageSizeOptions" [ngValue]="s">{{ s }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="flex items-center gap-4 flex-wrap">
+        <ng-container *ngIf="hasFooter && filteredData.length">
+          <span *ngFor="let c of visibleColumns" class="tabular-nums text-xs">
+            <ng-container *ngIf="c.aggregate">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mr-1">{{ c.aggregate === 'avg' ? 'Avg' : 'Total' }} {{ c.label }}</span>
+              <ng-container [ngSwitch]="c.type">
+                <span *ngSwitchCase="'currency'" class="font-medium text-gray-800 dark:text-gray-200">{{ c.currencyCode || 'QAR' }} {{ aggregateValue(c) | currency: (c.currencyCode || 'QAR') : '' : '1.2-2' }}</span>
+                <span *ngSwitchDefault class="font-medium text-gray-800 dark:text-gray-200">{{ aggregateValue(c) | number: '1.0-2' }}</span>
+              </ng-container>
+            </ng-container>
+          </span>
+        </ng-container>
+        <div class="flex items-center gap-1">
+        <button type="button" class="dg-page-btn" [disabled]="page === 1" (click)="goTo(page - 1)" aria-label="Previous">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6" /></svg>
+        </button>
+        <button *ngFor="let p of pageNumbers" type="button" class="dg-page-btn"
+          [disabled]="p === '…'" [class.dg-page-active]="p === page" (click)="goTo(p)">{{ p }}</button>
+        <button type="button" class="dg-page-btn" [disabled]="page === totalPages" (click)="goTo(page + 1)" aria-label="Next">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" /></svg>
+        </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row action menu (fixed so it isn't clipped by the scroll area) -->
+  <ng-container *ngIf="actionMenu">
+    <div class="fixed inset-0 z-40" (click)="closeActionMenu()"></div>
+    <div class="dg-pop fixed z-50 w-48 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg p-1"
+      [style.top.px]="actionMenu.top" [style.left.px]="actionMenu.left" role="menu">
+      <ng-container *ngFor="let a of visibleRowActions(actionMenu.row)">
+        <div *ngIf="a.divider" class="my-1 h-px bg-gray-100 dark:bg-erp-border-dark"></div>
+        <button type="button" role="menuitem" (click)="runRowAction(a)"
+          class="w-full flex items-center px-2.5 h-8 text-sm rounded-lg text-left transition-colors"
+          [ngClass]="a.variant === 'danger' ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
+          {{ a.label }}
+        </button>
+      </ng-container>
+    </div>
+  </ng-container>
+
+  <!-- Toasts -->
+  <div class="fixed bottom-5 right-5 z-[60] flex flex-col gap-2 items-end" aria-live="polite">
+    <div *ngFor="let t of toasts" class="dg-pop flex items-center gap-2.5 min-w-60 max-w-sm pl-3 pr-1.5 py-2 rounded-lg bg-gray-900 text-white text-sm shadow-lg" role="status">
+      <svg *ngIf="t.variant === 'success'" class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7" /></svg>
+      <svg *ngIf="t.variant === 'error'" class="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 8v5M12 16.5v.5" /><circle cx="12" cy="12" r="9" /></svg>
+      <svg *ngIf="t.variant === 'info'" class="w-4 h-4 text-sky-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 11v5M12 7.5v.5" /><circle cx="12" cy="12" r="9" /></svg>
+      <span class="flex-1">{{ t.message }}</span>
+      <button type="button" (click)="dismissToast(t)" aria-label="Dismiss" class="p-1 rounded text-gray-400 hover:text-white">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============ DETAIL PANEL ============ -->
+  <app-detail-panel *ngIf="activeRow"
+    [breadcrumb]="detailBreadcrumb ? [detailBreadcrumb] : (title ? [title] : [])"
+    [title]="detailTitle(activeRow)"
+    [subtitle]="detailSubtitle ? detailSubtitle(activeRow) : ''"
+    [tabs]="detailTabs"
+    [(activeTab)]="activeTab"
+    [closeOnEscape]="false"
+    (closed)="closeDetail()">
+    <ng-container panelActions>
+      <!-- Record navigation (also ↑/↓ or K/J) through the list as currently filtered and sorted -->
+      <span *ngIf="activeIndex > -1" class="flex items-center gap-0.5 mr-1 pr-2 border-r border-gray-100 dark:border-erp-border-dark">
+        <span class="px-1 text-xs text-gray-500 dark:text-gray-500 tabular-nums">{{ activeIndex + 1 }} / {{ sortedData.length }}</span>
+        <button type="button" class="dg-icon-btn" [disabled]="activeIndex === 0" (click)="stepRow(-1)"
+          aria-label="Previous record" matTooltip="Previous (↑ or K)"><app-dp-icon name="chevronUp"></app-dp-icon></button>
+        <button type="button" class="dg-icon-btn" [disabled]="activeIndex === sortedData.length - 1" (click)="stepRow(1)"
+          aria-label="Next record" matTooltip="Next (↓ or J)"><app-dp-icon name="chevronDown"></app-dp-icon></button>
+      </span>
+      <ng-container *ngIf="detailActionsTemplate">
+        <ng-container *ngTemplateOutlet="detailActionsTemplate; context: { $implicit: activeRow }"></ng-container>
+      </ng-container>
+      <span *ngIf="panelActions(activeRow).length" class="flex items-center gap-0.5 mr-1 pr-2 border-r border-gray-100 dark:border-erp-border-dark">
+        <button *ngFor="let a of panelActions(activeRow)" type="button" class="dg-icon-btn"
+          [class.dg-icon-danger]="a.variant === 'danger'" [matTooltip]="a.label" [attr.aria-label]="a.label"
+          (click)="runQuickAction(a, activeRow)"><app-dp-icon [name]="a.icon || 'check'"></app-dp-icon></button>
+      </span>
+      <button *ngIf="visibleRowActions(activeRow).length" type="button" class="dg-icon-btn" aria-label="More actions"
+        matTooltip="More actions" (click)="openActionMenu(activeRow, $event)"><app-dp-icon name="more"></app-dp-icon></button>
+    </ng-container>
+    <ng-container panelAside *ngIf="detailAsideTemplate">
+      <ng-container *ngTemplateOutlet="detailAsideTemplate; context: { $implicit: activeRow }"></ng-container>
+    </ng-container>
+    <ng-container panelMeta *ngIf="detailMetaTemplate">
+      <ng-container *ngTemplateOutlet="detailMetaTemplate; context: { $implicit: activeRow }"></ng-container>
+    </ng-container>
+    <ng-container panelFooter *ngIf="detailFooterTemplate">
+      <ng-container *ngTemplateOutlet="detailFooterTemplate; context: { $implicit: activeRow }"></ng-container>
+    </ng-container>
+    <div *ngIf="detailLoading" class="space-y-6" aria-busy="true" aria-label="Loading details">
+      <div *ngFor="let s of [0, 1]" class="space-y-3">
+        <div class="dg-skel w-24"></div>
+        <div class="grid grid-cols-2 gap-x-6 gap-y-4">
+          <div *ngFor="let f of [0, 1, 2, 3]" class="space-y-1.5">
+            <div class="dg-skel !h-2.5 w-16"></div>
+            <div class="dg-skel" [style.width]="(55 + ((s + f) * 13) % 40) + '%'"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ng-container *ngIf="!detailLoading">
+      <ng-container *ngIf="detailTemplate; else defaultDetail">
+        <ng-container *ngTemplateOutlet="detailTemplate; context: { $implicit: activeRow, tab: activeTab }"></ng-container>
+      </ng-container>
+    </ng-container>
+    <ng-template #defaultDetail>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-3">
+        <ng-container *ngFor="let c of columns">
+          <dt class="text-xs text-gray-500 dark:text-gray-500">{{ c.label }}</dt>
+          <dd class="text-sm text-gray-900 dark:text-gray-100 break-words">{{ rawValue(activeRow, c) ?? '—' }}</dd>
+        </ng-container>
+      </dl>
+    </ng-template>
+  </app-detail-panel>
+</div>

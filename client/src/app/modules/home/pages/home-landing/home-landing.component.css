@@ -1,0 +1,35 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.hl-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 1.875rem; height: 1.875rem;
+  border-radius: 0.5rem; color: #6b7280;
+}
+.hl-icon-btn:hover { background: #f3f4f6; color: #111827; }
+
+.hl-meta { padding: 0.625rem 0.75rem; min-width: 0; }
+.hl-meta + .hl-meta { border-left: 1px solid #e5e7eb; }
+.hl-meta-label { font-size: 0.6875rem; color: #6b7280; }
+.hl-meta-value { margin-top: 0.125rem; font-size: 0.8125rem; font-weight: 500; color: #111827;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+
+.hl-btn {
+  display: inline-flex; align-items: center; gap: 0.375rem; height: 2rem; padding: 0 0.75rem;
+  font-size: 0.8125rem; font-weight: 500; border-radius: 0.5rem; transition: background-color 120ms ease;
+}
+.hl-btn-secondary { color: #374151; background: #fff; border: 1px solid #e5e7eb; }
+.hl-btn-secondary:hover { background: #f9fafb; }
+.hl-btn-primary { color: #fff; background: #6d28d9; }
+.hl-btn-primary:hover { background: #5b21b6; }
+
+:host-context(html.dark) .hl-icon-btn { color: #9ca3af; }
+:host-context(html.dark) .hl-icon-btn:hover { background: #2a2640; color: #f3f4f6; }
+
+:host-context(html.dark) .hl-meta + .hl-meta { border-left-color: #2a2640; }
+:host-context(html.dark) .hl-meta-label { color: #9ca3af; }
+:host-context(html.dark) .hl-meta-value { color: #f3f4f6; }
+
+:host-context(html.dark) .hl-btn-secondary { color: #d1d5db; background: #1c1930; border-color: #2a2640; }
+:host-context(html.dark) .hl-btn-secondary:hover { background: #2a2640; }
