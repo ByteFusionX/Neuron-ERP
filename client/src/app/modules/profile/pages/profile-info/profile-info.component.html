@@ -1,81 +1,83 @@
-<div class="w-full p-8">
-    <div class="w-full h-full bg-white p-10 m-2 mb-5 rounded-md">
-        <div class="flex">
-            <div *ngIf="employeeData$ | async as employeeData"
-                class="w-40 bg-orange-200 rounded-md flex justify-center items-center">
-                <p class="text-center text-6xl font-semibold text-orange-400">{{ employeeData.firstName[0].toUpperCase()
-                    }}{{employeeData.lastName[0].toUpperCase() }}</p>
+<div class="w-full p-8 space-y-5">
+    <!-- Profile summary -->
+    <div class="bg-white rounded-xl shadow-sm p-6 flex items-center gap-5"
+        *ngIf="employeeData$ | async as employeeData; else profileBlock">
+        <div class="w-20 h-20 shrink-0 rounded-full bg-orange-200 flex items-center justify-center overflow-hidden">
+            <p class="text-2xl font-semibold text-orange-500">{{ employeeData.firstName[0].toUpperCase()
+                }}{{ employeeData.lastName[0].toUpperCase() }}</p>
+        </div>
+        <div>
+            <p class="text-black font-semibold text-base">{{employeeData.firstName}} {{employeeData.lastName}}</p>
+            <p class="text-gray-500 text-sm">{{employeeData.category.role | titlecase}}</p>
+            <p class="text-gray-500 text-sm" *ngIf="companyDetails?.address as address">{{address.city}}, {{address.country}}</p>
+        </div>
+    </div>
+    <ng-template #profileBlock>
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <app-skelton-loading [lineLength]="1"></app-skelton-loading>
+        </div>
+    </ng-template>
+
+    <!-- Personal Information -->
+    <div class="bg-white rounded-xl shadow-sm p-6" *ngIf="employeeData$ | async as employeeData">
+        <div class="border-b pb-3 mb-5">
+            <p class="text-black font-semibold text-base">Personal Information</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-6">
+            <div>
+                <p class="text-gray-400 text-xs mb-1">First Name</p>
+                <p class="text-gray-800 text-sm">{{employeeData.firstName}}</p>
             </div>
-            <div class=" px-4">
-                <div class="flex gap-1">
-                    <i><ng-icon name="heroUser" class="text-orange-400 text-lg mt-[1px]"></ng-icon></i>
-                    <p class="font-medium text-orange-400 "> Profile info:</p>
-                </div>
-                <div class="mt-1 ml-1" *ngIf="employeeData$ | async as employeeData; else profileBlock">
-                    <p class="text-lg">{{employeeData.firstName}} {{employeeData.lastName}}</p>
-                    <span class="text-sm">{{employeeData.category.categoryName}} - {{employeeData.category.role |
-                        titlecase}}</span>
-                    <div class="mt-3">
-                        <p>{{employeeData.email}}</p>
-                        <p>{{employeeData.contactNo}}</p>
-                    </div>
-                </div>
-                <ng-template #profileBlock>
-                    <app-skelton-loading [lineLength]="1"></app-skelton-loading>
-                </ng-template>
+            <div>
+                <p class="text-gray-400 text-xs mb-1">Last Name</p>
+                <p class="text-gray-800 text-sm">{{employeeData.lastName}}</p>
+            </div>
+            <div>
+                <p class="text-gray-400 text-xs mb-1">Date of Birth</p>
+                <p class="text-gray-800 text-sm">{{employeeData.dob | date:'dd-MM-yyyy'}}</p>
+            </div>
+            <div>
+                <p class="text-gray-400 text-xs mb-1">Email Address</p>
+                <p class="text-gray-800 text-sm">{{employeeData.email}}</p>
+            </div>
+            <div>
+                <p class="text-gray-400 text-xs mb-1">Phone Number</p>
+                <p class="text-gray-800 text-sm">{{employeeData.contactNo}}</p>
+            </div>
+            <div>
+                <p class="text-gray-400 text-xs mb-1">User Role</p>
+                <p class="text-gray-800 text-sm">{{employeeData.category.role | titlecase}}</p>
             </div>
         </div>
     </div>
-    <div *ngIf="companyDetails; else noCompanyDetails" class="w-full h-full bg-white p-10 m-2 mb-5 rounded-md">
 
-        <div class="mb-5">
-            <div class="flex gap-1 items-center">
-                <div class="flex items-center gap-1">
-                    <i><ng-icon name="heroBuildingOffice" class="text-orange-400 text-lg mt-[1px]"></ng-icon></i>
-                    <p class="font-medium text-orange-400"> Organization Details:</p>
-                </div>
-                <button
-                    class="ml-auto bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm flex items-center gap-2"
-                    (click)="updateCompanyDetails()">
-                    <ng-icon name="heroPencilSquare"></ng-icon>
-                    Edit
-                </button>
-            </div>
-            <p class="text-gray-600 mt-1">
-                <span>{{companyDetails.name}}</span> <br>
-                {{companyDetails.description}}
-            </p>
+    <!-- Address -->
+    <div class="bg-white rounded-xl shadow-sm p-6" *ngIf="companyDetails; else noCompanyDetails">
+        <div class="border-b pb-3 mb-5">
+            <p class="text-black font-semibold text-base">Address</p>
         </div>
-
-
-        <div class="mb-5">
-            <div class="flex gap-1">
-                <i><ng-icon name="heroMapPin" class="text-orange-400 text-lg mt-[1px]"></ng-icon></i>
-                <p class="font-medium text-orange-400">Address:</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-6">
+            <div>
+                <p class="text-gray-400 text-xs mb-1">Country</p>
+                <p class="text-gray-800 text-sm">{{companyDetails.address.country}}</p>
             </div>
-            <p class="text-gray-600 mt-1">{{companyDetails.name}}, <br>
-                {{companyDetails.address.street}}, <br>
-                {{companyDetails.address.area}}, <br>
-                {{companyDetails.address.city}} - {{companyDetails.address.country}}
-            </p>
+            <div>
+                <p class="text-gray-400 text-xs mb-1">City</p>
+                <p class="text-gray-800 text-sm">{{companyDetails.address.city}}</p>
+            </div>
+            <div>
+                <p class="text-gray-400 text-xs mb-1">Area / Street</p>
+                <p class="text-gray-800 text-sm">{{companyDetails.address.area}}, {{companyDetails.address.street}}</p>
+            </div>
         </div>
     </div>
     <ng-template #noCompanyDetails>
-        <div class="w-full h-64 bg-white p-10 m-2 mb-5 rounded-md flex justify-center items-center flex-col">
-
-            <h1>No Company Details available.</h1>
-            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-0.5 px-4 rounded text-sm"
+        <div class="bg-white rounded-xl shadow-sm p-10 flex flex-col items-center justify-center gap-2">
+            <p class="text-gray-500">No Company Details available.</p>
+            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-1.5 px-4 rounded text-sm"
                 (click)="updateCompanyDetails()">
                 + Add Company Details
             </button>
-
         </div>
-
-
     </ng-template>
-
-
-
-
 </div>
-<div class="w-full p-5 bg-white"></div>

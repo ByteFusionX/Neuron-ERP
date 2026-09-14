@@ -9,15 +9,14 @@ import { getCompanyDetails } from 'src/app/shared/interfaces/company.interface';
 import { Router } from '@angular/router';
 import { EditCompanyDetailsComponent } from '../edit-company-details/edit-company-details.component';
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
-import { NgIf, AsyncPipe, TitleCasePipe } from '@angular/common';
-import { NgIcon } from '@ng-icons/core';
+import { NgIf, AsyncPipe, TitleCasePipe, DatePipe } from '@angular/common';
 import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
 
 @Component({
     selector: 'app-profile-info',
     templateUrl: './profile-info.component.html',
     styleUrls: ['./profile-info.component.css'],
-    imports: [NgIf, NgIcon, SkeltonLoadingComponent, AsyncPipe, TitleCasePipe]
+    imports: [NgIf, SkeltonLoadingComponent, AsyncPipe, TitleCasePipe, DatePipe]
 })
 export class ProfileInfoComponent {
 
