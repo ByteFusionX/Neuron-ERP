@@ -79,7 +79,8 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/home/home.component').then((c) => c.HomeComponent),
     children: [
-      { path: '', component: HomeLandingComponent },
+      { path: '', component: HomeLandingComponent, canDeactivate: [(c: HomeLandingComponent) => c.canDeactivate()] },
+      { path: 'projects/:id', loadComponent: () => import('./modules/home/pages/project-detail/project-detail.component').then((c) => c.ProjectDetailComponent) },
     ],
   },
   {

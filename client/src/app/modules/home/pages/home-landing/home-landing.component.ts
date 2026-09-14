@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AbstractControl, FormBuilder, ValidationErrors, Validators } from '@angular/forms';
 import { SfDraftDirective, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
@@ -13,30 +13,11 @@ import {
   DataGridColumn, DataGridDetailTab, DataGridRowAction, DataGridRowActionEvent, DataGridView,
 } from 'src/app/shared/components/data-grid/data-grid.model';
 
-interface SampleProject {
-  id: string;
-  name: string;
-  customer: string;
-  manager: string;
-  status: string;
-  priority: string;
-  startDate: string;
-  dueDate: string;
-  budget: number;
-  spent: number;
-  progress: number;
-  activity: { text: string; by: string; date: string }[];
-}
-
-// TODO: sample data for design review only — replace with API data after approval
-const CUSTOMERS = ['Al Noor Trading', 'Qatar Build Co.', 'Gulf Systems', 'Doha Retail Group', 'Pearl Logistics', 'Lusail Tech'];
-const MANAGERS = ['Ahmed Khan', 'Sara Ali', 'John Mathew', 'Fatima Noor', 'Ravi Kumar'];
-const STATUSES = ['Planning', 'In Progress', 'On Hold', 'Completed', 'Cancelled'];
-const PRIORITIES = ['Low', 'Medium', 'High'];
-// TODO: replace with the logged-in employee once this grid is wired to real data
-const CURRENT_USER = 'Sara Ali';
-const CLOSED_STATUSES = ['Completed', 'Cancelled'];
-const TYPES = ['CCTV Installation', 'Network Upgrade', 'Access Control', 'Data Center Fit-out', 'Fire Alarm System', 'Server Migration'];
+import { RouterLink } from '@angular/router';
+import {
+  CLOSED_STATUSES, CURRENT_USER, CUSTOMERS, MANAGERS, PRIORITIES, STATUSES, STATUS_CLASSES, TYPES,
+  SampleProject, getSampleProjects, setSampleProjects,
+} from '../../sample-projects';
 
 const toOptions = (list: string[]): SfOption<string>[] => list.map((v) => ({ label: v, value: v }));
 const isoDate = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -46,43 +27,21 @@ function dueAfterStart(c: AbstractControl): ValidationErrors | null {
   return start && c.value && c.value < start ? { dateOrder: 'Due date must be on or after the start date' } : null;
 }
 
-function sampleProjects(count: number): SampleProject[] {
-  return Array.from({ length: count }, (_, i) => {
-    const start = new Date(2026, i % 9, (i * 3) % 27 + 1);
-    const due = new Date(start.getTime() + (30 + (i % 5) * 20) * 86400000);
-    const budget = 25000 + ((i * 7919) % 40) * 5000;
-    const status = STATUSES[i % STATUSES.length];
-    const progress = status === 'Completed' ? 100 : status === 'Planning' ? 5 : (i * 13) % 95;
-    return {
-      id: `PRJ-${String(1001 + i)}`,
-      name: `${TYPES[i % TYPES.length]} – Phase ${(i % 3) + 1}`,
-      customer: CUSTOMERS[i % CUSTOMERS.length],
-      manager: MANAGERS[(i * 2) % MANAGERS.length],
-      status,
-      priority: PRIORITIES[(i * 5) % PRIORITIES.length],
-      startDate: start.toISOString(),
-      dueDate: due.toISOString(),
-      budget,
-      spent: Math.round(budget * (progress / 100) * (0.8 + (i % 5) * 0.1)),
-      progress,
-      activity: [
-        { text: `Status changed to ${status}`, by: MANAGERS[i % MANAGERS.length], date: due.toISOString() },
-        { text: 'Site survey completed', by: MANAGERS[(i + 1) % MANAGERS.length], date: start.toISOString() },
-        { text: 'Project created', by: 'System', date: start.toISOString() },
-      ],
-    };
-  });
-}
-
 @Component({
   selector: 'app-home-landing',
   standalone: true,
-  imports: [CommonModule, SmartFormModule, DataGridComponent, DataGridFieldComponent, DetailFieldComponent, DetailSectionComponent, DetailPanelIconComponent],
+  imports: [CommonModule, RouterLink, SmartFormModule, DataGridComponent, DataGridFieldComponent, DetailFieldComponent, DetailSectionComponent, DetailPanelIconComponent],
   templateUrl: './home-landing.component.html',
   styleUrls: ['./home-landing.component.css'],
 })
 export class HomeLandingComponent implements OnInit {
-  projects: SampleProject[] = [];
+  private _projects: SampleProject[] = [];
+  /** Writes through to the shared store so the project detail page sees creates/deletes. */
+  get projects(): SampleProject[] { return this._projects; }
+  set projects(list: SampleProject[]) {
+    this._projects = list;
+    setSampleProjects(list);
+  }
   loading = true;
   detailLoading = false;
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
@@ -141,13 +100,7 @@ export class HomeLandingComponent implements OnInit {
   projectTitle = (p: SampleProject) => p.name;
   projectSubtitle = (p: SampleProject) => p.id;
 
-  readonly statusClasses: Record<string, string> = {
-    Planning: 'bg-sky-50 text-sky-700 ring-sky-200',
-    'In Progress': 'bg-violet-50 text-violet-700 ring-violet-200',
-    'On Hold': 'bg-amber-50 text-amber-700 ring-amber-200',
-    Completed: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    Cancelled: 'bg-red-50 text-red-700 ring-red-200',
-  };
+  readonly statusClasses = STATUS_CLASSES;
 
   // ---- New project form (smart-form showcase) ----
   private fb = inject(FormBuilder);
@@ -205,6 +158,24 @@ export class HomeLandingComponent implements OnInit {
   get contingencyAmount(): number {
     const { budget, contingency } = this.projectForm.controls;
     return ((budget.value ?? 0) * (contingency.value ?? 0)) / 100;
+  }
+
+  /** Route guard: leaving the page with an open, dirty form asks first (the draft is kept either way). */
+  async canDeactivate(): Promise<boolean> {
+    if (!this.formOpen || !this.projectForm.dirty) return true;
+    const { confirmed } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Leave without creating the project?',
+      message: 'Your entries stay saved as a draft and can be restored next time you open the form.',
+      confirmLabel: 'Leave page',
+      cancelLabel: 'Stay',
+    });
+    return confirmed;
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(e: BeforeUnloadEvent): void {
+    if (this.formOpen && this.projectForm.dirty) e.preventDefault();
   }
 
   closeForm(discarded: boolean, draft: SfDraftDirective): void {
@@ -266,7 +237,7 @@ export class HomeLandingComponent implements OnInit {
   ngOnInit(): void {
     // simulates the API call so the loading skeleton can be reviewed
     setTimeout(() => {
-      this.projects = sampleProjects(57);
+      this.projects = getSampleProjects();
       this.loading = false;
     }, 900);
   }
@@ -386,7 +357,7 @@ export class HomeLandingComponent implements OnInit {
       grid.clearSelection();
       grid.notify(`${count} marked ${status}`);
     } else if (action.id === 'export') {
-      grid.notify(`${count} exported`, 'info');
+      await grid.exportToExcel(rows);
     }
   }
 }

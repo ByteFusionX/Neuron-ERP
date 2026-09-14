@@ -7,6 +7,8 @@
     createLabel="New project"
     searchPlaceholder="Search projects…"
     storageKey="home-projects"
+    [exportable]="true"
+    exportFileName="projects.xlsx"
     [views]="views"
     [loading]="loading"
     [detailLoading]="detailLoading"
@@ -57,7 +59,7 @@
     <ng-template #detailFooterTemplate let-row>
       <button type="button" class="hl-btn hl-btn-secondary" *ngIf="row.status !== 'On Hold' && row.status !== 'Completed' && row.status !== 'Cancelled'"
         (click)="onRowAction({ action: rowActions[1], row: row }, grid)">Put on Hold</button>
-      <button type="button" class="hl-btn hl-btn-primary">Open project</button>
+      <a [routerLink]="['/home/projects', row.id]" class="hl-btn hl-btn-primary">Open project</a>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
