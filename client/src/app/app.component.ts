@@ -14,6 +14,7 @@ import { LoadingBarModule } from '@ngx-loading-bar/core';
 import { NgIf } from '@angular/common';
 import { SideBarComponent } from './shared/components/side-bar/side-bar.component';
 import { NotificationComponent } from './shared/components/notification/notification.component';
+import { AnnouncementsComponent } from './modules/announcements/announcements.component';
 import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
 import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
 import { ToastrService } from 'ngx-toastr';
@@ -26,13 +27,14 @@ import { SidebarPreferencesService } from './core/services/sidebar-preferences.s
     selector: 'app-root',
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.css'],
-    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, MatDrawerContent, NavBarComponent]
+    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, AnnouncementsComponent, MatDrawerContent, NavBarComponent]
 })
 export class AppComponent implements OnDestroy, OnInit {
   showFiller = false;
   title = 'client';
   birthdaysViewed!: boolean;
   reduceState: boolean = true;
+  activePanel: 'notification' | 'announcement' = 'notification';
   loginRouter: boolean = false;
   dialogRef: MatDialogRef<CelebrationDialogComponent> | undefined;
   employeeToken: string | null = null;
@@ -116,6 +118,7 @@ export class AppComponent implements OnDestroy, OnInit {
         this.loginRouter = this.isLoginRoute();
         if (!this.loginRouter) {
           this.isUserThere();
+          this._notificationService.markAsReadForRoute(event.urlAfterRedirects);
         }
       }
     });
@@ -196,6 +199,15 @@ export class AppComponent implements OnDestroy, OnInit {
     if (this.drawer) {
       this.drawer.close();
     }
+  }
+
+  openPanel(panel: 'notification' | 'announcement') {
+    if (this.drawer && this.drawer.opened && this.activePanel === panel) {
+      this.drawer.close();
+      return;
+    }
+    this.activePanel = panel;
+    this.drawer?.open();
   }
 
   ngOnDestroy() {

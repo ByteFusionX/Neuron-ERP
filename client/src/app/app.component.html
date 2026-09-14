@@ -5,27 +5,31 @@
 </div>
 
 <div class="w-full h-screen flex" *ngIf="!isLoginRoute()">
-    <div class="h-full overflow-auto overflow-x-hidden
+    <div class="h-full shrink-0 overflow-auto overflow-x-hidden
         [&::-webkit-scrollbar]:w-2
         [&::-webkit-scrollbar-track]:rounded-full
         [&::-webkit-scrollbar-track]:bg-gray-100
+        dark:[&::-webkit-scrollbar-track]:bg-gray-800
         [&::-webkit-scrollbar-thumb]:rounded-full
-        [&::-webkit-scrollbar-thumb]:bg-gray-300"
-        (click)="closeSidenav()">
+        [&::-webkit-scrollbar-thumb]:bg-gray-300
+        dark:[&::-webkit-scrollbar-thumb]:bg-gray-700">
         <app-side-bar [showFullBar]="reduceState"></app-side-bar>
     </div>
 
-    <div class="w-full h-screen overflow-y-auto flex flex-col">
+    <div class="flex-1 min-w-0 h-screen overflow-y-auto flex flex-col dark:bg-gray-900">
         <mat-drawer-container class="example-container" [hasBackdrop]="false">
             <mat-drawer #drawer mode="over" position="end"
                 class="w-[600px] h-full bg-red-400 z-50">
-                <app-notification
+                <app-notification *ngIf="activePanel === 'notification'"
                     (closeSidenav)="closeSidenav()"></app-notification>
+                <app-announcements *ngIf="activePanel === 'announcement'"
+                    (closeSidenav)="closeSidenav()"></app-announcements>
             </mat-drawer>
             <mat-drawer-content>
                 <app-nav-bar (reduce)="reduceSideBar($event)"
-                    (toggleDrawer)="drawer.toggle()"></app-nav-bar>
-                <div class="h-[calc(100vh-85px)]" (click)="closeSidenav()">
+                    (toggleDrawer)="openPanel('notification')"
+                    (toggleAnnouncementDrawer)="openPanel('announcement')"></app-nav-bar>
+                <div class="h-[calc(100vh-65px)] border-l border-gray-100 dark:border-erp-border-dark" (click)="closeSidenav()">
                     <router-outlet></router-outlet>
                 </div>
             </mat-drawer-content>

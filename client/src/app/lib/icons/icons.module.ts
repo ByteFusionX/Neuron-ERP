@@ -106,7 +106,15 @@ import {
   heroSun
 } from '@ng-icons/heroicons/outline';
 
-import { heroBellSolid } from '@ng-icons/heroicons/solid'
+import {
+  heroBellSolid,
+  heroFlagSolid,
+  heroPhoneSolid,
+  heroUserGroupSolid,
+  heroEnvelopeSolid,
+  heroEllipsisHorizontalCircleSolid,
+  heroCalendarDaysSolid
+} from '@ng-icons/heroicons/solid'
 @NgModule({
   declarations: [],
   imports: [
@@ -166,6 +174,12 @@ import { heroBellSolid } from '@ng-icons/heroicons/solid'
       heroArrowsRightLeft,
       heroTag,
       heroBellSolid,
+      heroFlagSolid,
+      heroPhoneSolid,
+      heroUserGroupSolid,
+      heroEnvelopeSolid,
+      heroEllipsisHorizontalCircleSolid,
+      heroCalendarDaysSolid,
       heroBell,
       heroClipboardDocumentCheck,
       heroClipboardDocument,
