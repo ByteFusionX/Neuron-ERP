@@ -13,6 +13,7 @@ import {
   buttonSlideState,
   dropDownMenuSate,
   sideBarState,
+  slideLogoState,
 } from './side-bar.animation';
 import {
   NavigationEnd,
@@ -23,12 +24,13 @@ import {
 } from '@angular/router';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Privileges } from '../../interfaces/employee.interface';
-import { Observable, Subscription } from 'rxjs';
+import { combineLatest, Observable, Subscription } from 'rxjs';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
+import { NotificationCounts, TextNotification } from '../../interfaces/notification.interface';
+import { ThemeService } from 'src/app/core/services/theme.service';
 
 interface MenuItem {
   id: string;
@@ -64,14 +66,15 @@ interface MenuCategory {
   selector: 'app-side-bar',
   templateUrl: './side-bar.component.html',
   styleUrls: ['./side-bar.component.css'],
-  animations: [sideBarState, dropDownMenuSate, buttonSlideState],
-  imports: [CommonModule, IconsModule, MatTooltipModule, RouterModule],
+  animations: [sideBarState, dropDownMenuSate, buttonSlideState, slideLogoState],
+  imports: [CommonModule, IconsModule, RouterModule],
   standalone: true,
 })
 export class SideBarComponent
   implements OnInit, OnChanges, AfterViewInit, OnDestroy
 {
   @Input() showFullBar: boolean = true;
+  logoAnimationsReady: boolean = false;
   activeLink: string = '';
   showTabs: boolean = false;
   privileges!: Privileges | undefined;
@@ -80,6 +83,45 @@ export class SideBarComponent
   // Tracks the navigation target url, not this.router.url (which only updates
   // once a navigation is committed, so it can't be trusted mid-navigation).
   private currentUrl: string;
+
+  // Per-module unread counts, derived client-side by grouping unviewed
+  // notifications by type. Keyed by the notificationKey values used on
+  // MenuItem/SubMenuItem above.
+  notificationCounts: Partial<NotificationCounts> = {};
+
+  private readonly notificationTypeToKey: Partial<
+    Record<string, keyof NotificationCounts>
+  > = {
+    Announcement: 'announcementCount',
+    AssignedJob: 'assignedJobCount',
+    ReAssignedJob: 'reAssignedJobCount',
+    FeedbackRequest: 'enquiryCount',
+    Enquiry: 'enquiryCount',
+    DealSheet: 'dealSheetCount',
+    DealSheetResponse: 'quotationCount',
+    Quotation: 'quotationCount',
+    JobAllocated: 'purchaseCount',
+    ProcurementTransferred: 'purchaseCount',
+    PurchaseApprovalRequest: 'purchaseCount',
+    PurchaseProcurementNotice: 'purchaseCount',
+    MrApproved: 'purchaseCount',
+    PurchaseApproved: 'purchaseApprovedCount',
+    PurchaseRejected: 'purchaseApprovedCount',
+    LpoApprovalRequest: 'lpoApprovalCount',
+    LpoApproved: 'lpoApprovedCount',
+    LpoRejected: 'lpoApprovedCount',
+    MrRequest: 'technicalProjectCount',
+    MrRejected: 'technicalProjectCount',
+    TechnicalAssigned: 'technicalCount',
+    MrApprovalRequest: 'technicalApprovalCount',
+    SupplierApprovalRequest: 'supplierCount',
+    SupplierApproved: 'supplierCount',
+    SupplierRejected: 'supplierCount',
+    ClaimApproved: 'claimsCount',
+    ClaimRejected: 'claimsCount',
+    ClaimPaid: 'claimsCount',
+    ClaimApprovalRequest: 'claimsApprovalCount',
+  };
 
   menuCategories: MenuCategory[] = [
     {
@@ -251,7 +293,7 @@ export class SideBarComponent
               id: 'pendingSuppliers',
               label: 'Pending',
               route: '/suppliers/pendings',
-              notificationKey: 'dealSheetCount',
+              notificationKey: 'supplierCount',
             },
             {
               id: 'approvedSuppliers',
@@ -279,7 +321,7 @@ export class SideBarComponent
               id: 'approvedPurchase',
               label: 'Approved PR',
               route: '/purchase/approves',
-              notificationKey: 'purchaseCount',
+              notificationKey: 'purchaseApprovedCount',
             },
           ],
         },
@@ -297,6 +339,7 @@ export class SideBarComponent
               route: '/purchase-order/pending-approval',
               privilegeKey: 'purchaseOrder',
               privilegeValue: 'none',
+              notificationKey: 'lpoApprovalCount',
             },
             {
               id: 'approvedLpos',
@@ -304,6 +347,7 @@ export class SideBarComponent
               route: '/purchase-order/approved',
               privilegeKey: 'purchaseOrder',
               privilegeValue: 'none',
+              notificationKey: 'lpoApprovedCount',
             },
           ],
         },
@@ -320,7 +364,7 @@ export class SideBarComponent
           hasDropdown: true,
           privilegeKey: 'technical',
           privilegeValue: 'none',
-          notificationKey: 'purchaseCount',
+          notificationKey: 'technicalCount',
           children: [
             {
               id: 'pendingJobs',
@@ -328,7 +372,7 @@ export class SideBarComponent
               route: '/technical/open-to-work-project',
               privilegeKey: 'technical',
               privilegeValue: 'canViewOpenToWorkAndAssign',
-              notificationKey: 'purchaseCount',
+              notificationKey: 'technicalCount',
             },
             {
               id: 'projects',
@@ -336,7 +380,7 @@ export class SideBarComponent
               route: '/technical/project',
               privilegeKey: 'technical',
               privilegeValue: 'none',
-              notificationKey: 'purchaseCount',
+              notificationKey: 'technicalProjectCount',
             },
             {
               id: 'amc',
@@ -344,7 +388,6 @@ export class SideBarComponent
               route: '/technical/amc',
               privilegeKey: 'technical',
               privilegeValue: 'none',
-              notificationKey: 'purchaseCount',
             },
             {
               id: 'mrApprovalRequests',
@@ -352,7 +395,7 @@ export class SideBarComponent
               route: '/technical/mr-approval-requests',
               privilegeKey: 'technical',
               privilegeValue: 'canApproveMRRequests',
-              notificationKey: 'purchaseCount',
+              notificationKey: 'technicalApprovalCount',
             },
           ],
         },
@@ -370,7 +413,6 @@ export class SideBarComponent
           privilegeKey: 'inventory',
           privilegeValue: 'none',
           inventorySubKey: 'products',
-          notificationKey: 'dealSheetCount',
         },
         {
           id: 'stockEntries',
@@ -495,7 +537,7 @@ export class SideBarComponent
               route: '/claims/my-claims',
               privilegeKey: 'claims',
               privilegeValue: 'none',
-              notificationKey: 'dealSheetCount',
+              notificationKey: 'claimsCount',
             },
             {
               id: 'approvalRequests',
@@ -503,6 +545,7 @@ export class SideBarComponent
               route: '/claims/approval-requests',
               privilegeKey: 'claims',
               privilegeValue: 'canApprove',
+              notificationKey: 'claimsApprovalCount',
             },
           ],
         },
@@ -516,6 +559,7 @@ export class SideBarComponent
     private _employeeService: EmployeeService,
     private _notificationService: NotificationService,
     private sidebarPrefs: SidebarPreferencesService,
+    public themeService: ThemeService,
   ) {
     this.currentUrl = this.router.url;
     this.router.events.subscribe((event) => {
@@ -528,6 +572,21 @@ export class SideBarComponent
 
   ngOnInit() {
     this.checkPermission();
+
+    this.mySubscription.add(
+      combineLatest([
+        this._notificationService.textNotificationsSubject$,
+        this._notificationService.markedUnreadIds$,
+      ]).subscribe(([{ viewed, unviewed }, markedUnreadIds]) => {
+        const reMarkedUnread = (viewed || []).filter(
+          (notification) => notification._id && markedUnreadIds.has(notification._id),
+        );
+        this.notificationCounts = this.computeNotificationCounts([
+          ...unviewed,
+          ...reMarkedUnread,
+        ]);
+      }),
+    );
 
     // Initialize expandedMenus with all menus collapsed
     this.menuCategories.forEach((category) => {
@@ -577,6 +636,12 @@ export class SideBarComponent
         this.currentUrl = event.url;
         this.expandActiveRouteMenus(event.url);
       }
+    });
+
+    // Enable the logo slide animation only after the initial render, so it
+    // plays on minimise/maximise button clicks and not on page load.
+    setTimeout(() => {
+      this.logoAnimationsReady = true;
     });
   }
 
@@ -762,6 +827,51 @@ export class SideBarComponent
   get visibleCategories(): MenuCategory[] {
     return this.menuCategories.filter((category) =>
       this.categoryHasAccess(category),
+    );
+  }
+
+  private computeNotificationCounts(
+    unviewed: TextNotification[],
+  ): Partial<NotificationCounts> {
+    const counts: Partial<NotificationCounts> = {};
+    for (const notification of unviewed || []) {
+      const key = this.notificationTypeToKey[notification.type];
+      if (!key) continue;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }
+
+  // Sub-tab badge: always its own count, shown once its parent dropdown is expanded.
+  getSubMenuBadgeCount(subItem: SubMenuItem): number {
+    if (!subItem.notificationKey) return 0;
+    return (
+      this.notificationCounts[subItem.notificationKey as keyof NotificationCounts] ||
+      0
+    );
+  }
+
+  // Top-level badge: while the dropdown is collapsed, roll up all of its
+  // children's counts into one number on the main tab. Once expanded, the
+  // children show their own badges instead, so the parent badge hides.
+  getTopLevelBadgeCount(item: MenuItem): number {
+    if (item.hasDropdown && item.children?.length) {
+      if (this.expandedMenus[item.id]) return 0;
+      const keys = new Set(
+        item.children
+          .map((child) => child.notificationKey)
+          .filter((key): key is string => !!key),
+      );
+      let total = 0;
+      keys.forEach((key) => {
+        total += this.notificationCounts[key as keyof NotificationCounts] || 0;
+      });
+      return total;
+    }
+    if (!item.notificationKey) return 0;
+    return (
+      this.notificationCounts[item.notificationKey as keyof NotificationCounts] ||
+      0
     );
   }
 

@@ -4,20 +4,46 @@
 
 .dropDown {
     position: absolute;
-    background-color: white;
+    background-color: #ffffff;
+    border: 1px solid #f3f4f6;
+    box-shadow: 0 8px 24px -8px rgba(76, 29, 149, 0.12);
     margin-top: -50px;
-    margin-left: 55px;
+    margin-left: 68px;
     padding: 10px 0px 10px 0px;
+}
+
+:host-context(html.dark) .dropDown {
+    background-color: #1c1930;
+    border: 1px solid #2a2640;
+    box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.5);
 }
 
 .active {
     background: #f5f3ff;
     border: 0px;
-    border-radius: 6px;
-    color: #4c1d95;
+    border-radius: 8px;
+    color: #6d28d9;
+    font-weight: 500;
+}
+
+.active ng-icon {
+    color: #7c3aed;
+}
+
+:host-context(html.dark) .active {
+    background: rgb(46 16 101 / 0.5);
+    color: #ddd6fe;
+}
+
+:host-context(html.dark) .active ng-icon {
+    color: #c4b5fd;
 }
 
 ng-icon {
     color: rgb(109, 109, 109);
+}
+
+:host-context(html.dark) ng-icon {
+    color: rgb(209, 213, 219);
 }
 
