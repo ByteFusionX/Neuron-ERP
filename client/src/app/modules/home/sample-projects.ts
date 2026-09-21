@@ -1,3 +1,5 @@
+import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
+
 export interface SampleProject {
   id: string;
   name: string;
@@ -22,6 +24,18 @@ export const PRIORITIES = ['Low', 'Medium', 'High'];
 export const CURRENT_USER = 'Sara Ali';
 export const CLOSED_STATUSES = ['Completed', 'Cancelled'];
 export const TYPES = ['CCTV Installation', 'Network Upgrade', 'Access Control', 'Data Center Fit-out', 'Fire Alarm System', 'Server Migration'];
+
+/**
+ * Semantic tone per project status, for the detail panel's shared components.
+ * STATUS_CLASSES below is the older raw-class map, still used by the standalone project-detail page.
+ */
+export const STATUS_TONE: Record<string, DetailTone> = {
+  Planning: 'info',
+  'In Progress': 'active',
+  'On Hold': 'warn',
+  Completed: 'good',
+  Cancelled: 'bad',
+};
 
 export const STATUS_CLASSES: Record<string, string> = {
   Planning: 'bg-sky-50 text-sky-700 ring-sky-200',

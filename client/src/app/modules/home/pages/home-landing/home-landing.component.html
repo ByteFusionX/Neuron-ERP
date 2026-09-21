@@ -26,103 +26,70 @@
     (cellEdit)="onCellEdit($event)"
     (bulkAction)="onBulkAction($event, grid)">
 
-    <!-- Copy link: disabled/hidden for now
+    <!-- One report for everything the grid is currently showing. -->
+    <app-action-button dgToolbarExtra variant="tool" (click)="openPortfolio(grid)" [disabled]="loading">
+      <app-dp-icon name="chart" size="w-4 h-4 text-gray-500 dark:text-gray-400"></app-dp-icon>
+      Report
+    </app-action-button>
+
     <ng-template #detailActionsTemplate>
-      <button type="button" class="hl-icon-btn" aria-label="Copy link" matTooltip="Copy link"><app-dp-icon name="link"></app-dp-icon></button>
+      <app-dp-icon-button icon="link" label="Copy link"></app-dp-icon-button>
     </ng-template>
-    -->
 
     <ng-template #detailAsideTemplate let-row>
-      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
-        [ngClass]="statusClasses[row.status]">{{ row.status }}</span>
+      <app-detail-badge [label]="row.status" [tone]="statusTone[row.status]"></app-detail-badge>
     </ng-template>
 
     <ng-template #detailMetaTemplate let-row>
-      <div class="hl-meta">
-        <p class="hl-meta-label">Customer</p>
-        <p class="hl-meta-value">{{ row.customer }}</p>
-      </div>
-      <div class="hl-meta">
-        <p class="hl-meta-label">Budget</p>
-        <p class="hl-meta-value">{{ row.budget | currency: 'QAR' : 'symbol-narrow' : '1.0-0' }}</p>
-      </div>
-      <div class="hl-meta">
-        <p class="hl-meta-label">Due date</p>
-        <p class="hl-meta-value" [class.text-red-600]="daysToDue(row) < 0 && row.status !== 'Completed'">{{ row.dueDate | date: 'dd MMM yyyy' }}</p>
-      </div>
-      <div class="hl-meta">
-        <p class="hl-meta-label">Progress</p>
-        <p class="hl-meta-value">{{ row.progress }}%</p>
-      </div>
+      <app-detail-meta [items]="metaFor(row)"></app-detail-meta>
     </ng-template>
 
     <ng-template #detailFooterTemplate let-row>
-      <button type="button" class="hl-btn hl-btn-secondary" *ngIf="row.status !== 'On Hold' && row.status !== 'Completed' && row.status !== 'Cancelled'"
-        (click)="onRowAction({ action: rowActions[1], row: row }, grid)">Put on Hold</button>
-      <a [routerLink]="['/home/projects', row.id]" class="hl-btn hl-btn-primary">Open project</a>
+      <app-detail-actions [actions]="footerFor(row)" (action)="onFooterAction($event, row, grid)"></app-detail-actions>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
         <ng-container *ngSwitchCase="'overview'">
-          <app-detail-section title="General" columns="2">
-            <app-detail-field stacked label="Project #"><span class="tabular-nums">{{ row.id }}</span></app-detail-field>
-            <app-dg-field stacked [grid]="grid" [row]="row" key="status"></app-dg-field>
-            <app-detail-field stacked label="Customer">{{ row.customer }}</app-detail-field>
-            <app-dg-field stacked [grid]="grid" [row]="row" key="priority"></app-dg-field>
-            <app-dg-field stacked [grid]="grid" [row]="row" key="manager" label="Project manager"></app-dg-field>
-          </app-detail-section>
-
-          <app-detail-section title="Schedule" columns="2">
-            <app-detail-field stacked label="Start date">{{ row.startDate | date: 'dd MMM yyyy' }}</app-detail-field>
-            <div>
-              <app-dg-field stacked [grid]="grid" [row]="row" key="dueDate"></app-dg-field>
-              <p *ngIf="row.status !== 'Completed' && row.status !== 'Cancelled'" class="mt-0.5 text-xs"
-                [ngClass]="daysToDue(row) < 0 ? 'text-red-600' : 'text-gray-500'">
-                {{ daysToDue(row) < 0 ? (-daysToDue(row)) + 'd overdue' : daysToDue(row) + 'd left' }}
-              </p>
-            </div>
-          </app-detail-section>
-
-          <app-detail-section title="Progress">
-            <div class="flex items-center justify-between text-[13px] mb-1.5">
-              <span class="text-gray-500">Completion</span>
-              <span class="font-medium tabular-nums">{{ row.progress }}%</span>
-            </div>
-            <div class="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-              <div class="h-full rounded-full bg-violet-600" [style.width.%]="row.progress"></div>
-            </div>
-          </app-detail-section>
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
         </ng-container>
 
-        <ng-container *ngSwitchCase="'financials'">
-          <app-detail-section title="Budget">
-            <app-dg-field [grid]="grid" [row]="row" key="budget" label="Approved budget"></app-dg-field>
-            <app-detail-field label="Spent"><span class="tabular-nums">{{ row.spent | currency: 'QAR' : 'symbol-narrow' }}</span></app-detail-field>
-            <app-detail-field label="Remaining">
-              <span class="font-medium tabular-nums" [class.text-red-600]="row.budget - row.spent < 0">{{ row.budget - row.spent | currency: 'QAR' : 'symbol-narrow' }}</span>
-            </app-detail-field>
-          </app-detail-section>
+        <app-detail-table *ngSwitchCase="'items'" title="Line items" [columns]="itemColumns" [rows]="extrasFor(row).items" showTotals></app-detail-table>
 
-          <app-detail-section title="Utilization">
-            <div class="flex items-center justify-between text-[13px] mb-1.5">
-              <span class="text-gray-500">Budget used</span>
-              <span class="font-medium tabular-nums" [class.text-red-600]="budgetUsed(row) > 100">{{ budgetUsed(row) }}%</span>
-            </div>
-            <div class="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-              <div class="h-full rounded-full" [ngClass]="budgetUsed(row) > 100 ? 'bg-red-500' : 'bg-emerald-500'"
-                [style.width.%]="budgetUsed(row) > 100 ? 100 : budgetUsed(row)"></div>
-            </div>
-          </app-detail-section>
+        <app-detail-documents *ngSwitchCase="'documents'" [documents]="extrasFor(row).documents" uploadable removable
+          (upload)="grid.notify('Upload is not wired yet')" (download)="grid.notify('Downloading ' + $event.name)"
+          (remove)="removeDocument(row, $event, grid)"></app-detail-documents>
+
+        <app-detail-task-list *ngSwitchCase="'events'" [items]="extrasFor(row).tasks"
+          defaultFilter="event" [showTasks]="false" [showEvents]="true" addable
+          (add)="openAddEventModal(row, grid)"
+          (toggle)="$event.done = !$event.done"
+          (remove)="removeEvent(row, $event)"></app-detail-task-list>
+
+        <ng-container *ngSwitchCase="'report'">
+          <ng-container *ngIf="reportFor(row) as rep">
+            <!-- Verdict first: the answer to "how is this project doing" before any number. -->
+            <app-detail-callout [tone]="rep.headline.tone" [label]="rep.headline.label" [summary]="rep.headline.summary">
+              <app-dp-icon-button calloutActions icon="download" label="Download PDF" (click)="downloadReport(row, grid)"></app-dp-icon-button>
+              <app-dp-icon-button calloutActions icon="mail" label="Email report" (click)="shareReport(row, grid)"></app-dp-icon-button>
+            </app-detail-callout>
+
+            <!-- Four numbers, each with the comparison that makes it mean something. -->
+            <app-detail-metrics class="mb-1" [items]="rep.metrics"></app-detail-metrics>
+
+            <app-detail-section title="What needs attention">
+              <app-detail-signal-list [items]="rep.signals"></app-detail-signal-list>
+            </app-detail-section>
+
+            <app-detail-section title="Delivery" *ngIf="rep.delivery.length">
+              <app-detail-breakdown [rows]="deliveryRows(rep)"></app-detail-breakdown>
+            </app-detail-section>
+
+            <app-detail-footnote>Generated {{ rep.asOf | date: 'dd MMM yyyy, HH:mm' }} from live project data.</app-detail-footnote>
+          </ng-container>
         </ng-container>
 
-        <ol *ngSwitchCase="'activity'" class="relative ml-1 border-l border-gray-200 dark:border-erp-border-dark">
-          <li *ngFor="let a of row.activity" class="relative pl-5 pb-5 last:pb-0">
-            <span class="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-white dark:bg-erp-surface-dark ring-2 ring-violet-500"></span>
-            <p class="text-[13px] text-gray-800 dark:text-gray-100">{{ a.text }}</p>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ a.by }} · {{ a.date | date: 'dd MMM yyyy' }}</p>
-          </li>
-        </ol>
+        <app-detail-timeline *ngSwitchCase="'activity'" [entries]="activityFor(row)"></app-detail-timeline>
       </ng-container>
     </ng-template>
   </app-data-grid>
@@ -240,10 +207,55 @@
 
     <ng-container sfDrawerFooter>
       <span *ngIf="projectForm.invalid && projectForm.touched" class="mr-auto text-xs text-red-600">Fix the highlighted fields</span>
-      <button type="button" class="hl-btn hl-btn-secondary" (click)="formOpen = false">Cancel</button>
-      <button type="submit" form="new-project-form" class="hl-btn hl-btn-primary disabled:opacity-60" [disabled]="saving">
+      <app-action-button variant="secondary" (click)="formOpen = false">Cancel</app-action-button>
+      <app-action-button variant="primary" type="submit" form="new-project-form" [disabled]="saving">
         {{ saving ? 'Creating…' : 'Create project' }}
-      </button>
+      </app-action-button>
+    </ng-container>
+  </app-sf-drawer>
+
+  <!-- Portfolio report: one report for the whole table, scoped to what the grid is showing. -->
+  <app-sf-drawer title="Project portfolio report" [subtitle]="portfolio ? portfolio.count + ' projects · ' + portfolio.scope : ''"
+    width="760px" [open]="portfolioOpen" (closed)="portfolioOpen = false">
+
+    <ng-container sfDrawerHeader>
+      <app-dp-icon-button icon="download" label="Download PDF" (click)="exportPortfolio(grid)"></app-dp-icon-button>
+      <app-dp-icon-button icon="mail" label="Schedule by email" (click)="schedulePortfolio(grid)"></app-dp-icon-button>
+    </ng-container>
+
+    <ng-container *ngIf="portfolio as pf">
+      <!-- Verdict first, then the shape of the portfolio as one segmented bar. -->
+      <app-detail-callout class="!flex-col !items-stretch" [tone]="pf.verdict.tone"
+        [label]="pf.verdict.label" [summary]="pf.verdict.summary">
+        <app-detail-bar-mix *ngIf="pf.mix.length" class="mt-4" [segments]="pf.mix"></app-detail-bar-mix>
+      </app-detail-callout>
+
+      <!-- Four rollups: value, money spent, delivery against plan, exposure. -->
+      <app-detail-metrics class="mb-1" [items]="pf.kpis"></app-detail-metrics>
+
+      <!-- The payoff: which projects to open, worst first, each one click away. -->
+      <app-detail-section [title]="'Needs attention' + (pf.risks.length ? ' · ' + pf.risks.length : '')">
+        <p *ngIf="!pf.risks.length" class="text-[13px] text-gray-500 dark:text-gray-400">
+          No active project is behind plan or over budget in this scope.
+        </p>
+        <app-detail-signal-list clickable [items]="riskSignals(pf)" (select)="onRiskSelect($event, grid)"></app-detail-signal-list>
+      </app-detail-section>
+
+      <!-- Where the portfolio sits, and who is carrying it. -->
+      <app-detail-section title="Budget by status">
+        <app-detail-breakdown [rows]="statusRows(pf)"></app-detail-breakdown>
+      </app-detail-section>
+
+      <app-detail-section title="Active workload by manager" *ngIf="pf.managers.length">
+        <app-detail-breakdown [rows]="managerRows(pf)"></app-detail-breakdown>
+      </app-detail-section>
+    </ng-container>
+
+    <ng-container sfDrawerFooter>
+      <app-detail-footnote class="mr-auto !mt-0" *ngIf="portfolio">
+        Generated {{ portfolio.asOf | date: 'dd MMM yyyy, HH:mm' }} from live project data
+      </app-detail-footnote>
+      <app-detail-actions [actions]="closeAction" (action)="portfolioOpen = false"></app-detail-actions>
     </ng-container>
   </app-sf-drawer>
 </div>
