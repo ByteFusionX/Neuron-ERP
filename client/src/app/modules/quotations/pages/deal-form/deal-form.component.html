@@ -1,303 +1,125 @@
-<app-modal-layout
-  title="Deal Sheet"
-  [onClose]="onClose.bind(this)"
-  [footerButtons]="getFooterButtons()">
-  <form class="p-6" [formGroup]="costForm">
-      <div class="w-full mb-4 flex gap-4">
-        <div class="w-1/2">
-          <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="paymentTerms">
-            Payment Terms
-          </label>
-          <input appNoLeadingSpace formControlName="paymentTerms"
-            class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-            id="paymentTerms" placeholder="Payment Terms..">
-          <div *ngIf="paymentTermsControl.invalid && isSubmitted" class="text-red-500 text-xs mt-1">
-            <div *ngIf="paymentTermsControl.errors?.['required']">Payment Terms is required.</div>
-          </div>
-        </div>
-        
-      </div>
+<app-sf-drawer title="Convert to Deal Sheet"
+    [subtitle]="q ? ((q.quoteId || '') + ' · ' + (q.client?.companyName || '') + ' · ' + q.currency) : ''"
+    [width]="step === 2 ? 'min(720px, 96vw)' : 'min(1400px, 96vw)'" [open]="open" [dirty]="!!form?.dirty" (closed)="onDrawerClosed()">
 
+    <form *ngFor="let f of forms" id="deal-form" [formGroup]="f" (ngSubmit)="onSubmit()" novalidate>
 
-      <div class="mt-6" *ngIf="data.optionalItems.length > 1">
-        <label for="mainCalculationOption" class="uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">
-            Select Option for the Deal:
-        </label>
-        <select id="mainCalculationOption" 
-                (change)="onCalculationOptionChange()" 
-                [(ngModel)]="selectedOption" 
-                [ngModelOptions]="{standalone: true}"
-                class="w-52 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-transparent focus:border-violet-500 p-2.5">
-            <option *ngFor="let option of data.optionalItems; let i = index" [value]="i">
-                Option {{ i + 1 }}
-            </option>
-        </select>
-    </div>
-      <table class="w-fit text-sm text-left rtl:text-right text-gray-500 border mb-4">
-        <thead class="text-xs text-gray-700 uppercase bg-violet-50  ">
-          <tr>
-            <th scope="col" class=" border-l border-r border-t text-center">
-              <input type="checkbox" (change)="toggleAllSelection($event)" [checked]="isAllSelected" />
+        <!-- Step header -->
+        <ol class="mb-5 flex items-center gap-3">
+            <ng-container *ngFor="let s of steps; let last = last">
+                <li class="flex items-center gap-2">
+                    <span class="grid h-6 w-6 place-content-center rounded-full text-xs font-semibold"
+                        [ngClass]="step === s.n ? 'bg-violet-600 text-white' : step > s.n ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">{{ step > s.n ? '✓' : s.n }}</span>
+                    <span class="text-[13px] font-medium" [ngClass]="step === s.n ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'">{{ s.label }}</span>
+                </li>
+                <li *ngIf="!last" aria-hidden="true" class="h-px w-10 bg-gray-200 dark:bg-erp-border-dark"></li>
+            </ng-container>
+        </ol>
 
-            </th>
-            <th scope="col" class=" w-96 border-l border-r border-t " key="itemDetail">
-              <div class="px-6 py-3">Item Details</div>
+        <!-- Step 1 toolbar. Hidden, not destroyed, on step 2 so state survives Back. -->
+        <div [hidden]="step !== 1"><div class="mb-4 flex flex-col gap-4">
+            <p class="text-xs text-gray-500">Tick the lines that go into the deal, then set their real cost, margin and supplier. Unticked lines are left out.</p>
 
-            </th>
-            <th scope="col" class=" border-l border-r border-t   text-center min-w-[66px]">
-              <div class="px-2 py-3">QTY</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center">
-              <div class="px-6 py-3">Unit Cost ({{data.currency}})</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center">
-              <div class="px-6 py-3">Total Cost ({{data.currency}})</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t hover:border-r-slate-950  text-center">
-              <div class="px-6 py-3">Profit</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center">
-              <div class="px-6 py-3">Unit Selling Price ({{data.currency}})</div>
-            </th>
-            <th scope="col" class="border-l border-r border-t   text-center">
-              <div class="px-6 py-3">Total Selling Price ({{data.currency}})</div>
-            </th>
-
-            <th scope="col" class="border-l border-r border-t   text-center min-w-[200px]">
-              <div class="px-2 py-3">Supplier</div>
-            </th>
-          </tr>
-        </thead>
-        <tbody formArrayName="items">
-          <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
-            <tr>
-              <td colspan="10" class="border px-6 py-2 bg-gray-50">
-                <div class="flex justify-center items-center text-md text-black font-medium uppercase">
-                  {{ item.get('itemName')?.value }}
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <app-sf-checkbox [ngModelOptions]="{ standalone: true }" [ngModel]="allSelected" (ngModelChange)="toggleAll($event)"
+                    [label]="'Select all (' + selectedCount + ' of ' + lineCount + ')'"></app-sf-checkbox>
+                <div class="flex items-center gap-2" *ngIf="selectedCount">
+                    <div class="w-56">
+                        <app-sf-combobox [ngModelOptions]="{ standalone: true }" [ngModel]="bulkSupplier" (ngModelChange)="bulkSupplier = $event"
+                            [options]="supplierOptions" placeholder="Supplier for selected lines"></app-sf-combobox>
+                    </div>
+                    <app-action-button variant="tool" [disabled]="!bulkSupplier" (click)="applyBulkSupplier()">Apply to {{ selectedCount }} line{{ selectedCount === 1 ? '' : 's' }}</app-action-button>
                 </div>
-              </td>
-            </tr>
-          <ng-container *ngFor="let detail of getItemDetailsArray(item) as FormArray; let j = index"
-            formArrayName="itemDetails">
-            <tr class=" border-b text-gray-400" [formGroupName]="j"
-              [ngClass]="{'text-gray-800':detail.get('dealSelected')?.value}">
-              <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line ">
-                <input type="checkbox" name="" id="" formControlName="dealSelected"
-                  (change)="onItemCheckboxChange(i,j,$event)">
-              </th>
-
-              <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line">
-                <div [innerHTML]="detail.get('detail')?.value | parseBracketsText | parseBoldText"></div>
-              </th>
-
-              <td
-                [class.border-orange-500]="getItemDetailsControls(i).controls[j].get('quantity')?.invalid && isSubmitted"
-                class="border px-2 py-2 text-center">
-                <input appNoLeadingSpace formControlName="quantity" *ngIf="detail.get('dealSelected')?.value"
-                  class="w-10 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  type="number" placeholder="00">
-                <p *ngIf="!detail.get('dealSelected')?.value"> {{ detail.get('quantity')?.value }} </p>
-              </td>
-
-              <td
-                [class.border-orange-500]="getItemDetailsControls(i).controls[j].get('unitCost')?.invalid && isSubmitted"
-                class="border px-6 py-3">
-                <input appNoLeadingSpace formControlName="unitCost" *ngIf="detail.get('dealSelected')?.value"
-                  class="w-24 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  type="number" placeholder="00.00" (input)="onUnitCostChange(i, j)">
-                <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitCost')?.value.toFixed(2) }}</p>
-              </td>
-
-              <td class="px-6 py-3 border-l border-b border-t text-center">
-                <p>{{ calculateTotalCost(i,j) }}</p>
-              </td>
-
-              <td [class.border-orange-500]="getItemDetailsControls(i).controls[j].get('profit')?.invalid && isSubmitted"
-                class="border py-2 px-6 text-center">
-                <div class="flex justify-center items-center">
-                  <input appNoLeadingSpace formControlName="profit" *ngIf="detail.get('dealSelected')?.value"
-                    class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    type="number" placeholder="00" (input)="calculateUnitSellingPriceForInput(i, j)">
-                  <p *ngIf="!detail.get('dealSelected')?.value">{{ calculateProfit(i,j) | number:'1.2-2' }}</p>
-                  <p class="ml-0.5 mb-0.5">%</p>
-                </div>
-              </td>
-
-              <td class="px-6 py-3 border-l border-b border-t text-center">
-                <input appNoLeadingSpace formControlName="unitSellingPrice" *ngIf="detail.get('dealSelected')?.value"
-                class="w-20 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                type="number" placeholder="00" (input)="calculateProfitForInput(i,j)">
-                <p *ngIf="!detail.get('dealSelected')?.value">{{ detail.get('unitSellingPrice')?.value }}</p>
-              </td>
-
-              <td class="px-6 py-3 border-l border-b border-t text-center">
-                <p>{{ calculateTotalPrice(i,j).toFixed(2) }}</p>
-              </td>
-
-              <td class="px-2 py-2 border text-center" *ngIf="detail.get('dealSelected')?.value">
-                <ng-select [class.border-orange-500]="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted" class="form border"
-                  bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
-                  <ng-option *ngFor="let supplier of suppliers" [value]="supplier._id">
-                    {{ supplier.supplierName }}
-                  </ng-option>
-                </ng-select>
-                <div *ngIf="detail.get('supplierId')?.hasError('supplierRequired') && isSubmitted"
-                  class="text-red-500 text-xs">
-                  Supplier is required
-                </div>
-              </td>
-            </tr>
-          </ng-container>
-          </ng-container>
-        </tbody>
-
-      </table>
-
-      <div class="w-full">
-        <ng-container formArrayName="costs" *ngFor="let cost of costs.controls; let i = index;">
-          <div [formGroupName]="i" class="flex items-center space-x-4 additional-cost mb-2">
-            <div class="w-1/6 font-medium text-gray-700">
-              {{ cost.get('type')?.value }}
             </div>
-            <div *ngIf="cost.get('type')?.value === 'Additional Cost'" class="w-4/6">
-              <input type="text" 
-                formControlName="name"
-                [class.border-orange-500]="cost.get('name')?.invalid && isSubmitted"
-                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                placeholder="Cost Name">
-              <div *ngIf="cost.get('name')?.hasError('required') && isSubmitted" 
-                class="text-red-500 text-xs mt-1">
-                Cost name is required
-              </div>
-            </div>
-            <div *ngIf="cost.get('type')?.value === 'Supplier Discount'" class="w-4/6">
-              <ng-select [class.border-orange-500]="cost.get('supplierId')?.invalid && isSubmitted" class="form border"
-                bindLabel="supplierName" formControlName="supplierId" placeholder="Select Supplier">
-                <ng-option *ngFor="let supplier of getSelectedSuppliers()" [value]="supplier._id">
-                  {{supplier.supplierName}}
-                </ng-option>
-              </ng-select>
-              <div *ngIf="cost.get('supplierId')?.hasError('required') && isSubmitted" 
-                class="text-red-500 text-xs mt-1">
-                Supplier is required
-              </div>
-            </div>
-            <div [class]="cost.get('type')?.value !== 'Customer Discount' ? 'w-4/6' : 'w-5/6'">
-              <input type="number" 
-                formControlName="value"
-                [class.border-orange-500]="cost.get('value')?.invalid && isSubmitted"
-                class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                [placeholder]="cost.get('type')?.value === 'Additional Cost' ? 'Cost' : 'Discount Amount'">
-              <div *ngIf="cost.get('value')?.hasError('required') && isSubmitted" 
-                class="text-red-500 text-xs mt-1">
-                Value is required
-              </div>
-            </div>
-            <button type="button" 
-              class="bg-red-500 hover:bg-red-600 text-white font-medium p-2 rounded text-sm"
-              (click)="removeCost(i)">&times;</button>
-          </div>
-        </ng-container>
-
-        <div *ngIf="costs.errors?.['additionalCostInvalid'] && isSubmitted" class="text-red-500 text-xs">
-          All costs must have required fields filled (name for additional costs, supplier for supplier discounts, and value for all)
         </div>
-        
-        <div class="flex gap-2 mt-2">
-          <button type="button"
-            class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-            (click)="addCost('Additional Cost')">+ Additional Cost</button>
-          <button type="button"
-            class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-            (click)="addCost('Supplier Discount')">+ Supplier Discount</button>
-          <button type="button"
-            class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-            (click)="addCost('Customer Discount')">+ Customer Discount</button>
         </div>
-      </div>
 
-      <div class="w-full mt-4 flex gap-4">
-        <div class="w-1/2">
-          <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold " for="grid-zip">
-            Attachment
-          </label>
-          <div class="flex gap-2">
-            <div class="w-full" [ngClass]="{'w-1/2':selectedFiles.length}">
-              <div [class.border-orange-500]="!this.selectedFiles.length && isSubmitted"
-                class="flex border items-center justify-start px-3 mt-2 bg-gray-200 py-2 cursor-pointer h-fit"
-                (click)="fileInput.click()">
-                <div class="font-medium flex items-center text-sm py-1">
-                  <ng-icon name="heroPaperClip" class="text-xl text-gray-600 mr-2">
-                  </ng-icon>
-                  Select Files
-                </div>
-                <input appFileValidator appFileSizeValidator type="file" multiple hidden #fileInput
-                  (change)="onFileSelected($event)">
-  
-              </div>
-              <div class="mt-2">
-                <p class="text-sm text-gray-500">
-                  <span>File type: doc,pdf,types of images</span>
-                </p>
-              </div>
-            </div>
-  
-            <div *ngIf="selectedFiles.length" class="overflow-hidden  w-1/2">
-              <p class="">Selected Files</p>
-              <div class="px-2 pt-1 mt-2" *ngFor="let file of selectedFiles; let i=index" @fileTrigger>
-                <div class="flex justify-between items-center">
-                  <div class="flex">
-                    <ng-icon name="heroDocumentArrowUp"></ng-icon>
-                    <p class="text-sm px-2 w-40 truncate ..." matTooltip="{{file.name}}" matTooltipPosition="above"
-                      matTooltipClass="mat-tooltip">{{file.name}}</p>
-                  </div>
-                  <div>
-                    <ng-icon name="heroXMark" class="text-orange-500 cursor-pointer" (click)="onFileRemoved(i)"></ng-icon>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="w-1/2">
-          <table class="w-full text-sm text-left text-gray-500 border my-4">
-            <tbody>
-              <tr>
-                <th scope="col"
-                  class="px-4 py-2 border-l border-r border-t text-gray-700 text-start uppercase bg-violet-50">
-                  <div>Total Selling Price </div>
-                </th>
-                <td class=" px-4 border text-gray-800">
-                  {{calculateSellingPrice().toFixed(2)}} {{data.currency}}
-                </td>
-                <th scope="col"
-                  class="px-4 py-2 border-l border-r border-t text-gray-700 text-start uppercase bg-violet-50">
-                  <div>Total cost</div>
-                </th>
-                <td class=" px-4 border text-gray-800">
-                  {{ (calculateAllTotalCost() | number: '1.2-2') }} {{data.currency}}
-                </td>
-              </tr>
-              <tr>
-                <th scope="col"
-                  class="px-4 py-2 border-l border-r border-t text-gray-700 text-start uppercase bg-violet-50">
-                  <div>Profit </div>
-                </th>
-                <td class=" px-4 border text-gray-800">
-                  {{ (calculateSellingPrice() - calculateAllTotalCost()).toFixed(2)}} {{data.currency}}
-                </td>
-                <th scope="col"
-                  class="px-4 py-2 border-l border-r border-t text-gray-700 text-start uppercase bg-violet-50">
-                  <div>%</div>
-                </th>
-                <td class=" px-4 border text-gray-800">
-                  {{calculateSellingPrice() ? ((((calculateSellingPrice() - calculateAllTotalCost()) / calculateSellingPrice()) * 100).toFixed(2)) : '0.00'}} %
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <!-- Step 2 — terms, adjustments, attachments -->
+        <div *ngIf="step === 2" class="flex flex-col gap-4">
 
-  </form>
-</app-modal-layout>
+            <section class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark">
+                <header class="mb-3 flex items-baseline justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Payment terms</h3>
+                        <p class="mt-0.5 text-xs text-gray-500">Written into the deal sheet exactly as typed.</p>
+                    </div>
+                    <span class="text-[11px] font-medium text-red-500">Required</span>
+                </header>
+
+                <div class="mb-2 flex flex-wrap gap-1.5">
+                    <button *ngFor="let p of termPresets" type="button" (click)="useTermPreset(p)"
+                        class="rounded-full border border-gray-200 px-2.5 py-1 text-[11px] text-gray-600 transition hover:border-violet-400 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-400 dark:hover:text-violet-300">{{ p }}</button>
+                </div>
+
+                <app-sf-field [control]="f.controls['paymentTerms']">
+                    <app-sf-textarea formControlName="paymentTerms" [rows]="4" [maxlength]="500"
+                        placeholder="e.g. 30% advance with the purchase order, 70% within 30 days of delivery."></app-sf-textarea>
+                </app-sf-field>
+            </section>
+
+            <section class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark">
+                <header class="mb-3">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Adjustments <span class="ml-1 text-[11px] font-normal text-gray-400">Optional</span></h3>
+                    <p class="mt-0.5 text-xs text-gray-500">Costs and discounts on the whole deal. Supplier discounts can only name a supplier picked on the lines.</p>
+                </header>
+
+                <div formArrayName="costs" class="flex flex-col gap-2">
+                    <div *ngFor="let c of costs.controls; let k = index" [formGroupName]="k"
+                        class="rounded-md border border-gray-200 p-3 dark:border-erp-border-dark">
+                        <div class="mb-2 flex items-center justify-between gap-2">
+                            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{{ c.get('type')?.value }}</span>
+                            <button type="button" aria-label="Remove adjustment" (click)="removeCost(k)"
+                                class="grid h-6 w-6 place-content-center rounded-md text-base leading-none text-gray-400 transition hover:text-red-600">&times;</button>
+                        </div>
+                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <ng-container [ngSwitch]="c.get('type')?.value">
+                                <app-sf-input *ngSwitchCase="'Additional Cost'" formControlName="name" placeholder="What is this cost for?"></app-sf-input>
+                                <app-sf-combobox *ngSwitchCase="'Supplier Discount'" formControlName="supplierId" [options]="discountSupplierOptions"
+                                    placeholder="Select supplier"></app-sf-combobox>
+                            </ng-container>
+                            <app-sf-number formControlName="value" [stepper]="false" [min]="0"
+                                [class.sm:col-span-2]="c.get('type')?.value === 'Customer Discount'"
+                                [placeholder]="c.get('type')?.value === 'Additional Cost' ? 'Cost amount' : 'Discount amount'"
+                                [suffix]="q?.currency || ''"></app-sf-number>
+                        </div>
+                    </div>
+
+                    <p *ngIf="!costs.length" class="rounded-md border border-dashed border-gray-200 px-3 py-3 text-center text-xs text-gray-400 dark:border-erp-border-dark">
+                        No adjustments. The deal total is the sum of the selected lines.
+                    </p>
+                </div>
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <app-action-button *ngFor="let t of costTypes" variant="tool" (click)="addCost(t)">+ {{ t }}</app-action-button>
+                </div>
+            </section>
+
+            <section class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark">
+                <header class="mb-3">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Attachments <span class="ml-1 text-[11px] font-normal text-gray-400">Optional</span></h3>
+                    <p class="mt-0.5 text-xs text-gray-500">Supplier quotes or approvals · PDF, Word or images, up to 5 MB each.</p>
+                </header>
+                <app-sf-file formControlName="attachments" accept=".pdf,.doc,.docx,image/*" [maxSizeMb]="5"></app-sf-file>
+            </section>
+        </div>
+
+        <!-- Price summary: the shared item-entry totals bar, kept on both steps (items hidden on step 2) -->
+        <div [class.mt-4]="step === 2">
+            <app-item-entry mode="deal" [optionalItems]="$any(f.get('optionalItems'))" [seedOptionalItems]="seed"
+                [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
+                [itemsHidden]="step !== 1" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
+                [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
+        </div>
+
+        <p *ngIf="issues.length" class="mt-2 text-right text-xs text-red-600 dark:text-red-400">{{ issues[0] }}<ng-container *ngIf="issues.length > 1"> (+{{ issues.length - 1 }} more)</ng-container></p>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button variant="secondary" (click)="drawer?.requestClose()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="secondary" (click)="back()">Back</app-action-button>
+        <app-action-button *ngIf="step === 1" variant="primary" [disabled]="!!lineIssues.length" (click)="next()">Next</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="deal-form" [disabled]="saving || !!termIssues.length">
+            {{ saving ? 'Converting…' : 'Convert to Deal Sheet' }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

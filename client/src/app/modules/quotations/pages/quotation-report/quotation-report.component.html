@@ -1,0 +1,289 @@
+<div class="qr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+
+    <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
+    <div class="qr-card shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <nav aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
+                    <a *ngFor="let b of breadcrumbs" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+                    <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+                    </svg>
+                </nav>
+                <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Quotations</h2>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <!-- List | Report. Both carry the same filters through the URL. -->
+                <div class="qr-toggle" role="tablist" aria-label="Quotation view">
+                    <a role="tab" aria-selected="false" routerLink="/quotations" [queryParams]="listQueryParams" class="qr-toggle-btn">List</a>
+                    <span role="tab" aria-selected="true" class="qr-toggle-btn qr-toggle-on">Report</span>
+                </div>
+
+                <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!report">
+                    <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    Excel
+                </app-action-button>
+                <app-action-button variant="tool" (click)="exportPdf()" [disabled]="!report">
+                    <ng-icon name="heroPrinter" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    PDF
+                </app-action-button>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+            <app-sf-field label="Department">
+                <app-sf-select [(ngModel)]="selectedDepartment" [options]="departmentOptions" placeholder="All departments"
+                    (ngModelChange)="onFilterChange()"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Sales Person">
+                <app-sf-combobox [(ngModel)]="selectedSalesPerson" [options]="salesPersonOptions" placeholder="Everyone"
+                    (ngModelChange)="onFilterChange()"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Customer">
+                <app-sf-combobox [(ngModel)]="selectedCustomer" [options]="customerOptions" placeholder="All customers"
+                    (ngModelChange)="onFilterChange()"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="From">
+                <app-sf-date [(ngModel)]="fromDate" displayFormat="dd/MM/yy" (ngModelChange)="onFilterChange()"></app-sf-date>
+            </app-sf-field>
+            <app-sf-field label="To">
+                <app-sf-date [(ngModel)]="toDate" displayFormat="dd/MM/yy" (ngModelChange)="onFilterChange()"></app-sf-date>
+            </app-sf-field>
+        </div>
+
+        <div *ngIf="hasFilters" class="flex items-center justify-between gap-3 border-t border-gray-100 dark:border-erp-border-dark px-4 py-2">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Showing a filtered slice of the quotations.</p>
+            <button type="button" class="text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline" (click)="clearFilters()">Clear filters</button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading" class="qr-card grid place-content-center py-20 text-sm text-gray-500 dark:text-gray-400">
+        Building report…
+    </div>
+
+    <div *ngIf="!loading && failed" class="qr-card grid place-content-center gap-3 py-20 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-300">The report could not be generated.</p>
+        <p class="text-xs text-gray-500 dark:text-gray-500">Try a narrower date range, or reload the page.</p>
+    </div>
+
+    <ng-container *ngIf="!loading && report as r">
+
+        <!-- KPI strip -->
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <div class="qr-kpi">
+                <p class="qr-kpi-label">Total Quoted</p>
+                <p class="qr-kpi-value">{{ r.kpi.totalValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
+                <p class="qr-kpi-foot">{{ r.kpi.totalCount }} quotation{{ r.kpi.totalCount === 1 ? '' : 's' }}</p>
+                <p *ngIf="delta('totalValue') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
+                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
+                </p>
+            </div>
+            <div class="qr-kpi">
+                <p class="qr-kpi-label">Won</p>
+                <p class="qr-kpi-value text-emerald-600 dark:text-emerald-400">{{ r.kpi.wonValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
+                <p class="qr-kpi-foot">{{ r.kpi.wonCount }} won · {{ r.kpi.lostCount }} lost</p>
+                <p *ngIf="delta('wonValue') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
+                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
+                </p>
+            </div>
+            <div class="qr-kpi">
+                <p class="qr-kpi-label">Win Rate</p>
+                <p class="qr-kpi-value">{{ r.kpi.winRate | number: '1.0-1' }}<span class="qr-kpi-unit">%</span></p>
+                <!-- Said out loud, because a win rate over "everything" would be misleading while quotes are still open. -->
+                <p class="qr-kpi-foot">of {{ r.kpi.closedCount }} closed quotation{{ r.kpi.closedCount === 1 ? '' : 's' }}</p>
+                <p *ngIf="delta('winRate') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
+                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
+                </p>
+            </div>
+            <div class="qr-kpi">
+                <p class="qr-kpi-label">Open Pipeline</p>
+                <p class="qr-kpi-value">{{ r.kpi.openValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
+                <p class="qr-kpi-foot">{{ r.kpi.openCount }} still in play</p>
+            </div>
+            <div class="qr-kpi">
+                <p class="qr-kpi-label">Average Quote</p>
+                <p class="qr-kpi-value">{{ r.kpi.avgQuoteValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
+                <p class="qr-kpi-foot">
+                    <ng-container *ngIf="r.kpi.avgDaysToClose !== null; else noDaysToClose">{{ r.kpi.avgDaysToClose | number: '1.0-0' }} days to close</ng-container>
+                    <ng-template #noDaysToClose>No closed quotes to measure</ng-template>
+                </p>
+                <p *ngIf="delta('avgQuoteValue') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
+                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Sections: one at a time on screen, all of them when printed. -->
+        <div class="qr-toggle self-start" role="tablist" aria-label="Report section">
+            <button type="button" role="tab" class="qr-toggle-btn" [attr.aria-selected]="section === 'overview'"
+                [ngClass]="section === 'overview' ? 'qr-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
+            <button type="button" role="tab" class="qr-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
+                [ngClass]="section === 'breakdown' ? 'qr-toggle-on' : ''" (click)="section = 'breakdown'">Breakdown</button>
+            <button type="button" role="tab" class="qr-toggle-btn" [attr.aria-selected]="section === 'attention'"
+                [ngClass]="section === 'attention' ? 'qr-toggle-on' : ''" (click)="section = 'attention'">
+                Attention <span class="qr-count">{{ attentionTotal }}</span>
+            </button>
+        </div>
+
+        <div class="qr-section flex flex-col gap-5" [class.qr-hidden]="section !== 'overview'">
+
+        <!-- Funnel + status split -->
+        <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div class="qr-card lg:col-span-2 p-5">
+                <div class="mb-4 flex items-baseline justify-between gap-3">
+                    <h3 class="qr-heading">Pipeline</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-500">Each quotation sits in one status. Untick a status to hide it from the chart.</p>
+                </div>
+
+                <apx-chart *ngIf="pipelineChart"
+                    [series]="pipelineChart.series" [chart]="pipelineChart.chart" [plotOptions]="pipelineChart.plotOptions"
+                    [xaxis]="pipelineChart.xaxis" [yaxis]="pipelineChart.yaxis" [grid]="pipelineChart.grid" [legend]="pipelineChart.legend"
+                    [tooltip]="pipelineChart.tooltip" [dataLabels]="pipelineChart.dataLabels" [colors]="pipelineChart.colors">
+                </apx-chart>
+
+                <p *ngIf="!pipelineChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No statuses selected.</p>
+
+                <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-100 dark:border-erp-border-dark pt-4">
+                    <label *ngFor="let stage of r.funnel" class="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" class="h-3.5 w-3.5 cursor-pointer rounded" [checked]="isStageShown(stage.key)" (change)="toggleStage(stage.key)" [style.accentColor]="statusColor(stage.label)" />
+                        <span>{{ stage.label }}</span>
+                        <span class="tabular-nums text-gray-400 dark:text-gray-500">{{ stage.count }} · {{ stage.value | numberFormatter }} {{ r.currency }}</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Deal status -->
+            <div class="qr-card p-5">
+                <h3 class="qr-heading mb-1">Deal Status</h3>
+                <p class="mb-3 text-xs text-gray-500 dark:text-gray-500">Deal sheet approval, for quotations that have one.</p>
+                <apx-chart *ngIf="statusChart"
+                    [series]="statusChart.series" [chart]="statusChart.chart" [labels]="statusChart.labels" [colors]="statusChart.colors"
+                    [stroke]="statusChart.stroke" [plotOptions]="statusChart.plotOptions" [legend]="statusChart.legend"
+                    [tooltip]="statusChart.tooltip" [dataLabels]="statusChart.dataLabels">
+                </apx-chart>
+                <p *ngIf="!statusChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">{{ hasDealSheets ? 'No statuses selected.' : 'No deal sheets match these filters.' }}</p>
+
+                <div *ngIf="hasDealSheets" class="mt-4 flex flex-col gap-2 border-t border-gray-100 dark:border-erp-border-dark pt-4">
+                    <label *ngFor="let d of r.dealStatus" class="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" class="h-3.5 w-3.5 cursor-pointer rounded" [checked]="isDealStatusShown(d.key)" (change)="toggleDealStatus(d.key)" [style.accentColor]="dealStatusColor(d.key)" />
+                        <span>{{ d.label }}</span>
+                        <span class="ml-auto tabular-nums text-gray-400 dark:text-gray-500">{{ d.count }} · {{ d.value | numberFormatter }} {{ r.currency }}</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trend -->
+        <div class="qr-card p-5">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="qr-heading">Quoted vs Won</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-500">Last 12 months. A quotation counts as won in the month its status changed.</p>
+                </div>
+                <div class="qr-toggle">
+                    <button type="button" class="qr-toggle-btn" [ngClass]="trendMetric === 'value' ? 'qr-toggle-on' : ''" (click)="setTrendMetric('value')">Value</button>
+                    <button type="button" class="qr-toggle-btn" [ngClass]="trendMetric === 'count' ? 'qr-toggle-on' : ''" (click)="setTrendMetric('count')">Count</button>
+                </div>
+            </div>
+            <apx-chart *ngIf="trendChart"
+                [series]="trendChart.series" [chart]="trendChart.chart" [xaxis]="trendChart.xaxis" [yaxis]="trendChart.yaxis"
+                [stroke]="trendChart.stroke" [fill]="trendChart.fill" [grid]="trendChart.grid" [legend]="trendChart.legend"
+                [tooltip]="trendChart.tooltip" [dataLabels]="trendChart.dataLabels" [colors]="trendChart.colors">
+            </apx-chart>
+        </div>
+
+        </div>
+
+        <!-- Breakdown -->
+        <div class="qr-section flex flex-col gap-3" [class.qr-hidden]="section !== 'breakdown'">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="qr-heading">Breakdown</h3>
+                <div class="qr-toggle">
+                    <button *ngFor="let t of breakdownTabs" type="button" class="qr-toggle-btn"
+                        [ngClass]="breakdownKey === t.key ? 'qr-toggle-on' : ''" (click)="setBreakdown(t.key)">{{ t.label }}</button>
+                </div>
+            </div>
+            <app-data-grid #breakdownGrid
+                rowKey="id"
+                [title]="'By ' + (breakdownKey === 'salesPerson' ? 'Sales Person' : breakdownKey)"
+                [data]="breakdownRows"
+                [columns]="breakdownColumns"
+                [selectable]="false"
+                [pageSize]="10"
+                searchPlaceholder="Search"
+                emptyMessage="Nothing to break down for these filters"
+                exportFileName="quotation-breakdown.xlsx"
+                exportable
+                (rowOpen)="onBreakdownRowOpen($event)">
+            </app-data-grid>
+            <p class="text-xs text-gray-500 dark:text-gray-500">
+                Open a row to see those quotations in the list. A quotation covering several departments is counted under each, so department rows can add up to more than the total.
+            </p>
+        </div>
+
+        <!-- Attention + lost reasons -->
+        <div class="qr-section grid grid-cols-1 gap-5 lg:grid-cols-3" [class.qr-hidden]="section !== 'attention'">
+            <div class="qr-card lg:col-span-2 flex flex-col">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
+                    <h3 class="qr-heading">Needs Attention</h3>
+                    <div class="qr-toggle">
+                        <button type="button" class="qr-toggle-btn" [ngClass]="attentionKey === 'overdue' ? 'qr-toggle-on' : ''" (click)="attentionKey = 'overdue'">
+                            Overdue <span class="qr-count">{{ attentionCount('overdue') }}</span>
+                        </button>
+                        <button type="button" class="qr-toggle-btn" [ngClass]="attentionKey === 'closingSoon' ? 'qr-toggle-on' : ''" (click)="attentionKey = 'closingSoon'">
+                            Closing soon <span class="qr-count">{{ attentionCount('closingSoon') }}</span>
+                        </button>
+                        <button type="button" class="qr-toggle-btn" [ngClass]="attentionKey === 'idle' ? 'qr-toggle-on' : ''" (click)="attentionKey = 'idle'">
+                            Idle <span class="qr-count">{{ attentionCount('idle') }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
+                    <button *ngFor="let item of attentionItems; trackBy: trackById" type="button"
+                        class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                        (click)="openQuotation(item)">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ item.quoteId }} — {{ item.customer }}</span>
+                            <span class="block truncate text-xs text-gray-500 dark:text-gray-400">{{ item.status }} · {{ item.salesPerson }}</span>
+                        </span>
+                        <span class="shrink-0 text-right">
+                            <span class="block text-[13px] tabular-nums font-medium text-gray-900 dark:text-gray-100">{{ item.value | numberFormatter }}</span>
+                            <span class="block text-xs tabular-nums"
+                                [ngClass]="attentionKey === 'overdue' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'">{{ attentionDaysLabel(item) }}</span>
+                        </span>
+                    </button>
+                    <p *ngIf="!attentionItems.length" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Nothing here — every open quotation is on track.
+                    </p>
+                </div>
+
+                <p class="border-t border-gray-100 dark:border-erp-border-dark px-5 py-2 text-[11px] text-gray-500 dark:text-gray-500">
+                    Closing soon is the next {{ r.attention.soonDays }} days. Idle means nothing has been recorded against the quotation for {{ r.attention.idleDays }} days. Won, Lost and Expired quotations are left out.
+                </p>
+            </div>
+
+            <div class="qr-card p-5">
+                <h3 class="qr-heading mb-1">Why Quotes Are Lost</h3>
+                <p class="mb-4 text-xs text-gray-500 dark:text-gray-500">Taken from the note left when the status was set to Lost.</p>
+                <div class="space-y-3">
+                    <div *ngFor="let reason of r.lostReasons" class="flex items-start justify-between gap-3">
+                        <span class="min-w-0 text-[13px] text-gray-700 dark:text-gray-300">{{ reason.reason }}</span>
+                        <span class="shrink-0 text-right">
+                            <span class="block text-[13px] font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ reason.count }}</span>
+                            <span class="block text-[11px] tabular-nums text-gray-500 dark:text-gray-500">{{ reason.value | numberFormatter }}</span>
+                        </span>
+                    </div>
+                    <p *ngIf="!r.lostReasons.length" class="text-sm text-gray-500 dark:text-gray-400">No quotations have been lost in this period.</p>
+                </div>
+            </div>
+        </div>
+
+        <p class="pb-2 text-center text-[11px] text-gray-400 dark:text-gray-600">
+            Generated {{ r.generatedAt | date: 'dd MMM yyyy, HH:mm' }} · values shown in {{ r.currency }} (USD converted at {{ r.usdRate | number: '1.2-2' }})
+        </p>
+    </ng-container>
+</div>

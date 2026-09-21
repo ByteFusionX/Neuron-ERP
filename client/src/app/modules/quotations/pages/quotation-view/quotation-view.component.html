@@ -1,254 +1,265 @@
-<div class="bg-white m-6">
-    <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">Quote <span class="uppercase text-purple-600">{{quoteData.quoteId}}</span></h3>
-        <div class="flex gap-3">
-            <app-btn theme="secondary" (buttonClick)="onViewNote()" *ngIf="isNoteOwner">
-                <ng-icon name="heroDocumentText"></ng-icon>
-                Note
-            </app-btn>
-            <app-btn theme="secondary" (buttonClick)="onViewEditHistory()" *ngIf="isSuperAdmin">
-                <ng-icon name="heroClock"></ng-icon>
-                History
-            </app-btn>
-            <app-btn theme="primary" (buttonClick)="onQuoteEdit()" [disabled]="isEditDisabled"
-                [title]="isEditDisabled ? (isDealApproved ? 'Deal approved' : 'Quote won') : ''">
-                <ng-icon name="heroPencilSquare"></ng-icon>
-                Edit
-            </app-btn>
-            <app-btn theme="danger" (buttonClick)="deleteQuote()" *ngIf="isDeleteOption" [disabled]="isDealApproved"
-                [title]="isDealApproved ? 'Deal approved' : ''">
-                <ng-icon name="heroTrash"></ng-icon>
-                Delete
-            </app-btn>
-        </div>
+<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-detail-view-shell
+    class="min-h-0 flex-1"
+    [loading]="loading"
+    [empty]="!loading && !quoteData"
+    emptyTitle="Quotation not found"
+    emptyMessage="It may have been deleted, or you may not have access to it."
+    [emptyLink]="['/quotations']"
+    emptyLinkLabel="Back to quotations"
+    [breadcrumbs]="breadcrumbs"
+    [avatarText]="headerAvatarText"
+    [title]="headerTitle"
+    [badges]="badges"
+    [subtitle]="headerSubtitle"
+    [stats]="stats"
+    [tabs]="tabs"
+    [activeTab]="tab"
+    (activeTabChange)="onTabChange($event)"
+    [hasSidebar]="true"
+    *ngIf="quoteData as q; else emptyShell"
+  >
+    <ng-container headerActions>
+      <app-detail-revision-chip
+        [revision]="revision"
+        hideZero
+        title="View revision history"
+        (open)="onViewRevisions()"
+      ></app-detail-revision-chip>
+      <app-action-button variant="secondary" *ngIf="isNoteOwner" (click)="onViewNote()">Note</app-action-button>
+      <app-action-button variant="secondary" [disabled]="isPreviewing" (click)="onPreviewPdf()">
+        {{ isPreviewing ? 'Preparing…' : 'Preview' }}
+      </app-action-button>
+      <app-action-button variant="secondary" [disabled]="isDownloadingStamped" (click)="onDownloadPdf(true)">
+        {{ isDownloadingStamped ? 'Generating…' : 'Stamped PDF' }}
+      </app-action-button>
+      <app-action-button variant="secondary" [disabled]="isDownloading" (click)="onDownloadPdf(false)">
+        {{ isDownloading ? 'Generating…' : 'Download PDF' }}
+      </app-action-button>
+      <app-action-button variant="secondary" [disabled]="isStatusLocked" (click)="onUpdateStatus()">Update status</app-action-button>
+      <app-action-button variant="primary" [disabled]="isEditDisabled" (click)="onQuoteEdit()">Edit quote</app-action-button>
+    </ng-container>
+
+    <div tabToolbar *ngIf="(tab === 'items' || tab === 'pricing') && q.optionalItems.length > 1" class="flex items-center gap-2">
+      <label for="mainCalculationOption" class="text-xs text-gray-500 dark:text-gray-400">Select Item Options:</label>
+      <select
+        id="mainCalculationOption"
+        [(ngModel)]="selectedOption"
+        (ngModelChange)="onOptionChange()"
+        class="qv-select"
+      >
+        <option *ngFor="let option of q.optionalItems; let i = index" [ngValue]="i">Option {{ i + 1 }}</option>
+      </select>
     </div>
 
-    <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+    <ng-container sidebar>
+      <app-detail-section title="Deal" *ngIf="dealFacts.length">
+        <app-detail-field *ngFor="let f of dealFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
+          <app-detail-badge *ngIf="f.pill" class="capitalize" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
+          <a *ngIf="f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="qv-link">{{ f.value }}</a>
+          <button *ngIf="f.deal" type="button" class="qv-link" (click)="onDealClick()">{{ f.value }}</button>
+          <ng-container *ngIf="!f.link && !f.deal && !f.pill">{{ f.value }}</ng-container>
+        </app-detail-field>
+      </app-detail-section>
 
-        <!-- Quote details -->
-        <section class="rounded-md border border-gray-200 bg-white mb-8">
-            <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
-                <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Quote Details</h4>
-                <div class="flex items-center gap-2" *ngIf="quoteData?.enqId">
-                    <button type="button" (click)="viewAttachments()"
-                        class="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50">
-                        <ng-icon name="heroDocumentText" class="text-sm"></ng-icon>
-                        Attachments
-                        <span class="rounded-full bg-gray-100 px-1.5 text-[11px] text-gray-600">{{ quoteData.enqId.attachments?.length || 0 }}</span>
-                    </button>
-                    <button type="button" (click)="viewPresaleFiles()"
-                        class="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50">
-                        <ng-icon name="heroDocumentText" class="text-sm"></ng-icon>
-                        Pre-Sale Files
-                        <span class="rounded-full bg-gray-100 px-1.5 text-[11px] text-gray-600">{{ quoteData.enqId.preSale?.presaleFiles?.length || 0 }}</span>
-                    </button>
-                </div>
-            </div>
-            <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Client</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{(quoteData.client.companyName || 'N/A') +
-                        (quoteData.client.clientRef ? ' (' + quoteData.client.clientRef + ')' : '')}}
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Attention</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{((quoteData.attention.firstName || '') + ' ' + (quoteData.attention.lastName ||
-                        '')).trim() || 'N/A'}}
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Date</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{ quoteData.date ? (quoteData.date | date: 'dd/MM/yyyy') : 'N/A' }}
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Closing Date</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{ quoteData.closingDate ? (quoteData.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Subject</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{quoteData.subject || 'N/A'}}</dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Sales Person</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{((quoteData.createdBy.firstName || '') + ' ' + (quoteData.createdBy.lastName ||
-                        '')).trim() || 'N/A'}}
-                    </dd>
-                </div>
-                <div class="min-w-0" *ngIf="quoteData?.enqId?.enquiryId">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Enq Ref Id</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{quoteData.enqId.enquiryId}}</dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Quoting Company</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">{{quoteData.quoteCompany || 'N/A'}}</dd>
-                </div>
-            </dl>
-        </section>
+      <app-detail-section title="Customer" *ngIf="customerFacts.length">
+        <app-detail-field *ngFor="let f of customerFacts" [label]="f.label" [tone]="f.tone ?? null" [numeric]="f.numeric ?? false">
+          <a *ngIf="f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="qv-link">{{ f.value }}</a>
+          <button *ngIf="f.deal" type="button" class="qv-link" (click)="onDealClick()">{{ f.value }}</button>
+          <ng-container *ngIf="!f.link && !f.deal">{{ f.value }}</ng-container>
+        </app-detail-field>
+      </app-detail-section>
+      
+      <app-detail-section title="Enquiry" *ngIf="enquiryFacts.length">
+        <app-detail-field *ngFor="let f of enquiryFacts" [label]="f.label" [tone]="f.tone ?? null" [numeric]="f.numeric ?? false">
+          <a *ngIf="f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="qv-link">{{ f.value }}</a>
+          <button *ngIf="f.deal" type="button" class="qv-link" (click)="onDealClick()">{{ f.value }}</button>
+          <ng-container *ngIf="!f.link && !f.deal">{{ f.value }}</ng-container>
+        </app-detail-field>
+      </app-detail-section>
 
-        <!-- Items -->
-        <div class="w-full mb-8">
-            <div class="flex justify-between items-center gap-3 mb-3">
-                <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold">
-                    Items
-                </label>
-                <div *ngIf="quoteData.optionalItems.length > 1" class="flex items-center gap-2">
-                    <label for="mainCalculationOption" class="text-xs text-gray-500">Select Item Options:</label>
-                    <select id="mainCalculationOption" [(ngModel)]="selectedOption"
-                        class="bg-white border border-gray-200 text-gray-900 text-sm rounded-md focus:ring-2 focus:ring-violet-500 focus:border-violet-500 py-1.5 px-2.5">
-                        <option *ngFor="let option of quoteData.optionalItems; let i = index" [value]="i">
-                            Option {{ i + 1 }}
-                        </option>
-                    </select>
-                </div>
-            </div>
-            <div class="relative overflow-x-auto">
-                <table class="w-full text-md text-left border">
-                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                        <tr>
-                            <th scope="col" resizable class="px-6 py-2 border w-96" key="itemDetail">Item Details</th>
-                            <th scope="col" resizable key="qty" class="px-2 py-2 border text-center min-w-[66px]">QTY</th>
-                            <th scope="col" resizable key="unitCost" class="px-6 py-2 border text-center">Unit Cost ({{quoteData.currency}})</th>
-                            <th scope="col" resizable key="totalCost" class="px-6 py-2 border text-center">Total Cost ({{quoteData.currency}})</th>
-                            <th scope="col" resizable key="profit" class="px-6 py-2 border text-center">Profit</th>
-                            <th scope="col" resizable key="unitPrice" class="px-6 py-2 border text-center">Unit Price ({{quoteData.currency}})</th>
-                            <th scope="col" resizable key="totalPrice" class="px-6 py-2 border text-center">Total Price ({{quoteData.currency}})</th>
-                            <th scope="col" resizable key="avbl" class="px-2 py-2 border text-center min-w-[90px]">AVBL.</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <ng-container *ngFor="let item of quoteData.optionalItems[selectedOption].items; let j = index">
-                            <tr>
-                                <td colspan="9" class="border px-6 py-2">
-                                    <div class="flex justify-center items-center text-md text-black font-medium uppercase">
-                                        {{item.itemName}}
-                                        <span *ngIf="item.isOptional"
-                                            class="ml-2 bg-yellow-500 text-white font-semibold py-1 px-2 rounded text-xs uppercase">
-                                            Optional
-                                        </span>
-                                        <label *ngIf="item.isOptional"
-                                            class="ml-2 inline-flex items-center gap-1 text-xs font-medium normal-case">
-                                            <input type="checkbox" [checked]="item.includeInTotal" disabled
-                                                class="w-3.5 h-3.5" />
-                                            Include in Total
-                                        </label>
-                                    </div>
-                                </td>
-                            </tr>
-                            <ng-container *ngFor="let itemsDetail of item.itemDetails; let k = index">
-                                <tr class="border-b">
-                                    <th scope="row"
-                                        class="px-6 border font-normal py-2 whitespace-normal break-words max-w-[28rem]">
-                                        <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
-                                    </th>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{itemsDetail.quantity}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{itemsDetail.unitCost | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{calculateProfit(selectedOption,j,k) | number:'1.2-2' }}%
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{itemsDetail.unitSellingPrice | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{calculateTotalPrice(selectedOption,j,k) | numberFormatter}}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{itemsDetail.availability}}
-                                    </td>
-                                </tr>
-                            </ng-container>
-                        </ng-container>
-                    </tbody>
-                </table>
-            </div>
+    </ng-container>
+
+    <div tabBody [ngSwitch]="tab">
+      <!-- overview -->
+      <div *ngSwitchCase="'overview'" class="space-y-6">
+        <app-detail-section title="Quote Details">
+          <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+            <app-detail-field label="Client" stacked>{{
+              (q.client.companyName || 'N/A') + (q.client.clientRef ? ' (' + q.client.clientRef + ')' : '')
+            }}</app-detail-field>
+            <app-detail-field label="Attention" stacked>{{ fullName(q.attention) }}</app-detail-field>
+            <app-detail-field label="Date" stacked>{{ q.date ? (q.date | date: 'dd/MM/yyyy') : 'N/A' }}</app-detail-field>
+            <app-detail-field label="Subject" stacked>{{ q.subject || 'N/A' }}</app-detail-field>
+            <app-detail-field label="Closing Date" stacked>{{ q.closingDate ? (q.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}</app-detail-field>
+            <app-detail-field label="Sales Person" stacked>{{ fullName(q.createdBy) }}</app-detail-field>
+            <app-detail-field *ngIf="q.enqId?.enquiryId" label="Enq Ref Id" stacked>{{ q.enqId.enquiryId }}</app-detail-field>
+            <app-detail-field label="Quoting Company" stacked>{{ q.quoteCompany || 'N/A' }}</app-detail-field>
+            <app-detail-field label="Status" stacked>{{ q.status || 'N/A' }}</app-detail-field>
+            <app-detail-field label="Department" stacked>{{ q.department?.departmentName || 'N/A' }}</app-detail-field>
+          </div>
+        </app-detail-section>
+      </div>
+
+      <!-- items -->
+      <div *ngSwitchCase="'items'">
+        <app-detail-table [columns]="itemCols" [rows]="itemRows" groupStyle="band" numbered groupTotals spread centerGroups emptyMessage="No items in this option."></app-detail-table>
+      </div>
+
+      <!-- deal sheet -->
+      <div *ngSwitchCase="'deal'" class="space-y-6">
+        <ng-container *ngIf="dealView as deal">
+          <app-detail-metrics [items]="deal.metrics"></app-detail-metrics>
+          <app-detail-overview [grid]="$any(null)" [row]="q" [sections]="deal.sections"></app-detail-overview>
+          <app-detail-table title="Selected items" [columns]="itemCols" [rows]="dealItemRows" groupStyle="band" numbered groupTotals spread centerGroups
+            emptyMessage="No items were selected for this deal."></app-detail-table>
+          <app-detail-table *ngIf="deal.costRows.length" title="Additional costs and discounts" [columns]="dealCostCols" [rows]="deal.costRows" [currency]="q.currency"></app-detail-table>
+        </ng-container>
+      </div>
+
+      <!-- documents -->
+      <div *ngSwitchCase="'documents'">
+        <app-detail-documents
+          [documents]="docList"
+          [downloadable]="false"
+          emptyMessage="No files on this quotation, its deal, enquiry or events."
+          (open)="openDocument($event)"
+        ></app-detail-documents>
+      </div>
+
+      <!-- events -->
+      <div *ngSwitchCase="'events'">
+        <app-detail-task-list
+          [items]="eventItems"
+          defaultFilter="event"
+          [showTasks]="false"
+          [showEvents]="true"
+          addable
+          (add)="onAddEvent()"
+          (toggle)="onToggleEvent($event)"
+          (remove)="onDeleteEvent($event)"
+          (eventOutcome)="onEventOutcome($event.item, $event.status)"
+          (previewFile)="onPreviewEventFile($event.file)"
+          (deleteFile)="onDeleteEventFile($event.item, $event.file)"
+        ></app-detail-task-list>
+      </div>
+
+      <!-- history -->
+      <div *ngSwitchCase="'history'">
+        <!-- revisions are a separate, content-level history; the log below is every action -->
+        <div *ngIf="revision" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2.5 dark:border-erp-border-dark">
+          <div class="flex items-center gap-2">
+            <app-detail-revision-chip [revision]="revision"></app-detail-revision-chip>
+            <span class="text-[13px] text-gray-600 dark:text-gray-400">
+              This quote has been revised {{ revision }} {{ revision === 1 ? 'time' : 'times' }} since it was sent.
+            </span>
+          </div>
+          <app-action-button variant="secondary" (click)="onViewRevisions()">View revisions</app-action-button>
         </div>
 
-        <!-- Notes & Terms -->
-        <div class="flex flex-wrap gap-6 mb-8">
-            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
-                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Customer Notes</h4>
+        <!-- the log itself, newest first, bucketed by day -->
+        <div *ngFor="let g of historyGroups" class="mb-5 last:mb-0">
+          <div class="mb-2 flex items-center gap-3">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ g.day }}</span>
+            <span class="h-px flex-1 bg-gray-200 dark:bg-erp-border-dark"></span>
+          </div>
+
+          <div class="space-y-2.5">
+            <article
+              *ngFor="let e of g.entries"
+              class="rounded-lg border border-gray-200 bg-white p-3 dark:border-erp-border-dark dark:bg-white/[0.02]"
+            >
+              <!-- who / what / when -->
+              <header class="flex items-start gap-3">
+                <span
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                  [ngClass]="historyToneClass(e.tone)"
+                >{{ e.initials }}</span>
+
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ e.who }}</span>
+                    <span
+                      class="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                      [ngClass]="historyToneClass(e.tone)"
+                    >{{ e.action }}</span>
+                    <app-detail-revision-chip
+                      *ngIf="e.revision !== null"
+                      [revision]="e.revision"
+                      title="This edit created a new revision — click to view it"
+                      (open)="onViewRevisions()"
+                    ></app-detail-revision-chip>
+                  </div>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ e.when }}<span *ngIf="e.ago"> · {{ e.ago }}</span>
+                  </p>
                 </div>
-                <p class="px-4 py-4 w-full whitespace-pre-line text-md text-gray-900">{{quoteData.customerNote}}</p>
-            </section>
-            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
-                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Terms and Conditions</h4>
+              </header>
+
+              <div class="mt-2.5 pl-11">
+                <!-- status moves read as a pill pair, not a field row -->
+                <div *ngIf="e.status" class="flex flex-wrap items-center gap-2 text-xs">
+                  <span class="rounded-full bg-gray-100 px-2 py-0.5 font-medium capitalize text-gray-600 dark:bg-white/10 dark:text-gray-300">{{ e.status.from }}</span>
+                  <span class="text-gray-400">→</span>
+                  <span class="rounded-full px-2 py-0.5 font-medium capitalize" [ngClass]="historyToneClass(e.tone)">{{ e.status.to }}</span>
                 </div>
-                <p class="px-4 py-4 w-full whitespace-pre-line text-md text-gray-900">{{quoteData.termsAndCondition}}</p>
-            </section>
+
+                <p *ngIf="e.reason" class="mt-2 border-l-2 border-gray-200 pl-2.5 text-xs italic text-gray-600 dark:border-erp-border-dark dark:text-gray-400">
+                  “{{ e.reason }}”
+                </p>
+
+                <!-- field-level edits, one line each: [field tag] previous → new -->
+                <ul *ngIf="e.changes.length" class="mt-2.5 space-y-1.5">
+                  <li *ngFor="let c of e.changes" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+                    <span class="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">{{ c.label }}</span>
+                    <span class="break-words" [ngClass]="c.fromUnknown ? 'italic text-gray-400 dark:text-gray-500' : 'text-gray-500 line-through decoration-gray-300 dark:text-gray-400'">{{ c.from }}</span>
+                    <span class="text-gray-400">→</span>
+                    <span class="break-words" [ngClass]="c.toUnknown ? 'italic text-gray-400 dark:text-gray-500' : 'font-semibold text-gray-900 dark:text-gray-100'">{{ c.to }}</span>
+                  </li>
+                </ul>
+
+                <p *ngIf="!e.changes.length && !e.status && e.summary" class="text-xs text-gray-500 dark:text-gray-400">{{ e.summary }}</p>
+              </div>
+            </article>
+          </div>
         </div>
 
-        <!-- Totals -->
-        <div class="flex flex-wrap gap-6">
-            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
-                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Cost Summary</h4>
-                </div>
-                <dl class="divide-y divide-gray-100 px-4">
-                    <div class="flex items-center justify-between py-3">
-                        <dt class="font-medium text-gray-700">Total Cost</dt>
-                        <dd class="text-xl">{{calculateAllTotalCost()| numberFormatter}}</dd>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <dt class="font-medium text-gray-700">Total Selling price</dt>
-                        <dd class="text-xl">{{calculateDiscoutPrice()| numberFormatter}}</dd>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <dt class="font-medium text-gray-700">Profit Margin</dt>
-                        <dd class="text-xl">{{calculateProfitMargin()| numberFormatter}}</dd>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <dt class="font-medium text-gray-700">Profit margin with %</dt>
-                        <dd class="text-xl">{{calculateTotalProfit().toFixed(2)}}%</dd>
-                    </div>
-                </dl>
-            </section>
-            <section class="rounded-md border border-gray-200 bg-white flex-1 min-w-[280px]">
-                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Price Summary</h4>
-                </div>
-                <dl class="divide-y divide-gray-100 px-4">
-                    <div class="flex items-center justify-between py-3">
-                        <dt class="font-medium text-gray-700">Subtotal</dt>
-                        <dd class="text-xl">{{calculateSellingPrice() | numberFormatter}}</dd>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <dt class="font-medium text-gray-700">Discount</dt>
-                        <dd class="text-xl">{{(quoteData.optionalItems[selectedOption].totalDiscount) | numberFormatter}}</dd>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <dt class="font-medium text-gray-700">Total Amount</dt>
-                        <dd class="text-xl">{{calculateDiscoutPrice() | numberFormatter }}</dd>
-                    </div>
-                </dl>
-            </section>
+        <p *ngIf="!historyLog.length" class="text-[13px] text-gray-500 dark:text-gray-400">No edit history available.</p>
+      </div>
+
+      <!-- pricing -->
+      <div *ngSwitchCase="'pricing'" class="space-y-6">
+        <div class="grid gap-6 lg:grid-cols-2">
+          <app-detail-section title="Cost Summary">
+            <app-detail-field label="Total Cost" numeric>{{ calculateAllTotalCost() | numberFormatter }}</app-detail-field>
+            <app-detail-field label="Total Selling price" numeric>{{ calculateDiscoutPrice() | numberFormatter }}</app-detail-field>
+            <app-detail-field label="Profit Margin" numeric>{{ calculateProfitMargin() | numberFormatter }}</app-detail-field>
+            <app-detail-field label="Profit margin with %" numeric>{{ calculateTotalProfit().toFixed(2) }}%</app-detail-field>
+          </app-detail-section>
+          <app-detail-section title="Price Summary">
+            <app-detail-field label="Subtotal" numeric>{{ calculateSellingPrice() | numberFormatter }}</app-detail-field>
+            <app-detail-field label="Discount" numeric>{{ q.optionalItems[selectedOption].totalDiscount | numberFormatter }}</app-detail-field>
+            <app-detail-field label="Total Amount" numeric>{{ calculateDiscoutPrice() | numberFormatter }}</app-detail-field>
+          </app-detail-section>
         </div>
+
+        <app-detail-clause-list [clauses]="noteClauses" emptyMessage="No customer notes or terms & conditions."></app-detail-clause-list>
+      </div>
     </div>
+  </app-detail-view-shell>
 
-    <div class="border-t py-6 px-9 flex justify-end gap-3">
-        <app-btn theme="orange" [loading]="isPreviewing" (buttonClick)="onPreviewPdf()">
-            Preview
-        </app-btn>
-        <app-btn theme="primary" [loading]="isDownloadingStamped" (buttonClick)="onDownloadPdf(true)">
-            Download PDF (Stamped)
-        </app-btn>
-        <app-btn theme="primary" [loading]="isDownloading" (buttonClick)="onDownloadPdf(false)">
-            Download PDF
-        </app-btn>
-    </div>
+  <app-quote-form-drawer [open]="editOpen" mode="edit" [quote]="quoteData"
+    (saved)="onQuoteEdited()" (closed)="editOpen = false"></app-quote-form-drawer>
+
+  <ng-template #emptyShell>
+    <app-detail-view-shell
+      class="min-h-0 flex-1"
+      [loading]="loading"
+      [empty]="true"
+      emptyTitle="Quotation not found"
+      emptyMessage="It may have been deleted, or you may not have access to it."
+      [emptyLink]="['/quotations']"
+      emptyLinkLabel="Back to quotations"
+    ></app-detail-view-shell>
+  </ng-template>
 </div>
