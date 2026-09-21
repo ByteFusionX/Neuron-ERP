@@ -15,6 +15,7 @@ const PATHS: Record<string, string> = {
   link: 'M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1',
   pin: 'M12 21s-7-6.2-7-11a7 7 0 1114 0c0 4.8-7 11-7 11zm0-8a3 3 0 100-6 3 3 0 000 6z',
   calendar: 'M8 3v4m8-4v4M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z',
+  clock: 'M12 7v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   flag: 'M5 21V4m0 0h11l-2 4 2 4H5',
   tag: 'M3 12V4a1 1 0 011-1h8l9 9-9 9-9-9zm5-4h.01',
   building: 'M4 21V5a2 2 0 012-2h8a2 2 0 012 2v16M16 9h2a2 2 0 012 2v10M8 7h4M8 11h4M8 15h4M2 21h20',
@@ -30,11 +31,14 @@ const PATHS: Record<string, string> = {
   trash: 'M4 7h16M10 11v6m4-6v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4h6v3',
   download: 'M12 4v11m0 0l-4-4m4 4l4-4M4 19h16',
   send: 'M4 12l16-8-6 16-3-7-7-1z',
+  upload: 'M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3',
+  pencil: 'M11 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5m-1.5-9.5a2.121 2.121 0 013 3L12 16l-4 1 1-4 9.5-9.5z',
   eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zm10 3a3 3 0 100-6 3 3 0 000 6z',
   chevronUp: 'M6 15l6-6 6 6',
   chevronDown: 'M6 9l6 6 6-6',
   sort: 'M3 6h11M3 12h7M3 18h4M17 5v14m0 0l-3-3m3 3l3-3',
   density: 'M4 5h16M4 9.67h16M4 14.33h16M4 19h16',
+  chart: 'M4 20V10m6 10V4m6 16v-7M3 20h18',
   grip:'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
 };
 

@@ -18,14 +18,17 @@ import { CommonModule } from '@angular/common';
   imports: [CommonModule],
   template: `
     <div *ngIf="title" class="flex items-center justify-between gap-3 mb-2">
-      <h3 class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{{ title }}</h3>
+      <h3 class="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">{{ title }}</h3>
       <div class="flex items-center gap-2"><ng-content select="[sectionActions]"></ng-content></div>
     </div>
     <div [ngClass]="columns === '2' ? 'grid grid-cols-2 gap-x-6 gap-y-4' : ''"><ng-content></ng-content></div>
   `,
   styles: [`
-    :host { display: block; }
-    :host + :host { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #f3f4f6; }
+    :host { display: block; --dp-rule: #d1d5db; }
+    :host-context(html.dark) { --dp-rule: #3f3f46; }
+    /* Full-bleed rule: cancel the tab body's horizontal padding so the line spans the panel. */
+    :host + :host { margin: 1.5rem calc(var(--dp-pad, 1.25rem) * -1) 0; padding: 1.5rem var(--dp-pad, 1.25rem) 0;
+      border-top: 1px solid var(--dp-rule); }
   `],
 })
 export class DetailSectionComponent {

@@ -52,18 +52,27 @@
   color: #ededed;
 }
 
+/* Header block, separated from the scrolling tab content by a full-width rule. */
+.dp-head {
+  border-bottom: 1px solid #d1d5db;
+}
+
+:host-context(html.dark) .dp-head {
+  border-bottom-color: #3f3f46;
+}
+
 /* Key facts: bordered strip of label/value cells */
 .dp-meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
   margin-top: 1rem;
-  border: 1px solid #f3f4f6;
+  border: 1px solid #d1d5db;
   border-radius: 0.625rem;
   overflow: hidden;
 }
 
 :host-context(html.dark) .dp-meta {
-  border-color: #262626;
+  border-color: #3f3f46;
 }
 
 .dp-footer {

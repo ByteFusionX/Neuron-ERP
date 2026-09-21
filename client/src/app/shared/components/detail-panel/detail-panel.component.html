@@ -1,5 +1,5 @@
 <!-- Top bar: breadcrumb + actions -->
-<div class="shrink-0 flex items-center justify-between gap-3 h-12 px-4 border-b border-gray-100 dark:border-erp-border-dark">
+<div class="shrink-0 flex items-center justify-between gap-3 h-12 px-4 border-b border-gray-300 dark:border-neutral-700">
   <nav class="flex items-center gap-1.5 min-w-0 text-sm" aria-label="Breadcrumb">
     <ng-container *ngFor="let b of breadcrumb">
       <span class="text-gray-500 dark:text-gray-500 truncate">{{ b }}</span>
@@ -17,7 +17,7 @@
 
 <div class="flex-1 min-h-0 overflow-y-auto">
   <!-- Header: reference, title, status -->
-  <div class="px-5 pt-4 pb-4">
+  <div class="dp-head px-5 pt-4 pb-4">
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0">
         <p *ngIf="subtitle" class="text-xs font-medium text-gray-500 dark:text-gray-500 tabular-nums">{{ subtitle }}</p>
@@ -33,7 +33,7 @@
 
   <!-- Tabs (sticky while the body scrolls) -->
   <nav *ngIf="tabs.length" role="tablist"
-    class="sticky top-0 z-10 bg-white dark:bg-erp-surface-dark flex flex-wrap gap-x-5 gap-y-1 px-5 border-b border-gray-100 dark:border-erp-border-dark">
+    class="sticky top-0 z-10 bg-white dark:bg-erp-surface-dark flex flex-wrap gap-x-5 gap-y-1 px-5 border-b border-gray-300 dark:border-neutral-700">
     <button *ngFor="let t of tabs" type="button" role="tab" (click)="selectTab(t.id)"
       [attr.aria-selected]="activeTab === t.id"
       class="flex items-center gap-1.5 py-2.5 text-sm whitespace-nowrap border-b-2 -mb-px transition-colors"
@@ -43,7 +43,7 @@
     </button>
   </nav>
 
-  <div class="p-5" role="tabpanel">
+  <div class="p-5 space-y-5" role="tabpanel">
     <ng-content></ng-content>
   </div>
 </div>
