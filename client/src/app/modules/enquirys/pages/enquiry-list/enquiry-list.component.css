@@ -1,0 +1,38 @@
+table {
+    width: 100%;
+}
+.enquiry-meta {
+  padding: 0.625rem 0.75rem;
+  min-width: 0;
+}
+
+.enquiry-meta + .enquiry-meta {
+  border-left: 1px solid #e5e7eb;
+}
+
+.enquiry-meta-label {
+  font-size: 0.6875rem;
+  color: #6b7280;
+}
+
+.enquiry-meta-value {
+  margin-top: 0.125rem;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #111827;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:host-context(html.dark) .enquiry-meta + .enquiry-meta {
+  border-left-color: #262626;
+}
+
+:host-context(html.dark) .enquiry-meta-label {
+  color: #a1a1a1;
+}
+
+:host-context(html.dark) .enquiry-meta-value {
+  color: #ededed;
+}

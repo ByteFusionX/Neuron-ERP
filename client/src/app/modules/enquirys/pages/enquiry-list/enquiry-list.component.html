@@ -1,0 +1,80 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Enquiries"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="total"
+    [data]="dataSource.data"
+    [columns]="columns"
+    [loading]="isLoading"
+    [pageSize]="row"
+    searchPlaceholder="Search enquiries"
+    emptyMessage="No enquiries found"
+    [createLabel]="createEnquiry ? 'Create Enquiry' : ''"
+    [rowActions]="rowActions"
+    [views]="views"
+    storageKey="enquiry-list"
+    exportable
+    exportFileName="enquiries.xlsx"
+    [detailTabs]="detailTabs"
+    [detailTitle]="enquiryTitle"
+    [detailSubtitle]="enquirySubtitle"
+    (queryChange)="onQueryChange($event)"
+    (rowAction)="onRowAction($event)"
+    (create)="openDialog()">
+
+    <ng-template #detailAsideTemplate let-row>
+      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
+        [ngClass]="statusBadgeClasses[row.status] || 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700'">
+        {{ row.status === 'Work In Progress' ? 'In Progress' : row.status }}
+      </span>
+    </ng-template>
+
+    <ng-template #detailMetaTemplate let-row>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Customer</p><p class="enquiry-meta-value">{{ row.client?.companyName }}</p></div>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Department</p><p class="enquiry-meta-value">{{ row.department?.departmentName }}</p></div>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Sales person</p><p class="enquiry-meta-value">{{ salesPersonName(row) }}</p></div>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Date</p><p class="enquiry-meta-value">{{ row.date | date: 'dd MMM yyyy' }}</p></div>
+    </ng-template>
+
+    <ng-template #detailFooterTemplate let-row>
+      <span *ngIf="row.status !== 'Work In Progress'" class="mr-auto text-xs text-amber-700 dark:text-amber-300">
+        Complete the presales workflow before creating a quote.
+      </span>
+      <app-action-button variant="primary" [disabled]="row.status !== 'Work In Progress'" (click)="createQuote(row)">
+        Create Quote
+      </app-action-button>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        <app-detail-task-list *ngSwitchCase="'events'"
+          [items]="eventItems((eventsFor(row) | async) ?? [])"
+          defaultFilter="event"
+          [showTasks]="false"
+          [showEvents]="true"
+          addable
+          (add)="onAddEvent(row)"
+          (toggle)="onToggleEvent(row, $event)"
+          (eventOutcome)="onEventOutcome(row, $event.item, $event.status)"
+          (remove)="onDeleteEvent(row, $event)"
+          (previewFile)="onPreviewEventFile($event.file)"
+          (deleteFile)="onDeleteEventFile(row, $event.item, $event.file)"></app-detail-task-list>
+        <app-detail-timeline *ngSwitchCase="'progress'"
+          [entries]="presaleProgress(row)"
+          emptyMessage="No presale activity yet."></app-detail-timeline>
+        <app-detail-documents *ngSwitchCase="'documents'"
+          title="Enquiry files"
+          [documents]="enquiryDocuments(row)"
+          [uploadable]="canUploadAttachments(row)"
+          (upload)="openAttachmentUpload(row)"
+          (open)="onDocumentOpen(row)"
+          (download)="onDocumentDownload(row, $event)"></app-detail-documents>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+</div>
