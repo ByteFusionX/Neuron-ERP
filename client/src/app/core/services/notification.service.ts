@@ -353,10 +353,8 @@ export class NotificationService {
         routeData?: any
     ): { commands: any[]; extras?: NavigationExtras } | null {
         if (routePath === '/quotations/view' && routeData) {
-            return {
-                commands: [routePath],
-                extras: { state: routeData },
-            };
+            const quoteId = routeData?._id?.toString?.() ?? routeData?.toString?.();
+            return { commands: [routePath, quoteId] };
         }
         if (routePath === '/enquiry' && routeData?.enquiryId) {
             return {

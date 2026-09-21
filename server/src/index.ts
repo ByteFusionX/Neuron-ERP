@@ -20,6 +20,7 @@ import quoteRouter from './routes/quotation.router';
 import fileRouter from './routes/file.router';
 import PassportMiddleware from './common/middlewares/jwt.middleware';
 import { attachEmployee } from './common/middlewares/privilege.middleware';
+import { apiErrorHandler } from './common/utils/apiError';
 import jobRouter from './routes/job.router';
 import catRouter from './routes/category.router';
 import { socketConnection } from './services/socket-io.service';
@@ -146,6 +147,8 @@ app.use('/stock-hold', stockHoldRouter);
 
 const uploadFolderPath = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadFolderPath));
+
+app.use(apiErrorHandler);
 
 if (!fs.existsSync(uploadFolderPath)) {
   fs.mkdirSync(uploadFolderPath);

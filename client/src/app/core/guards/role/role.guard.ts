@@ -99,22 +99,6 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 }
                 break;
 
-            case '/quotations/create':
-                // Check the previous URL using router.getCurrentNavigation()
-                const previousUrl = router.getCurrentNavigation()?.previousNavigation?.finalUrl?.toString();
-
-                // Allow if coming from your specific route (e.g., '/quotations/view')
-                if (previousUrl === '/enquiry') {
-                    return true;
-                }
-
-                // Otherwise check for permissions as before
-                if (!privileges?.quotation?.create) {
-                    router.navigate(['/home']);
-                    return false;
-                }
-                break;
-
             case '/job-sheet':
                 if (privileges?.jobSheet?.viewReport == 'none') {
                     router.navigate(['/home']);
