@@ -1,0 +1,216 @@
+<div class="flex flex-col gap-4">
+
+  <!-- Option tabs ------------------------------------------------------------------------ -->
+  <div *ngIf="!itemsHidden && ((allowOptions && (!isDeal || optionalItems.length > 1)) || previousJobItemsCount)"
+    class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark pb-3">
+    <ng-container *ngIf="allowOptions && (!isDeal || optionalItems.length > 1)">
+      <div class="flex flex-wrap items-center gap-1">
+        <button *ngFor="let option of optionalItems.controls; let i = index" type="button"
+          class="group inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+          [ngClass]="i === selectedOption
+            ? 'bg-violet-600 text-white'
+            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
+          (click)="selectOption(i)">
+          Option {{ i + 1 }}
+          <span *ngIf="!isDeal && optionalItems.length > 1" role="button" aria-label="Remove option"
+            class="grid h-4 w-4 place-content-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/20"
+            (click)="$event.stopPropagation(); removeOption(i)">
+            <ng-icon name="heroXMark" class="h-3 w-3"></ng-icon>
+          </span>
+        </button>
+      </div>
+
+      <app-action-button *ngIf="!isDeal" variant="ghost" (click)="addOption()">
+        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add option
+      </app-action-button>
+    </ng-container>
+
+    <app-action-button *ngIf="previousJobItemsCount" class="ml-auto" variant="tool" (click)="previousJobsClicked.emit()">
+      <ng-icon name="heroRectangleStack" class="h-3.5 w-3.5"></ng-icon>
+      {{ previousJobsLabel }} ({{ previousJobItemsCount }})
+    </app-action-button>
+  </div>
+
+  <p *ngIf="allowOptions && !isDeal && !itemsHidden" class="-mt-2 text-xs text-gray-500 dark:text-gray-500">
+    Totals are calculated from <span class="font-medium text-gray-700 dark:text-gray-300">Option {{ selectedOption + 1 }}</span>.
+    Add more options to quote alternatives.
+  </p>
+
+  <!-- Items of the selected option -------------------------------------------------------- -->
+  <ng-container *ngFor="let option of optionalItems.controls; let i = index">
+    <div *ngIf="i === selectedOption" class="flex flex-col gap-3">
+
+      <ng-container *ngIf="!itemsHidden">
+      <div *ngFor="let item of itemsAt(i).controls; let j = index" [formGroup]="$any(item)"
+        class="rounded-xl border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark">
+
+        <!-- Item header -->
+        <div class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark px-3 py-2">
+          <span class="grid h-6 w-6 shrink-0 place-content-center rounded-md bg-gray-100 dark:bg-gray-800 text-[11px] font-semibold text-gray-600 dark:text-gray-400">{{ j + 1 }}</span>
+
+          <span *ngIf="isDeal" class="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ item.get('itemName')?.value }}</span>
+          <div *ngIf="!isDeal" class="relative min-w-0 flex-1">
+            <app-sf-input formControlName="itemName" placeholder="Item name (e.g. CCTV Cameras)"
+              (input)="onItemNameInput(i, j)" (focusout)="closeSuggestions()"></app-sf-input>
+            <div *ngIf="suggestionsFor(i + '-' + j) as rows">
+              <div *ngIf="rows.length"
+                class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                <button *ngFor="let s of rows" type="button"
+                  class="block w-full px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
+                  (mousedown)="$event.preventDefault(); applySuggestion(i, j, null, s)">
+                  <span class="font-medium text-gray-900 dark:text-gray-100">{{ s.categoryName }}</span>
+                  <span class="mt-0.5 block truncate text-gray-500 dark:text-gray-500">{{ s.description }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <ng-container *ngIf="!isDeal && allowOptionalItems && item.get('isOptional')?.value">
+            <span class="shrink-0 rounded-md border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-300">Optional</span>
+            <app-sf-checkbox formControlName="includeInTotal" label="Include" class="shrink-0"></app-sf-checkbox>
+          </ng-container>
+
+          <span class="shrink-0 text-xs font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+            {{ itemTotal(i, j) | number: '1.2-2' }} {{ currency }}
+          </span>
+
+          <button *ngIf="!isDeal" type="button" aria-label="Remove item" [disabled]="itemsAt(i).length <= 1" (click)="removeItem(i, j)"
+            class="grid h-7 w-7 shrink-0 place-content-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:hover:bg-red-950/40">
+            <ng-icon name="heroTrash" class="h-3.5 w-3.5"></ng-icon>
+          </button>
+        </div>
+
+        <!-- Column labels: the placeholders disappear once a line is filled in, so the numeric
+             strip needs standing headers. Hidden below the width where the strip wraps. -->
+        <div class="hidden items-start gap-2 px-3 pt-2 min-[1400px]:flex">
+          <span class="shrink-0" [ngClass]="isDeal ? 'w-5' : 'w-3.5'"></span>
+          <div class="min-w-0 flex-1">
+            <div class="ie-strip ie-labels">
+              <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span><span>Unit cost</span><span>Margin</span>
+              <span>Unit price</span><span>Supplier</span><span>Availability</span><span>Total cost</span><span>Total price</span>
+            </div>
+          </div>
+          <span *ngIf="!isDeal" class="w-6 shrink-0"></span>
+        </div>
+
+        <!-- Detail lines -->
+        <div class="divide-y divide-gray-100 dark:divide-erp-border-dark" cdkDropList [cdkDropListDisabled]="isDeal"
+          (cdkDropListDropped)="dropDetail($event, i, j)">
+          <div *ngFor="let detail of detailsAt(i, j)?.controls; let k = index" cdkDrag [cdkDragDisabled]="isDeal" [formGroup]="$any(detail)"
+            class="flex items-start gap-2 bg-white px-3 py-2.5 dark:bg-erp-surface-dark">
+
+            <div *ngIf="isDeal" class="mt-1 shrink-0"><app-sf-checkbox formControlName="dealSelected"></app-sf-checkbox></div>
+            <button *ngIf="!isDeal" type="button" cdkDragHandle aria-label="Reorder line"
+              class="mt-2 shrink-0 cursor-grab text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400">
+              <ng-icon name="heroBars" class="h-3.5 w-3.5"></ng-icon>
+            </button>
+
+            <div class="min-w-0 flex-1 space-y-1.5">
+              <!-- Description spans the full width; the numbers sit underneath -->
+              <div *ngIf="isDeal" class="whitespace-pre-line text-[13px]"
+                [ngClass]="detail.get('dealSelected')?.value ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'"
+                [innerHTML]="detail.get('detail')?.value | parseBracketsText | parseBoldText"></div>
+              <div *ngIf="!isDeal" class="relative">
+                <app-sf-textarea formControlName="detail" [rows]="2"
+                  placeholder="Description — **bold** and {highlight} are supported"
+                  (input)="onDetailInput(i, j, k)" (focusout)="closeSuggestions()"></app-sf-textarea>
+                <div *ngIf="suggestionsFor(i + '-' + j + '-' + k) as rows">
+                  <div *ngIf="rows.length"
+                    class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark shadow-lg">
+                    <button *ngFor="let s of rows" type="button"
+                      class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                      (mousedown)="$event.preventDefault(); applySuggestion(i, j, k, s)">{{ s.description }}</button>
+                    <button *ngIf="allowCreateProduct" type="button"
+                      class="block w-full border-t border-gray-100 px-3 py-2 text-left text-xs font-medium text-violet-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-violet-400 dark:hover:bg-gray-800"
+                      (mousedown)="$event.preventDefault(); requestCreateProduct(i, j, k)">+ Create product</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ie-strip" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value">
+                <span *ngIf="isDeal" class="ie-cell">{{ detail.get('itemCode')?.value || '—' }}</span>
+                <span *ngIf="isDeal" class="ie-cell">{{ detail.get('partNo')?.value || '—' }}</span>
+                <app-sf-input *ngIf="!isDeal" formControlName="itemCode" placeholder="Item code"></app-sf-input>
+                <app-sf-input *ngIf="!isDeal" formControlName="partNo" placeholder="Part no"></app-sf-input>
+                <app-sf-number formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
+                <span *ngIf="isDeal" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
+                <app-sf-input *ngIf="!isDeal" formControlName="uom" placeholder="UoM"></app-sf-input>
+                <app-sf-number formControlName="unitCost" placeholder="Cost" [stepper]="false" [min]="0"></app-sf-number>
+                <app-sf-number formControlName="profit" placeholder="Margin" suffix="%" [stepper]="false"></app-sf-number>
+                <app-sf-number formControlName="unitSellingPrice" placeholder="Price" [stepper]="false" [min]="0"></app-sf-number>
+                <div class="min-w-0">
+                  <app-sf-combobox formControlName="supplierId" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
+                  <p *ngIf="isDeal && detail.get('supplierId')?.hasError('supplierRequired') && detail.get('supplierId')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
+                </div>
+                <span *ngIf="isDeal" class="ie-cell">{{ detail.get('availability')?.value || '—' }}</span>
+                <app-sf-select *ngIf="!isDeal" formControlName="availability" [options]="availabilityOptions" placeholder="Availability"></app-sf-select>
+                <span class="ie-total" title="Total cost (qty × unit cost)">{{ lineCost(i, j, k) | number: '1.2-2' }}</span>
+                <span class="ie-total" title="Total selling price (qty × unit price)">{{ lineTotal(i, j, k) | number: '1.2-2' }}</span>
+              </div>
+            </div>
+
+            <div *ngIf="!isDeal" class="flex shrink-0 flex-col items-end gap-1 pt-1.5">
+              <button type="button" aria-label="Remove line" [disabled]="(detailsAt(i, j)?.length ?? 0) <= 1" (click)="removeDetail(i, j, k)"
+                class="grid h-6 w-6 place-content-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:hover:bg-red-950/40">
+                <ng-icon name="heroXMark" class="h-3.5 w-3.5"></ng-icon>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="!isDeal" class="border-t border-gray-100 dark:border-erp-border-dark px-3 py-1.5">
+          <app-action-button variant="ghost" (click)="addDetail(i, j)">
+            <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add line
+          </app-action-button>
+        </div>
+      </div>
+
+      <div *ngIf="!isDeal" class="flex items-center gap-3">
+        <app-action-button variant="secondary" (click)="addItem(i)">
+          <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
+        </app-action-button>
+        <app-action-button *ngIf="allowOptionalItems" variant="ghost" (click)="addItem(i, true)">Add optional item</app-action-button>
+      </div>
+      </ng-container>
+
+      <!-- Totals ------------------------------------------------------------------------- -->
+      <div *ngIf="showTotalsBar" [formGroup]="$any(option)"
+        class="sticky bottom-0 z-20 rounded-xl border border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur dark:border-erp-border-dark dark:bg-gray-900/85">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-5">
+            <div *ngIf="!isDeal" class="w-28">
+              <!-- <p class="mb-0.5 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Discount</p> -->
+              <app-sf-number formControlName="totalDiscount" placeholder="Discount" [stepper]="false" [min]="0"></app-sf-number>
+            </div>
+            <div *ngIf="isDeal">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Discount</p>
+              <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ discount() | number: '1.2-2' }}</p>
+            </div>
+            <div>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Total cost</p>
+              <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ totalCost() | number: '1.2-2' }}</p>
+            </div>
+            <div>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Selling price</p>
+              <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ sellingPrice() | number: '1.2-2' }}</p>
+            </div>
+            <div>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Margin</p>
+              <p class="text-sm font-semibold tabular-nums"
+                [ngClass]="profitPercent() < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
+                {{ profitPercent() | number: '1.1-1' }}%
+              </p>
+            </div>
+          </div>
+
+          <div class="text-right">
+            <p class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-500">Final total</p>
+            <p class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+              {{ finalTotal() | number: '1.2-2' }} <span class="text-xs font-normal text-gray-500">{{ currency }}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</div>

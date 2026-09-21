@@ -8,7 +8,7 @@ import { RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent,
-  DataGridColumn, DataGridDetailTab, DataGridFilter, DataGridFilterOperator, DataGridRowAction,
+  DataGridColumn, DataGridDetailTab, DataGridFilter, DataGridFilterOperator, DataGridQuery, DataGridRowAction,
   DataGridRowActionEvent, DataGridSortState, DataGridToast, DataGridView,
 } from './data-grid.model';
 import { DataGridAutofocusDirective } from './data-grid-autofocus.directive';
@@ -84,6 +84,11 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   /** Shows an Export button that downloads the filtered rows (visible columns) as .xlsx. Defaults to `<title>.xlsx`. */
   @Input({ transform: booleanAttribute }) exportable = false;
   @Input() exportFileName = '';
+  /** When true, `data` is treated as already filtered/sorted/paginated by the host; search, filter, sort,
+   *  view and page changes emit `queryChange` instead of being computed client-side. */
+  @Input({ transform: booleanAttribute }) serverSide = false;
+  /** Total row count for the current query, used for pagination when `serverSide` is true. */
+  @Input() totalCount = 0;
 
   @HostBinding('class.dg-fill-height') get hostFillHeight(): boolean {
     return this.fillHeight;
@@ -97,6 +102,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Output() create = new EventEmitter<void>();
   /** Fires when the user switches view; server-paged hosts reload their data here. */
   @Output() viewChange = new EventEmitter<DataGridView<T>>();
+  /** Fires with the current search/filter/sort/page state whenever any of them change and `serverSide` is true. */
+  @Output() queryChange = new EventEmitter<DataGridQuery>();
 
   @ContentChild('detailTemplate') detailTemplate?: TemplateRef<any>;
   @ContentChild('detailActionsTemplate') detailActionsTemplate?: TemplateRef<any>;
@@ -130,6 +137,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   dragOverKey: string | null = null;
   private defaultColumns: { key: string; visible: boolean }[] = [];
   private prefs: DataGridPrefs | null = null;
+  private searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private host: ElementRef<HTMLElement>) {}
 
@@ -265,6 +273,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.emitSelection();
     this.savePrefs();
     this.viewChange.emit(view);
+    this.emitQuery();
   }
 
   private applyView(view: DataGridView<T>): void {
@@ -274,6 +283,19 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.sort = view.sort ? { ...view.sort } : { key: null, direction: null };
     if (view.columns) this.applyColumnState(view.columns);
     this.page = 1;
+  }
+
+  /** Emits the current query state for server-paged hosts. No-op unless `serverSide` is true. */
+  private emitQuery(): void {
+    if (!this.serverSide) return;
+    this.queryChange.emit({
+      search: this.searchTerm,
+      filters: this.filters,
+      sort: this.sort,
+      page: this.page,
+      pageSize: this.pageSize,
+      viewId: this.activeViewId,
+    });
   }
 
   openSaveView(): void {
@@ -355,6 +377,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     else if (this.sort.direction === 'asc') this.sort = { key: col.key, direction: 'desc' };
     else this.sort = { key: null, direction: null };
     this.page = 1;
+    this.emitQuery();
   }
 
   // ---- sort menu & density ----
@@ -372,6 +395,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     const keep = this.sort.key === key ? this.sort.direction : null;
     this.sort = key ? { key, direction: direction ?? keep ?? 'asc' } : { key: null, direction: null };
     this.page = 1;
+    this.emitQuery();
   }
 
   toggleDensity(): void {
@@ -380,6 +404,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   get sortedData(): T[] {
+    if (this.serverSide) return this.data;
     const { key, direction } = this.sort;
     const rows = this.filteredData;
     if (!key || !direction) return rows;
@@ -399,6 +424,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   // ---- search & filters ----
   get filteredData(): T[] {
+    if (this.serverSide) return this.data;
     const pred = this.basePredicate(this.activeView);
     const rows = pred ? this.data.filter(pred) : this.data;
     if (!this.searchTerm.trim() && !this.filters.length) return rows;
@@ -443,6 +469,9 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   onSearch(term: string): void {
     this.searchTerm = term;
     this.page = 1;
+    if (!this.serverSide) return;
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
+    this.searchDebounce = setTimeout(() => this.emitQuery(), 300);
   }
 
   operatorsFor(col?: DataGridColumn<T>): { value: DataGridFilterOperator; label: string }[] {
@@ -504,6 +533,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.editingFilterId = null;
     this.filterMenuOpen = false;
     this.page = 1;
+    this.emitQuery();
   }
 
   /** Reopen the builder prefilled with a pill's condition. */
@@ -517,6 +547,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.filters = this.filters.filter((x) => x.id !== f.id);
     if (this.filters.length) this.filters[0] = { ...this.filters[0], or: undefined };
     this.page = 1;
+    this.emitQuery();
   }
 
   trackByGroupIndex(i: number): number {
@@ -531,6 +562,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   toggleConnector(f: DataGridFilter): void {
     this.filters = this.filters.map((x) => (x.id === f.id ? { ...x, or: !x.or } : x));
     this.page = 1;
+    this.emitQuery();
   }
 
   /** Filters split into OR-groups, in order. Rows must match at least one filter of every group. */
@@ -548,6 +580,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.filters = [];
     this.searchTerm = '';
     this.page = 1;
+    this.emitQuery();
   }
 
   /** True when search/filters differ from what the active view holds, so "Save view" makes sense. */
@@ -617,20 +650,24 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   // ---- pagination ----
   get totalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredData.length / this.pageSize));
+    const total = this.serverSide ? this.totalCount : this.filteredData.length;
+    return Math.max(1, Math.ceil(total / this.pageSize));
   }
 
   get pagedData(): T[] {
+    if (this.serverSide) return this.data;
     const start = (this.page - 1) * this.pageSize;
     return this.sortedData.slice(start, start + this.pageSize);
   }
 
   get rangeStart(): number {
-    return this.filteredData.length ? (this.page - 1) * this.pageSize + 1 : 0;
+    const total = this.serverSide ? this.totalCount : this.filteredData.length;
+    return total ? (this.page - 1) * this.pageSize + 1 : 0;
   }
 
   get rangeEnd(): number {
-    return Math.min(this.page * this.pageSize, this.filteredData.length);
+    const total = this.serverSide ? this.totalCount : this.filteredData.length;
+    return Math.min(this.page * this.pageSize, total);
   }
 
   get pageNumbers(): (number | '…')[] {
@@ -648,12 +685,14 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   goTo(p: number | '…'): void {
     if (p === '…') return;
     this.page = Math.min(Math.max(1, p), this.totalPages);
+    this.emitQuery();
   }
 
   changePageSize(size: number): void {
     this.pageSize = +size;
     this.page = 1;
     this.savePrefs();
+    this.emitQuery();
   }
 
   // ---- loading ----
@@ -822,9 +861,13 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     return this.rowActions.filter((a) => !a.hidden?.(row));
   }
 
-  /** Every quick action keeps its slot (invisible when hidden for the row) so icons line up down the column. */
   get quickActionSlots(): DataGridRowAction<T>[] {
     return this.rowActions.filter((a) => a.quick);
+  }
+
+  /** Quick actions actually visible for this row — hidden ones are omitted rather than reserving a slot. */
+  visibleQuickActionSlots(row: T): DataGridRowAction<T>[] {
+    return this.quickActionSlots.filter((a) => !a.hidden?.(row));
   }
 
   /** Actions shown as icon buttons in the detail panel's top bar for the open record. */
@@ -835,6 +878,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   isActionHidden(action: DataGridRowAction<T>, row: T): boolean {
     return !!action.hidden?.(row);
+  }
+
+  hasActionBadge(action: DataGridRowAction<T>, row: T): boolean {
+    return !!action.badge?.(row);
   }
 
   runQuickAction(action: DataGridRowAction<T>, row: T): void {

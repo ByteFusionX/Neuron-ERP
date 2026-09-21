@@ -17,7 +17,7 @@
           </nav>
           <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" [attr.aria-current]="breadcrumbs.length ? 'page' : null">{{ title }}</h2>
           <!-- view tabs carry the counts when views are configured -->
-          <span *ngIf="!allViews.length" class="px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full tabular-nums">{{ isFiltered ? filteredData.length + ' / ' + data.length : data.length }}</span>
+          <span *ngIf="!allViews.length" class="px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full tabular-nums">{{ serverSide ? totalCount : (isFiltered ? filteredData.length + ' / ' + data.length : data.length) }}</span>
         </div>
       </ng-container>
 
@@ -139,6 +139,9 @@
         </svg>
         Export
       </button>
+
+      <!-- Extra toolbar actions projected by the host page -->
+      <ng-content select="[dgToolbarExtra]"></ng-content>
 
       <!-- Column visibility -->
       <div class="relative">
@@ -347,8 +350,7 @@
             <tr *ngFor="let row of pagedData; trackBy: trackRow" (click)="openRow(row)" [attr.data-row-key]="row[rowKey]"
               class="dg-row group cursor-pointer" [class.dg-refreshing]="loading"
               [class.dg-row-active]="isActive(row)"
-              [class.dg-row-selected]="!isActive(row) && isSelected(row)"
-              [attr.data-accent]="rowAccent?.(row) || null">
+              [class.dg-row-selected]="!isActive(row) && isSelected(row)">
               <td *ngIf="selectable" class="dg-td dg-accent-cell !pl-5" (click)="$event.stopPropagation()"
                 [class.dg-active-bar]="isActive(row)">
                 <input type="checkbox" class="dg-checkbox" [checked]="isSelected(row)" (change)="toggleRow(row)"
@@ -363,14 +365,19 @@
 
                 <span class="inline-flex items-center gap-1.5 max-w-full" [class.flex-row-reverse]="alignOf(c) === 'right'">
                   <ng-container [ngSwitch]="c.type">
-                    <span *ngSwitchCase="'badge'"
-                      class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap"
-                      [ngClass]="badgeClass(c, rawValue(row, c))">
-                      <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
-                      {{ rawValue(row, c) }}
+                    <span *ngSwitchCase="'badge'">
+                      <span *ngIf="rawValue(row, c) != null && rawValue(row, c) !== ''; else noBadgeValue"
+                        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap"
+                        [ngClass]="badgeClass(c, rawValue(row, c))">
+                        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
+                        {{ rawValue(row, c) }}
+                      </span>
+                      <ng-template #noBadgeValue>
+                        <span class="flex justify-center w-full text-gray-400 dark:text-gray-600">—</span>
+                      </ng-template>
                     </span>
                     <span *ngSwitchCase="'date'" class="whitespace-nowrap">{{ rawValue(row, c) | date: 'dd MMM yyyy' }}</span>
-                    <span *ngSwitchCase="'currency'" class="whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{{ c.currencyCode || 'QAR' }} {{ rawValue(row, c) | currency: (c.currencyCode || 'QAR') : '' : '1.2-2' }}</span>
+                    <span *ngSwitchCase="'currency'" class="whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{{ rawValue(row, c) | currency: (c.currencyCode || 'QAR') : '' : '1.2-2' }}</span>
                     <span *ngSwitchCase="'number'">{{ rawValue(row, c) | number }}</span>
                     <span *ngSwitchDefault class="truncate">{{ rawValue(row, c) ?? '—' }}</span>
                   </ng-container>
@@ -379,12 +386,13 @@
 
               <!-- Row actions -->
               <td *ngIf="rowActions.length" class="dg-td dg-sticky-right !pr-5 text-right whitespace-nowrap" (click)="$event.stopPropagation()">
-                <span *ngIf="quickActionSlots.length" class="dg-quick inline-flex items-center gap-0.5 mr-0.5 align-middle">
-                  <button *ngFor="let a of quickActionSlots" type="button" class="dg-icon-btn"
-                    [class.dg-icon-danger]="a.variant === 'danger'" [class.invisible]="isActionHidden(a, row)"
-                    [disabled]="isActionHidden(a, row)" [matTooltip]="a.label" [attr.aria-label]="a.label"
+                <span *ngIf="visibleQuickActionSlots(row).length" class="dg-quick inline-flex items-center gap-0.5 mr-0.5 align-middle">
+                  <button *ngFor="let a of visibleQuickActionSlots(row)" type="button" class="dg-icon-btn relative"
+                    [class.dg-icon-danger]="a.variant === 'danger'" [matTooltip]="a.label" [attr.aria-label]="a.label"
                     (click)="runQuickAction(a, row)">
                     <app-dp-icon [name]="a.icon || 'check'"></app-dp-icon>
+                    <span *ngIf="hasActionBadge(a, row)"
+                      class="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-orange-500"></span>
                   </button>
                 </span>
                 <button type="button" (click)="openActionMenu(row, $event)" aria-label="Row actions"
@@ -404,7 +412,7 @@
     <!-- Pagination -->
     <div class="shrink-0 flex flex-col gap-3 px-5 py-3 border-t border-gray-100 dark:border-erp-border-dark sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-500">
-        <span class="tabular-nums">Showing <span class="font-medium text-gray-800 dark:text-gray-200">{{ rangeStart }}–{{ rangeEnd }}</span> of <span class="font-medium text-gray-800 dark:text-gray-200">{{ filteredData.length }}</span></span>
+        <span class="tabular-nums">Showing <span class="font-medium text-gray-800 dark:text-gray-200">{{ rangeStart }}–{{ rangeEnd }}</span> of <span class="font-medium text-gray-800 dark:text-gray-200">{{ serverSide ? totalCount : filteredData.length }}</span></span>
         <label class="flex items-center gap-2">
           <span>Rows</span>
           <select class="h-8 border border-gray-100 dark:border-erp-border-dark rounded-lg px-2 text-xs text-gray-700 dark:text-gray-300 bg-white dark:bg-erp-surface-dark focus:outline-none focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-900"
@@ -447,8 +455,9 @@
       <ng-container *ngFor="let a of visibleRowActions(actionMenu.row)">
         <div *ngIf="a.divider" class="my-1 h-px bg-gray-100 dark:bg-erp-border-dark"></div>
         <button type="button" role="menuitem" (click)="runRowAction(a)"
-          class="w-full flex items-center px-2.5 h-8 text-sm rounded-lg text-left transition-colors"
+          class="w-full flex items-center gap-1.5 px-2.5 h-8 text-sm rounded-lg text-left transition-colors"
           [ngClass]="a.variant === 'danger' ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
+          <span *ngIf="hasActionBadge(a, actionMenu.row)" class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
           {{ a.label }}
         </button>
       </ng-container>

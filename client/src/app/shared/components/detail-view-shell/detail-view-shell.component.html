@@ -1,0 +1,110 @@
+<!-- skeleton -->
+<div *ngIf="loading" class="dvs-shell flex-1 animate-pulse space-y-4 p-5">
+  <div class="h-3 w-48 rounded bg-gray-200 dark:bg-gray-800"></div>
+  <div class="h-7 w-80 rounded bg-gray-200 dark:bg-gray-800"></div>
+  <div class="h-16 rounded-lg bg-gray-200 dark:bg-gray-800"></div>
+  <div class="h-8 w-2/3 rounded bg-gray-200 dark:bg-gray-800"></div>
+  <div class="h-72 rounded-lg bg-gray-200 dark:bg-gray-800"></div>
+</div>
+
+<!-- not found -->
+<div *ngIf="!loading && empty" class="dvs-shell grid flex-1 place-content-center p-8 text-center">
+  <p class="dvs-strong text-base font-semibold">{{ emptyTitle }}</p>
+  <p *ngIf="emptyMessage" class="dvs-muted mt-1 text-sm">{{ emptyMessage }}</p>
+  <app-action-button *ngIf="emptyLink" variant="primary" [link]="emptyLink" class="mx-auto mt-5">{{ emptyLinkLabel }}</app-action-button>
+</div>
+
+<div *ngIf="!loading && !empty" class="dvs-shell flex min-h-0 flex-1 flex-col overflow-hidden">
+
+  <!-- 1. header (non-scrolling) -->
+  <header class="dvs-line shrink-0 border-b px-5 pt-4">
+    <nav *ngIf="breadcrumbs.length" class="dvs-muted flex items-center gap-1.5 text-[13px]" aria-label="Breadcrumb">
+      <ng-container *ngFor="let b of breadcrumbs; let last = last">
+        <a *ngIf="b.link && !last" [routerLink]="b.link" class="hover:text-violet-600">{{ b.label }}</a>
+        <span *ngIf="!b.link || last">{{ b.label }}</span>
+        <span *ngIf="!last">&rsaquo;</span>
+      </ng-container>
+    </nav>
+
+    <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex min-w-0 items-center gap-3">
+        <app-detail-avatar *ngIf="avatarText" [text]="avatarText" size="md"></app-detail-avatar>
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="dvs-strong truncate text-lg font-semibold">{{ title }}</h1>
+            <ng-container *ngFor="let badge of badges">
+              <app-detail-badge *ngIf="badge.tone" [label]="badge.label" [tone]="badge.tone"></app-detail-badge>
+              <span *ngIf="!badge.tone" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset" [ngClass]="badge.class">{{ badge.label }}</span>
+            </ng-container>
+          </div>
+          <p *ngIf="subtitle" class="dvs-muted text-[13px]">{{ subtitle }}</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <ng-content select="[headerActions]"></ng-content>
+      </div>
+    </div>
+
+    <!-- inline stats -->
+    <dl *ngIf="stats.length" class="dvs-line mt-3 grid grid-cols-2 border-t sm:grid-cols-3 lg:grid-cols-6">
+      <div *ngFor="let s of stats" class="py-2.5 pr-4">
+        <dt class="dvs-label">{{ s.label }}</dt>
+        <dd *ngIf="s.progress == null" class="dvs-kpi" [class.!text-red-600]="s.danger">{{ s.value }}</dd>
+        <dd *ngIf="s.progress != null" class="flex items-center gap-2">
+          <span class="dvs-kpi" [class.!text-red-600]="s.danger">{{ s.value }}</span>
+          <span class="mt-1 h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"><span class="block h-full rounded-full" [ngClass]="s.progressClass || 'bg-violet-600'" [style.width.%]="s.progress"></span></span>
+        </dd>
+      </div>
+    </dl>
+  </header>
+
+  <!-- 2. tabs -->
+  <div *ngIf="tabs.length" class="dvs-line flex h-11 shrink-0 items-stretch justify-between border-b px-5">
+    <div class="dvs-tabs flex h-full gap-5 overflow-x-auto" role="tablist">
+      <button *ngFor="let t of tabs" type="button" role="tab" [attr.aria-selected]="activeTab === t.id" (click)="selectTab(t.id)"
+        class="-mb-px flex h-full items-center whitespace-nowrap border-b-2 text-[13px] font-medium transition-colors"
+        [ngClass]="activeTab === t.id ? 'border-violet-600 text-gray-900 dark:text-gray-100' : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'">
+        {{ t.label }}
+      </button>
+    </div>
+    <div class="flex items-center gap-2 self-center">
+      <ng-content select="[tabToolbar]"></ng-content>
+    <app-action-button *ngIf="showPanelToggle && hasSidebar" variant="ghost" class="hidden self-center lg:inline-flex" (click)="togglePanel()">
+      {{ panelOpen ? hidePanelLabel : showPanelLabel }}
+    </app-action-button>
+    </div>
+  </div>
+
+  <div class="flex min-h-0 flex-1">
+    <!-- tab body (scrolls) -->
+    <main class="min-w-0 flex-1 overflow-y-auto p-5">
+      <ng-content select="[tabBody]"></ng-content>
+    </main>
+
+    <!-- 3. right panel -->
+    <aside *ngIf="hasSidebar && panelOpen" class="dvs-line hidden w-80 shrink-0 flex-col border-l lg:flex">
+      <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+        <div *ngFor="let s of sections" class="dov-section">
+          <app-detail-section *ngIf="s.visible !== false" [title]="s.title" [columns]="s.columns || '1'">
+            <ng-container *ngFor="let f of s.fields">
+              <ng-container *ngIf="f.visible !== false && f.type !== 'dg'">
+                <app-detail-field *ngIf="f.type === 'field'" [label]="f.label || ''" [tone]="f.tone ?? null"
+                  [stacked]="f.stacked ?? (s.columns === '2')" [numeric]="f.numeric ?? false" [noHover]="f.noHover ?? false">
+                  <span [class.tabular-nums]="f.numeric">{{ f.value ?? '—' }}</span>
+                </app-detail-field>
+                <app-detail-badge *ngIf="f.type === 'badge'" [label]="f.label || ''" [tone]="f.tone || 'neutral'" [dot]="f.dot ?? false"></app-detail-badge>
+                <app-detail-progress *ngIf="f.type === 'progress'" [label]="f.label || ''" [value]="f.value" [tone]="f.tone || 'active'"
+                  [max]="f.max ?? null" [display]="f.display ?? null" [marker]="f.marker ?? null" [caption]="f.caption || ''"></app-detail-progress>
+              </ng-container>
+            </ng-container>
+          </app-detail-section>
+          <p *ngIf="s.visible === false && s.emptyMessage" class="text-[13px] text-gray-500 dark:text-gray-400 px-1">{{ s.emptyMessage }}</p>
+        </div>
+        <ng-content select="[sidebar]"></ng-content>
+      </div>
+      <ng-content select="[sidebarFooter]"></ng-content>
+    </aside>
+  </div>
+</div>
+
+<div *ngIf="toast" role="status" class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg dark:bg-gray-100 dark:text-gray-900">{{ toast }}</div>

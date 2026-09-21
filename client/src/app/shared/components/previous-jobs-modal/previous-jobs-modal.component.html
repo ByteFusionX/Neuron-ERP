@@ -1,53 +1,47 @@
 <app-modal-layout
   title="Previous Job Items"
-  subtitle="Select items from previous in-progress or completed jobs to add to this quote"
+  subtitle="Pick items from this client's earlier jobs to add to the quote"
   [onClose]="onCancel.bind(this)"
   [footerButtons]="footerButtons"
 >
-  <div class="p-4">
-    <table class="w-full text-sm text-left border mb-4">
-      <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-        <tr>
-          <th class="px-3 py-2 border text-center">
-            <input
-              type="checkbox"
-              [checked]="allSelected"
-              [indeterminate]="someSelected"
-              (change)="toggleSelectAll($any($event.target).checked)"
-            />
-          </th>
-          <th class="px-3 py-2 border text-center">Job ID</th>
-          <th class="px-3 py-2 border text-center">Item Name</th>
-          <th class="px-3 py-2 border">Item Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (row of rows; track row.jobId + row.itemName + $index) {
-          <tr class="border-b">
-            <td class="px-3 py-2 border text-center">
-              <input type="checkbox" [(ngModel)]="row.selected" />
-            </td>
-            <td class="px-3 py-2 border text-center whitespace-nowrap">{{ row.jobId }}</td>
-            <td class="px-3 py-2 border font-medium uppercase">{{ row.itemName }}</td>
-            <td class="px-3 py-2 border">
-              <ul class="list-disc pl-4">
-                @for (detail of row.itemDetails; track $index) {
-                  <li>
-                    {{ detail.detail }}
-                    <span class="text-gray-500">(Qty: {{ detail.quantity }})</span>
-                  </li>
-                }
-              </ul>
-            </td>
-          </tr>
-        } @empty {
-          <tr>
-            <td colspan="4" class="px-3 py-4 border text-center text-gray-500">
-              No items found.
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
+  <div class="flex flex-col gap-4 p-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="w-full sm:w-72">
+        <app-sf-input [ngModelOptions]="{ standalone: true }" [(ngModel)]="search" placeholder="Search job, item or detail"></app-sf-input>
+      </div>
+      <app-sf-checkbox *ngIf="visibleRows.length" [ngModelOptions]="{ standalone: true }" [ngModel]="allSelected"
+        (ngModelChange)="toggleSelectAll($event)" [label]="'Select all (' + selectedCount + ' of ' + rows.length + ' selected)'"></app-sf-checkbox>
+    </div>
+
+    <section *ngFor="let g of groups" class="rounded-lg border border-gray-200 dark:border-erp-border-dark">
+      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-2.5 dark:border-erp-border-dark">
+        <div class="flex items-center gap-2">
+          <app-sf-checkbox [ngModelOptions]="{ standalone: true }" [ngModel]="groupAllSelected(g)"
+            (ngModelChange)="toggleGroup(g, $event)" [attr.aria-label]="'Select all items of ' + g.jobId"></app-sf-checkbox>
+          <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ g.jobId }}</span>
+          <span *ngIf="g.jobStatus" class="rounded-full border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600 dark:border-erp-border-dark dark:text-gray-400">{{ g.jobStatus }}</span>
+        </div>
+        <span *ngIf="g.createdDate" class="text-xs text-gray-500">{{ g.createdDate | date: 'dd MMM yyyy' }}</span>
+      </header>
+
+      <div class="divide-y divide-gray-200 dark:divide-erp-border-dark">
+        <div *ngFor="let r of g.rows" class="flex gap-3 px-4 py-3">
+          <app-sf-checkbox [ngModelOptions]="{ standalone: true }" [(ngModel)]="r.selected" [attr.aria-label]="'Select ' + r.itemName"></app-sf-checkbox>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13px] font-medium uppercase text-gray-900 dark:text-gray-100">{{ r.itemName }}</p>
+            <ul class="mt-1 flex flex-col gap-0.5">
+              <li *ngFor="let d of r.itemDetails" class="flex items-baseline justify-between gap-3 text-xs text-gray-600 dark:text-gray-400">
+                <span class="min-w-0">{{ d.detail }}</span>
+                <span class="shrink-0 text-gray-500">Qty {{ d.quantity }}<ng-container *ngIf="d.uom"> {{ d.uom }}</ng-container></span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <p *ngIf="!groups.length" class="rounded-lg border border-dashed border-gray-200 px-3 py-8 text-center text-sm text-gray-500 dark:border-erp-border-dark">
+      {{ rows.length ? 'No items match your search.' : 'No items found.' }}
+    </p>
   </div>
 </app-modal-layout>

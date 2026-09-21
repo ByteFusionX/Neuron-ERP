@@ -24,49 +24,50 @@
     <!-- Body -->
     <div class="px-6 py-4 max-h-[65vh] overflow-y-auto">
         <ng-container *ngIf="events$ | async as events">
-            <div *ngIf="events.length; else noEvent" class="space-y-4">
-                <div class="p-4 bg-gray-100 rounded" *ngFor="let event of events">
-                    <div class="w-full flex justify-between">
-                        <p class="text-gray-900 text-lg"><ng-icon name="heroCalendarDays"></ng-icon> {{event.event}}
+            <ol *ngIf="events.length; else noEvent" class="relative ml-1 border-l border-gray-200">
+                <li class="relative pb-5 pl-5 last:pb-0" *ngFor="let event of events">
+                    <span class="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-white ring-2 ring-violet-500"></span>
+
+                    <div class="w-full flex items-start justify-between gap-2">
+                        <p class="text-[13px] font-medium text-gray-900 flex items-center gap-1.5">
+                            <ng-icon name="heroCalendarDays" class="text-violet-500"></ng-icon>
+                            {{event.event}}
                         </p>
-                        <div class="flex">
-                            <div class="">
-                                <div>
-                                    <input type="checkbox" class="size-4 border border-violet-500"
-                                        [disabled]="event.status === 'completed'"
-                                        (click)="onCheckboxClick($event, event._id)"
-                                        [checked]="event.status === 'completed'">
-                                </div>
-                            </div>
-                            <div *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)">
-                                <button class="text-red-600 hover:text-red-800 px-2" matTooltip="Delete Event"
-                                    matTooltipPosition="above" (click)="onDeleteEvent(event._id)">
-                                    <ng-icon name="heroTrash" class="text-md"></ng-icon>
-                                </button>
-                            </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <input type="checkbox" class="size-4 border border-violet-500"
+                                [disabled]="event.status === 'completed'"
+                                (click)="onCheckboxClick($event, event._id)"
+                                [checked]="event.status === 'completed'">
+                            <button *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)"
+                                type="button" class="text-red-600 hover:text-red-800 px-1" matTooltip="Delete Event"
+                                matTooltipPosition="above" (click)="onDeleteEvent(event._id)">
+                                <ng-icon name="heroTrash" class="text-sm"></ng-icon>
+                            </button>
                         </div>
                     </div>
-                    <p class="text-gray-600">{{event.summary}}</p>
-                    <p class="text-gray-600">{{formatDate(event.date)}}</p>
+
+                    <p class="text-xs text-gray-500 mt-0.5">{{event.summary}}</p>
+                    <p class="text-xs text-gray-400 mt-0.5">{{formatDate(event.date)}}</p>
+
                     <div *ngIf="event.eventFiles && event.eventFiles.length" class="mt-2 space-y-1">
                         <div *ngFor="let file of event.eventFiles" class="flex items-center gap-1">
                             <button type="button"
-                                class="flex items-center gap-1 text-violet-600 hover:text-violet-800 text-sm underline"
+                                class="flex items-center gap-1 text-violet-600 hover:text-violet-800 text-xs underline"
                                 matTooltip="Preview File" matTooltipPosition="above"
                                 (click)="onPreviewFile(file.fileName)">
-                                <ng-icon name="heroEye" class="text-md"></ng-icon>
+                                <ng-icon name="heroEye" class="text-sm"></ng-icon>
                                 {{file.originalname}}
                             </button>
                             <button
                                 *ngIf="event.createdBy && isCreatedEmployee(event.createdBy._id || event.createdBy)"
                                 type="button" class="text-red-600 hover:text-red-800" matTooltip="Delete File"
                                 matTooltipPosition="above" (click)="onDeleteFile(event, file.fileName)">
-                                <ng-icon name="heroTrash" class="text-sm"></ng-icon>
+                                <ng-icon name="heroTrash" class="text-xs"></ng-icon>
                             </button>
                         </div>
                     </div>
-                </div>
-            </div>
+                </li>
+            </ol>
         </ng-container>
 
         <ng-template #noEvent>

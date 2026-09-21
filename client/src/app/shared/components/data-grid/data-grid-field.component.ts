@@ -19,7 +19,7 @@ import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.comp
   standalone: true,
   imports: [CommonModule, FormsModule, DataGridAutofocusDirective, DetailFieldComponent, DetailPanelIconComponent],
   template: `
-    <app-detail-field *ngIf="col" [label]="label || col.label" [icon]="icon" [stacked]="stacked">
+    <app-detail-field *ngIf="col" [label]="label || col.label" [icon]="icon" [stacked]="stacked" [noHover]="noHover">
       <ng-container *ngIf="editing; else display">
         <select *ngIf="col.editor === 'select'" class="dgf-input" dgAutofocus [ngModel]="value"
           (ngModelChange)="value = $event; commit()" (blur)="commit()" (keydown.escape)="cancel($event)">
@@ -41,9 +41,12 @@ import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.comp
 
       <ng-template #valueTpl>
         <ng-container [ngSwitch]="col.type">
-          <span *ngSwitchCase="'badge'" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium"
-            [ngClass]="grid.badgeClass(col, raw)">
-            <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>{{ raw }}
+          <span *ngSwitchCase="'badge'">
+            <span *ngIf="raw; else badgeEmpty" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium"
+              [ngClass]="grid.badgeClass(col, raw)">
+              <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>{{ raw }}
+            </span>
+            <ng-template #badgeEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
           </span>
           <span *ngSwitchCase="'date'">{{ raw ? (raw | date: 'dd MMM yyyy') : '—' }}</span>
           <span *ngSwitchCase="'currency'" class="tabular-nums">{{ raw == null ? '—' : (raw | currency: (col.currencyCode || 'QAR') : 'symbol-narrow' : '1.2-2') }}</span>
@@ -57,10 +60,10 @@ import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.comp
     .dgf-value { display: flex; align-items: center; gap: 0.5rem; width: calc(100% + 0.75rem); min-height: 1.875rem;
       margin: -0.25rem -0.375rem; padding: 0.25rem 0.375rem; border-radius: 0.375rem; text-align: left;
       transition: background-color 120ms ease; }
-    .dgf-value:hover, .dgf-value:focus-visible { background: #f3f4f6; outline: none; }
+    .dgf-value:focus-visible { background: #f3f4f6; outline: none; }
     .dgf-input { width: 100%; height: 1.875rem; padding: 0 0.5rem; font-size: 0.8125rem; border: 1px solid #7c3aed;
       border-radius: 0.375rem; outline: none; box-shadow: 0 0 0 3px rgb(124 58 237 / 0.15); background: #fff; }
-    :host-context(html.dark) .dgf-value:hover, :host-context(html.dark) .dgf-value:focus-visible { background: #262626; }
+    :host-context(html.dark) .dgf-value:focus-visible { background: #262626; }
     :host-context(html.dark) .dgf-input { background: #1a1a1a; color: #ededed; }
   `],
 })
@@ -73,6 +76,7 @@ export class DataGridFieldComponent<T extends Record<string, any> = any> {
   @Input() label = '';
   @Input() icon = '';
   @Input({ transform: booleanAttribute }) stacked = false;
+  @Input({ transform: booleanAttribute }) noHover = false;
 
   editing = false;
   value: any = null;

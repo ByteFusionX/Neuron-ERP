@@ -44,6 +44,8 @@ export interface DataGridRowAction<T = any> {
   icon?: string;
   /** Show as an icon button in the detail panel's top bar for the open record. Defaults to `quick`. */
   panel?: boolean;
+  /** Show a small attention dot on the quick button for rows where this returns true */
+  badge?: (row: T) => boolean;
 }
 
 export interface DataGridRowActionEvent<T = any> {
@@ -84,6 +86,16 @@ export interface DataGridFilter {
   value: any;
   /** OR'd with the filter before it. Consecutive OR'd filters form a group; groups are AND'd together. */
   or?: boolean;
+}
+
+/** Query state emitted by `queryChange` when the grid runs in server-side mode. */
+export interface DataGridQuery {
+  search: string;
+  filters: DataGridFilter[];
+  sort: DataGridSortState;
+  page: number;
+  pageSize: number;
+  viewId: string;
 }
 
 export interface DataGridToast {

@@ -1,0 +1,26 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.dvs-shell { border: 1px solid #f3f4f6; background: #fff; border-radius: 0.75rem; overflow: hidden; }
+.dvs-line { border-color: #f3f4f6; }
+.dvs-label { font-size: 0.6875rem; color: #6b7280; }
+.dvs-kpi { margin-top: 0.125rem; font-size: 1rem; font-weight: 600; color: #111827; font-variant-numeric: tabular-nums; }
+.dvs-muted { color: #6b7280; }
+.dvs-strong { color: #111827; }
+
+.dvs-tabs { scrollbar-width: none; -ms-overflow-style: none; }
+.dvs-tabs::-webkit-scrollbar { display: none; height: 0; }
+
+.dov-section + .dov-section { margin-top: 1.75rem; padding-top: 1.5rem; border-top: 1px solid #f3f4f6; }
+:host-context(html.dark) .dov-section + .dov-section { border-top-color: #262626; }
+
+:host-context(html.dark) .dvs-shell { border-color: #262626; background: #111111; }
+:host-context(html.dark) .dvs-line { border-color: #262626; }
+:host-context(html.dark) .dvs-label,
+:host-context(html.dark) .dvs-muted { color: #a1a1a1; }
+:host-context(html.dark) .dvs-kpi,
+:host-context(html.dark) .dvs-strong { color: #ededed; }

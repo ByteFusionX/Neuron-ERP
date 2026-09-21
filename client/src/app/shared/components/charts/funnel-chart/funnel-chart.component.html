@@ -1,0 +1,73 @@
+<div
+  #host
+  class="fc-host"
+  [class.fc-vertical]="orientation === 'vertical'"
+  [class.fc-entered]="entered"
+  [class.fc-static]="!animate"
+>
+  <svg
+    *ngIf="segments.length"
+    class="fc-svg"
+    [attr.width]="width"
+    [attr.height]="height"
+    [attr.viewBox]="'0 0 ' + width + ' ' + height"
+    preserveAspectRatio="none"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <g
+      *ngFor="let seg of segments; trackBy: trackByIndex"
+      class="fc-seg"
+      [class.fc-dim]="isDimmed(seg.index)"
+      [class.fc-hot]="hovered === seg.index"
+      [style.animationDelay.ms]="seg.delay"
+    >
+      <path
+        *ngFor="let ring of seg.rings"
+        class="fc-ring"
+        [attr.d]="ring.d"
+        [attr.fill]="seg.fill"
+        [attr.fill-opacity]="ring.opacity"
+        [style.--fc-hover-scale]="ring.hoverScale"
+        [style.transitionDuration.ms]="ring.duration"
+      ></path>
+    </g>
+  </svg>
+
+  <!-- Labels sit above the shapes and carry the hover, so the hit target is a
+       clean rectangle per stage rather than the tapered path. -->
+  <div
+    *ngFor="let seg of segments; trackBy: trackByIndex"
+    class="fc-labels"
+    [class.fc-dim]="isDimmed(seg.index)"
+    [style.left.px]="seg.box.left"
+    [style.top.px]="seg.box.top"
+    [style.width.px]="seg.box.width"
+    [style.height.px]="seg.box.height"
+    [style.transitionDelay.ms]="entered ? 0 : seg.delay"
+    (mouseenter)="onEnter(seg.index)"
+    (mouseleave)="onLeave(seg.index)"
+  >
+    <div class="fc-row fc-row-top">
+      <span *ngIf="showValues" class="fc-value">{{ seg.valueText }}</span>
+    </div>
+    <div class="fc-row fc-row-mid">
+      <span *ngIf="showPercentage" class="fc-pct">{{ seg.percentText }}</span>
+    </div>
+    <div class="fc-row fc-row-bottom">
+      <span *ngIf="showLabels" class="fc-label">{{ seg.label }}</span>
+    </div>
+  </div>
+
+  <!-- Screen readers get the numbers, not the shapes. -->
+  <table class="sr-only">
+    <caption>Funnel stages</caption>
+    <tbody>
+      <tr *ngFor="let seg of segments; trackBy: trackByIndex">
+        <th scope="row">{{ seg.label }}</th>
+        <td>{{ seg.valueText }}</td>
+        <td>{{ seg.percentText }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

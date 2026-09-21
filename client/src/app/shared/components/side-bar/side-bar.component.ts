@@ -278,7 +278,7 @@ export class SideBarComponent
     },
     {
       id: 'procurement',
-      label: 'Procurement',
+      label: 'Purchase',
       items: [
         {
           id: 'suppliers',
@@ -350,6 +350,14 @@ export class SideBarComponent
               notificationKey: 'lpoApprovedCount',
             },
           ],
+        },
+        {
+          id: 'grn',
+          label: 'GRN',
+          icon: 'heroInboxArrowDown',
+          route: '/grn/grn-list',
+          privilegeKey: 'grn',
+          privilegeValue: 'none',
         },
       ],
     },
@@ -441,14 +449,6 @@ export class SideBarComponent
       id: 'administration',
       label: 'Logistics',
       items: [
-        {
-          id: 'grn',
-          label: 'GRN',
-          icon: 'heroInboxArrowDown',
-          route: '/grn/grn-list',
-          privilegeKey: 'grn',
-          privilegeValue: 'none',
-        },
         {
           id: 'dispatch',
           label: 'Dispatch',
