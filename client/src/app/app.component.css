@@ -1,0 +1,5 @@
+:host-context(html.dark) .mat-drawer-container,
+:host-context(html.dark) .mat-drawer-content {
+  background-color: #0a0a0a;
+  color: #ededed;
+}
