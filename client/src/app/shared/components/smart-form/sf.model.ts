@@ -35,5 +35,7 @@ export const SF_STYLES = `
   :host-context(html.dark) .sf-input:hover { border-color: #525252; }
   :host-context(html.dark) .sf-input:focus, :host-context(html.dark) .sf-input:focus-within { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25); }
   :host-context(html.dark) .sf-input:disabled, :host-context(html.dark) .sf-input.sf-disabled { background: #1a1a1a; color: #8f8f8f; border-color: #262626; }
-  :host-context(html.dark) .sf-check, :host-context(html.dark) .sf-radio { background: #111111; border-color: #525252; }
+  :host-context(html.dark) .sf-check, :host-context(html.dark) .sf-radio { background-color: #111111; border-color: #525252; }
+  :host-context(html.dark) .sf-check:checked { background-color: #6d28d9; border-color: #6d28d9; }
+  :host-context(html.dark) .sf-radio:checked { border-color: #6d28d9; }
 `;

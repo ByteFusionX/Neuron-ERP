@@ -16,6 +16,8 @@ export class SfDraftDirective implements OnInit, OnDestroy {
   @Input('sfDraft') key = '';
   /** Controls that can't be serialized (files) or shouldn't persist */
   @Input() sfDraftExclude: string[] = [];
+  /** Lets a host that reuses one form for create and edit switch autosave off for the latter. */
+  @Input() sfDraftDisabled = false;
 
   pending: StoredDraft | null = null;
   savedAt: Date | null = null;
@@ -28,6 +30,8 @@ export class SfDraftDirective implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // `pending` is only readable once this runs, so host templates must not read it from an
+    // element that is checked before the form (it would flip null -> value in one pass, NG0100).
     try {
       const raw = localStorage.getItem(this.storageKey);
       this.pending = raw ? JSON.parse(raw) : null;
@@ -35,7 +39,7 @@ export class SfDraftDirective implements OnInit, OnDestroy {
       this.pending = null;
     }
     this.sub = this.fg.form.valueChanges.pipe(debounceTime(600)).subscribe(() => {
-      if (this.fg.form.dirty) this.save();
+      if (!this.sfDraftDisabled && this.fg.form.dirty) this.save();
     });
   }
 
