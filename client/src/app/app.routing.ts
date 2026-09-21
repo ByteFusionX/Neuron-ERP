@@ -15,8 +15,6 @@ import { UploadEstimationComponent } from './modules/assigned-jobs/pages/upload-
 import { CompletedJobsListComponent } from './modules/assigned-jobs/pages/completed-jobs-list/completed-jobs-list.component';
 import { ReassignedJobsComponent } from './modules/assigned-jobs/pages/reassigned-jobs/reassigned-jobs.component';
 import { QuotationViewComponent } from './modules/quotations/pages/quotation-view/quotation-view.component';
-import { QuotationEditComponent } from './modules/quotations/pages/quotation-edit/quotation-edit.component';
-import { CreateQuotatationComponent } from './modules/quotations/pages/create-quotatation/create-quotatation.component';
 import { QuotationListComponent } from './modules/quotations/pages/quotation-list/quotation-list.component';
 import { PendingDealsComponent } from './modules/deal-sheet/pending-deals/pending-deals.component';
 import { ApprovedDealsComponent } from './modules/deal-sheet/approved-deals/approved-deals.component';
@@ -115,7 +113,10 @@ export const routes: Routes = [
   {
     path: 'enquiry',
     canActivate: [AuthGuard, RoleGuard],
-    loadComponent: () => import('./modules/enquirys/enquiry.component').then((c) => c.EnquiryComponent)
+    loadComponent: () => import('./modules/enquirys/enquiry.component').then((c) => c.EnquiryComponent),
+    children: [
+      { path: '', loadComponent: () => import('./modules/enquirys/pages/enquiry-list/enquiry-list.component').then((c) => c.EnquiryListComponent) }
+    ]
   },
   {
     path: 'assigned-jobs',
@@ -135,10 +136,11 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/quotations/quotations.component').then((c) => c.QuotationsComponent),
     children: [
       { path: '', canActivate: [RoleGuard], component: QuotationListComponent },
-      { path: 'report', canActivate: [RoleGuard], component: QuotationListComponent },
-      { path: 'create', canActivate: [RoleGuard], component: CreateQuotatationComponent },
-      { path: 'edit', canActivate: [RoleGuard], component: QuotationEditComponent },
-      { path: 'view', canActivate: [RoleGuard], component: QuotationViewComponent }
+      {
+        path: 'report', canActivate: [RoleGuard],
+        loadComponent: () => import('./modules/quotations/pages/quotation-report/quotation-report.component').then((c) => c.QuotationReportComponent),
+      },
+      { path: 'view/:id', canActivate: [RoleGuard], component: QuotationViewComponent }
     ]
   },
   {

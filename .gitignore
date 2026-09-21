@@ -1,1 +1,30 @@
 server/src/common/exchangeRate.json
+
+# AI agent / tooling files
+CLAUDE.md
+.claude/
+.cursor/
+skill-observations/
+
+# Local notes and generated docs
+ISSUES_CHECKLIST.md
+quotation-list-migration-checklist.md
+docs/standalone-ui-system.md
+docs/ui-*.md
+
+# Logs
+*.log
+
+# Dependencies and build output
+node_modules/
+dist/
+.angular/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
