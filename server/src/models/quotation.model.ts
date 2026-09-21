@@ -13,6 +13,8 @@ interface QuoteItemDetail {
     dealSelected?: boolean;
     purchaseItemDetailId?: Types.ObjectId;
     uom?: string;
+    itemCode?: string;
+    partNo?: string;
 }
 
 interface QuoteItem {
@@ -34,6 +36,12 @@ interface AdditionalCost {
     value: number;
 }
 
+interface FieldChange {
+    field: string;
+    from: string;
+    to: string;
+}
+
 interface EditHistoryEntry {
     editedBy: Types.ObjectId;
     editedAt: Date;
@@ -41,6 +49,23 @@ interface EditHistoryEntry {
     fromStatus?: string;
     toStatus?: string;
     reason?: string;
+    revision?: number;
+    changes?: FieldChange[];
+}
+
+/** Content of a quote as it stood before a revision-creating edit. */
+interface QuoteRevision {
+    revision: number;
+    savedAt: Date;
+    savedBy: Types.ObjectId;
+    reason?: string;
+    snapshot: {
+        subject: string;
+        currency: string;
+        optionalItems: OptionalItems[];
+        customerNote: string;
+        termsAndCondition: string;
+    };
 }
 
 interface Deal {
@@ -82,6 +107,8 @@ interface Quotation extends Document {
     eventId: any;
     saveNote: string;
     editHistory: EditHistoryEntry[];
+    revision: number;
+    revisions: QuoteRevision[];
 }
 
 export enum quoteStatus {
@@ -143,6 +170,14 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
         required: false,
     },
     uom: {
+        type: String,
+        required: false,
+    },
+    itemCode: {
+        type: String,
+        required: false,
+    },
+    partNo: {
         type: String,
         required: false,
     }
@@ -273,6 +308,19 @@ const editHistoryEntrySchema = new Schema<EditHistoryEntry>({
         type: String,
         required: false,
     },
+    revision: {
+        type: Number,
+        required: false,
+    },
+    changes: {
+        type: [{
+            field: { type: String, required: true },
+            from: { type: String, default: '' },
+            to: { type: String, default: '' },
+        }],
+        required: false,
+        default: undefined,
+    },
 }, { _id: false });
 
 const quotationSchema = new Schema<Quotation>({
@@ -363,6 +411,21 @@ const quotationSchema = new Schema<Quotation>({
     editHistory: {
         type: [editHistoryEntrySchema],
         default: [],
+    },
+    revision: {
+        type: Number,
+        default: 0,
+    },
+    revisions: {
+        type: [{
+            revision: { type: Number, required: true },
+            savedAt: { type: Date, default: Date.now },
+            savedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+            reason: { type: String },
+            snapshot: { type: Schema.Types.Mixed },
+        }],
+        default: [],
+        select: false,
     },
 });
 

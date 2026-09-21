@@ -6,7 +6,9 @@ import {
     getNextQuoteId,
     getProductSuggestions,
     getQuotations,
+    getQuotationById,
     getQuoteNote,
+    getQuoteRevisions,
     getReportDetails,
     markAsQuotationSeened,
     markAsSeenDeal,
@@ -42,8 +44,10 @@ quoteRouter.post('/deal/revoke', requirePrivilege("dealSheet"), revokeDeal)
 quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
 quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprovedDealSheet)
 quoteRouter.post('/get', getQuotations)
+quoteRouter.post('/get/:id', getQuotationById)
 quoteRouter.get('/product-suggestions', getProductSuggestions)
 quoteRouter.get('/note/:quoteId', getQuoteNote)
+quoteRouter.get('/revisions/:quoteId', getQuoteRevisions)
 quoteRouter.post('/report', getReportDetails)
 quoteRouter.get('/total', totalQuotation)
 quoteRouter.post('/nextQuoteId', getNextQuoteId)

@@ -3,6 +3,7 @@ import Quotation, { quoteStatus } from '../models/quotation.model';
 import Job, { allocateStatus } from '../models/job.model';
 import Department from '../models/department.model';
 import Employee from '../models/employee.model'
+import Customer from '../models/customer.model';
 import Enquiry from "../models/enquiry.model";
 import Product from "../models/products.model";
 import ProductCategory from "../models/productCategory.model";
@@ -15,6 +16,17 @@ import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import Event from '../models/events.model'
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
+
+/**
+ * Marks the source enquiry as Quoted the first time a quotation leaves Draft.
+ * Creating a quote directly at a non-draft status handles this inline in `saveQuotation`;
+ * this covers the draft-then-promote path, where the flip is deliberately deferred.
+ */
+const markEnquiryQuotedIfPromoted = async (quote: any, fromStatus?: string, toStatus?: string) => {
+    if (!quote?.enqId) return;
+    if (fromStatus !== quoteStatus.Draft || !toStatus || toStatus === quoteStatus.Draft) return;
+    await Enquiry.findByIdAndUpdate(quote.enqId, { status: 'Quoted' });
+}
 
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -46,7 +58,12 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         if (quoteData.enqId) {
             const enquiry = await Enquiry.findById(quoteData.enqId);
             if (enquiry) {
-                await Enquiry.findByIdAndUpdate(quoteData.enqId, { status: 'Quoted' });
+                // A draft is not a quotation the customer has seen, so the enquiry keeps its current
+                // status until the quote leaves Draft (see `updateQuotationStatus`). Flipping it early
+                // would drop the enquiry out of the pending lists, which filter on status != 'Quoted'.
+                if (quoteData.status !== quoteStatus.Draft) {
+                    await Enquiry.findByIdAndUpdate(quoteData.enqId, { status: 'Quoted' });
+                }
                 const event = await Event.findOneAndUpdate({ collectionId: quoteData.enqId }, { $set: { collectionId: quote._id } });
                 if (event) {
                     await Quotation.findOneAndUpdate({ _id: saveQuote._id }, { $set: { eventId: event._id } });
@@ -69,13 +86,153 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
 }
 
 
+// Joins shared by the quotation list and the single-quotation fetch so both return the same populated shape.
+const quotationLookupStages = [
+    {
+        $lookup: {
+            from: 'customers',
+            localField: 'client',
+            foreignField: '_id',
+            as: 'client'
+        }
+    },
+    {
+        $unwind: '$client'
+    },
+    {
+        $lookup: {
+            from: 'departments',
+            localField: 'department',
+            foreignField: '_id',
+            as: 'department'
+        }
+    },
+    {
+        $unwind: '$department',
+    },
+    {
+        $lookup: {
+            from: 'departments',
+            localField: 'departments',
+            foreignField: '_id',
+            as: 'departments'
+        }
+    },
+    {
+        $lookup: {
+            from: 'employees',
+            localField: 'createdBy',
+            foreignField: '_id',
+            as: 'createdBy'
+        }
+    },
+    {
+        $unwind: '$createdBy',
+    },
+    {
+        $lookup: {
+            from: 'enquiries',
+            localField: 'enqId',
+            foreignField: '_id',
+            as: 'enqId'
+        }
+    },
+    {
+        $unwind: {
+            path: '$enqId',
+            preserveNullAndEmptyArrays: true
+        }
+    },
+    {
+        $lookup: {
+            from: 'employees',
+            localField: 'enqId.salesPerson',
+            foreignField: '_id',
+            pipeline: [{ $project: { firstName: 1, lastName: 1 } }],
+            as: 'enqSalesPerson'
+        }
+    },
+    {
+        $addFields: {
+            enqId: {
+                $cond: [
+                    { $ifNull: ['$enqId', false] },
+                    { $mergeObjects: ['$enqId', { salesPerson: { $arrayElemAt: ['$enqSalesPerson', 0] } }] },
+                    '$$REMOVE'
+                ]
+            }
+        }
+    },
+    { $unset: 'enqSalesPerson' },
+    {
+        $addFields: {
+            attention: {
+                $arrayElemAt: [
+                    {
+                        $filter: {
+                            input: '$client.contactDetails',
+                            as: 'contact',
+                            cond: {
+                                $eq: ['$$contact._id', '$attention']
+                            }
+                        }
+                    },
+                    0
+                ]
+            }
+        }
+    },
+    {
+        $lookup: {
+            from: 'suppliers',
+            localField: 'dealData.additionalCosts.supplierId',
+            foreignField: '_id',
+            as: 'costSupplierDetails'
+        }
+    },
+    {
+        $addFields: {
+            'dealData.additionalCosts': {
+                $map: {
+                    input: '$dealData.additionalCosts',
+                    as: 'cost',
+                    in: {
+                        $mergeObjects: [
+                            '$$cost',
+                            {
+                                supplierDetails: {
+                                    $arrayElemAt: [
+                                        {
+                                            $filter: {
+                                                input: '$costSupplierDetails',
+                                                as: 'supplier',
+                                                cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
+                                            }
+                                        },
+                                        0
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+];
+
 export const getQuotations = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId } = req.body;
+        let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir } = req.body;
+
+        page = Math.max(1, parseInt(page) || 1);
+        row = Math.min(100, Math.max(1, parseInt(row) || 10));
         let skipNum: number = (page - 1) * row;
 
-        let searchRegex = search.split('').join('\\s*');
-        let fullNameRegex = new RegExp(searchRegex, 'i');
+        const sortableFields: Record<string, string> = { date: 'date', quoteId: 'quoteId', status: 'status' };
+        const sortStage: Record<string, 1 | -1> = sortKey && sortableFields[sortKey]
+            ? { [sortableFields[sortKey]]: sortDir === 'desc' ? -1 : 1 }
+            : { _id: -1 };
 
         let isSalesPerson = salesPerson == null ? true : false;
         let isCustomer = customer == null ? true : false;
@@ -84,6 +241,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 
         let matchFilters = {
             isDeleted: { $ne: true },
+            status: { $ne: 'revised' },
             $and: [
                 ...(quoteStatus ? [{ status: quoteStatus }] : []),
                 ...(dealStatus ? [{ 'dealData.status': dealStatus }] : []),
@@ -102,25 +260,16 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             ]
         }
 
-
         let accessFilter = {};
 
-        let reportedToUserIds = await getAllReportedEmployees(userId);
-
-        switch (access) {
-            case 'created':
-                accessFilter = { createdBy: new ObjectId(userId) };
-                break;
-            case 'reported':
-                accessFilter = { createdBy: { $in: reportedToUserIds } };
-                break;
-            case 'createdAndReported':
+        if (access === 'reported' || access === 'createdAndReported') {
+            let reportedToUserIds = await getAllReportedEmployees(userId);
+            if (access === 'createdAndReported') {
                 reportedToUserIds.push(new ObjectId(userId));
-                accessFilter = { createdBy: { $in: reportedToUserIds } };
-                break;
-
-            default:
-                break;
+            }
+            accessFilter = { createdBy: { $in: reportedToUserIds } };
+        } else if (access === 'created') {
+            accessFilter = { createdBy: new ObjectId(userId) };
         }
 
         const filters = { $and: [matchFilters, accessFilter] }
@@ -129,12 +278,6 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
         await Quotation.aggregate([
             {
                 $match: filters
-            },
-            {
-                $match: {
-                    isDeleted: { $ne: true },
-                    status: { $ne: 'revised' }
-                }
             },
             {
                 $group: { _id: null, total: { $sum: 1 } }
@@ -154,7 +297,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
                 $match: filters,
             },
             {
-                $sort: { _id: -1 }
+                $sort: sortStage
             },
             {
                 $skip: skipNum
@@ -162,129 +305,71 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             {
                 $limit: row
             },
-            {
-                $lookup: {
-                    from: 'customers',
-                    localField: 'client',
-                    foreignField: '_id',
-                    as: 'client'
-                }
-            },
-            {
-                $unwind: '$client'
-            },
-            {
-                $lookup: {
-                    from: 'departments',
-                    localField: 'department',
-                    foreignField: '_id',
-                    as: 'department'
-                }
-            },
-            {
-                $unwind: '$department',
-            },
-            {
-                $lookup: {
-                    from: 'departments',
-                    localField: 'departments',
-                    foreignField: '_id',
-                    as: 'departments'
-                }
-            },
-            {
-                $lookup: {
-                    from: 'employees',
-                    localField: 'createdBy',
-                    foreignField: '_id',
-                    as: 'createdBy'
-                }
-            },
-            {
-                $unwind: '$createdBy',
-            },
-            {
-                $lookup: {
-                    from: 'enquiries',
-                    localField: 'enqId',
-                    foreignField: '_id',
-                    as: 'enqId'
-                }
-            },
-            {
-                $unwind: {
-                    path: '$enqId',
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            {
-                $addFields: {
-                    attention: {
-                        $arrayElemAt: [
-                            {
-                                $filter: {
-                                    input: '$client.contactDetails',
-                                    as: 'contact',
-                                    cond: {
-                                        $eq: ['$$contact._id', '$attention']
-                                    }
-                                }
-                            },
-                            0
-                        ]
-                    }
-                }
-            },
-            {
-                $lookup: {
-                    from: 'suppliers',
-                    localField: 'dealData.additionalCosts.supplierId',
-                    foreignField: '_id',
-                    as: 'costSupplierDetails'
-                }
-            },
-            {
-                $addFields: {
-                    'dealData.additionalCosts': {
-                        $map: {
-                            input: '$dealData.additionalCosts',
-                            as: 'cost',
-                            in: {
-                                $mergeObjects: [
-                                    '$$cost',
-                                    {
-                                        supplierDetails: {
-                                            $arrayElemAt: [
-                                                {
-                                                    $filter: {
-                                                        input: '$costSupplierDetails',
-                                                        as: 'supplier',
-                                                        cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
-                                                    }
-                                                },
-                                                0
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                $match: {
-                    isDeleted: { $ne: true },
-                    status: { $ne: 'revised' }
-                }
-            }
+            ...quotationLookupStages
         ]);
 
-        if (!quoteData || !total) return res.status(204).json({ err: 'No Quoatation data found' })
-        return res.status(200).json({ total: total, quotations: quoteData })
+        return res.status(200).json({ total: total, quotations: quoteData ?? [] })
 
     } catch (error) {
         console.log(error)
+    }
+}
+
+export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { access, userId } = req.body ?? {};
+
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Invalid quotation id' });
+        }
+
+        // Same access scoping as the list, so a direct link can't reveal a quote the list would hide.
+        let accessFilter = {};
+        if (access === 'reported' || access === 'createdAndReported') {
+            const reportedToUserIds = await getAllReportedEmployees(userId);
+            if (access === 'createdAndReported') {
+                reportedToUserIds.push(new ObjectId(userId));
+            }
+            accessFilter = { createdBy: { $in: reportedToUserIds } };
+        } else if (access === 'created') {
+            accessFilter = { createdBy: new ObjectId(userId) };
+        }
+
+        const [quotation] = await Quotation.aggregate([
+            { $match: { $and: [{ _id: new ObjectId(id), isDeleted: { $ne: true } }, accessFilter] } },
+            ...quotationLookupStages
+        ]);
+
+        if (!quotation) {
+            return res.status(404).json({ message: 'Quotation not found' });
+        }
+
+        // Calendar events are keyed by collectionId (moved from the enquiry to the quote when it is created).
+        const events = await Event.find({ collectionId: quotation._id })
+            .sort({ date: -1 })
+            .populate('employee createdBy', 'firstName lastName')
+            .lean();
+        quotation.events = events;
+
+        // editHistory.editedBy is a bare ObjectId; resolve it so the History tab can show who made each edit.
+        if (quotation.editHistory?.length) {
+            const editorIds = [...new Set(quotation.editHistory.map((e: any) => e.editedBy?.toString()).filter(Boolean))];
+            const editors = await Employee.find({ _id: { $in: editorIds } }, 'firstName lastName').lean();
+            const editorById = new Map(editors.map((emp: any) => [emp._id.toString(), emp]));
+            quotation.editHistory = quotation.editHistory.map((e: any) => ({
+                ...e,
+                editedBy: editorById.get(e.editedBy?.toString()) ?? e.editedBy,
+            }));
+        }
+
+        if (quotation.dealData?.approvedBy) {
+            quotation.dealData.approvedBy = await Employee.findById(quotation.dealData.approvedBy, 'firstName lastName').lean();
+        }
+        return res.status(200).json(quotation);
+    } catch (error) {
+        console.log(error)
+        next(error)
     }
 }
 
@@ -919,10 +1004,17 @@ const generateQuoteId = async (departmentId: string, employeeId: string, date: s
 
 export const updateQuoteStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { status } = req.body;
+        const { status, reason } = req.body;
         const { quoteId } = req.params;
 
         const statusCheck = await Quotation.findOne({ _id: quoteId });
+
+        if (!statusCheck) {
+            return res.status(404).json({ message: "Quote not found" });
+        }
+        if (status === 'Lost' && !String(reason ?? '').trim()) {
+            return res.status(400).json({ message: "A reason is required when marking a quote as Lost" });
+        }
 
         if (statusCheck?.status === 'Expired') {
             return res.status(400).json({ message: "Quote is expired (past its closing date) and can no longer change status" });
@@ -958,6 +1050,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
                 action: 'StatusChanged',
                 fromStatus: statusCheck.status,
                 toStatus: status,
+                ...(String(reason ?? '').trim() ? { reason: String(reason).trim() } : {}),
             }
         };
 
@@ -968,6 +1061,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         );
 
         if (quoteUpdated) {
+            await markEnquiryQuotedIfPromoted(quoteUpdated, statusCheck.status, status);
             return res.status(200).json(status);
         }
         return res.status(404).json({ message: "Quote not found" });
@@ -977,13 +1071,29 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
     }
 }
 
+/** Statuses before the quote has gone to the customer: edits there don't create revisions. */
+const UNSENT_QUOTE_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
+const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'currency'];
+
 export const updateQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const quoteData = req.body;
         const { quoteId } = req.params;
         const { editReason } = req.body;
         delete quoteData.editReason;
+        delete quoteData.editHistory;
+        delete quoteData.revision;
+        delete quoteData.revisions;
         normalizeQuoteDepartments(quoteData)
+
+        const existingQuote = await Quotation.findById(quoteId).lean();
+        const changes = await resolveHistoryNames(buildFieldChanges(existingQuote, quoteData));
+
+        // A quote that already went to the customer keeps its old content as a revision snapshot when the commercial content changes.
+        const createsRevision = !!existingQuote
+            && !UNSENT_QUOTE_STATUSES.includes(existingQuote.status)
+            && changes.some((c) => REVISION_FIELDS.includes(c.field));
+        const nextRevision = (existingQuote?.revision ?? 0) + 1;
 
         const editorData = await getEmployeeData(req.user);
         const historyEntry: any = {
@@ -995,13 +1105,37 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         if (editReason) {
             historyEntry.reason = editReason;
         }
+        if (changes.length) {
+            historyEntry.changes = changes;
+        }
+
+        const push: any = { editHistory: historyEntry };
+        const set: any = { ...quoteData };
+        if (createsRevision && existingQuote) {
+            historyEntry.revision = nextRevision;
+            set.revision = nextRevision;
+            push.revisions = {
+                revision: nextRevision - 1,
+                savedAt: new Date(),
+                savedBy: editorData?._id,
+                reason: editReason,
+                snapshot: {
+                    subject: existingQuote.subject,
+                    currency: existingQuote.currency,
+                    optionalItems: existingQuote.optionalItems,
+                    customerNote: existingQuote.customerNote,
+                    termsAndCondition: existingQuote.termsAndCondition,
+                },
+            };
+        }
 
         const quoteUpdated = await Quotation.findByIdAndUpdate(
             quoteId,
-            { $set: quoteData, $push: { editHistory: historyEntry } },
+            { $set: set, $push: push },
         )
 
         if (quoteUpdated) {
+            await markEnquiryQuotedIfPromoted(quoteUpdated, existingQuote?.status, quoteData.status);
             return res.status(200).json(quoteUpdated)
         }
         return res.status(502).json()
@@ -1334,6 +1468,69 @@ export const totalQuotation = async (req: Request, res: Response, next: NextFunc
         next(error)
     }
 }
+/** Statuses a quote can still move out of — everything that is not a final outcome. */
+const OPEN_STATUSES = [
+    quoteStatus.Draft,
+    quoteStatus.WorkInProgress,
+    quoteStatus.QuoteSubmitted,
+    quoteStatus.UnderNegotiation,
+    quoteStatus.UnderReview,
+    quoteStatus.ReadyForSubmission,
+] as string[];
+
+/**
+ * The pipeline the report draws: one stage per quote status, so a quote sits in exactly one
+ * stage and the stages add up to the total. The client lets the user hide stages.
+ */
+const FUNNEL_STAGES: { key: string; label: string; statuses: string[] }[] = [
+    quoteStatus.Draft,
+    quoteStatus.WorkInProgress,
+    quoteStatus.ReadyForSubmission,
+    quoteStatus.QuoteSubmitted,
+    quoteStatus.UnderReview,
+    quoteStatus.UnderNegotiation,
+    quoteStatus.Won,
+    quoteStatus.Lost,
+    quoteStatus.Expired,
+].map((status) => ({ key: status, label: status, statuses: [status] }));
+
+/** Approval state of a quote's deal sheet, in the order the report shows it. */
+const DEAL_STATUSES = ['pending', 'approved', 'rejected'];
+
+/** Quoted value of a quote's primary option, discount applied. Tolerates quotes with no items. */
+const quoteGrossValue = (quote: any): number => {
+    const option = quote?.optionalItems?.[0];
+    if (!option?.items?.length) return 0;
+    return calculateDiscountPrice(option.totalDiscount || 0, option.items);
+};
+
+/** The last time anything was recorded against the quote — used to spot quotes that have gone quiet. */
+const lastActivityAt = (quote: any): Date => {
+    const stamps = (quote?.editHistory || [])
+        .map((e: any) => (e?.editedAt ? new Date(e.editedAt).getTime() : 0))
+        .filter((t: number) => t > 0);
+    const latest = stamps.length ? Math.max(...stamps) : 0;
+    return new Date(Math.max(latest, quote?.date ? new Date(quote.date).getTime() : 0));
+};
+
+/** When the quote reached a final status, read off the audit log (null if it never did). */
+const outcomeEntry = (quote: any, status: string): any =>
+    [...(quote?.editHistory || [])].reverse().find((e: any) => e?.toStatus === status) || null;
+
+const monthKey = (d: Date): string => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+
+/** Accumulates count + value per key, so department / salesperson / customer share one code path. */
+const tally = (map: Map<string, any>, id: string, name: string, value: number, won: boolean) => {
+    let row = map.get(id);
+    if (!row) {
+        row = { id, name, count: 0, value: 0, wonCount: 0, wonValue: 0, winRate: 0 };
+        map.set(id, row);
+    }
+    row.count += 1;
+    row.value += value;
+    if (won) { row.wonCount += 1; row.wonValue += value; }
+};
+
 export const getReportDetails = async (req: Request, res: Response) => {
     try {
         let { salesPerson, customer, fromDate, toDate, department, access, userId } = req.body;
@@ -1354,7 +1551,11 @@ export const getReportDetails = async (req: Request, res: Response) => {
                     ]
                 },
                 {
-                    $or: [{ department: new ObjectId(department) }, { department: { $exists: isDepartment } }]
+                    // Quotes carry either the legacy single `department` or the newer `departments[]`,
+                    // so a department filter has to look at both.
+                    $or: isDepartment
+                        ? [{ department: { $exists: true } }]
+                        : [{ department: new ObjectId(department) }, { departments: new ObjectId(department) }]
                 }
             ]
         }
@@ -1378,77 +1579,203 @@ export const getReportDetails = async (req: Request, res: Response) => {
                 break;
         }
 
-        const filters = { $and: [matchFilters, accessFilter] }
+        const filters = { $and: [matchFilters, accessFilter, { isDeleted: { $ne: true } }] }
 
-        // Get all quotations
-        const quotations = await Quotation.aggregate([
-            { $match: filters }
-        ]);
+        const quotations = await Quotation.find(filters)
+            .select('quoteId date closingDate status currency optionalItems editHistory client createdBy department departments dealData.status')
+            .populate('client', 'companyName')
+            .populate('createdBy', 'firstName lastName')
+            .populate('department', 'departmentName')
+            .populate('departments', 'departmentName')
+            .lean();
 
-        // Calculate values
-        const qatarUsdRates = await getUSDRated();
-        
-        const totalValues = quotations.reduce((acc: any, quote: any) => {
-            // Calculate the discounted price for the current quote
-            const discountPrice = calculateDiscountPrice(quote.optionalItems[0].totalDiscount, quote.optionalItems[0].items);
-            
-            // Track values for each status type
-            if (!acc.statusValues[quote.status]) {
-                acc.statusValues[quote.status] = {
-                    qar: 0,
-                    usd: 0,
-                    combined: 0,
-                    lpoValue: 0 // Add LPO value tracking
-                };
-            }
+        // Everything below is reported in QAR; USD quotes are converted once, here.
+        const usdRate = await getUSDRated();
 
-            // Add to the appropriate currency total
-            if (quote.currency == 'USD') {
-                acc.statusValues[quote.status].usd += discountPrice;
-            } else if (quote.currency == 'QAR') {
-                acc.statusValues[quote.status].qar += discountPrice;
-            }
-            
-            // Calculate LPO value (example calculation - modify as needed)
-            acc.statusValues[quote.status].lpoValue += discountPrice * 0.8; // Assuming LPO is 80% of quote value
-            
-            // Track counts for pie chart
-            acc.statusCounts[quote.status] = (acc.statusCounts[quote.status] || 0) + 1;
+        const now = new Date();
+        const DAY = 24 * 60 * 60 * 1000;
+        const SOON_DAYS = 7;
+        const IDLE_DAYS = 14;
 
-            if (quote.currency == 'USD') {
-                acc.totalUSDValue += discountPrice;
-            } else if (quote.currency == 'QAR') {
-                acc.totalQARValue += discountPrice;
-            }
-            
-            return acc;
-        }, {
-            totalUSDValue: 0,
-            totalQARValue: 0,
-            statusCounts: {},
-            statusValues: {}
-        });
-
-        // Calculate combined values and total value
-        const totalValue = totalValues.totalQARValue + (totalValues.totalUSDValue * qatarUsdRates);
-        
-        // Create pie chart data with LPO values
-        const pieChartData = Object.keys(totalValues.statusCounts).map(status => {
-            const statusData = totalValues.statusValues[status];
-            statusData.combined = statusData.qar + (statusData.usd * qatarUsdRates);
-            
+        // One pass decorates each quote with the facts every section needs, so the
+        // sections below are plain filters over the same array rather than repeated work.
+        const enriched = quotations.map((quote: any) => {
+            const gross = quoteGrossValue(quote);
+            const won = quote.status === quoteStatus.Won;
+            const lost = quote.status === quoteStatus.Lost;
+            const outcome = won ? outcomeEntry(quote, quoteStatus.Won) : lost ? outcomeEntry(quote, quoteStatus.Lost) : null;
             return {
-                name: status,
-                value: totalValues.statusCounts[status],
-                lpoValue: statusData.lpoValue // Add LPO value to pie chart data
+                quote,
+                value: quote.currency === 'USD' ? gross * usdRate : gross,
+                won,
+                lost,
+                open: OPEN_STATUSES.indexOf(quote.status) !== -1,
+                closedAt: outcome?.editedAt ? new Date(outcome.editedAt) : null,
+                lostReason: lost ? outcome?.reason || null : null,
+                lastActivity: lastActivityAt(quote),
             };
         });
 
-        console.log(pieChartData)
-        // Return only pie chart data and total value
-        return res.status(200).json({
+        const sum = (rows: any[]): number => rows.reduce((t, r) => t + r.value, 0);
+
+        const wonRows = enriched.filter((r: any) => r.won);
+        const lostRows = enriched.filter((r: any) => r.lost);
+        const expiredRows = enriched.filter((r: any) => r.quote.status === quoteStatus.Expired);
+        const openRows = enriched.filter((r: any) => r.open);
+        const closedCount = wonRows.length + lostRows.length;
+        const totalValue = sum(enriched);
+
+        // Averaged only over quotes whose outcome was actually logged, so an unlogged
+        // legacy quote lowers confidence rather than skewing the number to zero.
+        const closedDurations = enriched
+            .filter((r: any) => r.closedAt && r.quote.date)
+            .map((r: any) => (r.closedAt.getTime() - new Date(r.quote.date).getTime()) / DAY)
+            .filter((d: number) => d >= 0);
+
+        const kpi = {
             totalValue,
-            pieChartData
+            totalCount: enriched.length,
+            wonValue: sum(wonRows),
+            wonCount: wonRows.length,
+            lostValue: sum(lostRows),
+            lostCount: lostRows.length,
+            closedCount,
+            winRate: closedCount ? (wonRows.length / closedCount) * 100 : 0,
+            openValue: sum(openRows),
+            openCount: openRows.length,
+            avgQuoteValue: enriched.length ? totalValue / enriched.length : 0,
+            avgDaysToClose: closedDurations.length
+                ? closedDurations.reduce((a: number, b: number) => a + b, 0) / closedDurations.length
+                : null,
+        };
+
+        const funnel = FUNNEL_STAGES.map((stage) => {
+            const rows = enriched.filter((r: any) => stage.statuses.indexOf(r.quote.status) !== -1);
+            return {
+                key: stage.key,
+                label: stage.label,
+                count: rows.length,
+                value: sum(rows),
+                pct: enriched.length ? (rows.length / enriched.length) * 100 : 0,
+            };
+        });
+
+        // Status counts, kept under the old key and shape so the status colour map still applies.
+        const statusMap = new Map<string, any>();
+        enriched.forEach((r: any) => {
+            const bucket = statusMap.get(r.quote.status) || { name: r.quote.status, value: 0, amount: 0 };
+            bucket.value += 1;
+            bucket.amount += r.value;
+            statusMap.set(r.quote.status, bucket);
+        });
+        const pieChartData = [...statusMap.values()];
+
+        // Only quotes that have a deal sheet count here; the rest have no deal status to report.
+        const dealStatus = DEAL_STATUSES.map((key) => {
+            const rows = enriched.filter((r: any) => r.quote.dealData?.status === key);
+            return { key, label: key.charAt(0).toUpperCase() + key.slice(1), count: rows.length, value: sum(rows) };
+        });
+
+        // Trend covers the last 12 months including the current one, with empty months kept
+        // so the chart shows a gap rather than silently compressing the timeline.
+        const months: string[] = [];
+        for (let i = 11; i >= 0; i--) {
+            months.push(monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))));
+        }
+        const trendMap = new Map<string, any>(
+            months.map((m) => [m, { month: m, createdCount: 0, createdValue: 0, wonCount: 0, wonValue: 0 }])
+        );
+        enriched.forEach((r: any) => {
+            const created = trendMap.get(monthKey(new Date(r.quote.date)));
+            if (created) { created.createdCount += 1; created.createdValue += r.value; }
+            if (r.won) {
+                const wonBucket = trendMap.get(monthKey(r.closedAt || new Date(r.quote.date)));
+                if (wonBucket) { wonBucket.wonCount += 1; wonBucket.wonValue += r.value; }
+            }
+        });
+        const trend = months.map((m) => trendMap.get(m));
+
+        // A quote spanning several departments counts once under each, so the department
+        // rows deliberately do not add up to the overall total.
+        const byDepartment = new Map<string, any>();
+        const bySalesPerson = new Map<string, any>();
+        const byCustomer = new Map<string, any>();
+        enriched.forEach((r: any) => {
+            const q = r.quote;
+            const depts: any[] = q.departments?.length ? q.departments : q.department ? [q.department] : [];
+            depts.forEach((d) => tally(byDepartment, String(d?._id), d?.departmentName || 'Unassigned', r.value, r.won));
+            tally(
+                bySalesPerson,
+                String(q.createdBy?._id),
+                [q.createdBy?.firstName, q.createdBy?.lastName].filter(Boolean).join(' ') || 'Unknown',
+                r.value,
+                r.won
+            );
+            tally(byCustomer, String(q.client?._id), q.client?.companyName || 'Unknown', r.value, r.won);
+        });
+        const finish = (map: Map<string, any>) =>
+            [...map.values()]
+                .map((row) => ({ ...row, winRate: row.count ? (row.wonCount / row.count) * 100 : 0 }))
+                .sort((a, b) => b.value - a.value);
+
+        // Attention covers open quotes only — a Won or Lost quote has nothing left to chase.
+        const daysUntil = (d: any): number => Math.round((new Date(d).getTime() - now.getTime()) / DAY);
+        const brief = (r: any, days: number) => ({
+            _id: String(r.quote._id),
+            quoteId: r.quote.quoteId,
+            customer: r.quote.client?.companyName || '',
+            salesPerson: [r.quote.createdBy?.firstName, r.quote.createdBy?.lastName].filter(Boolean).join(' '),
+            status: r.quote.status,
+            value: r.value,
+            closingDate: r.quote.closingDate || null,
+            days,
+        });
+        const overdue = openRows
+            .filter((r: any) => r.quote.closingDate && daysUntil(r.quote.closingDate) < 0)
+            .map((r: any) => brief(r, -daysUntil(r.quote.closingDate)))
+            .sort((a: any, b: any) => b.days - a.days);
+        const closingSoon = openRows
+            .filter((r: any) => r.quote.closingDate && daysUntil(r.quote.closingDate) >= 0 && daysUntil(r.quote.closingDate) <= SOON_DAYS)
+            .map((r: any) => brief(r, daysUntil(r.quote.closingDate)))
+            .sort((a: any, b: any) => a.days - b.days);
+        const idle = openRows
+            .filter((r: any) => (now.getTime() - r.lastActivity.getTime()) / DAY >= IDLE_DAYS)
+            .map((r: any) => brief(r, Math.round((now.getTime() - r.lastActivity.getTime()) / DAY)))
+            .sort((a: any, b: any) => b.days - a.days);
+
+        // The status-change note is the only place a loss is explained, so that is what is grouped.
+        const reasonMap = new Map<string, any>();
+        lostRows.forEach((r: any) => {
+            const reason = (r.lostReason || '').trim() || 'No reason recorded';
+            const row = reasonMap.get(reason) || { reason, count: 0, value: 0 };
+            row.count += 1;
+            row.value += r.value;
+            reasonMap.set(reason, row);
+        });
+        const lostReasons = [...reasonMap.values()].sort((a, b) => b.count - a.count);
+
+        return res.status(200).json({
+            currency: 'QAR',
+            usdRate,
+            generatedAt: now,
+            totalValue,
+            pieChartData,
+            kpi,
+            funnel,
+            dealStatus,
+            outcomes: {
+                won: { count: wonRows.length, value: sum(wonRows) },
+                lost: { count: lostRows.length, value: sum(lostRows) },
+                expired: { count: expiredRows.length, value: sum(expiredRows) },
+            },
+            trend,
+            breakdown: {
+                department: finish(byDepartment),
+                salesPerson: finish(bySalesPerson),
+                customer: finish(byCustomer).slice(0, 25),
+            },
+            attention: { overdue, closingSoon, idle, idleDays: IDLE_DAYS, soonDays: SOON_DAYS },
+            lostReasons,
         });
 
     } catch (error) {
@@ -1619,6 +1946,64 @@ export const getQuoteNote = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+/**
+ * The content of every past revision, newest first, plus the live content as the current one.
+ * `revisions` is `select: false` on the schema, so it has to be asked for explicitly.
+ */
+export const getQuoteRevisions = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const quote = await Quotation.findById(quoteId)
+            .select('+revisions revision subject currency optionalItems customerNote termsAndCondition createdBy')
+            .lean();
+
+        if (!quote) {
+            return res.status(404).json({ message: 'Quote not found' });
+        }
+
+        const past = (quote.revisions || []) as any[];
+
+        // savedBy is a bare ObjectId; resolve the names so the client can show who saved each revision.
+        const authorIds = [...new Set(past.map((r) => r.savedBy?.toString()).filter(Boolean))];
+        const authors = await Employee.find({ _id: { $in: authorIds } }, 'firstName lastName').lean();
+        const authorById = new Map(authors.map((emp: any) => [emp._id.toString(), emp]));
+
+        const revisions = past
+            .map((r) => ({
+                revision: r.revision,
+                savedAt: r.savedAt,
+                savedBy: authorById.get(r.savedBy?.toString()) ?? null,
+                reason: r.reason || '',
+                current: false,
+                snapshot: r.snapshot,
+            }))
+            .sort((a, b) => (b.revision ?? 0) - (a.revision ?? 0));
+
+        return res.status(200).json({
+            revision: quote.revision ?? 0,
+            revisions: [
+                {
+                    revision: quote.revision ?? 0,
+                    savedAt: null,
+                    savedBy: null,
+                    reason: '',
+                    current: true,
+                    snapshot: {
+                        subject: quote.subject,
+                        currency: quote.currency,
+                        optionalItems: quote.optionalItems,
+                        customerNote: quote.customerNote,
+                        termsAndCondition: quote.termsAndCondition,
+                    },
+                },
+                ...revisions,
+            ],
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export const removeLpo = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { quoteId, fileName } = req.params;
@@ -1655,4 +2040,108 @@ export const normalizeQuoteDepartments = (quoteData: any) => {
     }
 
     return quoteData;
+}
+
+const EDIT_HISTORY_IGNORED_FIELDS = new Set(['_id', '__v', 'editHistory', 'createdBy', 'quoteId', 'updatedAt', 'createdAt']);
+const EDIT_HISTORY_MAX_VALUE_LENGTH = 300;
+
+const stringifyForHistory = (value: any): string => {
+    if (value === undefined || value === null) return '';
+    const str = typeof value === 'string' ? value : JSON.stringify(value);
+    return str.length > EDIT_HISTORY_MAX_VALUE_LENGTH ? `${str.slice(0, EDIT_HISTORY_MAX_VALUE_LENGTH)}…` : str;
+}
+
+const HISTORY_ID_PATTERN = /^[a-f\d]{24}$/i;
+
+/** Pulls a single id out of a stored history value: a bare id, or an object carrying `_id`. */
+const historyValueId = (raw: string): string => {
+    if (!raw) return '';
+    try {
+        const v = JSON.parse(raw);
+        const id = typeof v === 'string' ? v : v?._id;
+        return typeof id === 'string' && HISTORY_ID_PATTERN.test(id) ? id : '';
+    } catch {
+        return HISTORY_ID_PATTERN.test(raw) ? raw : '';
+    }
+}
+
+/** Replaces client / attention / department ids in the change rows with their readable names, so History never shows an id. */
+export const resolveHistoryNames = async (changes: { field: string, from: string, to: string }[]) => {
+    const nameOf = async (field: string, raw: string): Promise<string> => {
+        const id = historyValueId(raw);
+        if (!id) return raw;
+        if (field === 'client') {
+            const customer: any = await Customer.findById(id).select('companyName').lean();
+            return customer?.companyName ?? raw;
+        }
+        if (field === 'attention') {
+            const customer: any = await Customer.findOne({ 'contactDetails._id': id }).select('contactDetails').lean();
+            const contact = customer?.contactDetails?.find((c: any) => String(c._id) === id);
+            return contact ? [contact.firstName, contact.lastName].filter(Boolean).join(' ') : raw;
+        }
+        if (field === 'department') {
+            const department: any = await Department.findById(id).select('name').lean();
+            return department?.name ?? raw;
+        }
+        return raw;
+    };
+
+    for (const change of changes) {
+        change.from = await nameOf(change.field, change.from);
+        change.to = await nameOf(change.field, change.to);
+    }
+    return changes;
+}
+
+/**
+ * The quoted content of `optionalItems` and nothing else. The stored copy carries line `_id`s and
+ * defaults the form never sends, and key order differs between the two, so comparing the raw JSON
+ * would report an untouched quote as changed (and, on a sent quote, create a revision for it).
+ */
+const normalizeOptionalItems = (options: any): any[] => {
+    const num = (v: any) => (v === undefined || v === null || v === '' ? null : Number(v));
+    const str = (v: any) => (v === undefined || v === null ? '' : String(v));
+    return (Array.isArray(options) ? options : []).map((option: any) => ({
+        totalDiscount: Number(option?.totalDiscount) || 0,
+        items: (option?.items || []).map((item: any) => ({
+            itemName: str(item?.itemName),
+            isOptional: !!item?.isOptional,
+            includeInTotal: !!item?.includeInTotal,
+            itemDetails: (item?.itemDetails || []).map((d: any) => ({
+                itemCode: str(d?.itemCode),
+                partNo: str(d?.partNo),
+                detail: str(d?.detail),
+                quantity: num(d?.quantity),
+                unitCost: num(d?.unitCost),
+                profit: num(d?.profit),
+                unitSellingPrice: num(d?.unitSellingPrice),
+                availability: str(d?.availability),
+                supplierId: str(d?.supplierId?._id ?? d?.supplierId),
+                uom: str(d?.uom),
+            })),
+        })),
+    }));
+}
+
+export const buildFieldChanges =(existingDoc: any, updatedData: any): { field: string, from: string, to: string }[] => {
+    if (!existingDoc || !updatedData) return [];
+
+    const changes: { field: string, from: string, to: string }[] = [];
+    for (const field of Object.keys(updatedData)) {
+        if (EDIT_HISTORY_IGNORED_FIELDS.has(field)) continue;
+
+        const oldValue = existingDoc[field];
+        const newValue = updatedData[field];
+        const same = field === 'optionalItems'
+            ? JSON.stringify(normalizeOptionalItems(oldValue)) === JSON.stringify(normalizeOptionalItems(newValue))
+            : JSON.stringify(oldValue) === JSON.stringify(newValue);
+        if (same) continue;
+
+        changes.push({
+            field,
+            from: stringifyForHistory(oldValue),
+            to: stringifyForHistory(newValue),
+        });
+    }
+    return changes;
 }

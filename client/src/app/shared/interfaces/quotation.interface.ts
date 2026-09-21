@@ -38,6 +38,37 @@ export interface File {
     originalname: string;
 }
 
+/** Commercial content of a quote as it stood at one revision. */
+export interface QuoteRevisionSnapshot {
+    subject: string;
+    currency: string;
+    optionalItems: OptionalItems[];
+    customerNote: string;
+    termsAndCondition: string;
+}
+
+export interface QuoteRevision {
+    revision: number;
+    /** Null on the current revision, which has not been superseded yet. */
+    savedAt: string | null;
+    savedBy: { firstName?: string; lastName?: string } | null;
+    reason: string;
+    /** True for the live content rather than a stored snapshot. */
+    current: boolean;
+    snapshot: QuoteRevisionSnapshot;
+}
+
+export interface QuoteRevisionsResponse {
+    revision: number;
+    revisions: QuoteRevision[];
+}
+
+export interface FieldChange {
+    field: string;
+    from: string;
+    to: string;
+}
+
 export interface EditHistoryEntry {
     editedBy: getEmployee;
     editedAt: string;
@@ -45,6 +76,9 @@ export interface EditHistoryEntry {
     fromStatus?: string;
     toStatus?: string;
     reason?: string;
+    /** Set only on edits that produced a new revision. */
+    revision?: number;
+    changes?: FieldChange[];
 }
 
 export interface Quotatation {
@@ -74,6 +108,8 @@ export interface Quotatation {
     saveNote?: string;
     job?: { allocateStatus?: string };
     editHistory?: EditHistoryEntry[];
+    /** Bumped when a sent quote's commercial content is edited. 0 on quotes that never were. */
+    revision?: number;
 }
 
 export interface getQuotatation {
@@ -101,6 +137,9 @@ export interface getQuotatation {
     eventId?: any;
     saveNote?: string;
     editHistory?: EditHistoryEntry[];
+    /** Bumped when a sent quote's commercial content is edited. 0 on quotes that never were. */
+    revision?: number;
+    events?: any[];
 }
 
 export interface DefaultAndText {
@@ -163,6 +202,7 @@ export interface dealData {
     savedDate: string;
     seenByApprover: boolean;
     status: string;
+    approvedBy?: any;
     comments: string[]
     seenedBySalsePerson: boolean
     attachments: Files[]
@@ -177,6 +217,8 @@ export interface FilterQuote {
     customer: string | null;
     fromDate: string | null;
     toDate: string | null;
+    sortKey?: string | null;
+    sortDir?: 'asc' | 'desc' | null;
 }
 
 export interface FilterDeal {
@@ -202,14 +244,124 @@ export interface priceDetails {
 }
 
 export interface PieChartData {
+    /** Status name. */
     name: string;
+    /** Number of quotations at this status. */
     value: number;
-    lpoValue: number;
+    /** Their combined quoted value, in QAR. */
+    amount: number;
+}
+
+/** Filters the report is generated for. Mirrors the quotation list's own filters. */
+export interface ReportFilter {
+    salesPerson: string | null;
+    customer: string | null;
+    department: string | null;
+    fromDate: string | null;
+    toDate: string | null;
+    access?: string;
+    userId?: string;
+}
+
+export interface ReportKpi {
+    totalValue: number;
+    totalCount: number;
+    wonValue: number;
+    wonCount: number;
+    lostValue: number;
+    lostCount: number;
+    /** Won + Lost. Quotes still open are not counted against the win rate. */
+    closedCount: number;
+    winRate: number;
+    openValue: number;
+    openCount: number;
+    avgQuoteValue: number;
+    /** Null when no quotation has a logged outcome to measure. */
+    avgDaysToClose: number | null;
+}
+
+export interface ReportFunnelStage {
+    key: string;
+    label: string;
+    count: number;
+    value: number;
+    pct: number;
+}
+
+export interface ReportDealStatus {
+    key: 'pending' | 'approved' | 'rejected';
+    label: string;
+    count: number;
+    value: number;
+}
+
+export interface ReportTrendPoint {
+    /** yyyy-MM */
+    month: string;
+    createdCount: number;
+    createdValue: number;
+    wonCount: number;
+    wonValue: number;
+}
+
+export interface ReportBreakdownRow {
+    id: string;
+    name: string;
+    count: number;
+    value: number;
+    wonCount: number;
+    wonValue: number;
+    winRate: number;
+}
+
+/** A quotation that needs chasing: closing soon, past its closing date, or gone quiet. */
+export interface ReportAttentionItem {
+    _id: string;
+    quoteId: string;
+    customer: string;
+    salesPerson: string;
+    status: string;
+    value: number;
+    closingDate: string | null;
+    /** Days until closing, days overdue, or days idle, depending on the list it came from. */
+    days: number;
+}
+
+export interface ReportLostReason {
+    reason: string;
+    count: number;
+    value: number;
 }
 
 export interface ReportDetails {
-    totalValue: any;
+    /** Everything is reported in this currency; other currencies are converted at `usdRate`. */
+    currency: string;
+    usdRate: number;
+    generatedAt: string;
+    totalValue: number;
     pieChartData: PieChartData[];
+    kpi: ReportKpi;
+    funnel: ReportFunnelStage[];
+    dealStatus: ReportDealStatus[];
+    outcomes: {
+        won: { count: number; value: number };
+        lost: { count: number; value: number };
+        expired: { count: number; value: number };
+    };
+    trend: ReportTrendPoint[];
+    breakdown: {
+        department: ReportBreakdownRow[];
+        salesPerson: ReportBreakdownRow[];
+        customer: ReportBreakdownRow[];
+    };
+    attention: {
+        overdue: ReportAttentionItem[];
+        closingSoon: ReportAttentionItem[];
+        idle: ReportAttentionItem[];
+        idleDays: number;
+        soonDays: number;
+    };
+    lostReasons: ReportLostReason[];
 }
 
 export type PieChartOptions = {

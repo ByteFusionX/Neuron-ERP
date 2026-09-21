@@ -1,7 +1,7 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails } from 'src/app/shared/interfaces/quotation.interface';
+import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -33,7 +33,11 @@ export class QuotationService {
     return this.http.post<getQuotation>(`${this.api}/quotation/get`, filterData)
   }
 
-  getQuotationReport(filterData: FilterQuote): Observable<ReportDetails> {
+  getQuotationById(id: string, access?: string, userId?: string): Observable<Quotatation> {
+    return this.http.post<Quotatation>(`${this.api}/quotation/get/${id}`, { access, userId }, { context: context() })
+  }
+
+  getQuotationReport(filterData: ReportFilter): Observable<ReportDetails> {
     return this.http.post<ReportDetails>(`${this.api}/quotation/report`, filterData)
   }
 
@@ -60,8 +64,8 @@ export class QuotationService {
     return this.http.get<{ success: boolean; message: string; data: any[] }>(`${this.api}/quotation/product-suggestions`, { params: httpParams })
   }
 
-  updateQuoteStatus(quoteId: string, status: QuoteStatus): Observable<QuoteStatus> {
-    return this.http.patch<QuoteStatus>(`${this.api}/quotation/status/${quoteId}`, { status })
+  updateQuoteStatus(quoteId: string, status: QuoteStatus, reason?: string): Observable<QuoteStatus> {
+    return this.http.patch<QuoteStatus>(`${this.api}/quotation/status/${quoteId}`, { status, reason })
   }
 
   saveDealSheet(dealDatas: dealData, quoteId?: string): Observable<Quotatation> {
@@ -568,6 +572,11 @@ export class QuotationService {
 
   getQuoteNote(quoteId: string): Observable<{ saveNote: string, createdBy: string }> {
     return this.http.get<{ saveNote: string, createdBy: string }>(`${this.api}/quotation/note/${quoteId}`);
+  }
+
+  /** Past revision snapshots plus the live content, newest first. */
+  getQuoteRevisions(quoteId: string): Observable<QuoteRevisionsResponse> {
+    return this.http.get<QuoteRevisionsResponse>(`${this.api}/quotation/revisions/${quoteId}`);
   }
 
 }
