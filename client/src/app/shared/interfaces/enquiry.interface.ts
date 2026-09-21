@@ -54,6 +54,10 @@ export interface getEnquiry {
 export interface EnquiryTable {
     total: number;
     enquiry: getEnquiry[];
+    viewCounts?: {
+        all: number;
+        mine: number;
+    };
 }
 
 export interface FeedbackTable {
@@ -79,10 +83,14 @@ export interface MonthlyEnquiry {
 export interface FilterEnquiry {
     page: number;
     row: number;
+    search?: string;
+    sortKey?: string | null;
+    sortDir?: 'asc' | 'desc' | null;
     salesPerson: string | null;
     status: string | null;
     fromDate: string | null;
     toDate: string | null;
+    createdBy?: string | null;
 }
 
 export interface Files {

@@ -248,7 +248,7 @@ export class CreateEnquiryDialog implements OnInit, OnDestroy {
               this._enquiryService.emitToQuote(data);
               this.isQuoting = false;
               this.dialogRef.close();
-              this.router.navigate(['/quotations/create']);
+              this.router.navigate(['/quotations']);
             }
           },
           error: () => {

@@ -251,27 +251,37 @@ export const updateEnquiryAttachments = async (req: any, res: Response) => {
 
 export const getEnquiries = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, salesPerson, status, customer, fromDate, toDate, department, access, userId } = req.body;
+        let { page, row, search, sortKey, sortDir, salesPerson, status, customer, fromDate, toDate, department, access, userId, createdBy } = req.body;
         let skipNum: number = (page - 1) * row;
 
         let isSalesPerson = salesPerson == null ? true : false;
         let isCustomer = customer == null ? true : false;
         let isStatus = status == null ? true : false;
-        let isDate = fromDate == null || toDate == null ? true : false;
         let isDepartment = department == null ? true : false;
+
+        const dateFilter: Record<string, Date> = {};
+        if (fromDate) dateFilter.$gte = new Date(fromDate);
+        if (toDate) {
+            const endDate = new Date(toDate);
+            endDate.setDate(endDate.getDate() + 1);
+            dateFilter.$lt = endDate;
+        }
+
+        const searchFilter = search?.trim()
+            ? { $or: [
+                { enquiryId: { $regex: search.trim(), $options: 'i' } },
+                { title: { $regex: search.trim(), $options: 'i' } }
+            ] }
+            : {};
 
         let matchFilters = {
             isDeleted: { $ne: true },
             $and: [
+                searchFilter,
                 { $or: [{ salesPerson: new ObjectId(salesPerson) }, { salesPerson: { $exists: isSalesPerson } }] },
                 { $or: [{ status: status }, { status: { $exists: isStatus } }] },
                 { $or: [{ client: new ObjectId(customer) }, { client: { $exists: isCustomer } }] },
-                {
-                    $or: [
-                        { $and: [{ date: { $gte: new Date(fromDate) } }, { date: { $lte: new Date(toDate) } }] },
-                        { date: { $exists: isDate } }
-                    ]
-                },
+                Object.keys(dateFilter).length ? { date: dateFilter } : {},
                 {
                     $or: [{ department: new ObjectId(department) }, { department: { $exists: isDepartment } }]
                 }
@@ -298,7 +308,9 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
                 break;
         }
 
-        const filters = { $and: [matchFilters, accessFilter] }
+        const creatorFilter = createdBy ? { salesPerson: new ObjectId(createdBy) } : {};
+        const baseFilters = { $and: [matchFilters, accessFilter] };
+        const filters = { $and: [matchFilters, accessFilter, creatorFilter] }
 
         const enquiryTotal: { total: number }[] = await enquiryModel.aggregate([
             { $match: filters },
@@ -307,10 +319,33 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             { $project: { total: 1, _id: 0 } }
         ]).exec()
 
+        const viewCounts = await enquiryModel.aggregate([
+            { $match: baseFilters },
+            { $match: { status: { $ne: 'Quoted' } } },
+            {
+                $facet: {
+                    all: [{ $count: 'total' }],
+                    mine: [
+                        { $match: { salesPerson: new ObjectId(userId) } },
+                        { $count: 'total' }
+                    ]
+                }
+            }
+        ]).exec();
+
+        const sortableFields: Record<string, string> = {
+            date: 'date',
+            enquiryId: 'enquiryId',
+            description: 'title',
+            status: 'status'
+        };
+        const resolvedSortKey = sortableFields[sortKey] || '_id';
+        const resolvedSortDirection = sortDir === 'asc' ? 1 : -1;
+
         const enquiryData = await enquiryModel.aggregate([
             { $match: filters },
             { $match: { status: { $ne: 'Quoted' } } },
-            { $sort: { _id: -1 } },
+            { $sort: { [resolvedSortKey]: resolvedSortDirection } },
             { $skip: skipNum },
             { $limit: row },
             {
@@ -412,8 +447,14 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             }
         ]);
 
-        if (enquiryTotal.length) return res.status(200).json({ total: enquiryTotal[0].total, enquiry: enquiryData })
-        return res.status(504).json({ err: 'No enquiry data found' })
+        return res.status(200).json({
+            total: enquiryTotal[0]?.total ?? 0,
+            enquiry: enquiryData,
+            viewCounts: {
+                all: viewCounts[0]?.all[0]?.total ?? 0,
+                mine: viewCounts[0]?.mine[0]?.total ?? 0
+            }
+        })
 
     } catch (error) {
         console.log(error)
