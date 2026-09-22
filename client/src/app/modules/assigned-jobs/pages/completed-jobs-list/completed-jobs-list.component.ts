@@ -25,7 +25,7 @@ import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/co
     selector: 'app-completed-jobs-list',
     templateUrl: './completed-jobs-list.component.html',
     styleUrls: ['./completed-jobs-list.component.css'],
-    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
+    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, ViewEstimationComponent]
 })
 export class CompletedJobsListComponent implements OnInit, OnDestroy {
 
@@ -83,10 +83,10 @@ export class CompletedJobsListComponent implements OnInit, OnDestroy {
     this.subscriptions.unsubscribe()
   }
 
+  estimationTarget: { estimation: Estimations; enqId: string } | null = null;
+
   onViewEstimation(estimation: Estimations, enqId: string) {
-    this._dialog.open(ViewEstimationComponent, {
-      data: { estimation, enqId, isEdit: false }
-    })
+    this.estimationTarget = { estimation, enqId };
   }
 
   viewFeedback(feedback: feedback[], enqId: string, index: number) {

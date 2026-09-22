@@ -191,4 +191,5 @@
             <p class="m-2 text-center text-gray-500">No Data</p>
         </div>
     </div>
+    <app-view-estimation [open]="!!estimationTarget" [estimation]="estimationTarget?.estimation ?? null" [enquiryId]="estimationTarget?.enqId ?? ''" editable (cleared)="onEstimationCleared()" (closed)="estimationTarget = null"></app-view-estimation>
 </div>

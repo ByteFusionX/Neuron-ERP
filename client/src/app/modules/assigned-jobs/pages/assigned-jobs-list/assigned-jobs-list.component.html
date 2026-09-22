@@ -238,4 +238,6 @@
             <p class="m-2 text-center text-gray-500">No Data</p>
         </div>
     </div>
+    <app-rejection-history-drawer [open]="rejectionsOpen" [rejections]="rejections" (closed)="rejectionsOpen = false"></app-rejection-history-drawer>
+    <app-view-estimation [open]="!!estimationTarget" [estimation]="estimationTarget?.estimation ?? null" [enquiryId]="estimationTarget?.enqId ?? ''" editable (cleared)="onEstimationCleared()" (closed)="estimationTarget = null"></app-view-estimation>
 </div>

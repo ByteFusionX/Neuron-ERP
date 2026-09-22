@@ -28,7 +28,7 @@ import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/co
     selector: 'app-reassigned-jobs',
     templateUrl: './reassigned-jobs.component.html',
     styleUrls: ['./reassigned-jobs.component.css'],
-    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
+    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, ViewEstimationComponent]
 })
 export class ReassignedJobsComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChildren('jobItem') jobItems!: QueryList<ElementRef>;
@@ -271,26 +271,27 @@ export class ReassignedJobsComponent implements OnInit, OnDestroy, AfterViewInit
     this._router.navigate(['/assigned-jobs/upload-estimations'], navigationExtras);
   }
 
-  onViewEstimation(estimation: Estimations, enqId: string) {
-    const estimationDialog = this._dialog.open(ViewEstimationComponent, {
-      data: { estimation, enqId, isEdit: true }
-    })
+  estimationTarget: { estimation: Estimations; enqId: string } | null = null;
 
-    estimationDialog.afterClosed().subscribe((remove: boolean) => {
-      if (remove) {
-        this._enquiryService.clearEstimations(enqId).subscribe({
-          next: (res: any) => {
-            if (res.success) {
-              this.dataSource.data = this.dataSource.data.map((enquiry) => {
-                if (enquiry._id == enqId) {
-                  delete (enquiry.preSale as any).estimations
-                }
-                return enquiry
-              })
-              this.dataSource._updateChangeSubscription()
+  onViewEstimation(estimation: Estimations, enqId: string) {
+    this.estimationTarget = { estimation, enqId };
+  }
+
+  onEstimationCleared() {
+    const enqId = this.estimationTarget?.enqId;
+    if (!enqId) return;
+    this._enquiryService.clearEstimations(enqId).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.dataSource.data = this.dataSource.data.map((enquiry) => {
+            if (enquiry._id == enqId) {
+              delete (enquiry.preSale as any).estimations
             }
-          }
-        })
+            return enquiry
+          })
+          this.dataSource._updateChangeSubscription()
+          this.estimationTarget = null;
+        }
       }
     })
   }

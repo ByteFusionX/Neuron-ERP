@@ -1,114 +1,103 @@
-import { Component, Inject } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { Component, EventEmitter, booleanAttribute, Input, OnChanges, Output, SimpleChanges, inject } from '@angular/core';
+import { DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { NavigationExtras, Router } from '@angular/router';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { ParseBoldTextPipe } from 'src/app/shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from 'src/app/shared/pipes/highlightParse.pipe';
+import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
-import { QuoteItem } from 'src/app/shared/interfaces/quotation.interface';
-import { NgIf, NgFor, DecimalPipe } from '@angular/common';
-import { NgIcon } from '@ng-icons/core';
-import { FormsModule } from '@angular/forms';
-import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
-import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
-import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
+/**
+ * Drawer showing a presale estimation. With `editable` the presale engineer can also edit it
+ * (navigates to the edit page) or clear it (emits `cleared` once confirmed; the host does the delete).
+ */
 @Component({
-    selector: 'app-view-estimation',
-    templateUrl: './view-estimation.component.html',
-    styleUrls: ['./view-estimation.component.css'],
-    imports: [NgIf, NgIcon, FormsModule, NgFor, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe]
+  selector: 'app-view-estimation',
+  standalone: true,
+  templateUrl: './view-estimation.component.html',
+  imports: [NgIf, NgFor, NgClass, DecimalPipe, SmartFormModule, ActionButtonComponent,
+    ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe],
 })
-export class ViewEstimationComponent {
-  selectedOption: number = 0;
-  constructor(
-    private _dialog: MatDialog,
-    private dialogRef: MatDialogRef<ViewEstimationComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { estimation: Estimations, enqId: string, isEdit: boolean },
-    private _router: Router
-  ) { }
+export class ViewEstimationComponent implements OnChanges {
+  @Input() open = false;
+  @Input() estimation: Estimations | null = null;
+  @Input() enquiryId = '';
+  @Input({ transform: booleanAttribute }) editable = false;
+  @Output() cleared = new EventEmitter<void>();
+  @Output() closed = new EventEmitter<void>();
 
-  onEstimationEdit() {
-    this.dialogRef.close()
+  selectedOption = 0;
+
+  private router = inject(Router);
+  private confirm = inject(ConfirmDialogService);
+
+  get options(): any[] {
+    return this.estimation?.optionalItems ?? [];
+  }
+
+  get option(): any {
+    return this.options[this.selectedOption];
+  }
+
+  get totalCost(): number {
+    return this.sum((d) => d.quantity * d.unitCost);
+  }
+
+  get sellingPrice(): number {
+    return this.sum((d) => d.unitSellingPrice * d.quantity);
+  }
+
+  get profitAmount(): number {
+    return this.sellingPrice - this.totalCost || 0;
+  }
+
+  get profitPercent(): number {
+    return (this.profitAmount / this.sellingPrice) * 100 || 0;
+  }
+
+  get discount(): number {
+    return this.option?.totalDiscount ?? this.estimation?.totalDiscount ?? 0;
+  }
+
+  get netAmount(): number {
+    return this.sellingPrice - this.discount;
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (this.open && (changes['open'] || changes['estimation'])) this.selectedOption = 0;
+  }
+
+  profit(d: any): number {
+    return d.unitCost && d.unitSellingPrice ? ((d.unitSellingPrice - d.unitCost) / d.unitSellingPrice) * 100 : 0;
+  }
+
+  onEdit(): void {
     const navigationExtras: NavigationExtras = {
-      state: { estimation: this.data.estimation, enquiryId: this.data.enqId }
+      state: { estimation: this.estimation, enquiryId: this.enquiryId },
     };
-    this._router.navigate(['/assigned-jobs/edit-estimations'], navigationExtras);
+    this.closed.emit();
+    this.router.navigate(['/assigned-jobs/edit-estimations'], navigationExtras);
   }
 
-  onClearEstimation() {
-    const dialogRef = this._dialog.open(ConfirmationDialogComponent,
-      {
-        data: {
-          title: `Are you absolutely sure?`,
-          description: `This action is irreversible and this will remove your estimation and you have to re-estmate. `,
-          icon: 'heroExclamationCircle',
-          IconColor: 'orange'
-        }
-      });
-
-    dialogRef.afterClosed().subscribe((approved: boolean) => {
-      if (approved) {
-        this.dialogRef.close({ remove: true })
-      }
-    })
+  async onClear(): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Clear Estimation',
+      message: 'This removes your estimation and you will have to re-estimate.',
+      consequence: 'This cannot be undone.',
+      confirmLabel: 'Clear estimation',
+      cancelLabel: 'Keep it',
+    });
+    if (confirmed) this.cleared.emit();
   }
 
-
-  calculateTotalCost(i: number, j: number, k: number) {
-    return this.data.estimation.optionalItems[this.selectedOption].items[j].itemDetails[k].quantity *
-      this.data.estimation.optionalItems[this.selectedOption].items[j].itemDetails[k].unitCost;
-  }
-
-  calculateAllTotalCost() {
-    let totalCost = 0;
-    this.data.estimation.optionalItems[this.selectedOption].items.forEach((item, j) => {
-        item.itemDetails.forEach((itemDetail, k) => {
-          totalCost += this.calculateTotalCost(this.selectedOption, j, k)
-        })
-      })
-
-    return totalCost;
-  }
-
-  calculateSellingPrice(): number {
-    let totalCost = 0;
-    this.data.estimation.optionalItems[this.selectedOption].items.forEach((item, j) => {
-      item.itemDetails.forEach((itemDetail, k) => {
-          totalCost += this.calculateTotalPrice(this.selectedOption, j, k)
-        })
-      })
-
-    return totalCost;
-  }
-
-  calculateProfit(i: number, j: number, k: number) {
-    const unitCost = this.data.estimation.optionalItems[i].items[j].itemDetails[k].unitCost;
-    const unitSellingPrice = this.data.estimation.optionalItems[i].items[j].itemDetails[k].unitSellingPrice;
-    
-    if (unitCost && unitSellingPrice) {
-      return ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
-    }
-    return 0;
-  }
-
-  calculateTotalPrice(i: number, j: number, k: number) {
-    return this.data.estimation.optionalItems[i].items[j].itemDetails[k].unitSellingPrice * this.data.estimation.optionalItems[i].items[j].itemDetails[k].quantity;
-  }
-
-  calculateProfitMargin(): number {
-    return this.calculateSellingPrice() - this.calculateAllTotalCost() || 0
-  }
-
-  calculateTotalProfit(): number {
-    return ((this.calculateSellingPrice() - this.calculateAllTotalCost()) / this.calculateSellingPrice() * 100) || 0
-  }
-
-  calculateDiscoutPrice(): number {
-    return this.calculateSellingPrice() - (this.data.estimation.totalDiscount || 0)
-  }
-
-
-
-  onClose() {
-    this.dialogRef.close()
+  private sum(fn: (d: any) => number): number {
+    let total = 0;
+    (this.option?.items ?? []).forEach((item: any) =>
+      (item.itemDetails ?? []).forEach((d: any) => (total += fn(d) || 0))
+    );
+    return total;
   }
 }

@@ -1,197 +1,75 @@
-<div>
-    <div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between items-center">
-        <h3 class="text-md font-medium">Estimations</h3>
-        <div class="flex justify-center items-center gap-4">
-            <button *ngIf="data.isEdit"
-                class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm flex items-center gap-2"
-                (click)="onEstimationEdit()">
-                <ng-icon name="heroPencilSquare"></ng-icon>
-                Edit
-            </button>
-            <button *ngIf="data.isEdit"
-                class="bg-orange-600 hover:bg-orange-500 text-white font-medium py-2 px-4 rounded text-sm flex items-center gap-2"
-                (click)="onClearEstimation()">
-                <ng-icon name="heroTrash"></ng-icon>
-                Clear Estimation
-            </button>
-            <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
-                <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-            </button>
-        </div>
-    </div>
+<app-sf-drawer title="Estimations" width="1100px" [open]="open" (closed)="closed.emit()">
 
-    <div class="relative overflow-x-auto my-6 px-6">
-        <div class="mb-4" *ngIf="data.estimation.optionalItems.length > 1">
-            <label for="mainCalculationOption" class="uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">
-                Select Item Options:
-            </label>
-            <select id="mainCalculationOption" [(ngModel)]="selectedOption"
-                class="w-52 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-transparent focus:border-violet-500 p-2.5 ">
-                <option *ngFor="let option of data.estimation.optionalItems; let i = index" [value]="i">
-                    Option {{ i + 1 }}
-                </option>
-            </select>
+    <ng-container *ngIf="estimation">
+        <div *ngIf="options.length > 1" class="mb-4 flex flex-wrap items-center gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Option</span>
+            <button *ngFor="let o of options; let i = index" type="button"
+                class="rounded-full border px-3 py-1 text-[13px] transition-colors"
+                [ngClass]="i === selectedOption
+                    ? 'border-violet-600 bg-violet-600 text-white'
+                    : 'border-gray-300 dark:border-erp-border-dark text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5'"
+                (click)="selectedOption = i">Option {{ i + 1 }}</button>
         </div>
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-2">
-                <thead class="text-xs text-gray-700 uppercase bg-violet-50  ">
+
+        <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-erp-border-dark">
+            <table class="w-full min-w-[860px] text-left text-[13px] text-gray-800 dark:text-gray-100">
+                <thead class="bg-gray-50 dark:bg-white/5 text-[11px] uppercase text-gray-600 dark:text-gray-300">
                     <tr>
-                        <th scope="col" resizable class=" w-96 border-l border-r border-t"
-                            key="itemDetail">
-                            <div class="px-6 py-3">Item Details</div>
-
-                        </th>
-                        <th scope="col" resizable key="qty"
-                            class=" border-l border-r border-t  text-center min-w-[66px]">
-                            <div class="px-2 py-3">QTY</div>
-                        </th>
-                        <th scope="col" resizable key="unitCost"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Unit Cost ({{data.estimation.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="totalCost"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Total Cost ({{data.estimation.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="profit"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Profit</div>
-                        </th>
-                        <th scope="col" resizable key="unitPrice"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Unit Price ({{data.estimation.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="totalPrice"
-                            class="border-l border-r border-t  text-center">
-                            <div class="px-6 py-3">Total Price ({{data.estimation.currency}})</div>
-                        </th>
-                        <th scope="col" resizable key="avbl"
-                            class="border-l border-r border-t hover:border-r-slate-950  text-center min-w-[90px]">
-                            <div class="px-2 py-3">AVBL.</div>
-                        </th>
+                        <th class="px-4 py-2.5">Item details</th>
+                        <th class="px-3 py-2.5 text-center">Qty</th>
+                        <th class="px-3 py-2.5 text-right">Unit cost ({{ estimation.currency }})</th>
+                        <th class="px-3 py-2.5 text-right">Total cost ({{ estimation.currency }})</th>
+                        <th class="px-3 py-2.5 text-right">Profit</th>
+                        <th class="px-3 py-2.5 text-right">Unit price ({{ estimation.currency }})</th>
+                        <th class="px-3 py-2.5 text-right">Total price ({{ estimation.currency }})</th>
+                        <th class="px-3 py-2.5 text-center">Avbl.</th>
                     </tr>
                 </thead>
                 <tbody>
-
-
-                    <ng-container *ngFor="let item of data.estimation.optionalItems[selectedOption].items; let j = index">
-                        <tr>
-                            <td colspan="9" class="border px-6 py-2 bg-gray-50 ">
-                                <div class="flex justify-center items-center text-md text-black font-medium uppercase">
-                                    {{item.itemName}}
-                                </div>
-                            </td>
+                    <ng-container *ngFor="let item of option?.items">
+                        <tr class="border-t border-gray-200 dark:border-erp-border-dark bg-gray-50/70 dark:bg-white/[0.03]">
+                            <td colspan="8" class="px-4 py-2 text-center text-xs font-semibold uppercase">{{ item.itemName }}</td>
                         </tr>
-                        <ng-container *ngFor="let itemsDetail of item.itemDetails; let k = index">
-                            <tr class="bg-white border-b text-gray-800">
-                                <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line">
-                                    <div [innerHTML]="itemsDetail.detail | parseBracketsText | parseBoldText"></div>
-                                </th>
-
-
-
-
-
-                                <td class="px-2  border text-center">
-                                    {{itemsDetail.quantity}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{itemsDetail.unitCost | numberFormatter}}
-                                </td>
-                                <td class=" py-2  text-center ">
-                                    {{(itemsDetail.quantity * itemsDetail.unitCost) | numberFormatter}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{calculateProfit(selectedOption,j,k) | number:'1.2-2' }}%
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{itemsDetail.unitSellingPrice | numberFormatter}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{calculateTotalPrice(selectedOption,j,k) | numberFormatter}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    {{itemsDetail.availability}}
-                                </td>
-                            </tr>
-                        </ng-container>
+                        <tr *ngFor="let d of item.itemDetails" class="border-t border-gray-100 dark:border-erp-border-dark align-top">
+                            <td class="whitespace-pre-line px-4 py-2"><div [innerHTML]="d.detail | parseBracketsText | parseBoldText"></div></td>
+                            <td class="px-3 py-2 text-center">{{ d.quantity }}</td>
+                            <td class="px-3 py-2 text-right">{{ d.unitCost | numberFormatter }}</td>
+                            <td class="px-3 py-2 text-right">{{ d.quantity * d.unitCost | numberFormatter }}</td>
+                            <td class="px-3 py-2 text-right">{{ profit(d) | number: '1.2-2' }}%</td>
+                            <td class="px-3 py-2 text-right">{{ d.unitSellingPrice | numberFormatter }}</td>
+                            <td class="px-3 py-2 text-right">{{ d.unitSellingPrice * d.quantity | numberFormatter }}</td>
+                            <td class="px-3 py-2 text-center">{{ d.availability }}</td>
+                        </tr>
                     </ng-container>
                 </tbody>
             </table>
-
-
-        
-        <div class="relative overflow-x-auto mt-6 w-full flex gap-6">
-            <table class="w-1/2 text-sm text-left rtl:text-right text-black border bg-gray-50">
-                <tbody>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Total Cost
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateAllTotalCost() | numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Total Selling price
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateSellingPrice() | numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Profit Margin
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl font-medium">
-                            {{(calculateSellingPrice() - calculateAllTotalCost()) | numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Profit margin with %
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateTotalProfit().toFixed(2)}}%
-                        </td>
-                    </tr>
-
-                </tbody>
-            </table>
-            <table class="w-1/2  text-sm text-left rtl:text-right text-black border bg-gray-100">
-                <tbody>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Subtotal
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateSellingPrice() | numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Discount
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{(data.estimation.optionalItems[selectedOption].totalDiscount) | numberFormatter}}
-                        </td>
-                    </tr>
-                    <tr class=" border-b ">
-                        <td class="px-2 py-3  border text-center font-medium text-xl ">
-                            Total Amount
-                        </td>
-                        <td class="px-2 py-2 border text-center uppercase text-xl">
-                            {{calculateDiscoutPrice() | numberFormatter }}
-                        </td>
-                    </tr>
-
-                </tbody>
-            </table>
-        </div>
-        <div class="mt-4">
-            <h3 class="font-medium uppercase ">Presale Note : </h3>
-            <p>{{data.estimation.presaleNote}}</p>
         </div>
 
-    </div>
-</div>
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+            <dl class="divide-y divide-gray-200 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark text-[13px]">
+                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Total cost</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ totalCost | numberFormatter }}</dd></div>
+                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Total selling price</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ sellingPrice | numberFormatter }}</dd></div>
+                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Profit margin</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ profitAmount | numberFormatter }}</dd></div>
+                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Profit margin %</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ profitPercent | number: '1.2-2' }}%</dd></div>
+            </dl>
+            <dl class="divide-y divide-gray-200 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark text-[13px]">
+                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Subtotal</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ sellingPrice | numberFormatter }}</dd></div>
+                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Discount</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ discount | numberFormatter }}</dd></div>
+                <div class="flex justify-between px-4 py-2.5"><dt class="font-semibold text-gray-900 dark:text-gray-100">Total amount</dt><dd class="font-semibold text-gray-900 dark:text-gray-100">{{ netAmount | numberFormatter }}</dd></div>
+            </dl>
+        </div>
+
+        <div *ngIf="estimation.presaleNote" class="mt-5 rounded-lg border-l-4 border-violet-500 bg-violet-50 dark:bg-violet-500/10 px-4 py-3 text-[13px]">
+            <p class="text-xs font-semibold uppercase text-violet-700 dark:text-violet-300">Presale note</p>
+            <p class="mt-1 text-gray-800 dark:text-gray-100">{{ estimation.presaleNote }}</p>
+        </div>
+    </ng-container>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button variant="secondary" (click)="closed.emit()">Close</app-action-button>
+        <ng-container *ngIf="editable">
+            <app-action-button variant="secondary" (click)="onClear()">Clear Estimation</app-action-button>
+            <app-action-button variant="primary" (click)="onEdit()">Edit</app-action-button>
+        </ng-container>
+    </ng-container>
+</app-sf-drawer>

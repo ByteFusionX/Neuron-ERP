@@ -18,7 +18,7 @@ import { NavigationExtras, Router } from '@angular/router';
 import { ViewEstimationComponent } from '../view-estimation/view-estimation.component';
 import { RejectJobCommentComponent } from '../reject-job-comment/reject-job-comment.component';
 import { ReassignEmployeeComponent } from '../reassign-employee/reassign-employee.component';
-import { ViewRejectsComponent } from 'src/app/modules/enquirys/pages/view-rejects/view-rejects.component';
+import { RejectionHistoryDrawerComponent } from 'src/app/modules/enquirys/pages/rejection-history-drawer/rejection-history-drawer.component';
 import { EventsListComponent } from 'src/app/shared/components/events-list/events-list.component';
 import { NgIf, NgClass, NgSwitch, NgSwitchCase, NgSwitchDefault, NgFor } from '@angular/common';
 import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
@@ -31,7 +31,7 @@ import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/co
     selector: 'app-assigned-jobs-list',
     templateUrl: './assigned-jobs-list.component.html',
     styleUrls: ['./assigned-jobs-list.component.css'],
-    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgSwitch, NgSwitchCase, NgSwitchDefault, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
+    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgSwitch, NgSwitchCase, NgSwitchDefault, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, RejectionHistoryDrawerComponent, ViewEstimationComponent]
 })
 export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChildren('jobItem') jobItems!: QueryList<ElementRef>;
@@ -268,26 +268,27 @@ export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewIn
     this._router.navigate(['/assigned-jobs/upload-estimations'], navigationExtras);
   }
 
-  onViewEstimation(estimation: Estimations, enqId: string) {
-    const estimationDialog = this._dialog.open(ViewEstimationComponent, {
-      data: { estimation, enqId, isEdit: true }
-    })
+  estimationTarget: { estimation: Estimations; enqId: string } | null = null;
 
-    estimationDialog.afterClosed().subscribe((remove: boolean) => {
-      if (remove) {
-        this._enquiryService.clearEstimations(enqId).subscribe({
-          next: (res: any) => {
-            if (res.success) {
-              this.dataSource.data = this.dataSource.data.map((enquiry) => {
-                if (enquiry._id == enqId) {
-                  delete (enquiry.preSale as any).estimations
-                }
-                return enquiry
-              })
-              this.dataSource._updateChangeSubscription()
+  onViewEstimation(estimation: Estimations, enqId: string) {
+    this.estimationTarget = { estimation, enqId };
+  }
+
+  onEstimationCleared() {
+    const enqId = this.estimationTarget?.enqId;
+    if (!enqId) return;
+    this._enquiryService.clearEstimations(enqId).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.dataSource.data = this.dataSource.data.map((enquiry) => {
+            if (enquiry._id == enqId) {
+              delete (enquiry.preSale as any).estimations
             }
-          }
-        })
+            return enquiry
+          })
+          this.dataSource._updateChangeSubscription()
+          this.estimationTarget = null;
+        }
       }
     })
   }
@@ -401,11 +402,12 @@ export class AssignedJobsListComponent implements OnInit, OnDestroy, AfterViewIn
     })
   }
 
+  rejectionsOpen = false;
+  rejections: any[] = [];
+
   openReview(rejectionHistory: any) {
-    this._dialog.open(ViewRejectsComponent, {
-      data: rejectionHistory,
-      width: '500px'
-    });
+    this.rejections = rejectionHistory ?? [];
+    this.rejectionsOpen = true;
   }
 
   onEventClicks(enquiryId: string) {
