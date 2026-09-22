@@ -23,7 +23,10 @@ import {
     RejectPresaleJob,
     reAssignJob,
     markAsSeenReAssingedJob,
-    updateEnquiryAttachments
+    updateEnquiryAttachments,
+    removeEnquiryAttachment,
+    findSimilarEnquiries,
+    getEnquiryReport
 } from "../controllers/enquiry.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const equiRouter = Router()
@@ -32,9 +35,12 @@ equiRouter.use(requirePrivilege("enquiry"));
 
 equiRouter.post('/create', requirePrivilege("enquiry", "create"), upload.fields([{ name: 'attachments' }, { name: 'presaleFiles' }]), createEnquiry);
 equiRouter.post('/get', getEnquiries);
+equiRouter.get('/similar', findSimilarEnquiries);
+equiRouter.post('/report', getEnquiryReport);
 equiRouter.get('/presales', getPreSaleJobs);
 equiRouter.patch('/presales/:enquiryId', upload.fields([{ name: 'newPresaleFile' }]), assignPresale);
 equiRouter.patch('/:enquiryId/attachments', upload.array('files'), updateEnquiryAttachments);
+equiRouter.delete('/:enquiryId/attachments/:fileName', removeEnquiryAttachment);
 equiRouter.put('/update', updateEnquiryStatus);
 equiRouter.get('/monthly', monthlyEnquiries);
 equiRouter.patch('/feedback-request', sendFeedbackRequest);

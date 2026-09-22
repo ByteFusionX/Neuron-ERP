@@ -2,10 +2,11 @@ import { NextFunction, Request, Response } from "express"
 import enquiryModel from "../models/enquiry.model";
 import Employee from '../models/employee.model';
 import Department from '../models/department.model';
+import customerModel from "../models/customer.model";
 import { Enquiry } from "../interface/enquiry.interface";
 import { Server } from "socket.io";
 import quotationModel from "../models/quotation.model";
-import { uploadFileToAws } from "../common/aws-connect";
+import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
 import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import { createNotificationWithPrivileges } from "./notification.controller";
@@ -100,6 +101,37 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
     } catch (error) {
         console.log(error)
         next(error)
+    }
+}
+
+const titleTokens = (title: string) =>
+    new Set((title || '').toLowerCase().replace(/[^a-z0-9s]/g, ' ').split(/s+/).filter(t => t.length > 2));
+
+/** Open enquiries of the same customer whose title looks like the one being entered. */
+export const findSimilarEnquiries = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const client = String(req.query.client || '');
+        const title = String(req.query.title || '');
+        if (!ObjectId.isValid(client) || !title.trim()) return res.status(200).json([]);
+
+        const wanted = titleTokens(title);
+        if (!wanted.size) return res.status(200).json([]);
+
+        const open = await enquiryModel.find(
+            { client: new ObjectId(client), status: { $ne: 'Quoted' } },
+            { enquiryId: 1, title: 1, status: 1, date: 1 }
+        ).sort({ _id: -1 }).limit(200).lean();
+
+        const similar = open.filter((enquiry: any) => {
+            const existing = titleTokens(enquiry.title);
+            if (!existing.size) return false;
+            const shared = [...wanted].filter(t => existing.has(t)).length;
+            return shared / Math.min(wanted.size, existing.size) >= 0.7;
+        }).slice(0, 5);
+
+        return res.status(200).json(similar);
+    } catch (error) {
+        next(error);
     }
 }
 
@@ -249,6 +281,36 @@ export const updateEnquiryAttachments = async (req: any, res: Response) => {
     }
 };
 
+export const removeEnquiryAttachment = async (req: any, res: Response) => {
+    try {
+        const { enquiryId, fileName } = req.params;
+
+        const enquiry = await enquiryModel.findById(enquiryId);
+        if (!enquiry) {
+            return res.status(404).json({ success: false, message: "Enquiry not found" });
+        }
+
+        const employee = req.employee;
+        const role = employee?.category?.role;
+        const isOwner = enquiry.salesPerson?.toString() === employee?._id?.toString();
+        if (role !== "admin" && role !== "superAdmin" && !isOwner) {
+            return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+
+        const remaining = (enquiry.attachments || []).filter((file: any) => file.fileName !== fileName);
+        if (remaining.length === (enquiry.attachments || []).length) {
+            return res.status(404).json({ success: false, message: "Attachment not found" });
+        }
+
+        await deleteFileFromAws(fileName);
+        const updated = await enquiryModel.findByIdAndUpdate(enquiryId, { $set: { attachments: remaining } }, { new: true });
+        return res.status(200).json({ success: true, data: updated });
+    } catch (error: any) {
+        console.error("Error in removeEnquiryAttachment:", error);
+        return res.status(500).json({ success: false, message: "Internal server error", error: error.message });
+    }
+};
+
 export const getEnquiries = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let { page, row, search, sortKey, sortDir, salesPerson, status, customer, fromDate, toDate, department, access, userId, createdBy } = req.body;
@@ -267,10 +329,16 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             dateFilter.$lt = endDate;
         }
 
-        const searchFilter = search?.trim()
+        const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const searchText = search?.trim() ? escapeRegex(search.trim()) : '';
+        const matchingCustomerIds = searchText
+            ? (await customerModel.find({ companyName: { $regex: searchText, $options: 'i' } }, { _id: 1 }).lean()).map((c: any) => c._id)
+            : [];
+        const searchFilter = searchText
             ? { $or: [
-                { enquiryId: { $regex: search.trim(), $options: 'i' } },
-                { title: { $regex: search.trim(), $options: 'i' } }
+                { enquiryId: { $regex: searchText, $options: 'i' } },
+                { title: { $regex: searchText, $options: 'i' } },
+                { client: { $in: matchingCustomerIds } }
             ] }
             : {};
 
@@ -312,16 +380,19 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         const baseFilters = { $and: [matchFilters, accessFilter] };
         const filters = { $and: [matchFilters, accessFilter, creatorFilter] }
 
+        // 'Sended by Presale Engineer' rows are hidden here so paging and counts stay correct.
+        const hiddenStatuses = ['Quoted', 'Sended by Presale Engineer'];
+
         const enquiryTotal: { total: number }[] = await enquiryModel.aggregate([
             { $match: filters },
-            { $match: { status: { $ne: 'Quoted' } } },
+            { $match: { status: { $nin: hiddenStatuses } } },
             { $group: { _id: null, total: { $sum: 1 } } },
             { $project: { total: 1, _id: 0 } }
         ]).exec()
 
         const viewCounts = await enquiryModel.aggregate([
             { $match: baseFilters },
-            { $match: { status: { $ne: 'Quoted' } } },
+            { $match: { status: { $nin: hiddenStatuses } } },
             {
                 $facet: {
                     all: [{ $count: 'total' }],
@@ -339,15 +410,40 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             description: 'title',
             status: 'status'
         };
-        const resolvedSortKey = sortableFields[sortKey] || '_id';
+        // Sorting by a related record's name needs that name pulled in ahead of the sort/paging stages.
+        const relatedSorts: Record<string, { from: string; localField: string; name: any }> = {
+            customer: { from: 'customers', localField: 'client', name: '$_sortRef.companyName' },
+            department: { from: 'departments', localField: 'department', name: '$_sortRef.departmentName' },
+            salesPerson: {
+                from: 'employees',
+                localField: 'salesPerson',
+                name: { $concat: [{ $ifNull: [{ $arrayElemAt: ['$_sortRef.firstName', 0] }, ''] }, ' ', { $ifNull: [{ $arrayElemAt: ['$_sortRef.lastName', 0] }, ''] }] }
+            }
+        };
+        const relatedSort = relatedSorts[sortKey];
+        const resolvedSortKey = relatedSort ? '_sortValue' : (sortableFields[sortKey] || '_id');
         const resolvedSortDirection = sortDir === 'asc' ? 1 : -1;
+        const sortPrep: any[] = relatedSort ? [
+            { $lookup: { from: relatedSort.from, localField: relatedSort.localField, foreignField: '_id', as: '_sortRef' } },
+            {
+                $addFields: {
+                    _sortValue: {
+                        $toLower: relatedSort.localField === 'salesPerson'
+                            ? relatedSort.name
+                            : { $ifNull: [{ $arrayElemAt: [relatedSort.name, 0] }, ''] }
+                    }
+                }
+            }
+        ] : [];
 
         const enquiryData = await enquiryModel.aggregate([
             { $match: filters },
-            { $match: { status: { $ne: 'Quoted' } } },
-            { $sort: { [resolvedSortKey]: resolvedSortDirection } },
+            { $match: { status: { $nin: hiddenStatuses } } },
+            ...sortPrep,
+            { $sort: { [resolvedSortKey]: resolvedSortDirection, _id: resolvedSortDirection } },
             { $skip: skipNum },
             { $limit: row },
+            ...(relatedSort ? [{ $project: { _sortRef: 0, _sortValue: 0 } }] : []),
             {
                 $lookup: { from: 'customers', localField: 'client', foreignField: '_id', as: 'client' }
             },
@@ -1033,9 +1129,14 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
 }
 
 
-const seedEnquiryIdSequence = async (): Promise<number> => {
+// Numbering is per department and per calendar year, so each series stays gap-free for audit.
+const seedEnquiryIdSequence = (departmentId: string, year: number) => async (): Promise<number> => {
     const lastEnquiry = await enquiryModel.aggregate([
-        { $match: { enquiryId: { $exists: true } } },
+        { $match: {
+            enquiryId: { $exists: true },
+            department: new ObjectId(departmentId),
+            date: { $gte: new Date(Date.UTC(year, 0, 1)), $lt: new Date(Date.UTC(year + 1, 0, 1)) }
+        } },
         { $addFields: { lastNumber: { $toInt: { $arrayElemAt: [{ $split: ["$enquiryId", "-"] }, -1] } } } },
         { $sort: { lastNumber: -1 } },
         { $limit: 1 }
@@ -1050,13 +1151,17 @@ const generateEnquiryId = async (departmentId: string, employeeId: string, date:
         let quoteId: string;
 
         if (employee && department) {
-            const salesId = `${employee.firstName[0]}${employee.lastName[0]}`;
+            // Initials of first/last name; a single-name employee uses the first two letters so the ID never has gaps.
+            const nameParts = `${employee.firstName || ''} ${employee.lastName || ''}`.replace(/[^A-Za-z ]/g, '').trim().split(/s+/).filter(Boolean);
+            const salesId = (nameParts.length > 1
+                ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`
+                : (nameParts[0] || 'XX').slice(0, 2)).toUpperCase();
             const departmentName = department.departmentName.split(' ')[0].replace(/\s/g, "").toUpperCase().slice(0, 4);
 
             const [year, month] = date.split('-');
             const formatedDate = `${month}/${year.substring(2)}`;
 
-            const incrementedNum = await getNextSequence('enquiryId', seedEnquiryIdSequence);
+            const incrementedNum = await getNextSequence(`enquiryId:${year}:${departmentId}`, seedEnquiryIdSequence(departmentId, Number(year)));
             const formattedIncrementedNum = String(incrementedNum).padStart(3, '0');
             quoteId = `ENQ-NT/${salesId}/${departmentName}-${formatedDate}-${formattedIncrementedNum}`
         }
@@ -1409,3 +1514,251 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
         next(error)
     }
 }
+
+
+// ---- Report -------------------------------------------------------------------------------------
+
+/** Every enquiry sits in exactly one stage, derived from its status and whether presales ever held it. */
+const REPORT_STAGES = [
+    { key: 'new', label: 'New' },
+    { key: 'presales', label: 'With Presales' },
+    { key: 'estimated', label: 'Estimated' },
+    { key: 'quoted', label: 'Quoted' },
+    { key: 'rejected', label: 'Rejected' },
+];
+
+const enquiryStage = (e: any): string => {
+    const status: string = e.status || '';
+    if (status === 'Quoted') return 'quoted';
+    if (status.startsWith('Rejected by Presale')) return 'rejected';
+    if (status.startsWith('Assigned To Presale') || status === 'Sended by Presale Engineer') return 'presales';
+    // Back with the sales person: an estimation exists if presales ever worked on it.
+    if (status === 'Work In Progress') return e.preSale?.presalePerson ? 'estimated' : 'new';
+    return 'other';
+};
+
+const reportMonthKey = (d: Date): string => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+
+const personName = (p: any): string => [p?.firstName, p?.lastName].filter(Boolean).join(' ');
+
+/** Accumulates one report row per key, so department / sales person / customer / presale share a code path. */
+const tallyEnquiry = (map: Map<string, any>, id: string, name: string, stage: string) => {
+    let row = map.get(id);
+    if (!row) {
+        row = { id, name, count: 0, openCount: 0, quotedCount: 0, rejectedCount: 0, conversionRate: 0 };
+        map.set(id, row);
+    }
+    row.count += 1;
+    if (stage === 'quoted') row.quotedCount += 1;
+    else if (stage === 'rejected') row.rejectedCount += 1;
+    else row.openCount += 1;
+};
+
+export const getEnquiryReport = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { salesPerson, customer, fromDate, toDate, department, access, userId } = req.body;
+
+        const match: any = { isDeleted: { $ne: true } };
+        if (salesPerson) match.salesPerson = new ObjectId(salesPerson);
+        if (customer) match.client = new ObjectId(customer);
+        if (department) match.department = new ObjectId(department);
+        const dateFilter: Record<string, Date> = {};
+        if (fromDate) dateFilter.$gte = new Date(fromDate);
+        if (toDate) {
+            const end = new Date(toDate);
+            end.setDate(end.getDate() + 1);
+            dateFilter.$lt = end;
+        }
+        if (Object.keys(dateFilter).length) match.date = dateFilter;
+
+        // Same visibility rule as the list: a viewer only reports on the people they may see.
+        const reportedToUserIds = access === 'reported' || access === 'createdAndReported'
+            ? await getAllReportedEmployees(userId)
+            : [];
+        if (access === 'created') match.salesPerson = new ObjectId(userId);
+        else if (access === 'reported') match.salesPerson = { $in: reportedToUserIds };
+        else if (access === 'createdAndReported') match.salesPerson = { $in: [...reportedToUserIds, new ObjectId(userId)] };
+
+        const enquiries: any[] = await enquiryModel.find(match)
+            .select('enquiryId title status date client salesPerson department assignmentHistory preSale.presalePerson preSale.createdDate preSale.rejectionHistory')
+            .populate('client', 'companyName')
+            .populate('salesPerson', 'firstName lastName')
+            .populate('department', 'departmentName')
+            .populate('preSale.presalePerson', 'firstName lastName')
+            .lean();
+
+        // "Days to quote" comes from the quotation raised against the enquiry; the earliest one counts.
+        const quotes: any[] = enquiries.length
+            ? await quotationModel.find({ enqId: { $in: enquiries.map((e) => e._id) }, isDeleted: { $ne: true }, date: { $exists: true } })
+                .select('enqId date').lean()
+            : [];
+        const firstQuoteAt = new Map<string, Date>();
+        quotes.forEach((q) => {
+            const key = String(q.enqId);
+            const at = new Date(q.date);
+            const seen = firstQuoteAt.get(key);
+            if (!seen || at < seen) firstQuoteAt.set(key, at);
+        });
+
+        const now = new Date();
+        const DAY = 24 * 60 * 60 * 1000;
+        const NOT_STARTED_DAYS = 2;
+        const STUCK_DAYS = 3;
+        const AWAITING_QUOTE_DAYS = 7;
+        const daysSince = (d: Date) => Math.max(0, Math.floor((now.getTime() - d.getTime()) / DAY));
+
+        // One pass decorates each enquiry, so every section below is a plain filter over the same array.
+        const enriched = enquiries.map((e: any) => {
+            const history: any[] = e.assignmentHistory || [];
+            const lastAssignment = history.length ? history[history.length - 1] : null;
+            const holderId = lastAssignment?.employee ? String(lastAssignment.employee) : e.preSale?.presalePerson?._id ? String(e.preSale.presalePerson._id) : null;
+            const holderName = lastAssignment?.employeeName || personName(e.preSale?.presalePerson) || '';
+            const quotedAt = firstQuoteAt.get(String(e._id)) || null;
+            return {
+                e,
+                stage: enquiryStage(e),
+                holderId,
+                holderName,
+                createdAt: new Date(e.date),
+                assignedAt: new Date(lastAssignment?.date || e.preSale?.createdDate || e.date),
+                quotedAt,
+                rejections: e.preSale?.rejectionHistory || [],
+                sentToPresales: history.length > 0 || !!e.preSale?.presalePerson,
+            };
+        });
+
+        const inStage = (key: string) => enriched.filter((r) => r.stage === key);
+        const quotedRows = inStage('quoted');
+        const rejectedRows = inStage('rejected');
+        const presalesRows = inStage('presales');
+        const total = enriched.length;
+        const sentCount = enriched.filter((r) => r.sentToPresales).length;
+        const everRejected = enriched.filter((r) => r.rejections.length > 0).length;
+
+        const quoteDurations = quotedRows
+            .filter((r) => r.quotedAt)
+            .map((r) => (r.quotedAt!.getTime() - r.createdAt.getTime()) / DAY)
+            .filter((d) => d >= 0);
+
+        const kpi = {
+            totalCount: total,
+            openCount: total - quotedRows.length - rejectedRows.length,
+            presalesCount: presalesRows.length,
+            estimatedCount: inStage('estimated').length,
+            quotedCount: quotedRows.length,
+            rejectedCount: rejectedRows.length,
+            everRejectedCount: everRejected,
+            sentToPresalesCount: sentCount,
+            conversionRate: total ? (quotedRows.length / total) * 100 : 0,
+            rejectionRate: sentCount ? (everRejected / sentCount) * 100 : 0,
+            avgDaysToQuote: quoteDurations.length ? quoteDurations.reduce((a, b) => a + b, 0) / quoteDurations.length : null,
+        };
+
+        const funnel = [
+            ...REPORT_STAGES,
+            ...(inStage('other').length ? [{ key: 'other', label: 'Other' }] : []),
+        ].map((stage) => {
+            const count = inStage(stage.key).length;
+            return { key: stage.key, label: stage.label, count, pct: total ? (count / total) * 100 : 0 };
+        });
+
+        // Last 12 months including the current one; empty months stay in so a gap reads as a gap.
+        const months: string[] = [];
+        for (let i = 11; i >= 0; i--) {
+            months.push(reportMonthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))));
+        }
+        const trendMap = new Map<string, any>(months.map((m) => [m, { month: m, createdCount: 0, quotedCount: 0 }]));
+        enriched.forEach((r) => {
+            const created = trendMap.get(reportMonthKey(r.createdAt));
+            if (created) created.createdCount += 1;
+            if (r.quotedAt) {
+                const quoted = trendMap.get(reportMonthKey(r.quotedAt));
+                if (quoted) quoted.quotedCount += 1;
+            }
+        });
+        const trend = months.map((m) => trendMap.get(m));
+
+        const byDepartment = new Map<string, any>();
+        const bySalesPerson = new Map<string, any>();
+        const byCustomer = new Map<string, any>();
+        const byPresale = new Map<string, any>();
+        enriched.forEach((r) => {
+            const e = r.e;
+            tallyEnquiry(byDepartment, String(e.department?._id), e.department?.departmentName || 'Unassigned', r.stage);
+            tallyEnquiry(bySalesPerson, String(e.salesPerson?._id), personName(e.salesPerson) || 'Unknown', r.stage);
+            tallyEnquiry(byCustomer, String(e.client?._id), e.client?.companyName || 'Unknown', r.stage);
+            if (r.holderId) tallyEnquiry(byPresale, r.holderId, r.holderName || 'Unknown', r.stage);
+        });
+        const finish = (map: Map<string, any>) =>
+            [...map.values()]
+                .map((row) => ({ ...row, conversionRate: row.count ? (row.quotedCount / row.count) * 100 : 0 }))
+                .sort((a, b) => b.count - a.count);
+
+        // Open work only: a quoted enquiry has nothing left to chase, a rejected one is listed on its own.
+        const brief = (r: any, days: number) => ({
+            _id: String(r.e._id),
+            enquiryId: r.e.enquiryId,
+            title: r.e.title,
+            customer: r.e.client?.companyName || '',
+            salesPerson: personName(r.e.salesPerson),
+            presale: r.holderName,
+            status: r.e.status,
+            days,
+        });
+        const byDaysDesc = (a: any, b: any) => b.days - a.days;
+        const notStarted = inStage('new')
+            .filter((r) => daysSince(r.createdAt) >= NOT_STARTED_DAYS)
+            .map((r) => brief(r, daysSince(r.createdAt))).sort(byDaysDesc);
+        const stuck = presalesRows
+            .filter((r) => daysSince(r.assignedAt) >= STUCK_DAYS)
+            .map((r) => brief(r, daysSince(r.assignedAt))).sort(byDaysDesc);
+        const awaitingQuote = inStage('estimated')
+            .filter((r) => daysSince(r.createdAt) >= AWAITING_QUOTE_DAYS)
+            .map((r) => brief(r, daysSince(r.createdAt))).sort(byDaysDesc);
+        const rejected = rejectedRows
+            .map((r) => brief(r, daysSince(r.assignedAt))).sort(byDaysDesc);
+
+        // What presales are holding right now, so an unbalanced load is visible at a glance.
+        const workloadMap = new Map<string, any>();
+        presalesRows.forEach((r) => {
+            const id = r.holderId || 'unassigned';
+            const row = workloadMap.get(id) || { id, name: r.holderName || 'Unassigned', count: 0, oldestDays: 0 };
+            row.count += 1;
+            row.oldestDays = Math.max(row.oldestDays, daysSince(r.assignedAt));
+            workloadMap.set(id, row);
+        });
+        const workload = [...workloadMap.values()].sort((a, b) => b.count - a.count);
+
+        // Free text left when presales rejected an enquiry; grouped so repeats stand out.
+        const reasonMap = new Map<string, any>();
+        enriched.forEach((r) => r.rejections.forEach((entry: any) => {
+            const reason = (entry?.rejectionReason || '').trim() || 'No reason recorded';
+            const row = reasonMap.get(reason) || { reason, count: 0 };
+            row.count += 1;
+            reasonMap.set(reason, row);
+        }));
+        const rejectionReasons = [...reasonMap.values()].sort((a, b) => b.count - a.count);
+
+        return res.status(200).json({
+            generatedAt: now,
+            kpi,
+            funnel,
+            trend,
+            breakdown: {
+                department: finish(byDepartment),
+                salesPerson: finish(bySalesPerson),
+                customer: finish(byCustomer).slice(0, 25),
+                presale: finish(byPresale),
+            },
+            attention: {
+                notStarted, stuck, awaitingQuote, rejected,
+                notStartedDays: NOT_STARTED_DAYS, stuckDays: STUCK_DAYS, awaitingQuoteDays: AWAITING_QUOTE_DAYS,
+            },
+            workload,
+            rejectionReasons,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(502).json({ error: 'Failed to generate report' });
+    }
+};

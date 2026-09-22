@@ -119,3 +119,86 @@ export interface Presale {
     presalePersonName: string;
     feedback: feedback
 };
+
+// ---- Enquiry report ---------------------------------------------------------------------------
+
+export interface EnquiryReportFilter {
+    salesPerson: string | null;
+    customer: string | null;
+    department: string | null;
+    fromDate: string | null;
+    toDate: string | null;
+    access?: string;
+    userId?: string;
+}
+
+export interface EnquiryReportKpi {
+    totalCount: number;
+    /** Neither quoted nor rejected. */
+    openCount: number;
+    presalesCount: number;
+    estimatedCount: number;
+    quotedCount: number;
+    rejectedCount: number;
+    /** Enquiries that were rejected by presales at least once, even if since reassigned. */
+    everRejectedCount: number;
+    sentToPresalesCount: number;
+    conversionRate: number;
+    /** Share of enquiries sent to presales that were rejected at least once. */
+    rejectionRate: number;
+    /** Null when no quoted enquiry has a quotation date to measure against. */
+    avgDaysToQuote: number | null;
+}
+
+export interface EnquiryReportStage {
+    key: string;
+    label: string;
+    count: number;
+    pct: number;
+}
+
+export interface EnquiryReportBreakdownRow {
+    id: string;
+    name: string;
+    count: number;
+    openCount: number;
+    quotedCount: number;
+    rejectedCount: number;
+    conversionRate: number;
+}
+
+/** An enquiry that needs chasing. `days` means age, time with presales or time since rejection, depending on the list. */
+export interface EnquiryReportAttentionItem {
+    _id: string;
+    enquiryId: string;
+    title: string;
+    customer: string;
+    salesPerson: string;
+    presale: string;
+    status: string;
+    days: number;
+}
+
+export interface EnquiryReportDetails {
+    generatedAt: string;
+    kpi: EnquiryReportKpi;
+    funnel: EnquiryReportStage[];
+    trend: { month: string; createdCount: number; quotedCount: number }[];
+    breakdown: {
+        department: EnquiryReportBreakdownRow[];
+        salesPerson: EnquiryReportBreakdownRow[];
+        customer: EnquiryReportBreakdownRow[];
+        presale: EnquiryReportBreakdownRow[];
+    };
+    attention: {
+        notStarted: EnquiryReportAttentionItem[];
+        stuck: EnquiryReportAttentionItem[];
+        awaitingQuote: EnquiryReportAttentionItem[];
+        rejected: EnquiryReportAttentionItem[];
+        notStartedDays: number;
+        stuckDays: number;
+        awaitingQuoteDays: number;
+    };
+    workload: { id: string; name: string; count: number; oldestDays: number }[];
+    rejectionReasons: { reason: string; count: number }[];
+}

@@ -1,0 +1,59 @@
+<app-sf-drawer title="Create Enquiry" subtitle="Customer, contact and enquiry details" width="720px"
+    [open]="open" [dirty]="enquiryForm.dirty" (closed)="onDrawerClosed($event)">
+
+    <span sfDrawerHeader *ngIf="draftRef.savedAt" class="text-xs text-gray-400 dark:text-gray-500">Draft saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
+
+    <form id="enquiry-form" [formGroup]="enquiryForm" sfDraft="enquiry-list-create" #draftRef="sfDraft"
+        [sfDraftExclude]="['attachments']" (ngSubmit)="submit()" novalidate>
+
+        <div *ngIf="draftRef.pending" class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 text-[13px] text-violet-900 dark:text-violet-200">
+            <span>You have an unsaved draft from {{ draftRef.pending.savedAt | date: 'dd MMM, HH:mm' }}.</span>
+            <span class="flex gap-3">
+                <button type="button" class="font-medium hover:underline" (click)="draftRef.restore()">Restore</button>
+                <button type="button" class="text-violet-700 dark:text-violet-400 hover:underline" (click)="draftRef.discard()">Discard</button>
+            </span>
+        </div>
+
+        <app-sf-section title="Customer" columns="2">
+            <app-sf-field label="Client" [control]="enquiryForm.controls.client">
+                <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Point of Contact" hint="Select client first" [control]="enquiryForm.controls.contact">
+                <app-sf-combobox formControlName="contact" [options]="contactOptions" placeholder="Select contact"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Department" [control]="enquiryForm.controls.department">
+                <app-sf-combobox formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Sales Person">
+                <app-sf-input [ngModelOptions]="{ standalone: true }" [ngModel]="salesPersonName" [readonly]="true"></app-sf-input>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Details" columns="2">
+            <app-sf-field full label="Enquiry Title" [control]="enquiryForm.controls.title">
+                <app-sf-input formControlName="title" placeholder="Title"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Date" [control]="enquiryForm.controls.date">
+                <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Attachments">
+            <app-sf-field label="Files" hint="Optional" [control]="enquiryForm.controls.attachments">
+                <app-sf-file formControlName="attachments" [accept]="acceptedFiles" [maxSizeMb]="5"></app-sf-file>
+            </app-sf-field>
+        </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <!-- Leaves for the customer form; the draft is saved first so this form comes back filled in. -->
+        <app-action-button class="mr-auto" variant="tool" [disabled]="saving || quoting" (click)="createCustomer()">+ Create Customer</app-action-button>
+        <app-action-button variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button variant="tool" [disabled]="saving || quoting" (click)="createQuote()">
+            {{ quoting ? 'Creating…' : 'Create Quote' }}
+        </app-action-button>
+        <app-action-button variant="primary" type="submit" form="enquiry-form" [disabled]="saving || quoting">
+            {{ saving ? 'Creating…' : 'Create Enquiry' }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

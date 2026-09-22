@@ -1,7 +1,7 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { EnquiryTable, FeedbackTable, FilterEnquiry, MonthlyEnquiry, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
+import { EnquiryReportDetails, EnquiryReportFilter, EnquiryTable, FeedbackTable, FilterEnquiry, MonthlyEnquiry, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { environment } from 'src/environments/environment';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
 
@@ -24,6 +24,14 @@ export class EnquiryService {
 
   createEnquiry(formData: FormData): Observable<getEnquiry> {
     return this.http.post<getEnquiry>(`${this.api}/enquiry/create`, formData)
+  }
+
+  findSimilarEnquiries(client: string, title: string): Observable<{ _id: string; enquiryId: string; title: string; status: string }[]> {
+    return this.http.get<{ _id: string; enquiryId: string; title: string; status: string }[]>(`${this.api}/enquiry/similar`, { params: { client, title } })
+  }
+
+  getEnquiryReport(filterData: EnquiryReportFilter): Observable<EnquiryReportDetails> {
+    return this.http.post<EnquiryReportDetails>(`${this.api}/enquiry/report`, filterData)
   }
 
   assignPresale(formData: FormData, enquiryId: string): Observable<{ success: boolean }> {
@@ -133,6 +141,10 @@ export class EnquiryService {
 
   reassignjob(data: { enquiryId: string, employeeId: string }): Observable<any> {
     return this.http.put<any>(`${this.api}/enquiry/reassignjob`, data)
+  }
+
+  removeEnquiryAttachment(enquiryId: string, fileName: string): Observable<any> {
+    return this.http.delete<any>(`${this.api}/enquiry/${enquiryId}/attachments/${fileName}`);
   }
 
   updateEnquiryAttachments(enquiryId: string, formData: FormData): Observable<any> {

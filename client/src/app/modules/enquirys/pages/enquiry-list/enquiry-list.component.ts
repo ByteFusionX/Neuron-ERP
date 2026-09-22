@@ -1,7 +1,6 @@
-import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
-import { MatDialog } from '@angular/material/dialog';
-import { CreateEnquiryDialog } from '../create-enquiry/create-enquiry.component';
+import { EnquiryFormDrawerComponent } from '../enquiry-form-drawer/enquiry-form-drawer.component';
 import {
   FormBuilder,
   FormControl,
@@ -18,17 +17,16 @@ import {
   Presale,
 } from 'src/app/shared/interfaces/enquiry.interface';
 import { MatTableDataSource } from '@angular/material/table';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { NgIcon } from '@ng-icons/core';
 import { ToastrService } from 'ngx-toastr';
-import { AssignPresaleComponent } from '../assign-presale/assign-presale.component';
-import { ViewPresaleComponent } from '../view-presale/view-presale.component';
+import { AssignPresaleDrawerComponent, PresaleAssignment } from '../assign-presale-drawer/assign-presale-drawer.component';
+import { EnquiryEstimationViewComponent } from '../enquiry-estimation-view/enquiry-estimation-view.component';
 import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { ViewRejectsComponent } from '../view-rejects/view-rejects.component';
+import { RejectionHistoryDrawerComponent, RejectionEntry } from '../rejection-history-drawer/rejection-history-drawer.component';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
-import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import {
   NgIf,
   NgSwitch,
@@ -52,13 +50,14 @@ import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/
 import { DetailDocument, DetailOverviewSection, DetailTaskItem, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
-import { NgClass } from '@angular/common';
+import { ENQUIRY_STATUS_TONES, STATUS_TONE_CLASSES } from 'src/app/shared/components/status-indicator/status-tone';
+import { StatusPillComponent } from 'src/app/shared/components/status-indicator/status-pill.component';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { EventsService } from 'src/app/core/services/events/events.service';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
-import { SfOption } from 'src/app/shared/components/smart-form';
+import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 
 @Component({
   selector: 'app-enquiry-list',
@@ -67,29 +66,41 @@ import { SfOption } from 'src/app/shared/components/smart-form';
   imports: [
     FormsModule,
     ReactiveFormsModule,
+    SmartFormModule,
     NgIf,
     NgSwitch,
     NgSwitchCase,
     DatePipe,
     AsyncPipe,
-    NgClass,
+    StatusPillComponent,
     DataGridComponent,
     DetailOverviewComponent,
     DetailDocumentsComponent,
     DetailTaskListComponent,
     DetailTimelineComponent,
     ActionButtonComponent,
+    EnquiryFormDrawerComponent,
+    AssignPresaleDrawerComponent,
+    EnquiryEstimationViewComponent,
+    RejectionHistoryDrawerComponent,
+    RouterLink,
+    NgIcon,
   ],
 })
-export class EnquiryListComponent implements OnInit, OnDestroy {
+export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('grid') grid?: DataGridComponent<getEnquiry>;
 
   enqId: string | null = null;
+  formOpen = false;
   salesPerson$!: Observable<getEmployee[]>;
   customers$!: Observable<getCustomer[]>;
 
   isLoading: boolean = true;
   isEmpty: boolean = false;
+  estimationTarget: { index: number; enquiry: getEnquiry } | null = null;
+  rejectionsOpen = false;
+  rejections: RejectionEntry[] = [];
+  assignTarget: { enquiryId: string; index: number; preSale: any } | null = null;
   assigningPresale: boolean = false;
   assigningPresaleIndex!: number;
   isFiltered: boolean = false;
@@ -101,21 +112,7 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     { name: 'Work In Progress', label: 'In Progress' },
     { name: 'Assigned To Presale Manager', label: 'In Presales' },
   ];
-  displayedColumns: string[] = [
-    'date',
-    'enquiryId',
-    'customerName',
-    'enquiryDescription',
-    'salesPersonName',
-    'department',
-    'attachedFiles',
-    'status',
-    'presale',
-    'events',
-  ];
-
   dataSource = new MatTableDataSource<getEnquiry>();
-  filteredData = new MatTableDataSource<getEnquiry>();
   columns: DataGridColumn<getEnquiry>[] = [];
   rowActions: DataGridRowAction<getEnquiry>[] = [];
   views: DataGridView<getEnquiry>[] = [
@@ -129,13 +126,15 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     { id: 'progress', label: 'Progress', icon: 'activity' },
     { id: 'documents', label: 'Documents', icon: 'files' },
   ];
-  readonly statusBadgeClasses: Record<string, string> = {
-    'Work In Progress': 'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:ring-orange-900',
-    'Assigned To Presale Manager': 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900',
-    'Assigned To Presale Engineer': 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900',
-    'Assigned To Presales': 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900',
-    'Rejected by Presale Engineer': 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900',
-    'Rejected by Presale Manager': 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900',
+  readonly statusToneMap = ENQUIRY_STATUS_TONES;
+  readonly statusBadgeClasses: Record<string, string> = Object.fromEntries(
+    Object.entries(ENQUIRY_STATUS_TONES).map(([status, tone]) => [status, STATUS_TONE_CLASSES[tone].pill + ' border']),
+  );
+  /** Table and panel show a short label; anything sitting with presales reads as 'In Presales'. */
+  statusLabel = (status: string): string => {
+    if (status === 'Work In Progress') return 'In Progress';
+    if (status?.startsWith('Assigned To Presale')) return 'In Presales';
+    return status;
   };
   enquiryTitle = (row: getEnquiry) => row.enquiryId ?? '';
   enquirySubtitle = (row: getEnquiry) => row.client?.companyName ?? '';
@@ -153,7 +152,6 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
   activeViewId: string = 'all';
-  isDeletedClicked: boolean = false;
   private eventsCache = new Map<string, BehaviorSubject<Events[]>>();
 
   private subscriptions = new Subscription();
@@ -165,7 +163,6 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
   private confirm = inject(ConfirmDialogService);
 
   constructor(
-    public dialog: MatDialog,
     private fb: FormBuilder,
     private _employeeService: EmployeeService,
     private _enquiryService: EnquiryService,
@@ -196,9 +193,6 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
         this.currentEmployeeId = employee?._id;
         if (employee?.category.role == 'superAdmin') {
           this.isDeleteOption = true;
-          if (!this.displayedColumns.includes('action')) {
-            this.displayedColumns.push('action');
-          }
         }
       }),
     );
@@ -257,18 +251,40 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     );
   }
 
+  /** A `?search=` link (from the report's attention lists) lands on the list already searching for that enquiry. */
+  ngAfterViewInit(): void {
+    const search = this._route.snapshot.queryParamMap.get('search');
+    if (!search) return;
+    // The grid finishes its own first render before it can take a search term.
+    setTimeout(() => {
+      this.grid?.onSearch(search);
+      this._router.navigate([], { relativeTo: this._route, queryParams: { search: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    });
+  }
+
+  /** Filters handed to the Report tab, so switching keeps the same slice of data. */
+  get reportQueryParams(): Record<string, string | null> {
+    return {
+      salesPerson: this.selectedSalesPerson,
+      customer: this.selectedCustomer,
+      department: this.selectedDepartment,
+      fromDate: this.fromDate,
+      toDate: this.toDate,
+    };
+  }
+
   private buildColumns(): void {
     this.columns = [
       { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px' },
       { key: 'enquiryId', label: 'Enquiry No.', sortable: true, locked: true },
-      { key: 'customer', label: 'Customer', valueGetter: (row) => row.client?.companyName },
+      { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.client?.companyName },
       { key: 'contactPerson', label: 'Contacted By', valueGetter: (row) => row.contact ? `${row.contact.firstName ?? ''} ${row.contact.lastName ?? ''}`.trim() : '—' },
-      { key: 'description', label: 'Description', valueGetter: (row) => row.title },
-      { key: 'salesPerson', label: 'Sales Person', valueGetter: (row) => this.salesPersonName(row) },
-      { key: 'department', label: 'Department', valueGetter: (row) => row.department?.departmentName },
+      { key: 'description', label: 'Description', sortable: true, valueGetter: (row) => row.title },
+      { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (row) => this.salesPersonName(row) },
+      { key: 'department', label: 'Department', sortable: true, valueGetter: (row) => row.department?.departmentName },
       {
-        key: 'status', label: 'Status', type: 'badge', badgeClasses: this.statusBadgeClasses,
-        editorOptions: Object.keys(this.statusBadgeClasses).map((status) => ({ label: status, value: status })),
+        key: 'status', label: 'Status', sortable: true, type: 'badge', badgeClasses: this.statusBadgeClasses, badgeLabel: this.statusLabel,
+        editorOptions: Object.keys(this.statusBadgeClasses).map((status) => ({ label: this.statusLabel(status), value: status })),
       },
     ];
   }
@@ -278,7 +294,7 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
       { id: 'upload', label: 'Upload Files', icon: 'upload', quick: true, hidden: (row) => !!row.attachments?.length || !this.canUploadAttachments(row) },
       { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, badge: (row) => row.preSale?.seenbySalesPerson === false, hidden: (row) => !this.canViewEstimations(row) },
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', quick: true, hidden: (row) => !row.preSale?.presalePerson || !!row.preSale?.estimations },
-      { id: 'assignPresale', label: 'Assign to Presale', icon: 'user', quick: true, hidden: (row) => !!row.preSale?.presalePerson && row.status !== 'Rejected by Presale Manager' },
+      { id: 'assignPresale', label: 'Assign to Presale', icon: 'user', quick: true, hidden: (row) => (!!row.preSale?.presalePerson || this.isAssignedToPresale(row.status)) && row.status !== 'Rejected by Presale Manager' },
       { id: 'review', label: 'View Rejection', icon: 'info', panel: true, hidden: (row) => row.status !== 'Rejected by Presale Manager' },
       { id: 'delete', label: 'Delete Enquiry', icon: 'trash', variant: 'danger', divider: true, hidden: (row) => !this.isDeleteOption || this.isAssignedToPresale(row.status) },
     ];
@@ -312,7 +328,7 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     const index = this.dataSource.data.indexOf(row);
     const click = new Event('click');
     switch (action.id) {
-      case 'upload': this.openAttachmentUpload(row); break;
+      case 'upload': this.startAttachmentUpload(row); break;
       case 'estimations': this.onViewPresale(click, index, row); break;
       case 'presaleHistory': this.openPresaleProgress(row); break;
       case 'assignPresale': this.onAssignPresale(click, row.preSale, row._id, index); break;
@@ -431,6 +447,12 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     });
   }
 
+  private displayDate(value: string | Date | null | undefined): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
   private progressMeta(parts: Array<string | null | undefined>): string | undefined {
     const meta = parts.filter(Boolean).join(' · ');
     return meta || undefined;
@@ -452,7 +474,7 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'Contact', value: row.contact ? `${row.contact.firstName ?? ''} ${row.contact.lastName ?? ''}`.trim() : '—' },
           { type: 'field', label: 'Sales Person', value: this.salesPersonName(row) },
           { type: 'field', label: 'Department', value: row.department?.departmentName },
-          { type: 'field', label: 'Date', value: row.date },
+          { type: 'field', label: 'Date', value: this.displayDate(row.date) },
           { type: 'field', label: 'Presales', value: this.presalePersonName(row) },
         ],
       },
@@ -469,8 +491,38 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     }));
   }
 
-  onDocumentOpen(row: getEnquiry): void {
-    this.openAttachmentView(row);
+  documentRemoveDetails(row: getEnquiry) {
+    return (doc: DetailDocument) => [
+      { label: 'Enquiry', value: row.enquiryId ?? '' },
+      { label: 'Customer', value: row.client?.companyName ?? '' },
+      { label: 'File Name', value: doc.name },
+    ];
+  }
+
+  onDocumentOpen(row: getEnquiry, document: DetailDocument): void {
+    const fileName = row.attachments?.map((f: any) => f.fileName ?? f.filename).find((n: string) => n === document.id);
+    if (!fileName) return;
+    this._enquiryService.getFile(fileName).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+      },
+      error: (error) => {
+        if (error.status === 404) this.toaster.warning('Sorry, the requested file was not found on the server.');
+        else this.toaster.error('An error occurred while opening the file.');
+      },
+    });
+  }
+
+  onDocumentRemove(row: getEnquiry, document: DetailDocument): void {
+    this._enquiryService.removeEnquiryAttachment(row._id, document.id).subscribe({
+      next: (res: any) => {
+        row.attachments = res?.data?.attachments ?? (row.attachments ?? []).filter((f: any) => (f.fileName ?? f.filename) !== document.id);
+        this.toaster.success('File deleted');
+      },
+      error: () => this.toaster.error('Failed to delete file'),
+    });
   }
 
   onDocumentDownload(row: getEnquiry, document: DetailDocument): void {
@@ -616,21 +668,23 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     });
   }
 
-  onDeleteEventFile(row: getEnquiry, item: DetailTaskItem, file: { id: string; name: string }): void {
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: { title: 'Delete File', description: 'Are you sure you want to delete this file?', icon: 'heroExclamationCircle', IconColor: 'red' },
+  async onDeleteEventFile(row: getEnquiry, item: DetailTaskItem, file: { id: string; name: string }): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Delete file',
+      message: 'Are you sure you want to delete this file?',
+      details: [{ label: 'File', value: file.name }],
+      confirmLabel: 'Delete',
     });
-    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
-      if (!confirmed) return;
-      this._eventsService.eventFileDelete(item.id, file.id).subscribe((response: any) => {
-        if (response.success) {
-          this.toaster.success('File Deleted');
-          const subject = this.eventsCache.get(row._id);
-          subject?.next(subject.value.map((event) => event._id === item.id
-            ? { ...event, eventFiles: (event.eventFiles || []).filter((eventFile) => eventFile.fileName !== file.id) }
-            : event));
-        }
-      });
+    if (!confirmed) return;
+    this._eventsService.eventFileDelete(item.id, file.id).subscribe((response: any) => {
+      if (response.success) {
+        this.toaster.success('File Deleted');
+        const subject = this.eventsCache.get(row._id);
+        subject?.next(subject.value.map((event) => event._id === item.id
+          ? { ...event, eventFiles: (event.eventFiles || []).filter((eventFile) => eventFile.fileName !== file.id) }
+          : event));
+      }
     });
   }
 
@@ -688,11 +742,7 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._enquiryService.getEnquiry(filterData).subscribe({
         next: (data: EnquiryTable) => {
-          const filteredEnquiries = data.enquiry.filter(
-            (enq: any) => enq.status != 'Sended by Presale Engineer',
-          );
-          this.dataSource.data = filteredEnquiries;
-          this.filteredData.data = data.enquiry;
+          this.dataSource.data = data.enquiry;
           this.total = data.total;
           this.views = this.views.map((view) => ({
             ...view,
@@ -718,54 +768,47 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     return this.isDeleteOption || element?.salesPerson?._id === this.currentEmployeeId;
   }
 
-  openAttachmentView(element: any): void {
-    if (!element?.attachments?.length) {
-      return;
+  /** Row that is currently showing the upload field instead of its file list. */
+  uploadRowId: string | null = null;
+  isUploadingFiles = false;
+  pendingFiles: File[] = [];
+  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+
+  /** Opens the row's documents tab with the upload field showing. */
+  startAttachmentUpload(row: getEnquiry): void {
+    if (!this.canUploadAttachments(row)) return;
+    this.uploadRowId = row._id;
+    this.pendingFiles = [];
+    if (this.grid) {
+      this.grid.activeTab = 'documents';
+      this.grid.openRow(row);
     }
-
-    const modalData: FileUploadModalData = {
-      title: `Files - ${element.enquiryId}`,
-      existingFiles: element.attachments,
-      allowMultiple: true,
-      showActions: { upload: false, download: true, view: true, delete: false }
-    };
-
-    this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
   }
 
-  openAttachmentUpload(element: any): void {
-    if (!this.canUploadAttachments(element)) {
-      return;
-    }
+  cancelAttachmentUpload(): void {
+    this.uploadRowId = null;
+    this.pendingFiles = [];
+  }
 
-    const modalData: FileUploadModalData = {
-      title: `Files - ${element.enquiryId}`,
-      allowMultiple: true,
-      showActions: { upload: true, download: false, view: false, delete: true }
-    };
+  /** Uploads the picked files and returns to the file list; existing files are re-sent because the server replaces the set. */
+  uploadAttachments(row: getEnquiry): void {
+    if (!this.pendingFiles.length || this.isUploadingFiles || !this.canUploadAttachments(row)) return;
+    const formData = new FormData();
+    this.pendingFiles.forEach((file) => formData.append('files', file));
+    if (row.attachments?.length) formData.append('existingFiles', JSON.stringify(row.attachments));
 
-    const dialogRef = this.dialog.open(FileUploadModalComponent, { data: modalData, width: '800px', maxHeight: '90vh' });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result && result.action === 'save') {
-        const newFiles = result.files.filter((file: any) => file.file).map((file: any) => file.file);
-        if (!newFiles.length) {
-          return;
-        }
-
-        const formData = new FormData();
-        newFiles.forEach((file: File) => formData.append('files', file));
-
-        this._enquiryService.updateEnquiryAttachments(element._id, formData).subscribe({
-          next: (res) => {
-            element.attachments = res.data?.attachments || [];
-            this.toaster.success('Files uploaded successfully');
-          },
-          error: () => {
-            this.toaster.error('Failed to upload files');
-          }
-        });
-      }
+    this.isUploadingFiles = true;
+    this._enquiryService.updateEnquiryAttachments(row._id, formData).subscribe({
+      next: (res) => {
+        row.attachments = res.data?.attachments || [];
+        this.isUploadingFiles = false;
+        this.cancelAttachmentUpload();
+        this.toaster.success('Files uploaded successfully');
+      },
+      error: () => {
+        this.isUploadingFiles = false;
+        this.toaster.error('Failed to upload files');
+      },
     });
   }
 
@@ -791,25 +834,18 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
   }
 
   openDialog() {
-    if (this.enqId) {
-      const dialogRef = this.dialog.open(CreateEnquiryDialog, {
-        data: this.enqId,
-      });
-      dialogRef.afterClosed().subscribe((result) => {
-        if (result) {
-          this.total++;
-          this.isEmpty = false;
-          this.isLoading = false;
-          result.client = result.client;
-          result.department = result.department;
-          result.salesPerson = result.salesPerson;
-          this.dataSource.data = [result, ...this.dataSource.data];
-          this.dataSource._updateChangeSubscription();
-          this.enqId = result.enquiryId.slice(-3);
-          this.toaster.success('Enquiry created successfully');
-        }
-      });
-    }
+    if (this.enqId) this.formOpen = true;
+  }
+
+  onFormClosed(): void {
+    this.formOpen = false;
+  }
+
+  onEnquiryCreated(result: getEnquiry): void {
+    this.formOpen = false;
+    this.toaster.success('Enquiry created successfully');
+    // Reload so the total, view counts, sort and paging all reflect the new enquiry.
+    this.getEnquiries();
   }
 
   preventClick(event: Event) {
@@ -818,68 +854,60 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
 
   onViewPresale(event: Event, i: number, enquiryData: getEnquiry) {
     event.stopPropagation();
-    const presaleDialog = this.dialog.open(ViewPresaleComponent, {
-      data: enquiryData,
-    });
-    presaleDialog.afterClosed().subscribe((success: boolean) => {
-      this.dataSource.data[i].preSale.seenbySalesPerson = true;
-      if (success) {
-        this.dataSource.data[i].status = 'Assigned To Presale Manager';
-        this.dataSource._updateChangeSubscription();
-      }
-    });
+    this.estimationTarget = { index: i, enquiry: enquiryData };
   }
 
-  onAssignPresale(
-    event: Event,
-    preSale: any,
-    enquiryId: string,
-    index: number,
-  ) {
+  onEstimationSeen(): void {
+    const t = this.estimationTarget;
+    if (t) this.dataSource.data[t.index].preSale.seenbySalesPerson = true;
+  }
+
+  onEstimationRevised(): void {
+    const t = this.estimationTarget;
+    this.estimationTarget = null;
+    if (!t) return;
+    this.dataSource.data[t.index].status = 'Assigned To Presale Manager';
+    this.dataSource._updateChangeSubscription();
+  }
+
+  onAssignPresale(event: Event, preSale: any, enquiryId: string, index: number) {
     event.stopPropagation();
+    this.assignTarget = { enquiryId, index, preSale };
+  }
 
-    const presaleDialog = this.dialog.open(AssignPresaleComponent, {
-      data: preSale,
-    });
-    presaleDialog.afterClosed().subscribe((data: any) => {
-      if (data) {
-        this.assigningPresale = true;
-        this.assigningPresaleIndex = index;
-        const presaleData = {
-            comment: data.comment,
-            newPresaleFile: data.newPresaleFile,
-            existingPresaleFiles: data.existingPresaleFiles,
-            presalePerson: data.presalePerson,
-        };
-        let formData = new FormData();
-        formData.append('presaleData', JSON.stringify(presaleData));
+  onAssignClosed(): void {
+    this.assignTarget = null;
+  }
 
-        if (presaleData.newPresaleFile) {
-          for (let i = 0; i < presaleData.newPresaleFile.length; i++) {
-            formData.append(
-              'newPresaleFile',
-              presaleData.newPresaleFile[i] as unknown as Blob,
-            );
-          }
-        }
+  onPresaleAssigned(data: PresaleAssignment): void {
+    const target = this.assignTarget;
+    if (!target) return;
+    this.assignTarget = null;
+    const { enquiryId, index } = target;
 
-        this._enquiryService
-          .assignPresale(formData, enquiryId)
-          .subscribe((res) => {
-            if (res.success) {
-              let currentPreSale = this.dataSource.data[index].preSale || {};
-              this.dataSource.data[index].preSale = {
-                ...currentPreSale,
-                presalePerson: presaleData.presalePerson,
-              } as any;
-              this.dataSource.data[index].status =
-                'Assigned To Presale Manager';
-              this.dataSource._updateChangeSubscription();
-              this.assigningPresale = false;
-              this.toaster.success('Assinged Presale successfully');
-            }
-          });
-      }
+    this.assigningPresale = true;
+    this.assigningPresaleIndex = index;
+    const presaleData = {
+      comment: data.comment,
+      newPresaleFile: data.newPresaleFile,
+      existingPresaleFiles: data.existingPresaleFiles,
+      presalePerson: data.presalePerson,
+    };
+    const formData = new FormData();
+    formData.append("presaleData", JSON.stringify(presaleData));
+    (presaleData.newPresaleFile ?? []).forEach((file) => formData.append("newPresaleFile", file as unknown as Blob));
+
+    this._enquiryService.assignPresale(formData, enquiryId).subscribe({
+      next: (res) => {
+        this.assigningPresale = false;
+        if (!res.success) return;
+        const row = this.dataSource.data[index];
+        row.preSale = { ...(row.preSale || {}), presalePerson: presaleData.presalePerson } as any;
+        row.status = "Assigned To Presale Manager";
+        this.dataSource._updateChangeSubscription();
+        this.toaster.success("Assinged Presale successfully");
+      },
+      error: () => (this.assigningPresale = false),
     });
   }
 
@@ -922,23 +950,9 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     this.updateUrlParams();
   }
 
-  onRowClicks(index: number) {
-    let enqData = this.dataSource.data[index];
-    if (!this.isDeletedClicked) {
-      if (enqData.status === 'Work In Progress') {
-        this._enquiryService.emitToQuote(enqData);
-        this.router.navigate(['/quotations']);
-      } else {
-        this.toaster.warning('Sorry,Selected enquiry assinged to presales');
-      }
-    }
-  }
-
   openReview(rejectionHistory: any) {
-    this.dialog.open(ViewRejectsComponent, {
-      data: rejectionHistory,
-      width: '500px',
-    });
+    this.rejections = rejectionHistory ?? [];
+    this.rejectionsOpen = true;
   }
 
   checkPermission() {
@@ -960,42 +974,30 @@ export class EnquiryListComponent implements OnInit, OnDestroy {
     );
   }
 
-  deleteEnquiry(enquiryId: string, status: string) {
-    this.isDeletedClicked = true;
+  async deleteEnquiry(enquiryId: string, status: string): Promise<void> {
     if (this.isAssignedToPresale(status)) {
       this.toaster.warning('Sorry,Selected enquiry assinged to presales');
       return;
     }
     const employee = this._employeeService.employeeToken();
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Delete Enquiry',
-        description: 'Are you sure you want to delete this enquiry?',
-        icon: 'heroExclamationCircle',
-        IconColor: 'red',
-      },
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Delete enquiry',
+      message: 'Are you sure you want to delete this enquiry?',
+      consequence: 'This cannot be undone.',
+      confirmLabel: 'Delete',
     });
-
-    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
-      if (confirmed) {
-        this.subscriptions.add(
-          this._enquiryService
-            .deleteEnquiry({ dataId: enquiryId, employeeId: employee.id })
-            .subscribe({
-              next: () => {
-                this.toaster.success('Enquiry deleted successfully');
-                this.getEnquiries();
-              },
-              error: (error) => {
-                this.toaster.error(
-                  error.error.message || 'Failed to delete enquiry',
-                );
-              },
-            }),
-        );
-      }
-      this.isDeletedClicked = false;
-    });
+    if (!confirmed) return;
+    this.subscriptions.add(
+      this._enquiryService.deleteEnquiry({ dataId: enquiryId, employeeId: employee.id }).subscribe({
+        next: () => {
+          this.toaster.success('Enquiry deleted successfully');
+          this.getEnquiries();
+        },
+        error: (error) => {
+          this.toaster.error(error.error.message || 'Failed to delete enquiry');
+        },
+      }),
+    );
   }
-
 }

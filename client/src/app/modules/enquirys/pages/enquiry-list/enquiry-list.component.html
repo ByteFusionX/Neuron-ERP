@@ -26,11 +26,19 @@
     (rowAction)="onRowAction($event)"
     (create)="openDialog()">
 
+    <div dgToolbarExtra class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-100 dark:bg-erp-surface-dark-alt" role="tablist" aria-label="Enquiry view">
+      <span role="tab" aria-selected="true"
+        class="inline-flex h-7 items-center rounded-md bg-white px-2.5 text-xs font-medium text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100">List</span>
+      <a role="tab" aria-selected="false" routerLink="/enquiry/report" [queryParams]="reportQueryParams"
+        class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+        <ng-icon name="heroChartBar" class="h-4 w-4"></ng-icon>
+        Report
+      </a>
+    </div>
+
     <ng-template #detailAsideTemplate let-row>
-      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
-        [ngClass]="statusBadgeClasses[row.status] || 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700'">
-        {{ row.status === 'Work In Progress' ? 'In Progress' : row.status }}
-      </span>
+      <app-status-pill [status]="row.status" [toneMap]="statusToneMap"
+        [label]="statusLabel(row.status)"></app-status-pill>
     </ng-template>
 
     <ng-template #detailMetaTemplate let-row>
@@ -67,14 +75,39 @@
         <app-detail-timeline *ngSwitchCase="'progress'"
           [entries]="presaleProgress(row)"
           emptyMessage="No presale activity yet."></app-detail-timeline>
-        <app-detail-documents *ngSwitchCase="'documents'"
-          title="Enquiry files"
-          [documents]="enquiryDocuments(row)"
-          [uploadable]="canUploadAttachments(row)"
-          (upload)="openAttachmentUpload(row)"
-          (open)="onDocumentOpen(row)"
-          (download)="onDocumentDownload(row, $event)"></app-detail-documents>
+        <ng-container *ngSwitchCase="'documents'">
+          <app-detail-documents *ngIf="uploadRowId !== row._id; else uploadZone"
+            title="Enquiry files"
+            [documents]="enquiryDocuments(row)"
+            [uploadable]="canUploadAttachments(row)"
+            [removable]="canUploadAttachments(row)"
+            [removeDetails]="documentRemoveDetails(row)"
+            (upload)="uploadRowId = row._id"
+            (open)="onDocumentOpen(row, $event)"
+            (download)="onDocumentDownload(row, $event)"
+            (remove)="onDocumentRemove(row, $event)"></app-detail-documents>
+          <ng-template #uploadZone>
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Upload files</p>
+              <button type="button" (click)="cancelAttachmentUpload()" [disabled]="isUploadingFiles"
+                class="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
+            </div>
+            <app-sf-file [(ngModel)]="pendingFiles" [accept]="acceptedFiles" [maxSizeMb]="5" [disabled]="isUploadingFiles"></app-sf-file>
+            <div class="mt-3 flex justify-end">
+              <button type="button" (click)="uploadAttachments(row)" [disabled]="isUploadingFiles || !pendingFiles.length"
+                class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">{{ isUploadingFiles ? 'Uploading…' : 'Upload' + (pendingFiles.length ? ' (' + pendingFiles.length + ')' : '') }}</button>
+            </div>
+          </ng-template>
+        </ng-container>
       </ng-container>
     </ng-template>
   </app-data-grid>
+
+  <app-enquiry-form-drawer [open]="formOpen" (saved)="onEnquiryCreated($event)" (closed)="onFormClosed()"></app-enquiry-form-drawer>
+
+  <app-assign-presale-drawer [open]="!!assignTarget" [presale]="assignTarget?.preSale" (assigned)="onPresaleAssigned($event)" (closed)="onAssignClosed()"></app-assign-presale-drawer>
+
+  <app-enquiry-estimation-view [open]="!!estimationTarget" [enquiry]="estimationTarget?.enquiry" (seen)="onEstimationSeen()" (revised)="onEstimationRevised()" (closed)="estimationTarget = null"></app-enquiry-estimation-view>
+
+  <app-rejection-history-drawer [open]="rejectionsOpen" [rejections]="rejections" (closed)="rejectionsOpen = false"></app-rejection-history-drawer>
 </div>
