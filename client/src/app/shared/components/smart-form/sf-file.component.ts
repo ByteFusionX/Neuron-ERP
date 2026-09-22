@@ -66,6 +66,10 @@ export class SfFileComponent extends SfControl<File[]> {
         this.rejected.push(`${f.name} is larger than ${this.maxSizeMb} MB`);
         return false;
       }
+      if (!this.isAllowedType(f)) {
+        this.rejected.push(`${f.name} is not an allowed file type`);
+        return false;
+      }
       return true;
     });
     this.update(this.multiple ? [...this.files, ...accepted] : accepted.slice(0, 1));
@@ -74,6 +78,17 @@ export class SfFileComponent extends SfControl<File[]> {
 
   remove(i: number): void {
     this.update(this.files.filter((_, idx) => idx !== i));
+  }
+
+  /** Enforces `accept` (extensions like .pdf, mime types like image/*) for drops and "All files" picks too. */
+  private isAllowedType(f: File): boolean {
+    const tokens = this.accept.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (!tokens.length) return true;
+    const name = f.name.toLowerCase();
+    const type = (f.type || '').toLowerCase();
+    return tokens.some((t) =>
+      t.startsWith('.') ? name.endsWith(t) : t.endsWith('/*') ? type.startsWith(t.slice(0, -1)) : type === t
+    );
   }
 
   ext(f: File): string {

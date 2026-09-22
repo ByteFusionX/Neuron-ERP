@@ -16,6 +16,8 @@ export interface DataGridColumn<T = any> {
   editorOptions?: { label: string; value: any }[];
   /** Map badge value -> tailwind classes */
   badgeClasses?: Record<string, string>;
+  /** Text shown inside the badge; the raw value is still used for colour, filters and export. */
+  badgeLabel?: (value: any) => string;
   currencyCode?: string;
   /** Footer summary over the filtered rows. Numeric columns only. */
   aggregate?: 'sum' | 'avg';
@@ -121,6 +123,8 @@ export interface DataGridView<T = any> {
   predicate?: (row: T) => boolean;
   /** Count shown on the tab. Defaults to the predicate match count; pass it for server-paged modules. */
   count?: number;
+  /** Hide the count badge — for server-paged views whose total is unknown while another view is active. */
+  hideCount?: boolean;
   sort?: DataGridSortState;
   custom?: boolean;
   /** Built-in view a custom view was saved from; its predicate still applies. */

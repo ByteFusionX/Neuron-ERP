@@ -26,6 +26,16 @@ const TONE_RULES: [RegExp, StatusTone][] = [
   [/new|open|created|initiated|info/i, 'info'],
 ];
 
+/** Enquiry statuses whose tone the generic rules would not pick (or would pick differently). */
+export const ENQUIRY_STATUS_TONES: Record<string, StatusTone> = {
+  'Work In Progress': 'warning',
+  'Assigned To Presale Manager': 'progress',
+  'Assigned To Presale Engineer': 'progress',
+  'Assigned To Presales': 'progress',
+  'Rejected by Presale Engineer': 'danger',
+  'Rejected by Presale Manager': 'danger',
+};
+
 export function statusTone(status: unknown, overrides?: Record<string, StatusTone>): StatusTone {
   if (status === null || status === undefined || status === '') return 'neutral';
   const s = String(status).trim();

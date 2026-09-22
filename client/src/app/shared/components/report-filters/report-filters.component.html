@@ -1,0 +1,17 @@
+<div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+  <app-sf-field *ngFor="let f of fields" [label]="f.label">
+    <ng-container [ngSwitch]="f.type">
+      <app-sf-select *ngSwitchCase="'select'" [ngModel]="values[f.key]" [options]="f.options || []" [placeholder]="f.placeholder || ''"
+        (ngModelChange)="set(f.key, $event)"></app-sf-select>
+      <app-sf-combobox *ngSwitchCase="'combobox'" [ngModel]="values[f.key]" [options]="f.options || []" [placeholder]="f.placeholder || ''"
+        (ngModelChange)="set(f.key, $event)"></app-sf-combobox>
+      <app-sf-date *ngSwitchCase="'date'" [ngModel]="values[f.key]" displayFormat="dd/MM/yy"
+        (ngModelChange)="set(f.key, $event)"></app-sf-date>
+    </ng-container>
+  </app-sf-field>
+</div>
+
+<div *ngIf="hasFilters" class="flex items-center justify-between gap-3 border-t border-gray-100 dark:border-erp-border-dark px-4 py-2">
+  <p class="text-xs text-gray-500 dark:text-gray-400">{{ hint }}</p>
+  <button type="button" class="text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline" (click)="clear()">Clear filters</button>
+</div>

@@ -5,7 +5,7 @@ import { SfOption } from 'src/app/shared/components/smart-form';
 /**
  * One row offered under an item-name or description field.
  *
- * The catalogue is today's only source (see `QuotationSuggestionSource`). Inventory is the intended
+ * The catalogue is today's only source (see `CatalogueSuggestionSource`). Inventory is the intended
  * second source: a source that returns `source: 'inventory'` rows may also fill `uom`, `unitCost`,
  * `supplierId` and `stockOnHand` — `applySuggestion` already patches those through, so nothing in
  * this component has to change when stock lookup lands.

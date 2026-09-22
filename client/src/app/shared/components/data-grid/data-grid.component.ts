@@ -947,6 +947,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     return col.valueGetter ? col.valueGetter(row) : row[col.key];
   }
 
+  badgeText(col: DataGridColumn<T>, value: any): string {
+    return col.badgeLabel ? col.badgeLabel(value) : value;
+  }
+
   badgeClass(col: DataGridColumn<T>, value: any): string {
     return col.badgeClasses?.[value] ?? STATUS_TONE_CLASSES[statusTone(value)].pill + ' border';
   }

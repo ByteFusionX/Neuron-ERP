@@ -44,7 +44,7 @@ import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.comp
           <span *ngSwitchCase="'badge'">
             <span *ngIf="raw; else badgeEmpty" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium"
               [ngClass]="grid.badgeClass(col, raw)">
-              <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>{{ raw }}
+              <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>{{ grid.badgeText(col, raw) }}
             </span>
             <ng-template #badgeEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
           </span>

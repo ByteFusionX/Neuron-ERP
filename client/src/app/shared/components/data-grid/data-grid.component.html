@@ -205,8 +205,8 @@
       <button *ngFor="let v of allViews" type="button" role="tab" class="dg-view-tab group/view"
         [class.dg-view-active]="v.id === activeViewId" [attr.aria-selected]="v.id === activeViewId" (click)="selectView(v)">
         {{ v.label }}
-        <span *ngIf="!loading || data.length; else countSkel" class="dg-view-count tabular-nums">{{ viewCount(v) }}</span>
-        <ng-template #countSkel><span class="dg-skel !h-3 w-5"></span></ng-template>
+        <span *ngIf="!v.hideCount && (!loading || data.length); else countSkel" class="dg-view-count tabular-nums">{{ viewCount(v) }}</span>
+        <ng-template #countSkel><span *ngIf="!v.hideCount" class="dg-skel !h-3 w-5"></span></ng-template>
         <span *ngIf="v.custom" role="button" tabindex="0" [attr.aria-label]="'Delete view ' + v.label" matTooltip="Delete view"
           class="-mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-gray-400 dark:text-gray-500 opacity-0 group-hover/view:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
           (click)="deleteView(v, $event)" (keydown.enter)="deleteView(v, $event)">
@@ -370,7 +370,7 @@
                         class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap"
                         [ngClass]="badgeClass(c, rawValue(row, c))">
                         <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
-                        {{ rawValue(row, c) }}
+                        {{ badgeText(c, rawValue(row, c)) }}
                       </span>
                       <ng-template #noBadgeValue>
                         <span class="flex justify-center w-full text-gray-400 dark:text-gray-600">—</span>

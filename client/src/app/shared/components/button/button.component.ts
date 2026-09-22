@@ -35,12 +35,12 @@ export class ButtonComponent {
 
     const themeClasses = {
       'primary': 'bg-violet-700 hover:bg-violet-600 text-white',
-      'secondary': 'border border-gray-300 hover:bg-gray-100 text-black',
+      'secondary': 'border border-gray-300 hover:bg-gray-100 text-black dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-800',
       'orange': 'bg-orange-500 hover:bg-orange-700 text-white',
       'danger': 'bg-red-600 hover:bg-red-700 text-white',
       'warning': 'bg-orange-500 hover:bg-orange-700 text-white',
       'filter': 'bg-orange-500 hover:bg-orange-700 text-white text-xs',
-      'cancel': 'border border-gray-300 hover:bg-gray-100 text-black',
+      'cancel': 'border border-gray-300 hover:bg-gray-100 text-black dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-800',
       'success': 'bg-green-600 hover:bg-green-700 text-white',
       'primary-outline': 'border border-violet-700 text-violet-700 hover:shadow-md',
       'secondary-outline': 'border border-gray-500 text-gray-700 hover:shadow-md'

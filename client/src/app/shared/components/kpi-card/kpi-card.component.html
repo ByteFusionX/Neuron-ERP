@@ -1,0 +1,9 @@
+<div class="kpi">
+  <p class="kpi-label">{{ label }}</p>
+  <p class="kpi-value" [ngClass]="valueClass">{{ value }}<span *ngIf="unit" class="kpi-unit"> {{ unit }}</span></p>
+  <p class="kpi-foot"><ng-content></ng-content>{{ foot }}</p>
+  <p *ngIf="delta as d" class="kpi-delta" [ngClass]="'kpi-delta-' + d.tone" [title]="deltaTitle">
+    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }}
+    <span class="kpi-delta-note">{{ deltaNote }}</span>
+  </p>
+</div>
