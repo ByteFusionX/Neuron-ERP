@@ -1,7 +1,8 @@
 import { Router } from "express";
 
-import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists, updateCustomerStatus } from "../controllers/customer.controller";
+import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists, updateCustomerStatus, updateCustomerAttachments, removeCustomerAttachment } from "../controllers/customer.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+const upload = require("../common/multer.storage")
 const cusRouter = Router()
 
 cusRouter.use(requirePrivilege("customer"));
@@ -22,5 +23,7 @@ cusRouter.post('/delete', deleteCustomer)
 // rather than pinned to one flag, to avoid wrongly blocking either case.
 cusRouter.patch('/shareOrTransferCustomer', shareOrTransferCustomer)
 cusRouter.patch('/stopSharing', stopSharingCustomer)
+cusRouter.patch('/:customerId/attachments', upload.array('files'), updateCustomerAttachments)
+cusRouter.delete('/:customerId/attachments/:fileName', removeCustomerAttachment)
 
 export default cusRouter;

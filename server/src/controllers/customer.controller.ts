@@ -5,6 +5,7 @@ import { newTrash } from '../controllers/trash.controller'
 import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
 import { getNextSequence } from "../models/counter.model";
+import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 const { ObjectId } = require('mongodb')
 
 const normalizeEmail = (email?: string): string | undefined =>
@@ -841,3 +842,83 @@ export const deleteCustomer = async (req: Request, res: Response, next: NextFunc
         next(error);
     }
 }
+
+export const updateCustomerAttachments = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const { customerId } = req.params;
+
+        const customer = await Customer.findOne({ _id: customerId, isDeleted: { $ne: true } });
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'Customer not found' });
+        }
+
+        const employee = await getEmployeeData(req.user);
+        const role = employee?.category?.role;
+        const isOwner = customer.createdBy?.toString() === employee?._id?.toString();
+        const isShared = (customer.sharedWith || []).some((id) => id.toString() === employee?._id?.toString());
+        if (role !== 'admin' && role !== 'superAdmin' && !isOwner && !isShared) {
+            return res.status(403).json({ success: false, message: 'Forbidden' });
+        }
+
+        let attachments = [];
+        if (req.files && req.files.length > 0) {
+            attachments = await Promise.all(req.files.map(async (file: any) => {
+                await uploadFileToAws(file.filename, file.path);
+                return { fileName: file.filename, originalname: file.originalname };
+            }));
+        }
+
+        if (req.body.existingFiles) {
+            try {
+                const existingFiles = typeof req.body.existingFiles === 'string'
+                    ? JSON.parse(req.body.existingFiles)
+                    : req.body.existingFiles;
+                attachments = [...attachments, ...existingFiles];
+            } catch (error) {
+                console.error('Error parsing existingFiles:', error);
+            }
+        }
+
+        const updatedCustomer = await Customer.findByIdAndUpdate(
+            customerId,
+            { $set: { attachments } },
+            { new: true, runValidators: true }
+        );
+
+        return res.status(200).json({ success: true, message: 'Attachments updated successfully', data: updatedCustomer });
+    } catch (error: any) {
+        console.error('Error in updateCustomerAttachments:', error);
+        next(error);
+    }
+};
+
+export const removeCustomerAttachment = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const { customerId, fileName } = req.params;
+
+        const customer = await Customer.findOne({ _id: customerId, isDeleted: { $ne: true } });
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'Customer not found' });
+        }
+
+        const employee = await getEmployeeData(req.user);
+        const role = employee?.category?.role;
+        const isOwner = customer.createdBy?.toString() === employee?._id?.toString();
+        const isShared = (customer.sharedWith || []).some((id) => id.toString() === employee?._id?.toString());
+        if (role !== 'admin' && role !== 'superAdmin' && !isOwner && !isShared) {
+            return res.status(403).json({ success: false, message: 'Forbidden' });
+        }
+
+        const remaining = (customer.attachments || []).filter((file: any) => file.fileName !== fileName);
+        if (remaining.length === (customer.attachments || []).length) {
+            return res.status(404).json({ success: false, message: 'Attachment not found' });
+        }
+
+        await deleteFileFromAws(fileName);
+        const updated = await Customer.findByIdAndUpdate(customerId, { $set: { attachments: remaining } }, { new: true });
+        return res.status(200).json({ success: true, data: updated });
+    } catch (error: any) {
+        console.error('Error in removeCustomerAttachment:', error);
+        next(error);
+    }
+};

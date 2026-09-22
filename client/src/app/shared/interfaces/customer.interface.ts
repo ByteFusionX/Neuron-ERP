@@ -32,6 +32,11 @@ export interface CustomerStatusHistoryEntry {
     changedDate: string;
 }
 
+export interface CustomerAttachment {
+    fileName: string;
+    originalname: string;
+}
+
 export interface getCustomer {
     _id: string;
     clientRef:string;
@@ -50,6 +55,7 @@ export interface getCustomer {
     status: CustomerStatus;
     statusReason?: string;
     statusHistory?: CustomerStatusHistoryEntry[];
+    attachments?: CustomerAttachment[];
     createdBy:string;
     sharedWith:string[];
     updatedBy?: string;

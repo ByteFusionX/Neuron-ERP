@@ -38,7 +38,45 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'contacts'">
-                    <app-detail-table title="Contact details" [columns]="contactColumns" [rows]="contactRows(row)"></app-detail-table>
+                    <ul *ngIf="contactRows(row).length; else noContacts" class="space-y-2">
+                        <li *ngFor="let c of contactRows(row)"
+                            class="flex items-start gap-3 rounded-lg border border-gray-200 px-3 py-2.5 dark:border-erp-border-dark">
+                            <app-detail-avatar [name]="c['name']"></app-detail-avatar>
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ c['name'] }}</p>
+                                <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ c['designation'] || '—' }}<ng-container *ngIf="c['department']"> · {{ c['department'] }}</ng-container></p>
+                                <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ c['email'] }}<ng-container *ngIf="c['phoneNo']"> · {{ c['phoneNo'] }}</ng-container></p>
+                            </div>
+                        </li>
+                    </ul>
+                    <ng-template #noContacts>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">No contacts added for this customer.</p>
+                    </ng-template>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'documents'">
+                    <app-detail-documents *ngIf="uploadRowId !== row._id; else uploadZone"
+                        title="Customer files"
+                        [documents]="customerDocuments(row)"
+                        [uploadable]="true"
+                        [removable]="true"
+                        [removeDetails]="documentRemoveDetails(row)"
+                        (upload)="startAttachmentUpload(row)"
+                        (open)="onDocumentOpen(row, $event)"
+                        (download)="onDocumentDownload(row, $event)"
+                        (remove)="onDocumentRemove(row, $event)"></app-detail-documents>
+                    <ng-template #uploadZone>
+                        <div class="mb-3 flex items-center justify-between gap-3">
+                            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Upload files</p>
+                            <button type="button" (click)="cancelAttachmentUpload()" [disabled]="isUploadingFiles"
+                                class="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
+                        </div>
+                        <app-sf-file [(ngModel)]="pendingFiles" [accept]="acceptedFiles" [maxSizeMb]="5" [disabled]="isUploadingFiles"></app-sf-file>
+                        <div class="mt-3 flex justify-end">
+                            <button type="button" (click)="uploadAttachments(row)" [disabled]="isUploadingFiles || !pendingFiles.length"
+                                class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">{{ isUploadingFiles ? 'Uploading…' : 'Upload' + (pendingFiles.length ? ' (' + pendingFiles.length + ')' : '') }}</button>
+                        </div>
+                    </ng-template>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'share'">

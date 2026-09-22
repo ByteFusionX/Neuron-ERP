@@ -52,12 +52,14 @@
   color: #ededed;
 }
 
-/* Header block, separated from the scrolling tab content by a full-width rule. */
-.dp-head {
+/* Header block, separated from the scrolling tab content by a full-width rule.
+   Only drawn when a metrics/key-facts strip (panelMeta) actually renders under
+   the title — otherwise it's a bare line under the name with nothing to divide. */
+.dp-head:has(.dp-meta:not(:empty)) {
   border-bottom: 1px solid #d1d5db;
 }
 
-:host-context(html.dark) .dp-head {
+:host-context(html.dark) .dp-head:has(.dp-meta:not(:empty)) {
   border-bottom-color: #3f3f46;
 }
 

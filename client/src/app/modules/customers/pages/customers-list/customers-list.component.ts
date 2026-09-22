@@ -2,10 +2,12 @@ import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
+import { HttpEventType } from '@angular/common/http';
+import { saveAs } from 'file-saver';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { CustomerStatus, getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
+import { CustomerAttachment, CustomerStatus, getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
@@ -13,15 +15,16 @@ import {
   DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView,
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
-import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailOverviewSection, DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { FormatStringPipe } from 'src/app/shared/pipes/formatString.pipe';
 import { NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
-import { FormControl } from '@angular/forms';
+import { FormControl, FormsModule } from '@angular/forms';
 import { ModalService } from 'src/app/shared/components/modal';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailAvatarComponent } from 'src/app/shared/components/detail-panel/detail-avatar.component';
 import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { CustomerFormDrawerComponent } from '../customer-form-drawer/customer-form-drawer.component';
 import { CustomerPickerPanelComponent } from '../../components/picker-panel/picker-panel.component';
 import { ChangeCustomerStatusComponent, ChangeCustomerStatusModalData, ChangeCustomerStatusModalResult } from '../change-customer-status/change-customer-status.component';
@@ -30,7 +33,7 @@ import { ChangeCustomerStatusComponent, ChangeCustomerStatusModalData, ChangeCus
   selector: 'app-customers-list',
   templateUrl: './customers-list.component.html',
   styleUrls: ['./customers-list.component.css'],
-  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailAvatarComponent, ActionButtonComponent, CustomerFormDrawerComponent, CustomerPickerPanelComponent],
+  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, FormsModule, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailAvatarComponent, ActionButtonComponent, SmartFormModule, CustomerFormDrawerComponent, CustomerPickerPanelComponent],
 })
 export class CustomersListComponent implements OnInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<getCustomer>;
@@ -58,13 +61,6 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   detailLoading = false;
   detailTabs: DataGridDetailTab[] = this.buildDetailTabs();
-  readonly contactColumns: DetailTableColumn[] = [
-    { key: 'name', label: 'Name' },
-    { key: 'designation', label: 'Designation' },
-    { key: 'email', label: 'Email' },
-    { key: 'phoneNo', label: 'Phone No.' },
-    { key: 'department', label: 'Department' },
-  ];
 
   customerTitle = (r: getCustomer) => r.companyName ?? '';
   customerSubtitle = (r: getCustomer) => r.clientRef ?? '';
@@ -137,6 +133,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     return [
       { id: 'overview', label: 'Details', icon: 'info' },
       { id: 'contacts', label: 'Contacts', icon: 'users' },
+      { id: 'documents', label: 'Documents', icon: 'files' },
       ...(this.shareAccess ? [{ id: 'share', label: 'Share', icon: 'send' }] : []),
       { id: 'transfer', label: 'Transfer', icon: 'transfer' },
     ];
@@ -524,6 +521,89 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         this.getAllCustomers(() => this.onRowOpen(row));
       },
       error: () => this.toaster.warning('Failed to stop sharing'),
+    });
+  }
+
+  // --- Documents (detail-panel tab) ------------------------------------------------
+
+  uploadRowId: string | null = null;
+  isUploadingFiles = false;
+  pendingFiles: File[] = [];
+  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+
+  customerDocuments(row: getCustomer): DetailDocument[] {
+    return (this.detail(row).attachments ?? []).map((file: CustomerAttachment) => ({
+      id: file.fileName,
+      name: file.originalname,
+    }));
+  }
+
+  documentRemoveDetails(row: getCustomer) {
+    return (doc: DetailDocument) => [
+      { label: 'Customer', value: row.companyName ?? '' },
+      { label: 'File Name', value: doc.name },
+    ];
+  }
+
+  startAttachmentUpload(row: getCustomer): void {
+    this.uploadRowId = row._id;
+    this.pendingFiles = [];
+  }
+
+  cancelAttachmentUpload(): void {
+    this.uploadRowId = null;
+    this.pendingFiles = [];
+  }
+
+  /** Existing files are re-sent because the server replaces the whole set. */
+  uploadAttachments(row: getCustomer): void {
+    if (!this.pendingFiles.length || this.isUploadingFiles) return;
+    const current = this.detail(row);
+    const formData = new FormData();
+    this.pendingFiles.forEach((file) => formData.append('files', file));
+    if (current.attachments?.length) formData.append('existingFiles', JSON.stringify(current.attachments));
+
+    this.isUploadingFiles = true;
+    this._customerService.updateCustomerAttachments(row._id, formData).subscribe({
+      next: (res) => {
+        this.details.set(row._id, { ...current, attachments: res.data?.attachments || [] });
+        this.isUploadingFiles = false;
+        this.cancelAttachmentUpload();
+        this.toaster.success('Files uploaded successfully');
+      },
+      error: () => {
+        this.isUploadingFiles = false;
+        this.toaster.error('Failed to upload files');
+      },
+    });
+  }
+
+  onDocumentOpen(row: getCustomer, document: DetailDocument): void {
+    this.onDocumentDownload(row, document);
+  }
+
+  onDocumentDownload(row: getCustomer, document: DetailDocument): void {
+    this._customerService.downloadFile(document.id).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.Response) {
+          saveAs(new Blob([event.body]), document.name);
+        }
+      },
+      error: (error) => {
+        if (error.status === 404) this.toaster.warning('Sorry, the requested file was not found on the server.');
+        else this.toaster.error('An error occurred while downloading the file.');
+      },
+    });
+  }
+
+  onDocumentRemove(row: getCustomer, document: DetailDocument): void {
+    const current = this.detail(row);
+    this._customerService.removeCustomerAttachment(row._id, document.id).subscribe({
+      next: (res: any) => {
+        this.details.set(row._id, { ...current, attachments: res?.data?.attachments ?? (current.attachments ?? []).filter((f) => f.fileName !== document.id) });
+        this.toaster.success('File deleted');
+      },
+      error: () => this.toaster.error('Failed to delete file'),
     });
   }
 }

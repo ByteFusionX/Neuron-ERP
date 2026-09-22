@@ -64,4 +64,17 @@ export class CustomerService {
     return this.http.patch<getCustomer>(`${this.apiUrl}/customer/status`, data);
   }
 
+  updateCustomerAttachments(customerId: string, formData: FormData): Observable<any> {
+    return this.http.patch<any>(`${this.apiUrl}/customer/${customerId}/attachments`, formData);
+  }
+
+  removeCustomerAttachment(customerId: string, fileName: string): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/customer/${customerId}/attachments/${fileName}`);
+  }
+
+  downloadFile(fileName: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/file/download?file=${encodeURIComponent(fileName)}`,
+      { responseType: 'blob', observe: 'events', reportProgress: true });
+  }
+
 }

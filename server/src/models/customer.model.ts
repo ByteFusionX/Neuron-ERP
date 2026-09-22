@@ -31,6 +31,11 @@ interface StatusHistoryEntry {
   changedDate: Date;
 }
 
+interface AttachmentEntry {
+  fileName: string;
+  originalname: string;
+}
+
 export interface Customer extends Document {
   clientRef: string;
   department: Types.ObjectId;
@@ -52,6 +57,7 @@ export interface Customer extends Document {
   status: CustomerStatus;
   statusReason?: string;
   statusHistory: StatusHistoryEntry[];
+  attachments: AttachmentEntry[];
   createdBy: Types.ObjectId; // Denotes the current owner
   sharedWith: Types.ObjectId[]; // Array of employees with shared access
   createdDate: Date;
@@ -87,6 +93,11 @@ const statusHistorySchema = new Schema({
   changedDate: { type: Date, default: Date.now },
 }, { _id: false });
 
+const attachmentSchema = new Schema({
+  fileName: { type: String, required: true },
+  originalname: { type: String, required: true },
+}, { _id: false });
+
 const customerSchema = new Schema<Customer>({
   clientRef: { type: String, required: true, unique: true },
   department: { type: Schema.Types.ObjectId, ref: "Department", required: true },
@@ -108,6 +119,7 @@ const customerSchema = new Schema<Customer>({
   status: { type: String, enum: CUSTOMER_STATUSES, default: "Active", required: true },
   statusReason: { type: String },
   statusHistory: [{ type: statusHistorySchema }],
+  attachments: [{ type: attachmentSchema }],
   createdBy: { type: Schema.Types.ObjectId, ref: "Employee", required: true }, // Current owner
   sharedWith: [{ type: Schema.Types.ObjectId, ref: "Employee" }], // Employees with shared access
   createdDate: { type: Date, default: Date.now },
