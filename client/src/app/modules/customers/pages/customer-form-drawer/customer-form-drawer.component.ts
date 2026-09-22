@@ -1,6 +1,5 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
-import { NgClass, NgFor, NgIf } from '@angular/common';
-import { NgIcon } from '@ng-icons/core';
+import { NgIf } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
@@ -16,6 +15,9 @@ import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form'
 import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getCustomerType } from 'src/app/shared/interfaces/customerType.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
+import { CustomerAddressFieldsComponent } from '../../components/address-fields/address-fields.component';
+import { CustomerContactRepeaterComponent } from '../../components/contact-repeater/contact-repeater.component';
+import { CustomerFormStepperComponent } from '../../components/form-stepper/form-stepper.component';
 
 /**
  * Create and edit a customer in a slide-over.
@@ -25,7 +27,8 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
   selector: 'app-customer-form-drawer',
   standalone: true,
   templateUrl: './customer-form-drawer.component.html',
-  imports: [NgIf, NgFor, NgClass, NgIcon, ReactiveFormsModule, SmartFormModule, ActionButtonComponent],
+  imports: [NgIf, ReactiveFormsModule, SmartFormModule, ActionButtonComponent,
+    CustomerAddressFieldsComponent, CustomerContactRepeaterComponent, CustomerFormStepperComponent],
 })
 export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -43,6 +46,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   ];
   saving = false;
   companyExists = false;
+  duplicateField: 'email' | 'phone' | 'trn' | null = null;
   canCreateDepartment = false;
   canCreateCustomerType = false;
 
@@ -69,9 +73,14 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     department: [null as string | null, Validators.required],
     companyName: ['', Validators.required],
     companyAddress: ['', Validators.required],
+    companyAddressStructured: this.newAddress(),
+    sameAsBilling: [true],
+    shippingAddress: [''],
+    shippingAddressStructured: this.newAddress(),
     customerType: [null as string | null, Validators.required],
     customerEmailId: ['', [Validators.required, Validators.email]],
     contactNo: ['', Validators.required],
+    trn: [''],
     contactDetails: this.fb.array([this.newContact()]),
   });
 
@@ -98,10 +107,22 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.reset();
     if (this.isEdit && this.customer) this.seed(this.customer);
     this.watchCompanyName();
+    this.watchSameAsBilling();
   }
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+  }
+
+  private newAddress(): FormGroup {
+    return this.fb.group({
+      line1: [''],
+      line2: [''],
+      city: [''],
+      state: [''],
+      country: [''],
+      postalCode: [''],
+    });
   }
 
   private newContact(): FormGroup {
@@ -113,6 +134,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       email: ['', [Validators.required, Validators.email]],
       phoneNo: ['', Validators.required],
       department: [null as string | null, Validators.required],
+      designation: [''],
     }) as unknown as FormGroup;
   }
 
@@ -158,10 +180,30 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     );
   }
 
+  private sameAsBillingWatched = false;
+
+  /** Toggles shippingAddress's required-ness as sameAsBilling changes, and clears it when re-checked. */
+  private watchSameAsBilling(): void {
+    if (this.sameAsBillingWatched) return;
+    this.sameAsBillingWatched = true;
+    const shipping = this.customerForm.controls.shippingAddress;
+    this.subscriptions.add(
+      this.customerForm.controls.sameAsBilling.valueChanges.subscribe((same) => {
+        if (same) {
+          shipping.clearValidators();
+          shipping.setValue('');
+        } else {
+          shipping.setValidators(Validators.required);
+        }
+        shipping.updateValueAndValidity();
+      })
+    );
+  }
+
   // --- form state ------------------------------------------------------------
 
   private readonly stepControls: Record<1 | 2, string[]> = {
-    1: ['department', 'companyName', 'companyAddress', 'customerType', 'customerEmailId', 'contactNo'],
+    1: ['department', 'companyName', 'companyAddress', 'shippingAddress', 'customerType', 'customerEmailId', 'contactNo', 'trn'],
     2: ['contactDetails'],
   };
 
@@ -206,9 +248,12 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.companyExists = false;
     this.contactDetails.clear();
     this.contactDetails.push(this.newContact());
+    this.duplicateField = null;
     this.customerForm.reset({
-      department: null, companyName: '', companyAddress: '', customerType: null, customerEmailId: '', contactNo: '',
+      department: null, companyName: '', companyAddress: '', sameAsBilling: true, shippingAddress: '', customerType: null, customerEmailId: '', contactNo: '', trn: '',
     });
+    this.customerForm.controls.companyAddressStructured.reset();
+    this.customerForm.controls.shippingAddressStructured.reset();
   }
 
   private seed(c: getCustomer): void {
@@ -223,10 +268,18 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       department: id(c.department),
       companyName: c.companyName,
       companyAddress: c.companyAddress,
+      sameAsBilling: c.sameAsBilling ?? true,
+      shippingAddress: c.shippingAddress ?? '',
       customerType: id(c.customerType),
       customerEmailId: c.customerEmailId,
       contactNo: String(c.contactNo ?? ''),
+      trn: c.trn ?? '',
     });
+    this.customerForm.controls.companyAddressStructured.patchValue(c.companyAddressStructured ?? {});
+    this.customerForm.controls.shippingAddressStructured.patchValue(c.shippingAddressStructured ?? {});
+    const shipping = this.customerForm.controls.shippingAddress;
+    shipping.setValidators(c.sameAsBilling ?? true ? [] : Validators.required);
+    shipping.updateValueAndValidity();
     this.customerForm.markAsPristine();
     this.customerForm.markAsUntouched();
   }
@@ -280,10 +333,12 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
 
     this.saving = true;
     this.companyExists = false;
+    this.duplicateField = null;
     const payload: any = this.customerForm.getRawValue();
-    payload.contactDetails = payload.contactDetails.map((c: any) => {
+    payload.contactDetails = payload.contactDetails.map((c: any, i: number) => {
       const { _id, ...rest } = c;
-      return _id ? { ...rest, _id } : rest;
+      const withPrimary = { ...rest, isPrimary: i === 0 };
+      return _id ? { ...withPrimary, _id } : withPrimary;
     });
 
     let request$;
@@ -300,6 +355,13 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
         if (res.companyExist) {
           this.companyExists = true;
           this.step = 1;
+          return;
+        }
+        if (res.duplicateExist) {
+          this.duplicateField = res.duplicateField;
+          this.step = 1;
+          const fieldName = { email: 'email', phone: 'contact number', trn: 'TRN' }[res.duplicateField as 'email' | 'phone' | 'trn'] ?? 'value';
+          this.toaster.warning(`Another customer already uses this ${fieldName}.`, 'Duplicate');
           return;
         }
         const edit = this.isEdit;

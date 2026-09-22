@@ -1,4 +1,4 @@
-import { Component, Input, booleanAttribute, forwardRef } from '@angular/core';
+import { Component, ElementRef, HostListener, Input, booleanAttribute, forwardRef, inject, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
 import { SfControl } from './sf-control';
@@ -11,7 +11,7 @@ import { SF_STYLES, SfOption } from './sf.model';
   imports: [CommonModule],
   providers: [{ provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => SfComboboxComponent), multi: true }],
   template: `
-    <div class="relative">
+    <div class="relative" #wrapper>
       <div class="sf-input flex cursor-text flex-wrap items-center gap-1 !pr-8" [class.py-1]="multiple && selected.length"
         [class.sf-disabled]="disabled" (click)="input.focus()">
         <ng-container *ngIf="multiple">
@@ -24,13 +24,14 @@ import { SF_STYLES, SfOption } from './sf.model';
         <input #input class="sf-bare min-w-[5rem]" [class.!h-7]="multiple && selected.length" role="combobox" autocomplete="off"
           [id]="inputId" [attr.aria-expanded]="open" [value]="open || multiple ? query : selectedLabel"
           [placeholder]="multiple && selected.length ? '' : (selectedLabel || placeholder)" [disabled]="disabled" [readOnly]="readonly"
-          (focus)="open = !readonly; active = 0" (blur)="close()" (input)="query = $any($event.target).value; open = true; active = 0"
+          (focus)="onFocus()" (blur)="close()" (input)="query = $any($event.target).value; open = true; active = 0; positionDropdown()"
           (keydown)="onKey($event)" />
       </div>
       <svg class="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
       </svg>
-      <ul *ngIf="open" role="listbox" class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark py-1 shadow-lg">
+      <ul *ngIf="open" role="listbox" class="fixed z-[999] max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark py-1 shadow-lg"
+        [style.top.px]="dropdownTop" [style.left.px]="dropdownLeft" [style.width.px]="dropdownWidth">
         <li *ngFor="let o of filtered; let i = index" role="option" [attr.aria-selected]="isSelected(o)"
           class="flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-[13px] text-gray-800 dark:text-gray-200"
           [ngClass]="{ 'bg-gray-50 dark:bg-gray-800': i === active, 'cursor-not-allowed text-gray-300 dark:text-gray-600': o.disabled }"
@@ -53,9 +54,44 @@ export class SfComboboxComponent extends SfControl {
   @Input() options: SfOption[] = [];
   @Input({ transform: booleanAttribute }) multiple = false;
 
+  @ViewChild('wrapper') private wrapper!: ElementRef<HTMLElement>;
+
   open = false;
   query = '';
   active = 0;
+
+  dropdownTop = 0;
+  dropdownLeft = 0;
+  dropdownWidth = 0;
+
+  private elementRef = inject(ElementRef);
+
+  @HostListener('document:mousedown', ['$event'])
+  onDocumentMousedown(e: MouseEvent): void {
+    if (this.open && !this.elementRef.nativeElement.contains(e.target)) {
+      this.close();
+    }
+  }
+
+  @HostListener('window:scroll')
+  @HostListener('window:resize')
+  onViewportChange(): void {
+    if (this.open) this.positionDropdown();
+  }
+
+  onFocus(): void {
+    if (this.readonly) return;
+    this.open = true;
+    this.active = 0;
+    this.positionDropdown();
+  }
+
+  positionDropdown(): void {
+    const rect = this.wrapper.nativeElement.getBoundingClientRect();
+    this.dropdownTop = rect.bottom + 4;
+    this.dropdownLeft = rect.left;
+    this.dropdownWidth = rect.width;
+  }
 
   get values(): any[] {
     return Array.isArray(this.value) ? this.value : [];

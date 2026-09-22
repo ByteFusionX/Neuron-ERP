@@ -60,4 +60,8 @@ export class CustomerService {
     return this.http.patch<getCustomer>(`${this.apiUrl}/customer/stopSharing`, data);
   }
 
+  updateCustomerStatus(data: { id: string, status: string, reason?: string }): Observable<getCustomer> {
+    return this.http.patch<getCustomer>(`${this.apiUrl}/customer/status`, data);
+  }
+
 }

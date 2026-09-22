@@ -5,7 +5,7 @@ import { ToastrService } from 'ngx-toastr';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
+import { CustomerStatus, getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
@@ -17,17 +17,20 @@ import { DetailTableComponent } from 'src/app/shared/components/detail-panel/det
 import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { FormatStringPipe } from 'src/app/shared/pipes/formatString.pipe';
 import { NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { FormControl } from '@angular/forms';
 import { ModalService } from 'src/app/shared/components/modal';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailAvatarComponent } from 'src/app/shared/components/detail-panel/detail-avatar.component';
-import { ShareTransferCustomerComponent, ShareTransferModalData, ShareTransferModalResult } from '../share-transfer-customer/share-transfer-customer.component';
+import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 import { CustomerFormDrawerComponent } from '../customer-form-drawer/customer-form-drawer.component';
+import { CustomerPickerPanelComponent } from '../../components/picker-panel/picker-panel.component';
+import { ChangeCustomerStatusComponent, ChangeCustomerStatusModalData, ChangeCustomerStatusModalResult } from '../change-customer-status/change-customer-status.component';
 
 @Component({
   selector: 'app-customers-list',
   templateUrl: './customers-list.component.html',
   styleUrls: ['./customers-list.component.css'],
-  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailAvatarComponent, ActionButtonComponent, CustomerFormDrawerComponent],
+  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailAvatarComponent, ActionButtonComponent, CustomerFormDrawerComponent, CustomerPickerPanelComponent],
 })
 export class CustomersListComponent implements OnInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<getCustomer>;
@@ -57,6 +60,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   detailTabs: DataGridDetailTab[] = this.buildDetailTabs();
   readonly contactColumns: DetailTableColumn[] = [
     { key: 'name', label: 'Name' },
+    { key: 'designation', label: 'Designation' },
     { key: 'email', label: 'Email' },
     { key: 'phoneNo', label: 'Phone No.' },
     { key: 'department', label: 'Department' },
@@ -147,6 +151,17 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       { key: 'department', label: 'Department', valueGetter: (r) => r.department?.departmentName },
       { key: 'customerEmailId', label: 'Email' },
       {
+        key: 'status', label: 'Status', type: 'badge', width: '110px',
+        valueGetter: (r) => r.status,
+        badgeClasses: {
+          Active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          Inactive: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+          Blacklisted: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+          'On Hold': 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          Prospect: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+        },
+      },
+      {
         key: 'shared', label: 'Shared', type: 'badge', width: '100px',
         valueGetter: (r) => (r.sharedWith?.length ? 'Shared' : null),
         badgeClasses: { Shared: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300' },
@@ -157,6 +172,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   private buildRowActions(): void {
     this.rowActions = [
       { id: 'edit', label: 'Edit', icon: 'pencil', quick: true },
+      { id: 'changeStatus', label: 'Change Status', icon: 'flag' },
       { id: 'viewShared', label: 'Shared With', icon: 'eye', hidden: (r) => !this.shareAccess || !r.sharedWith?.length },
       { id: 'share', label: 'Share', icon: 'send', hidden: () => !this.shareAccess },
       { id: 'transfer', label: 'Transfer', icon: 'transfer', hidden: (r) => !this.canTransfer(r) },
@@ -288,6 +304,8 @@ export class CustomersListComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'Company Name', value: c.companyName, noHover: true },
           { type: 'field', label: 'Department', value: c.department?.departmentName, noHover: true },
           { type: 'field', label: 'Created by / Owner', value: this.ownerName(c), noHover: true },
+          { type: 'field', label: 'Status', value: c.status, noHover: true },
+          ...(c.statusReason ? [{ type: 'field' as const, label: 'Status Reason', value: c.statusReason, noHover: true }] : []),
         ],
       },
       {
@@ -296,7 +314,9 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         fields: [
           { type: 'field', label: 'Email', value: c.customerEmailId, noHover: true },
           { type: 'field', label: 'Contact No.', value: c.contactNo, noHover: true },
-          { type: 'field', label: 'Company Address', value: c.companyAddress, noHover: true },
+          { type: 'field', label: 'Billing Address', value: c.companyAddress, noHover: true },
+          { type: 'field', label: 'Shipping Address', value: c.sameAsBilling ? 'Same as billing' : (c.shippingAddress || '—'), noHover: true },
+          { type: 'field', label: 'TRN / VAT Number', value: c.trn || '—', noHover: true },
         ],
       },
     ];
@@ -304,7 +324,8 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   contactRows(row: getCustomer): Record<string, any>[] {
     return (this.detail(row).contactDetails ?? []).map((c) => ({
-      name: `${c.courtesyTitle ? c.courtesyTitle + '. ' : ''}${c.firstName} ${c.lastName}`.trim(),
+      name: `${c.courtesyTitle ? c.courtesyTitle + '. ' : ''}${c.firstName} ${c.lastName}`.trim() + (c.isPrimary ? ' (Primary)' : ''),
+      designation: c.designation || '—',
       email: c.email,
       phoneNo: c.phoneNo,
       department: c.department?.departmentName ?? '',
@@ -337,15 +358,22 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         this.formCustomer = this.detail(row);
         this.formOpen = true;
         break;
+      case 'changeStatus':
+        this.onChangeStatus(row);
+        break;
       case 'viewShared':
         this.grid.activeTab = 'share';
         this.grid.openRow(row);
         break;
       case 'share':
-        this.onShareOrTransfer(row, 'Share');
+        this.grid.activeTab = 'share';
+        this.grid.openRow(row);
+        this.openPicker(row, 'Share');
         break;
       case 'transfer':
-        this.onShareOrTransfer(row, 'Transfer');
+        this.grid.activeTab = 'transfer';
+        this.grid.openRow(row);
+        this.openPicker(row, 'Transfer');
         break;
       case 'delete':
         void this.deleteCustomers([row]);
@@ -399,33 +427,84 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     return this.canTransfer(this.detail(row));
   }
 
-  onShareOrTransfer(row: getCustomer, type: 'Share' | 'Transfer'): void {
-    const data: ShareTransferModalData = { type, customerId: row._id, context: row.companyName };
+  // Inline share/transfer picker shown in the detail panel (no modal) --------------
+  pickerType: 'Share' | 'Transfer' | null = null;
+  pickerLoading = false;
+  pickerSaving = false;
+  employeeOptions: SfOption[] = [];
+  shareControl = new FormControl<string[]>([]);
+  transferControl = new FormControl<string | null>(null);
+
+  openPicker(row: getCustomer, type: 'Share' | 'Transfer'): void {
+    this.pickerType = type;
+    this.pickerLoading = true;
+    this.shareControl.setValue([]);
+    this.transferControl.setValue(null);
+    this._employeeService.getEmployeesForCustomerTransfer(row._id).subscribe({
+      next: (employees) => {
+        this.employeeOptions = (employees || []).map((e) => ({ value: e._id!, label: `${e.firstName} ${e.lastName}` }));
+        this.pickerLoading = false;
+      },
+      error: () => { this.pickerLoading = false; },
+    });
+  }
+
+  closePicker(): void {
+    this.pickerType = null;
+  }
+
+  async confirmPicker(row: getCustomer): Promise<void> {
+    const type = this.pickerType;
+    if (!type) return;
+    const value = type === 'Transfer' ? this.transferControl.value : this.shareControl.value;
+    const employees = (Array.isArray(value) ? value : value ? [value] : []) as string[];
+    if (!employees.length) return;
+
+    if (type === 'Transfer') {
+      const { confirmed } = await this.confirm.open({
+        tone: 'reject',
+        title: 'Transfer customer?',
+        message: `Transfer ownership of "${row.companyName}" to the selected employee?`,
+        consequence: 'You will lose owner-level access to this customer.',
+        confirmLabel: 'Transfer',
+      });
+      if (!confirmed) return;
+    }
+
+    this.pickerSaving = true;
+    this._customerService
+      .shareOrTransferCustomer({ customerId: row._id, employees, type })
+      .subscribe({
+        next: () => {
+          this.pickerSaving = false;
+          this.pickerType = null;
+          this.toaster.success(type === 'Share' ? 'Customer shared' : 'Customer transferred');
+          if (type === 'Transfer') this.grid?.closeDetail();
+          this.getAllCustomers(() => { if (type === 'Share') this.onRowOpen(row); });
+        },
+        error: (error) => {
+          this.pickerSaving = false;
+          this.toaster.error(error?.error?.message || `Failed to ${type.toLowerCase()} customer`);
+        },
+      });
+  }
+
+  onChangeStatus(row: getCustomer): void {
+    const current = this.detail(row);
+    const data: ChangeCustomerStatusModalData = { currentStatus: current.status, context: row.companyName };
     this.modal
-      .open<ShareTransferModalResult>(ShareTransferCustomerComponent, { width: '520px', data })
+      .open<ChangeCustomerStatusModalResult>(ChangeCustomerStatusComponent, { width: '480px', data })
       .afterClosed()
-      .subscribe(async (res) => {
+      .subscribe((res) => {
         if (!res) return;
-        if (type === 'Transfer') {
-          const { confirmed } = await this.confirm.open({
-            tone: 'reject',
-            title: 'Transfer customer?',
-            message: `Transfer ownership of "${row.companyName}" to the selected employee?`,
-            consequence: 'You will lose owner-level access to this customer.',
-            confirmLabel: 'Transfer',
-          });
-          if (!confirmed) return;
-        }
-        this._customerService
-          .shareOrTransferCustomer({ customerId: row._id, employees: res.employees, type: res.type })
-          .subscribe({
-            next: () => {
-              this.toaster.success(type === 'Share' ? 'Customer shared' : 'Customer transferred');
-              if (type === 'Transfer') this.grid?.closeDetail();
-              this.getAllCustomers(() => { if (type === 'Share') this.onRowOpen(row); });
-            },
-            error: (error) => this.toaster.error(error?.error?.message || `Failed to ${type.toLowerCase()} customer`),
-          });
+        this._customerService.updateCustomerStatus({ id: row._id, status: res.status, reason: res.reason }).subscribe({
+          next: () => {
+            this.toaster.success('Customer status updated');
+            this.details.delete(row._id);
+            this.getAllCustomers(() => this.onRowOpen(row));
+          },
+          error: (error) => this.toaster.error(error?.error?.message || 'Failed to update status'),
+        });
       });
   }
 

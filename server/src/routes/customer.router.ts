@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists } from "../controllers/customer.controller";
+import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists, updateCustomerStatus } from "../controllers/customer.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const cusRouter = Router()
 
@@ -13,6 +13,9 @@ cusRouter.get('/view/get/:customerId', getCustomerByCustomerId)
 cusRouter.post('/', requirePrivilege("customer", "create"), createCustomer)
 cusRouter.post('/get',getFilteredCustomers)
 cusRouter.patch('/edit', editCustomer)
+// no dedicated privilege flag exists for customer edit/status yet — left under the
+// base view gate above, same as editCustomer
+cusRouter.patch('/status', updateCustomerStatus)
 cusRouter.post('/delete', deleteCustomer)
 // shareOrTransferCustomer covers both the "share" and "transfer" privilege
 // flags depending on request body — left under the base view gate above

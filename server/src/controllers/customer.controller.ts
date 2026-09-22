@@ -1,11 +1,37 @@
 import { Request, Response, NextFunction } from "express";
-import Customer from '../models/customer.model';
+import Customer, { CUSTOMER_STATUSES } from '../models/customer.model';
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller'
 import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
 import { getNextSequence } from "../models/counter.model";
 const { ObjectId } = require('mongodb')
+
+const normalizeEmail = (email?: string): string | undefined =>
+    email ? email.trim().toLowerCase() : undefined;
+
+const normalizePhone = (phone?: string | number): string | undefined =>
+    phone !== undefined && phone !== null ? String(phone).replace(/[^\d]/g, '') : undefined;
+
+const normalizeTrn = (trn?: string): string | undefined =>
+    trn ? trn.trim().toUpperCase().replace(/\s+/g, '') : undefined;
+
+const normalizeDomain = (email?: string): string | undefined => {
+    const normalized = normalizeEmail(email);
+    return normalized?.includes('@') ? normalized.split('@')[1] : undefined;
+};
+
+const normalizeContactDetails = (contactDetails?: any[]): any[] => {
+    if (!Array.isArray(contactDetails) || contactDetails.length === 0) return contactDetails ?? [];
+    const primaryIndex = contactDetails.findIndex((c) => c.isPrimary);
+    return contactDetails.map((c, i) => ({ ...c, isPrimary: i === (primaryIndex === -1 ? 0 : primaryIndex) }));
+};
+
+const formatAddress = (structured?: { line1?: string; line2?: string; city?: string; state?: string; country?: string; postalCode?: string }): string | undefined => {
+    if (!structured) return undefined;
+    const { line1, line2, city, state, country, postalCode } = structured;
+    return [line1, line2, city, state, postalCode, country].filter((part) => part && part.trim()).join(', ') || undefined;
+};
 
 export const getAllCustomers = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -92,7 +118,8 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
                     department: 1,
                     companyAddress: 1,
                     createdBy: 1,
-                    contactDetails: 1
+                    contactDetails: 1,
+                    status: 1
                 },
             },
             { $sort: { createdDate: -1 } },
@@ -311,12 +338,18 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                     department: { $first: "$department" },
                     companyName: { $first: "$companyName" },
                     companyAddress: { $first: "$companyAddress" },
+                    companyAddressStructured: { $first: "$companyAddressStructured" },
+                    shippingAddress: { $first: "$shippingAddress" },
+                    shippingAddressStructured: { $first: "$shippingAddressStructured" },
+                    sameAsBilling: { $first: "$sameAsBilling" },
+                    trn: { $first: "$trn" },
                     customerType: { $first: "$customerType" },
                     customerEmailId: { $first: "$customerEmailId" },
                     contactNo: { $first: "$contactNo" },
                     createdBy: { $first: "$createdBy" },
                     sharedWith: { $first: "$sharedWith" },
                     createdDate: { $first: "$createdDate" },
+                    status: { $first: "$status" },
                     contactDetails: { $push: "$contactDetails" },
                 },
             },
@@ -380,6 +413,9 @@ export const getCustomerByCustomerId = async (req: Request, res: Response, next:
                     $lookup: { from: 'employees', localField: 'createdBy', foreignField: '_id', as: 'createdBy' }
                 },
                 {
+                    $lookup: { from: 'employees', localField: 'sharedWith', foreignField: '_id', as: 'sharedWith' }
+                },
+                {
                     $unwind: "$contactDetails"
                 },
                 {
@@ -420,11 +456,22 @@ export const getCustomerByCustomerId = async (req: Request, res: Response, next:
                         department: { $first: "$department" },
                         companyName: { $first: "$companyName" },
                         companyAddress: { $first: "$companyAddress" },
+                        companyAddressStructured: { $first: "$companyAddressStructured" },
+                        shippingAddress: { $first: "$shippingAddress" },
+                        shippingAddressStructured: { $first: "$shippingAddressStructured" },
+                        sameAsBilling: { $first: "$sameAsBilling" },
+                        trn: { $first: "$trn" },
                         customerEmailId: { $first: "$customerEmailId" },
                         customerType: { $first: "$customerType" },
                         contactNo: { $first: "$contactNo" },
                         createdBy: { $first: "$createdBy" },
+                        sharedWith: { $first: "$sharedWith" },
                         createdDate: { $first: "$createdDate" },
+                        status: { $first: "$status" },
+                        statusReason: { $first: "$statusReason" },
+                        statusHistory: { $first: "$statusHistory" },
+                        updatedBy: { $first: "$updatedBy" },
+                        updatedDate: { $first: "$updatedDate" },
                         contactDetails: { $push: "$contactDetails" },
                     },
                 },
@@ -593,11 +640,48 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
             return res.status(200).json({ companyExist: true })
         }
 
+        const normalizedEmail = normalizeEmail(customerData.customerEmailId);
+        const normalizedPhone = normalizePhone(customerData.contactNo);
+        const normalizedTrn = normalizeTrn(customerData.trn);
+        const normalizedDomain = normalizeDomain(customerData.customerEmailId);
+
+        const duplicate = await Customer.findOne({
+            $or: [
+                ...(normalizedEmail ? [{ normalizedEmail }] : []),
+                ...(normalizedPhone ? [{ normalizedPhone }] : []),
+                ...(normalizedTrn ? [{ normalizedTrn }] : []),
+            ]
+        });
+        if (duplicate) {
+            return res.status(200).json({
+                duplicateExist: true,
+                duplicateField: duplicate.normalizedTrn && duplicate.normalizedTrn === normalizedTrn ? 'trn'
+                    : duplicate.normalizedEmail && duplicate.normalizedEmail === normalizedEmail ? 'email'
+                    : 'phone',
+            })
+        }
+
+        customerData.normalizedEmail = normalizedEmail;
+        customerData.normalizedPhone = normalizedPhone;
+        customerData.normalizedTrn = normalizedTrn;
+        customerData.normalizedDomain = normalizedDomain;
+        customerData.contactDetails = normalizeContactDetails(customerData.contactDetails);
+        if (customerData.companyAddressStructured) {
+            customerData.companyAddress = formatAddress(customerData.companyAddressStructured) || customerData.companyAddress;
+        }
+        if (!customerData.sameAsBilling && customerData.shippingAddressStructured) {
+            customerData.shippingAddress = formatAddress(customerData.shippingAddressStructured) || customerData.shippingAddress;
+        }
+
         const createdBy = await getEmployeeData(userToken)
         customerData.createdBy = createdBy._id
 
         let clientId: string = await generateClientRef(customerData.createdDate);
         customerData.clientRef = clientId;
+
+        const status = customerData.status || "Active";
+        customerData.status = status;
+        customerData.statusHistory = [{ status, reason: customerData.statusReason, changedBy: createdBy._id, changedDate: new Date() }];
 
         const customer = new Customer(customerData)
         const saveCustomer = await customer.save()
@@ -615,21 +699,56 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
 
 export const editCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { id, department, contactDetails, companyName, customerEmailId, contactNo, companyAddress, customerType } = req.body;
+        const { id, department, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, sameAsBilling, customerType, trn } = req.body;
         const companyNameTrimmed = companyName.trim();
         const companyExist = await Customer.findOne({ companyName: new RegExp(`^${companyNameTrimmed}$`, 'i'), _id: { $ne: id } })
         if (companyExist) {
             return res.status(200).json({ companyExist: true })
         }
+
+        const normalizedEmail = normalizeEmail(customerEmailId);
+        const normalizedPhone = normalizePhone(contactNo);
+        const normalizedTrn = normalizeTrn(trn);
+        const normalizedDomain = normalizeDomain(customerEmailId);
+
+        const duplicate = await Customer.findOne({
+            _id: { $ne: id },
+            $or: [
+                ...(normalizedEmail ? [{ normalizedEmail }] : []),
+                ...(normalizedPhone ? [{ normalizedPhone }] : []),
+                ...(normalizedTrn ? [{ normalizedTrn }] : []),
+            ]
+        });
+        if (duplicate) {
+            return res.status(200).json({
+                duplicateExist: true,
+                duplicateField: duplicate.normalizedTrn && duplicate.normalizedTrn === normalizedTrn ? 'trn'
+                    : duplicate.normalizedEmail && duplicate.normalizedEmail === normalizedEmail ? 'email'
+                    : 'phone',
+            })
+        }
+
+        const editor = await getEmployeeData(req.user);
         const updatedCustomer = await Customer.findOneAndUpdate({ _id: id }, {
             $set: {
                 department: department,
-                contactDetails: contactDetails,
+                contactDetails: normalizeContactDetails(contactDetails),
                 companyName: companyName,
                 customerEmailId: customerEmailId,
-                companyAddress: companyAddress,
+                companyAddress: formatAddress(companyAddressStructured) || companyAddress,
+                companyAddressStructured: companyAddressStructured,
+                shippingAddress: sameAsBilling ? undefined : (formatAddress(shippingAddressStructured) || shippingAddress),
+                shippingAddressStructured: sameAsBilling ? undefined : shippingAddressStructured,
+                sameAsBilling: sameAsBilling,
                 contactNo: contactNo,
                 customerType: customerType,
+                trn: trn,
+                normalizedEmail: normalizedEmail,
+                normalizedPhone: normalizedPhone,
+                normalizedTrn: normalizedTrn,
+                normalizedDomain: normalizedDomain,
+                updatedBy: editor._id,
+                updatedDate: new Date(),
             }
         })
         return res.status(200).json(updatedCustomer)
@@ -659,6 +778,37 @@ const generateClientRef = async (date: string) => {
         return `${String(nextSlNo).padStart(3, '0')}-${year}`;
     } catch (error) {
         console.log(error)
+    }
+}
+
+export const updateCustomerStatus = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id, status, reason } = req.body;
+
+        if (!id || !status) {
+            return res.status(400).json({ message: "Missing required fields" });
+        }
+        if (!CUSTOMER_STATUSES.includes(status)) {
+            return res.status(400).json({ message: "Invalid status" });
+        }
+
+        const customer = await Customer.findOne({ _id: id, isDeleted: { $ne: true } });
+        if (!customer) {
+            return res.status(404).json({ message: "Customer not found" });
+        }
+
+        const changedBy = await getEmployeeData(req.user);
+        customer.status = status;
+        customer.statusReason = reason;
+        customer.statusHistory.push({ status, reason, changedBy: changedBy._id, changedDate: new Date() });
+        customer.updatedBy = changedBy._id;
+        customer.updatedDate = new Date();
+
+        const updatedCustomer = await customer.save();
+        return res.status(200).json(updatedCustomer);
+    } catch (error) {
+        console.error(error);
+        next(error);
     }
 }
 

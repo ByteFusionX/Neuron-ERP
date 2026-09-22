@@ -44,8 +44,14 @@
                 <ng-container *ngSwitchCase="'share'">
                     <div class="mb-3 flex items-center justify-between gap-3">
                         <p class="text-xs text-gray-500 dark:text-gray-400">Employees who can access this customer.</p>
-                        <app-action-button variant="tool" (click)="onShareOrTransfer(row, 'Share')">+ Share</app-action-button>
+                        <app-action-button *ngIf="pickerType !== 'Share'" variant="tool" (click)="openPicker(row, 'Share')">+ Share</app-action-button>
                     </div>
+
+                    <app-customer-picker-panel *ngIf="pickerType === 'Share'" class="mb-4 block" label="Employees"
+                        [control]="shareControl" [multiple]="true" [options]="employeeOptions" [loading]="pickerLoading"
+                        [saving]="pickerSaving" confirmLabel="Share" savingLabel="Sharing…"
+                        (cancel)="closePicker()" (confirm)="confirmPicker(row)"></app-customer-picker-panel>
+
                     <ul class="space-y-2">
                         <li *ngFor="let e of sharedEmployees(row)"
                             class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-erp-border-dark">
@@ -68,12 +74,18 @@
                         </div>
                     </div>
                     <ng-container *ngIf="canTransferRow(row); else noTransfer">
-                        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        <p *ngIf="pickerType !== 'Transfer'" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
                             Transferring hands ownership to another employee. If they are already in the shared list, remove them from it first.
                         </p>
-                        <div class="mt-3">
-                            <app-action-button variant="primary" (click)="onShareOrTransfer(row, 'Transfer')">Transfer customer</app-action-button>
+                        <div *ngIf="pickerType !== 'Transfer'" class="mt-3">
+                            <app-action-button variant="primary" (click)="openPicker(row, 'Transfer')">Transfer customer</app-action-button>
                         </div>
+
+                        <app-customer-picker-panel *ngIf="pickerType === 'Transfer'" class="mt-3 block" label="New owner"
+                            [control]="transferControl" [options]="employeeOptions" [loading]="pickerLoading" [saving]="pickerSaving"
+                            confirmLabel="Transfer" savingLabel="Transferring…"
+                            hint="If the employee is already in the shared list, remove them from it first."
+                            (cancel)="closePicker()" (confirm)="confirmPicker(row)"></app-customer-picker-panel>
                     </ng-container>
                     <ng-template #noTransfer>
                         <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Only the owner, or someone with the transfer privilege, can transfer this customer.</p>
