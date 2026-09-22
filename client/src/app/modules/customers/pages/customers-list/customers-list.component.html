@@ -1,103 +1,88 @@
-<div class="bg-white m-6">
-    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Customers"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="total"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        searchPlaceholder="Name / Client Ref."
+        emptyMessage="No customers found"
+        [createLabel]="createCustomer ? 'Create Customer' : ''"
+        [rowActions]="rowActions"
+        [views]="views"
+        (viewChange)="onViewChange($event)"
+        [bulkActions]="bulkActions"
+        storageKey="customers-list"
+        exportable
+        exportFileName="customers.xlsx"
+        [detailLoading]="detailLoading"
+        [detailTabs]="detailTabs"
+        [detailTitle]="customerTitle"
+        [detailSubtitle]="customerSubtitle"
+        (queryChange)="onQueryChange($event)"
+        (rowOpen)="onRowOpen($event)"
+        (rowAction)="onRowAction($event)"
+        (bulkAction)="onBulkAction($event, grid)"
+        (create)="onCreateCustomer()">
 
-        <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-            <h3 class="font-semibold">Customers</h3>
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'overview'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                </ng-container>
 
-            <div class="flex justify-end gap-4 items-center">
+                <ng-container *ngSwitchCase="'contacts'">
+                    <app-detail-table title="Contact details" [columns]="contactColumns" [rows]="contactRows(row)"></app-detail-table>
+                </ng-container>
 
-                <div
-                    class="h-10 inline-flex items-center justify-between text-body dark:text-white/60 bg-white border border-gray/60 rounded-[6px] pl-[20px] pr-[8px]">
-                    <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="ngModelChange()"
-                        placeholder="Name / Client Ref." (keyup.enter)="onSearch()"
-                        class="bg-transparent border-none text-[15px] shadow-none text-black flex items-center focus:outline-none">
-                    <div class="bg-violet-100 hover:bg-violet-200 flex justify-center items-center rounded-full  cursor-pointer"
-                        (click)="onSearch()">
-
-                        <ng-icon name="heroMagnifyingGlass" class="text-sm text-gray-600  hover:text-violet-700 m-1.5">
-                        </ng-icon>
+                <ng-container *ngSwitchCase="'share'">
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">Employees who can access this customer.</p>
+                        <app-action-button variant="tool" (click)="onShareOrTransfer(row, 'Share')">+ Share</app-action-button>
                     </div>
-                </div>
-                <ng-select appNoLeadingSpace [(ngModel)]="selectedEmployee" class="filter-createdby"
-                    placeholder="Created By" appendTo="body" (change)="onfilterApplied()">
-                    <ng-option *ngFor="let employee of employees$ | async"
-                        [value]="employee._id">{{employee.fullName}}</ng-option>
-                </ng-select>
-                <button *ngIf="createCustomer"
-                    class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2.5 px-4 rounded text-sm"
-                    routerLink="/customers/create">
-                    + Create Customer
-                </button>
-            </div>
-
-        </div>
-    </div>
-
-    <app-skelton-loading *ngIf="isLoading" [lineLength]="4"></app-skelton-loading>
-
-    <div class="m-8  overflow-y-auto">
-        <section *ngIf="!isEmpty && !isLoading" class="mat-elevation-z8 h-fit max-h-[57vh] overflow-auto" tabindex="0">
-
-            <table mat-table [dataSource]="dataSource" class="rounded-lg table-fixed">
-                <ng-container matColumnDef="position">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        No </th>
-                    <td mat-cell *matCellDef="let element; let i=index"> {{i+1}} </td>
+                    <ul class="space-y-2">
+                        <li *ngFor="let e of sharedEmployees(row)"
+                            class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-erp-border-dark">
+                            <app-detail-avatar [name]="e.firstName + ' ' + e.lastName"></app-detail-avatar>
+                            <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ e.firstName }} {{ e.lastName }}</span>
+                            <button *ngIf="e._id !== userId" type="button"
+                                class="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                                (click)="stopSharing(row, e)">Stop sharing</button>
+                        </li>
+                    </ul>
+                    <p *ngIf="!sharedEmployees(row).length" class="text-xs text-gray-500 dark:text-gray-400">This customer is not shared with anyone.</p>
                 </ng-container>
 
-                <!-- ClientRef Column -->
-                <ng-container matColumnDef="clientRef">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Client Ref. </th>
-                    <td mat-cell *matCellDef="let element"> <span
-                            class="text-purple-600 font-semibold">{{element.clientRef}}</span> </td>
+                <ng-container *ngSwitchCase="'transfer'">
+                    <div class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark">
+                        <p class="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Current owner</p>
+                        <div class="mt-2 flex items-center gap-3">
+                            <app-detail-avatar [name]="ownerLabel(row)"></app-detail-avatar>
+                            <span class="text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ ownerLabel(row) || '—' }}</span>
+                        </div>
+                    </div>
+                    <ng-container *ngIf="canTransferRow(row); else noTransfer">
+                        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                            Transferring hands ownership to another employee. If they are already in the shared list, remove them from it first.
+                        </p>
+                        <div class="mt-3">
+                            <app-action-button variant="primary" (click)="onShareOrTransfer(row, 'Transfer')">Transfer customer</app-action-button>
+                        </div>
+                    </ng-container>
+                    <ng-template #noTransfer>
+                        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Only the owner, or someone with the transfer privilege, can transfer this customer.</p>
+                    </ng-template>
                 </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
 
-                <!-- Name Column -->
-                <ng-container matColumnDef="name">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Customer Name </th>
-                    <td mat-cell *matCellDef="let element"> <span
-                            class="text-purple-600 font-semibold">{{element.companyName}}</span> </td>
-                </ng-container>
-
-                <!-- Creator Column -->
-                <ng-container matColumnDef="createdBy">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Created by / Owner </th>
-                    <td mat-cell *matCellDef="let element"> {{element.createdBy.firstName + ' ' +
-                        element.createdBy.lastName}} </td>
-                </ng-container>
-
-                <!-- Department Column -->
-                <ng-container matColumnDef="department">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Department </th>
-                    <td mat-cell *matCellDef="let element"> {{element.department.departmentName}} </td>
-                </ng-container>
-
-                <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-                <tr mat-row *matRowDef="let row; columns: displayedColumns;  let i= index"
-                    class="cursor-pointer hover:bg-gray-100" (click)="onRowClicks(i)"></tr>
-            </table>
-        </section>
-        <div class="w-full bg-white" *ngIf="!isEmpty">
-            <app-pagination [page]="page" [row]="row" [total]="total"
-                (changeData)="onPageNumberClick($event)"></app-pagination>
-        </div>
-        <div *ngIf="isEmpty" class="w-full flex justify-center items-center">
-            <div class="p-3">
-                <img src="assets/images/empty.png" alt="">
-                <p class="m-2 text-center text-gray-500">No Data</p>
-            </div>
-        </div>
-    </div>
-    <div>
-
-    </div>
+    <app-customer-form-drawer [open]="formOpen" [mode]="formMode" [customer]="formCustomer"
+        (saved)="onFormSaved()" (closed)="formOpen = false"></app-customer-form-drawer>
 </div>

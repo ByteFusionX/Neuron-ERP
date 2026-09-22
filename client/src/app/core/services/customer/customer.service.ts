@@ -22,6 +22,12 @@ export class CustomerService {
     return this.http.post<getCustomer>(`${this.apiUrl}/customer`, data)
   }
 
+  checkCompanyExists(companyName: string, excludeId?: string): Observable<{ companyExist: boolean }> {
+    let url = `${this.apiUrl}/customer/checkCompanyExists?companyName=${encodeURIComponent(companyName)}`;
+    if (excludeId) url += `&excludeId=${encodeURIComponent(excludeId)}`;
+    return this.http.get<{ companyExist: boolean }>(url, { context: context() });
+  }
+
   getAllCustomers(userId?:string | undefined): Observable<getCustomer[]> {
     return this.http.get<getCustomer[]>(`${this.apiUrl}/customer/${userId}`)
   }

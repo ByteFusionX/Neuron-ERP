@@ -500,6 +500,12 @@ export const shareOrTransferCustomer = async (req: Request, res: Response, next:
         }
 
         if (type == "Transfer") {
+            const requester = await getEmployeeData(req.user);
+            const canTransfer = requester?.category?.privileges?.customer?.transfer;
+            if (!canTransfer) {
+                return res.status(403).json({ message: "You do not have permission to transfer this customer" });
+            }
+
             // Transfer ownership to the first employee in the array
             const newOwner = employees;
             if (!newOwner) {
@@ -508,7 +514,7 @@ export const shareOrTransferCustomer = async (req: Request, res: Response, next:
                     .json({ message: "Employee ID required for transfer" });
             }
             customer.createdBy = newOwner; // Update ownership
-            customer.sharedWith.filter((res) => res !== newOwner)
+            customer.sharedWith = customer.sharedWith.filter((id) => id.toString() !== newOwner.toString())
         } else if (type == "Share") {
             // Share the customer with specified employees
             const existingIds = customer.sharedWith.map((id) => id.toString());
@@ -555,6 +561,23 @@ export const stopSharingCustomer = async (req: Request, res: Response, next: Nex
     } catch (error) {
         console.error(error);
         next(error);
+    }
+}
+
+export const checkCompanyExists = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const companyName = String(req.query.companyName ?? '').trim();
+        const excludeId = req.query.excludeId ? String(req.query.excludeId) : undefined;
+        if (!companyName) {
+            return res.status(200).json({ companyExist: false })
+        }
+        const filter: any = { companyName: new RegExp(`^${companyName}$`, 'i') };
+        if (excludeId) filter._id = { $ne: excludeId };
+        const companyExist = await Customer.findOne(filter)
+        return res.status(200).json({ companyExist: !!companyExist })
+    } catch (error) {
+        console.error(error)
+        next(error)
     }
 }
 

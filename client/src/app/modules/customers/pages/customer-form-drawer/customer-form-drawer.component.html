@@ -1,0 +1,106 @@
+<app-sf-drawer [title]="title" [subtitle]="subtitle" width="860px"
+    [open]="open" [dirty]="customerForm.dirty" (closed)="onDrawerClosed($event)">
+
+    <!-- Stepper -->
+    <ol class="mb-5 flex items-center gap-2">
+        <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+                [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+                (click)="goToStep(s.n)">
+                <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
+                    [ngClass]="s.n === step
+                        ? 'bg-violet-600 text-white'
+                        : (s.n < step && isStepValid(s.n))
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
+                    <ng-icon *ngIf="s.n < step && isStepValid(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
+                    <ng-template #stepNumber>{{ s.n }}</ng-template>
+                </span>
+                <span class="truncate text-xs font-medium"
+                    [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
+            </button>
+            <span *ngIf="s.n < 2" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
+        </li>
+    </ol>
+
+    <form id="customer-form" [formGroup]="customerForm" (ngSubmit)="submit()" novalidate>
+
+        <!-- Step 1 — company ---------------------------------------------------------- -->
+        <app-sf-section *ngIf="step === 1" title="Company" columns="2">
+            <app-sf-field label="Company Name" [control]="customerForm.controls.companyName">
+                <app-sf-input formControlName="companyName" placeholder="Company name"></app-sf-input>
+                <p *ngIf="companyExists" class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">Company already exists</p>
+            </app-sf-field>
+            <app-sf-field label="Company Address" [control]="customerForm.controls.companyAddress">
+                <app-sf-input formControlName="companyAddress" placeholder="Company address"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field full label="Department" [control]="customerForm.controls.department">
+                <app-sf-radio-group formControlName="department" variant="segmented" [options]="departmentOptions"></app-sf-radio-group>
+            </app-sf-field>
+            <app-sf-field label="Customer Type" [control]="customerForm.controls.customerType">
+                <app-sf-combobox formControlName="customerType" [options]="customerTypeOptions" placeholder="Select customer type"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Customer Email" [control]="customerForm.controls.customerEmailId">
+                <app-sf-input formControlName="customerEmailId" type="email" placeholder="name@company.com"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Contact No" [control]="customerForm.controls.contactNo">
+                <app-sf-input formControlName="contactNo" type="tel" placeholder="Contact number"></app-sf-input>
+            </app-sf-field>
+        </app-sf-section>
+
+        <!-- Step 2 — contacts --------------------------------------------------------- -->
+        <app-sf-section *ngIf="step === 2" title="Contacts" description="The first contact is the primary contact." columns="1">
+            <div *ngFor="let contact of contactDetails.controls; let i = index" [formGroup]="contact"
+                class="rounded-lg border border-gray-200 p-3 dark:border-erp-border-dark">
+                <div class="mb-3 flex items-center justify-between">
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ i === 0 ? 'Primary contact' : 'Contact ' + (i + 1) }}</span>
+                    <button *ngIf="i > 0" type="button" class="text-xs text-red-600 hover:underline dark:text-red-400" (click)="removeContact(i)">Remove</button>
+                </div>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <app-sf-field label="Title" [control]="contact.controls['courtesyTitle']">
+                        <app-sf-radio-group formControlName="courtesyTitle" variant="segmented" [options]="titleOptions"></app-sf-radio-group>
+                    </app-sf-field>
+                    <app-sf-field label="Department" [control]="contact.controls['department']">
+                        <app-sf-combobox formControlName="department" [options]="customerDepartmentOptions" placeholder="Select department"></app-sf-combobox>
+                    </app-sf-field>
+                    <app-sf-field label="First Name" [control]="contact.controls['firstName']">
+                        <app-sf-input formControlName="firstName" placeholder="First name"></app-sf-input>
+                    </app-sf-field>
+                    <app-sf-field label="Last Name" [control]="contact.controls['lastName']">
+                        <app-sf-input formControlName="lastName" placeholder="Last name"></app-sf-input>
+                    </app-sf-field>
+                    <app-sf-field label="Email" [control]="contact.controls['email']">
+                        <app-sf-input formControlName="email" type="email" placeholder="Email"></app-sf-input>
+                    </app-sf-field>
+                    <app-sf-field label="Phone No" [control]="contact.controls['phoneNo']">
+                        <app-sf-input formControlName="phoneNo" type="tel" placeholder="Phone number"></app-sf-input>
+                    </app-sf-field>
+                </div>
+            </div>
+            <div>
+                <app-action-button variant="tool" (click)="addContact()">+ Add Contact</app-action-button>
+            </div>
+        </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button *ngIf="step === 1 && canCreateCustomerType" variant="tool" (click)="createCustomerType()">+ Create Customer Type</app-action-button>
+        <app-action-button *ngIf="step === 2 && canCreateDepartment" variant="tool" (click)="createCustomerDepartment()">+ Create Department</app-action-button>
+        <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="secondary" (click)="previousStep()">Back</app-action-button>
+
+        <!-- Editing already has the data, so saving is offered on the first step too. -->
+        <app-action-button *ngIf="isEdit && step === 1" variant="tool" [disabled]="saving" (click)="submit()">
+            {{ saving ? 'Saving…' : 'Save Changes' }}
+        </app-action-button>
+
+        <app-action-button *ngIf="step === 1" variant="primary" (click)="nextStep()">
+            Next: {{ steps[1].label }}
+        </app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="customer-form" [disabled]="saving">
+            {{ saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create Customer') }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

@@ -1,12 +1,13 @@
 import { Router } from "express";
 
-import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer } from "../controllers/customer.controller";
+import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists } from "../controllers/customer.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const cusRouter = Router()
 
 cusRouter.use(requirePrivilege("customer"));
 
 cusRouter.get('/creators',getCustomerCreators)
+cusRouter.get('/checkCompanyExists', checkCompanyExists)
 cusRouter.get('/:userId',getAllCustomers)
 cusRouter.get('/view/get/:customerId', getCustomerByCustomerId)
 cusRouter.post('/', requirePrivilege("customer", "create"), createCustomer)
