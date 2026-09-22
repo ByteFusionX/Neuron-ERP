@@ -82,7 +82,7 @@
                     <app-sf-input formControlName="subject" placeholder="Quotation subject"></app-sf-input>
                 </app-sf-field>
                 <app-sf-field label="Date" [control]="quoteForm.controls.date">
-                    <app-sf-date formControlName="date" [readonly]="true"></app-sf-date>
+                    <app-sf-date formControlName="date" [readonly]="true" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Closing Date" [control]="quoteForm.controls.closingDate">
                     <app-sf-date formControlName="closingDate" displayFormat="dd/MM/yy"></app-sf-date>

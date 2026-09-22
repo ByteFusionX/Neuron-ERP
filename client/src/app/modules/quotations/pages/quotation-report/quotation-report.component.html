@@ -31,32 +31,8 @@
             </div>
         </div>
 
-        <!-- Filters -->
-        <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
-            <app-sf-field label="Department">
-                <app-sf-select [(ngModel)]="selectedDepartment" [options]="departmentOptions" placeholder="All departments"
-                    (ngModelChange)="onFilterChange()"></app-sf-select>
-            </app-sf-field>
-            <app-sf-field label="Sales Person">
-                <app-sf-combobox [(ngModel)]="selectedSalesPerson" [options]="salesPersonOptions" placeholder="Everyone"
-                    (ngModelChange)="onFilterChange()"></app-sf-combobox>
-            </app-sf-field>
-            <app-sf-field label="Customer">
-                <app-sf-combobox [(ngModel)]="selectedCustomer" [options]="customerOptions" placeholder="All customers"
-                    (ngModelChange)="onFilterChange()"></app-sf-combobox>
-            </app-sf-field>
-            <app-sf-field label="From">
-                <app-sf-date [(ngModel)]="fromDate" displayFormat="dd/MM/yy" (ngModelChange)="onFilterChange()"></app-sf-date>
-            </app-sf-field>
-            <app-sf-field label="To">
-                <app-sf-date [(ngModel)]="toDate" displayFormat="dd/MM/yy" (ngModelChange)="onFilterChange()"></app-sf-date>
-            </app-sf-field>
-        </div>
-
-        <div *ngIf="hasFilters" class="flex items-center justify-between gap-3 border-t border-gray-100 dark:border-erp-border-dark px-4 py-2">
-            <p class="text-xs text-gray-500 dark:text-gray-400">Showing a filtered slice of the quotations.</p>
-            <button type="button" class="text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline" (click)="clearFilters()">Clear filters</button>
-        </div>
+        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the quotations."
+            (valuesChange)="onFilterChange($event)"></app-report-filters>
     </div>
 
     <!-- Loading -->
@@ -73,47 +49,18 @@
 
         <!-- KPI strip -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <div class="qr-kpi">
-                <p class="qr-kpi-label">Total Quoted</p>
-                <p class="qr-kpi-value">{{ r.kpi.totalValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
-                <p class="qr-kpi-foot">{{ r.kpi.totalCount }} quotation{{ r.kpi.totalCount === 1 ? '' : 's' }}</p>
-                <p *ngIf="delta('totalValue') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
-                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
-                </p>
-            </div>
-            <div class="qr-kpi">
-                <p class="qr-kpi-label">Won</p>
-                <p class="qr-kpi-value text-emerald-600 dark:text-emerald-400">{{ r.kpi.wonValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
-                <p class="qr-kpi-foot">{{ r.kpi.wonCount }} won · {{ r.kpi.lostCount }} lost</p>
-                <p *ngIf="delta('wonValue') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
-                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
-                </p>
-            </div>
-            <div class="qr-kpi">
-                <p class="qr-kpi-label">Win Rate</p>
-                <p class="qr-kpi-value">{{ r.kpi.winRate | number: '1.0-1' }}<span class="qr-kpi-unit">%</span></p>
-                <!-- Said out loud, because a win rate over "everything" would be misleading while quotes are still open. -->
-                <p class="qr-kpi-foot">of {{ r.kpi.closedCount }} closed quotation{{ r.kpi.closedCount === 1 ? '' : 's' }}</p>
-                <p *ngIf="delta('winRate') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
-                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
-                </p>
-            </div>
-            <div class="qr-kpi">
-                <p class="qr-kpi-label">Open Pipeline</p>
-                <p class="qr-kpi-value">{{ r.kpi.openValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
-                <p class="qr-kpi-foot">{{ r.kpi.openCount }} still in play</p>
-            </div>
-            <div class="qr-kpi">
-                <p class="qr-kpi-label">Average Quote</p>
-                <p class="qr-kpi-value">{{ r.kpi.avgQuoteValue | numberFormatter }} <span class="qr-kpi-unit">{{ r.currency }}</span></p>
-                <p class="qr-kpi-foot">
-                    <ng-container *ngIf="r.kpi.avgDaysToClose !== null; else noDaysToClose">{{ r.kpi.avgDaysToClose | number: '1.0-0' }} days to close</ng-container>
-                    <ng-template #noDaysToClose>No closed quotes to measure</ng-template>
-                </p>
-                <p *ngIf="delta('avgQuoteValue') as d" class="qr-kpi-delta" [ngClass]="'qr-delta-' + d.tone" title="Compared with the previous period of the same length">
-                    <span aria-hidden="true">{{ d.tone === 'up' ? '▲' : d.tone === 'down' ? '▼' : '–' }}</span> {{ d.text }} <span class="qr-delta-note">vs previous period</span>
-                </p>
-            </div>
+            <app-kpi-card label="Total Quoted" [value]="r.kpi.totalValue | numberFormatter" [unit]="r.currency"
+                [foot]="r.kpi.totalCount + ' quotation' + (r.kpi.totalCount === 1 ? '' : 's')" [delta]="delta('totalValue')"></app-kpi-card>
+            <app-kpi-card label="Won" [value]="r.kpi.wonValue | numberFormatter" [unit]="r.currency" valueClass="text-emerald-600 dark:text-emerald-400"
+                [foot]="r.kpi.wonCount + ' won · ' + r.kpi.lostCount + ' lost'" [delta]="delta('wonValue')"></app-kpi-card>
+            <!-- Said out loud, because a win rate over "everything" would be misleading while quotes are still open. -->
+            <app-kpi-card label="Win Rate" [value]="(r.kpi.winRate | number: '1.0-1') + ''" unit="%"
+                [foot]="'of ' + r.kpi.closedCount + ' closed quotation' + (r.kpi.closedCount === 1 ? '' : 's')" [delta]="delta('winRate')"></app-kpi-card>
+            <app-kpi-card label="Open Pipeline" [value]="r.kpi.openValue | numberFormatter" [unit]="r.currency"
+                [foot]="r.kpi.openCount + ' still in play'"></app-kpi-card>
+            <app-kpi-card label="Average Quote" [value]="r.kpi.avgQuoteValue | numberFormatter" [unit]="r.currency"
+                [foot]="r.kpi.avgDaysToClose !== null ? (r.kpi.avgDaysToClose | number: '1.0-0') + ' days to close' : 'No closed quotes to measure'"
+                [delta]="delta('avgQuoteValue')"></app-kpi-card>
         </div>
 
         <!-- Sections: one at a time on screen, all of them when printed. -->

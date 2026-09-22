@@ -1,6 +1,6 @@
 import { DetailMetric, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
-import { DealCost, DealLine, dealTotals, marginFromPrice } from './deal-pricing';
+import { DealCost, DealLine, dealTotals, marginFromPrice } from 'src/app/shared/utils/deal-pricing.util';
 
 /** Everything the deal sheet renders, derived once from a quotation's `dealData`. */
 export interface DealView {

@@ -20,9 +20,8 @@ import { SfDraftDirective, SfOption, SmartFormModule } from 'src/app/shared/comp
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { PreviousJobsModalComponent } from 'src/app/shared/components/previous-jobs-modal/previous-jobs-modal.component';
-import { CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryTotals } from 'src/app/shared/components/item-entry';
+import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryTotals } from 'src/app/shared/components/item-entry';
 import { CreateProductComponent } from 'src/app/modules/products/modals/create-product/create-product.component';
-import { QuotationSuggestionSource } from '../../services/quotation-suggestion.source';
 
 /** Statuses before the quote has gone to the customer. Mirrors the server, which only revises past these. */
 const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress, QuoteStatus.ReadyForSubmission];
@@ -36,7 +35,7 @@ const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress
   selector: 'app-quote-form-drawer',
   standalone: true,
   templateUrl: './quote-form-drawer.component.html',
-  providers: [DatePipe, QuotationSuggestionSource, { provide: ITEM_SUGGESTION_SOURCE, useExisting: QuotationSuggestionSource }],
+  providers: [DatePipe, CatalogueSuggestionSource, { provide: ITEM_SUGGESTION_SOURCE, useExisting: CatalogueSuggestionSource }],
   imports: [NgIf, NgFor, NgClass, NgIcon, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
 })
 export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {

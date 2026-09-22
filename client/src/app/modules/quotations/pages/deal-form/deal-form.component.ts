@@ -7,7 +7,7 @@ import { dealData, Quotatation } from 'src/app/shared/interfaces/quotation.inter
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
 import { SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
-import { DealCost } from './deal-pricing';
+import { DealCost } from 'src/app/shared/utils/deal-pricing.util';
 
 export type CostType = 'Additional Cost' | 'Supplier Discount' | 'Customer Discount';
 

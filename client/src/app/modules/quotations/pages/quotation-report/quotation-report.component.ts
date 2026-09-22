@@ -5,8 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
 import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexNonAxisChartSeries, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis, ChartComponent } from 'ng-apexcharts';
 import { Observable, Subscription, filter, of, shareReplay, switchMap, take } from 'rxjs';
-import * as ExcelJS from 'exceljs';
-import * as FileSaver from 'file-saver';
+import { ExcelExportService, ExcelSheet } from 'src/app/core/services/export/excel-export.service';
 
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -20,6 +19,8 @@ import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import { KpiCardComponent, KpiDelta } from 'src/app/shared/components/kpi-card/kpi-card.component';
+import { ReportFilterField, ReportFilterValues, ReportFiltersComponent } from 'src/app/shared/components/report-filters/report-filters.component';
 import { DataGridBreadcrumb, DataGridColumn } from 'src/app/shared/components/data-grid/data-grid.model';
 
 type TrendChart = {
@@ -61,12 +62,6 @@ type StatusChart = {
   dataLabels: ApexDataLabels;
 };
 
-/** How a KPI moved against the previous period. */
-export interface KpiDelta {
-  text: string;
-  tone: 'up' | 'down' | 'flat';
-}
-
 type BreakdownKey = 'department' | 'salesPerson' | 'customer';
 type AttentionKey = 'overdue' | 'closingSoon' | 'idle';
 type ReportSection = 'overview' | 'breakdown' | 'attention';
@@ -83,7 +78,7 @@ type ReportSection = 'overview' | 'breakdown' | 'attention';
   providers: [NumberFormatterPipe, DatePipe],
   imports: [
     NgIf, NgFor, NgClass, AsyncPipe, DecimalPipe, DatePipe, RouterLink, FormsModule, NgIcon,
-    ChartComponent, SmartFormModule, ActionButtonComponent, DataGridComponent, NumberFormatterPipe,
+    ChartComponent, SmartFormModule, ActionButtonComponent, DataGridComponent, NumberFormatterPipe, KpiCardComponent, ReportFiltersComponent,
   ],
 })
 export class QuotationReportComponent implements OnInit, OnDestroy {
@@ -99,15 +94,15 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
   failed = false;
 
   // --- Filters (mirrored into the URL so the List | Report toggle keeps them) ---------------
-  selectedSalesPerson: string | null = null;
-  selectedCustomer: string | null = null;
-  selectedDepartment: string | null = null;
-  fromDate: string | null = null;
-  toDate: string | null = null;
+  filters: ReportFilterValues = { salesPerson: null, customer: null, department: null, fromDate: null, toDate: null };
 
-  salesPersonOptions: SfOption[] = [];
-  customerOptions: SfOption[] = [];
-  departmentOptions: SfOption[] = [];
+  filterFields: ReportFilterField[] = [
+    { key: 'department', label: 'Department', type: 'select', options: [], placeholder: 'All departments' },
+    { key: 'salesPerson', label: 'Sales Person', type: 'combobox', options: [], placeholder: 'Everyone' },
+    { key: 'customer', label: 'Customer', type: 'combobox', options: [], placeholder: 'All customers' },
+    { key: 'fromDate', label: 'From', type: 'date' },
+    { key: 'toDate', label: 'To', type: 'date' },
+  ];
 
   breakdownKey: BreakdownKey = 'department';
   readonly breakdownTabs: { key: BreakdownKey; label: string }[] = [
@@ -145,6 +140,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     private _router: Router,
     private _route: ActivatedRoute,
     private numberFormat: NumberFormatterPipe,
+    private excelExport: ExcelExportService,
   ) {}
 
   ngOnInit(): void {
@@ -153,11 +149,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
-        this.selectedSalesPerson = params['salesPerson'] || null;
-        this.selectedCustomer = params['customer'] || null;
-        this.selectedDepartment = params['department'] || null;
-        this.fromDate = params['fromDate'] || null;
-        this.toDate = params['toDate'] || null;
+        this.filters = Object.fromEntries(this.filterFields.map((f) => [f.key, params[f.key] || null]));
         this.fetch();
       })
     );
@@ -180,12 +172,12 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
   private loadFilterOptions(): void {
     this.subscriptions.add(
       this._employeeService.getAllEmployees().subscribe((people: getEmployee[]) => {
-        this.salesPersonOptions = people.map((p) => ({ label: `${p.firstName} ${p.lastName}`, value: p._id }));
+        this.setOptions('salesPerson', people.map((p) => ({ label: `${p.firstName} ${p.lastName}`, value: p._id })));
       })
     );
     this.subscriptions.add(
       this._departmentService.getDepartments().subscribe((departments: getDepartment[]) => {
-        this.departmentOptions = departments.map((d) => ({ label: d.departmentName, value: d._id }));
+        this.setOptions('department', departments.map((d) => ({ label: d.departmentName, value: d._id })));
       })
     );
     // Customers are scoped to the employee, so wait until the employee is known.
@@ -197,9 +189,13 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     );
     this.subscriptions.add(
       customers$.subscribe((customers) => {
-        this.customerOptions = customers.map((c) => ({ label: c.companyName, value: c._id }));
+        this.setOptions('customer', customers.map((c) => ({ label: c.companyName, value: c._id })));
       })
     );
+  }
+
+  private setOptions(key: string, options: SfOption[]): void {
+    this.filterFields = this.filterFields.map((f) => (f.key === key ? { ...f, options } : f));
   }
 
   private currentFilter(): ReportFilter {
@@ -209,11 +205,7 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     }).unsubscribe();
 
     return {
-      salesPerson: this.selectedSalesPerson,
-      customer: this.selectedCustomer,
-      department: this.selectedDepartment,
-      fromDate: this.fromDate,
-      toDate: this.toDate,
+      ...(this.filters as Pick<ReportFilter, "salesPerson" | "customer" | "department" | "fromDate" | "toDate">),
       access: this.access,
       userId: this.userId,
     };
@@ -284,43 +276,18 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
   }
 
   /** Filter changes go through the URL, so a refresh or a switch to the list keeps them. */
-  onFilterChange(): void {
+  onFilterChange(values: ReportFilterValues): void {
     this._router.navigate([], {
       relativeTo: this._route,
-      queryParams: {
-        salesPerson: this.selectedSalesPerson,
-        customer: this.selectedCustomer,
-        department: this.selectedDepartment,
-        fromDate: this.fromDate,
-        toDate: this.toDate,
-      },
+      queryParams: values,
       queryParamsHandling: 'merge',
       replaceUrl: true,
     });
   }
 
-  clearFilters(): void {
-    this.selectedSalesPerson = null;
-    this.selectedCustomer = null;
-    this.selectedDepartment = null;
-    this.fromDate = null;
-    this.toDate = null;
-    this.onFilterChange();
-  }
-
-  get hasFilters(): boolean {
-    return !!(this.selectedSalesPerson || this.selectedCustomer || this.selectedDepartment || this.fromDate || this.toDate);
-  }
-
   /** Query params handed to the List tab, so switching back keeps the same slice of data. */
   get listQueryParams(): Record<string, string | null> {
-    return {
-      salesPerson: this.selectedSalesPerson,
-      customer: this.selectedCustomer,
-      department: this.selectedDepartment,
-      fromDate: this.fromDate,
-      toDate: this.toDate,
-    };
+    return { ...this.filters };
   }
 
   // --- Funnel -------------------------------------------------------------------------------
@@ -594,101 +561,103 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
     const report = this.report;
     if (!report) return;
 
-    const workbook = new ExcelJS.Workbook();
     const currency = report.currency;
-
-    const summary = workbook.addWorksheet('Summary');
-    summary.columns = [{ header: 'Metric', key: 'metric', width: 30 }, { header: 'Value', key: 'value', width: 22 }];
     const k = report.kpi;
-    [
-      ['Total quoted value', `${Math.round(k.totalValue)} ${currency}`],
-      ['Quotations', k.totalCount],
-      ['Won value', `${Math.round(k.wonValue)} ${currency}`],
-      ['Won', k.wonCount],
-      ['Lost', k.lostCount],
-      ['Win rate', `${k.winRate.toFixed(1)}%`],
-      ['Open pipeline value', `${Math.round(k.openValue)} ${currency}`],
-      ['Open quotations', k.openCount],
-      ['Average quote value', `${Math.round(k.avgQuoteValue)} ${currency}`],
-      ['Average days to close', k.avgDaysToClose == null ? 'n/a' : k.avgDaysToClose.toFixed(1)],
-    ].forEach(([metric, value]) => summary.addRow({ metric, value }));
+    const money = (n: number) => Math.round(n);
+    const pct = (n: number) => `${n.toFixed(1)}%`;
 
-    const funnel = workbook.addWorksheet('Funnel');
-    funnel.columns = [
-      { header: 'Stage', key: 'stage', width: 20 },
-      { header: 'Quotes', key: 'count', width: 12 },
-      { header: `Value (${currency})`, key: 'value', width: 20 },
-      { header: 'Share', key: 'pct', width: 12 },
+    const sheets: ExcelSheet[] = [
+      {
+        name: 'Summary',
+        columns: [{ header: 'Metric', key: 'metric', width: 30 }, { header: 'Value', key: 'value', width: 22 }],
+        rows: ([
+          ['Total quoted value', `${money(k.totalValue)} ${currency}`],
+          ['Quotations', k.totalCount],
+          ['Won value', `${money(k.wonValue)} ${currency}`],
+          ['Won', k.wonCount],
+          ['Lost', k.lostCount],
+          ['Win rate', pct(k.winRate)],
+          ['Open pipeline value', `${money(k.openValue)} ${currency}`],
+          ['Open quotations', k.openCount],
+          ['Average quote value', `${money(k.avgQuoteValue)} ${currency}`],
+          ['Average days to close', k.avgDaysToClose == null ? 'n/a' : k.avgDaysToClose.toFixed(1)],
+        ] as [string, unknown][]).map(([metric, value]) => ({ metric, value })),
+      },
+      {
+        name: 'Funnel',
+        columns: [
+          { header: 'Stage', key: 'stage', width: 20 },
+          { header: 'Quotes', key: 'count', width: 12 },
+          { header: `Value (${currency})`, key: 'value', width: 20 },
+          { header: 'Share', key: 'pct', width: 12 },
+        ],
+        rows: report.funnel.map((s) => ({ stage: s.label, count: s.count, value: money(s.value), pct: pct(s.pct) })),
+      },
+      {
+        name: 'Trend',
+        columns: [
+          { header: 'Month', key: 'month', width: 12 },
+          { header: 'Created', key: 'createdCount', width: 12 },
+          { header: `Created value (${currency})`, key: 'createdValue', width: 24 },
+          { header: 'Won', key: 'wonCount', width: 12 },
+          { header: `Won value (${currency})`, key: 'wonValue', width: 24 },
+        ],
+        rows: report.trend.map((t) => ({
+          month: t.month, createdCount: t.createdCount, createdValue: money(t.createdValue), wonCount: t.wonCount, wonValue: money(t.wonValue),
+        })),
+      },
+      ...(['department', 'salesPerson', 'customer'] as BreakdownKey[]).map((key): ExcelSheet => ({
+        name: this.breakdownTabs.find((t) => t.key === key)!.label,
+        columns: [
+          { header: 'Name', key: 'name', width: 32 },
+          { header: 'Quotes', key: 'count', width: 12 },
+          { header: `Value (${currency})`, key: 'value', width: 20 },
+          { header: 'Won', key: 'wonCount', width: 12 },
+          { header: `Won value (${currency})`, key: 'wonValue', width: 20 },
+          { header: 'Win rate', key: 'winRate', width: 12 },
+        ],
+        rows: report.breakdown[key].map((r) => ({
+          name: r.name, count: r.count, value: money(r.value), wonCount: r.wonCount, wonValue: money(r.wonValue), winRate: pct(r.winRate),
+        })),
+      })),
+      {
+        name: 'Needs attention',
+        columns: [
+          { header: 'List', key: 'list', width: 16 },
+          { header: 'Quote Id', key: 'quoteId', width: 18 },
+          { header: 'Customer', key: 'customer', width: 30 },
+          { header: 'Sales Person', key: 'salesPerson', width: 24 },
+          { header: 'Status', key: 'status', width: 20 },
+          { header: `Value (${currency})`, key: 'value', width: 20 },
+          { header: 'Closing Date', key: 'closingDate', width: 16 },
+          { header: 'Days', key: 'days', width: 10 },
+        ],
+        rows: ([
+          { key: 'overdue', label: 'Overdue' },
+          { key: 'closingSoon', label: 'Closing soon' },
+          { key: 'idle', label: 'Idle' },
+        ] as { key: AttentionKey; label: string }[]).flatMap(({ key, label }) =>
+          report.attention[key].map((i) => ({
+            list: label, quoteId: i.quoteId, customer: i.customer, salesPerson: i.salesPerson, status: i.status,
+            value: money(i.value), closingDate: i.closingDate ? new Date(i.closingDate).toLocaleDateString() : '', days: i.days,
+          }))
+        ),
+      },
     ];
-    report.funnel.forEach((s) => funnel.addRow({ stage: s.label, count: s.count, value: Math.round(s.value), pct: `${s.pct.toFixed(1)}%` }));
-
-    const trend = workbook.addWorksheet('Trend');
-    trend.columns = [
-      { header: 'Month', key: 'month', width: 12 },
-      { header: 'Created', key: 'createdCount', width: 12 },
-      { header: `Created value (${currency})`, key: 'createdValue', width: 24 },
-      { header: 'Won', key: 'wonCount', width: 12 },
-      { header: `Won value (${currency})`, key: 'wonValue', width: 24 },
-    ];
-    report.trend.forEach((t) =>
-      trend.addRow({ month: t.month, createdCount: t.createdCount, createdValue: Math.round(t.createdValue), wonCount: t.wonCount, wonValue: Math.round(t.wonValue) })
-    );
-
-    (['department', 'salesPerson', 'customer'] as BreakdownKey[]).forEach((key) => {
-      const sheet = workbook.addWorksheet(this.breakdownTabs.find((t) => t.key === key)!.label);
-      sheet.columns = [
-        { header: 'Name', key: 'name', width: 32 },
-        { header: 'Quotes', key: 'count', width: 12 },
-        { header: `Value (${currency})`, key: 'value', width: 20 },
-        { header: 'Won', key: 'wonCount', width: 12 },
-        { header: `Won value (${currency})`, key: 'wonValue', width: 20 },
-        { header: 'Win rate', key: 'winRate', width: 12 },
-      ];
-      report.breakdown[key].forEach((r) =>
-        sheet.addRow({ name: r.name, count: r.count, value: Math.round(r.value), wonCount: r.wonCount, wonValue: Math.round(r.wonValue), winRate: `${r.winRate.toFixed(1)}%` })
-      );
-    });
-
-    const attention = workbook.addWorksheet('Needs attention');
-    attention.columns = [
-      { header: 'List', key: 'list', width: 16 },
-      { header: 'Quote Id', key: 'quoteId', width: 18 },
-      { header: 'Customer', key: 'customer', width: 30 },
-      { header: 'Sales Person', key: 'salesPerson', width: 24 },
-      { header: 'Status', key: 'status', width: 20 },
-      { header: `Value (${currency})`, key: 'value', width: 20 },
-      { header: 'Closing Date', key: 'closingDate', width: 16 },
-      { header: 'Days', key: 'days', width: 10 },
-    ];
-    const lists: { key: AttentionKey; label: string }[] = [
-      { key: 'overdue', label: 'Overdue' },
-      { key: 'closingSoon', label: 'Closing soon' },
-      { key: 'idle', label: 'Idle' },
-    ];
-    lists.forEach(({ key, label }) =>
-      report.attention[key].forEach((i) =>
-        attention.addRow({
-          list: label, quoteId: i.quoteId, customer: i.customer, salesPerson: i.salesPerson, status: i.status,
-          value: Math.round(i.value), closingDate: i.closingDate ? new Date(i.closingDate).toLocaleDateString() : '', days: i.days,
-        })
-      )
-    );
 
     if (report.lostReasons.length) {
-      const lost = workbook.addWorksheet('Lost reasons');
-      lost.columns = [
-        { header: 'Reason', key: 'reason', width: 44 },
-        { header: 'Quotes', key: 'count', width: 12 },
-        { header: `Value (${currency})`, key: 'value', width: 20 },
-      ];
-      report.lostReasons.forEach((r) => lost.addRow({ reason: r.reason, count: r.count, value: Math.round(r.value) }));
+      sheets.push({
+        name: 'Lost reasons',
+        columns: [
+          { header: 'Reason', key: 'reason', width: 44 },
+          { header: 'Quotes', key: 'count', width: 12 },
+          { header: `Value (${currency})`, key: 'value', width: 20 },
+        ],
+        rows: report.lostReasons.map((r) => ({ reason: r.reason, count: r.count, value: money(r.value) })),
+      });
     }
 
-    workbook.worksheets.forEach((sheet) => (sheet.getRow(1).font = { bold: true }));
-    workbook.xlsx.writeBuffer().then((buffer: BlobPart) => {
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      FileSaver.saveAs(blob, 'quotation-report.xlsx');
-    });
+    void this.excelExport.download('quotation-report.xlsx', sheets);
   }
 
   /** The browser's own print-to-PDF, against a print stylesheet — no second rendering to keep in step. */

@@ -16,6 +16,7 @@
             [createLabel]="createQuotation ? 'Create Quote' : ''"
             [rowActions]="rowActions"
             [views]="views"
+            (viewChange)="onViewChange($event)"
             [bulkActions]="bulkActions"
             storageKey="quotation-list"
             [density]="density"

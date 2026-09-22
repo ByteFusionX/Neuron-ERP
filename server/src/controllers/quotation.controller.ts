@@ -1,5 +1,6 @@
 import { NextFunction, Response, Request } from "express";
 import Quotation, { quoteStatus } from '../models/quotation.model';
+import { canTransitionQuoteStatus, isKnownQuoteStatus, quoteStatusRequiresReason } from '../common/quote-status-transitions';
 import Job, { allocateStatus } from '../models/job.model';
 import Department from '../models/department.model';
 import Employee from '../models/employee.model'
@@ -28,10 +29,20 @@ const markEnquiryQuotedIfPromoted = async (quote: any, fromStatus?: string, toSt
     await Enquiry.findByIdAndUpdate(quote.enqId, { status: 'Quoted' });
 }
 
+// An enquiry still with presales has no finished estimation, so it can't be quoted yet.
+const PRESALE_IN_PROGRESS_STATUSES = ['Assigned To Presale Manager', 'Assigned To Presale Engineer', 'Assigned To Presales', 'Rejected by Presale Engineer', 'Rejected by Presale Manager'];
+
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const quoteData = req.body;
         const userToken = req.user;
+
+        if (quoteData.enqId) {
+            const linkedEnquiry = await Enquiry.findById(quoteData.enqId, { status: 1 }).lean();
+            if (linkedEnquiry && PRESALE_IN_PROGRESS_STATUSES.includes(linkedEnquiry.status)) {
+                return res.status(409).json({ success: false, message: 'This enquiry is still with presales. Complete the presales workflow before creating a quote.' });
+            }
+        }
 
         
         const createdBy = await getEmployeeData(userToken)
@@ -63,10 +74,6 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
                 // would drop the enquiry out of the pending lists, which filter on status != 'Quoted'.
                 if (quoteData.status !== quoteStatus.Draft) {
                     await Enquiry.findByIdAndUpdate(quoteData.enqId, { status: 'Quoted' });
-                }
-                const event = await Event.findOneAndUpdate({ collectionId: quoteData.enqId }, { $set: { collectionId: quote._id } });
-                if (event) {
-                    await Quotation.findOneAndUpdate({ _id: saveQuote._id }, { $set: { eventId: event._id } });
                 }
             } else {
                 console.log(`Enquiry with ID ${quoteData.enqId} not found.`);
@@ -1012,12 +1019,26 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         if (!statusCheck) {
             return res.status(404).json({ message: "Quote not found" });
         }
-        if (status === 'Lost' && !String(reason ?? '').trim()) {
-            return res.status(400).json({ message: "A reason is required when marking a quote as Lost" });
+        if (!isKnownQuoteStatus(status) || status === quoteStatus.Expired) {
+            return res.status(400).json({ message: "Invalid quote status" });
         }
 
         if (statusCheck?.status === 'Expired') {
             return res.status(400).json({ message: "Quote is expired (past its closing date) and can no longer change status" });
+        }
+
+        if (status === statusCheck.status) {
+            return res.status(400).json({ message: `Quote is already ${status}` });
+        }
+        if (!canTransitionQuoteStatus(statusCheck.status, status)) {
+            return res.status(400).json({ message: `A quote cannot move from "${statusCheck.status}" to "${status}"` });
+        }
+        if (quoteStatusRequiresReason(statusCheck.status, status) && !String(reason ?? '').trim()) {
+            return res.status(400).json({ message: status === quoteStatus.Lost ? "A reason is required when marking a quote as Lost" : "A reason is required for this status change" });
+        }
+        // Once a deal sheet is raised (and not rejected) the order is in handover; it must not be silently undone from here.
+        if (statusCheck.status === quoteStatus.Won && statusCheck.dealData?.status && statusCheck.dealData.status !== 'rejected') {
+            return res.status(400).json({ message: "A deal sheet is in progress or approved, so this quote can no longer leave Won" });
         }
 
         type UpdateQuery = {
@@ -1042,6 +1063,12 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
             };
         }
 
+        // Leaving Won discards the deal sheet and LPO files, so the history records what was removed.
+        const discarded = statusCheck.status === quoteStatus.Won
+            ? [statusCheck.dealData?.dealId && `deal sheet ${statusCheck.dealData.dealId}`, statusCheck.lpoFiles?.length && `${statusCheck.lpoFiles.length} LPO file(s)`].filter(Boolean)
+            : [];
+        const historyReason = [String(reason ?? '').trim(), discarded.length ? `Removed: ${discarded.join(', ')}` : ''].filter(Boolean).join(' — ');
+
         const editorData = await getEmployeeData(req.user);
         updateObject.$push = {
             editHistory: {
@@ -1050,7 +1077,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
                 action: 'StatusChanged',
                 fromStatus: statusCheck.status,
                 toStatus: status,
-                ...(String(reason ?? '').trim() ? { reason: String(reason).trim() } : {}),
+                ...(historyReason ? { reason: historyReason } : {}),
             }
         };
 
@@ -1087,6 +1114,24 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         normalizeQuoteDepartments(quoteData)
 
         const existingQuote = await Quotation.findById(quoteId).lean();
+        if (existingQuote) {
+            // Content is frozen once the quote expires or its deal sheet is approved (the order is in handover).
+            if (existingQuote.status === quoteStatus.Expired) {
+                return res.status(400).json({ message: "Quote is expired and can no longer be edited" });
+            }
+            if (existingQuote.dealData?.status === 'approved') {
+                return res.status(400).json({ message: "The deal sheet is approved, so this quote can no longer be edited" });
+            }
+            // Status moves go through the same rules as the status endpoint, so an edit cannot skip them.
+            if (quoteData.status && quoteData.status !== existingQuote.status) {
+                if (!isKnownQuoteStatus(quoteData.status) || !canTransitionQuoteStatus(existingQuote.status, quoteData.status)) {
+                    return res.status(400).json({ message: `A quote cannot move from "${existingQuote.status}" to "${quoteData.status}"` });
+                }
+                if (quoteData.status === quoteStatus.Won || existingQuote.status === quoteStatus.Won) {
+                    return res.status(400).json({ message: "Use the status update to move a quote into or out of Won" });
+                }
+            }
+        }
         const changes = await resolveHistoryNames(buildFieldChanges(existingQuote, quoteData));
 
         // A quote that already went to the customer keeps its old content as a revision snapshot when the commercial content changes.

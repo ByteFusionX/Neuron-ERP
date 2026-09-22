@@ -7,6 +7,7 @@ import { ToastrService } from 'ngx-toastr';
 import { HttpEventType } from '@angular/common/http';
 import { BehaviorSubject, Subscription, combineLatest, filter, map, switchMap, take, tap } from 'rxjs';
 import { EventsService } from 'src/app/core/services/events/events.service';
+import { EventActionsService } from 'src/app/core/services/events/event-actions.service';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
@@ -17,13 +18,14 @@ import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
-import { StatusUpdateModalComponent, StatusUpdateModalData, StatusUpdateResult } from '../status-update-modal/status-update-modal.component';
+import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
+import { quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EditHistoryModalComponent } from 'src/app/shared/components/edit-history-modal/edit-history-modal.component';
-import { RevisionHistoryModalComponent } from '../revision-history-modal/revision-history-modal.component';
+import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app/shared/components/revision-history-modal/revision-history-modal.component';
 import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer.component';
 import { DetailRevisionChipComponent } from 'src/app/shared/components/detail-panel/detail-revision-chip.component';
 import {
@@ -42,7 +44,7 @@ import { DetailClauseListComponent } from 'src/app/shared/components/detail-pane
 import { DetailClause, DetailDocument, DetailSummaryRow, DetailTableColumn, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 import { DEAL_COST_COLUMNS, DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
-import { marginFromPrice } from '../deal-form/deal-pricing';
+import { marginFromPrice } from 'src/app/shared/utils/deal-pricing.util';
 import {
   DetailViewBadge,
   DetailViewBreadcrumb,
@@ -214,6 +216,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
   private subscriptions = new Subscription();
   private confirm = inject(ConfirmDialogService);
+  private _eventActions = inject(EventActionsService);
   private numberFormatter = new NumberFormatterPipe();
   private boldPipe = new ParseBoldTextPipe();
   private bracketsPipe = new ParseBracketsTextPipe(inject(DomSanitizer));
@@ -330,8 +333,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     const q = this.quoteData;
     if (!q?._id || this.isStatusLocked) return;
     this._dialog
-      .open<StatusUpdateModalComponent, StatusUpdateModalData, StatusUpdateResult | null>(StatusUpdateModalComponent, {
-        data: { quoteId: q._id, currentStatus: q.status as QuoteStatus },
+      .open<StatusChangeModalComponent, any, StatusChangeResult<QuoteStatus> | null>(StatusChangeModalComponent, {
+        data: quoteStatusModalData(q.status as QuoteStatus),
         width: '480px',
         maxWidth: '95vw',
         autoFocus: false,
@@ -339,10 +342,11 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       .afterClosed()
       .subscribe((result) => {
         if (!result) return;
+        const wasWon = q.status === QuoteStatus.Won;
         this.quotationService.updateQuoteStatus(q._id as string, result.status, result.reason).subscribe({
           next: (res) => {
             q.status = (res as any) || result.status;
-            if (result.status === 'Won') { q.lpoFiles = [] as any; delete (q as any).dealData; }
+            if (wasWon) { q.lpoFiles = [] as any; delete (q as any).dealData; }
             this.toast.success('Status updated.');
             this.reloadHistory();
             this.rebuild();
@@ -441,8 +445,14 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     if (!this.quoteData?._id) {
       return;
     }
+    const quoteId = this.quoteData._id;
+    const data: RevisionHistoryModalData = {
+      load: () => this.quotationService.getQuoteRevisions(quoteId),
+      entityLabel: 'quotation',
+      ref: this.quoteData.quoteId,
+    };
     this._dialog.open(RevisionHistoryModalComponent, {
-      data: { quoteId: this.quoteData._id, quoteRef: this.quoteData.quoteId },
+      data,
       width: '920px',
       maxWidth: '95vw',
       autoFocus: false,
@@ -852,45 +862,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   }
 
   get eventItems(): DetailTaskItem[] {
-    return this.events.map((e) => ({
-      id: e._id,
-      title: e.event,
-      kind: 'event' as const,
-      date: e.date as any,
-      done: e.status === 'completed' || e.status === 'success',
-      eventStatus: (e.status || 'pending') as DetailTaskItem['eventStatus'],
-      outcomeable: true,
-      assignee: e.employee ? `Assigned to ${[e.employee.firstName, e.employee.lastName].filter(Boolean).join(' ') || e.employee.fullName || ''}`.trim() : undefined,
-      description: e.summary,
-      deletable: this.isEventCreator(e.createdBy),
-      attachments: (e.eventFiles || []).map((f) => ({ id: f.fileName, name: f.originalname })),
-    }));
-  }
-
-  async onEventOutcome(item: DetailTaskItem, status: 'success' | 'cancelled'): Promise<void> {
-    const success = status === 'success';
-    const { confirmed } = await this.confirm.open({
-      tone: success ? 'approve' : 'reject',
-      title: success ? 'Mark Event Successful' : 'Cancel Event',
-      message: success ? 'Mark this event as successful?' : 'Mark this event as cancelled?',
-      details: [{ label: 'Event', value: item.title }],
-      confirmLabel: success ? 'Mark successful' : 'Cancel event',
-      cancelLabel: 'Keep as is',
-    });
-    if (!confirmed) { return; }
-    this._eventsService.eventStatus(item.id, status).subscribe((res: any) => {
-      if (res.success === true) {
-        this.toast.success(success ? 'Event marked successful' : 'Event cancelled');
-        this.events = this.events.map((e) => (e._id === item.id ? { ...e, status } : e));
-      }
-    });
-  }
-
-  private isEventCreator(createdBy: any): boolean {
-    const employeeId = this._employeeService.employeeToken()?.id;
-    if (!employeeId || !createdBy) { return false; }
-    const idToCompare = typeof createdBy === 'string' ? createdBy : createdBy._id || createdBy;
-    return employeeId == idToCompare;
+    return this._eventActions.toItems(this.events);
   }
 
   private reloadEvents(): void {
@@ -905,111 +877,44 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   onAddEvent(): void {
     const q = this.quoteData;
     if (!q) { return; }
-    const contactPersons: SfOption[] = ((q.client as any)?.contactDetails || []).map((c: ContactDetail) => ({
-      label: `${c.firstName} ${c.lastName}`,
-      value: c._id,
-    }));
-
-    this.modal.open<EventModalResult>(EventCreateModalComponent, {
-      width: '560px',
-      data: {
-        context: q.quoteId || q._id,
-        assignable: true,
-        employees: this._employeeService.getAllEmployees(),
-        contactPersonable: true,
-        contactPersons,
-        requireSummary: true,
-      },
-    }).afterClosed().subscribe((event) => {
-      if (!event) { return; }
-      const eventData = {
-        from: 'Enquiry',
-        collectionId: q._id,
-        event: event.title,
-        date: event.date,
-        employee: event.employeeId,
-        contactPerson: event.contactPersonId,
-        summary: event.description,
-      };
-      const formData = new FormData();
-      formData.append('eventData', JSON.stringify(eventData));
-      this._eventsService.newEvent(formData).subscribe({
-        next: (res) => {
-          if (res?.event) {
-            this.toast.success(res.message || 'Event created successfully');
-            this.reloadEvents();
-          }
-        },
-        error: () => this.toast.error('Failed to create event'),
-      });
-    });
+    this._eventActions.create({
+      from: 'Quotation',
+      collectionId: q._id as string,
+      context: q.quoteId || (q._id as string),
+      contactDetails: (q.client as any)?.contactDetails,
+    }).subscribe((created) => { if (created) { this.reloadEvents(); } });
   }
 
   onToggleEvent(item: DetailTaskItem): void {
-    if (item.done) { return; }
-    this._eventsService.eventStatus(item.id, 'completed').subscribe((res: any) => {
-      if (res.success === true) {
-        this.toast.success('Event completion updated');
-        this.events = this.events.map((e) => (e._id === item.id ? { ...e, status: 'completed' } : e));
-      }
+    this._eventActions.markCompleted(item).subscribe((ok) => {
+      if (ok) { this.events = this.events.map((e) => (e._id === item.id ? { ...e, status: 'completed' } : e)); }
+    });
+  }
+
+  async onEventOutcome(item: DetailTaskItem, status: 'success' | 'cancelled'): Promise<void> {
+    (await this._eventActions.setOutcome(item, status)).subscribe((ok) => {
+      if (ok) { this.events = this.events.map((e) => (e._id === item.id ? { ...e, status } : e)); }
     });
   }
 
   async onDeleteEvent(item: DetailTaskItem): Promise<void> {
-    const { confirmed } = await this.confirm.open({
-      tone: 'reject',
-      title: 'Delete Event',
-      message: 'Are you sure you want to delete this event?',
-      details: [{ label: 'Event', value: item.title }],
-      confirmLabel: 'Delete',
-      cancelLabel: 'Keep',
-    });
-    if (!confirmed) { return; }
-    this._eventsService.eventDelete(item.id).subscribe((res: any) => {
-      if (res.success) {
-        this.toast.success('Event Deleted');
-        this.events = this.events.filter((e) => e._id !== item.id);
-      }
+    (await this._eventActions.delete(item)).subscribe((ok) => {
+      if (ok) { this.events = this.events.filter((e) => e._id !== item.id); }
     });
   }
 
   onPreviewEventFile(file: { id: string; name: string }): void {
-    this._enquiryService.downloadFile(file.id).subscribe({
-      next: (event) => {
-        if (event.type === HttpEventType.Response) {
-          const fileURL = URL.createObjectURL(new Blob([event.body], { type: event.body.type || 'application/octet-stream' }));
-          window.open(fileURL, '_blank');
-          setTimeout(() => URL.revokeObjectURL(fileURL), 10000);
-        }
-      },
-      error: (error) => {
-        if (error.status === 404) {
-          this.toast.warning('Sorry, the requested file was not found on the server.');
-        } else {
-          this.toast.error('An error occurred while trying to preview the file.');
-        }
-      },
-    });
+    this._eventActions.previewFile(file);
   }
 
   onDeleteEventFile(item: DetailTaskItem, file: { id: string; name: string }): void {
-    this._dialog
-      .open(ConfirmationDialogComponent, {
-        data: { title: 'Delete File', description: 'Are you sure you want to delete this file?', icon: 'heroExclamationCircle', IconColor: 'red' },
-      })
-      .afterClosed()
-      .subscribe((confirmed: boolean) => {
-        if (!confirmed) { return; }
-        this._eventsService.eventFileDelete(item.id, file.id).subscribe((res: any) => {
-          if (res.success) {
-            this.toast.success('File Deleted');
-            this.events = this.events.map((e) =>
-              e._id === item.id ? { ...e, eventFiles: (e.eventFiles || []).filter((f) => f.fileName !== file.id) } : e,
-            );
-            if (this.quoteData) { this.buildDocuments(this.quoteData); }
-          }
-        });
-      });
+    this._eventActions.deleteFile(item, file).subscribe((ok) => {
+      if (!ok) { return; }
+      this.events = this.events.map((e) =>
+        e._id === item.id ? { ...e, eventFiles: (e.eventFiles || []).filter((f) => f.fileName !== file.id) } : e,
+      );
+      if (this.quoteData) { this.buildDocuments(this.quoteData); }
+    });
   }
 
   /** The shell takes new-array inputs, so header data is rebuilt on load / option change rather than in getters. */
