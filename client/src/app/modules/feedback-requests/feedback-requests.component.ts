@@ -25,7 +25,7 @@ import { PaginationComponent } from '../../shared/components/pagination/paginati
     selector: 'app-feedback-requests',
     templateUrl: './feedback-requests.component.html',
     styleUrls: ['./feedback-requests.component.css'],
-    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent]
+    imports: [NgIf, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, NgClass, MatTooltip, NgIcon, NgFor, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, ViewEstimationComponent]
 })
 export class FeedbackRequestsComponent {
   @ViewChildren('feebackItem') feebackItems!: QueryList<ElementRef>;
@@ -134,10 +134,10 @@ export class FeedbackRequestsComponent {
     }
   }
 
+  estimationTarget: { estimation: Estimations; enqId: string } | null = null;
+
   onViewEstimation(estimation: Estimations, enqId: string) {
-    this._dialog.open(ViewEstimationComponent, {
-      data: { estimation, enqId, isEdit: false }
-    })
+    this.estimationTarget = { estimation, enqId };
   }
 
   markFeedbackAsViewed(enqId: string) {

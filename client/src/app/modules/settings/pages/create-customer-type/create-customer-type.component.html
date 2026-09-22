@@ -1,35 +1,27 @@
-<div class="border border-white border-b-gray-300 p-3 px-6 flex justify-between ">
-    <h3 class="text-md font-medium">Create Customer Type</h3>
-    <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onCloseClicked()">
-        <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-    </button>
-</div>
-<div class="p-5">
-    <form action="">
-        <div class="mt-1 flex justify-between items-center">
-            <label for="" class="me-2 text-gray-700">Customer Type Name:</label>
-            <div>
-                <input type="text" name="" appNoLeadingSpace
-                    class="w-80 mt-1 px-3 py-1.5 border border-gray-200 rounded-md ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-violet-300 outline-none sm:text-sm sm:leading-6"
-                    placeholder="Eg:- Education" [formControl]="name">
-                <p *ngIf="nameError" class="text-red-500 italic text-sm">Please enter customer type name</p>
-            </div>
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+    <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+        <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-100 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-900">
+            <app-dp-icon name="tag" size="w-5 h-5"></app-dp-icon>
+        </span>
+        <div class="min-w-0 flex-1">
+            <h2 class="text-base font-semibold leading-6">{{ newCustomerType ? 'Create customer type' : 'Edit customer type' }}</h2>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Group customers by the kind of business they run.</p>
         </div>
-    </form>
-</div>
-<div class="border border-white border-t-gray-300 p-3 px-6 flex justify-end gap-2">
-    <button class="bg-orange-600 hover:bg-orange-500 text-white font-medium py-2 px-4 rounded text-sm"  type="button"
-        (click)="onCloseClicked()">
-        Cancel
-    </button>
-    <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
-        *ngIf="newCustomerType; else updateBlock" (click)="onSubmit()">
-        Create
-    </button>
-    <ng-template #updateBlock>
-        <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm"
-            (click)="onUpdate()" [disabled]="!name.dirty">
-            Update
+        <button type="button" (click)="onCloseClicked()" aria-label="Close"
+            class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+            <app-dp-icon name="close" size="w-4 h-4"></app-dp-icon>
         </button>
-    </ng-template>
+    </header>
+
+    <form id="customer-type-form" (ngSubmit)="save()" novalidate class="overflow-y-auto px-6 py-5">
+        <app-sf-field label="Customer type name" [control]="name" [messages]="{ required: 'Please enter customer type name' }">
+            <app-sf-input [formControl]="name" placeholder="Eg:- Education"></app-sf-input>
+        </app-sf-field>
+    </form>
+
+    <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+        <app-action-button variant="secondary" (click)="onCloseClicked()">Cancel</app-action-button>
+        <app-action-button variant="primary" type="submit" form="customer-type-form"
+            [disabled]="!newCustomerType && !name.dirty">{{ newCustomerType ? 'Create' : 'Update' }}</app-action-button>
+    </footer>
 </div>

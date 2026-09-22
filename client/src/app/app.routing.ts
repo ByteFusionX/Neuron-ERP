@@ -8,8 +8,6 @@ import { ViewEmployeeComponent } from './modules/employees/view-employee/view-em
 import { EmployeesComponent } from './modules/employees/employees.component';
 import { HomeLandingComponent } from './modules/home/pages/home-landing/home-landing.component';
 import { CustomersListComponent } from './modules/customers/pages/customers-list/customers-list.component';
-import { CreateCustomerDialog } from './modules/customers/pages/create-customer/create-customer.component';
-import { CustomerEditComponent } from './modules/customers/pages/customer-edit/customer-edit.component';
 import { AssignedJobsListComponent } from './modules/assigned-jobs/pages/assigned-jobs-list/assigned-jobs-list.component';
 import { UploadEstimationComponent } from './modules/assigned-jobs/pages/upload-estimation/upload-estimation.component';
 import { CompletedJobsListComponent } from './modules/assigned-jobs/pages/completed-jobs-list/completed-jobs-list.component';
@@ -106,8 +104,6 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/customers/customers.component').then((c) => c.CustomersComponent),
     children: [
       { path: '', canActivate: [RoleGuard], component: CustomersListComponent },
-      { path: 'create', canActivate: [RoleGuard], component: CreateCustomerDialog },
-      { path: 'edit', canActivate: [RoleGuard], component: CustomerEditComponent }
     ]
   },
   {
@@ -115,7 +111,8 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/enquirys/enquiry.component').then((c) => c.EnquiryComponent),
     children: [
-      { path: '', loadComponent: () => import('./modules/enquirys/pages/enquiry-list/enquiry-list.component').then((c) => c.EnquiryListComponent) }
+      { path: '', loadComponent: () => import('./modules/enquirys/pages/enquiry-list/enquiry-list.component').then((c) => c.EnquiryListComponent) },
+      { path: 'report', loadComponent: () => import('./modules/enquirys/pages/enquiry-report/enquiry-report.component').then((c) => c.EnquiryReportComponent) }
     ]
   },
   {

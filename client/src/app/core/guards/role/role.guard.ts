@@ -57,13 +57,6 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 }
                 break;
 
-            case '/customers/create':
-                if (!privileges?.customer?.create) {
-                    router.navigate(['/home']);
-                    return false;
-                }
-                break;
-
             case '/enquiry':
                 if (privileges?.enquiry?.viewReport == 'none') {
                     router.navigate(['/home']);

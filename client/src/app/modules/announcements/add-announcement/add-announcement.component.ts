@@ -9,7 +9,6 @@ import { MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { AnnouncementService } from 'src/app/core/services/announcement/announcement.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { CreateCustomerDialog } from 'src/app/modules/customers/pages/create-customer/create-customer.component';
 
 import { announcementGetData, announcementPostData } from 'src/app/shared/interfaces/announcement.interface';
 import { GetCategory } from 'src/app/shared/interfaces/employee.interface';
@@ -35,7 +34,7 @@ export class AddAnnouncementComponent implements OnDestroy, OnInit {
   private mySubscription!: Subscription;
 
   constructor(
-    public dialogRef: MatDialogRef<CreateCustomerDialog>,
+    public dialogRef: MatDialogRef<AddAnnouncementComponent>,
     @Inject(MAT_DIALOG_DATA) public data: { data?: announcementGetData },
     private fb: FormBuilder,
     private _service: AnnouncementService,

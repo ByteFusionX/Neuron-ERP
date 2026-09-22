@@ -187,7 +187,7 @@ export class BlockItemComponent implements OnInit {
 
   createCustomer(): void {
     this.dialogRef.close();
-    this.router.navigate(['/customers/create']);
+    this.router.navigate(['/customers'], { queryParams: { create: 1 } });
   }
 
   onCancel(): void {
