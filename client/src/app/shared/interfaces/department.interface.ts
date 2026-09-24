@@ -6,6 +6,9 @@ export interface getDepartment {
     departmentHead: getEmployee[];
     forCustomerContact: boolean;
     createdDate: number;
+    code?: string;
+    isActive?: boolean;
+    salesTarget?: number;
 }
 
 export interface Department{
@@ -13,7 +16,10 @@ export interface Department{
     departmentName:string,
     departmentHead?:string,
     forCustomerContact?:boolean,
-    createdDate:number
+    createdDate:number,
+    code?:string,
+    isActive?:boolean,
+    salesTarget?:number
 }
 
 export interface getInternalDep{
@@ -21,4 +27,9 @@ export interface getInternalDep{
     departmentName: string;
     departmentHead: getEmployee[] | string;
     createdDate: number;
+    description?: string;
+    parentDepartment?: string | null;
+    code?: string;
+    costCentre?: string;
+    isActive?: boolean;
 }

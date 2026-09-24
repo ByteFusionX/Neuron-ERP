@@ -4,6 +4,11 @@ interface Category extends Document {
   categoryName: string;
   role: string;
   isSalespersonWithTarget: boolean,
+  responsibilities: string[];
+  approvalLimit?: {
+    maxAmount: number | null;
+    maxDiscountPercent: number | null;
+  };
   privileges: Privileges;
   isDeleted: boolean;
 }
@@ -16,6 +21,7 @@ export interface Privileges {
   employee: {
     viewReport: string;
     create: boolean;
+    viewCompensation?: boolean;
   };
   announcement: {
     viewReport: string;
@@ -38,6 +44,7 @@ export interface Privileges {
   quotation: {
     viewReport: string;
     create: boolean;
+    canApprove?: boolean;
   };
   jobSheet: {
     viewReport: string;
@@ -102,6 +109,11 @@ export interface Privileges {
     canIssueCreditNote: boolean;
     canCreateReplacementLPO: boolean;
   };
+  sensitiveData?: {
+    viewCost: boolean;
+    viewMargin: boolean;
+    overrideDiscount: boolean;
+  };
   portalManagement: {
     department: boolean;
     notesAndTerms: boolean;
@@ -130,6 +142,16 @@ const categorySchema = new Schema<Category>({
   isSalespersonWithTarget: {
     type: Boolean,
     default:false
+  },
+  // Keys from the Responsibility master list (Settings > Master Data).
+  responsibilities: {
+    type: [String],
+    default: [],
+  },
+  // Largest amount / discount this role may approve. null = no limit set.
+  approvalLimit: {
+    maxAmount: { type: Number, default: null },
+    maxDiscountPercent: { type: Number, default: null },
   },
   privileges: {
     type: Object,

@@ -74,6 +74,9 @@ interface Company extends Document {
   description: string;
   address: Address;
   targets: Target[];
+  taxRegistrationNumber?: string;
+  registrationNumber?: string;
+  logo?: string;
 }
 
 const companySchema = new Schema<Company>({
@@ -91,6 +94,15 @@ const companySchema = new Schema<Company>({
   },
   targets: {
     type: [targetSchema],
+  },
+  taxRegistrationNumber: {
+    type: String,
+  },
+  registrationNumber: {
+    type: String,
+  },
+  logo: {
+    type: String,
   },
 });
 

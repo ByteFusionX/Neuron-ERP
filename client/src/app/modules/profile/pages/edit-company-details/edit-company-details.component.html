@@ -92,11 +92,39 @@
             </div>
           </div>
         </div>
-       
-        
-        
 
-       
+        <div class="flex flex-wrap -mx-3 mb-6">
+          <div class="w-full md:w-1/2 px-3 mb-6">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="taxRegistrationNumber">
+              Tax Registration Number
+            </label>
+            <input formControlName="taxRegistrationNumber" id="taxRegistrationNumber" appNoLeadingSpace
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              type="text" placeholder="Enter the tax registration number.">
+          </div>
+
+          <div class="w-full md:w-1/2 px-3 mb-6">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="registrationNumber">
+              Company Registration Number
+            </label>
+            <input formControlName="registrationNumber" id="registrationNumber" appNoLeadingSpace
+              class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
+              type="text" placeholder="Enter the company registration number.">
+          </div>
+
+          <div class="w-full px-3">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="logo">
+              Company Logo
+            </label>
+            <div class="flex items-center gap-4">
+              <img *ngIf="logoPreviewUrl" [src]="logoPreviewUrl" alt="Company logo"
+                class="h-14 w-14 object-contain border border-gray-200 rounded bg-white">
+              <input id="logo" type="file" accept="image/*" (change)="onLogoSelected($event)"
+                class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-violet-100 file:text-violet-700 hover:file:bg-violet-200">
+              <ng-icon *ngIf="isUploadingLogo" class="spin" name="heroArrowPath"></ng-icon>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   

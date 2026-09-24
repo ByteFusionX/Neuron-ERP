@@ -1,0 +1,383 @@
+<div class="w-full">
+    <app-settings-section-header sectionId="general"></app-settings-section-header>
+
+    <!-- DESIGN MOCKUP: all values below are dummy data pending design approval -->
+    <div class="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+        <ng-icon name="heroInformationCircle" class="text-base"></ng-icon>
+        Name, logo, tax and registration numbers and address are live. Currency, fiscal year, banking, branches and branding toggles are still sample data.
+    </div>
+
+    <!-- Hero -->
+    <div class="relative overflow-hidden bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm mb-6">
+        <div class="h-20 bg-gradient-to-r from-violet-600 via-violet-500 to-indigo-500"></div>
+        <div class="px-6 pb-5">
+            <div class="flex flex-wrap items-end justify-between gap-4 -mt-10">
+                <div class="flex items-end gap-4">
+                    <div class="group relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-4 border-white bg-white shadow-md dark:border-erp-surface-dark dark:bg-gray-800">
+                        <img *ngIf="companyDetails?.logo; else initials" [src]="companyDetails!.logo" alt="Company logo" class="h-full w-full object-contain">
+                        <ng-template #initials><span class="text-2xl font-bold text-violet-600">{{ companyInitials }}</span></ng-template>
+                        <button type="button" (click)="openCompanyDetails()" aria-label="Change company logo"
+                            class="absolute inset-0 hidden items-center justify-center bg-black/50 group-hover:flex cursor-pointer">
+                            <ng-icon name="heroPhoto" class="text-white text-xl"></ng-icon>
+                        </button>
+                    </div>
+                    <div class="pb-1">
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ companyDetails?.name || (isCompanyDetailsLoading ? 'Loading...' : 'Company name not set') }}</h2>
+                            <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">Active</span>
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                            <ng-container *ngIf="companyDetails">{{ companyDetails.description }} · {{ companyDetails.address.city }}, {{ companyDetails.address.country }}</ng-container>
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 pb-1">
+                    <button type="button" class="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-white/5">
+                        <ng-icon name="heroArrowsRightLeft"></ng-icon>
+                        Entity: Neuron Trading W.L.L.
+                        <ng-icon name="heroChevronDown"></ng-icon>
+                    </button>
+                    <app-action-button variant="primary" (click)="openCompanyDetails()">Edit Profile</app-action-button>
+                </div>
+            </div>
+
+            <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/5">
+                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Base Currency</p>
+                    <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">QAR</p>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/5">
+                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Fiscal Year</p>
+                    <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">Jan – Dec 2026</p>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/5">
+                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Branches</p>
+                    <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">3 locations</p>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/5">
+                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Profile Completeness</p>
+                    <div class="mt-1 flex items-center gap-2">
+                        <div class="h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-gray-700">
+                            <div class="h-1.5 w-[85%] rounded-full bg-violet-600"></div>
+                        </div>
+                        <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">85%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3 mb-6">
+        <!-- Legal & Tax -->
+        <div class="bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-5">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                    <ng-icon name="heroIdentification" class="text-violet-600 dark:text-violet-400"></ng-icon>
+                </div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Legal &amp; Tax</h3>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div>
+                    <p class="text-xs text-gray-500">Legal Name</p>
+                    <p class="font-medium text-gray-900 dark:text-gray-100">{{ companyDetails?.name || '-' }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Tax Registration No.</p>
+                    <p class="font-medium text-gray-900 dark:text-gray-100">{{ companyDetails?.taxRegistrationNumber || 'Not set' }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-500">Commercial Registration No.</p>
+                    <p class="font-medium text-gray-900 dark:text-gray-100">{{ companyDetails?.registrationNumber || 'Not set' }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Address & Contact -->
+        <div class="bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-5">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                    <ng-icon name="heroMapPin" class="text-violet-600 dark:text-violet-400"></ng-icon>
+                </div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Head Office</h3>
+            </div>
+            <div class="space-y-3 text-sm">
+                <div>
+                    <p class="text-xs text-gray-500">Address</p>
+                    <p *ngIf="companyDetails; else noAddress" class="font-medium text-gray-900 dark:text-gray-100">{{ companyDetails.address.street }}, {{ companyDetails.address.area }}<br>{{ companyDetails.address.city }}, {{ companyDetails.address.country }}</p>
+                    <ng-template #noAddress><p class="font-medium text-gray-900 dark:text-gray-100">Not set</p></ng-template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Finance setup -->
+        <div class="bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-5">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                    <ng-icon name="heroScale" class="text-violet-600 dark:text-violet-400"></ng-icon>
+                </div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Financial Setup</h3>
+            </div>
+            <div class="space-y-4 text-sm">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-gray-500">Base Currency</p>
+                        <p class="font-medium text-gray-900 dark:text-gray-100">QAR — Qatari Riyal</p>
+                    </div>
+                    <span class="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                        title="Locked after go-live">
+                        <ng-icon name="heroLockClosed"></ng-icon> Locked
+                    </span>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-gray-500">Fiscal Year Start</p>
+                            <p class="font-medium text-gray-900 dark:text-gray-100">1 January</p>
+                        </div>
+                        <span class="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                            <ng-icon name="heroLockClosed"></ng-icon> Locked
+                        </span>
+                    </div>
+                    <div class="mt-2 grid grid-cols-12 gap-0.5">
+                        <div *ngFor="let m of ['J','F','M','A','M','J','J','A','S','O','N','D']; let i = index"
+                            class="rounded py-1 text-center text-[10px] font-medium"
+                            [ngClass]="i < 8 ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400' : i === 8 ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400'">
+                            {{m}}
+                        </div>
+                    </div>
+                    <p class="mt-1 text-[11px] text-gray-500">Period 9 of 12 open · earlier periods closed</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6">
+        <!-- Banking -->
+        <div class="bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-5">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                        <ng-icon name="heroBanknotes" class="text-violet-600 dark:text-violet-400"></ng-icon>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Banking Details</h3>
+                        <p class="text-[11px] text-gray-500">Printed on invoice footers</p>
+                    </div>
+                </div>
+                <button type="button" class="flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700">
+                    <ng-icon name="heroPlus"></ng-icon> Add account
+                </button>
+            </div>
+            <div class="space-y-3">
+                <div class="rounded-lg border border-violet-200 bg-violet-50/40 p-3 dark:border-violet-500/30 dark:bg-violet-500/5">
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">Sample National Bank</p>
+                        <span class="rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-medium text-white">Default</span>
+                    </div>
+                    <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+                        <div><span class="text-gray-500">Account</span><p class="font-mono text-gray-800 dark:text-gray-200">•••• •••• 4821</p></div>
+                        <div><span class="text-gray-500">SWIFT</span><p class="font-mono text-gray-800 dark:text-gray-200">SMPLQAQA</p></div>
+                        <div class="col-span-2"><span class="text-gray-500">IBAN</span><p class="font-mono text-gray-800 dark:text-gray-200">QA00 SMPL •••• •••• •••• •••• 4821</p></div>
+                    </div>
+                </div>
+                <div class="rounded-lg border border-gray-200 p-3 dark:border-erp-border-dark">
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">Example Commercial Bank</p>
+                        <span class="text-[11px] text-gray-500">USD account</span>
+                    </div>
+                    <p class="mt-1 font-mono text-xs text-gray-600 dark:text-gray-400">•••• •••• 9054</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Branches -->
+        <div class="bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-5">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                        <ng-icon name="heroBuildingLibrary" class="text-violet-600 dark:text-violet-400"></ng-icon>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Branches &amp; Warehouses</h3>
+                        <p class="text-[11px] text-gray-500">Each with its own address and numbering prefix</p>
+                    </div>
+                </div>
+                <button type="button" class="flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700">
+                    <ng-icon name="heroPlus"></ng-icon> Add location
+                </button>
+            </div>
+            <div class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+                <div *ngFor="let b of [
+                        { name: 'Head Office', type: 'Branch', city: 'Al Sadd, Doha', prefix: 'DOH', icon: 'heroBuildingOffice', primary: true },
+                        { name: 'Industrial Area Store', type: 'Warehouse', city: 'Street 24, Industrial Area', prefix: 'IND', icon: 'heroCube', primary: false },
+                        { name: 'Lusail Office', type: 'Branch', city: 'Marina District, Lusail', prefix: 'LUS', icon: 'heroBuildingOffice', primary: false }
+                    ]"
+                    class="flex items-center justify-between py-2.5">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 dark:bg-white/5">
+                            <ng-icon [name]="b.icon" class="text-gray-600 dark:text-gray-400"></ng-icon>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {{b.name}}
+                                <span *ngIf="b.primary" class="ml-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-500/10 dark:text-violet-400">Primary</span>
+                            </p>
+                            <p class="text-[11px] text-gray-500">{{b.type}} · {{b.city}}</p>
+                        </div>
+                    </div>
+                    <span class="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-[11px] text-gray-700 dark:bg-white/5 dark:text-gray-300">{{b.prefix}}-####</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document branding -->
+    <div class="bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-5 mb-6">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                <ng-icon name="heroDocumentText" class="text-violet-600 dark:text-violet-400"></ng-icon>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Document Branding</h3>
+                <p class="text-[11px] text-gray-500">How your company appears on printed and PDF documents</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-5">
+            <div class="lg:col-span-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 dark:border-erp-border-dark dark:bg-white/5">
+                <div class="rounded-md bg-white p-4 shadow-sm dark:bg-gray-900">
+                    <div class="flex items-start justify-between border-b border-gray-200 pb-3 dark:border-gray-700">
+                        <div class="flex items-center gap-2">
+                            <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded bg-violet-100 text-sm font-bold text-violet-600">
+                                <img *ngIf="companyDetails?.logo; else previewInitials" [src]="companyDetails!.logo" alt="" class="h-full w-full object-contain">
+                                <ng-template #previewInitials>{{ companyInitials }}</ng-template>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-gray-900 dark:text-gray-100">{{ companyDetails?.name }}</p>
+                                <p *ngIf="companyDetails" class="text-[10px] text-gray-500">{{ companyDetails.address.street }}, {{ companyDetails.address.city }}, {{ companyDetails.address.country }}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm font-bold tracking-wide text-violet-700">TAX INVOICE</p>
+                            <p *ngIf="companyDetails?.taxRegistrationNumber" class="text-[10px] text-gray-500">{{ companyDetails!.taxRegistrationNumber }}</p>
+                            <p class="text-[10px] text-gray-500">INV-DOH-0001</p>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5 py-3">
+                        <div class="h-2 w-3/4 rounded bg-gray-100 dark:bg-gray-800"></div>
+                        <div class="h-2 w-1/2 rounded bg-gray-100 dark:bg-gray-800"></div>
+                        <div class="h-2 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
+                    </div>
+                    <div class="border-t border-gray-200 pt-2 text-[10px] text-gray-500 dark:border-gray-700">
+                        Bank: Sample National Bank · IBAN QA00 SMPL •••• 4821 · SWIFT SMPLQAQA
+                    </div>
+                </div>
+                <p class="mt-2 text-center text-[11px] text-gray-500">Live preview</p>
+            </div>
+            <div class="lg:col-span-2 space-y-2">
+                <p class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Show company branding on</p>
+                <label *ngFor="let d of [
+                        { label: 'Quotations', on: true },
+                        { label: 'Tax Invoices', on: true },
+                        { label: 'Delivery Notes', on: true },
+                        { label: 'Purchase Orders (LPO)', on: false }
+                    ]"
+                    class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-erp-border-dark">
+                    <span class="text-gray-800 dark:text-gray-200">{{d.label}}</span>
+                    <span class="relative inline-flex h-5 w-9 items-center rounded-full transition"
+                        [ngClass]="d.on ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'">
+                        <span class="inline-block h-4 w-4 rounded-full bg-white shadow transition"
+                            [ngClass]="d.on ? 'translate-x-4' : 'translate-x-0.5'"></span>
+                    </span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Yearly Targets section hidden for now (2026-09-23); re-enable by restoring the *ngIf below -->
+    <div class="bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-6"
+        *ngIf="false && this.privileges?.portalManagement?.companyTarget">
+        <div class="flex items-start justify-between gap-3 mb-4">
+            <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                    <ng-icon name="heroBuildingLibrary" class="text-violet-600 dark:text-violet-400 text-lg"></ng-icon>
+                </div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Yearly Targets for Profit and Sales Revenue</h3>
+            </div>
+            <app-action-button variant="primary" (click)="addCompanyTarget()" *ngIf="!openCreateForm && !isTargetEmpty">+ Add Target</app-action-button>
+        </div>
+        <app-skelton-loading *ngIf="isTargetLoading" [lineLength]="2"></app-skelton-loading>
+
+        <div *ngIf="!isTargetLoading && isTargetEmpty"
+            class="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 dark:border-erp-border-dark px-6 py-10 text-center">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 dark:bg-violet-500/10 mb-3">
+                <ng-icon name="heroBuildingLibrary" class="text-violet-600 dark:text-violet-400 text-xl"></ng-icon>
+            </div>
+            <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">No yearly targets yet</p>
+            <p class="mt-1 max-w-sm text-xs text-gray-500 dark:text-gray-400">
+                Set a Sales Revenue and Gross Profit target for a year, along with the critical and moderate thresholds used to flag performance.
+            </p>
+            <app-action-button variant="primary" class="mt-4" (click)="addCompanyTarget()">+ Add Target</app-action-button>
+        </div>
+
+        <div *ngIf="!isTargetLoading && !isTargetEmpty" class="max-h-[32rem] overflow-y-auto pr-1 space-y-4">
+            <!-- Threshold legend -->
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-red-500"></span>Critical (below)</span>
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-400"></span>Moderate</span>
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>On track to target</span>
+            </div>
+
+            <div *ngFor="let target of targets"
+                class="rounded-lg border p-4 transition-colors"
+                [ngClass]="target.year == currentYear
+                    ? 'border-violet-300 bg-violet-50/40 dark:border-violet-500/40 dark:bg-violet-500/5'
+                    : 'border-gray-200 dark:border-erp-border-dark'">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ target.year }}</span>
+                        <span *ngIf="target.year == currentYear"
+                            class="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                            Current year
+                        </span>
+                    </div>
+                    <button type="button" *ngIf="target._id" (click)="editTarget(target._id)"
+                        class="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-violet-600 dark:hover:bg-white/5"
+                        [attr.aria-label]="'Edit ' + target.year + ' target'" title="Edit target">
+                        <ng-icon name="heroPencilSquare"></ng-icon>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <div *ngFor="let metric of targetMetrics">
+                        <div class="flex items-baseline justify-between gap-2 mb-2">
+                            <span class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ metric.label }}</span>
+                            <span class="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                {{ target[metric.key].targetValue | numberFormatter }} <span class="text-xs font-normal text-gray-500">QAR</span>
+                            </span>
+                        </div>
+
+                        <!-- Threshold bar: full width = target value -->
+                        <div class="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/5">
+                            <div class="h-full bg-red-500"
+                                [style.width.%]="zonePercent(target[metric.key].criticalRange, target[metric.key].targetValue)"></div>
+                            <div class="h-full bg-amber-400"
+                                [style.width.%]="zonePercent(target[metric.key].moderateRange - target[metric.key].criticalRange, target[metric.key].targetValue)"></div>
+                            <div class="h-full flex-1 bg-emerald-500"></div>
+                        </div>
+
+                        <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                                <p class="text-gray-500 dark:text-gray-400">Critical below</p>
+                                <p class="font-medium text-red-600 dark:text-red-400">{{ target[metric.key].criticalRange | numberFormatter }} QAR</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-gray-500 dark:text-gray-400">Moderate below</p>
+                                <p class="font-medium text-amber-600 dark:text-amber-400">{{ target[metric.key].moderateRange | numberFormatter }} QAR</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

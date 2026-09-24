@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import Company from "../models/company.model"
 import { ObjectId } from "mongodb";
+import { uploadFileToAws, getFileUrlFromAws } from "../common/aws-connect";
 
 export const getCompanyDetails = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -8,10 +9,14 @@ export const getCompanyDetails = async (req: Request, res: Response, next: NextF
             name: { $exists: true },
             description: { $exists: true },
             address: { $exists: true }
-        }).select('name description address');
+        }).select('name description address taxRegistrationNumber registrationNumber logo');
 
         if (company) {
-            return res.status(200).json(company);
+            const companyData = company.toObject();
+            if (companyData.logo) {
+                companyData.logo = await getFileUrlFromAws(companyData.logo);
+            }
+            return res.status(200).json(companyData);
         }
         return res.status(204).json();
     } catch (error) {
@@ -23,7 +28,7 @@ next(error);
 
 export const updateCompanyDetails = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { companyName, description, street, area, city, country } = req.body
+        const { companyName, description, street, area, city, country, taxRegistrationNumber, registrationNumber } = req.body
 
 
         const companyUpdate = await Company.updateOne(
@@ -37,7 +42,9 @@ export const updateCompanyDetails = async (req: Request, res: Response, next: Ne
                         area: area,
                         city: city,
                         country: country
-                    }
+                    },
+                    taxRegistrationNumber: taxRegistrationNumber,
+                    registrationNumber: registrationNumber
                 }
             },
             { upsert: true }
@@ -51,6 +58,29 @@ export const updateCompanyDetails = async (req: Request, res: Response, next: Ne
         console.log(error)
 next(error)
 
+    }
+}
+
+export const uploadCompanyLogo = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ success: false, message: 'No file uploaded' });
+        }
+
+        await uploadFileToAws(file.filename, file.path);
+
+        const companyUpdate = await Company.findOneAndUpdate(
+            {},
+            { $set: { logo: file.filename } },
+            { upsert: true, new: true }
+        );
+
+        const logoUrl = await getFileUrlFromAws(file.filename);
+        return res.status(200).json({ success: true, logo: logoUrl });
+    } catch (error) {
+        console.log(error)
+        next(error);
     }
 }
 

@@ -1,7 +1,10 @@
 export interface getCompanyDetails {
     name:string,
     description:string,
-    address:Address
+    address:Address,
+    taxRegistrationNumber?:string,
+    registrationNumber?:string,
+    logo?:string
   }
 
   interface Address{

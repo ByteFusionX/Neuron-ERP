@@ -15,9 +15,11 @@ import { NgIf } from '@angular/common';
 })
 export class EditCompanyDetailsComponent {
   isSaving:boolean=false
+  isUploadingLogo:boolean=false
+  logoPreviewUrl:string|null=null
   constructor(private _fb: FormBuilder,
     private dialogRef:MatDialogRef<EditCompanyDetailsComponent>,
-    private _profileService:ProfileService  
+    private _profileService:ProfileService
   ){}
 
   companyDetailsForm = this._fb.group({
@@ -27,6 +29,8 @@ export class EditCompanyDetailsComponent {
     area: ['', Validators.required],
     city: ['', Validators.required],
     country: ['', Validators.required],
+    taxRegistrationNumber: [''],
+    registrationNumber: [''],
   })
 
   ngOnInit() {
@@ -38,10 +42,30 @@ export class EditCompanyDetailsComponent {
           street:res.address.street,
           area:res.address.area,
           city:res.address.city,
-          country:res.address.country
+          country:res.address.country,
+          taxRegistrationNumber:res.taxRegistrationNumber,
+          registrationNumber:res.registrationNumber
         })
+        this.logoPreviewUrl = res.logo ?? null;
       }
     })
+  }
+
+  onLogoSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.isUploadingLogo = true;
+    this._profileService.uploadCompanyLogo(file).subscribe({
+      next: (res) => {
+        this.isUploadingLogo = false;
+        this.logoPreviewUrl = res.logo;
+      },
+      error: () => {
+        this.isUploadingLogo = false;
+      }
+    });
   }
 
   onClose(): void {

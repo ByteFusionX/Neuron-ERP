@@ -32,6 +32,8 @@ export const getCategory = async (req: Request, res: Response, next: NextFunctio
                     privileges: 1,
                     employeeCount: 1,
                     isSalespersonWithTarget: 1,
+                    responsibilities: 1,
+                    approvalLimit: 1,
                 }
             }
         ]);

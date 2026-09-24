@@ -1,0 +1,47 @@
+<div class="w-full h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md" *ngIf="this.privileges?.portalManagement?.notesAndTerms">
+    <app-settings-section-header sectionId="notes-terms"></app-settings-section-header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ng-container *ngFor="let col of columns">
+            <!-- Card list: no filter/pagination/sort chrome — these lists are small and flat. -->
+            <div class="w-full bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm self-start">
+                <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-erp-border-dark">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ col.title }}</h3>
+                    <app-action-button variant="primary" (click)="onNoteForm(col.createAction)">{{ col.createLabel }}</app-action-button>
+                </div>
+
+                <app-skelton-loading *ngIf="isNotesLoading" [lineLength]="3" class="block p-5"></app-skelton-loading>
+
+                <div *ngIf="!isNotesLoading && notesFor(col.key).length === 0" class="flex flex-col items-center justify-center px-6 py-12 text-center">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 dark:bg-violet-500/10 mb-3">
+                        <ng-icon name="heroDocumentText" class="text-violet-600 dark:text-violet-400 text-xl"></ng-icon>
+                    </div>
+                    <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ col.empty }}</p>
+                </div>
+
+                <div *ngIf="!isNotesLoading && notesFor(col.key).length > 0" class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+                    <div *ngFor="let note of notesFor(col.key)" class="group flex items-start justify-between gap-3 px-5 py-3">
+                        <div class="flex items-start gap-3 min-w-0">
+                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                                <ng-icon name="heroDocumentText" class="text-violet-600 dark:text-violet-400 text-sm"></ng-icon>
+                            </div>
+                            <p class="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-line break-words min-w-0 pt-1">{{ note.note }}</p>
+                        </div>
+                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button type="button" (click)="onNoteForm(col.editAction, note.note, note._id)"
+                                class="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-violet-600 dark:hover:bg-white/5"
+                                aria-label="Edit" title="Edit">
+                                <ng-icon name="heroPencilSquare"></ng-icon>
+                            </button>
+                            <button type="button" (click)="onNoteDelete(col.key, note._id)"
+                                class="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                                aria-label="Delete" title="Delete">
+                                <ng-icon name="heroTrash"></ng-icon>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </ng-container>
+    </div>
+</div>
