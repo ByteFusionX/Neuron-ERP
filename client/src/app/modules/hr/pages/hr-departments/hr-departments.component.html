@@ -1,0 +1,177 @@
+<!-- Departments: Internal (HR overview) / Sales Department / Customer Type / Customer Department -->
+<div class="h-full p-6 bg-gray-50 dark:bg-erp-surface-dark-alt" *ngIf="privileges?.portalManagement?.department || privileges?.portalManagement?.customerType">
+<div class="w-full min-h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md">
+    <div class="flex items-start gap-3 mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10 shrink-0">
+            <ng-icon name="heroBuildingLibrary" class="text-violet-600 dark:text-violet-400 text-xl"></ng-icon>
+        </div>
+        <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Departments</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Internal departments with headcount and org chart, sales and customer departments, and customer types.</p>
+        </div>
+    </div>
+
+    <div class="mb-4 inline-flex flex-wrap items-center gap-0.5 p-0.5 rounded-lg bg-gray-100 dark:bg-erp-surface-dark-alt" role="tablist" aria-label="Department view">
+        <span role="tab" *ngIf="privileges?.portalManagement?.department" [attr.aria-selected]="activeTab === 'internal'"
+            (click)="activeTab = 'internal'"
+            class="px-3 py-1.5 text-sm rounded-md cursor-pointer transition-colors"
+            [ngClass]="activeTab === 'internal' ? 'bg-white shadow-sm text-violet-700 font-medium' : 'text-gray-500 hover:text-gray-700'">Internal (HR)</span>
+        <span role="tab" *ngIf="privileges?.portalManagement?.department" [attr.aria-selected]="activeTab === 'department'"
+            (click)="activeTab = 'department'"
+            class="px-3 py-1.5 text-sm rounded-md cursor-pointer transition-colors"
+            [ngClass]="activeTab === 'department' ? 'bg-white shadow-sm text-violet-700 font-medium' : 'text-gray-500 hover:text-gray-700'">Sales Department</span>
+        <span role="tab" *ngIf="privileges?.portalManagement?.customerType" [attr.aria-selected]="activeTab === 'customerType'"
+            (click)="activeTab = 'customerType'"
+            class="px-3 py-1.5 text-sm rounded-md cursor-pointer transition-colors"
+            [ngClass]="activeTab === 'customerType' ? 'bg-white shadow-sm text-violet-700 font-medium' : 'text-gray-500 hover:text-gray-700'">Customer Type</span>
+        <span role="tab" *ngIf="privileges?.portalManagement?.customerType" [attr.aria-selected]="activeTab === 'customerDepartment'"
+            (click)="activeTab = 'customerDepartment'"
+            class="px-3 py-1.5 text-sm rounded-md cursor-pointer transition-colors"
+            [ngClass]="activeTab === 'customerDepartment' ? 'bg-white shadow-sm text-violet-700 font-medium' : 'text-gray-500 hover:text-gray-700'">Customer Department</span>
+        <span role="tab" *ngIf="privileges?.portalManagement?.department" [attr.aria-selected]="activeTab === 'activity'"
+            (click)="openActivity()"
+            class="px-3 py-1.5 text-sm rounded-md cursor-pointer transition-colors"
+            [ngClass]="activeTab === 'activity' ? 'bg-white shadow-sm text-violet-700 font-medium' : 'text-gray-500 hover:text-gray-700'">Activity</span>
+    </div>
+
+    <!-- Activity: audit trail of master-data changes -->
+    <div *ngIf="activeTab === 'activity'" class="w-full bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm">
+        <div class="px-5 py-3 border-b border-gray-100 dark:border-erp-border-dark">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent changes</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Last 200 create, update and delete actions across departments and customer types.</p>
+        </div>
+        <app-skelton-loading *ngIf="isAuditLoading" [lineLength]="3" class="block p-5"></app-skelton-loading>
+        <p *ngIf="!isAuditLoading && !auditRows.length" class="px-5 py-10 text-center text-sm text-gray-500">No activity recorded yet</p>
+        <div *ngIf="auditRows.length" class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+            <div *ngFor="let a of auditRows" class="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+                <div class="min-w-0">
+                    <p class="truncate text-gray-900 dark:text-gray-100"><span class="capitalize font-medium">{{ a.action }}</span> · {{ a.entity }}<ng-container *ngIf="a.summary"> · {{ a.summary }}</ng-container></p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ a.actorName || 'Unknown user' }}</p>
+                </div>
+                <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ a.at | date: 'dd MMM yyyy, HH:mm' }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Internal (HR): headcount table + org chart -->
+    <div *ngIf="activeTab === 'internal'" class="grid grid-cols-1 gap-4">
+        <div class="w-full bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-erp-border-dark">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Internal Department</h3>
+                <app-action-button variant="primary" (click)="onCreateInternalDepartment()">+ Add Internal Department</app-action-button>
+            </div>
+            <app-skelton-loading *ngIf="isOverviewLoading" [lineLength]="3" class="block p-5"></app-skelton-loading>
+            <p *ngIf="!isOverviewLoading && !overviewRows.length" class="px-5 py-10 text-center text-sm text-gray-500">No internal departments found</p>
+            <div *ngIf="overviewRows.length" class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-erp-border-dark">
+                            <th class="px-5 py-2 font-medium">Department</th>
+                            <th class="px-2 py-2 font-medium">Parent</th>
+                            <th class="px-2 py-2 font-medium">Head</th>
+                            <th class="px-2 py-2 font-medium text-right">Headcount</th>
+                            <th class="px-2 py-2"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+                        <tr *ngFor="let d of overviewRows" (click)="selectOverview(d._id)"
+                            class="group cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5"
+                            [ngClass]="d._id === selectedOverview?._id ? 'bg-violet-50/60 dark:bg-violet-500/10' : ''">
+                            <td class="px-5 py-2.5">
+                                <p class="font-medium text-gray-900 dark:text-gray-100">{{ d.departmentName }}</p>
+                                <p *ngIf="d.description" class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[16rem]">{{ d.description }}</p>
+                            </td>
+                            <td class="px-2 py-2.5 text-gray-600 dark:text-gray-300">{{ overviewParentName(d) }}</td>
+                            <td class="px-2 py-2.5 text-gray-600 dark:text-gray-300">{{ d.departmentHead ? d.departmentHead.firstName + ' ' + d.departmentHead.lastName : '—' }}</td>
+                            <td class="px-2 py-2.5 text-right text-gray-900 dark:text-gray-100">{{ d.headcount }}</td>
+                            <td class="px-2 py-2.5">
+                                <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button type="button" (click)="$event.stopPropagation(); onOverviewEdit(d._id)"
+                                        class="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-violet-600 dark:hover:bg-white/5" aria-label="Edit" title="Edit">
+                                        <ng-icon name="heroPencilSquare"></ng-icon>
+                                    </button>
+                                    <button type="button" *ngIf="categorySection" (click)="$event.stopPropagation(); onOverviewDelete(d._id)"
+                                        class="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10" aria-label="Delete" title="Delete">
+                                        <ng-icon name="heroTrash"></ng-icon>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Org chart panel hidden for now (to be redesigned later):
+        <div class="w-full bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm p-5">
+            <p *ngIf="!selectedOverview" class="text-sm text-gray-500 dark:text-gray-400">Select a department to see its org chart.</p>
+            <div *ngIf="selectedOverview">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">{{ selectedOverview.departmentName }} — {{ selectedOverview.headcount }} employees</h3>
+                <p *ngIf="!selectedOverview.orgChart?.length" class="text-sm text-gray-500 dark:text-gray-400">No employees.</p>
+                <ul class="list-none m-0 p-0">
+                    <ng-container *ngTemplateOutlet="orgNode; context: { $implicit: selectedOverview.orgChart }"></ng-container>
+                </ul>
+            </div>
+        </div>
+        -->
+    </div>
+
+    <!-- Org chart node template hidden with the panel above:
+    <ng-template #orgNode let-nodes>
+        <li *ngFor="let n of nodes" class="my-1 text-sm text-gray-900 dark:text-gray-100">
+            <span>{{ n.firstName }} {{ n.lastName }}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400"> · {{ n.designation }} ({{ n.employeeId }})</span>
+            <ul *ngIf="n.reports?.length" class="ml-5 border-l border-gray-200 dark:border-erp-border-dark pl-3 list-none">
+                <ng-container *ngTemplateOutlet="orgNode; context: { $implicit: n.reports }"></ng-container>
+            </ul>
+        </li>
+    </ng-template>
+    -->
+
+    <!-- (org chart data is still loaded in the component; only the UI is hidden) -->
+
+    <!-- Sales Department / Customer Type / Customer Department (one shared card list) -->
+    <div *ngIf="activeTab !== 'internal' && activeTab !== 'activity'" class="w-full max-w-3xl bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-erp-border-dark">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ departmentTabTitle(activeTab) }}</h3>
+            <app-action-button variant="primary" (click)="onDepartmentTabCreate(activeTab)">{{ departmentTabCreateLabel(activeTab) }}</app-action-button>
+        </div>
+
+        <app-skelton-loading *ngIf="departmentTabLoading(activeTab)" [lineLength]="3" class="block p-5"></app-skelton-loading>
+
+        <div *ngIf="!departmentTabLoading(activeTab) && departmentTabData(activeTab).length === 0" class="flex flex-col items-center justify-center px-6 py-12 text-center">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 dark:bg-violet-500/10 mb-3">
+                <ng-icon name="heroBuildingLibrary" class="text-violet-600 dark:text-violet-400 text-xl"></ng-icon>
+            </div>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ departmentTabEmptyMessage(activeTab) }}</p>
+            <app-action-button variant="primary" class="mt-4" (click)="onDepartmentTabCreate(activeTab)">{{ departmentTabCreateLabel(activeTab) }}</app-action-button>
+        </div>
+
+        <div *ngIf="!departmentTabLoading(activeTab) && departmentTabData(activeTab).length > 0" class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+            <div *ngFor="let item of departmentTabData(activeTab); let i = index" class="group flex items-center justify-between px-5 py-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 dark:bg-violet-500/10">
+                        <ng-icon name="heroBuildingLibrary" class="text-violet-600 dark:text-violet-400 text-sm"></ng-icon>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{{ departmentTabItemName(item) }}</p>
+                        <p *ngIf="departmentTabItemMeta(item, activeTab)" class="text-xs text-gray-500 dark:text-gray-400 truncate">{{ departmentTabItemMeta(item, activeTab) }}</p>
+                    </div>
+                </div>
+                <span *ngIf="departmentTabItemCreated(item)" class="ml-auto pl-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap" title="Created date">{{ departmentTabItemCreated(item) }}</span>
+                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button type="button" (click)="onDepartmentTabItemEdit(i, activeTab)"
+                        class="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-violet-600 dark:hover:bg-white/5" aria-label="Edit" title="Edit">
+                        <ng-icon name="heroPencilSquare"></ng-icon>
+                    </button>
+                    <button type="button" *ngIf="categorySection" (click)="onDepartmentTabItemDelete(i, activeTab)"
+                        class="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10" aria-label="Delete" title="Delete">
+                        <ng-icon name="heroTrash"></ng-icon>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+<!-- /Departments -->

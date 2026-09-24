@@ -1,7 +1,7 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap, tap } from 'rxjs';
-import { CreateEmployee, FilterEmployee, GetCategory, getEmployee, getEmployeeByID, Target } from 'src/app/shared/interfaces/employee.interface';
+import { ApprovalLimit, CreateEmployee, FilterEmployee, GetCategory, Responsibility, getEmployee, getEmployeeByID, Target } from 'src/app/shared/interfaces/employee.interface';
 import { login } from 'src/app/shared/interfaces/login';
 import { environment } from 'src/environments/environment';
 import { jwtDecode } from "jwt-decode";
@@ -87,6 +87,22 @@ export class EmployeeService {
     return this.http.get<GetCategory[]>(`${this.api}/category`)
   }
 
+  getResponsibilities(): Observable<Responsibility[]> {
+    return this.http.get<Responsibility[]>(`${this.api}/responsibility`)
+  }
+
+  createResponsibility(data: Pick<Responsibility, 'label' | 'description'>): Observable<Responsibility> {
+    return this.http.post<Responsibility>(`${this.api}/responsibility`, data)
+  }
+
+  updateResponsibility(id: string, data: Partial<Responsibility>): Observable<Responsibility> {
+    return this.http.patch<Responsibility>(`${this.api}/responsibility/${id}`, data)
+  }
+
+  deleteResponsibility(id: string): Observable<any> {
+    return this.http.delete(`${this.api}/responsibility/${id}`)
+  }
+
   employeeLogin(employeeData: Object): Observable<login> {
     return this.http.post(`${this.api}/employee/login`, employeeData)
   }
@@ -105,6 +121,15 @@ export class EmployeeService {
       const decodedToken = <{ id: string, employeeId: string }>jwtDecode(token);
       return decodedToken
     }
+  }
+
+  /** All active employees with their personal approval limit; category is the role id, not populated. */
+  getEmployeeApprovalLimits() {
+    return this.http.get<{ _id: string; employeeId: string; firstName: string; lastName: string; category: string; approvalLimit?: ApprovalLimit }[] | null>(`${this.api}/employee`)
+  }
+
+  setEmployeeApprovalLimit(employeeId: string, limit: ApprovalLimit) {
+    return this.http.patch<ApprovalLimit>(`${this.api}/employee/approval-limit/${employeeId}`, limit)
   }
 
   blockEmployee(employeeId: string) {

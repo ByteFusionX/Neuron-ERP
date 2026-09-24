@@ -1,0 +1,45 @@
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+    <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+        <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-100 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-900">
+            <app-dp-icon name="building" size="w-5 h-5"></app-dp-icon>
+        </span>
+        <div class="min-w-0 flex-1">
+            <h2 class="text-base font-semibold leading-6">{{ newDepartment ? 'Create department' : 'Edit department' }}</h2>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                {{ data.forCustomer ? 'A department contacts of a customer can belong to.' : 'An internal department and the employee who heads it.' }}
+            </p>
+        </div>
+        <button type="button" (click)="onCloseClicked()" aria-label="Close"
+            class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+            <app-dp-icon name="close" size="w-4 h-4"></app-dp-icon>
+        </button>
+    </header>
+
+    <form id="department-form" (ngSubmit)="save()" novalidate class="grid gap-4 overflow-y-auto px-6 py-5">
+        <app-sf-field label="Department name" [control]="name" [messages]="{ required: 'Please enter department name' }">
+            <app-sf-input [formControl]="name" placeholder="Eg:- ICT"></app-sf-input>
+        </app-sf-field>
+        <div *ngIf="data.forCustomer && newDepartment" class="flex flex-wrap gap-1.5">
+            <button type="button" *ngFor="let s of suggestions" (click)="useSuggestion(s)"
+                class="rounded-full border border-gray-200 px-2.5 py-0.5 text-xs text-gray-600 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-violet-950/40">{{ s }}</button>
+        </div>
+        <app-sf-field *ngIf="!data.forCustomer" label="Department head" [control]="head" [messages]="{ required: 'Please select department head' }">
+            <app-sf-combobox [formControl]="head" [options]="(employeeOptions$ | async) ?? []" placeholder="Select an employee"></app-sf-combobox>
+        </app-sf-field>
+        <ng-container *ngIf="!data.forCustomer">
+            <app-sf-field label="Department code (optional)" [control]="code">
+                <app-sf-input [formControl]="code" placeholder="Eg:- SAL-01"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Monthly sales target (optional)" [control]="salesTarget">
+                <app-sf-number [formControl]="salesTarget" [min]="0" [stepper]="false"></app-sf-number>
+            </app-sf-field>
+        </ng-container>
+        <app-sf-switch [formControl]="isActive" label="Active" description="Inactive departments are kept for history but flagged in the list."></app-sf-switch>
+    </form>
+
+    <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+        <app-action-button variant="secondary" (click)="onCloseClicked()">Cancel</app-action-button>
+        <app-action-button variant="primary" type="submit" form="department-form"
+            [disabled]="!newDepartment && !head.dirty && !name.dirty && !code.dirty && !salesTarget.dirty && !isActive.dirty">{{ newDepartment ? 'Create' : 'Update' }}</app-action-button>
+    </footer>
+</div>

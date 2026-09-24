@@ -407,6 +407,14 @@ export const getEmployeeByEmployeeId = async (
         },
       ]);
 
+      // Aggregation ignores select:false, so strip pay data unless permitted.
+      if (
+        employeeData[0] &&
+        !canViewCompensation(await getEmployeeData(req.user))
+      ) {
+        delete employeeData[0].compensation;
+      }
+
       if (employeeData[0]) {
         return res
           .status(200)
@@ -429,7 +437,8 @@ export const getFilteredEmployees = async (
   next: NextFunction,
 ) => {
   try {
-    let { page, row, search, access, userId } = req.body;
+    let { page, row, search, access, userId, department, status, sortKey, sortDir } = req.body;
+    search = search ?? "";
     let skipNum: number = (page - 1) * row;
     let searchRegex = search.split("").join("\\s*");
     let fullNameRegex = new RegExp(searchRegex, "i");
@@ -472,7 +481,20 @@ export const getFilteredEmployees = async (
         break;
     }
 
-    const filters = { $and: [matchFilters, accessFilter] };
+    const extraFilter: Record<string, any> = {};
+    if (department && mongoose.isValidObjectId(department)) {
+      extraFilter.department = new ObjectId(department);
+    }
+    if (status === "blocked") extraFilter.isBlocked = true;
+    if (status === "active") extraFilter.isBlocked = { $ne: true };
+
+    const filters = { $and: [matchFilters, accessFilter, extraFilter] };
+
+    // Only plain fields are sortable, since the sort runs before the joins below.
+    const sortable = ["employeeId", "firstName", "email", "designation", "dateOfJoining"];
+    const sortStage: Record<string, 1 | -1> = sortable.includes(sortKey)
+      ? { [sortKey]: sortDir === "desc" ? -1 : 1 }
+      : { employeeId: 1 };
 
     await Employee.aggregate([
       {
@@ -498,6 +520,7 @@ export const getFilteredEmployees = async (
       {
         $match: filters,
       },
+      { $sort: sortStage },
       {
         $skip: skipNum,
       },
@@ -546,9 +569,9 @@ export const getFilteredEmployees = async (
           preserveNullAndEmptyArrays: true,
         },
       },
-      {
-        $sort: { employeeId: 1 },
-      },
+      { $sort: sortStage },
+      // aggregate ignores select:false, so pay data and hashes are stripped here.
+      { $project: { password: 0, compensation: 0 } },
     ]);
     if (!employeeData || !total)
       return res.status(204).json({ err: "No data found" });
@@ -557,6 +580,34 @@ export const getFilteredEmployees = async (
     console.log(error);
     next(error);
   }
+};
+
+const canViewCompensation = (actor: any): boolean =>
+  !!actor &&
+  (actor.category?.role === "superAdmin" ||
+    actor.category?.privileges?.employee?.viewCompensation === true);
+
+// Records a promotion/transfer only when designation, department or manager actually changed.
+const buildHistoryEntry = (existing: any, body: any, changedBy: any) => {
+  const same = (a: any, b: any) => String(a ?? "") === String(b ?? "");
+  const changed =
+    (body.designation !== undefined && !same(existing.designation, body.designation)) ||
+    (body.department !== undefined && !same(existing.department, body.department)) ||
+    (body.reportingTo !== undefined && !same(existing.reportingTo, body.reportingTo));
+  if (!changed) return null;
+
+  return {
+    effectiveDate: body.effectiveDate ? new Date(body.effectiveDate) : new Date(),
+    fromDesignation: existing.designation,
+    toDesignation: body.designation ?? existing.designation,
+    fromDepartment: existing.department,
+    toDepartment: body.department ?? existing.department,
+    fromReportingTo: existing.reportingTo ?? null,
+    toReportingTo: body.reportingTo !== undefined ? body.reportingTo : existing.reportingTo ?? null,
+    reason: body.changeReason,
+    changedBy,
+    changedAt: new Date(),
+  };
 };
 
 export const createEmployee = async (
@@ -568,6 +619,10 @@ export const createEmployee = async (
     let employeeId: string = await generateEmployeeId();
     const employeeData = req.body;
     employeeData.employeeId = employeeId;
+    delete employeeData.employmentHistory;
+    if (!canViewCompensation(await getEmployeeData(req.user))) {
+      delete employeeData.compensation;
+    }
 
     const employee = new Employee(employeeData);
 
@@ -610,6 +665,10 @@ export const editEmployee = async (
 
     delete updatedEmployeeData.password;
     delete updatedEmployeeData.employeeId;
+    delete updatedEmployeeData.employmentHistory;
+    delete updatedEmployeeData.effectiveDate;
+    delete updatedEmployeeData.changeReason;
+    delete updatedEmployeeData.compensation;
 
     const { password } = req.body;
     if (password) {
@@ -617,12 +676,37 @@ export const editEmployee = async (
       updatedEmployeeData.password = hashedPassword;
     }
 
+    const actor = await getEmployeeData(req.user);
+
+    // Compensation is HR-only: silently ignored for anyone without the privilege.
+    if (req.body.compensation && canViewCompensation(actor)) {
+      const { costRatePerHour, billingRate } = req.body.compensation;
+      if (costRatePerHour !== undefined) {
+        updatedEmployeeData["compensation.costRatePerHour"] = costRatePerHour;
+      }
+      if (billingRate !== undefined) {
+        updatedEmployeeData["compensation.billingRate"] = billingRate;
+      }
+    }
+
+    const existing = await Employee.findOne({
+      _id: employeeId,
+      isDeleted: { $ne: true },
+    });
+    const update: any = { $set: updatedEmployeeData };
+    const historyEntry = existing
+      ? buildHistoryEntry(existing, req.body, actor?._id)
+      : null;
+    if (historyEntry) {
+      update.$push = { employmentHistory: historyEntry };
+    }
+
     const saveEmployeeEdit = await Employee.findOneAndUpdate(
       {
         _id: employeeId,
         isDeleted: { $ne: true },
       },
-      updatedEmployeeData,
+      update,
       { new: true },
     ).populate("category department reportingTo");
 
@@ -1010,6 +1094,41 @@ export const deleteEmployee = async (
       message: "Employee deleted successfully",
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+export const setEmployeeApprovalLimit = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { employeeId } = req.params;
+    const toLimit = (v: unknown, max: number): number | null | undefined => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 && n <= max ? n : undefined;
+    };
+    const maxAmount = toLimit(req.body?.maxAmount, Number.MAX_SAFE_INTEGER);
+    const maxDiscountPercent = toLimit(req.body?.maxDiscountPercent, 100);
+    if (maxAmount === undefined || maxDiscountPercent === undefined) {
+      return res.status(400).json({
+        message: "Amount must be 0 or more and discount must be between 0 and 100",
+      });
+    }
+
+    const employee = await Employee.findByIdAndUpdate(
+      employeeId,
+      { $set: { approvalLimit: { maxAmount, maxDiscountPercent } } },
+      { new: true, projection: { approvalLimit: 1 } },
+    );
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+    return res.status(200).json(employee.approvalLimit);
+  } catch (error) {
+    console.log(error);
     next(error);
   }
 };

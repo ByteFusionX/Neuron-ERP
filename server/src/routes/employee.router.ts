@@ -17,6 +17,7 @@ import {
   getPresaleManagers,
   getProcurementEmployees,
   blockEmployee,
+  setEmployeeApprovalLimit,
 } from "../controllers/employee.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const empRouter = Router();
@@ -48,6 +49,11 @@ empRouter.patch(
   "/update-target/:employeeId/:targetId",
   requirePrivilege("employee", "create"),
   updateTarget,
+);
+empRouter.patch(
+  "/approval-limit/:employeeId",
+  requirePrivilege("employee", "create"),
+  setEmployeeApprovalLimit,
 );
 empRouter.post("/login", login);
 empRouter.get("/get", getEmployee);

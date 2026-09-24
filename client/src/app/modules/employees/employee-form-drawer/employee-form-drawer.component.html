@@ -1,0 +1,133 @@
+<app-sf-drawer [title]="title" [subtitle]="subtitle" width="860px"
+    [open]="open" [dirty]="employeeForm.dirty" (closed)="onDrawerClosed($event)">
+
+    <span sfDrawerHeader *ngIf="!isEdit && draftRef.savedAt" class="text-xs text-gray-400 dark:text-gray-500">Draft saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
+
+    <!-- Stepper (create only) -->
+    <ol class="mb-5 flex items-center gap-2">
+        <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+                [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+                (click)="goToStep(s.n)">
+                <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
+                    [ngClass]="s.n === step
+                        ? 'bg-violet-600 text-white'
+                        : (s.n < step && isStepValid(s.n))
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
+                    <ng-icon *ngIf="s.n < step && isStepValid(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
+                    <ng-template #stepNumber>{{ s.n }}</ng-template>
+                </span>
+                <span class="truncate text-xs font-medium"
+                    [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
+            </button>
+            <span *ngIf="s.n < 2" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
+        </li>
+    </ol>
+
+    <form id="employee-form" [formGroup]="employeeForm" sfDraft="employee-list-create" #draftRef="sfDraft"
+        [sfDraftDisabled]="isEdit" (ngSubmit)="submit()" novalidate>
+
+        <div *ngIf="!isEdit && draftRef.pending" class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 text-[13px] text-violet-900 dark:text-violet-200">
+            <span>You have an unsaved draft from {{ draftRef.pending.savedAt | date: 'dd MMM, HH:mm' }}.</span>
+            <span class="flex gap-3">
+                <button type="button" class="font-medium hover:underline" (click)="draftRef.restore()">Restore</button>
+                <button type="button" class="text-violet-700 dark:text-violet-400 hover:underline" (click)="draftRef.discard()">Discard</button>
+            </span>
+        </div>
+
+        <app-sf-section *ngIf="showStep(1)" title="Personal" columns="2">
+            <app-sf-field label="First name" [control]="employeeForm.controls.firstName">
+                <app-sf-input formControlName="firstName" placeholder="First name"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Last name" [control]="employeeForm.controls.lastName">
+                <app-sf-input formControlName="lastName" placeholder="Last name"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Email" [control]="employeeForm.controls.email">
+                <app-sf-input formControlName="email" type="email" placeholder="name@company.com"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Contact no." [control]="employeeForm.controls.contactNo">
+                <app-sf-input formControlName="contactNo" type="tel" placeholder="Contact number"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Date of birth" [control]="employeeForm.controls.dob">
+                <app-sf-date formControlName="dob" [max]="today" displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+            <app-sf-field label="Date of joining" [control]="employeeForm.controls.dateOfJoining">
+                <app-sf-date formControlName="dateOfJoining" [max]="today" displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="showStep(1)" title="Job" columns="2">
+            <app-sf-field label="Designation" [control]="employeeForm.controls.designation">
+                <app-sf-input formControlName="designation" placeholder="Designation"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Department" [control]="employeeForm.controls.department">
+                <app-sf-combobox formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Role" [control]="employeeForm.controls.category">
+                <app-sf-combobox formControlName="category" [options]="categoryOptions" placeholder="Select role"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Reporting to" optional>
+                <app-sf-combobox formControlName="reportingTo" [options]="reportingChoices" placeholder="No one"></app-sf-combobox>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="isEdit && showStep(1)" title="Change record"
+            description="Only used when designation, department or manager changes. It is saved to the employment history." columns="2">
+            <app-sf-field label="Effective date" optional>
+                <app-sf-date formControlName="effectiveDate" displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+            <app-sf-field label="Reason (promotion / transfer)" optional>
+                <app-sf-input formControlName="changeReason" placeholder="Why is this changing?"></app-sf-input>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="showStep(2)" title="Contract" columns="2">
+            <app-sf-field label="Contract type" optional>
+                <app-sf-select formControlName="contractType" [options]="contractTypeOptions" placeholder="Not set"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Probation end" optional>
+                <app-sf-date formControlName="probationEnd" displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+            <app-sf-field label="Contract start" optional>
+                <app-sf-date formControlName="contractStart" displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+            <app-sf-field label="Contract end" optional>
+                <app-sf-date formControlName="contractEnd" displayFormat="dd/MM/yyyy"></app-sf-date>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="showStep(2) && canViewCompensation" title="Compensation"
+            description="Visible only to roles with the view compensation privilege." columns="2" formGroupName="compensation">
+            <app-sf-field label="Cost rate / hour" [control]="employeeForm.controls.compensation.controls.costRatePerHour" optional>
+                <app-sf-number formControlName="costRatePerHour" [min]="0" [stepper]="false" placeholder="0.00"></app-sf-number>
+            </app-sf-field>
+            <app-sf-field label="Billing rate / hour" [control]="employeeForm.controls.compensation.controls.billingRate" optional>
+                <app-sf-number formControlName="billingRate" [min]="0" [stepper]="false" placeholder="0.00"></app-sf-number>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="isEdit && showStep(2)" title="Password">
+            <div *ngIf="!changePassword" class="flex items-center justify-between gap-3">
+                <p class="text-xs text-gray-500 dark:text-gray-500">The current password stays unchanged unless you set a new one.</p>
+                <app-action-button variant="tool" (click)="enablePasswordChange()">Change password</app-action-button>
+            </div>
+            <app-sf-field *ngIf="changePassword" label="New password" [control]="passwordControl"
+                [messages]="{ pattern: 'Min 8 characters with an uppercase, lowercase, number and symbol' }">
+                <app-sf-input formControlName="password" type="password" placeholder="New password"></app-sf-input>
+                <button type="button" class="mt-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-400"
+                    (click)="generatePassword()">Generate password</button>
+            </app-sf-field>
+        </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <span *ngIf="employeeForm.invalid && employeeForm.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="secondary" (click)="previousStep()">Back</app-action-button>
+        <app-action-button *ngIf="step === 1" variant="primary" (click)="nextStep()">Next: {{ steps[1].label }}</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="employee-form" [disabled]="saving">
+            {{ saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Employee') }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

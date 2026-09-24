@@ -1,101 +1,75 @@
-<div class="bg-white m-6">
-    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8 ">
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Employees"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="total"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        searchPlaceholder="Search by name or employee ID"
+        emptyMessage="No employees found"
+        [createLabel]="createEmployee ? 'Create Employee' : ''"
+        [rowActions]="rowActions"
+        [views]="views"
+        (viewChange)="onViewChange($event)"
+        storageKey="employee-list"
+        [density]="density"
+        [rowAccent]="rowAccent"
+        exportable
+        exportFileName="employees.xlsx"
+        [detailLoading]="detailLoading"
+        [detailTabs]="detailTabs"
+        [detailTitle]="employeeTitle"
+        [detailSubtitle]="employeeSubtitle"
+        (queryChange)="onQueryChange($event)"
+        (rowOpen)="onRowOpen()"
+        (rowAction)="onRowAction($event)"
+        (create)="openCreateDrawer()">
 
-        <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-            <h3>Employees</h3>
-
-            <div class="flex justify-end gap-4">
-                <div
-                    class="h-10 inline-flex items-center justify-between text-body dark:text-white/60 bg-white border border-gray/60 rounded-[6px] pl-[20px] pr-[8px]">
-                    <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="ngModelChange()"
-                        placeholder="Search Employees" (keyup.enter)="onSearch()"
-                        class="bg-transparent border-none text-[15px] shadow-none text-black flex items-center focus:outline-none">
-                    <div class="bg-violet-100 hover:bg-violet-200 flex justify-center items-center rounded-full  cursor-pointer"
-                        (click)="onSearch()">
-
-                        <ng-icon name="heroMagnifyingGlass" class="text-sm text-gray-600  hover:text-violet-700 m-1.5">
-                        </ng-icon>
-                    </div>
-                </div>
-                <button *ngIf="createEmployee"
-                    class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-0.5 px-4 rounded text-sm"
-                    (click)="openDialog()">
-                    + Create Employee
-                </button>
+        <ng-template #detailMetaTemplate let-row>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Department</p>
+                <p class="qt-meta-value">{{ row.department?.departmentName || '—' }}</p>
             </div>
-
-        </div>
-    </div>
-    <app-skelton-loading *ngIf="isLoading " [lineLength]="4"></app-skelton-loading>
-
-    <div class="m-8  overflow-y-auto">
-
-        <div *ngIf="isEmpty && !isLoading" class="w-full flex justify-center items-center">
-            <div class="p-3">
-                <img src="assets/images/empty.png" alt="">
-                <p class="m-2 text-center text-gray-500">No Data</p>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Designation</p>
+                <p class="qt-meta-value">{{ row.designation || '—' }}</p>
             </div>
-        </div>
-        <section class="mat-elevation-z8 h-fit max-h-[57vh] overflow-auto" tabindex="0">
+            <div class="qt-meta">
+                <p class="qt-meta-label">Reports to</p>
+                <p class="qt-meta-value">{{ fullName(row.reportingTo) || 'No one' }}</p>
+            </div>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Joined</p>
+                <p class="qt-meta-value">{{ row.dateOfJoining | date: 'dd MMM yyyy' }}</p>
+            </div>
+        </ng-template>
 
-            <table *ngIf="!isLoading && !isEmpty" mat-table [dataSource]="dataSource" class="rounded-lg table-fixed">
+        <ng-template #detailFooterTemplate let-row>
+            <app-action-button *ngIf="canEdit && row._id !== currentUserId" variant="secondary" (click)="openEditDrawer(row)">Edit</app-action-button>
+            <app-action-button variant="primary" (click)="openProfile(row)">Open full profile</app-action-button>
+        </ng-template>
 
-                <!--- Note that these columns can be defined in any order.
-                  The actual rendered columns are set as a property on the row definition" -->
-
-                <ng-container matColumnDef="employeeId">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-center text-dark  text-[15px] font-medium border-none before:hidden rounded-l-xl">
-                        Employee ID </th>
-                    <td mat-cell *matCellDef="let element">
-                        <p class="text-center font-medium">{{element.employeeId}}</p>
-                    </td>
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'overview'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
                 </ng-container>
-
-                <!-- Position Column -->
-                <ng-container matColumnDef="name">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Employee Name </th>
-                    <td mat-cell *matCellDef="let element"> {{element.firstName+' '+element.lastName}} </td>
+                <ng-container *ngSwitchCase="'contract'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="contractSections(row)"></app-detail-overview>
                 </ng-container>
-
-                <!-- Name Column -->
-                <ng-container matColumnDef="department">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Department </th>
-                    <td mat-cell *matCellDef="let element"> {{element.department.departmentName}} </td>
+                <ng-container *ngSwitchCase="'history'">
+                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No promotions or transfers recorded yet."></app-detail-timeline>
                 </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
 
-                <!-- Weight Column -->
-                <ng-container matColumnDef="email">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Email </th>
-                    <td mat-cell *matCellDef="let element"> {{element.email}} </td>
-                </ng-container>
-
-                <!-- Symbol Column -->
-                <ng-container matColumnDef="contactNo">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden rounded-r-xl">
-                        Contact No. </th>
-                    <td mat-cell *matCellDef="let element"> {{element.contactNo}} </td>
-                </ng-container>
-
-                <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-                <tr mat-row *matRowDef="let row; columns: displayedColumns; let i= index"
-                    class="cursor-pointer hover:bg-gray-100" (click)="onRowClicks(i)"></tr>
-            </table>
-        </section>
-        <div class="w-full bg-white" *ngIf="!isEmpty && !isLoading">
-            <app-pagination [page]="page" [row]="row" [total]="total"
-                (changeData)="onPageNumberClick($event)"></app-pagination>
-        </div>
-
-
-    </div>
-    <div>
-    </div>
+    <app-employee-form-drawer [open]="formOpen" [mode]="formMode" [employee]="formEmployee"
+        (saved)="getEmployees()" (closed)="formOpen = false"></app-employee-form-drawer>
 </div>

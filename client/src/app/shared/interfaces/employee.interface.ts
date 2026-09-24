@@ -34,6 +34,43 @@ export interface getEmployeeDetails {
   profitValue: number;
   targets: Target[];
   isBlocked?: boolean;
+  contractType?: ContractType;
+  contractStart?: string;
+  contractEnd?: string;
+  probationEnd?: string;
+  isTechnician?: boolean;
+  isDriver?: boolean;
+  isProjectManager?: boolean;
+  driverLicense?: DriverLicense;
+  /** Only present when the viewer has employee.viewCompensation. */
+  compensation?: Compensation;
+  employmentHistory?: EmploymentHistoryEntry[];
+}
+
+export type ContractType = 'permanent' | 'fixed-term' | 'probation' | 'contractor' | 'intern';
+
+export interface DriverLicense {
+  number?: string;
+  licenseClass?: string;
+  expiry?: string;
+}
+
+export interface Compensation {
+  costRatePerHour?: number;
+  billingRate?: number;
+}
+
+export interface EmploymentHistoryEntry {
+  effectiveDate: string;
+  fromDesignation?: string;
+  toDesignation?: string;
+  fromDepartment?: string;
+  toDepartment?: string;
+  fromReportingTo?: string | null;
+  toReportingTo?: string | null;
+  reason?: string;
+  changedBy?: string;
+  changedAt: string;
 }
 
 
@@ -64,6 +101,17 @@ export interface CreateEmployee {
   dateOfJoining: string;
   reportingTo: string | null | undefined;
   createdBy: string | undefined;
+  contractType?: ContractType;
+  contractStart?: string;
+  contractEnd?: string;
+  probationEnd?: string;
+  isTechnician?: boolean;
+  isDriver?: boolean;
+  isProjectManager?: boolean;
+  driverLicense?: DriverLicense;
+  compensation?: Compensation;
+  effectiveDate?: string;
+  changeReason?: string;
 }
 
 
@@ -83,6 +131,10 @@ export interface FilterEmployee {
   search?: string;
   access?: string | undefined;
   userId?: string | undefined;
+  department?: string | null;
+  status?: 'active' | 'blocked' | null;
+  sortKey?: string | null;
+  sortDir?: 'asc' | 'desc' | null;
 }
 
 export interface GetCategory {
@@ -90,7 +142,24 @@ export interface GetCategory {
   categoryName: string;
   role: string;
   isSalespersonWithTarget: boolean;
+  /** Keys from the Responsibility master list. Older roles may still hold the retired object shape. */
+  responsibilities?: string[] | Record<string, boolean>;
+  approvalLimit?: ApprovalLimit;
+  employeeCount?: number;
   privileges: Privileges;
+}
+
+export interface ApprovalLimit {
+  maxAmount: number | null;
+  maxDiscountPercent: number | null;
+}
+
+export interface Responsibility {
+  _id?: string;
+  key: string;
+  label: string;
+  description?: string;
+  isActive: boolean;
 }
 
 export interface getEmployeeByID {
@@ -106,6 +175,7 @@ export interface Privileges {
   employee: {
     viewReport: string;
     create: boolean;
+    viewCompensation?: boolean;
   };
   announcement: {
     viewReport: string;
@@ -128,6 +198,7 @@ export interface Privileges {
   quotation: {
     viewReport: string;
     create: boolean;
+    canApprove?: boolean;
   };
   jobSheet: {
     viewReport: string;
@@ -185,6 +256,11 @@ export interface Privileges {
   claims: {
     viewReport: string;
     canApprove: boolean;
+  };
+  sensitiveData?: {
+    viewCost: boolean;
+    viewMargin: boolean;
+    overrideDiscount: boolean;
   };
   portalManagement: {
     department: boolean;

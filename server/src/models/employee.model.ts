@@ -20,6 +20,33 @@ interface Employee extends Document {
   isDeleted: boolean;
   lastActivity: number;
   microsoftId: string;
+  approvalLimit?: {
+    maxAmount: number | null;
+    maxDiscountPercent: number | null;
+  };
+  contractType?: "permanent" | "fixed-term" | "probation" | "contractor" | "intern";
+  contractStart?: Date;
+  contractEnd?: Date;
+  probationEnd?: Date;
+  isTechnician?: boolean;
+  isDriver?: boolean;
+  isProjectManager?: boolean;
+  driverLicense?: { number?: string; licenseClass?: string; expiry?: Date };
+  compensation?: { costRatePerHour?: number; billingRate?: number };
+  employmentHistory?: EmploymentHistory[];
+}
+
+interface EmploymentHistory {
+  effectiveDate: Date;
+  fromDesignation?: string;
+  toDesignation?: string;
+  fromDepartment?: Types.ObjectId;
+  toDepartment?: Types.ObjectId;
+  fromReportingTo?: Types.ObjectId | null;
+  toReportingTo?: Types.ObjectId | null;
+  reason?: string;
+  changedBy?: Types.ObjectId;
+  changedAt: Date;
 }
 
 interface Target {
@@ -149,7 +176,54 @@ const employeeSchema = new Schema<Employee>({
   lastActivity: {
     type: Number,
     required: false
-  }
+  },
+  // Personal override of the role's approval limit. null = fall back to the role.
+  approvalLimit: {
+    maxAmount: { type: Number, default: null, min: 0 },
+    maxDiscountPercent: { type: Number, default: null, min: 0, max: 100 },
+  },
+  // Optional additions: absent on existing documents, no migration needed.
+  contractType: {
+    type: String,
+    enum: ["permanent", "fixed-term", "probation", "contractor", "intern"],
+    required: false,
+  },
+  contractStart: { type: Date, required: false },
+  contractEnd: { type: Date, required: false },
+  probationEnd: { type: Date, required: false },
+  isTechnician: { type: Boolean, default: false },
+  isDriver: { type: Boolean, default: false },
+  isProjectManager: { type: Boolean, default: false },
+  driverLicense: {
+    number: { type: String, required: false },
+    licenseClass: { type: String, required: false },
+    expiry: { type: Date, required: false },
+  },
+  // Hidden from every query unless explicitly selected (HR-only, see employee.viewCompensation).
+  compensation: {
+    type: {
+      costRatePerHour: { type: Number, min: 0 },
+      billingRate: { type: Number, min: 0 },
+    },
+    select: false,
+  },
+  employmentHistory: {
+    type: [
+      {
+        effectiveDate: { type: Date, required: true },
+        fromDesignation: String,
+        toDesignation: String,
+        fromDepartment: { type: Schema.Types.ObjectId, ref: "InternalDepartment" },
+        toDepartment: { type: Schema.Types.ObjectId, ref: "InternalDepartment" },
+        fromReportingTo: { type: Schema.Types.ObjectId, ref: "Employee", default: null },
+        toReportingTo: { type: Schema.Types.ObjectId, ref: "Employee", default: null },
+        reason: String,
+        changedBy: { type: Schema.Types.ObjectId, ref: "Employee" },
+        changedAt: { type: Date, default: Date.now },
+      },
+    ],
+    default: undefined,
+  },
 });
 
 employeeSchema.index({ firstName: 1, lastName: 1 })

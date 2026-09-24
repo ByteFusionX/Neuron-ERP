@@ -1,0 +1,45 @@
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+    <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+        <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-100 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-900">
+            <app-dp-icon name="building" size="w-5 h-5"></app-dp-icon>
+        </span>
+        <div class="min-w-0 flex-1">
+            <h2 class="text-base font-semibold leading-6">{{ newDepartment ? 'Create internal department' : 'Edit internal department' }}</h2>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">An internal department and the employee who heads it.</p>
+        </div>
+        <button type="button" (click)="onCloseClicked()" aria-label="Close"
+            class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+            <app-dp-icon name="close" size="w-4 h-4"></app-dp-icon>
+        </button>
+    </header>
+
+    <form id="internal-department-form" (ngSubmit)="save()" novalidate class="grid gap-4 overflow-y-auto px-6 py-5">
+        <app-sf-field label="Department name" [control]="name" [messages]="{ required: 'Please enter department name' }">
+            <app-sf-input [formControl]="name" placeholder="Eg:- ICT"></app-sf-input>
+        </app-sf-field>
+        <app-sf-field label="Department head" [control]="head" [messages]="{ required: 'Please select department head' }">
+            <app-sf-combobox [formControl]="head" [options]="(employeeOptions$ | async) ?? []" placeholder="Select an employee"></app-sf-combobox>
+        </app-sf-field>
+        <app-sf-field label="Parent department (optional)" [control]="parent">
+            <app-sf-combobox [formControl]="parent" [options]="(parentOptions$ | async) ?? []" placeholder="None"></app-sf-combobox>
+        </app-sf-field>
+        <app-sf-field label="Description (optional)" [control]="description">
+            <app-sf-input [formControl]="description" placeholder="What this department does"></app-sf-input>
+        </app-sf-field>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <app-sf-field label="Department code (optional)" [control]="code">
+                <app-sf-input [formControl]="code" placeholder="Eg:- ICT"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Cost centre (optional)" [control]="costCentre">
+                <app-sf-input [formControl]="costCentre" placeholder="Eg:- CC-1020"></app-sf-input>
+            </app-sf-field>
+        </div>
+        <app-sf-switch [formControl]="isActive" label="Active" description="Inactive departments are kept for history but flagged in the list."></app-sf-switch>
+    </form>
+
+    <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+        <app-action-button variant="secondary" (click)="onCloseClicked()">Cancel</app-action-button>
+        <app-action-button variant="primary" type="submit" form="internal-department-form"
+            [disabled]="!newDepartment && !head.dirty && !name.dirty && !parent.dirty && !description.dirty && !code.dirty && !costCentre.dirty && !isActive.dirty">{{ newDepartment ? 'Create' : 'Update' }}</app-action-button>
+    </footer>
+</div>

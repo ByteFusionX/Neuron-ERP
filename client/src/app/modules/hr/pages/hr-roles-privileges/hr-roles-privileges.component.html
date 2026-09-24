@@ -1,0 +1,27 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt" *ngIf="categorySection">
+    <app-settings-section-header label="Roles &amp; Privileges" description="Categories of employees and what each one is allowed to see and do." icon="heroUserGroup"></app-settings-section-header>
+
+    <app-data-grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        [showToolbarTools]="false"
+        [showDetailPanel]="false"
+        title="Roles"
+        rowKey="_id"
+        storageKey="hr-roles"
+        [selectable]="false"
+        [data]="roles"
+        [columns]="columns"
+        [loading]="isCategoryLoading"
+        [rowActions]="rowActions"
+        createLabel="Create Role"
+        searchPlaceholder="Search roles"
+        emptyMessage="No roles found"
+        (create)="createCategory()"
+        (rowOpen)="viewCategory($event)"
+        (rowAction)="onRowAction($event)">
+    </app-data-grid>
+</div>
+
+<app-role-form-drawer [open]="formOpen" [mode]="formMode" [category]="formCategory"
+    (saved)="onFormSaved()" (closed)="formOpen = false"></app-role-form-drawer>

@@ -1,0 +1,195 @@
+<app-sf-drawer [title]="title" [subtitle]="subtitle" width="960px"
+  [open]="open" [dirty]="categoryForm.dirty" (closed)="onClose($event)">
+  <form id="role-form" [formGroup]="categoryForm" (ngSubmit)="onSubmit()" novalidate>
+
+    <app-sf-section title="Basic information" columns="2">
+      <app-sf-field label="Role Name" required [control]="categoryForm.controls.categoryName">
+        <app-sf-input formControlName="categoryName" placeholder="Enter role name"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="User Role" required [control]="categoryForm.controls.role">
+        <app-sf-select formControlName="role" [options]="roleOptions" placeholder="Select a role"></app-sf-select>
+      </app-sf-field>
+      <app-sf-field full>
+        <app-sf-checkbox formControlName="isSalespersonWithTarget" label="Salesperson with assigned target"></app-sf-checkbox>
+      </app-sf-field>
+    </app-sf-section>
+
+    <!-- Hidden for now: responsibilities are not read by any feature yet (no routing/notifications).
+    <app-sf-section title="Responsibilities" description="What people in this role are accountable for. Manage the list in Settings, Master Data.">
+      <app-sf-checkbox-group *ngIf="responsibilityOptions.length; else noResponsibilities" formControlName="responsibilities"
+        [options]="responsibilityOptions" [columns]="3"></app-sf-checkbox-group>
+      <ng-template #noResponsibilities>
+        <p class="text-sm text-gray-500 dark:text-gray-400">No responsibilities defined yet.</p>
+      </ng-template>
+    </app-sf-section>
+    -->
+
+
+
+    <app-sf-section title="Approval limit" description="The most this role may approve. Leave empty for no limit." columns="2" formGroupName="approvalLimit">
+      <app-sf-field label="Maximum amount" optional [control]="categoryForm.controls.approvalLimit.controls.maxAmount">
+        <app-sf-number formControlName="maxAmount" [min]="0" [stepper]="false" placeholder="No limit"></app-sf-number>
+      </app-sf-field>
+      <app-sf-field label="Maximum discount" optional [control]="categoryForm.controls.approvalLimit.controls.maxDiscountPercent">
+        <app-sf-number formControlName="maxDiscountPercent" [min]="0" [max]="100" [stepper]="false" suffix="%" placeholder="No limit"></app-sf-number>
+      </app-sf-field>
+    </app-sf-section>
+
+    <app-sf-section title="Access privileges" description="Switch modules on, then choose what the role can see and do in each.">
+      <div class="space-y-3">
+
+        <!-- Toolbar: search, live summary, expand all -->
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative flex-1 min-w-[220px]">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z" />
+            </svg>
+            <input type="search" [(ngModel)]="privilegeSearch" [ngModelOptions]="{standalone: true}" placeholder="Search modules or permissions"
+              class="w-full h-9 pl-9 pr-3 text-sm rounded-lg border border-gray-200 bg-white text-gray-800 placeholder-gray-400 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:bg-erp-surface-dark dark:border-white/10 dark:text-gray-100">
+          </div>
+          <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+            {{ enabledModuleCount }} of {{ privilegeModules.length }} modules enabled
+          </span>
+        </div>
+
+        <!-- Read-only: summary cards with chips -->
+        <div *ngIf="viewing" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div *ngFor="let m of filteredModules" class="rounded-xl border p-4 transition-colors"
+            [ngClass]="hasAccess(m)
+              ? 'border-gray-200 bg-white dark:border-white/10 dark:bg-erp-surface-dark'
+              : 'border-dashed border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/[0.02]'">
+            <div class="flex items-center gap-3">
+              <span class="flex items-center justify-center w-8 h-8 shrink-0 rounded-lg text-[11px] font-bold"
+                [ngClass]="hasAccess(m) ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' : 'bg-gray-100 text-gray-400 dark:bg-white/5'">{{ m.abbr }}</span>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold truncate" [ngClass]="hasAccess(m) ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'">{{ m.label }}</p>
+                <p class="text-xs text-gray-500 truncate dark:text-gray-400">{{ m.description }}</p>
+              </div>
+              <span *ngIf="!hasAccess(m)" class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-white/5">No access</span>
+              <span *ngIf="hasAccess(m)" class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Enabled</span>
+            </div>
+            <div *ngIf="hasAccess(m)" class="mt-3 flex flex-wrap gap-1.5">
+              <span *ngFor="let s of m.scopes" class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+                <span class="text-sky-500/80">{{ s.label }}:</span> {{ scopeLabel(s) }}
+              </span>
+              <span *ngFor="let f of grantedFlags(m)" class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7" /></svg>
+                {{ f.label }}
+              </span>
+              <span *ngIf="!m.scopes.length && !grantedFlags(m).length" class="text-xs px-2 py-1 rounded-md bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-300">View only</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editing: quick presets -->
+        <div *ngIf="!viewing" class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Quick start:</span>
+          <button type="button" (click)="applyPreset('view')"
+            class="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 dark:border-white/10 dark:text-gray-200 dark:hover:bg-violet-500/15">View only</button>
+          <button type="button" (click)="applyPreset('full')"
+            class="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 dark:border-white/10 dark:text-gray-200 dark:hover:bg-violet-500/15">Full access</button>
+          <button type="button" (click)="applyPreset('none')"
+            class="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:border-white/10 dark:text-gray-400 dark:hover:bg-red-500/15">Clear all</button>
+          <span class="text-[11px] text-gray-400">Then fine-tune each module below.</span>
+        </div>
+
+        <!-- Editing: master-detail (module list + settings pane) -->
+        <div *ngIf="!viewing && filteredModules.length"
+          class="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-white/10 dark:bg-erp-surface-dark">
+
+          <!-- Module list -->
+          <nav class="max-h-72 md:max-h-[560px] overflow-y-auto border-b md:border-b-0 md:border-r border-gray-100 p-2 space-y-0.5 dark:border-white/10" aria-label="Modules">
+            <button *ngFor="let m of filteredModules" type="button" (click)="selectModule(m)"
+              [attr.aria-current]="selectedModule?.key === m.key ? 'true' : null"
+              class="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors"
+              [ngClass]="selectedModule?.key === m.key ? 'bg-violet-50 dark:bg-violet-500/15' : 'hover:bg-gray-50 dark:hover:bg-white/5'">
+              <span class="flex items-center justify-center w-7 h-7 shrink-0 rounded-md text-[10px] font-bold transition-colors"
+                [ngClass]="hasAccess(m) ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' : 'bg-gray-100 text-gray-400 dark:bg-white/5'">{{ m.abbr }}</span>
+              <span class="flex-1 min-w-0 text-sm truncate"
+                [ngClass]="selectedModule?.key === m.key ? 'font-semibold text-violet-700 dark:text-violet-200' : (hasAccess(m) ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400')">{{ m.label }}</span>
+              <span *ngIf="hasAccess(m) && m.flags.length" class="text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                {{ grantedFlags(m).length }}/{{ m.flags.length }}
+              </span>
+              <span *ngIf="hasAccess(m) && !m.flags.length" class="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-label="Enabled"></span>
+            </button>
+          </nav>
+
+          <!-- Settings pane -->
+          <section *ngIf="selectedModule as m" class="max-h-[560px] overflow-y-auto">
+            <header class="sticky top-0 z-10 flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-erp-surface-dark/95">
+              <span class="flex items-center justify-center w-9 h-9 shrink-0 rounded-lg text-xs font-bold"
+                [ngClass]="hasAccess(m) ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' : 'bg-gray-100 text-gray-400 dark:bg-white/5'">{{ m.abbr }}</span>
+              <div class="min-w-0 flex-1">
+                <h4 class="text-sm font-semibold text-gray-900 truncate dark:text-gray-100">{{ m.label }}</h4>
+                <p class="text-xs text-gray-500 truncate dark:text-gray-400">{{ m.description }}</p>
+              </div>
+              <span *ngIf="m.alwaysOn" class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 dark:bg-white/5">Always on</span>
+              <label *ngIf="m.master" class="inline-flex items-center gap-2 cursor-pointer">
+                <span class="text-xs font-medium" [ngClass]="isOn(m) ? 'text-violet-700 dark:text-violet-300' : 'text-gray-500'">{{ isOn(m) ? 'Enabled' : 'Disabled' }}</span>
+                <input type="checkbox" class="sr-only peer" [checked]="isOn(m)" (change)="toggleModule(m, $any($event.target).checked)" [attr.aria-label]="'Enable ' + m.label">
+                <span class="relative w-10 h-6 rounded-full bg-gray-200 transition-colors dark:bg-white/15 peer-checked:bg-violet-600 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40
+                  after:content-[''] after:absolute after:top-1 after:left-1 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4"></span>
+              </label>
+            </header>
+
+            <!-- Module switched off -->
+            <div *ngIf="!isOn(m)" class="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+              <span class="flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 text-gray-400 dark:bg-white/5">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+              </span>
+              <p class="text-sm font-medium text-gray-700 dark:text-gray-200">This role has no access to {{ m.label }}</p>
+              <button type="button" (click)="toggleModule(m, true)"
+                class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700">Enable {{ m.label }}</button>
+            </div>
+
+            <div *ngIf="isOn(m)" class="px-5 py-5 space-y-6">
+              <div *ngFor="let s of m.scopes">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ s.label }}</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label *ngFor="let o of s.options" class="cursor-pointer has-[:disabled]:cursor-not-allowed">
+                    <input type="radio" class="sr-only peer" [name]="'priv-' + s.path" [value]="o.value" [formControl]="ctrl(s.path)">
+                    <span class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-700 transition-colors hover:border-gray-300 dark:border-white/10 dark:text-gray-200
+                      peer-checked:border-violet-500 peer-checked:bg-violet-50 peer-checked:text-violet-800 dark:peer-checked:bg-violet-500/15 dark:peer-checked:text-violet-100
+                      peer-disabled:opacity-50 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40">
+                      {{ o.label }}
+                    </span>
+                  </label>
+                </div>
+                <p *ngIf="s.hint && ctrl(s.path).disabled" class="mt-1.5 text-xs text-gray-400">{{ s.hint }}</p>
+              </div>
+
+              <div *ngIf="m.flags.length">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Actions</p>
+                <div class="rounded-lg border border-gray-100 divide-y divide-gray-100 dark:border-white/10 dark:divide-white/10">
+                  <label *ngFor="let f of m.flags" class="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5">
+                    <span class="text-sm text-gray-700 dark:text-gray-200">{{ f.label }}</span>
+                    <input type="checkbox" class="sr-only peer" [formControl]="ctrl(f.path)">
+                    <span class="relative shrink-0 w-9 h-5 rounded-full bg-gray-200 transition-colors dark:bg-white/15 peer-checked:bg-violet-600 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40
+                      after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4"></span>
+                  </label>
+                </div>
+              </div>
+
+              <p *ngIf="!m.scopes.length && !m.flags.length" class="text-sm text-gray-500 dark:text-gray-400">No extra settings — enabling the module grants view access.</p>
+            </div>
+          </section>
+        </div>
+
+        <p *ngIf="!filteredModules.length" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">No modules match "{{ privilegeSearch }}".</p>
+      </div>
+    </app-sf-section>
+
+    <p class="text-red-600 text-sm mt-4 text-center" *ngIf="error" role="alert">{{ error }}</p>
+  </form>
+
+  <ng-container sfDrawerFooter>
+    <span *ngIf="categoryForm.invalid && categoryForm.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+    <app-action-button variant="secondary" (click)="onClose(false)">{{ viewing ? 'Close' : 'Cancel' }}</app-action-button>
+    <app-action-button *ngIf="viewing" variant="primary" (click)="startEditing()">Edit</app-action-button>
+    <app-action-button *ngIf="!viewing" variant="primary" type="submit" form="role-form" [disabled]="isSaving">
+      {{ isSaving ? 'Saving...' : (isEdit ? 'Save Changes' : 'Create Role') }}
+    </app-action-button>
+  </ng-container>
+</app-sf-drawer>
