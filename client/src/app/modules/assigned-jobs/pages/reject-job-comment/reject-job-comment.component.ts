@@ -3,12 +3,13 @@ import {  MatDialogRef,  } from '@angular/material/dialog';
 import { FormBuilder, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormGroup } from '@angular/forms';
 import { NgIf } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
 
 @Component({
     selector: 'app-reject-job-comment',
     templateUrl: './reject-job-comment.component.html',
     styleUrls: ['./reject-job-comment.component.css'],
-    imports: [FormsModule, ReactiveFormsModule, NgIf]
+    imports: [FormsModule, ReactiveFormsModule, NgIf, NgIcon]
 })
 export class RejectJobCommentComponent {
   rejectForm!: FormGroup;

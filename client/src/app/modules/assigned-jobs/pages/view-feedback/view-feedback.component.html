@@ -1,28 +1,43 @@
-<div class="bg-white rounded-lg shadow-lg w-full">
-    <div class="border-b px-4 py-3 flex justify-between">
-        <h3 class="text-lg font-semibold text-gray-900">Feedback</h3>
-        <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="closeModal()">
-            <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-        </button>
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+  <!-- Header -->
+  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+    <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900">
+      <ng-icon name="heroChatBubbleBottomCenterText" class="text-lg"></ng-icon>
+    </span>
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold leading-6">Feedback</h2>
+      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Responses received for this job.</p>
     </div>
-    <div class="px-8 py-5">
-        <ng-container *ngFor="let feedback of data.feedback">
-            <div class="mb-4 py-4 px-4  border-2 border-gray-200 rounded-lg"
-                [ngClass]="{'border border-orange-500': feedback.seenByFeedbackRequester == false}">
-                <div class="flex justify-between items-center w-full">
-                    <div>
-                        <h4 *ngIf="feedback?.employeeId?.firstName" class="text-md font-semibold">{{
-                            feedback.employeeId.firstName + ' ' + feedback.employeeId.lastName }}
-                        </h4>
-                        <p *ngIf="feedback.feedback; else noFeedback">{{ feedback.feedback }}</p>
-                    </div>
-                    <ng-template #noFeedback>
-                        <p class="text-gray-500 italic">No feedback has been received yet</p>
-                    </ng-template>
-                    <span *ngIf="feedback.seenByFeedbackRequester == false"
-                        class="bg-orange-200 rounded-xl text-xs py-1 px-2 text-orange-500">New</span>
-                </div>
-            </div>
-        </ng-container>
-    </div>
+    <button type="button" (click)="closeModal()" aria-label="Close"
+      class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+      <ng-icon name="heroXMark" class="text-base"></ng-icon>
+    </button>
+  </header>
+
+  <!-- Body -->
+  <div class="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+    <ng-container *ngFor="let feedback of data.feedback">
+      <div class="rounded-lg border-2 border-gray-200 dark:border-erp-border-dark px-4 py-4"
+        [ngClass]="{'border-orange-500': feedback.seenByFeedbackRequester == false}">
+        <div class="flex w-full items-center justify-between">
+          <div>
+            <h4 *ngIf="feedback?.employeeId?.firstName" class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {{ feedback.employeeId.firstName + ' ' + feedback.employeeId.lastName }}
+            </h4>
+            <p *ngIf="feedback.feedback; else noFeedback" class="text-sm text-gray-700 dark:text-gray-300">{{ feedback.feedback }}</p>
+          </div>
+          <ng-template #noFeedback>
+            <p class="text-sm italic text-gray-500 dark:text-gray-400">No feedback has been received yet</p>
+          </ng-template>
+          <span *ngIf="feedback.seenByFeedbackRequester == false"
+            class="rounded-xl bg-orange-200 px-2 py-1 text-xs text-orange-600">New</span>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+
+  <!-- Footer -->
+  <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+    <app-action-button variant="secondary" (click)="closeModal()">Close</app-action-button>
+  </footer>
 </div>

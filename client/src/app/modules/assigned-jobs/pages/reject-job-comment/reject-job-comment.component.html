@@ -1,21 +1,36 @@
-<div class="bg-opacity-50 flex items-center justify-center w-full">
-    <div class="bg-white rounded-lg  p-6">
-        <div class="mb-4">
-            <h2 class="text-lg font-bold text-red-600">Reject Job</h2>
-            <p class="text-sm text-gray-600">Are you sure you want to reject this Job? This action cannot be undone.</p>
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+    <!-- Header -->
+    <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+        <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-red-50 text-red-600 ring-1 ring-inset ring-red-100 dark:bg-red-950/40 dark:text-red-400 dark:ring-red-900">
+            <ng-icon name="heroExclamationTriangle" class="text-lg"></ng-icon>
+        </span>
+        <div class="min-w-0 flex-1">
+            <h2 class="text-base font-semibold leading-6">Reject job</h2>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Are you sure you want to reject this job? This action cannot be undone.</p>
         </div>
-        <form [formGroup]="rejectForm" (ngSubmit)="onSubmit()">
-            <div class="mb-4">
-                <label for="rejectionComment" class="block text-sm font-medium text-gray-700">Comment</label>
-                <textarea id="rejectionComment" formControlName="comment" rows="4" class="mt-1 block p-2 border w-full rounded-md border-gray-300 shadow-sm outline-none sm:text-sm" placeholder="Enter your comment..."></textarea>
-                <div *ngIf="rejectForm.controls['comment'].invalid && (rejectForm.controls['comment'].dirty || rejectForm.controls['comment'].touched)" class="text-red-600 text-sm mt-1">
-                    Comment is required.
-                </div>
-            </div>
-            <div class="flex justify-end space-x-2">
-                <button type="button" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md" (click)="onCancel()">Cancel</button>
-                <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md" [disabled]="rejectForm.invalid">Reject Job</button>
-            </div>
-        </form>
-    </div>
+        <button type="button" (click)="onCancel()" aria-label="Close"
+            class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+            <ng-icon name="heroXMark" class="text-base"></ng-icon>
+        </button>
+    </header>
+
+    <!-- Body -->
+    <form [formGroup]="rejectForm" (ngSubmit)="onSubmit()" class="flex-1 overflow-y-auto px-6 py-5">
+        <label for="rejectionComment" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Comment</label>
+        <textarea id="rejectionComment" formControlName="comment" rows="4"
+            class="mt-1 block w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm outline-none dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-100"
+            placeholder="Enter your comment..."></textarea>
+        <div *ngIf="rejectForm.controls['comment'].invalid && (rejectForm.controls['comment'].dirty || rejectForm.controls['comment'].touched)"
+            class="mt-1 text-sm text-red-600 dark:text-red-400">
+            Comment is required.
+        </div>
+    </form>
+
+    <!-- Footer -->
+    <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+        <button type="button" (click)="onCancel()"
+            class="rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-[13px] font-medium text-gray-700 transition hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
+        <button type="submit" (click)="onSubmit()" [disabled]="rejectForm.invalid"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3.5 py-2 text-[13px] font-medium text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">Reject Job</button>
+    </footer>
 </div>

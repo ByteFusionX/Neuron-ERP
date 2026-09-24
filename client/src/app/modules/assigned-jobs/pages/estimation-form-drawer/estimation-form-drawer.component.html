@@ -1,0 +1,81 @@
+<!-- Step 1 needs room for the item table, so the drawer widens for that step only. -->
+<app-sf-drawer [title]="title" [subtitle]="subtitle"
+    [width]="step === 1 ? 'min(1400px, 96vw)' : '860px'"
+    [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed($event)">
+
+    <!-- Stepper -->
+    <ol class="mb-5 flex items-center gap-2">
+        <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+                [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+                (click)="goToStep(s.n)">
+                <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
+                    [ngClass]="s.n === step
+                        ? 'bg-violet-600 text-white'
+                        : (s.n < step && isStepValid(s.n))
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">
+                    <ng-icon *ngIf="s.n < step && isStepValid(s.n); else stepNumber" name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
+                    <ng-template #stepNumber>{{ s.n }}</ng-template>
+                </span>
+                <span class="truncate text-xs font-medium"
+                    [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
+            </button>
+            <span *ngIf="s.n < 2" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
+        </li>
+    </ol>
+
+    <form id="estimation-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+
+        <!-- Step 1 — items -->
+        <div [hidden]="step !== 1">
+            <app-item-entry [optionalItems]="optionalItems"
+                [seedOptionalItems]="seedOptionalItems" [currency]="form.controls.currency.value || 'QAR'"
+                (totals)="onItemTotals($event)"></app-item-entry>
+        </div>
+
+        <!-- Step 2 — currency, discount & note -->
+        <ng-container *ngIf="step === 2">
+            <app-sf-section title="Terms" columns="2">
+                <app-sf-field label="Currency" [control]="form.controls.currency">
+                    <app-sf-select formControlName="currency" [options]="currencyOptions"></app-sf-select>
+                </app-sf-field>
+                <app-sf-field label="Total Discount" [control]="form.controls.totalDiscount">
+                    <app-sf-number formControlName="totalDiscount" [min]="0"></app-sf-number>
+                </app-sf-field>
+            </app-sf-section>
+
+            <app-sf-section title="Presale Note">
+                <app-sf-field full label="Note" [control]="form.controls.presaleNote">
+                    <app-sf-textarea formControlName="presaleNote" [rows]="6" placeholder="Presale note"></app-sf-textarea>
+                </app-sf-field>
+            </app-sf-section>
+
+            <app-sf-section title="Summary" columns="3">
+                <app-sf-field label="Total cost">
+                    <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ itemTotals.totalCost | number: '1.2-2' }}</p>
+                </app-sf-field>
+                <app-sf-field label="Margin">
+                    <p class="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{{ itemTotals.totalProfit | number: '1.1-1' }}%</p>
+                </app-sf-field>
+                <app-sf-field label="Total amount">
+                    <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                        {{ netAmount | number: '1.2-2' }} {{ form.controls.currency.value }}
+                    </p>
+                </app-sf-field>
+            </app-sf-section>
+        </ng-container>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <span *ngIf="!isStepValid(step) && form.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>
+
+        <app-action-button *ngIf="step < 2" variant="primary" (click)="nextStep()">Next: {{ steps[step].label }}</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="estimation-form" [disabled]="saving">
+            {{ saving ? 'Saving…' : 'Save' }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

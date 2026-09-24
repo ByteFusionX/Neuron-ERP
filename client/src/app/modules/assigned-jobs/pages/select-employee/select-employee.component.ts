@@ -1,22 +1,23 @@
 import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Observable } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { NgIcon } from '@ng-icons/core';
-import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
-import { NgFor, NgClass, NgIf, AsyncPipe } from '@angular/common';
+import { NgIf } from '@angular/common';
+import { SfFieldComponent } from 'src/app/shared/components/smart-form/sf-field.component';
+import { SfComboboxComponent } from 'src/app/shared/components/smart-form/sf-combobox.component';
+import { SfTextareaComponent } from 'src/app/shared/components/smart-form/sf-textarea.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 
 @Component({
     selector: 'app-select-employee',
     templateUrl: './select-employee.component.html',
-    styleUrls: ['./select-employee.component.css'],
-    imports: [NgIcon, NgSelectComponent, FormsModule, NgFor, NgOptionComponent, NgClass, NgIf, AsyncPipe]
+    imports: [NgIcon, FormsModule, NgIf, SfFieldComponent, SfComboboxComponent, SfTextareaComponent, ActionButtonComponent]
 })
 export class SelectEmployeeComponent {
 
-  employees$!: Observable<getEmployee[]>
+  employeeOptions: SfOption[] = [];
   selectedEmployee!:string;
   comment!:string;
   showError:boolean = false;
@@ -29,7 +30,9 @@ export class SelectEmployeeComponent {
   ) { }
 
   ngOnInit(){
-    this.employees$ = this._employeeService.getAllEmployees()
+    this._employeeService.getAllEmployees().subscribe((employees) => {
+      this.employeeOptions = employees.map((e) => ({ value: e._id, label: `${e.firstName} ${e.lastName}` }));
+    });
   }
 
   validateComment() {

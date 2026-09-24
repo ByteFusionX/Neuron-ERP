@@ -1,38 +1,34 @@
-<!-- Modal Background -->
-<div class="  flex items-center justify-center">
-    <!-- Modal Container -->
-    <div class="bg-white rounded-lg shadow-lg w-full">
-      <!-- Modal Header -->
-      <div class="border-b px-4 py-3 flex justify-between md:gap-32 gap-8">
-        <h3 class="text-lg font-semibold text-gray-900">Ask for Feedback</h3>
-        <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
-          <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-        </button>
-      </div>
-      <!-- Modal Body -->
-      <div class="px-4 py-5">
-        <label for="employee-select" class="block text-sm font-medium text-gray-700">Employee</label>
-        <div class="mt-1">
-            <ng-select id="employee" class="filter" placeholder="Employees" appendTo="body" [(ngModel)]="selectedEmployee">
-                <ng-option *ngFor="let employee of employees$ | async"
-                    [value]="employee._id">{{employee.firstName}} {{employee.lastName}}</ng-option>
-            </ng-select>
-        </div>
-        <div class="mt-3">
-          <label for="comment" class="block text-sm font-medium text-gray-700">Comment</label>
-          <textarea id="comment" name="comment" rows="4" [(ngModel)]="comment" (ngModelChange)="validateComment()" [ngClass]="{'border-orange-500':showError}"
-              class="p-2 mt-1 block w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="Enter your comment here"></textarea>
-          <div *ngIf="showError" class="text-red-500 mt-1 text-sm">
-              Please provide your comment.
-          </div>
-      </div>
-      </div>
-      <!-- Modal Footer -->
-      <div class="border-t px-4 py-3 flex justify-end">
-        <button type="button" class="mr-2 px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" (click)="onClose()">Cancel</button>
-        <button type="button" class="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" (click)="onSubmit()">Submit</button>
-      </div>
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+  <!-- Header -->
+  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+    <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900">
+      <ng-icon name="heroChatBubbleLeftRight" class="text-lg"></ng-icon>
+    </span>
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold leading-6">Ask for feedback</h2>
+      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Request input from a colleague on this job.</p>
     </div>
+    <button type="button" (click)="onClose()" aria-label="Close"
+      class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+      <ng-icon name="heroXMark" class="text-base"></ng-icon>
+    </button>
+  </header>
+
+  <!-- Body -->
+  <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+    <app-sf-field label="Employee">
+      <app-sf-combobox [options]="employeeOptions" [(ngModel)]="selectedEmployee" placeholder="Select employee"></app-sf-combobox>
+    </app-sf-field>
+
+    <app-sf-field label="Comment">
+      <app-sf-textarea [(ngModel)]="comment" (ngModelChange)="validateComment()" [rows]="4" placeholder="Enter your comment here"></app-sf-textarea>
+      <p *ngIf="showError" class="mt-1 text-sm text-red-500">Please provide your comment.</p>
+    </app-sf-field>
   </div>
-  
+
+  <!-- Footer -->
+  <footer class="flex justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+    <app-action-button variant="secondary" (click)="onClose()">Cancel</app-action-button>
+    <app-action-button variant="primary" (click)="onSubmit()">Submit</app-action-button>
+  </footer>
+</div>

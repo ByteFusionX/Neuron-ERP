@@ -1,139 +1,63 @@
-<div class="bg-white m-6">
-    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Completed Jobs"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        [totalCount]="total"
+        emptyMessage="No Data"
+        [rowActions]="rowActions"
+        storageKey="completed-jobs-list"
+        [detailLoading]="detailLoading"
+        [detailTabs]="detailTabs"
+        [detailTitle]="rowTitle"
+        [detailSubtitle]="rowSubtitle"
+        (rowOpen)="onRowOpen($event)"
+        (rowAction)="onRowAction($event)"
+        (queryChange)="onQueryChange($event)">
 
-        <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-            <h3 class="font-semibold">Completed Jobs</h3>
-        </div>
-    </div>
+        <ng-template #detailMetaTemplate let-row>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Customer</p>
+                <p class="qt-meta-value">{{ row.client?.[0]?.companyName }}</p>
+            </div>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Department</p>
+                <p class="qt-meta-value">{{ row.department?.[0]?.departmentName }}</p>
+            </div>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Assigned By</p>
+                <p class="qt-meta-value">{{ row.salesPerson?.[0]?.firstName }} {{ row.salesPerson?.[0]?.lastName }}</p>
+            </div>
+        </ng-template>
 
-    <app-skelton-loading *ngIf="isLoading && !isEmpty" [lineLength]="4"></app-skelton-loading>
-    <div class="m-8  overflow-y-auto overflow-x-auto">
-        <section class="mat-elevation-z8 h-fit max-h-[64vh] overflow-auto" tabindex="0">
-            <table mat-table *ngIf="!isLoading || isEmpty" [dataSource]="dataSource" class="rounded-lg table-fixed">
-
-                <ng-container matColumnDef="enqId">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Enquiry ID </th>
-                    <td mat-cell *matCellDef="let element">
-                        <p class="text-violet-500 font-medium">{{element.enquiryId}}</p>
-                    </td>
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'overview'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
                 </ng-container>
 
-                <ng-container matColumnDef="customerName">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Customer Name </th>
-                    <td mat-cell *matCellDef="let element"> {{element.client[0].companyName}} </td>
+                <ng-container *ngSwitchCase="'comments'">
+                    <app-detail-comments [comments]="commentsFor(row)" emptyMessage="No comments for this job."></app-detail-comments>
                 </ng-container>
 
-                <ng-container matColumnDef="description">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Description </th>
-                    <td mat-cell *matCellDef="let element">
-                        <span class="block max-w-[180px] truncate" [matTooltip]="element.title"
-                            matTooltipPosition="above" matTooltipClass="mat-tooltip">{{element.title}}</span>
-                    </td>
+                <ng-container *ngSwitchCase="'documents'">
+                    <app-detail-documents
+                        title="Presale Files"
+                        emptyMessage="No files uploaded yet."
+                        [documents]="presaleDocuments(row)"
+                        (open)="onDocPreview(row, $event)"
+                        (download)="onDocDownload(row, $event)"></app-detail-documents>
                 </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
 
-                <ng-container matColumnDef="assignedBy">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Ass. By </th>
-                    <td mat-cell *matCellDef="let element"> {{element.salesPerson[0].firstName}}
-                        {{element.salesPerson.lastName}}</td>
-                </ng-container>
-
-                <ng-container matColumnDef="department">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Depart. </th>
-                    <td mat-cell *matCellDef="let element"> {{element.department[0].departmentName}} </td>
-                </ng-container>
-
-                <ng-container matColumnDef="comment">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-center text-dark  text-[15px] font-medium border-none before:hidden">
-                        Comment </th>
-                    <td mat-cell *matCellDef="let element" >
-                        <div class="flex justify-center items-center">
-                            <button (click)="onViewComment(element.preSale.comment,element.preSale.revisionComment)"
-                            class="w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
-                            matTooltip="View Comment" matTooltipPosition="above" matTooltipClass="mat-tooltip">
-                            <ng-icon name="heroEye" class="text-black"></ng-icon>
-                        </button>
-                        </div>
-                    </td>
-                </ng-container>
-
-                <ng-container matColumnDef="download">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Files </th>
-                    <td mat-cell *matCellDef="let element">
-                        <div class="flex justify-center items-center gap-2">
-                            <button type="button" *ngIf="element.preSale?.presaleFiles?.length"
-                                (click)="openAttachmentView(element)"
-                                class="w-8 h-8 rounded-full border border-violet-300 bg-violet-50 hover:bg-violet-100 hover:border-violet-500 flex justify-center items-center"
-                                matTooltip="View Files" matTooltipPosition="above" matTooltipClass="mat-tooltip">
-                                <ng-icon name="heroDocumentText" class="text-violet-700"></ng-icon>
-                            </button>
-                        </div>
-                    </td>
-                </ng-container>
-
-                <ng-container matColumnDef="presaleFiles">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Estimations </th>
-                    <td mat-cell *matCellDef="let element; let i = index">
-                        <div class="flex justify-center items-center">
-                            <button
-                                class="w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
-                                *ngIf="element.preSale.estimations" matTooltip="View Estimations" matTooltipPosition="above"
-                                matTooltipClass="mat-tooltip"
-                                (click)="onViewEstimation(element.preSale.estimations,element._id)">
-                                <ng-icon name="heroEye" class="text-black"></ng-icon>
-                            </button>
-                        </div>
-                    </td>
-                </ng-container>
-
-                <ng-container matColumnDef="feedbacks">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100  px-[20px] py-[16px] text-start text-dark  text-[15px] font-medium border-none before:hidden">
-                        Feedbacks
-                    </th>
-                    <td mat-cell *matCellDef="let element; let i = index">
-
-                            <div class="flex items-center justify-center">
-                                <button *ngIf="element.preSale.feedback"
-                            class="w-8 h-8 rounded-full  border border-gray-300 hover:border-gray-500 flex justify-center items-center"
-                            matTooltip="View Feedback" matTooltipPosition="above" matTooltipClass="mat-tooltip"
-                            (click)="viewFeedback(element.preSale.feedback,element._id,i)">
-                            <ng-icon name="heroEye" class="text-black"></ng-icon></button>
-                            </div>
-                        
-                    </td>
-                </ng-container>
-
-                
-
-                <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-                <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-            </table>
-        </section>
-        <div class="w-full bg-white" *ngIf="!isEmpty">
-            <app-pagination [page]="page" [row]="row" [total]="total"
-                (changeData)="onDateChange($event)"></app-pagination>
-        </div>
-    </div>
-    <div *ngIf="isEmpty" class="w-full flex justify-center items-center">
-        <div class="p-3">
-            <img src="assets/images/empty.png" alt="">
-            <p class="m-2 text-center text-gray-500">No Data</p>
-        </div>
-    </div>
     <app-view-estimation [open]="!!estimationTarget" [estimation]="estimationTarget?.estimation ?? null" [enquiryId]="estimationTarget?.enqId ?? ''" (closed)="estimationTarget = null"></app-view-estimation>
 </div>

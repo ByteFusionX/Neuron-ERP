@@ -1,23 +1,23 @@
 import { Component, Inject, OnDestroy, OnInit } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Observable, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
-import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { NgIcon } from '@ng-icons/core';
-import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
 import { FormsModule } from '@angular/forms';
-import { NgFor, AsyncPipe } from '@angular/common';
+import { SfFieldComponent } from 'src/app/shared/components/smart-form/sf-field.component';
+import { SfComboboxComponent } from 'src/app/shared/components/smart-form/sf-combobox.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 
 @Component({
     selector: 'app-reassign-employee',
     templateUrl: './reassign-employee.component.html',
-    styleUrls: ['./reassign-employee.component.css'],
-    imports: [NgIcon, NgSelectComponent, FormsModule, NgFor, NgOptionComponent, AsyncPipe]
+    imports: [NgIcon, FormsModule, SfFieldComponent, SfComboboxComponent, ActionButtonComponent]
 })
 export class ReassignEmployeeComponent implements OnInit, OnDestroy {
 
-  employees$!: Observable<getEmployee[]>;
+  employeeOptions: SfOption[] = [];
   selectedEmployee!: string;
   private subscriptions = new Subscription()
 
@@ -29,7 +29,9 @@ export class ReassignEmployeeComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
-    this.employees$ = this._employeeService.getPresaleEngineers()
+    this._employeeService.getPresaleEngineers().subscribe((employees) => {
+      this.employeeOptions = employees.map((e) => ({ value: e._id, label: `${e.firstName} ${e.lastName}` }));
+    });
   }
 
   onClose() {

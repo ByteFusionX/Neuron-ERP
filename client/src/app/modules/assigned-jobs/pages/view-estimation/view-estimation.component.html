@@ -1,67 +1,50 @@
 <app-sf-drawer title="Estimations" width="1100px" [open]="open" (closed)="closed.emit()">
 
     <ng-container *ngIf="estimation">
-        <div *ngIf="options.length > 1" class="mb-4 flex flex-wrap items-center gap-2">
-            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Option</span>
-            <button *ngFor="let o of options; let i = index" type="button"
-                class="rounded-full border px-3 py-1 text-[13px] transition-colors"
-                [ngClass]="i === selectedOption
-                    ? 'border-violet-600 bg-violet-600 text-white'
-                    : 'border-gray-300 dark:border-erp-border-dark text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5'"
-                (click)="selectedOption = i">Option {{ i + 1 }}</button>
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div *ngIf="options.length > 1" class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Option</span>
+                <button *ngFor="let o of options; let i = index" type="button"
+                    class="rounded-full border px-3 py-1 text-[13px] transition-colors"
+                    [ngClass]="i === selectedOption
+                        ? 'border-violet-600 bg-violet-600 text-white'
+                        : 'border-gray-300 dark:border-erp-border-dark text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5'"
+                    (click)="selectedOption = i">Option {{ i + 1 }}</button>
+            </div>
+
+            <div class="flex items-center gap-1 rounded-lg border border-gray-200 p-1 dark:border-erp-border-dark">
+                <button type="button" class="rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors"
+                    [ngClass]="tab === 'items' ? 'bg-violet-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5'"
+                    (click)="tab = 'items'">Items</button>
+                <button type="button" class="rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors"
+                    [ngClass]="tab === 'summary' ? 'bg-violet-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5'"
+                    (click)="tab = 'summary'">Summary</button>
+            </div>
         </div>
 
-        <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-erp-border-dark">
-            <table class="w-full min-w-[860px] text-left text-[13px] text-gray-800 dark:text-gray-100">
-                <thead class="bg-gray-50 dark:bg-white/5 text-[11px] uppercase text-gray-600 dark:text-gray-300">
-                    <tr>
-                        <th class="px-4 py-2.5">Item details</th>
-                        <th class="px-3 py-2.5 text-center">Qty</th>
-                        <th class="px-3 py-2.5 text-right">Unit cost ({{ estimation.currency }})</th>
-                        <th class="px-3 py-2.5 text-right">Total cost ({{ estimation.currency }})</th>
-                        <th class="px-3 py-2.5 text-right">Profit</th>
-                        <th class="px-3 py-2.5 text-right">Unit price ({{ estimation.currency }})</th>
-                        <th class="px-3 py-2.5 text-right">Total price ({{ estimation.currency }})</th>
-                        <th class="px-3 py-2.5 text-center">Avbl.</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <ng-container *ngFor="let item of option?.items">
-                        <tr class="border-t border-gray-200 dark:border-erp-border-dark bg-gray-50/70 dark:bg-white/[0.03]">
-                            <td colspan="8" class="px-4 py-2 text-center text-xs font-semibold uppercase">{{ item.itemName }}</td>
-                        </tr>
-                        <tr *ngFor="let d of item.itemDetails" class="border-t border-gray-100 dark:border-erp-border-dark align-top">
-                            <td class="whitespace-pre-line px-4 py-2"><div [innerHTML]="d.detail | parseBracketsText | parseBoldText"></div></td>
-                            <td class="px-3 py-2 text-center">{{ d.quantity }}</td>
-                            <td class="px-3 py-2 text-right">{{ d.unitCost | numberFormatter }}</td>
-                            <td class="px-3 py-2 text-right">{{ d.quantity * d.unitCost | numberFormatter }}</td>
-                            <td class="px-3 py-2 text-right">{{ profit(d) | number: '1.2-2' }}%</td>
-                            <td class="px-3 py-2 text-right">{{ d.unitSellingPrice | numberFormatter }}</td>
-                            <td class="px-3 py-2 text-right">{{ d.unitSellingPrice * d.quantity | numberFormatter }}</td>
-                            <td class="px-3 py-2 text-center">{{ d.availability }}</td>
-                        </tr>
-                    </ng-container>
-                </tbody>
-            </table>
+        <!-- items -->
+        <div *ngIf="tab === 'items'">
+            <app-detail-table [columns]="itemCols" [rows]="itemRows" groupStyle="band" numbered groupTotals spread centerGroups
+                emptyMessage="No items in this option."></app-detail-table>
         </div>
 
-        <div class="mt-5 grid gap-4 md:grid-cols-2">
-            <dl class="divide-y divide-gray-200 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark text-[13px]">
-                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Total cost</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ totalCost | numberFormatter }}</dd></div>
-                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Total selling price</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ sellingPrice | numberFormatter }}</dd></div>
-                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Profit margin</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ profitAmount | numberFormatter }}</dd></div>
-                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Profit margin %</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ profitPercent | number: '1.2-2' }}%</dd></div>
-            </dl>
-            <dl class="divide-y divide-gray-200 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark text-[13px]">
-                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Subtotal</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ sellingPrice | numberFormatter }}</dd></div>
-                <div class="flex justify-between px-4 py-2.5"><dt class="text-gray-600 dark:text-gray-300">Discount</dt><dd class="font-medium text-gray-900 dark:text-gray-100">{{ discount | numberFormatter }}</dd></div>
-                <div class="flex justify-between px-4 py-2.5"><dt class="font-semibold text-gray-900 dark:text-gray-100">Total amount</dt><dd class="font-semibold text-gray-900 dark:text-gray-100">{{ netAmount | numberFormatter }}</dd></div>
-            </dl>
-        </div>
+        <!-- summary -->
+        <div *ngIf="tab === 'summary'" class="space-y-6">
+            <div class="grid gap-6 lg:grid-cols-2">
+                <app-detail-section title="Cost Summary">
+                    <app-detail-field label="Total Cost" numeric>{{ totalCost | numberFormatter }}</app-detail-field>
+                    <app-detail-field label="Total Selling price" numeric>{{ sellingPrice | numberFormatter }}</app-detail-field>
+                    <app-detail-field label="Profit Margin" numeric>{{ profitAmount | numberFormatter }}</app-detail-field>
+                    <app-detail-field label="Profit margin with %" numeric>{{ profitPercent.toFixed(2) }}%</app-detail-field>
+                </app-detail-section>
+                <app-detail-section title="Price Summary">
+                    <app-detail-field label="Subtotal" numeric>{{ sellingPrice | numberFormatter }}</app-detail-field>
+                    <app-detail-field label="Discount" numeric>{{ discount | numberFormatter }}</app-detail-field>
+                    <app-detail-field label="Total Amount" numeric>{{ netAmount | numberFormatter }}</app-detail-field>
+                </app-detail-section>
+            </div>
 
-        <div *ngIf="estimation.presaleNote" class="mt-5 rounded-lg border-l-4 border-violet-500 bg-violet-50 dark:bg-violet-500/10 px-4 py-3 text-[13px]">
-            <p class="text-xs font-semibold uppercase text-violet-700 dark:text-violet-300">Presale note</p>
-            <p class="mt-1 text-gray-800 dark:text-gray-100">{{ estimation.presaleNote }}</p>
+            <app-detail-clause-list [clauses]="noteClauses" emptyMessage="No presale note added."></app-detail-clause-list>
         </div>
     </ng-container>
 

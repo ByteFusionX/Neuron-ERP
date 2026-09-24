@@ -5,12 +5,12 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { feedback } from 'src/app/shared/interfaces/enquiry.interface';
 import { NgIcon } from '@ng-icons/core';
 import { NgFor, NgClass, NgIf } from '@angular/common';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 
 @Component({
     selector: 'app-view-feedback',
     templateUrl: './view-feedback.component.html',
-    styleUrls: ['./view-feedback.component.css'],
-    imports: [NgIcon, NgFor, NgClass, NgIf]
+    imports: [NgIcon, NgFor, NgClass, NgIf, ActionButtonComponent]
 })
 export class ViewFeedbackComponent {
 
