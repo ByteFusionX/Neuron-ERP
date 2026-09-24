@@ -12,11 +12,20 @@ export interface Product {
   _id?: string;
   partNo: string;
   itemCode: string;
+  productName?: string;
   productDescription: string;
   productCategory: any;
   productSegment: any;
   warehouse: any;
   brand: string;
+  type?: string;
+  unitOfMeasure?: string;
+  defaultTaxRate?: number | null;
+  defaultSellingPrice?: number | null;
+  estimatedCost?: number | null;
+  isActive?: boolean;
+  approvalStatus?: 'Draft' | 'Pending' | 'Approved';
+  rejectionReason?: string;
   createdBy?: any;
   createdDate: Date;
   updatedDate?: Date;
@@ -100,6 +109,14 @@ export class ProductService {
 
   updateProduct(id: string, product: Partial<Product>): Observable<Product> {
     return this.http.patch<Product>(`${this.api}/product/${id}`, product);
+  }
+
+  approveProduct(id: string): Observable<Product> {
+    return this.http.post<Product>(`${this.api}/product/${id}/approve`, {}, { context: context() });
+  }
+
+  rejectProduct(id: string, reason: string): Observable<Product> {
+    return this.http.post<Product>(`${this.api}/product/${id}/reject`, { reason }, { context: context() });
   }
 
   deleteProduct(id: string): Observable<any> {

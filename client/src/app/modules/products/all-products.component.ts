@@ -1,331 +1,359 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { MatDialog } from '@angular/material/dialog';
+import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { DatePipe, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
-import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
+import { forkJoin, of, Subscription } from 'rxjs';
 import { ProductService, Product, ProductQueryParams } from 'src/app/core/services/product/product.service';
-import { CreateProductComponent } from './modals/create-product/create-product.component';
-import { ProductViewComponent } from './modals/product-view/product-view.component';
-import { PaginationService } from 'src/app/core/services/pagination.service';
-import { NgIcon } from '@ng-icons/core';
-import { SearchComponent } from 'src/app/shared/components/search/search.component';
+import { PRODUCT_TYPES } from 'src/app/shared/interfaces/product.interface';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import {
+  DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridColumn, DataGridDetailTab,
+  DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView,
+} from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { ProductFormDrawerComponent } from './pages/product-form-drawer/product-form-drawer.component';
 
 @Component({
   selector: 'app-all-products',
   standalone: true,
-  imports: [
-    CommonModule,
-    TableComponent,
-    ButtonComponent,
-    NgIcon,
-    SearchComponent
-  ],
+  imports: [NgIf, NgSwitch, NgSwitchCase, DatePipe, DataGridComponent, DetailOverviewComponent, ProductFormDrawerComponent],
   templateUrl: './all-products.component.html',
   styleUrl: './all-products.component.css',
-  providers: [PaginationService]
+  providers: [DatePipe],
 })
-export class AllProductsComponent implements OnInit {
+export class AllProductsComponent implements OnInit, OnDestroy {
+  @ViewChild('grid') grid!: DataGridComponent<Product>;
+
   private productService = inject(ProductService);
-  private dialog = inject(MatDialog);
-  private toastr = inject(ToastrService);
-  private paginationService = inject(PaginationService);
   private productCategoryService = inject(ProductCategoryService);
   private profileService = inject(ProfileService);
   private warehouseService = inject(WarehouseService);
+  private confirm = inject(ConfirmDialogService);
+  private toastr = inject(ToastrService);
+  private datePipe = inject(DatePipe);
+  private subscriptions = new Subscription();
 
-  tableData = signal<Product[]>([]);
-  tableColumns: TableColumn[] = [];
-  defaultColumns: string[] = ['createdDate', 'itemCode', 'partNo', 'productDescription', 'productCategory', 'productSegment', 'warehouse', 'brand', 'createdBy'];
-  isLoading = signal<boolean>(false);
-  isEmpty = signal<boolean>(false);
-  totalItems = signal<number>(0);
-  categoryOptions = signal<{ label: string; value: string }[]>([]);
-  segmentOptions = signal<{ label: string; value: string }[]>([]);
-  warehouseOptions = signal<{ label: string; value: string }[]>([]);
+  isLoading = true;
+  rows: Product[] = [];
+  total = 0;
+  page = 1;
+  row = 10;
+  searchQuery = '';
+
+  columns: DataGridColumn<Product>[] = [];
+  rowActions: DataGridRowAction<Product>[] = [];
+  views: DataGridView<Product>[] = [{ id: 'all', label: 'All' }];
+  bulkActions: DataGridBulkAction[] = [{ id: 'delete', label: 'Delete', variant: 'danger' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
+  detailTabs: DataGridDetailTab[] = [
+    { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'pricing', label: 'Pricing', icon: 'wallet' },
+  ];
+  private activeViewId = 'all';
+
+  productTitle = (r: Product) => r.productName || r.itemCode || '';
+  productSubtitle = (r: Product) => r.itemCode ?? '';
 
   private appliedFilters: Record<string, any> = {};
-  private searchTerm: string = '';
 
   ngOnInit(): void {
-    this.setupTableColumns();
+    this.buildColumns();
+    this.buildRowActions();
     this.loadFilterOptions();
-    this.loadProducts();
+    this.getProducts();
   }
 
-  loadFilterOptions(): void {
-    this.productCategoryService.getProductCategories().subscribe({
-      next: (categories) => {
-        const options = (categories ?? []).map(category => ({
-          label: category.categoryName,
-          value: category._id as string
-        }));
-        this.categoryOptions.set(options);
-        this.updateColumnFilterOptions('productCategory', options);
-      },
-      error: () => {
-        this.toastr.error('Failed to load product categories');
-      }
-    });
-
-    this.profileService.getDepartments().subscribe({
-      next: (departments) => {
-        const options = (departments ?? []).map(department => ({
-          label: department.departmentName,
-          value: department._id as string
-        }));
-        this.segmentOptions.set(options);
-        this.updateColumnFilterOptions('productSegment', options);
-      },
-      error: () => {
-        this.toastr.error('Failed to load product segments');
-      }
-    });
-
-    this.warehouseService.getWarehouses().subscribe({
-      next: (warehouses) => {
-        const options = (warehouses ?? []).map(wh => ({
-          label: wh.wareHouseName,
-          value: wh._id as string
-        }));
-        this.warehouseOptions.set(options);
-        this.updateColumnFilterOptions('warehouse', options);
-      },
-      error: () => {
-        this.toastr.error('Failed to load warehouses');
-      }
-    });
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
   }
 
-  private updateColumnFilterOptions(columnKey: string, options: { label: string; value: string }[]): void {
-    const column = this.tableColumns.find(col => col.key === columnKey);
-    if (column) {
-      column.filterOptions = options;
-    }
-  }
-
-  setupTableColumns(): void {
-    this.tableColumns = [
+  private buildColumns(): void {
+    this.columns = [
+      { key: 'itemCode', label: 'Item Code', sortable: true, width: '120px' },
+      { key: 'partNo', label: 'Part No', sortable: true },
+      { key: 'productName', label: 'Product Name', sortable: true },
+      { key: 'productDescription', label: 'Description' },
       {
-        key: 'createdDate',
-        label: 'Created Date',
-        type: 'date',
-        sortable: true,
-        filterable: true,
-        filterType: 'date'
+        key: 'type', label: 'Type', type: 'badge', sortable: true,
+        editorOptions: PRODUCT_TYPES.map((t) => ({ label: t, value: t })),
+        badgeClasses: {
+          Stock: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          'Non-Stock': 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          Service: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+        },
+      },
+      { key: 'productCategory', label: 'Category', valueGetter: (r) => r.productCategory?.categoryName },
+      { key: 'productSegment', label: 'Segment', valueGetter: (r) => r.productSegment?.departmentName },
+      { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r.warehouse?.wareHouseName },
+      { key: 'brand', label: 'Brand' },
+      { key: 'unitOfMeasure', label: 'UOM', width: '90px' },
+      { key: 'defaultSellingPrice', label: 'Selling Price', type: 'number' },
+      {
+        key: 'isActive', label: 'Active', type: 'badge', width: '100px',
+        valueGetter: (r) => (r.isActive ? 'Active' : 'Inactive'),
+        badgeClasses: {
+          Active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          Inactive: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+        },
       },
       {
-        key: 'itemCode',
-        label: 'Item Code',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search item code...'
+        key: 'approvalStatus', label: 'Approval', type: 'badge', width: '110px',
+        valueGetter: (r) => r.approvalStatus ?? 'Approved',
+        badgeClasses: {
+          Approved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          Draft: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+        },
       },
-      {
-        key: 'partNo',
-        label: 'Part No',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search part no...'
-      },
-      {
-        key: 'productDescription',
-        label: 'Description',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search description...',
-        truncateText: true
-      },
-      {
-        key: 'productCategory',
-        label: 'Product Category',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'select',
-        filterOptions: this.categoryOptions(),
-        filterPlaceholder: 'Select category...',
-        cellRenderer: (item: any) => item?.productCategory?.categoryName || ''
-      },
-      {
-        key: 'productSegment',
-        label: 'Product Segment',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'select',
-        filterOptions: this.segmentOptions(),
-        filterPlaceholder: 'Select segment...',
-        cellRenderer: (item: any) => item?.productSegment?.departmentName || ''
-      },
-      {
-        key: 'warehouse',
-        label: 'Warehouse',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'select',
-        filterOptions: this.warehouseOptions(),
-        filterPlaceholder: 'Select warehouse...',
-        cellRenderer: (item: any) => item?.warehouse?.wareHouseName || ''
-      },
-      {
-        key: 'brand',
-        label: 'Brand',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search brand...'
-      },
-      {
-        key: 'createdBy',
-        label: 'Created By',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search creator...',
-        cellRenderer: (item: any) => {
-          if (item?.createdBy) {
-            return `${item.createdBy.firstName || ''} ${item.createdBy.lastName || ''}`.trim();
-          }
-          return '';
-        }
-      }
+      { key: 'createdBy', label: 'Created By', valueGetter: (r) => this.ownerName(r) },
     ];
   }
 
-  loadProducts(extraParams: Partial<ProductQueryParams> = {}): void {
-    this.isLoading.set(true);
-    const paginationState = this.paginationService.paginationState();
+  private buildRowActions(): void {
+    this.rowActions = [
+      { id: 'approve', label: 'Approve', icon: 'check', quick: true, hidden: (r) => r.approvalStatus !== 'Pending' },
+      { id: 'reject', label: 'Reject', variant: 'danger', hidden: (r) => r.approvalStatus !== 'Pending' },
+      { id: 'edit', label: 'Edit', icon: 'pencil', quick: true },
+      { id: 'delete', label: 'Delete', icon: 'trash', variant: 'danger', divider: true },
+    ];
+  }
 
+  private ownerName(r: Product): string {
+    const owner = r.createdBy as any;
+    return owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() : '';
+  }
+
+  private loadFilterOptions(): void {
+    this.subscriptions.add(
+      this.productCategoryService.getProductCategories().subscribe({
+        next: (categories) => {
+          const options = (categories ?? []).map((c) => ({ label: c.categoryName, value: c._id as string }));
+          this.setColumnOptions('productCategory', options);
+        },
+        error: () => this.toastr.error('Failed to load product categories'),
+      })
+    );
+
+    this.subscriptions.add(
+      this.profileService.getDepartments().subscribe({
+        next: (departments) => {
+          const options = (departments ?? []).map((d) => ({ label: d.departmentName, value: d._id as string }));
+          this.setColumnOptions('productSegment', options);
+        },
+        error: () => this.toastr.error('Failed to load product segments'),
+      })
+    );
+
+    this.subscriptions.add(
+      this.warehouseService.getWarehouses().subscribe({
+        next: (warehouses) => {
+          const options = (warehouses ?? []).map((w) => ({ label: w.wareHouseName, value: w._id as string }));
+          this.setColumnOptions('warehouse', options);
+        },
+        error: () => this.toastr.error('Failed to load warehouses'),
+      })
+    );
+  }
+
+  private setColumnOptions(key: string, editorOptions: { label: string; value: any }[]): void {
+    this.columns = this.columns.map((c) => (c.key === key ? { ...c, editorOptions } : c));
+  }
+
+  getProducts(): void {
+    this.isLoading = true;
     const params: ProductQueryParams = {
-      page: extraParams.page ?? paginationState.page,
-      row: extraParams.row ?? paginationState.row,
-      search: this.searchTerm || undefined,
+      page: this.page,
+      row: this.row,
+      search: this.searchQuery || undefined,
       ...this.appliedFilters,
-      ...extraParams
     };
 
-    this.productService.getProducts(params).subscribe({
-      next: (response) => {
-        const products = response.data?.products ?? [];
-        const pagination = response.data?.pagination;
-
-        this.tableData.set(products);
-        this.isEmpty.set(products.length === 0);
-
-        if (pagination) {
-          this.totalItems.set(pagination.total);
-          this.paginationService.updatePaginationState({
-            page: pagination.page,
-            row: pagination.limit,
-            total: pagination.total
-          });
-        }
-
-        this.isLoading.set(false);
-      },
-      error: () => {
-        this.toastr.error('Failed to load products');
-        this.isLoading.set(false);
-        this.isEmpty.set(true);
-      }
-    });
+    this.subscriptions.add(
+      this.productService.getProducts(params).subscribe({
+        next: (response) => {
+          const products = response.data?.products ?? [];
+          this.rows = products;
+          this.total = response.data?.pagination?.total ?? products.length;
+          this.refreshViewCounts();
+          this.isLoading = false;
+        },
+        error: () => {
+          this.toastr.error('Failed to load products');
+          this.isLoading = false;
+        },
+      })
+    );
   }
+
+  onQueryChange(query: DataGridQuery): void {
+    this.searchQuery = query.search;
+    this.page = query.page;
+    this.row = query.pageSize;
+
+    this.appliedFilters = {};
+    for (const f of query.filters) {
+      if (f.key === 'productCategory' || f.key === 'productSegment' || f.key === 'warehouse') {
+        this.appliedFilters[f.key] = f.value;
+      }
+    }
+
+    this.getProducts();
+  }
+
+  onViewChange(view: DataGridView<Product>): void {
+    this.activeViewId = view.id;
+    this.refreshViewCounts();
+  }
+
+  private refreshViewCounts(): void {
+    this.views = this.views.map((v) => ({ ...v, count: v.id === this.activeViewId ? this.total : undefined, hideCount: v.id !== this.activeViewId }));
+  }
+
+  // --- Product form drawer (create and edit) --------------------------------------
+
+  formOpen = false;
+  formMode: 'create' | 'edit' = 'create';
+  formProduct: Product | null = null;
 
   onCreateProduct(): void {
-    const dialogRef = this.dialog.open(CreateProductComponent, {
-      disableClose: true,
-      maxHeight: '90vh',
-      width:'50vw'
-    });
+    this.formMode = 'create';
+    this.formProduct = null;
+    this.formOpen = true;
+  }
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadProducts();
-      }
+  onFormSaved(): void {
+    this.getProducts();
+  }
+
+  onFormClosed(): void {
+    this.formOpen = false;
+  }
+
+  onRowAction({ action, row }: DataGridRowActionEvent<Product>): void {
+    switch (action.id) {
+      case 'edit':
+        this.formMode = 'edit';
+        this.formProduct = row;
+        this.formOpen = true;
+        break;
+      case 'approve':
+        this.approveProduct(row);
+        break;
+      case 'reject':
+        void this.rejectProduct(row);
+        break;
+      case 'delete':
+        void this.deleteProducts([row]);
+        break;
+    }
+  }
+
+  onBulkAction({ action, rows }: DataGridBulkActionEvent<Product>, grid: DataGridComponent<Product>): void {
+    if (action.id !== 'delete') return;
+    void this.deleteProducts(rows, grid);
+  }
+
+  private approveProduct(row: Product): void {
+    this.productService.approveProduct(row._id as string).subscribe({
+      next: () => {
+        this.toastr.success('Product approved');
+        this.getProducts();
+      },
+      error: (error) => this.toastr.error(error?.error?.message || 'Failed to approve product'),
     });
   }
 
-  onRowClick(row: Product): void {
-    const viewDialog = this.dialog.open(ProductViewComponent, {
-      data: { product: row },
-      width: '1100px',
-      maxHeight: '90vh'
+  private async rejectProduct(row: Product): Promise<void> {
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Reject product?',
+      message: `"${row.productName || row.itemCode}" will go back to draft and can't be used until it is edited and approved again.`,
+      confirmLabel: 'Reject',
+      reason: true,
     });
+    if (!confirmed) return;
 
-    viewDialog.afterClosed().subscribe((result) => {
-      if (result === 'edit') {
-        this.onEditProduct(row);
-      }
-    });
-  }
-
-  onEditProduct(product: Product): void {
-    const dialogRef = this.dialog.open(CreateProductComponent, {
-      disableClose: true,
-      maxHeight: '90vh',
-      width: '50vw',
-      data: { product }
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadProducts();
-      }
+    this.productService.rejectProduct(row._id as string, reason ?? '').subscribe({
+      next: () => {
+        this.toastr.success('Product rejected');
+        this.getProducts();
+      },
+      error: (error) => this.toastr.error(error?.error?.message || 'Failed to reject product'),
     });
   }
 
-  onFilterChange(filters: TableFilter[]): void {
-    const parsedFilters: Record<string, any> = {};
-
-    filters.forEach(filter => {
-      if (filter.value) {
-        parsedFilters[filter.column] = filter.value;
-      }
+  private async deleteProducts(rows: Product[], grid?: DataGridComponent<Product>): Promise<void> {
+    const count = rows.length === 1 ? `"${rows[0].productName || rows[0].itemCode}"` : `${rows.length} products`;
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: rows.length === 1 ? 'Delete product?' : `Delete ${count}?`,
+      message: `Are you sure you want to delete ${count}?`,
+      consequence: 'This cannot be undone.',
+      confirmLabel: 'Delete',
     });
+    if (!confirmed) return;
 
-    this.appliedFilters = parsedFilters;
-
-    const currentState = this.paginationService.paginationState();
-    this.paginationService.updatePaginationState({
-      page: 1,
-      row: currentState.row,
-      total: currentState.total
+    const requests = rows.map((r) => this.productService.deleteProduct(r._id as string));
+    forkJoin(requests.length ? requests : [of(null)]).subscribe({
+      next: () => {
+        grid?.clearSelection();
+        this.grid?.closeDetail();
+        this.toastr.success(rows.length === 1 ? 'Product deleted successfully' : `${rows.length} products deleted`);
+        this.getProducts();
+      },
+      error: (error) => {
+        this.toastr.error(error?.error?.message || 'Failed to delete product');
+      },
     });
-
-    this.loadProducts({ page: 1 });
   }
 
-  onPaginationChange(event: { page: number, row: number }): void {
-    this.paginationService.updatePaginationState({
-      page: event.page,
-      row: event.row,
-      total: this.totalItems()
-    });
-    this.loadProducts({ page: event.page, row: event.row });
+  // --- Detail panel ---------------------------------------------------------------
+
+  overviewSections(row: Product): DetailOverviewSection[] {
+    return [
+      {
+        title: 'General',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Item Code', value: row.itemCode, numeric: true, noHover: true },
+          { type: 'field', label: 'Part No', value: row.partNo, noHover: true },
+          { type: 'field', label: 'Product Name', value: row.productName, noHover: true },
+          { type: 'dg', key: 'type' },
+          { type: 'field', label: 'Category', value: row.productCategory?.categoryName, noHover: true },
+          { type: 'field', label: 'Segment', value: row.productSegment?.departmentName, noHover: true },
+          { type: 'field', label: 'Warehouse', value: row.warehouse?.wareHouseName, noHover: true },
+          { type: 'field', label: 'Brand', value: row.brand, noHover: true },
+          { type: 'field', label: 'Unit of Measure', value: row.unitOfMeasure, noHover: true },
+          { type: 'dg', key: 'isActive' },
+          { type: 'dg', key: 'approvalStatus' },
+          ...(row.rejectionReason ? [{ type: 'field' as const, label: 'Rejection Reason', value: row.rejectionReason, noHover: true }] : []),
+        ],
+      },
+      {
+        title: 'Description',
+        fields: [
+          { type: 'field', label: 'Description', value: row.productDescription },
+          { type: 'field', label: 'Created', value: this.datePipe.transform(row.createdDate, 'dd MMM yyyy'), noHover: true },
+        ],
+      },
+    ];
   }
 
-  onSearch(term: string): void {
-    this.searchTerm = term?.trim() || '';
-    const currentState = this.paginationService.paginationState();
-    this.paginationService.updatePaginationState({
-      page: 1,
-      row: currentState.row,
-      total: currentState.total
-    });
-    this.loadProducts({ page: 1 });
+  pricingSections(row: Product): DetailOverviewSection[] {
+    return [
+      {
+        title: 'Pricing',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Default Selling Price', value: row.defaultSellingPrice, numeric: true, noHover: true },
+          { type: 'field', label: 'Estimated Cost', value: row.estimatedCost, numeric: true, noHover: true },
+          { type: 'field', label: 'Tax Rate', value: row.defaultTaxRate, numeric: true, noHover: true },
+        ],
+      },
+    ];
   }
 }

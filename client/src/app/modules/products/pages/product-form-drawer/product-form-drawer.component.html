@@ -1,0 +1,67 @@
+<app-sf-drawer [title]="title" [subtitle]="subtitle" width="720px"
+    [open]="open" [dirty]="productForm.dirty" (closed)="onDrawerClosed()">
+
+    <form id="product-form" [formGroup]="productForm" (ngSubmit)="submit()" novalidate>
+
+        <app-sf-section title="Identification" columns="2">
+            <app-sf-field label="Item Code" [control]="productForm.controls.itemCode">
+                <app-sf-input formControlName="itemCode" placeholder="Auto-generated"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Part No" [control]="productForm.controls.partNo">
+                <app-sf-input formControlName="partNo" placeholder="Part number"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Product Name" [control]="productForm.controls.productName">
+                <app-sf-input formControlName="productName" placeholder="Product / service name"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Brand" [control]="productForm.controls.brand">
+                <app-sf-input formControlName="brand" placeholder="Brand"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field full label="Description" [control]="productForm.controls.productDescription">
+                <app-sf-textarea formControlName="productDescription" placeholder="Standard description"></app-sf-textarea>
+            </app-sf-field>
+            <app-sf-field full label="Type" [control]="productForm.controls.type">
+                <app-sf-radio-group formControlName="type" variant="segmented" [options]="typeOptions"></app-sf-radio-group>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Classification" columns="2">
+            <app-sf-field label="Department / Segment" [control]="productForm.controls.productSegment">
+                <app-sf-select formControlName="productSegment" [options]="segmentOptions" placeholder="Select department"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Category" [control]="productForm.controls.productCategory">
+                <app-sf-select formControlName="productCategory" [options]="categoryOptions" placeholder="Select category"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Warehouse" [control]="productForm.controls.warehouse">
+                <app-sf-select formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Unit of Measure" [control]="productForm.controls.unitOfMeasure">
+                <app-sf-select formControlName="unitOfMeasure" [options]="unitOptions" placeholder="Select unit"></app-sf-select>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Pricing & Tax" columns="2">
+            <app-sf-field label="Default Selling Price" [control]="productForm.controls.defaultSellingPrice">
+                <app-sf-currency formControlName="defaultSellingPrice" placeholder="0.00"></app-sf-currency>
+            </app-sf-field>
+            <app-sf-field label="Estimated Cost" [control]="productForm.controls.estimatedCost">
+                <app-sf-currency formControlName="estimatedCost" placeholder="0.00"></app-sf-currency>
+            </app-sf-field>
+            <app-sf-field label="Default Tax Rate (%)" [control]="productForm.controls.defaultTaxRate">
+                <app-sf-select formControlName="defaultTaxRate" [options]="taxOptions" placeholder="Select tax rate"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Status" [control]="productForm.controls.isActive">
+                <app-sf-checkbox formControlName="isActive" label="Active"></app-sf-checkbox>
+            </app-sf-field>
+        </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button variant="tool" (click)="createCategory()">+ Create Category</app-action-button>
+        <app-action-button variant="tool" (click)="createWarehouse()">+ Create Warehouse</app-action-button>
+        <span class="mr-auto"></span>
+        <app-action-button variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button variant="primary" type="submit" form="product-form" [disabled]="saving">
+            {{ saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create Product') }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

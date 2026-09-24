@@ -286,7 +286,7 @@ export class CreateStockComponent implements OnInit {
   }
 
   onAddCategory(): void {
-    this.router.navigate(['/products/category/add']);
+    this.router.navigate(['/products']);
   }
 
   onAddWarehouse(): void {
@@ -371,4 +371,3 @@ export class CreateStockComponent implements OnInit {
     this.router.navigate(['/stock/stock-entries']);
   }
 }
-

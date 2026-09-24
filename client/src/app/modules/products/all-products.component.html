@@ -1,22 +1,71 @@
-<data-table
-  [data]="tableData()"
-  [columns]="tableColumns"
-  [defaultColumns]="defaultColumns"
-  [isLoading]="isLoading()"
-  [isEmpty]="isEmpty()"
-  [totalItems]="totalItems()"
-  [tableId]="'all-products-table'"
-  [title]="'Products'"
-  (rowClick)="onRowClick($event)"
-  (filterChange)="onFilterChange($event)"
-  (paginationChange)="onPaginationChange($event)">
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Products"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="total"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        searchPlaceholder="Search by item code, part no, name..."
+        emptyMessage="No products found"
+        createLabel="Create Product"
+        [rowActions]="rowActions"
+        [views]="views"
+        (viewChange)="onViewChange($event)"
+        [bulkActions]="bulkActions"
+        storageKey="all-products-list"
+        exportable
+        exportFileName="products.xlsx"
+        [detailTabs]="detailTabs"
+        [detailTitle]="productTitle"
+        [detailSubtitle]="productSubtitle"
+        (queryChange)="onQueryChange($event)"
+        (rowAction)="onRowAction($event)"
+        (bulkAction)="onBulkAction($event, grid)"
+        (create)="onCreateProduct()">
 
-  <ng-template #sideColumn>
-    <div class="flex flex-wrap items-center gap-3 justify-end">
-      <app-btn theme="primary" (buttonClick)="onCreateProduct()">
-        <ng-icon name="heroPlus"></ng-icon>
-        Create Product
-      </app-btn>
-    </div>
-  </ng-template>
-</data-table>
+        <ng-template #detailMetaTemplate let-row>
+            <div class="pd-meta">
+                <p class="pd-meta-label">Category</p>
+                <p class="pd-meta-value">{{ row.productCategory?.categoryName }}</p>
+            </div>
+            <div class="pd-meta">
+                <p class="pd-meta-label">Warehouse</p>
+                <p class="pd-meta-value">{{ row.warehouse?.wareHouseName }}</p>
+            </div>
+            <div class="pd-meta">
+                <p class="pd-meta-label">Selling Price</p>
+                <p class="pd-meta-value">{{ row.defaultSellingPrice }}</p>
+            </div>
+            <div class="pd-meta">
+                <p class="pd-meta-label">Created</p>
+                <p class="pd-meta-value">{{ row.createdDate | date: 'dd MMM yyyy' }}</p>
+            </div>
+        </ng-template>
+
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'overview'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'pricing'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="pricingSections(row)"></app-detail-overview>
+                </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
+
+    <app-product-form-drawer
+        [open]="formOpen"
+        [mode]="formMode"
+        [product]="formProduct"
+        (saved)="onFormSaved()"
+        (closed)="onFormClosed()">
+    </app-product-form-drawer>
+</div>

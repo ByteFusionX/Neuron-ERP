@@ -1,6 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, Inject, inject } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
@@ -25,13 +25,17 @@ export class AddCategoryComponent {
   private fb = inject(FormBuilder);
   private productCategoryService = inject(ProductCategoryService);
   private toastr = inject(ToastrService);
-  private router = inject(Router);
   isSubmitting = false;
 
   categoryForm: FormGroup = this.fb.group({
     categoryName: ['', [Validators.required]],
     createdDate: [new Date(), [Validators.required]]
   });
+
+  constructor(
+    public dialogRef: MatDialogRef<AddCategoryComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: any
+  ) {}
 
   onSubmit(): void {
     if (this.categoryForm.invalid) {
@@ -43,7 +47,7 @@ export class AddCategoryComponent {
     this.productCategoryService.createProductCategory(this.categoryForm.value).subscribe({
       next: (category) => {
         this.toastr.success('Category created successfully');
-        this.router.navigate(['/products']);
+        this.dialogRef.close(category);
       },
       error: (error) => {
         this.toastr.error(error.error?.message || 'Failed to create category');
@@ -53,7 +57,7 @@ export class AddCategoryComponent {
   }
 
   onCancel(): void {
-    this.router.navigate(['/products']);
+    this.dialogRef.close();
   }
 }
 

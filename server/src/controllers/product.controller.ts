@@ -6,6 +6,11 @@ import Warehouse from "../models/warehouse.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
+/** Legacy records have no approvalStatus; treat anything not Draft/Pending as usable. */
+export const APPROVED_PRODUCT_FILTER = { approvalStatus: { $nin: ['Draft', 'Pending'] } };
+
+const isAdminRole = (employee: any): boolean => ['admin', 'superAdmin'].includes(employee?.category?.role);
+
 const getDepartmentCode = (departmentName?: string): string => {
     const words = (departmentName || '').trim().split(/\s+/).filter(Boolean);
 
@@ -107,11 +112,21 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         const product = await Product.create({
             partNo: data.partNo.trim(),
             itemCode: data.itemCode.trim(),
+            productName: data.productName?.trim(),
             productDescription: data.productDescription.trim(),
             productCategory: data.productCategory,
             productSegment: data.productSegment,
             warehouse: data.warehouse,
             brand: data.brand.trim(),
+            type: data.type,
+            unitOfMeasure: data.unitOfMeasure?.trim(),
+            defaultTaxRate: data.defaultTaxRate,
+            defaultSellingPrice: data.defaultSellingPrice,
+            estimatedCost: data.estimatedCost,
+            isActive: data.isActive ?? true,
+            // New items wait for approval before they can be used; admins are auto-approved.
+            approvalStatus: isAdminRole(employee) ? 'Approved' : 'Pending',
+            ...(isAdminRole(employee) ? { approvedBy: employee._id, approvedDate: new Date() } : {}),
             createdBy: employee._id,
             createdDate: data.createdDate,
             updatedDate: new Date(),
@@ -139,11 +154,17 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             search,
             partNo,
             itemCode,
+            productName,
             productDescription,
+            type,
             productCategory,
             productSegment,
             warehouse,
             brand,
+            unitOfMeasure,
+            defaultSellingPrice,
+            isActive,
+            approvalStatus,
             createdBy
         } = req.query;
 
@@ -178,8 +199,37 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             filter.itemCode = { $regex: itemCode as string, $options: 'i' };
         }
 
+        if (productName) {
+            filter.productName = { $regex: productName as string, $options: 'i' };
+        }
+
         if (productDescription) {
             filter.productDescription = { $regex: productDescription as string, $options: 'i' };
+        }
+
+        if (type) {
+            filter.type = type as string;
+        }
+
+        if (unitOfMeasure) {
+            filter.unitOfMeasure = { $regex: unitOfMeasure as string, $options: 'i' };
+        }
+
+        if (defaultSellingPrice !== undefined && defaultSellingPrice !== '') {
+            const priceNum = Number(defaultSellingPrice);
+            if (!Number.isNaN(priceNum)) {
+                filter.defaultSellingPrice = priceNum;
+            }
+        }
+
+        if (isActive === 'true' || isActive === 'false') {
+            filter.isActive = isActive === 'true';
+        }
+
+        if (approvalStatus === 'Pending' || approvalStatus === 'Draft') {
+            filter.approvalStatus = approvalStatus;
+        } else if (approvalStatus === 'Approved') {
+            Object.assign(filter, APPROVED_PRODUCT_FILTER);
         }
 
         if (productCategory && ObjectId.isValid(productCategory as string)) {
@@ -321,6 +371,9 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
         const employee = await getEmployeeData(token);
         if (!employee) return res.status(401).json({ message: "Unauthorized" });
 
+        // A non-admin edit (re)submits the item for approval; a rejected item is resubmitted this way.
+        const needsReapproval = !isAdminRole(employee);
+
         const updated = await Product.findOneAndUpdate(
             { _id: id, isDeleted: { $ne: true } },
             {
@@ -332,9 +385,18 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
                     ...(data.productSegment ? { productSegment: data.productSegment } : {}),
                     ...(data.warehouse ? { warehouse: data.warehouse } : {}),
                     ...(data.brand ? { brand: data.brand.trim() } : {}),
+                    ...(data.productName !== undefined ? { productName: data.productName?.trim() } : {}),
+                    ...(data.type ? { type: data.type } : {}),
+                    ...(data.unitOfMeasure !== undefined ? { unitOfMeasure: data.unitOfMeasure?.trim() } : {}),
+                    ...(data.defaultTaxRate !== undefined ? { defaultTaxRate: data.defaultTaxRate } : {}),
+                    ...(data.defaultSellingPrice !== undefined ? { defaultSellingPrice: data.defaultSellingPrice } : {}),
+                    ...(data.estimatedCost !== undefined ? { estimatedCost: data.estimatedCost } : {}),
+                    ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+                    ...(needsReapproval ? { approvalStatus: 'Pending' } : {}),
                     updatedBy: employee._id,
                     updatedDate: new Date()
-                }
+                },
+                ...(needsReapproval ? { $unset: { approvedBy: '', approvedDate: '', rejectionReason: '' } } : {})
             },
             { new: true }
         )
@@ -345,6 +407,50 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
 
         if (!updated) return res.status(404).json({ message: "Product not found" });
         return res.status(200).json(updated);
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+};
+
+export const approveProduct = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
+
+        const employee = await getEmployeeData((req as any).user);
+        if (!employee) return res.status(401).json({ message: "Unauthorized" });
+
+        const product = await Product.findOneAndUpdate(
+            { _id: id, isDeleted: { $ne: true }, approvalStatus: 'Pending' },
+            { $set: { approvalStatus: 'Approved', approvedBy: employee._id, approvedDate: new Date() }, $unset: { rejectionReason: '' } },
+            { new: true }
+        );
+        if (!product) return res.status(409).json({ message: "Only a pending product can be approved" });
+        return res.status(200).json(product);
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+};
+
+export const rejectProduct = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+        if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
+        if (!reason) return res.status(400).json({ message: "A reason is required to reject a product" });
+
+        const employee = await getEmployeeData((req as any).user);
+        if (!employee) return res.status(401).json({ message: "Unauthorized" });
+
+        const product = await Product.findOneAndUpdate(
+            { _id: id, isDeleted: { $ne: true }, approvalStatus: 'Pending' },
+            { $set: { approvalStatus: 'Draft', rejectionReason: reason, updatedBy: employee._id, updatedDate: new Date() }, $unset: { approvedBy: '', approvedDate: '' } },
+            { new: true }
+        );
+        if (!product) return res.status(409).json({ message: "Only a pending product can be rejected" });
+        return res.status(200).json(product);
     } catch (error) {
         console.error(error);
         next(error);
@@ -368,7 +474,7 @@ export const deleteProduct = async (req: Request, res: Response, next: NextFunct
 export const getProductPartNumbers = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { search = '', limit = '25' } = req.query;
-        const filter: any = { isDeleted: { $ne: true } };
+        const filter: any = { isDeleted: { $ne: true }, ...APPROVED_PRODUCT_FILTER };
 
         if (typeof search === 'string' && search.trim()) {
             const regex = new RegExp(search.trim(), 'i');
