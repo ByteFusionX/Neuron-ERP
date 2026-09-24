@@ -36,8 +36,8 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
         const url = state.url;
 
         switch (url) {
-            case '/employees':
-                if (privileges?.employee?.viewReport == 'none') {
+            case '/hr/employees':
+                if (!canViewEmployees()) {
                     router.navigate(['/home']);
                     return false;
                 }
@@ -86,7 +86,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 break;
 
             case '/quotations':
-                if (privileges?.quotation?.viewReport == 'none') {
+                if (!canViewQuotations()) {
                     router.navigate(['/home']);
                     return false;
                 }
@@ -100,18 +100,16 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 break;
 
             case '/deal-sheet':
-                if (privileges?.dealSheet == false) {
+                if (!canViewDealSheet()) {
                     router.navigate(['/home']);
                     return false;
                 }
                 break;
 
             case '/settings':
-                if (privileges) {
-                    if (!Object.values(privileges.portalManagement).some(value => value === true)) {
-                        router.navigate(['/home']);
-                        return false;
-                    }
+                if (!canViewSettings()) {
+                    router.navigate(['/home']);
+                    return false;
                 }
 
                 break;
@@ -126,7 +124,27 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 break;
 
             default:
-                if (url.startsWith('/purchase') && !url.startsWith('/purchase-order')) {
+                if (url.startsWith('/hr')) {
+                    if (!canViewEmployees()) {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/settings')) {
+                    if (!canViewSettings()) {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/quotations')) {
+                    if (!canViewQuotations()) {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/deal-sheet')) {
+                    if (!canViewDealSheet()) {
+                        router.navigate(['/home']);
+                        return false;
+                    }
+                } else if (url.startsWith('/purchase') && !url.startsWith('/purchase-order')) {
                     if (privileges?.purchase?.viewReport == 'none') {
                         router.navigate(['/home']);
                         return false;
@@ -238,6 +256,23 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
             return false;
         }
         return true;
+    }
+
+    function canViewEmployees(): boolean {
+        return privileges?.employee?.viewReport !== 'none';
+    }
+
+    function canViewQuotations(): boolean {
+        return privileges?.quotation?.viewReport !== 'none';
+    }
+
+    function canViewDealSheet(): boolean {
+        return privileges?.dealSheet !== false;
+    }
+
+    function canViewSettings(): boolean {
+        if (isSuperAdmin) return true;
+        return !!privileges?.portalManagement && Object.values(privileges.portalManagement).some(value => value === true);
     }
 
 };

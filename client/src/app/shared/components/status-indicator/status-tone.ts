@@ -28,12 +28,18 @@ const TONE_RULES: [RegExp, StatusTone][] = [
 
 /** Enquiry statuses whose tone the generic rules would not pick (or would pick differently). */
 export const ENQUIRY_STATUS_TONES: Record<string, StatusTone> = {
+  'New': 'info',
+  'In Review': 'warning',
+  'Sent to Presales': 'progress',
+  'Ready for Quotation': 'success',
   'Work In Progress': 'warning',
   'Assigned To Presale Manager': 'progress',
   'Assigned To Presale Engineer': 'progress',
   'Assigned To Presales': 'progress',
   'Rejected by Presale Engineer': 'danger',
   'Rejected by Presale Manager': 'danger',
+  'Quoted': 'success',
+  'Lost': 'danger',
 };
 
 export function statusTone(status: unknown, overrides?: Record<string, StatusTone>): StatusTone {

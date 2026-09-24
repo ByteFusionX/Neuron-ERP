@@ -28,7 +28,7 @@ import { appNoNegativeNumber } from '../../directives/no-negative-number.directi
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { QuoteItem } from '../../interfaces/quotation.interface';
-import { CreateProductComponent } from 'src/app/modules/products/modals/create-product/create-product.component';
+import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 
 interface ProductSuggestion {
   _id: string;
@@ -40,7 +40,7 @@ interface ProductSuggestion {
   selector: 'optional-items',
   templateUrl: './optional-items.component.html',
   styleUrls: ['./optional-items.component.css'],
-  imports: [
+  imports: [ProductFormDrawerComponent, 
     FormsModule,
     ReactiveFormsModule,
     NgFor,
@@ -248,33 +248,31 @@ export class OptionalItemsComponent implements OnInit {
     }
   }
 
+  createProductOpen = false;
+  createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
+
   onAddProductFromItemDetail(i: number, j: number, k: number): void {
     const itemGroup = this.getItemAtOption(i)?.at(j) as FormGroup;
     const itemName = (itemGroup?.get('itemName')?.value || '').toString().trim();
     const detailValue = (
       this.getItemDetailsArrayControls(i, j)?.at(k)?.get('detail')?.value || ''
     ).toString().trim();
-    const productSegment = this.selectedDepartmentIds[0] || '';
+    this.createProductPrefill = {
+      productSegment: this.selectedDepartmentIds[0] || '',
+      productCategoryName: itemName,
+      productDescription: detailValue,
+    };
+    this.createProductTarget = `${i}-${j}-${k}`;
+    this.createProductOpen = true;
+  }
 
-    const dialogRef = this._dialog.open(CreateProductComponent, {
-      disableClose: true,
-      maxHeight: '90vh',
-      width: '50vw',
-      data: {
-        prefill: {
-          productSegment,
-          productCategoryName: itemName,
-          productDescription: detailValue,
-        },
-      },
-    });
+  createProductTarget: string | null = null;
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.itemDetailSuggestions[`${i}-${j}-${k}`] = [];
-        this.activeDetailSuggestionKey = null;
-      }
-    });
+  onProductCreated(_product: any): void {
+    if (!this.createProductTarget) return;
+    this.itemDetailSuggestions[this.createProductTarget] = [];
+    this.activeDetailSuggestionKey = null;
+    this.createProductTarget = null;
   }
 
   patchOptionalItems() {

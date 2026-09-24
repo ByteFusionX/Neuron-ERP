@@ -56,7 +56,7 @@
       </div>
 
       <!-- Filter builder -->
-      <div class="relative">
+      <div *ngIf="showToolbarTools" class="relative">
         <button type="button" (click)="toggleFilterMenu()" class="dg-tool-btn"
           [ngClass]="filterMenuOpen ? 'ring-2 ring-violet-100 dark:ring-violet-900' : ''">
           <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -102,7 +102,7 @@
       </div>
 
       <!-- Sort -->
-      <div *ngIf="sortableColumns.length" class="relative">
+      <div *ngIf="showToolbarTools && sortableColumns.length" class="relative">
         <button type="button" (click)="sortMenuOpen = !sortMenuOpen" class="dg-tool-btn"
           [ngClass]="sortMenuOpen ? 'ring-2 ring-violet-100 dark:ring-violet-900' : ''">
           <app-dp-icon name="sort" class="text-gray-500 dark:text-gray-400"></app-dp-icon>
@@ -144,7 +144,7 @@
       <ng-content select="[dgToolbarExtra]"></ng-content>
 
       <!-- Column visibility -->
-      <div class="relative">
+      <div *ngIf="showToolbarTools" class="relative">
         <button type="button" (click)="columnMenuOpen = !columnMenuOpen" class="dg-tool-btn"
           [ngClass]="columnMenuOpen ? 'ring-2 ring-violet-100 dark:ring-violet-900' : ''">
           <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -478,7 +478,7 @@
   </div>
 
   <!-- ============ DETAIL PANEL ============ -->
-  <app-detail-panel *ngIf="activeRow"
+  <app-detail-panel *ngIf="activeRow && showDetailPanel"
     [breadcrumb]="detailBreadcrumb ? [detailBreadcrumb] : (title ? [title] : [])"
     [title]="detailTitle(activeRow)"
     [subtitle]="detailSubtitle ? detailSubtitle(activeRow) : ''"
@@ -513,7 +513,7 @@
       <ng-container *ngTemplateOutlet="detailMetaTemplate; context: { $implicit: activeRow }"></ng-container>
     </ng-container>
     <ng-container panelFooter *ngIf="detailFooterTemplate">
-      <ng-container *ngTemplateOutlet="detailFooterTemplate; context: { $implicit: activeRow }"></ng-container>
+      <ng-container *ngTemplateOutlet="detailFooterTemplate; context: { $implicit: activeRow, tab: activeTab }"></ng-container>
     </ng-container>
     <div *ngIf="detailLoading" class="space-y-6" aria-busy="true" aria-label="Loading details">
       <div *ngFor="let s of [0, 1]" class="space-y-3">

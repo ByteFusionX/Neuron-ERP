@@ -21,7 +21,7 @@
                 </a>
                 <div class="w-full bg-white rounded-lg shadow md:mt-0 sm:max-w-md xl:p-0">
                     <!-- Azure AD login temporarily disabled; restore this block to re-enable it.
-                    <div *ngIf="isEmployeePresent" class="p-6 space-y-6 md:space-y-8 sm:p-8">
+                    <div class="p-6 space-y-6 md:space-y-8 sm:p-8">
                         <div class="text-center">
                             <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-700 md:text-2xl mb-2">
                                 Welcome Back
@@ -58,7 +58,7 @@
                         </div>
                     </div>
                     -->
-                    <div *ngIf="isEmployeePresent" class="p-6 space-y-4 md:space-y-6 sm:p-8">
+                    <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
                         <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl ">
                             Sign in to your account
                         </h1>
@@ -112,26 +112,6 @@
                             </div>
 
                         </form>
-                    </div>
-                    <div *ngIf="!isEmployeePresent" class="p-6 space-y-4 md:space-y-6 sm:p-8">
-                        <div class="text-center">
-                            <h2 class="text-xl font-bold text-gray-900 mb-2">
-                                Setup Required
-                            </h2>
-                            <p class="text-gray-600 mb-6">
-                                No employees found in the database. Create a super admin account to get started.
-                            </p>
-                        </div>
-                        <button type="button" (click)="onCreateSuperAdmin()"
-                            [disabled]="isSuperAdminLoading"
-                            class="w-full text-white bg-violet-700 hover:bg-violet-600 font-medium rounded-lg text-sm px-5 py-3 text-center flex justify-center items-center gap-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-violet-700">
-                            
-                            <div *ngIf="isSuperAdminLoading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                            
-                            <ng-icon *ngIf="!isSuperAdminLoading" name="heroUserCircle" class="text-white text-lg"></ng-icon>
-                            
-                            {{ isSuperAdminLoading ? 'Creating Account...' : 'Create Super Admin Account' }}
-                        </button>
                     </div>
                 </div>
             </div>

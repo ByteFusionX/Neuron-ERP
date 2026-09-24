@@ -68,6 +68,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() emptyMessage = 'No records found';
   /** When true, the grid stretches to fill its parent's height (parent must be sized, e.g. a flex child) and only the table body scrolls. `maxHeight` is ignored. */
   @Input() fillHeight = false;
+  /** Hide the Filter / Sort / Columns toolbar buttons (for small tables). */
+  @Input() showToolbarTools = true;
+  /** When false, row click only emits rowOpen; no slide-in detail panel is shown. */
+  @Input() showDetailPanel = true;
   /** Label of the primary "+ New" button; the button is hidden when empty. */
   @Input() createLabel = '';
   @Input() searchPlaceholder = 'Search…';

@@ -14,8 +14,7 @@ import { CompletedJobsListComponent } from './modules/assigned-jobs/pages/comple
 import { ReassignedJobsComponent } from './modules/assigned-jobs/pages/reassigned-jobs/reassigned-jobs.component';
 import { QuotationViewComponent } from './modules/quotations/pages/quotation-view/quotation-view.component';
 import { QuotationListComponent } from './modules/quotations/pages/quotation-list/quotation-list.component';
-import { PendingDealsComponent } from './modules/deal-sheet/pending-deals/pending-deals.component';
-import { ApprovedDealsComponent } from './modules/deal-sheet/approved-deals/approved-deals.component';
+import { DealSheetListComponent } from './modules/deal-sheet/pages/deal-sheet-list/deal-sheet-list.component';
 import { ViewDealsheetComponent } from './modules/deal-sheet/view-dealsheet/view-dealsheet.component';
 import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.component';
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
@@ -90,14 +89,20 @@ export const routes: Routes = [
     component: AnnouncementsComponent,
   },
   {
-    path: 'employees',
+    path: 'hr',
     canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/hr/hr.component').then((c) => c.HrComponent),
     children: [
-      { path: '', canActivate: [RoleGuard], component: EmployeesComponent },
-      { path: 'view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
-      { path: 'category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
+      { path: '', pathMatch: 'full', redirectTo: 'employees' },
+      { path: 'departments', canActivate: [RoleGuard], loadComponent: () => import('./modules/hr/pages/hr-departments/hr-departments.component').then((c) => c.HrDepartmentsComponent) },
+      { path: 'departments/overview', redirectTo: 'departments' },
+      { path: 'roles-privileges', canActivate: [RoleGuard], loadComponent: () => import('./modules/hr/pages/hr-roles-privileges/hr-roles-privileges.component').then((c) => c.HrRolesPrivilegesComponent) },
+      { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
+      { path: 'employees/view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
+      { path: 'employees/category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
     ],
   },
+  { path: 'employees', redirectTo: 'hr/employees', pathMatch: 'full' },
   {
     path: 'customers',
     canActivate: [AuthGuard],
@@ -145,9 +150,12 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/deal-sheet/deal-sheet.component').then((c) => c.DealSheetComponent),
     children: [
-      { path: '', redirectTo: 'pendings', pathMatch: 'full' },
-      { path: 'pendings', canActivate: [RoleGuard], component: PendingDealsComponent },
-      { path: 'approved', canActivate: [RoleGuard], component: ApprovedDealsComponent },
+      { path: '', redirectTo: 'dealsheets', pathMatch: 'full' },
+      { path: 'dealsheets', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'all' } },
+      { path: 'pendings', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'pending' } },
+      { path: 'approved', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'approved' } },
+      { path: 'rejecteds', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'rejected' } },
+      { path: 'revokeds', canActivate: [RoleGuard], component: DealSheetListComponent, data: { view: 'revoked' } },
       { path: 'view/:id', canActivate: [RoleGuard], component: ViewDealsheetComponent },
     ]
   },
@@ -156,7 +164,7 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/job-sheet/job-sheet.component').then((c) => c.JobSheetComponent),
     children: [
-      { path: '', redirectTo: 'pendings', pathMatch: 'full' },
+      { path: '', redirectTo: 'pending', pathMatch: 'full' },
       { path: 'pending', canActivate: [RoleGuard], component: JobListComponent },
       { path: 'open-to-work', canActivate: [RoleGuard], component: OpenToWorckComponent },
       { path: 'in-progress', canActivate: [RoleGuard], component: OpenToWorckComponent },
@@ -174,17 +182,46 @@ export const routes: Routes = [
   {
     path: 'settings',
     canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/settings/settings.component').then((c) => c.SettingsComponnet)
-  },
-  {
-    path: 'settings/category/create',
-    canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent)
-  },
-  {
-    path: 'settings/category/edit/:id',
-    canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/settings/pages/edit-category/edit-category.component').then((c) => c.EditCategoryComponent)
+    loadComponent: () => import('./modules/settings/settings-shell.component').then((c) => c.SettingsShellComponent),
+    children: [
+      // Empty on purpose: the shell redirects to the first section the user can see.
+      { path: '', pathMatch: 'full', children: [] },
+      {
+        path: 'general',
+        data: { section: 'general' },
+        loadComponent: () => import('./modules/settings/pages/general-settings/general-settings.component').then((c) => c.GeneralSettingsComponent),
+      },
+      {
+        path: 'notes-terms',
+        data: { section: 'notes-terms' },
+        loadComponent: () => import('./modules/settings/pages/notes-terms-settings/notes-terms-settings.component').then((c) => c.NotesTermsSettingsComponent),
+      },
+      {
+        path: 'master-data',
+        data: { section: 'master-data' },
+        loadComponent: () => import('./modules/settings/pages/master-data/master-data.component').then((c) => c.MasterDataComponent),
+      },
+      {
+        path: 'approval-rules',
+        data: { section: 'approval-rules' },
+        loadComponent: () => import('./modules/settings/pages/approval-rules/approval-rules.component').then((c) => c.ApprovalRulesComponent),
+      },
+      {
+        path: 'numbering',
+        data: { section: 'numbering' },
+        loadComponent: () => import('./modules/settings/pages/numbering/numbering.component').then((c) => c.NumberingComponent),
+      },
+      {
+        path: 'notifications',
+        data: { section: 'notifications' },
+        loadComponent: () => import('./modules/settings/pages/notifications/notification-settings.component').then((c) => c.NotificationSettingsComponent),
+      },
+      {
+        path: 'audit',
+        data: { section: 'audit' },
+        loadComponent: () => import('./modules/settings/pages/audit/audit-settings.component').then((c) => c.AuditSettingsComponent),
+      },
+    ]
   },
   {
     path: 'feedback-requests',
@@ -302,8 +339,7 @@ export const routes: Routes = [
     path: 'products',
     canActivate: [AuthGuard],
     children: [
-      { path: '', component: AllProductsComponent },
-      { path: 'category/add', loadComponent: () => import('./modules/products/modals/add-category/add-category.component').then((c) => c.AddCategoryComponent) }
+      { path: '', component: AllProductsComponent }
     ]
   },
   {

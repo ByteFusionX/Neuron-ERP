@@ -31,6 +31,8 @@ import { NotificationService } from 'src/app/core/services/notification.service'
 import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
 import { NotificationCounts, TextNotification } from '../../interfaces/notification.interface';
 import { ThemeService } from 'src/app/core/services/theme.service';
+import { FormsModule } from '@angular/forms';
+import { SettingsNavService } from 'src/app/modules/settings/settings-nav.service';
 
 interface MenuItem {
   id: string;
@@ -67,16 +69,21 @@ interface MenuCategory {
   templateUrl: './side-bar.component.html',
   styleUrls: ['./side-bar.component.css'],
   animations: [sideBarState, dropDownMenuSate, buttonSlideState, slideLogoState],
-  imports: [CommonModule, IconsModule, RouterModule],
+  imports: [CommonModule, IconsModule, RouterModule, FormsModule],
   standalone: true,
 })
 export class SideBarComponent
   implements OnInit, OnChanges, AfterViewInit, OnDestroy
 {
   @Input() showFullBar: boolean = true;
+  overviewItems: MenuItem[] = [
+    { id: 'home', label: 'Home', icon: 'heroHome', route: '/home' },
+    { id: 'dashboard', label: 'Dashboard', icon: 'heroChartBar', route: '/dashboard' },
+  ];
   logoAnimationsReady: boolean = false;
   activeLink: string = '';
   showTabs: boolean = false;
+  isSettingsRoute: boolean = false;
   privileges!: Privileges | undefined;
   mySubscription: Subscription = new Subscription();
   expandedMenus: { [key: string]: boolean } = {};
@@ -211,24 +218,9 @@ export class SideBarComponent
           id: 'dealSheet',
           label: 'Deal Sheet',
           icon: 'heroClipboardDocumentCheck',
-          hasDropdown: true,
+          route: '/deal-sheet/dealsheets',
           privilegeKey: 'dealSheet',
           notificationKey: 'dealSheetCount',
-          children: [
-            {
-              id: 'pendingDeals',
-              label: 'Pending',
-              route: '/deal-sheet/pendings',
-              privilegeKey: 'dealSheet',
-              notificationKey: 'dealSheetCount',
-            },
-            {
-              id: 'approvedDeals',
-              label: 'Approved',
-              route: '/deal-sheet/approved',
-              privilegeKey: 'dealSheet',
-            },
-          ],
         },
       ],
     },
@@ -511,17 +503,39 @@ export class SideBarComponent
       ],
     },
     {
-      id: 'people',
-      label: 'People',
+      id: 'hr',
+      label: 'HR',
       items: [
+        {
+          id: 'hr-departments',
+          label: 'Departments',
+          icon: 'heroBuildingLibrary',
+          route: '/hr/departments',
+          privilegeKey: 'employee',
+          privilegeValue: 'none',
+        },
+        {
+          id: 'hr-roles-privileges',
+          label: 'Roles & Privileges',
+          icon: 'heroShieldCheck',
+          route: '/hr/roles-privileges',
+          privilegeKey: 'employee',
+          privilegeValue: 'none',
+        },
         {
           id: 'employees',
           label: 'Employees',
           icon: 'heroIdentification',
-          route: '/employees',
+          route: '/hr/employees',
           privilegeKey: 'employee',
           privilegeValue: 'none',
         },
+      ],
+    },
+    {
+      id: 'people',
+      label: 'People',
+      items: [
         {
           id: 'claims',
           label: 'Claims',
@@ -560,11 +574,14 @@ export class SideBarComponent
     private _notificationService: NotificationService,
     private sidebarPrefs: SidebarPreferencesService,
     public themeService: ThemeService,
+    public settingsNav: SettingsNavService,
   ) {
     this.currentUrl = this.router.url;
+    this.isSettingsRoute = this.router.url.split('?')[0].startsWith('/settings');
     this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.activeLink = event.urlAfterRedirects;
+        this.isSettingsRoute = event.urlAfterRedirects.split('?')[0].startsWith('/settings');
         this.scrollActiveItemIntoView();
       }
     });
@@ -572,6 +589,7 @@ export class SideBarComponent
 
   ngOnInit() {
     this.checkPermission();
+    this.settingsNav.init();
 
     this.mySubscription.add(
       combineLatest([

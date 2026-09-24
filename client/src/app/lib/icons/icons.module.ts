@@ -104,7 +104,8 @@ import {
   heroExclamationTriangle,
   heroMegaphone,
   heroMoon,
-  heroSun
+  heroSun,
+  heroHashtag
 } from '@ng-icons/heroicons/outline';
 
 import {
@@ -230,7 +231,8 @@ import {
       heroExclamationTriangle,
       heroMegaphone,
       heroMoon,
-      heroSun
+      heroSun,
+      heroHashtag
     }),
   ],
   exports: [NgIconsModule]

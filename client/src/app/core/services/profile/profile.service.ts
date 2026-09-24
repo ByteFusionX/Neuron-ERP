@@ -23,8 +23,8 @@ export class ProfileService {
   readonly api: string = environment.api
   constructor(private http: HttpClient) { }
 
-  getDepartments(): Observable<getDepartment[]> {
-    return this.http.get<getDepartment[]>(`${this.api}/department`, { context: context() })
+  getDepartments(activeOnly = false): Observable<getDepartment[]> {
+    return this.http.get<getDepartment[]>(`${this.api}/department`, { context: context(), params: activeOnly ? { activeOnly: 'true' } : {} })
   }
 
   setDepartment(department: Department): Observable<getDepartment> {
@@ -35,12 +35,12 @@ export class ProfileService {
     return this.http.put<getDepartment>(`${this.api}/department`, department)
   }
 
-  getCustomerDepartments(): Observable<getDepartment[]> {
-    return this.http.get<getDepartment[]>(`${this.api}/department/customer`)
+  getCustomerDepartments(activeOnly = false): Observable<getDepartment[]> {
+    return this.http.get<getDepartment[]>(`${this.api}/department/customer`, { params: activeOnly ? { activeOnly: 'true' } : {} })
   }
 
-  getCustomerTypes(): Observable<getCustomerType[]> {
-    return this.http.get<getCustomerType[]>(`${this.api}/customerType`)
+  getCustomerTypes(activeOnly = false): Observable<getCustomerType[]> {
+    return this.http.get<getCustomerType[]>(`${this.api}/customerType`, { params: activeOnly ? { activeOnly: 'true' } : {} })
   }
 
   setCustomerType(customerType: getCustomerType): Observable<getCustomerType> {
@@ -93,6 +93,12 @@ export class ProfileService {
     return this.http.patch<getCompanyDetails>(`${this.api}/company/updateCompanyDetails`, companyDetails)
   }
 
+  uploadCompanyLogo(logo: File): Observable<{ success: boolean, logo: string }> {
+    const formData = new FormData();
+    formData.append('logo', logo);
+    return this.http.patch<{ success: boolean, logo: string }>(`${this.api}/company/logo`, formData)
+  }
+
   setCompanyTarget(target: Target): Observable<Target[]> {
     return this.http.patch<Target[]>(`${this.api}/company/setTarget`, target)
   }
@@ -105,8 +111,28 @@ export class ProfileService {
     return this.http.get<{ targets: Target[] }>(`${this.api}/company/target`)
   }
 
-  getInternalDepartments(): Observable<getInternalDep[]> {
-    return this.http.get<getInternalDep[]>(`${this.api}/department/internalDepartment`)
+  getInternalDepartments(activeOnly = false): Observable<getInternalDep[]> {
+    return this.http.get<getInternalDep[]>(`${this.api}/department/internalDepartment`, { params: activeOnly ? { activeOnly: 'true' } : {} })
+  }
+
+  getDepartmentUsage(): Observable<{ customers: Record<string, number>, enquiries: Record<string, number>, contacts: Record<string, number>, employees: Record<string, number> }> {
+    return this.http.get<any>(`${this.api}/department/usage`)
+  }
+
+  getMasterDataAudit(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.api}/department/audit`)
+  }
+
+  getCustomerTypeUsage(): Observable<Record<string, number>> {
+    return this.http.get<Record<string, number>>(`${this.api}/customerType/usage`)
+  }
+
+  getInternalDepartmentHeadcount(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.api}/department/internalDepartment/headcount`)
+  }
+
+  getInternalDepartmentOrgChart(id: string): Observable<any> {
+    return this.http.get<any>(`${this.api}/department/internalDepartment/${id}/org-chart`)
   }
 
   setInternalDepartment(department: getInternalDep): Observable<getInternalDep> {
