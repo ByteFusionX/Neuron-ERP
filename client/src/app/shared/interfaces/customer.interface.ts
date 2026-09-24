@@ -4,6 +4,12 @@ import { getDepartment } from "./department.interface";
 export const CUSTOMER_STATUSES = ["Active", "Inactive", "Blacklisted", "On Hold", "Prospect"] as const;
 export type CustomerStatus = typeof CUSTOMER_STATUSES[number];
 
+export const PAYMENT_TERMS = ["Cash", "Net 15", "Net 30", "Net 45", "Net 60", "Net 90"] as const;
+export type PaymentTerm = typeof PAYMENT_TERMS[number];
+
+export const CREDIT_STATUSES = ["Good Standing", "Watch", "Hold", "Exceeded"] as const;
+export type CreditStatus = typeof CREDIT_STATUSES[number];
+
 export interface ContactDetail {
     _id?: string
     courtesyTitle: string;
@@ -13,6 +19,7 @@ export interface ContactDetail {
     phoneNo:string;
     department:getDepartment;
     designation?: string;
+    role?: string;
     isPrimary?: boolean;
 }
 
@@ -23,6 +30,12 @@ export interface AddressDetail {
     state?: string;
     country?: string;
     postalCode?: string;
+}
+
+export interface ShippingSite {
+    _id?: string;
+    siteName: string;
+    address?: AddressDetail;
 }
 
 export interface CustomerStatusHistoryEntry {
@@ -47,6 +60,7 @@ export interface getCustomer {
     companyAddressStructured?: AddressDetail;
     shippingAddress?: string;
     shippingAddressStructured?: AddressDetail;
+    shippingSites?: ShippingSite[];
     sameAsBilling: boolean;
     trn?: string;
     customerEmailId: string;
@@ -54,6 +68,12 @@ export interface getCustomer {
     customerType:getCustomerType;
     status: CustomerStatus;
     statusReason?: string;
+    paymentTerms?: string;
+    creditLimit?: number;
+    creditStatus?: CreditStatus;
+    taxExempt?: boolean;
+    currency?: string;
+    source?: string;
     statusHistory?: CustomerStatusHistoryEntry[];
     attachments?: CustomerAttachment[];
     createdBy:string;
@@ -77,4 +97,5 @@ export interface FilterCustomer {
     page: number;
     row: number;
     createdBy: string | null;
+    creditStatus?: string | null;
 }

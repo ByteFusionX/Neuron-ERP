@@ -32,6 +32,9 @@ import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form'
         <app-sf-field label="Designation" [control]="contact.controls['designation']">
           <app-sf-input formControlName="designation" placeholder="e.g. Procurement Manager"></app-sf-input>
         </app-sf-field>
+        <app-sf-field label="Contact Role" [control]="contact.controls['role']">
+          <app-sf-select formControlName="role" [options]="roleOptions"></app-sf-select>
+        </app-sf-field>
         <app-sf-field label="Email" [control]="contact.controls['email']">
           <app-sf-input formControlName="email" type="email" placeholder="Email"></app-sf-input>
         </app-sf-field>
@@ -48,6 +51,7 @@ import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form'
 export class CustomerContactRepeaterComponent {
   @Input({ required: true }) contacts!: FormArray<FormGroup>;
   @Input() titleOptions: SfOption[] = [];
+  readonly roleOptions: SfOption[] = ['Decision Maker', 'Buyer', 'Technical', 'Accounts', 'Other'].map((r) => ({ label: r, value: r }));
   @Input() departmentOptions: SfOption[] = [];
   @Output() add = new EventEmitter<void>();
   @Output() remove = new EventEmitter<number>();

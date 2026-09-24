@@ -1,18 +1,23 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
 import { NgIf } from '@angular/common';
-import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
+import { HttpEventType } from '@angular/common/http';
 import { ToastrService } from 'ngx-toastr';
+import { saveAs } from 'file-saver';
 import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { MasterListService } from 'src/app/core/services/master-list.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
-import { CreateCustomerTypeDialog } from 'src/app/modules/settings/pages/create-customer-type/create-customer-type.component';
-import { CreateDepartmentDialog } from 'src/app/modules/settings/pages/create-department/create-department.component';
+import { CreateCustomerTypeDialog } from 'src/app/modules/hr/pages/create-customer-type/create-customer-type.component';
+import { CreateDepartmentDialog } from 'src/app/modules/hr/pages/create-department/create-department.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
-import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { CustomerAttachment, getCustomer, PAYMENT_TERMS, CREDIT_STATUSES } from 'src/app/shared/interfaces/customer.interface';
 import { getCustomerType } from 'src/app/shared/interfaces/customerType.interface';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { CustomerAddressFieldsComponent } from '../../components/address-fields/address-fields.component';
@@ -27,7 +32,7 @@ import { CustomerFormStepperComponent } from '../../components/form-stepper/form
   selector: 'app-customer-form-drawer',
   standalone: true,
   templateUrl: './customer-form-drawer.component.html',
-  imports: [NgIf, ReactiveFormsModule, SmartFormModule, ActionButtonComponent,
+  imports: [NgIf, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DetailDocumentsComponent,
     CustomerAddressFieldsComponent, CustomerContactRepeaterComponent, CustomerFormStepperComponent],
 })
 export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
@@ -39,16 +44,22 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   @Output() saved = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
-  step: 1 | 2 = 1;
+  step: 1 | 2 | 3 = 1;
   readonly steps = [
     { n: 1 as const, label: 'Company' },
     { n: 2 as const, label: 'Contacts' },
+    { n: 3 as const, label: 'Commercial Terms' },
   ];
   saving = false;
   companyExists = false;
   duplicateField: 'email' | 'phone' | 'trn' | null = null;
   canCreateDepartment = false;
   canCreateCustomerType = false;
+
+  attachments: CustomerAttachment[] = [];
+  pendingFiles: File[] = [];
+  uploadingAttachments = false;
+  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
 
   departmentOptions: SfOption[] = [];
   customerDepartmentOptions: SfOption[] = [];
@@ -57,6 +68,11 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     { label: 'Mr', value: 'Mr' },
     { label: 'Ms', value: 'Ms' },
   ];
+  paymentTermsOptions: SfOption[] = PAYMENT_TERMS.map((t) => ({ label: t, value: t }));
+  readonly creditStatusOptions: SfOption[] = CREDIT_STATUSES.map((s) => ({ label: s, value: s }));
+  readonly currencyOptions: SfOption[] = ['QAR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'INR'].map((c) => ({ label: c, value: c }));
+  private readonly defaultSources = ['Referral', 'Website', 'Walk-in', 'Cold Call', 'Exhibition', 'Existing Client', 'Other'];
+  sourceOptions: SfOption[] = this.defaultSources.map((s) => ({ label: s, value: s }));
 
   private fb = inject(FormBuilder);
   private dialog = inject(MatDialog);
@@ -65,6 +81,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   private customerService = inject(CustomerService);
   private employeeService = inject(EmployeeService);
   private profileService = inject(ProfileService);
+  private masterList = inject(MasterListService);
   private subscriptions = new Subscription();
   private optionsLoaded = false;
   private companyNameWatched = false;
@@ -81,11 +98,22 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     customerEmailId: ['', [Validators.required, Validators.email]],
     contactNo: ['', Validators.required],
     trn: [''],
+    paymentTerms: [null as string | null],
+    creditLimit: [null as number | null],
+    creditStatus: ['Good Standing' as string | null],
+    taxExempt: [false],
+    currency: ['QAR' as string | null],
+    source: [null as string | null],
+    shippingSites: this.fb.array([] as FormGroup[]),
     contactDetails: this.fb.array([this.newContact()]),
   });
 
   get contactDetails(): FormArray<FormGroup> {
     return this.customerForm.controls.contactDetails as FormArray<FormGroup>;
+  }
+
+  get shippingSites(): FormArray<FormGroup> {
+    return this.customerForm.controls.shippingSites as FormArray<FormGroup>;
   }
 
   get isEdit(): boolean { return this.mode === 'edit'; }
@@ -104,6 +132,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.open || !(changes['open'] || changes['customer'])) return;
     this.ensureOptions();
+    this.loadMasterOptions();
     this.reset();
     if (this.isEdit && this.customer) this.seed(this.customer);
     this.watchCompanyName();
@@ -135,7 +164,21 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       phoneNo: ['', Validators.required],
       department: [null as string | null, Validators.required],
       designation: [''],
+      role: [null as string | null],
     }) as unknown as FormGroup;
+  }
+
+  /** Payment terms and source come from Settings → Master Data; a saved value stays selectable even if retired. */
+  private loadMasterOptions(): void {
+    const c = this.isEdit ? this.customer : null;
+    this.subscriptions.add(
+      this.masterList.getOptions('paymentTerms', { current: c?.paymentTerms, fallback: [...PAYMENT_TERMS] })
+        .subscribe((o) => (this.paymentTermsOptions = o))
+    );
+    this.subscriptions.add(
+      this.masterList.getOptions('source', { current: c?.source, fallback: this.defaultSources })
+        .subscribe((o) => (this.sourceOptions = o))
+    );
   }
 
   private ensureOptions(): void {
@@ -148,17 +191,17 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       })
     );
     this.subscriptions.add(
-      this.profileService.getDepartments().subscribe((res: getDepartment[]) => {
+      this.profileService.getDepartments(true).subscribe((res: getDepartment[]) => {
         this.departmentOptions = res.map((d) => ({ label: d.departmentName, value: d._id }));
       })
     );
     this.subscriptions.add(
-      this.profileService.getCustomerDepartments().subscribe((res: getDepartment[]) => {
+      this.profileService.getCustomerDepartments(true).subscribe((res: getDepartment[]) => {
         this.customerDepartmentOptions = res.map((d) => ({ label: d.departmentName, value: d._id }));
       })
     );
     this.subscriptions.add(
-      this.profileService.getCustomerTypes().subscribe((res: getCustomerType[]) => {
+      this.profileService.getCustomerTypes(true).subscribe((res: getCustomerType[]) => {
         this.customerTypeOptions = res.map((t) => ({ label: t.customerTypeName, value: t._id }));
       })
     );
@@ -202,32 +245,33 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
 
   // --- form state ------------------------------------------------------------
 
-  private readonly stepControls: Record<1 | 2, string[]> = {
-    1: ['department', 'companyName', 'companyAddress', 'shippingAddress', 'customerType', 'customerEmailId', 'contactNo', 'trn'],
+  private readonly stepControls: Record<1 | 2 | 3, string[]> = {
+    1: ['department', 'companyName', 'companyAddress', 'shippingAddress', 'customerType', 'customerEmailId', 'contactNo', 'trn', 'shippingSites'],
     2: ['contactDetails'],
+    3: ['paymentTerms', 'creditLimit', 'creditStatus', 'taxExempt', 'currency', 'source'],
   };
 
   /** A step is complete when every control it owns is valid. */
-  isStepValid(step: 1 | 2): boolean {
+  isStepValid(step: 1 | 2 | 3): boolean {
     return this.stepControls[step].every((name) => this.customerForm.get(name)?.valid);
   }
 
   /** True once the user has interacted with (or tried to submit) a control of this step. */
-  isStepTouched(step: 1 | 2): boolean {
+  isStepTouched(step: 1 | 2 | 3): boolean {
     return this.stepControls[step].some((name) => this.customerForm.get(name)?.touched);
   }
 
-  private markStepTouched(step: 1 | 2): void {
+  private markStepTouched(step: 1 | 2 | 3): void {
     this.stepControls[step].forEach((name) => this.customerForm.get(name)?.markAllAsTouched());
   }
 
-  goToStep(step: 1 | 2): void {
+  goToStep(step: 1 | 2 | 3): void {
     // Forward moves must pass every step in between; going back is always allowed.
     if (step > this.step) {
       for (let s = this.step; s < step; s++) {
-        if (!this.isStepValid(s as 1 | 2)) {
-          this.markStepTouched(s as 1 | 2);
-          this.step = s as 1 | 2;
+        if (!this.isStepValid(s as 1 | 2 | 3)) {
+          this.markStepTouched(s as 1 | 2 | 3);
+          this.step = s as 1 | 2 | 3;
           return;
         }
       }
@@ -236,11 +280,11 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   }
 
   nextStep(): void {
-    this.goToStep(2);
+    this.goToStep((this.step + 1) as 1 | 2 | 3);
   }
 
   previousStep(): void {
-    this.step = 1;
+    this.step = (this.step - 1) as 1 | 2 | 3;
   }
 
   private reset(): void {
@@ -248,9 +292,13 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.companyExists = false;
     this.contactDetails.clear();
     this.contactDetails.push(this.newContact());
+    this.shippingSites.clear();
     this.duplicateField = null;
+    this.attachments = [];
+    this.pendingFiles = [];
     this.customerForm.reset({
       department: null, companyName: '', companyAddress: '', sameAsBilling: true, shippingAddress: '', customerType: null, customerEmailId: '', contactNo: '', trn: '',
+      paymentTerms: null, creditLimit: null, creditStatus: 'Good Standing', taxExempt: false, currency: 'QAR', source: null,
     });
     this.customerForm.controls.companyAddressStructured.reset();
     this.customerForm.controls.shippingAddressStructured.reset();
@@ -274,14 +322,41 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       customerEmailId: c.customerEmailId,
       contactNo: String(c.contactNo ?? ''),
       trn: c.trn ?? '',
+      paymentTerms: c.paymentTerms ?? null,
+      creditLimit: c.creditLimit ?? null,
+      creditStatus: c.creditStatus ?? 'Good Standing',
+      taxExempt: c.taxExempt ?? false,
+      currency: c.currency ?? 'QAR',
+      source: c.source ?? null,
+    });
+    this.shippingSites.clear();
+    (c.shippingSites ?? []).forEach((s) => {
+      const g = this.newSite();
+      g.patchValue({ siteName: s.siteName, address: s.address ?? {} });
+      this.shippingSites.push(g);
     });
     this.customerForm.controls.companyAddressStructured.patchValue(c.companyAddressStructured ?? {});
     this.customerForm.controls.shippingAddressStructured.patchValue(c.shippingAddressStructured ?? {});
     const shipping = this.customerForm.controls.shippingAddress;
     shipping.setValidators(c.sameAsBilling ?? true ? [] : Validators.required);
     shipping.updateValueAndValidity();
+    this.attachments = c.attachments ?? [];
+    this.pendingFiles = [];
     this.customerForm.markAsPristine();
     this.customerForm.markAsUntouched();
+  }
+
+  private newSite(): FormGroup {
+    return this.fb.group({ siteName: ['', Validators.required], address: this.newAddress() }) as unknown as FormGroup;
+  }
+
+  addSite(): void {
+    this.shippingSites.push(this.newSite());
+  }
+
+  removeSite(index: number): void {
+    this.shippingSites.removeAt(index);
+    this.customerForm.markAsDirty();
   }
 
   addContact(): void {
@@ -316,6 +391,71 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     });
   }
 
+  // --- attachments -------------------------------------------------------------
+
+  attachmentDocuments(): DetailDocument[] {
+    return this.attachments.map((f) => ({ id: f.fileName, name: f.originalname }));
+  }
+
+  attachmentRemoveDetails(doc: DetailDocument) {
+    return [{ label: 'File Name', value: doc.name }];
+  }
+
+  /** Existing files are re-sent because the server replaces the whole set. */
+  uploadPendingAttachments(): void {
+    if (!this.pendingFiles.length || this.uploadingAttachments || !this.isEdit || !this.customer) return;
+    const formData = new FormData();
+    this.pendingFiles.forEach((file) => formData.append('files', file));
+    if (this.attachments.length) formData.append('existingFiles', JSON.stringify(this.attachments));
+
+    this.uploadingAttachments = true;
+    this.customerService.updateCustomerAttachments(this.customer._id, formData).subscribe({
+      next: (res: any) => {
+        this.attachments = res.data?.attachments || [];
+        this.pendingFiles = [];
+        this.uploadingAttachments = false;
+        this.toaster.success('Files uploaded successfully');
+      },
+      error: () => {
+        this.uploadingAttachments = false;
+        this.toaster.error('Failed to upload files');
+      },
+    });
+  }
+
+  onAttachmentDownload(doc: DetailDocument): void {
+    this.customerService.downloadFile(doc.id).subscribe({
+      next: (event: any) => {
+        if (event.type === HttpEventType.Response) saveAs(new Blob([event.body]), doc.name);
+      },
+      error: (error: any) => {
+        if (error.status === 404) this.toaster.warning('Sorry, the requested file was not found on the server.');
+        else this.toaster.error('An error occurred while downloading the file.');
+      },
+    });
+  }
+
+  onAttachmentRemove(doc: DetailDocument): void {
+    if (!this.customer) return;
+    this.customerService.removeCustomerAttachment(this.customer._id, doc.id).subscribe({
+      next: (res: any) => {
+        this.attachments = res?.data?.attachments ?? this.attachments.filter((f) => f.fileName !== doc.id);
+        this.toaster.success('File deleted');
+      },
+      error: () => this.toaster.error('Failed to delete file'),
+    });
+  }
+
+  private uploadAttachmentsFor(customerId: string): void {
+    if (!this.pendingFiles.length) return;
+    const formData = new FormData();
+    this.pendingFiles.forEach((file) => formData.append('files', file));
+    this.customerService.updateCustomerAttachments(customerId, formData).subscribe({
+      next: () => (this.pendingFiles = []),
+      error: () => this.toaster.error('Customer created, but attachment upload failed.'),
+    });
+  }
+
   // --- closing / saving --------------------------------------------------------
 
   onDrawerClosed(discarded: boolean): void {
@@ -326,7 +466,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   submit(): void {
     if (this.customerForm.invalid) {
       this.customerForm.markAllAsTouched();
-      this.step = this.isStepValid(1) ? 2 : 1;
+      this.step = !this.isStepValid(1) ? 1 : !this.isStepValid(2) ? 2 : 3;
       this.toaster.warning('Check the fields properly!', 'Warning !');
       return;
     }
@@ -365,6 +505,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
           return;
         }
         const edit = this.isEdit;
+        if (!edit && res._id) this.uploadAttachmentsFor(res._id);
         this.reset();
         this.closed.emit();
         this.saved.emit();

@@ -140,7 +140,7 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
 
 export const getFilteredCustomers = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, createdBy, access, userId, search } = req.body;
+        let { page, row, createdBy, access, userId, search, creditStatus } = req.body;
         let skipNum: number = (page - 1) * row;
         let isCreatedBy = createdBy == null ? true : false;
 
@@ -148,6 +148,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
         let searchRegex = search.split('').join('\\s*');
         let matchFilters = {
             isDeleted: { $ne: true },
+            ...(creditStatus ? { creditStatus } : {}),
             $or: [
                 { companyName: { $regex: search, $options: 'i' } },
                 { clientRef: { $regex: search, $options: 'i' } },]
@@ -700,7 +701,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
 
 export const editCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { id, department, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, sameAsBilling, customerType, trn } = req.body;
+        const { id, department, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, shippingSites, sameAsBilling, customerType, trn, paymentTerms, creditLimit, creditStatus, taxExempt, currency, source } = req.body;
         const companyNameTrimmed = companyName.trim();
         const companyExist = await Customer.findOne({ companyName: new RegExp(`^${companyNameTrimmed}$`, 'i'), _id: { $ne: id } })
         if (companyExist) {
@@ -740,6 +741,7 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
                 companyAddressStructured: companyAddressStructured,
                 shippingAddress: sameAsBilling ? undefined : (formatAddress(shippingAddressStructured) || shippingAddress),
                 shippingAddressStructured: sameAsBilling ? undefined : shippingAddressStructured,
+                shippingSites: shippingSites ?? [],
                 sameAsBilling: sameAsBilling,
                 contactNo: contactNo,
                 customerType: customerType,
@@ -748,6 +750,12 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
                 normalizedPhone: normalizedPhone,
                 normalizedTrn: normalizedTrn,
                 normalizedDomain: normalizedDomain,
+                paymentTerms: paymentTerms,
+                creditLimit: creditLimit,
+                creditStatus: creditStatus,
+                taxExempt: !!taxExempt,
+                currency: currency,
+                source: source,
                 updatedBy: editor._id,
                 updatedDate: new Date(),
             }

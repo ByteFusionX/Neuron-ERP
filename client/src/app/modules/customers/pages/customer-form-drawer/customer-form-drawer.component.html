@@ -26,6 +26,22 @@
             </app-sf-field>
             <app-customer-address-fields *ngIf="!customerForm.controls.sameAsBilling.value" class="contents"
                 [group]="customerForm.controls.shippingAddressStructured"></app-customer-address-fields>
+            <div full class="col-span-full">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Additional ship-to sites</span>
+                    <app-action-button variant="tool" (click)="addSite()">+ Add site</app-action-button>
+                </div>
+                <div *ngFor="let site of shippingSites.controls; let i = index" [formGroup]="site"
+                    class="mb-3 grid grid-cols-1 gap-4 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    <div class="flex items-end gap-2">
+                        <app-sf-field class="flex-1" label="Site Name" [control]="$any(site.get('siteName'))">
+                            <app-sf-input formControlName="siteName" placeholder="e.g. Warehouse, Project site"></app-sf-input>
+                        </app-sf-field>
+                        <app-action-button variant="secondary" (click)="removeSite(i)">Remove</app-action-button>
+                    </div>
+                    <app-customer-address-fields [group]="$any(site.get('address'))"></app-customer-address-fields>
+                </div>
+            </div>
             <app-sf-field label="Customer Type" [control]="customerForm.controls.customerType">
                 <app-sf-combobox formControlName="customerType" [options]="customerTypeOptions" placeholder="Select customer type"></app-sf-combobox>
             </app-sf-field>
@@ -49,6 +65,54 @@
                 [departmentOptions]="customerDepartmentOptions" (add)="addContact()" (remove)="removeContact($event)">
             </app-customer-contact-repeater>
         </app-sf-section>
+
+        <!-- Step 3 — commercial terms & attachments -------------------------------------- -->
+        <app-sf-section *ngIf="step === 3" title="Commercial Terms" columns="2">
+            <app-sf-field label="Payment Terms" [control]="customerForm.controls.paymentTerms">
+                <app-sf-select formControlName="paymentTerms" [options]="paymentTermsOptions" placeholder="Select payment terms"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Credit Limit" [control]="customerForm.controls.creditLimit">
+                <app-sf-currency formControlName="creditLimit" placeholder="0.00"></app-sf-currency>
+            </app-sf-field>
+            <app-sf-field label="Credit Status" [control]="customerForm.controls.creditStatus">
+                <app-sf-select formControlName="creditStatus" [options]="creditStatusOptions" placeholder="Select credit status"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Currency" [control]="customerForm.controls.currency">
+                <app-sf-select formControlName="currency" [options]="currencyOptions" placeholder="Select currency"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Source" [control]="customerForm.controls.source">
+                <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="How did they find us?"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field full label="Tax" [control]="customerForm.controls.taxExempt">
+                <app-sf-checkbox formControlName="taxExempt" label="Tax exempt (VAT is not applied)"></app-sf-checkbox>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="step === 3" title="Attachments" columns="1">
+            <ng-container *ngIf="isEdit; else createAttachments">
+                <app-detail-documents
+                    title="Customer files"
+                    [documents]="attachmentDocuments()"
+                    [uploadable]="false"
+                    [removable]="true"
+                    [viewable]="false"
+                    [downloadable]="true"
+                    [removeDetails]="attachmentRemoveDetails"
+                    (download)="onAttachmentDownload($event)"
+                    (remove)="onAttachmentRemove($event)"></app-detail-documents>
+                <app-sf-file class="mt-3 block" [(ngModel)]="pendingFiles" [ngModelOptions]="{standalone: true}"
+                    [accept]="acceptedFiles" [maxSizeMb]="5" [disabled]="uploadingAttachments"></app-sf-file>
+                <div class="mt-3 flex justify-end">
+                    <app-action-button variant="tool" [disabled]="uploadingAttachments || !pendingFiles.length" (click)="uploadPendingAttachments()">
+                        {{ uploadingAttachments ? 'Uploading…' : 'Upload' + (pendingFiles.length ? ' (' + pendingFiles.length + ')' : '') }}
+                    </app-action-button>
+                </div>
+            </ng-container>
+            <ng-template #createAttachments>
+                <app-sf-file [(ngModel)]="pendingFiles" [ngModelOptions]="{standalone: true}" [accept]="acceptedFiles" [maxSizeMb]="5"></app-sf-file>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Files are uploaded once the customer is created.</p>
+            </ng-template>
+        </app-sf-section>
     </form>
 
     <ng-container sfDrawerFooter>
@@ -57,17 +121,17 @@
         <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
-        <app-action-button *ngIf="step === 2" variant="secondary" (click)="previousStep()">Back</app-action-button>
+        <app-action-button *ngIf="step === 2 || step === 3" variant="secondary" (click)="previousStep()">Back</app-action-button>
 
-        <!-- Editing already has the data, so saving is offered on the first step too. -->
-        <app-action-button *ngIf="isEdit && step === 1" variant="tool" [disabled]="saving" (click)="submit()">
+        <!-- Editing already has the data, so saving is offered on every step too. -->
+        <app-action-button *ngIf="isEdit && (step === 1 || step === 2)" variant="tool" [disabled]="saving" (click)="submit()">
             {{ saving ? 'Saving…' : 'Save Changes' }}
         </app-action-button>
 
-        <app-action-button *ngIf="step === 1" variant="primary" (click)="nextStep()">
-            Next: {{ steps[1].label }}
+        <app-action-button *ngIf="step === 1 || step === 2" variant="primary" (click)="nextStep()">
+            Next: {{ steps[step].label }}
         </app-action-button>
-        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="customer-form" [disabled]="saving">
+        <app-action-button *ngIf="step === 3" variant="primary" type="submit" form="customer-form" [disabled]="saving">
             {{ saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create Customer') }}
         </app-action-button>
     </ng-container>

@@ -3,6 +3,12 @@ import { Schema, Document, model, Types } from "mongoose";
 export const CUSTOMER_STATUSES = ["Active", "Inactive", "Blacklisted", "On Hold", "Prospect"] as const;
 export type CustomerStatus = typeof CUSTOMER_STATUSES[number];
 
+export const PAYMENT_TERMS = ["Cash", "Net 15", "Net 30", "Net 45", "Net 60", "Net 90"] as const;
+export type PaymentTerm = typeof PAYMENT_TERMS[number];
+
+export const CREDIT_STATUSES = ["Good Standing", "Watch", "Hold", "Exceeded"] as const;
+export type CreditStatus = typeof CREDIT_STATUSES[number];
+
 interface ContactDetail {
   _id: string;
   courtesyTitle: string;
@@ -12,6 +18,7 @@ interface ContactDetail {
   phoneNo: number;
   department: Types.ObjectId;
   designation?: string;
+  role?: string;
   isPrimary?: boolean;
 }
 
@@ -22,6 +29,11 @@ interface AddressDetail {
   state?: string;
   country?: string;
   postalCode?: string;
+}
+
+interface ShippingSite {
+  siteName: string;
+  address?: AddressDetail;
 }
 
 interface StatusHistoryEntry {
@@ -46,6 +58,7 @@ export interface Customer extends Document {
   companyAddressStructured?: AddressDetail;
   shippingAddress?: string;
   shippingAddressStructured?: AddressDetail;
+  shippingSites?: ShippingSite[];
   sameAsBilling: boolean;
   customerEmailId: string;
   contactNo: number;
@@ -56,6 +69,12 @@ export interface Customer extends Document {
   normalizedDomain?: string;
   status: CustomerStatus;
   statusReason?: string;
+  paymentTerms?: string;
+  creditLimit?: number;
+  creditStatus?: CreditStatus;
+  taxExempt?: boolean;
+  currency?: string;
+  source?: string;
   statusHistory: StatusHistoryEntry[];
   attachments: AttachmentEntry[];
   createdBy: Types.ObjectId; // Denotes the current owner
@@ -74,6 +93,7 @@ const contactDetailSchema = new Schema({
   phoneNo: { type: Number, required: true },
   department: { type: Schema.Types.ObjectId, ref: "Department", required: true },
   designation: { type: String },
+  role: { type: String, enum: ['Decision Maker', 'Buyer', 'Technical', 'Accounts', 'Other'] },
   isPrimary: { type: Boolean, default: false },
 });
 
@@ -85,6 +105,11 @@ const addressDetailSchema = new Schema({
   country: { type: String },
   postalCode: { type: String },
 }, { _id: false });
+
+const shippingSiteSchema = new Schema({
+  siteName: { type: String, required: true },
+  address: { type: addressDetailSchema },
+});
 
 const statusHistorySchema = new Schema({
   status: { type: String, enum: CUSTOMER_STATUSES, required: true },
@@ -108,6 +133,7 @@ const customerSchema = new Schema<Customer>({
   companyAddressStructured: { type: addressDetailSchema },
   shippingAddress: { type: String },
   shippingAddressStructured: { type: addressDetailSchema },
+  shippingSites: [{ type: shippingSiteSchema }],
   sameAsBilling: { type: Boolean, default: true },
   customerEmailId: { type: String, required: true },
   contactNo: { type: Number, required: true },
@@ -118,6 +144,13 @@ const customerSchema = new Schema<Customer>({
   normalizedDomain: { type: String, index: true },
   status: { type: String, enum: CUSTOMER_STATUSES, default: "Active", required: true },
   statusReason: { type: String },
+  // Free string: values come from the Settings → Master Data "paymentTerms" list.
+  paymentTerms: { type: String },
+  creditLimit: { type: Number },
+  creditStatus: { type: String, enum: CREDIT_STATUSES, default: "Good Standing" },
+  taxExempt: { type: Boolean, default: false },
+  currency: { type: String, default: "QAR" },
+  source: { type: String },
   statusHistory: [{ type: statusHistorySchema }],
   attachments: [{ type: attachmentSchema }],
   createdBy: { type: Schema.Types.ObjectId, ref: "Employee", required: true }, // Current owner

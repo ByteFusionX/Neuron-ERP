@@ -51,6 +51,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   row = 10;
   searchQuery = '';
   selectedEmployee: string | null = null;
+  creditStatusFilter: string | null = null;
 
   columns: DataGridColumn<getCustomer>[] = [];
   rowActions: DataGridRowAction<getCustomer>[] = [];
@@ -163,6 +164,17 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         valueGetter: (r) => (r.sharedWith?.length ? 'Shared' : null),
         badgeClasses: { Shared: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300' },
       },
+      { key: 'paymentTerms', label: 'Payment Terms', valueGetter: (r) => r.paymentTerms || '' },
+      {
+        key: 'creditStatus', label: 'Credit Status', type: 'badge', width: '120px',
+        valueGetter: (r) => r.creditStatus,
+        badgeClasses: {
+          'Good Standing': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          Watch: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          Hold: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+          Exceeded: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+        },
+      },
     ];
   }
 
@@ -207,6 +219,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       access: this.viewReport,
       userId: this.userId,
       search: this.searchQuery,
+      creditStatus: this.creditStatusFilter,
     };
 
     this.subscriptions.add(
@@ -231,8 +244,10 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.page = query.page;
     this.row = query.pageSize;
     this.selectedEmployee = null;
+    this.creditStatusFilter = null;
     for (const f of query.filters) {
       if (f.key === 'createdBy') this.selectedEmployee = f.value;
+      if (f.key === 'creditStatus') this.creditStatusFilter = f.value;
     }
     this.getAllCustomers();
     this.updateUrlParams();
@@ -316,13 +331,37 @@ export class CustomersListComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'TRN / VAT Number', value: c.trn || '—', noHover: true },
         ],
       },
+      {
+        title: 'Commercial Terms',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Payment Terms', value: c.paymentTerms || '—', noHover: true },
+          { type: 'field', label: 'Credit Limit', value: c.creditLimit != null ? String(c.creditLimit) : '—', noHover: true },
+          { type: 'field', label: 'Credit Status', value: c.creditStatus || '—', noHover: true },
+          { type: 'field', label: 'Currency', value: c.currency || '—', noHover: true },
+          { type: 'field', label: 'Source', value: c.source || '—', noHover: true },
+          { type: 'field', label: 'Tax', value: c.taxExempt ? 'Tax exempt' : 'VAT applies', noHover: true },
+        ],
+      },
+      ...((c.shippingSites?.length)
+        ? [{
+            title: 'Ship-to Sites',
+            columns: '2' as const,
+            fields: c.shippingSites.map((s) => ({
+              type: 'field' as const,
+              label: s.siteName,
+              value: [s.address?.line1, s.address?.city, s.address?.country].filter(Boolean).join(', ') || '—',
+              noHover: true,
+            })),
+          }]
+        : []),
     ];
   }
 
   contactRows(row: getCustomer): Record<string, any>[] {
     return (this.detail(row).contactDetails ?? []).map((c) => ({
       name: `${c.courtesyTitle ? c.courtesyTitle + '. ' : ''}${c.firstName} ${c.lastName}`.trim() + (c.isPrimary ? ' (Primary)' : ''),
-      designation: c.designation || '—',
+      designation: (c.designation || '—') + (c.role ? ' · ' + c.role : ''),
       email: c.email,
       phoneNo: c.phoneNo,
       department: c.department?.departmentName ?? '',
