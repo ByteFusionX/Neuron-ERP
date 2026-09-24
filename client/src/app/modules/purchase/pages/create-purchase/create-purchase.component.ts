@@ -18,7 +18,7 @@ import { NgIcon } from '@ng-icons/core';
 import { MatTooltip } from '@angular/material/tooltip';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
-import { CreateProductComponent } from 'src/app/modules/products/modals/create-product/create-product.component';
+import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 
@@ -30,7 +30,7 @@ interface PartNumberDropdownOption {
 
 @Component({
   selector: 'app-create-purchase',
-  imports: [
+  imports: [ProductFormDrawerComponent, 
     ReactiveFormsModule,
     FormsModule,
     CommonModule,
@@ -1208,33 +1208,31 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     });
   }
 
-  onCreatePartNumber(): void {
-    const dialogRef = this._dialog.open(CreateProductComponent, {
-      width: '650px',
-      disableClose: true,
-      maxHeight: '90vh',
-      autoFocus: false
-    });
+  createProductOpen = false;
+  createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result?.partNo && result?._id) {
-        const option: PartNumberDropdownOption = {
-          label: this.composePartNumberLabel({
-            partNo: result.partNo,
-            productDescription: result.productDescription
-          }),
-          value: result._id,
-          data: {
-            _id: result._id,
-            partNo: result.partNo,
-            productDescription: result.productDescription
-          }
-        };
-        const filtered = this.partNumberOptions().filter(opt => opt.value !== option.value);
-        this.partNumberOptions.set([option, ...filtered]);
-        this.loadPartNumbers();
+  onCreatePartNumber(): void {
+    this.createProductPrefill = null;
+    this.createProductOpen = true;
+  }
+
+  onProductCreated(result: any): void {
+    if (!result?.partNo || !result?._id) return;
+    const option: PartNumberDropdownOption = {
+      label: this.composePartNumberLabel({
+        partNo: result.partNo,
+        productDescription: result.productDescription
+      }),
+      value: result._id,
+      data: {
+        _id: result._id,
+        partNo: result.partNo,
+        productDescription: result.productDescription
       }
-    });
+    };
+    const filtered = this.partNumberOptions().filter(opt => opt.value !== option.value);
+    this.partNumberOptions.set([option, ...filtered]);
+    this.loadPartNumbers();
   }
 
   ngOnDestroy(): void {

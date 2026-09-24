@@ -50,7 +50,9 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
             enquiryData.attachments = enquiryFiles
         }
 
+        enquiryData.status = enquiryData.status || 'New'
         enquiryData.date = new Date(enquiryData.date)
+        if (enquiryData.nextFollowUpDate) enquiryData.nextFollowUpDate = new Date(enquiryData.nextFollowUpDate)
         const newEnquiry = new enquiryModel(enquiryData)
         const saveEnquiryData = await newEnquiry.save()
         if (!saveEnquiryData) return res.status(504).json({ err: 'Internal Error' });
@@ -313,7 +315,7 @@ export const removeEnquiryAttachment = async (req: any, res: Response) => {
 
 export const getEnquiries = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, search, sortKey, sortDir, salesPerson, status, customer, fromDate, toDate, department, access, userId, createdBy } = req.body;
+        let { page, row, search, sortKey, sortDir, salesPerson, status, customer, fromDate, toDate, department, access, userId, createdBy, overdueFollowUp } = req.body;
         let skipNum: number = (page - 1) * row;
 
         let isSalesPerson = salesPerson == null ? true : false;
@@ -379,19 +381,26 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         const creatorFilter = createdBy ? { salesPerson: new ObjectId(createdBy) } : {};
         const baseFilters = { $and: [matchFilters, accessFilter] };
         const filters = { $and: [matchFilters, accessFilter, creatorFilter] }
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        const overdueFollowUpFilter = overdueFollowUp
+            ? { nextFollowUpDate: { $lte: today }, status: { $nin: ['Quoted', 'Lost'] } }
+            : {};
+        const listBaseFilters = { $and: [baseFilters, overdueFollowUpFilter] };
+        const listFilters = { $and: [filters, overdueFollowUpFilter] };
 
         // 'Sended by Presale Engineer' rows are hidden here so paging and counts stay correct.
         const hiddenStatuses = ['Quoted', 'Sended by Presale Engineer'];
 
         const enquiryTotal: { total: number }[] = await enquiryModel.aggregate([
-            { $match: filters },
+            { $match: listFilters },
             { $match: { status: { $nin: hiddenStatuses } } },
             { $group: { _id: null, total: { $sum: 1 } } },
             { $project: { total: 1, _id: 0 } }
         ]).exec()
 
         const viewCounts = await enquiryModel.aggregate([
-            { $match: baseFilters },
+            { $match: listBaseFilters },
             { $match: { status: { $nin: hiddenStatuses } } },
             {
                 $facet: {
@@ -406,6 +415,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
 
         const sortableFields: Record<string, string> = {
             date: 'date',
+            nextFollowUpDate: 'nextFollowUpDate',
             enquiryId: 'enquiryId',
             description: 'title',
             status: 'status'
@@ -437,7 +447,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         ] : [];
 
         const enquiryData = await enquiryModel.aggregate([
-            { $match: filters },
+            { $match: listFilters },
             { $match: { status: { $nin: hiddenStatuses } } },
             ...sortPrep,
             { $sort: { [resolvedSortKey]: resolvedSortDirection, _id: resolvedSortDirection } },
@@ -563,13 +573,13 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
         let page = Number(req.query.page)
         let row = Number(req.query.row)
         let skipNum: number = (page - 1) * row;
-        let { filter, access, userId } = req.query;
+        let { filter, access, userId, search } = req.query;
         let accessFilter: any = {};
         switch (access) {
             case 'assigned':
                 accessFilter['$or'] = [
                     { 'preSale.presalePerson': new ObjectId(userId) },
-                    { reAssigned : new ObjectId(userId) }, 
+                    { reAssigned : new ObjectId(userId) },
                 ];
                 break;
             default:
@@ -578,7 +588,39 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
 
         if (filter == 'completed') {
             accessFilter.status = 'Work In Progress'
+        } else if (filter == 'reassigned') {
+            accessFilter.status = 'Assigned To Presale Engineer'
+        } else if (filter == 'assigned') {
+            accessFilter.status = { $nin: ['Work In Progress', 'Rejected by Presale Manager'] }
         }
+
+        // Joined fields (customer/department/assigned-by names) need their lookups run before the
+        // search $match can see them, so a text search covers more than just enquiryId/title.
+        const needsJoinedSearch = typeof search === 'string' && search.trim().length > 0;
+        let searchFilter: any = {};
+        let joinedSearchFilter: any = {};
+        if (typeof search === 'string' && search.trim()) {
+            const escaped = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escaped, 'i');
+            searchFilter['$or'] = [
+                { enquiryId: regex },
+                { title: regex },
+            ];
+            joinedSearchFilter['$or'] = [
+                { enquiryId: regex },
+                { title: regex },
+                { 'client.companyName': regex },
+                { 'department.departmentName': regex },
+                { 'salesPerson.firstName': regex },
+                { 'salesPerson.lastName': regex },
+            ];
+        }
+
+        const joinedLookups = [
+            { $lookup: { from: 'customers', localField: 'client', foreignField: '_id', as: 'client' } },
+            { $lookup: { from: 'departments', localField: 'department', foreignField: '_id', as: 'department' } },
+            { $lookup: { from: 'employees', localField: 'salesPerson', foreignField: '_id', as: 'salesPerson' } },
+        ];
 
         const totalPresale: { total: number }[] = await enquiryModel.aggregate([
             {
@@ -587,12 +629,14 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             {
                 $match: {
                     ...accessFilter,
+                    ...(needsJoinedSearch ? {} : searchFilter),
                     isDeleted: { $ne: true }
                 }
             },
             {
                 $match: { "preSale.presalePerson": { $exists: true, $ne: null } }
             },
+            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : []),
             {
                 $group: { _id: null, total: { $sum: 1 } }
             },
@@ -603,6 +647,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             {
                 $match: {
                     ...accessFilter,
+                    ...(needsJoinedSearch ? {} : searchFilter),
                     isDeleted: { $ne: true }
                 }
             },
@@ -612,6 +657,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             {
                 $match: { "preSale.presalePerson": { $exists: true, $ne: null } }
             },
+            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : []),
             {
                 $sort: { 'preSale.createdDate': -1 }
             },
@@ -621,15 +667,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             {
                 $limit: row
             },
-            {
-                $lookup: { from: 'customers', localField: 'client', foreignField: '_id', as: 'client' }
-            },
-            {
-                $lookup: { from: 'departments', localField: 'department', foreignField: '_id', as: 'department' }
-            },
-            {
-                $lookup: { from: 'employees', localField: 'salesPerson', foreignField: '_id', as: 'salesPerson' }
-            },
+            ...(needsJoinedSearch ? [] : joinedLookups),
             {
                 $lookup: {
                     from: 'employees',
@@ -697,13 +735,13 @@ export const updateEnquiryStatus = async (req: Request, res: Response, next: Nex
         let data = req.body
         let quote = await quotationModel.findOne({ enqId: data.id })
         let status = data.status
-        if (quote) {
+        if (quote && data.status === 'Quoted') {
             let updateQuote = await quotationModel.updateOne({ enqId: data.id }, { $set: { 'status': 'Work In Progress' } })
             status = 'Quoted';
         }
         const update = await enquiryModel.findOneAndUpdate({ _id: data.id }, { $set: { status: status, 'preSale.seenbySalesPerson': false, 'preSale.newFeedbackAccess': true } })
             .populate(['client', 'department', 'salesPerson'])
-        if (update && !quote) {
+        if (update && !quote && status === 'Work In Progress') {
             const socket = req.app.get('io') as Server;
             const userData = await getEmployeeData(req.user);
             await createNotificationWithPrivileges(
@@ -721,7 +759,7 @@ export const updateEnquiryStatus = async (req: Request, res: Response, next: Nex
             );
             return res.status(200).json({ update })
         } else if (update) {
-            return res.status(200).json({ update, quoteId: quote.quoteId })
+            return res.status(200).json({ update, quoteId: quote?.quoteId })
         }
 
         return res.status(502).json()
@@ -1530,6 +1568,8 @@ const REPORT_STAGES = [
 const enquiryStage = (e: any): string => {
     const status: string = e.status || '';
     if (status === 'Quoted') return 'quoted';
+    if (status === 'Ready for Quotation') return 'estimated';
+    if (status === 'New' || status === 'In Review') return 'new';
     if (status.startsWith('Rejected by Presale')) return 'rejected';
     if (status.startsWith('Assigned To Presale') || status === 'Sended by Presale Engineer') return 'presales';
     // Back with the sales person: an estimation exists if presales ever worked on it.
@@ -1580,7 +1620,7 @@ export const getEnquiryReport = async (req: Request, res: Response, next: NextFu
         else if (access === 'createdAndReported') match.salesPerson = { $in: [...reportedToUserIds, new ObjectId(userId)] };
 
         const enquiries: any[] = await enquiryModel.find(match)
-            .select('enquiryId title status date client salesPerson department assignmentHistory preSale.presalePerson preSale.createdDate preSale.rejectionHistory')
+            .select('enquiryId title status date nextFollowUpDate client salesPerson department assignmentHistory preSale.presalePerson preSale.createdDate preSale.rejectionHistory')
             .populate('client', 'companyName')
             .populate('salesPerson', 'firstName lastName')
             .populate('department', 'departmentName')
@@ -1704,6 +1744,7 @@ export const getEnquiryReport = async (req: Request, res: Response, next: NextFu
             presale: r.holderName,
             status: r.e.status,
             days,
+            nextFollowUpDate: r.e.nextFollowUpDate,
         });
         const byDaysDesc = (a: any, b: any) => b.days - a.days;
         const notStarted = inStage('new')
@@ -1717,6 +1758,9 @@ export const getEnquiryReport = async (req: Request, res: Response, next: NextFu
             .map((r) => brief(r, daysSince(r.createdAt))).sort(byDaysDesc);
         const rejected = rejectedRows
             .map((r) => brief(r, daysSince(r.assignedAt))).sort(byDaysDesc);
+        const overdueFollowUps = enriched
+            .filter((r) => r.e.nextFollowUpDate && !['quoted', 'rejected'].includes(r.stage) && new Date(r.e.nextFollowUpDate) <= now)
+            .map((r) => brief(r, daysSince(new Date(r.e.nextFollowUpDate)))).sort(byDaysDesc);
 
         // What presales are holding right now, so an unbalanced load is visible at a glance.
         const workloadMap = new Map<string, any>();
@@ -1751,7 +1795,7 @@ export const getEnquiryReport = async (req: Request, res: Response, next: NextFu
                 presale: finish(byPresale),
             },
             attention: {
-                notStarted, stuck, awaitingQuote, rejected,
+                notStarted, stuck, awaitingQuote, rejected, overdueFollowUps,
                 notStartedDays: NOT_STARTED_DAYS, stuckDays: STUCK_DAYS, awaitingQuoteDays: AWAITING_QUOTE_DAYS,
             },
             workload,

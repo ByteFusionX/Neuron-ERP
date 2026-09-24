@@ -69,7 +69,9 @@
             </div>
         </ng-template>
 
-        <ng-template #detailFooterTemplate let-row>
+        <ng-template #detailFooterTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="tab === 'events'" variant="secondary" (click)="onAddEvent(row)">Add event</app-action-button>
+            <app-action-button *ngIf="tab === 'lpo' && canUploadLpo(row)" variant="secondary" (click)="startLpoUpload(row)">Upload</app-action-button>
             <app-action-button variant="primary" (click)="openFullQuotation(row, $event)">Open full quotation</app-action-button>
         </ng-template>
 
@@ -93,7 +95,6 @@
                         defaultFilter="event"
                         [showTasks]="false"
                         [showEvents]="true"
-                        addable
                         (add)="onAddEvent(row)"
                         (toggle)="onToggleEvent(row, $event)"
                         (eventOutcome)="onEventOutcome(row, $event.item, $event.status)"
@@ -106,14 +107,11 @@
                         title="Customer LPO"
                         emptyMessage="No Documents uploaded yet."
                         [documents]="lpoDocuments(row)"
-                        [uploadable]="row.status === 'Won' && !row.lpoFiles?.length"
                         [removable]="row.dealData?.status === 'rejected' || row.dealData?.status === 'revoked'"
                         [removeDetails]="lpoRemoveDetails(row)"
-                        (upload)="lpoFileInput.click()"
                         (open)="onLpoPreviewDoc(row, $event)"
                         (download)="onLpoDownloadDoc(row, $event)"
                         (remove)="onLpoRemoveDoc(row, $event)"></app-detail-documents>
-                    <input #lpoFileInput type="file" class="hidden" multiple (change)="onLpoFileSelected($event, row)">
                 </ng-container>
             </ng-container>
         </ng-template>

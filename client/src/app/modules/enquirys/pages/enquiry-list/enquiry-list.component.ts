@@ -109,7 +109,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   currentEmployeeId: string | undefined;
 
   status: { name: string; label: string }[] = [
-    { name: 'Work In Progress', label: 'In Progress' },
+    { name: 'New', label: 'New' },
+    { name: 'In Review', label: 'In Review' },
+    { name: 'Ready for Quotation', label: 'Ready for Quotation' },
     { name: 'Assigned To Presale Manager', label: 'In Presales' },
   ];
   dataSource = new MatTableDataSource<getEnquiry>();
@@ -118,6 +120,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   views: DataGridView<getEnquiry>[] = [
     { id: 'all', label: 'All' },
     { id: 'mine', label: 'My Enquiries' },
+    { id: 'overdue', label: 'Overdue Follow-up' },
   ];
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
   detailTabs: DataGridDetailTab[] = [
@@ -134,6 +137,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   statusLabel = (status: string): string => {
     if (status === 'Work In Progress') return 'In Progress';
     if (status?.startsWith('Assigned To Presale')) return 'In Presales';
+    if (status === 'Sent to Presales') return 'In Presales';
     return status;
   };
   enquiryTitle = (row: getEnquiry) => row.enquiryId ?? '';
@@ -276,6 +280,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   private buildColumns(): void {
     this.columns = [
       { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px' },
+      { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, width: '140px' },
       { key: 'enquiryId', label: 'Enquiry No.', sortable: true, locked: true },
       { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.client?.companyName },
       { key: 'contactPerson', label: 'Contacted By', valueGetter: (row) => row.contact ? `${row.contact.firstName ?? ''} ${row.contact.lastName ?? ''}`.trim() : '—' },
@@ -295,6 +300,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, badge: (row) => row.preSale?.seenbySalesPerson === false, hidden: (row) => !this.canViewEstimations(row) },
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', quick: true, hidden: (row) => !row.preSale?.presalePerson || !!row.preSale?.estimations },
       { id: 'assignPresale', label: 'Assign to Presale', icon: 'user', quick: true, hidden: (row) => (!!row.preSale?.presalePerson || this.isAssignedToPresale(row.status)) && row.status !== 'Rejected by Presale Manager' },
+      { id: 'readyForQuote', label: 'Mark Ready for Quotation', icon: 'check', quick: true, hidden: (row) => !this.canMarkReadyForQuotation(row) },
       { id: 'review', label: 'View Rejection', icon: 'info', panel: true, hidden: (row) => row.status !== 'Rejected by Presale Manager' },
       { id: 'delete', label: 'Delete Enquiry', icon: 'trash', variant: 'danger', divider: true, hidden: (row) => !this.isDeleteOption || this.isAssignedToPresale(row.status) },
     ];
@@ -332,18 +338,40 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'estimations': this.onViewPresale(click, index, row); break;
       case 'presaleHistory': this.openPresaleProgress(row); break;
       case 'assignPresale': this.onAssignPresale(click, row.preSale, row._id, index); break;
+      case 'readyForQuote': this.markReadyForQuotation(row); break;
       case 'review': this.openReview((row.preSale as any)?.rejectionHistory); break;
       case 'delete': this.deleteEnquiry(row._id, row.status); break;
     }
   }
 
   createQuote(row: getEnquiry): void {
-    if (row.status !== 'Work In Progress') {
-      this.toaster.warning('This enquiry is assigned to presales and cannot be quoted yet.');
+    if (row.status !== 'Ready for Quotation') {
+      this.toaster.warning('Mark this enquiry as Ready for Quotation before creating a quote.');
       return;
     }
     this._enquiryService.emitToQuote(row);
     this.router.navigate(['/quotations']);
+  }
+
+  canMarkReadyForQuotation(row: getEnquiry): boolean {
+    if (!row.client || !row.contact || !row.title?.trim()) return false;
+    return ['New', 'In Review', 'Work In Progress', 'Rejected by Presale Manager'].includes(row.status)
+      || (!!row.preSale?.estimations && !this.isAssignedToPresale(row.status));
+  }
+
+  markReadyForQuotation(row: getEnquiry): void {
+    if (!this.canMarkReadyForQuotation(row)) {
+      this.toaster.warning('Customer, contact and requirement summary are required before quotation.');
+      return;
+    }
+    this._enquiryService.updateEnquiryStatus({ id: row._id, status: 'Ready for Quotation' }).subscribe({
+      next: (res) => {
+        row.status = res.update?.status ?? 'Ready for Quotation';
+        this.dataSource._updateChangeSubscription();
+        this.toaster.success('Enquiry marked Ready for Quotation');
+      },
+      error: () => this.toaster.error('Failed to update enquiry status'),
+    });
   }
 
   canViewEstimations(row: getEnquiry): boolean {
@@ -475,6 +503,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
           { type: 'field', label: 'Sales Person', value: this.salesPersonName(row) },
           { type: 'field', label: 'Department', value: row.department?.departmentName },
           { type: 'field', label: 'Date', value: this.displayDate(row.date) },
+          { type: 'field', label: 'Next Follow-up', value: this.displayDate(row.nextFollowUpDate) },
           { type: 'field', label: 'Presales', value: this.presalePersonName(row) },
         ],
       },
@@ -731,6 +760,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       salesPerson: this.selectedSalesPerson,
       customer: this.selectedCustomer,
       status: this.selectedStatus,
+      overdueFollowUp: this.activeViewId === 'overdue',
       fromDate: this.fromDate,
       toDate: this.toDate,
       department: this.selectedDepartment,

@@ -15,7 +15,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 
 /**
  * Create-enquiry slide-over. The host binds `open` and reacts to `saved` / `closed`.
- * "Create Quote" saves the enquiry and hands it to the quotations page, as the old dialog did.
+ * New enquiries are captured first. Quotation is started from the enquiry list after review.
  */
 @Component({
   selector: 'app-enquiry-form-drawer',
@@ -25,14 +25,13 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 })
 export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
-  /** Fires with the created enquiry (not for Create Quote, which leaves for /quotations). */
+  /** Fires with the created enquiry. */
   @Output() saved = new EventEmitter<any>();
   @Output() closed = new EventEmitter<void>();
 
   @ViewChild(SfDraftDirective) draft?: SfDraftDirective;
 
   saving = false;
-  quoting = false;
   salesPersonName = '';
   readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
 
@@ -59,6 +58,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     department: [null as string | null, Validators.required],
     title: ['', Validators.required],
     date: [this.todayIso(), Validators.required],
+    nextFollowUpDate: [this.todayIso(), Validators.required],
     attachments: [[] as File[]],
   });
 
@@ -108,7 +108,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       })
     );
     this.subscriptions.add(
-      this.profileService.getDepartments().subscribe((departments) => {
+      this.profileService.getDepartments(true).subscribe((departments) => {
         this.departmentOptions = departments.map((d) => ({ label: d.departmentName, value: d._id }));
       })
     );
@@ -154,7 +154,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   private reset(): void {
     this.draft?.clear();
     this.contactOptions = [];
-    this.enquiryForm.reset({ client: null, contact: null, department: null, title: '', date: this.todayIso(), attachments: [] });
+    this.enquiryForm.reset({ client: null, contact: null, department: null, title: '', date: this.todayIso(), nextFollowUpDate: this.todayIso(), attachments: [] });
   }
 
   /** Local calendar date as yyyy-MM-dd (toISOString would shift it by the UTC offset). */
@@ -175,9 +175,10 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       salesPerson: this.salesPersonId,
       title: v.title,
       date: v.date,
+      nextFollowUpDate: v.nextFollowUpDate,
       attachments: null,
       presale: null,
-      status: 'Work In Progress',
+      status: 'New',
     }));
     (v.attachments ?? []).forEach((file) => formData.append('attachments', file as Blob));
     return formData;
@@ -234,26 +235,4 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     );
   }
 
-  /** Saves the enquiry, then hands it to the quotations page. */
-  async createQuote(): Promise<void> {
-    if (this.quoting || !this.isReady()) return;
-    this.quoting = true;
-    if (!(await this.confirmNotDuplicate())) {
-      this.quoting = false;
-      return;
-    }
-    this.subscriptions.add(
-      this.enquiryService.createEnquiry(this.buildFormData()).subscribe({
-        next: (enquiry) => {
-          this.quoting = false;
-          if (!enquiry) return;
-          this.reset();
-          this.enquiryService.emitToQuote(enquiry);
-          this.closed.emit();
-          this.router.navigate(['/quotations']);
-        },
-        error: () => (this.quoting = false),
-      })
-    );
-  }
 }

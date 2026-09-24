@@ -11,6 +11,7 @@ export interface Enquiry {
     salesPerson: string;
     title: string;
     date: string;
+    nextFollowUpDate?: string;
     attachments: File[];
     presale: Presale;
     status: string;
@@ -34,6 +35,7 @@ export interface getEnquiry {
     salesPerson: { _id: string, firstName: string, lastName: string };
     title: string;
     date: string;
+    nextFollowUpDate?: string;
     attachments: Files[];
     preSale: {
         presalePerson: getEmployeeDetails;
@@ -91,6 +93,7 @@ export interface FilterEnquiry {
     fromDate: string | null;
     toDate: string | null;
     createdBy?: string | null;
+    overdueFollowUp?: boolean;
 }
 
 export interface Files {
@@ -177,6 +180,7 @@ export interface EnquiryReportAttentionItem {
     presale: string;
     status: string;
     days: number;
+    nextFollowUpDate?: string;
 }
 
 export interface EnquiryReportDetails {
@@ -195,6 +199,7 @@ export interface EnquiryReportDetails {
         stuck: EnquiryReportAttentionItem[];
         awaitingQuote: EnquiryReportAttentionItem[];
         rejected: EnquiryReportAttentionItem[];
+        overdueFollowUps: EnquiryReportAttentionItem[];
         notStartedDays: number;
         stuckDays: number;
         awaitingQuoteDays: number;

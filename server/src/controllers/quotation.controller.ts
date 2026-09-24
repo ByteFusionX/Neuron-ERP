@@ -38,9 +38,21 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         const userToken = req.user;
 
         if (quoteData.enqId) {
-            const linkedEnquiry = await Enquiry.findById(quoteData.enqId, { status: 1 }).lean();
-            if (linkedEnquiry && PRESALE_IN_PROGRESS_STATUSES.includes(linkedEnquiry.status)) {
+            const linkedEnquiry = await Enquiry.findById(quoteData.enqId, { status: 1, client: 1, contact: 1, title: 1 }).lean();
+            if (!linkedEnquiry) {
+                return res.status(404).json({ success: false, message: 'Linked enquiry was not found.' });
+            }
+            if (!linkedEnquiry.client || !linkedEnquiry.contact) {
+                return res.status(400).json({ success: false, message: 'Select a customer and contact person on the enquiry before creating a quote.' });
+            }
+            if (!String(linkedEnquiry.title || '').trim()) {
+                return res.status(400).json({ success: false, message: 'Add the customer requirement summary before creating a quote.' });
+            }
+            if (PRESALE_IN_PROGRESS_STATUSES.includes(linkedEnquiry.status)) {
                 return res.status(409).json({ success: false, message: 'This enquiry is still with presales. Complete the presales workflow before creating a quote.' });
+            }
+            if (linkedEnquiry.status !== 'Ready for Quotation') {
+                return res.status(409).json({ success: false, message: 'Mark the enquiry as Ready for Quotation before creating a quote.' });
             }
         }
 
@@ -382,15 +394,27 @@ export const getQuotationById = async (req: Request, res: Response, next: NextFu
 
 export const getDealSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, access, userId, searchQuery, searchCriteria } = req.body;
+        let { page, row, access, userId, searchQuery, searchCriteria, view } = req.body;
 
         let skipNum: number = (page - 1) * row;
 
         let matchFilters: any = {
             isDeleted: { $ne: true },
             dealData: { $exists: true },
-            'dealData.status': { $nin: ['rejected', 'approved'] }
         };
+
+        if (view === 'all') {
+            matchFilters['dealData.status'] = { $ne: 'rejected' };
+        } else if (view === 'rejected') {
+            matchFilters['dealData.status'] = 'rejected';
+        } else if (view === 'revoked') {
+            // Revoking a deal resets dealData.status back to 'pending' and deletes its job, so a
+            // revoked deal is only identifiable via its editHistory, not its current status.
+            matchFilters['dealData.status'] = { $nin: ['rejected', 'approved'] };
+            matchFilters['editHistory.action'] = 'DealRevoked';
+        } else {
+            matchFilters['dealData.status'] = { $nin: ['rejected', 'approved'] };
+        }
 
 
         let accessFilter = {};
@@ -627,8 +651,6 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
                 }
             }
         ]);
-
-        console.log(dealData)
 
         if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
         return res.status(200).json({ total: total, dealSheet: dealData })
@@ -1102,6 +1124,12 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
 const UNSENT_QUOTE_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
 const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'currency'];
 
+const selectedDealLines = (items: any[]): any[] => (Array.isArray(items) ? items : [])
+    .flatMap((item: any) => Array.isArray(item?.itemDetails) ? item.itemDetails : [])
+    .filter((detail: any) => !!detail?.dealSelected);
+
+const hasActiveDeal = (quote: any): boolean => !!quote?.dealData?.status && quote.dealData.status !== 'rejected';
+
 export const updateQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const quoteData = req.body;
@@ -1192,6 +1220,35 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
 
 export const saveDealSheet = async (req: any, res: Response, next: NextFunction) => {
     try {
+        const { quoteId } = req.params;
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) {
+            return res.status(404).json({ message: "Quote not found" });
+        }
+        if (quote.status !== quoteStatus.Won) {
+            return res.status(400).json({ message: "A deal sheet can only be raised after the quote is marked Won" });
+        }
+        if (!quote.lpoFiles?.length) {
+            return res.status(400).json({ message: "Upload the accepted customer LPO before raising a deal sheet" });
+        }
+        if (hasActiveDeal(quote)) {
+            return res.status(409).json({ message: "A deal sheet is already in progress or approved for this quotation" });
+        }
+
+        let parsedDealData: any;
+        try {
+            parsedDealData = JSON.parse(req.body.dealData);
+        } catch {
+            return res.status(400).json({ message: "Invalid deal sheet payload" });
+        }
+        const { paymentTerms, items, removedFiles, existingFiles, costs, totalDiscount } = parsedDealData;
+        if (!String(paymentTerms ?? '').trim()) {
+            return res.status(400).json({ message: "Payment terms are required before raising a deal sheet" });
+        }
+        if (!selectedDealLines(items).length) {
+            return res.status(400).json({ message: "Select at least one deal line before raising a deal sheet" });
+        }
+
         const dealFiles = req.files;
 
         let files = [];
@@ -1202,7 +1259,6 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
             }));
         }
 
-        const { paymentTerms, items, removedFiles, existingFiles, costs, totalDiscount } = JSON.parse(req.body.dealData);
         if (existingFiles && removedFiles) {
             files = [...files, ...existingFiles];
             removedFiles.map((file: any) => removeFile(file.fileName))
@@ -1227,7 +1283,6 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
 
         const socket = req.app.get('io') as Server;
-        const { quoteId } = req.params;
         const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, updateQuoteData, { new: true });
         const userData = await getEmployeeData(req.user);
         
@@ -1265,6 +1320,27 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
 
 export const approveDeal = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        const quote = await Quotation.findById(req.body.quoteId);
+        if (!quote || quote.isDeleted || !quote.dealData) {
+            return res.status(404).json({ message: "Pending deal sheet not found" });
+        }
+        if (quote.status !== quoteStatus.Won) {
+            return res.status(400).json({ message: "Only a Won quotation can be approved for execution" });
+        }
+        if (!quote.lpoFiles?.length) {
+            return res.status(400).json({ message: "Customer LPO is required before approving the deal sheet" });
+        }
+        if (quote.dealData.status !== 'pending') {
+            return res.status(409).json({ message: `Deal sheet is already ${quote.dealData.status}` });
+        }
+        if (!selectedDealLines(quote.dealData.updatedItems).length) {
+            return res.status(400).json({ message: "Deal sheet has no selected lines to hand over" });
+        }
+        const existingJob = await Job.findOne({ quoteId: req.body.quoteId, isDeleted: { $ne: true } });
+        if (existingJob) {
+            return res.status(409).json({ message: "A job already exists for this quotation" });
+        }
+
         const jobId = await generateJobId()
         const jobData = {
             quoteId: req.body.quoteId,
@@ -1425,12 +1501,20 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
 
 export const uploadLpo = async (req: any, res: Response, next: NextFunction) => {
     try {
-        console.log('reached here')
         if (!req.files) return res.status(204).json({ err: 'No data' });
+        const existingQuote = await Quotation.findById(req.body.quoteId);
+        if (!existingQuote || existingQuote.isDeleted) {
+            return res.status(404).json({ message: "Quote not found" });
+        }
+        if (existingQuote.status !== quoteStatus.Won) {
+            return res.status(400).json({ message: "Customer LPO can only be uploaded after the quote is marked Won" });
+        }
+        if (hasActiveDeal(existingQuote)) {
+            return res.status(409).json({ message: "LPO files cannot be changed while a deal sheet is in progress or approved" });
+        }
 
         const lpoFiles = req.files;
         const newFiles = await Promise.all(lpoFiles.map(async (file: any) => {
-            console.log('reached here -- promise')
             await uploadFileToAws(file.filename, file.path, file.mimetype);
             return { fileName: file.filename, originalname: file.originalname };
         }));
@@ -1926,7 +2010,7 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
 export const getProductSuggestions = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { search = '', departments = '', limit = '20', category = '' } = req.query;
-        const filter: any = { isDeleted: { $ne: true } };
+        const filter: any = { isDeleted: { $ne: true }, approvalStatus: { $nin: ['Draft', 'Pending'] } };
 
         const departmentIds = (typeof departments === 'string' && departments.trim())
             ? departments.split(',').map((d) => d.trim()).filter(Boolean)

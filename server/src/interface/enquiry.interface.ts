@@ -6,6 +6,7 @@ export interface Enquiry {
     salesPerson: string;
     title: string;
     date: string | Date;
+    nextFollowUpDate?: string | Date;
     attachments: string[];
     preSale: {
         presalePerson: string;

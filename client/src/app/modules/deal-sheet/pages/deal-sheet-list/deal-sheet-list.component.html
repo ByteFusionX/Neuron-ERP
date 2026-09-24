@@ -1,0 +1,86 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Deal Sheets"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="total"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        searchPlaceholder="Search by Deal Id"
+        emptyMessage="No deal sheets found"
+        [rowActions]="rowActions"
+        [views]="views"
+        (viewChange)="onViewChange($event)"
+        [rowAccent]="rowAccent"
+        [detailLoading]="detailLoading"
+        [detailTabs]="detailTabs"
+        [detailTitle]="dealTitle"
+        [detailSubtitle]="dealSubtitle"
+        (queryChange)="onQueryChange($event)"
+        (rowOpen)="onRowOpen($event)"
+        (rowAction)="onRowAction($event)">
+
+        <ng-template #detailAsideTemplate let-row>
+            <span *ngIf="row.dealData?.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
+                [ngClass]="dealStatusBadgeClasses[row.dealData?.status] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ row.dealData?.status }}</span>
+            <ng-template #asideStatusEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
+        </ng-template>
+
+        <ng-template #detailMetaTemplate let-row>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Customer</p>
+                <p class="qt-meta-value">{{ row.client?.companyName }}</p>
+            </div>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Payment Terms</p>
+                <p class="qt-meta-value">{{ row.dealData?.paymentTerms }}</p>
+            </div>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Amount</p>
+                <p class="qt-meta-value">{{ formatAmount(row) }}</p>
+            </div>
+            <div class="qt-meta">
+                <p class="qt-meta-label">Date</p>
+                <p class="qt-meta-value">{{ row.dealData?.savedDate | date: 'dd MMM yyyy' }}</p>
+            </div>
+        </ng-template>
+
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'overview'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'items'">
+                    <app-detail-table title="Deal items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals [currency]="row.currency"></app-detail-table>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'documents'">
+                    <div class="flex flex-col gap-4">
+                        <div>
+                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Customer LPO</p>
+                            <button type="button" *ngIf="row.lpoFiles?.length" (click)="openLpoFiles(row)"
+                                class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-erp-surface-dark-alt">
+                                <ng-icon name="heroEye" class="h-4 w-4"></ng-icon>
+                                View LPO Files ({{ row.lpoFiles?.length }})
+                            </button>
+                            <span *ngIf="!row.lpoFiles?.length" class="text-sm text-gray-400 dark:text-gray-600">No LPO files uploaded.</span>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Deal Sheet Attachments</p>
+                            <app-detail-documents
+                                emptyMessage="No attachments uploaded."
+                                [documents]="dealDocuments(row)"
+                                (open)="onDealDocPreview(row, $event)"
+                                (download)="onDealDocDownload(row, $event)"></app-detail-documents>
+                        </div>
+                    </div>
+                </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
+</div>

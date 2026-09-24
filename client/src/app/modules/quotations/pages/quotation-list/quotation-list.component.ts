@@ -27,6 +27,7 @@ import { EventsService } from 'src/app/core/services/events/events.service';
 import { EventActionsService } from 'src/app/core/services/events/event-actions.service';
 import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
+import { LpoUploadModalComponent } from './lpo-upload-modal.component';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { NgIcon } from '@ng-icons/core';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
@@ -851,24 +852,46 @@ export class QuotationListComponent implements AfterViewInit {
     this.onLpoRemoveFile(row, index);
   }
 
-  onLpoFileSelected(event: any, row: Quotatation): void {
-    const files: FileList = event.target.files;
-    if (!files?.length) { return; }
+  canUploadLpo(row: Quotatation): boolean {
+    return row.status === 'Won' && !row.lpoFiles?.length;
+  }
+
+  isUploadingFiles = false;
+  readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+
+  startLpoUpload(row: Quotatation): void {
+    if (!this.canUploadLpo(row)) return;
+    this.modal.open<File[]>(LpoUploadModalComponent, {
+      width: '680px',
+      data: { context: row.quoteId || (row._id as string), acceptedFiles: this.acceptedFiles },
+    }).afterClosed().subscribe((files) => {
+      if (files?.length) { this.uploadLpoFiles(row, files); }
+    });
+  }
+
+  uploadLpoFiles(row: Quotatation, files: File[]): void {
+    if (!files.length || this.isUploadingFiles || !this.canUploadLpo(row)) return;
     const rowIndex = this.rows.indexOf(row);
     const formData = new FormData();
     formData.append('quoteId', row._id as string);
-    for (let i = 0; i < files.length; i++) {
-      formData.append('files', files[i]);
-    }
-    this._quoteService.uploadLpo(formData).subscribe((quote: Quotatation) => {
-      if (quote) {
-        this.rows[rowIndex].lpoFiles = quote.lpoFiles;
-        // The LPO is what unlocks the deal sheet, so carry straight on to it.
-        const uploaded = this.rows[rowIndex];
-        if (uploaded.status === 'Won' && !(uploaded.dealData as any)?._id) this.dealQuote = uploaded;
-      }
+    files.forEach((file) => formData.append('files', file));
+
+    this.isUploadingFiles = true;
+    this._quoteService.uploadLpo(formData).subscribe({
+      next: (quote: Quotatation) => {
+        this.isUploadingFiles = false;
+        if (quote) {
+          this.rows[rowIndex].lpoFiles = quote.lpoFiles;
+          const uploaded = this.rows[rowIndex];
+          if (uploaded.status === 'Won' && !(uploaded.dealData as any)?._id) this.dealQuote = uploaded;
+        }
+        this.toaster.success('Files uploaded successfully');
+      },
+      error: () => {
+        this.isUploadingFiles = false;
+        this.toaster.error('Failed to upload files');
+      },
     });
-    event.target.value = '';
   }
 
   /** Quotation whose deal sheet is being built; the deal drawer is open while this is set. */

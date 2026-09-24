@@ -42,8 +42,10 @@ export class EnquiryService {
     return this.http.post<EnquiryTable>(`${this.api}/enquiry/get`, filterData)
   }
 
-  getPresale(page: number, row: number, filter: string, access?: string, userId?: string): Observable<EnquiryTable> {
-    return this.http.get<EnquiryTable>(`${this.api}/enquiry/presales?filter=${filter}&page=${page}&row=${row}&access=${access}&userId=${userId}`)
+  getPresale(page: number, row: number, filter: string, access?: string, userId?: string, search?: string): Observable<EnquiryTable> {
+    let url = `${this.api}/enquiry/presales?filter=${filter}&page=${page}&row=${row}&access=${access}&userId=${userId}`;
+    if (search?.trim()) url += `&search=${encodeURIComponent(search.trim())}`;
+    return this.http.get<EnquiryTable>(url)
   }
 
   updateEnquiryStatus(selectedEnquiry: { id: string, status: string }): Observable<{ update: getEnquiry, quoteId: string | undefined }> {

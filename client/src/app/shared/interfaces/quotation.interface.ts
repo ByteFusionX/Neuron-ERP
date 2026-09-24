@@ -228,6 +228,9 @@ export interface FilterDeal {
     userId?: string;
     search?: string;
     role?: string;
+    searchQuery?: string;
+    searchCriteria?: string;
+    view?: string;
 }
 
 export interface nextQuoteData {

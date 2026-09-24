@@ -11,6 +11,7 @@ interface Enquiry extends Document {
     salesPerson: Types.ObjectId;
     title: String;
     date: string | number | Date;
+    nextFollowUpDate?: string | number | Date;
     createdDate: Date;
     preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[] };
     // preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; }[] };
@@ -200,6 +201,9 @@ const enquirySchema = new Schema<Enquiry>({
         type: Date,
         required: true
     },
+    nextFollowUpDate: {
+        type: Date,
+    },
     createdDate: {
         type: Date,
         default: Date.now()
@@ -214,6 +218,22 @@ const enquirySchema = new Schema<Enquiry>({
     },
     status: {
         type: String,
+        enum: [
+            'New',
+            'In Review',
+            'Sent to Presales',
+            'Ready for Quotation',
+            'Quoted',
+            'Lost',
+            'Work In Progress',
+            'Assigned To Presale Manager',
+            'Assigned To Presale Engineer',
+            'Assigned To Presales',
+            'Rejected by Presale Engineer',
+            'Rejected by Presale Manager',
+            'Sended by Presale Engineer',
+        ],
+        default: 'New',
         required: true
     },
     isDeleted: {
@@ -237,4 +257,3 @@ const enquirySchema = new Schema<Enquiry>({
 });
 
 export default model<Enquiry>("Enquiry", enquirySchema);
-

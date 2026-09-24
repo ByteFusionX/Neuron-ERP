@@ -21,7 +21,7 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { PreviousJobsModalComponent } from 'src/app/shared/components/previous-jobs-modal/previous-jobs-modal.component';
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryTotals } from 'src/app/shared/components/item-entry';
-import { CreateProductComponent } from 'src/app/modules/products/modals/create-product/create-product.component';
+import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 
 /** Statuses before the quote has gone to the customer. Mirrors the server, which only revises past these. */
 const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress, QuoteStatus.ReadyForSubmission];
@@ -36,7 +36,7 @@ const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress
   standalone: true,
   templateUrl: './quote-form-drawer.component.html',
   providers: [DatePipe, CatalogueSuggestionSource, { provide: ITEM_SUGGESTION_SOURCE, useExisting: CatalogueSuggestionSource }],
-  imports: [NgIf, NgFor, NgClass, NgIcon, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
+  imports: [ProductFormDrawerComponent, NgIf, NgFor, NgClass, NgIcon, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
 })
 export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -368,12 +368,15 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     if (this.step > 1) this.step = (this.step - 1) as 1 | 2;
   }
 
+  createProductOpen = false;
+  createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
+
   openCreateProduct({ itemName, detail, scopeIds }: CreateProductRequest): void {
-    this.dialog.open(CreateProductComponent, {
-      disableClose: true, maxHeight: '90vh', width: '50vw',
-      data: { prefill: { productSegment: scopeIds[0] || '', productCategoryName: itemName, productDescription: detail } },
-    });
+    this.createProductPrefill = { productSegment: scopeIds[0] || '', productCategoryName: itemName, productDescription: detail };
+    this.createProductOpen = true;
   }
+
+  onProductCreated(_product: any): void {}
 
   onItemTotals(totals: ItemEntryTotals): void {
     this.itemTotals = totals;

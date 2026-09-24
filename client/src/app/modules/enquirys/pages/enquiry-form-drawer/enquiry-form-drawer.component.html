@@ -36,6 +36,9 @@
             <app-sf-field label="Date" [control]="enquiryForm.controls.date">
                 <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
             </app-sf-field>
+            <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
+                <app-sf-date formControlName="nextFollowUpDate" displayFormat="dd/MM/yy"></app-sf-date>
+            </app-sf-field>
         </app-sf-section>
 
         <app-sf-section title="Attachments">
@@ -47,12 +50,9 @@
 
     <ng-container sfDrawerFooter>
         <!-- Leaves for the customer form; the draft is saved first so this form comes back filled in. -->
-        <app-action-button class="mr-auto" variant="tool" [disabled]="saving || quoting" (click)="createCustomer()">+ Create Customer</app-action-button>
+        <app-action-button class="mr-auto" variant="tool" [disabled]="saving" (click)="createCustomer()">+ Create Customer</app-action-button>
         <app-action-button variant="secondary" (click)="cancel()">Cancel</app-action-button>
-        <app-action-button variant="tool" [disabled]="saving || quoting" (click)="createQuote()">
-            {{ quoting ? 'Creating…' : 'Create Quote' }}
-        </app-action-button>
-        <app-action-button variant="primary" type="submit" form="enquiry-form" [disabled]="saving || quoting">
+        <app-action-button variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
             {{ saving ? 'Creating…' : 'Create Enquiry' }}
         </app-action-button>
     </ng-container>
