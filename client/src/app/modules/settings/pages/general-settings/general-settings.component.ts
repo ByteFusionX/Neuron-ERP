@@ -1,3 +1,4 @@
+import { settingsEditAccess } from '../../settings-edit-access';
 import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
@@ -24,6 +25,7 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 })
 export class GeneralSettingsComponent implements OnInit, OnDestroy {
   privileges!: Privileges | undefined;
+  readonly canEditProfile = settingsEditAccess('companyProfileEdit');
 
   companyDetails: getCompanyDetails | null = null;
   isCompanyDetailsLoading: boolean = true;

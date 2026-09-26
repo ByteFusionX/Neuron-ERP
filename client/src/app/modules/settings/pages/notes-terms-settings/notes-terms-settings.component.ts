@@ -1,5 +1,5 @@
 import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { NgIf, NgFor } from '@angular/common';
 import { NgIcon } from '@ng-icons/core';
@@ -21,15 +21,32 @@ import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-l
   imports: [SettingsSectionHeaderComponent, NgIf, NgFor, NgIcon, ActionButtonComponent, SkeltonLoadingComponent],
 })
 export class NotesTermsSettingsComponent implements OnInit, OnDestroy {
+  @Input() embedded = false;
+  @Input() listScope: 'sales' | 'purchase' | 'all' = 'sales';
+
   privileges!: Privileges | undefined;
   isNotesLoading: boolean = true;
   cstcDisplayedColumns: string[] = ['customerNote', 'termsCondition'];
   cstcDataSource: any = new MatTableDataSource();
 
-  readonly columns = [
+  readonly allColumns = [
     { key: 'customerNotes', title: 'Customer Notes', createLabel: '+ Create Customer Note', createAction: 'createCustomerNote', editAction: 'editCustomerNote', empty: 'No customer notes yet' },
     { key: 'termsAndConditions', title: 'Terms & Conditions', createLabel: '+ Create Terms & Conditions', createAction: 'createTermsAndCondition', editAction: 'editTermsAndCondition', empty: 'No terms & conditions yet' },
+    { key: 'placeOfDelivery', title: 'Place of Delivery', createLabel: '+ Create Place of Delivery', createAction: 'createPlaceOfDelivery', editAction: 'editPlaceOfDelivery', empty: 'No delivery places yet' },
+    { key: 'shippingTerms', title: 'Shipping Terms', createLabel: '+ Create Shipping Terms', createAction: 'createShippingTerms', editAction: 'editShippingTerms', empty: 'No shipping terms yet' },
   ];
+
+  get columns() {
+    if (this.listScope === 'purchase') {
+      return this.allColumns.filter((col) => col.key === 'placeOfDelivery' || col.key === 'shippingTerms' || col.key === 'termsAndConditions');
+    }
+
+    if (this.listScope === 'all') {
+      return this.allColumns;
+    }
+
+    return this.allColumns.filter((col) => col.key === 'customerNotes' || col.key === 'termsAndConditions');
+  }
 
   private subscriptions = new Subscription();
   private confirm = inject(ConfirmDialogService);
@@ -90,7 +107,7 @@ export class NotesTermsSettingsComponent implements OnInit, OnDestroy {
     this._profileService.deleteNote(noteType, noteId).subscribe((res) => {
       if (res.success) {
         let noteData = this.cstcDataSource.data[0];
-        if (noteType === "customerNotes" || noteType === "termsAndConditions") {
+        if (noteType === "customerNotes" || noteType === "termsAndConditions" || noteType === "placeOfDelivery" || noteType === "shippingTerms") {
           const index = noteData[noteType].findIndex((note: any) => note._id === noteId);
           if (index !== -1) {
             noteData[noteType].splice(index, 1);

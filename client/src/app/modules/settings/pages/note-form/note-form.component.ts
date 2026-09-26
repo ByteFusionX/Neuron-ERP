@@ -57,6 +57,26 @@ export class NoteFormComponent {
                 this.title = 'Create terms & condition'
                 this.subtitle = 'A term or condition included on documents.'
                 break;
+            case 'editPlaceOfDelivery':
+                this.title = 'Edit place of delivery'
+                this.subtitle = 'Update this delivery location used on purchase documents.'
+                this.createButton = false;
+                this.note.setValue(this.data.note);
+                break;
+            case 'createPlaceOfDelivery':
+                this.title = 'Create place of delivery'
+                this.subtitle = 'A delivery location used on purchase documents.'
+                break;
+            case 'editShippingTerms':
+                this.title = 'Edit shipping terms'
+                this.subtitle = 'Update this shipping term used on purchase documents.'
+                this.createButton = false;
+                this.note.setValue(this.data.note);
+                break;
+            case 'createShippingTerms':
+                this.title = 'Create shipping terms'
+                this.subtitle = 'A shipping term used on purchase documents.'
+                break;
         }
 
     }
@@ -84,8 +104,28 @@ export class NoteFormComponent {
                     this.isSaving = false;
                 }
             })
-        } else {
+        } else if (action == 'createTermsAndCondition') {
             this._profileService.createTermsAndCondition(note).subscribe({
+                next: (res) => {
+                    this.dialogRef.close(res);
+                    this.isSaving = false;
+                },
+                error: () => {
+                    this.isSaving = false;
+                }
+            })
+        } else if (action == 'createPlaceOfDelivery') {
+            this._profileService.createPlaceOfDelivery(note).subscribe({
+                next: (res) => {
+                    this.dialogRef.close(res);
+                    this.isSaving = false;
+                },
+                error: () => {
+                    this.isSaving = false;
+                }
+            })
+        } else {
+            this._profileService.createShippingTerms(note).subscribe({
                 next: (res) => {
                     this.dialogRef.close(res);
                     this.isSaving = false;
@@ -109,6 +149,10 @@ export class NoteFormComponent {
         let noteType = 'customerNote'
         if (action == 'editTermsAndCondition') {
             noteType = 'termsAndConditions'
+        } else if (action == 'editPlaceOfDelivery') {
+            noteType = 'placeOfDelivery'
+        } else if (action == 'editShippingTerms') {
+            noteType = 'shippingTerms'
         }
 
         const updateNodeData = {

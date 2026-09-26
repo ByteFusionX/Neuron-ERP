@@ -16,7 +16,7 @@
                     <div class="group relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-4 border-white bg-white shadow-md dark:border-erp-surface-dark dark:bg-gray-800">
                         <img *ngIf="companyDetails?.logo; else initials" [src]="companyDetails!.logo" alt="Company logo" class="h-full w-full object-contain">
                         <ng-template #initials><span class="text-2xl font-bold text-violet-600">{{ companyInitials }}</span></ng-template>
-                        <button type="button" (click)="openCompanyDetails()" aria-label="Change company logo"
+                        <button type="button" *ngIf="canEditProfile()" (click)="openCompanyDetails()" aria-label="Change company logo"
                             class="absolute inset-0 hidden items-center justify-center bg-black/50 group-hover:flex cursor-pointer">
                             <ng-icon name="heroPhoto" class="text-white text-xl"></ng-icon>
                         </button>
@@ -37,7 +37,7 @@
                         Entity: Neuron Trading W.L.L.
                         <ng-icon name="heroChevronDown"></ng-icon>
                     </button>
-                    <app-action-button variant="primary" (click)="openCompanyDetails()">Edit Profile</app-action-button>
+                    <app-action-button *ngIf="canEditProfile()" variant="primary" (click)="openCompanyDetails()">Edit Profile</app-action-button>
                 </div>
             </div>
 

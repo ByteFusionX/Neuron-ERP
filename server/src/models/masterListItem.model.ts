@@ -1,6 +1,6 @@
 import { model, Schema } from "mongoose";
 
-export const MASTER_LISTS = ['paymentTerms', 'tax', 'unit', 'source', 'priority', 'industry', 'enquiryCategory'] as const;
+export const MASTER_LISTS = ['paymentTerms', 'tax', 'unit', 'source', 'industry'] as const;
 export type MasterListName = typeof MASTER_LISTS[number];
 
 export interface MasterListItem {

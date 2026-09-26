@@ -3,6 +3,7 @@ import { NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
 import { SystemSettingService } from 'src/app/core/services/system-setting.service';
+import { settingsEditAccess } from '../../settings-edit-access';
 import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
 
 const AREA_DEFS: { id: string; label: string; description: string }[] = [
@@ -46,7 +47,7 @@ const AREA_DEFS: { id: string; label: string; description: string }[] = [
       </ng-container>
 
       <p *ngIf="error" class="mt-3 text-sm text-red-600" role="alert">{{ error }}</p>
-      <button type="button" *ngIf="!loading" (click)="save()" [disabled]="saving"
+      <button type="button" *ngIf="!loading && canEdit()" (click)="save()" [disabled]="saving"
         class="mt-4 rounded-lg bg-violet-700 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 disabled:opacity-50">
         {{ saving ? 'Saving...' : 'Save' }}
       </button>
@@ -56,6 +57,7 @@ const AREA_DEFS: { id: string; label: string; description: string }[] = [
 export class AuditSettingsComponent implements OnInit {
   private settings = inject(SystemSettingService);
   private toast = inject(ToastrService);
+  readonly canEdit = settingsEditAccess('auditEdit');
 
   readonly defs = AREA_DEFS;
   areas: Record<string, boolean> = {};

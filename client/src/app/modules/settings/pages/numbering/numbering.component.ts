@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MasterListService, NumberingSeries } from 'src/app/core/services/master-list.service';
+import { settingsEditAccess } from '../../settings-edit-access';
 import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
 
 interface SeriesRow extends NumberingSeries {
@@ -36,12 +37,12 @@ interface SeriesRow extends NumberingSeries {
               </td>
               <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ s.lastNumber || '-' }}</td>
               <td class="px-4 py-3">
-                <input type="number" min="1" [(ngModel)]="s.editNext" [name]="s.key"
+                <input type="number" min="1" [(ngModel)]="s.editNext" [name]="s.key" [disabled]="!canEdit()"
                   class="w-28 rounded border border-gray-300 dark:border-gray-600 bg-transparent px-2 py-1">
                 <p *ngIf="s.error" class="mt-1 text-xs text-red-600">{{ s.error }}</p>
               </td>
               <td class="px-4 py-3 text-right">
-                <button type="button" class="text-violet-700 hover:underline disabled:opacity-50"
+                <button type="button" *ngIf="canEdit()" class="text-violet-700 hover:underline disabled:opacity-50"
                   [disabled]="s.saving || s.editNext === s.nextNumber" (click)="save(s)">{{ s.saving ? 'Saving…' : 'Save' }}</button>
               </td>
             </tr>
@@ -53,6 +54,7 @@ interface SeriesRow extends NumberingSeries {
 })
 export class NumberingComponent implements OnInit {
   private svc = inject(MasterListService);
+  readonly canEdit = settingsEditAccess('numberingEdit');
 
   rows: SeriesRow[] = [];
   loading = true;

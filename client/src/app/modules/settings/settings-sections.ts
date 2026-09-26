@@ -4,14 +4,12 @@ export type SettingsSectionId =
   | 'general'
   | 'master-data'
   | 'approval-rules'
-  | 'notes-terms'
   | 'numbering'
   | 'notifications'
   | 'audit';
 
 export interface SettingsAccess {
   privileges?: Privileges;
-  isSuperAdmin: boolean;
 }
 
 export interface SettingsSection {
@@ -23,10 +21,10 @@ export interface SettingsSection {
   /** Extra terms the sidebar search matches on, so people can find a section by what's inside it. */
   keywords?: string[];
   planned?: boolean;
+  /** Sub-pages shown nested under the section in the sidebar, routed at /settings/<id>/<path>. */
+  children?: { path: string; label: string }[];
   canView: (access: SettingsAccess) => boolean;
 }
-
-const superAdminOnly = ({ isSuperAdmin }: SettingsAccess) => isSuperAdmin;
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
@@ -39,31 +37,30 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     canView: () => true,
   },
   {
-    id: 'notes-terms',
-    label: 'Notes & Terms',
-    description: 'Default customer notes and terms & conditions printed on documents.',
-    icon: 'heroDocumentText',
-    group: 'Data',
-    keywords: ['note', 'terms', 'conditions', 'quotation'],
-    canView: ({ privileges }) => !!privileges?.portalManagement?.notesAndTerms,
-  },
-  {
     id: 'numbering',
     label: 'Numbering',
     description: 'Sequence rules for customer, enquiry, quotation, deal sheet and job sheet numbers.',
     icon: 'heroHashtag',
     group: 'Company',
     keywords: ['sequence', 'prefix', 'number', 'code', 'series'],
-    canView: superAdminOnly,
+    canView: ({ privileges }) => !!privileges?.portalManagement?.numbering,
   },
   {
     id: 'master-data',
     label: 'Master Data',
-    description: 'Lists other screens pick from: role responsibilities, payment terms, tax rates, units, sources, priorities, industries and enquiry categories.',
+    description: 'Business lists other screens pick from: notes and terms, role responsibilities, payment terms, tax rates, units, sources and industries.',
     icon: 'heroCircleStack',
     group: 'Data',
-    keywords: ['responsibility', 'responsibilities', 'lists', 'lookup', 'payment terms', 'tax', 'vat', 'unit', 'uom'],
-    canView: superAdminOnly,
+    children: [
+      { path: 'customer', label: 'Customer Data' },
+      { path: 'product', label: 'Product Data' },
+      { path: 'purchase', label: 'Purchase Data' },
+      { path: 'sales-documents', label: 'Sales Documents' },
+      { path: 'notes-terms', label: 'Notes & Terms' },
+      { path: 'responsibilities', label: 'Responsibilities' },
+    ],
+    keywords: ['responsibility', 'responsibilities', 'lists', 'lookup', 'payment terms', 'tax', 'vat', 'unit', 'uom', 'note', 'terms', 'conditions', 'quotation'],
+    canView: ({ privileges }) => !!privileges?.portalManagement?.masterData,
   },
   {
     id: 'approval-rules',
@@ -71,8 +68,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     description: 'Approval rule thresholds (discount, margin, credit) and who may approve up to what amount.',
     icon: 'heroCheckBadge',
     group: 'Workflow',
+    children: [
+      { path: 'workflow', label: 'Workflow' },
+      { path: 'rules', label: 'Rules' },
+      { path: 'limits', label: 'Limits' },
+    ],
     keywords: ['rules', 'limits', 'threshold', 'discount', 'margin', 'credit', 'approver', 'workflow'],
-    canView: superAdminOnly,
+    canView: ({ privileges }) => !!privileges?.portalManagement?.approvalRules,
   },
   {
     id: 'notifications',
@@ -81,7 +83,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: 'heroBell',
     group: 'Workflow',
     keywords: ['alert', 'email', 'reminder', 'overdue', 'pending'],
-    canView: superAdminOnly,
+    canView: ({ privileges }) => !!privileges?.portalManagement?.notifications,
   },
   {
     id: 'audit',
@@ -90,7 +92,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: 'heroClock',
     group: 'Access',
     keywords: ['audit', 'history', 'log', 'retention'],
-    canView: superAdminOnly,
+    canView: ({ privileges }) => !!privileges?.portalManagement?.audit,
   },
 ];
 

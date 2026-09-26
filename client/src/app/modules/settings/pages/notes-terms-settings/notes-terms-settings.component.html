@@ -1,7 +1,7 @@
-<div class="w-full h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md" *ngIf="this.privileges?.portalManagement?.notesAndTerms">
-    <app-settings-section-header sectionId="notes-terms"></app-settings-section-header>
+<div [class]="embedded ? 'w-full' : 'w-full h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md'" *ngIf="this.privileges?.portalManagement?.notesAndTerms">
+    <app-settings-section-header *ngIf="!embedded" sectionId="notes-terms"></app-settings-section-header>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ng-container *ngFor="let col of columns">
             <!-- Card list: no filter/pagination/sort chrome — these lists are small and flat. -->
             <div class="w-full bg-white dark:bg-erp-surface-dark rounded-xl border border-gray-200 dark:border-erp-border-dark shadow-sm self-start">
