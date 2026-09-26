@@ -33,7 +33,6 @@ export const getCategory = async (req: Request, res: Response, next: NextFunctio
                     employeeCount: 1,
                     isSalespersonWithTarget: 1,
                     responsibilities: 1,
-                    approvalLimit: 1,
                 }
             }
         ]);

@@ -5,14 +5,14 @@ const upload = require("../common/multer.storage")
 
 const companyRouter = Router ()
 
-// The schema only defines a `companyTarget` flag, not one for general
-// company profile details — getCompanyDetails is a widely-used lookup
-// (e.g. header/branding) so it stays ungated. Target routes are gated.
+// getCompanyDetails is a widely-used lookup (header/branding) so reading stays
+// ungated. Editing the profile and all target routes are gated.
+const editProfile = requirePrivilege("portalManagement", "companyProfileEdit");
 const manageTarget = requirePrivilege("portalManagement", "companyTarget");
 
 companyRouter.get('/getCompanyDetails',getCompanyDetails)
-companyRouter.patch('/updateCompanyDetails',updateCompanyDetails)
-companyRouter.patch('/logo', upload.single('logo'), uploadCompanyLogo)
+companyRouter.patch('/updateCompanyDetails', editProfile, updateCompanyDetails)
+companyRouter.patch('/logo', editProfile, upload.single('logo'), uploadCompanyLogo)
 
 companyRouter.get('/target', manageTarget, getCompanyTargets)
 companyRouter.patch('/setTarget', manageTarget, setCompanyTarget)

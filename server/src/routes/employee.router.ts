@@ -39,34 +39,34 @@ empRouter.get(
 empRouter.post("/get", requirePrivilege("employee"), getFilteredEmployees);
 empRouter.post("/", requirePrivilege("employee", "create"), createEmployee);
 empRouter.patch("/changePasswordOfEmployee");
-empRouter.patch("/edit", requirePrivilege("employee", "create"), editEmployee);
+empRouter.patch("/edit", requirePrivilege("employee", "edit", "employee.create"), editEmployee);
 empRouter.patch(
   "/setTarget/:employeeId",
-  requirePrivilege("employee", "create"),
+  requirePrivilege("employee", "edit", "employee.create"),
   setTarget,
 );
 empRouter.patch(
   "/update-target/:employeeId/:targetId",
-  requirePrivilege("employee", "create"),
+  requirePrivilege("employee", "edit", "employee.create"),
   updateTarget,
 );
 empRouter.patch(
   "/approval-limit/:employeeId",
-  requirePrivilege("employee", "create"),
+  requirePrivilege("employee", "edit", "employee.create"),
   setEmployeeApprovalLimit,
 );
 empRouter.post("/login", login);
 empRouter.get("/get", getEmployee);
 // Deprecated: Use /notification endpoint instead for privilege-aware notifications
 // empRouter.get('/notifications', getNotificationCounts)
-empRouter.post("/delete", requirePrivilege("employee", "create"), deleteEmployee);
+empRouter.post("/delete", requirePrivilege("employee", "delete", "employee.create"), deleteEmployee);
 empRouter.get(
   "/no-customer-access/:customerId/:userId",
   getEmployeesForCustomerTransfer,
 );
 empRouter.patch(
   "/block/:employeeId",
-  requirePrivilege("employee", "create"),
+  requirePrivilege("employee", "block", "employee.create"),
   blockEmployee,
 );
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists, updateCustomerStatus, updateCustomerAttachments, removeCustomerAttachment } from "../controllers/customer.controller";
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage")
 const cusRouter = Router()
 
@@ -13,11 +13,11 @@ cusRouter.get('/:userId',getAllCustomers)
 cusRouter.get('/view/get/:customerId', getCustomerByCustomerId)
 cusRouter.post('/', requirePrivilege("customer", "create"), createCustomer)
 cusRouter.post('/get',getFilteredCustomers)
-cusRouter.patch('/edit', editCustomer)
+cusRouter.patch('/edit', requireUnlessDenied("customer", "edit"), editCustomer)
 // no dedicated privilege flag exists for customer edit/status yet — left under the
 // base view gate above, same as editCustomer
-cusRouter.patch('/status', updateCustomerStatus)
-cusRouter.post('/delete', deleteCustomer)
+cusRouter.patch('/status', requireUnlessDenied("customer", "edit"), updateCustomerStatus)
+cusRouter.post('/delete', requireUnlessDenied("customer", "delete"), deleteCustomer)
 // shareOrTransferCustomer covers both the "share" and "transfer" privilege
 // flags depending on request body — left under the base view gate above
 // rather than pinned to one flag, to avoid wrongly blocking either case.

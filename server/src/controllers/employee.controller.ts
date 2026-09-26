@@ -610,6 +610,19 @@ const buildHistoryEntry = (existing: any, body: any, changedBy: any) => {
   };
 };
 
+// True when making `managerId` the manager of `employeeId` would loop (self, or manager already reports up to employee).
+const createsReportingLoop = async (employeeId: string, managerId: string): Promise<boolean> => {
+  const seen = new Set<string>();
+  let current: string | null = managerId;
+  while (current && !seen.has(current)) {
+    if (current === employeeId) return true;
+    seen.add(current);
+    const next: any = await Employee.findById(current, "reportingTo").lean();
+    current = next?.reportingTo ? String(next.reportingTo) : null;
+  }
+  return false;
+};
+
 export const createEmployee = async (
   req: Request,
   res: Response,
@@ -693,6 +706,11 @@ export const editEmployee = async (
       _id: employeeId,
       isDeleted: { $ne: true },
     });
+    if (existing && updatedEmployeeData.reportingTo) {
+      if (await createsReportingLoop(String(existing._id), String(updatedEmployeeData.reportingTo))) {
+        return res.status(400).json({ message: "Reports-to would create a reporting loop" });
+      }
+    }
     const update: any = { $set: updatedEmployeeData };
     const historyEntry = existing
       ? buildHistoryEntry(existing, req.body, actor?._id)

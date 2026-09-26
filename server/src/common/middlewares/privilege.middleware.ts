@@ -21,7 +21,9 @@ const resolvePrivilege = (privileges: any, moduleKey: string) => {
   return moduleKey.split(".").reduce((acc, key) => (acc == null ? undefined : acc[key]), privileges);
 };
 
-export const requirePrivilege = (moduleKey: string, action?: string) => {
+// `legacyKey` is the pre-split flag (e.g. "portalManagement.department"). It grants the action only
+// while the new flag has never been set on the role; an explicit true/false on the new flag wins.
+export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?: string) => {
   return (req: any, res: Response, next: NextFunction) => {
     const employee = req.employee;
     if (!employee) {
@@ -50,6 +52,11 @@ export const requirePrivilege = (moduleKey: string, action?: string) => {
       }
     }
 
+    if (legacyKey && action && privilege?.[action] === undefined
+        && resolvePrivilege(employee.category?.privileges, legacyKey) === true) {
+      return next();
+    }
+
     if (privilege == null) {
       return res.status(403).json({ message: "Forbidden" });
     }
@@ -66,6 +73,25 @@ export const requirePrivilege = (moduleKey: string, action?: string) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
+    return next();
+  };
+};
+
+// For actions that `main` left open to anyone with view access: allowed unless an admin has
+// explicitly set the flag to false on the role.
+export const requireUnlessDenied = (moduleKey: string, action: string) => {
+  return (req: any, res: Response, next: NextFunction) => {
+    const employee = req.employee;
+    if (!employee) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const role = employee.category?.role;
+    if (role === "admin" || role === "superAdmin") {
+      return next();
+    }
+    if (resolvePrivilege(employee.category?.privileges, moduleKey)?.[action] === false) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     return next();
   };
 };
