@@ -34,22 +34,39 @@ export class EnquiryService {
     return this.http.post<EnquiryReportDetails>(`${this.api}/enquiry/report`, filterData)
   }
 
+  getPresaleReport(filterData: Record<string, unknown>): Observable<PresaleReport> {
+    return this.http.post<PresaleReport>(`${this.api}/enquiry/presales/report`, filterData)
+  }
+
   assignPresale(formData: FormData, enquiryId: string): Observable<{ success: boolean }> {
     return this.http.patch<{ success: boolean }>(`${this.api}/enquiry/presales/${enquiryId}`, formData)
+  }
+
+  sendToPresale(enquiryId: string): Observable<{ success: boolean }> {
+    return this.http.patch<{ success: boolean }>(`${this.api}/enquiry/${enquiryId}/send-to-presale`, {})
+  }
+
+  getPresaleTabCounts(access?: string, userId?: string): Observable<PresaleTabCounts> {
+    return this.http.get<PresaleTabCounts>(`${this.api}/enquiry/presales/tab-counts?access=${access}&userId=${userId}`)
   }
 
   getEnquiry(filterData: FilterEnquiry): Observable<EnquiryTable> {
     return this.http.post<EnquiryTable>(`${this.api}/enquiry/get`, filterData)
   }
 
-  getPresale(page: number, row: number, filter: string, access?: string, userId?: string, search?: string): Observable<EnquiryTable> {
+  getPresale(page: number, row: number, filter: string, access?: string, userId?: string, search?: string, sort?: { key: string | null; direction: string | null }): Observable<EnquiryTable> {
     let url = `${this.api}/enquiry/presales?filter=${filter}&page=${page}&row=${row}&access=${access}&userId=${userId}`;
+    if (sort?.key && sort.direction) url += `&sortKey=${sort.key}&sortDir=${sort.direction}`;
     if (search?.trim()) url += `&search=${encodeURIComponent(search.trim())}`;
     return this.http.get<EnquiryTable>(url)
   }
 
-  updateEnquiryStatus(selectedEnquiry: { id: string, status: string }): Observable<{ update: getEnquiry, quoteId: string | undefined }> {
+  updateEnquiryStatus(selectedEnquiry: { id: string, status: string, lostReason?: string, competitorName?: string, competitorPriceGap?: string }): Observable<{ update: getEnquiry, quoteId: string | undefined }> {
     return this.http.put<{ update: getEnquiry, quoteId: string | undefined }>(`${this.api}/enquiry/update`, selectedEnquiry)
+  }
+
+  addFollowUp(enquiryId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null }): Observable<{ success: boolean; enquiry: getEnquiry }> {
+    return this.http.patch<{ success: boolean; enquiry: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/follow-up`, data)
   }
 
   rejectJob(enqId: any, comment: string, role: string): Observable<{ success: boolean }> {
@@ -153,4 +170,19 @@ export class EnquiryService {
     return this.http.patch<any>(`${this.api}/enquiry/${enquiryId}/attachments`, formData)
   }
 
+}
+
+export interface PresaleTabCounts { new: number; assignedTab: number; rejected: number; completedTab: number; }
+
+export interface PresaleReportRow { id: string; name: string; count: number; new: number; assigned: number; completed: number; rejected: number; }
+export interface PresaleReportItem { id: string; enquiryId: string; title: string; customer: string; salesPerson: string; presale: string; status: string; days: number; }
+export interface PresaleReport {
+  kpi: { count: number; new: number; assigned: number; completed: number; rejected: number; completionRate: number; rejectionRate: number };
+  breakdown: { presale: PresaleReportRow[]; department: PresaleReportRow[] };
+  avgWaitDays: number | null;
+  funnel: { key: string; label: string; count: number; pct: number }[];
+  trend: { month: string; received: number; completed: number }[];
+  rejectionReasons: { reason: string; count: number }[];
+  attention: { new: PresaleReportItem[]; assigned: PresaleReportItem[]; rejected: PresaleReportItem[] };
+  generatedAt: string;
 }

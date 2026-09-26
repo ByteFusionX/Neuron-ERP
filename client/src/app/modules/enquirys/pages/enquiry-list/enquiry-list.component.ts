@@ -6,6 +6,7 @@ import {
   FormControl,
   FormsModule,
   ReactiveFormsModule,
+  Validators,
 } from '@angular/forms';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
@@ -20,7 +21,6 @@ import { MatTableDataSource } from '@angular/material/table';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
 import { ToastrService } from 'ngx-toastr';
-import { AssignPresaleDrawerComponent, PresaleAssignment } from '../assign-presale-drawer/assign-presale-drawer.component';
 import { EnquiryEstimationViewComponent } from '../enquiry-estimation-view/enquiry-estimation-view.component';
 import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
@@ -59,11 +59,12 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 
+import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
   selector: 'app-enquiry-list',
   templateUrl: './enquiry-list.component.html',
   styleUrls: ['./enquiry-list.component.css'],
-  imports: [
+  imports: [ViewToggleComponent, 
     FormsModule,
     ReactiveFormsModule,
     SmartFormModule,
@@ -80,7 +81,6 @@ import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form'
     DetailTimelineComponent,
     ActionButtonComponent,
     EnquiryFormDrawerComponent,
-    AssignPresaleDrawerComponent,
     EnquiryEstimationViewComponent,
     RejectionHistoryDrawerComponent,
     RouterLink,
@@ -100,9 +100,6 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   estimationTarget: { index: number; enquiry: getEnquiry } | null = null;
   rejectionsOpen = false;
   rejections: RejectionEntry[] = [];
-  assignTarget: { enquiryId: string; index: number; preSale: any } | null = null;
-  assigningPresale: boolean = false;
-  assigningPresaleIndex!: number;
   isFiltered: boolean = false;
   isDeleteOption: boolean = false;
   createEnquiry: boolean | undefined = false;
@@ -110,21 +107,31 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   status: { name: string; label: string }[] = [
     { name: 'New', label: 'New' },
-    { name: 'In Review', label: 'In Review' },
+    { name: 'Work In Progress', label: 'In Progress' },
     { name: 'Ready for Quotation', label: 'Ready for Quotation' },
-    { name: 'Assigned To Presale Manager', label: 'In Presales' },
+    { name: 'Quoted', label: 'Quoted' },
+    { name: 'Lost', label: 'Lost' },
   ];
+  readonly sourceOptions: SfOption[] = ['Referral', 'Website', 'Walk-in', 'Cold Call', 'Exhibition', 'Existing Customer', 'Other']
+    .map((label) => ({ label, value: label }));
+  readonly categoryOptions: SfOption[] = ['Product', 'Project', 'Both', 'Supply only', 'Installation']
+    .map((label) => ({ label, value: label }));
+  readonly priorityOptions: SfOption[] = ['Low', 'Normal', 'Urgent', 'Critical']
+    .map((label) => ({ label, value: label }));
   dataSource = new MatTableDataSource<getEnquiry>();
   columns: DataGridColumn<getEnquiry>[] = [];
   rowActions: DataGridRowAction<getEnquiry>[] = [];
   views: DataGridView<getEnquiry>[] = [
     { id: 'all', label: 'All' },
     { id: 'mine', label: 'My Enquiries' },
-    { id: 'overdue', label: 'Overdue Follow-up' },
+    { id: 'today', label: 'Today' },
+    { id: 'overdue', label: 'Overdue' },
+    { id: 'upcoming', label: 'Upcoming' },
   ];
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'progress', label: 'Progress', icon: 'activity' },
     { id: 'documents', label: 'Documents', icon: 'files' },
@@ -149,6 +156,11 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   fromDate: string | null = null;
   toDate: string | null = null;
   selectedStatus: string | null = null;
+  selectedSource: string | null = null;
+  selectedCategory: string | null = null;
+  selectedPriority: string | null = null;
+  followUpFromDate: string | null = null;
+  followUpToDate: string | null = null;
   selectedSalesPerson: string | null = null;
   selectedCustomer: string | null = null;
   selectedDepartment: string | null = null;
@@ -157,6 +169,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   sortDir: 'asc' | 'desc' | null = null;
   activeViewId: string = 'all';
   private eventsCache = new Map<string, BehaviorSubject<Events[]>>();
+  followUpSavingRowId: string | null = null;
 
   private subscriptions = new Subscription();
   private subject = new BehaviorSubject<{ page: number; row: number }>({
@@ -183,6 +196,13 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   formData = this.fb.group({
     fromDate: new FormControl(),
     toDate: new FormControl(),
+  });
+
+  followUpForm = this.fb.group({
+    date: [this.todayIso(), Validators.required],
+    outcome: ['', Validators.required],
+    note: [''],
+    nextFollowUpDate: [''],
   });
 
   ngOnInit(): void {
@@ -223,6 +243,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       this.selectedCustomer = params['customer'] || null;
       this.selectedSalesPerson = params['salesPerson'] || null;
       this.selectedDepartment = params['department'] || null;
+      this.selectedStatus = params['status'] || null;
+      this.selectedSource = params['source'] || null;
+      this.selectedCategory = params['enquiryCategory'] || null;
+      this.selectedPriority = params['priority'] || null;
+      this.followUpFromDate = params['followUpFromDate'] || null;
+      this.followUpToDate = params['followUpToDate'] || null;
 
       // Update form data if dates exist in URL
       if (this.fromDate) {
@@ -238,7 +264,13 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         this.toDate ||
         this.selectedCustomer ||
         this.selectedSalesPerson ||
-        this.selectedDepartment
+        this.selectedDepartment ||
+        this.selectedStatus ||
+        this.selectedSource ||
+        this.selectedCategory ||
+        this.selectedPriority ||
+        this.followUpFromDate ||
+        this.followUpToDate
       );
 
       // Initialize the BehaviorSubject with the current page and row
@@ -280,16 +312,17 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   private buildColumns(): void {
     this.columns = [
       { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px' },
-      { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, width: '140px' },
+      { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, width: '140px', cellClass: (row) => this.followUpCellClass(row) },
       { key: 'enquiryId', label: 'Enquiry No.', sortable: true, locked: true },
       { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.client?.companyName },
       { key: 'contactPerson', label: 'Contacted By', valueGetter: (row) => row.contact ? `${row.contact.firstName ?? ''} ${row.contact.lastName ?? ''}`.trim() : '—' },
       { key: 'description', label: 'Description', sortable: true, valueGetter: (row) => row.title },
+      { key: 'priority', label: 'Priority', sortable: true, editorOptions: this.priorityOptions, valueGetter: (row) => row.priority || '—' },
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (row) => this.salesPersonName(row) },
       { key: 'department', label: 'Department', sortable: true, valueGetter: (row) => row.department?.departmentName },
       {
         key: 'status', label: 'Status', sortable: true, type: 'badge', badgeClasses: this.statusBadgeClasses, badgeLabel: this.statusLabel,
-        editorOptions: Object.keys(this.statusBadgeClasses).map((status) => ({ label: this.statusLabel(status), value: status })),
+        editorOptions: this.status.map((status) => ({ label: status.label, value: status.name })),
       },
     ];
   }
@@ -297,10 +330,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   private buildRowActions(): void {
     this.rowActions = [
       { id: 'upload', label: 'Upload Files', icon: 'upload', quick: true, hidden: (row) => !!row.attachments?.length || !this.canUploadAttachments(row) },
+      { id: 'followUp', label: 'Add Follow-up', icon: 'chat', quick: true, hidden: (row) => ['Quoted', 'Lost'].includes(row.status) },
       { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, badge: (row) => row.preSale?.seenbySalesPerson === false, hidden: (row) => !this.canViewEstimations(row) },
-      { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', quick: true, hidden: (row) => !row.preSale?.presalePerson || !!row.preSale?.estimations },
-      { id: 'assignPresale', label: 'Assign to Presale', icon: 'user', quick: true, hidden: (row) => (!!row.preSale?.presalePerson || this.isAssignedToPresale(row.status)) && row.status !== 'Rejected by Presale Manager' },
+      { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', quick: true, hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
+      { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['New', 'In Review', 'Rejected by Presale Manager'].includes(row.status) },
       { id: 'readyForQuote', label: 'Mark Ready for Quotation', icon: 'check', quick: true, hidden: (row) => !this.canMarkReadyForQuotation(row) },
+      { id: 'markLost', label: 'Mark Lost', icon: 'x', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted'].includes(row.status) || this.isAssignedToPresale(row.status) },
       { id: 'review', label: 'View Rejection', icon: 'info', panel: true, hidden: (row) => row.status !== 'Rejected by Presale Manager' },
       { id: 'delete', label: 'Delete Enquiry', icon: 'trash', variant: 'danger', divider: true, hidden: (row) => !this.isDeleteOption || this.isAssignedToPresale(row.status) },
     ];
@@ -317,14 +352,20 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
     this.activeViewId = query.viewId;
-    const value = (key: string) => query.filters.find((filter) => filter.key === key)?.value ?? null;
+    const value = (key: string) => query.filters.find((filter) => filter.key === key && filter.op === 'is')?.value ?? null;
     this.selectedSalesPerson = value('salesPerson');
     this.selectedCustomer = value('customer');
     this.selectedDepartment = value('department');
     this.selectedStatus = value('status');
+    this.selectedSource = value('source');
+    this.selectedCategory = value('enquiryCategory');
+    this.selectedPriority = value('priority');
     const dateFilters = query.filters.filter((filter) => filter.key === 'date');
     this.fromDate = dateFilters.find((filter) => filter.op === 'after' || filter.op === 'on')?.value ?? null;
     this.toDate = dateFilters.find((filter) => filter.op === 'before' || filter.op === 'on')?.value ?? null;
+    const followUpDateFilters = query.filters.filter((filter) => filter.key === 'nextFollowUpDate');
+    this.followUpFromDate = followUpDateFilters.find((filter) => filter.op === 'after' || filter.op === 'on')?.value ?? null;
+    this.followUpToDate = followUpDateFilters.find((filter) => filter.op === 'before' || filter.op === 'on')?.value ?? null;
     this.getEnquiries();
     this.updateUrlParams();
   }
@@ -335,10 +376,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     const click = new Event('click');
     switch (action.id) {
       case 'upload': this.startAttachmentUpload(row); break;
+      case 'followUp': this.openFollowUps(row); break;
       case 'estimations': this.onViewPresale(click, index, row); break;
       case 'presaleHistory': this.openPresaleProgress(row); break;
-      case 'assignPresale': this.onAssignPresale(click, row.preSale, row._id, index); break;
+      case 'sendToPresale': this.onSendToPresale(row); break;
       case 'readyForQuote': this.markReadyForQuotation(row); break;
+      case 'markLost': this.markLost(row); break;
       case 'review': this.openReview((row.preSale as any)?.rejectionHistory); break;
       case 'delete': this.deleteEnquiry(row._id, row.status); break;
     }
@@ -374,6 +417,33 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
+  async markLost(row: getEnquiry): Promise<void> {
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Mark enquiry lost?',
+      message: 'This enquiry will be moved out of active follow-up.',
+      details: [
+        { label: 'Enquiry', value: row.enquiryId ?? '' },
+        { label: 'Customer', value: row.client?.companyName ?? '' },
+      ],
+      consequence: 'The reason will stay on the enquiry for reporting and review.',
+      confirmLabel: 'Mark lost',
+      cancelLabel: 'Keep active',
+      reason: true,
+      reasonLabel: 'Lost reason',
+    });
+    if (!confirmed) return;
+    this._enquiryService.updateEnquiryStatus({ id: row._id, status: 'Lost', lostReason: reason?.trim() || '' }).subscribe({
+      next: (res) => {
+        row.status = res.update?.status ?? 'Lost';
+        row.lostReason = res.update?.lostReason ?? reason ?? '';
+        this.dataSource._updateChangeSubscription();
+        this.toaster.success('Enquiry marked Lost');
+      },
+      error: () => this.toaster.error('Failed to update enquiry status'),
+    });
+  }
+
   canViewEstimations(row: getEnquiry): boolean {
     return !!row.preSale?.presalePerson
       && row.status !== 'Assigned To Presale Manager'
@@ -388,6 +458,14 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   presalePersonName(row: getEnquiry): string {
     const person = row.preSale?.presalePerson as any;
     return person ? `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim() : 'Not assigned';
+  }
+
+  followUpCellClass(row: getEnquiry): string | null {
+    if (!row.nextFollowUpDate || ['Quoted', 'Lost'].includes(row.status)) return null;
+    const followUp = new Date(row.nextFollowUpDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return followUp <= today ? 'font-semibold text-red-600 dark:text-red-400' : null;
   }
 
   presaleProgress(row: getEnquiry): DetailTimelineEntry[] {
@@ -481,6 +559,16 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
+  private todayIso(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  daysLabel(days: number | null | undefined): string {
+    if (days === null || days === undefined) return '—';
+    if (days <= 0) return 'Today';
+    return `${days}d`;
+  }
+
   private progressMeta(parts: Array<string | null | undefined>): string | undefined {
     const meta = parts.filter(Boolean).join(' · ');
     return meta || undefined;
@@ -490,6 +578,65 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.grid) return;
     this.grid.activeTab = 'progress';
     this.grid.openRow(row);
+  }
+
+  openFollowUps(row: getEnquiry): void {
+    if (!this.grid) return;
+    this.followUpForm.reset({
+      date: this.todayIso(),
+      outcome: '',
+      note: '',
+      nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : '',
+    });
+    this.grid.activeTab = 'followups';
+    this.grid.openRow(row);
+  }
+
+  followUpTimeline(row: getEnquiry): DetailTimelineEntry[] {
+    return (row.followUpHistory || [])
+      .slice()
+      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+      .map((entry) => ({
+        text: entry.note ? `${entry.outcome || 'Follow-up'} - ${entry.note}` : (entry.outcome || 'Follow-up'),
+        meta: this.progressMeta([
+          entry.createdByName || this.employeeName(entry.createdBy),
+          this.progressDate(entry.date),
+          entry.nextFollowUpDate ? `Next: ${this.displayDate(entry.nextFollowUpDate)}` : '',
+        ]),
+        tone: entry.nextFollowUpDate && new Date(entry.nextFollowUpDate) < new Date() ? 'warn' : 'good',
+      }));
+  }
+
+  saveFollowUp(row: getEnquiry): void {
+    if (this.followUpForm.invalid || this.followUpSavingRowId) {
+      this.followUpForm.markAllAsTouched();
+      return;
+    }
+    const value = this.followUpForm.getRawValue();
+    this.followUpSavingRowId = row._id;
+    this._enquiryService.addFollowUp(row._id, {
+      date: value.date || this.todayIso(),
+      outcome: value.outcome || '',
+      note: value.note || '',
+      nextFollowUpDate: value.nextFollowUpDate || null,
+    }).subscribe({
+      next: (response) => {
+        const updated = response.enquiry;
+        row.nextFollowUpDate = updated.nextFollowUpDate;
+        row.lastFollowUpDate = updated.lastFollowUpDate;
+        row.followUpOutcome = updated.followUpOutcome;
+        row.followUpHistory = updated.followUpHistory;
+        row.daysSinceLastFollowUp = 0;
+        this.followUpSavingRowId = null;
+        this.followUpForm.reset({ date: this.todayIso(), outcome: '', note: '', nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : '' });
+        this.dataSource._updateChangeSubscription();
+        this.toaster.success('Follow-up saved');
+      },
+      error: () => {
+        this.followUpSavingRowId = null;
+        this.toaster.error('Failed to save follow-up');
+      },
+    });
   }
 
   overviewSections(row: getEnquiry): DetailOverviewSection[] {
@@ -502,12 +649,20 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
           { type: 'field', label: 'Contact', value: row.contact ? `${row.contact.firstName ?? ''} ${row.contact.lastName ?? ''}`.trim() : '—' },
           { type: 'field', label: 'Sales Person', value: this.salesPersonName(row) },
           { type: 'field', label: 'Department', value: row.department?.departmentName },
+          { type: 'field', label: 'Priority', value: row.priority || '—' },
           { type: 'field', label: 'Date', value: this.displayDate(row.date) },
           { type: 'field', label: 'Next Follow-up', value: this.displayDate(row.nextFollowUpDate) },
           { type: 'field', label: 'Presales', value: this.presalePersonName(row) },
         ],
       },
-      { title: 'Enquiry', fields: [{ type: 'field', label: 'Description', value: row.title, noHover: true }] },
+      {
+        title: 'Enquiry', fields: [
+          { type: 'field', label: 'Description', value: row.title, noHover: true },
+          { type: 'field', label: 'Requirement / Notes', value: row.requirement || '—', noHover: true },
+          { type: 'field', label: 'Follow-up Outcome', value: row.followUpOutcome || '—', noHover: true },
+          { type: 'field', label: 'Lost Reason', value: row.lostReason || '—', noHover: true },
+        ]
+      },
     ];
   }
 
@@ -728,6 +883,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     queryParams.customer = this.selectedCustomer;
     queryParams.salesPerson = this.selectedSalesPerson;
     queryParams.department = this.selectedDepartment;
+    queryParams.status = this.selectedStatus;
+    queryParams.source = this.selectedSource;
+    queryParams.enquiryCategory = this.selectedCategory;
+    queryParams.priority = this.selectedPriority;
+    queryParams.followUpFromDate = this.followUpFromDate;
+    queryParams.followUpToDate = this.followUpToDate;
 
     this._router.navigate([], {
       relativeTo: this._route,
@@ -760,9 +921,16 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       salesPerson: this.selectedSalesPerson,
       customer: this.selectedCustomer,
       status: this.selectedStatus,
+      source: this.selectedSource,
+      enquiryCategory: this.selectedCategory,
+      priority: this.selectedPriority,
       overdueFollowUp: this.activeViewId === 'overdue',
+      todayFollowUp: this.activeViewId === 'today',
+      upcomingFollowUp: this.activeViewId === 'upcoming',
       fromDate: this.fromDate,
       toDate: this.toDate,
+      followUpFromDate: this.followUpFromDate,
+      followUpToDate: this.followUpToDate,
       department: this.selectedDepartment,
       access: access,
       userId: userId,
@@ -900,44 +1068,23 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dataSource._updateChangeSubscription();
   }
 
-  onAssignPresale(event: Event, preSale: any, enquiryId: string, index: number) {
-    event.stopPropagation();
-    this.assignTarget = { enquiryId, index, preSale };
-  }
+  async onSendToPresale(row: getEnquiry): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Send to Presale?',
+      message: `Enquiry ${row.enquiryId} will be sent to the presale team to be assigned. You can follow its progress from here.`,
+      confirmLabel: 'Send',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
 
-  onAssignClosed(): void {
-    this.assignTarget = null;
-  }
-
-  onPresaleAssigned(data: PresaleAssignment): void {
-    const target = this.assignTarget;
-    if (!target) return;
-    this.assignTarget = null;
-    const { enquiryId, index } = target;
-
-    this.assigningPresale = true;
-    this.assigningPresaleIndex = index;
-    const presaleData = {
-      comment: data.comment,
-      newPresaleFile: data.newPresaleFile,
-      existingPresaleFiles: data.existingPresaleFiles,
-      presalePerson: data.presalePerson,
-    };
-    const formData = new FormData();
-    formData.append("presaleData", JSON.stringify(presaleData));
-    (presaleData.newPresaleFile ?? []).forEach((file) => formData.append("newPresaleFile", file as unknown as Blob));
-
-    this._enquiryService.assignPresale(formData, enquiryId).subscribe({
+    this._enquiryService.sendToPresale(row._id).subscribe({
       next: (res) => {
-        this.assigningPresale = false;
         if (!res.success) return;
-        const row = this.dataSource.data[index];
-        row.preSale = { ...(row.preSale || {}), presalePerson: presaleData.presalePerson } as any;
-        row.status = "Assigned To Presale Manager";
+        row.status = 'Sent to Presales';
         this.dataSource._updateChangeSubscription();
-        this.toaster.success("Assinged Presale successfully");
+        this.toaster.success('Enquiry sent to presale');
       },
-      error: () => (this.assigningPresale = false),
     });
   }
 
@@ -948,6 +1095,11 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedSalesPerson = null;
     this.selectedDepartment = null;
     this.selectedStatus = null;
+    this.selectedSource = null;
+    this.selectedCategory = null;
+    this.selectedPriority = null;
+    this.followUpFromDate = null;
+    this.followUpToDate = null;
     this.formData.reset();
     this.page = 1;
     this.getEnquiries();
@@ -999,6 +1151,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     return (
       status == 'Assigned To Presale Manager' ||
       status == 'Assigned To Presale Engineer' ||
+      status == 'Sent to Presales' ||
       status == 'Assigned To Presales' ||
       status == 'Rejected by Presale Engineer'
     );

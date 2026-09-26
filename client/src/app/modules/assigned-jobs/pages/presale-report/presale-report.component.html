@@ -1,0 +1,156 @@
+<div class="er-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+
+    <div class="er-card shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <nav aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
+                    <a *ngFor="let b of breadcrumbs" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+                    <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+                    </svg>
+                </nav>
+                <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Presale</h2>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <app-view-toggle label="Presale" active="report" listLink="/assigned-jobs" reportLink="/assigned-jobs/report"></app-view-toggle>
+                <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!report">
+                    <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    Excel
+                </app-action-button>
+                <app-action-button variant="tool" (click)="exportPdf()" [disabled]="!report">
+                    <ng-icon name="heroPrinter" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    PDF
+                </app-action-button>
+            </div>
+        </div>
+
+        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the presale jobs."
+            (valuesChange)="onFilterChange($event)"></app-report-filters>
+    </div>
+
+    <div *ngIf="loading" class="er-card grid place-content-center py-20 text-sm text-gray-500 dark:text-gray-400">Building report…</div>
+
+    <div *ngIf="!loading && failed" class="er-card grid place-content-center gap-3 py-20 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-300">The report could not be generated.</p>
+        <p class="text-xs text-gray-500 dark:text-gray-500">Try a narrower date range, or reload the page.</p>
+    </div>
+
+    <ng-container *ngIf="!loading && report as r">
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <app-kpi-card label="Total Jobs" [value]="r.kpi.count" [foot]="'sent to presale'" [delta]="delta('count')"></app-kpi-card>
+            <app-kpi-card label="Waiting" [value]="r.kpi.new" [foot]="r.avgWaitDays !== null ? 'avg ' + (r.avgWaitDays | number: '1.0-1') + ' days unassigned' : 'nothing unassigned'"></app-kpi-card>
+            <app-kpi-card label="With Engineers" [value]="r.kpi.assigned" [foot]="'assigned, in progress'"></app-kpi-card>
+            <app-kpi-card label="Completed" [value]="r.kpi.completed" valueClass="text-emerald-600 dark:text-emerald-400"
+                [foot]="(r.kpi.completionRate | number: '1.0-0') + '% of all jobs'" [delta]="delta('completed')"></app-kpi-card>
+            <app-kpi-card label="Rejected" [value]="r.kpi.rejected" valueClass="text-red-600 dark:text-red-400"
+                [foot]="(r.kpi.rejectionRate | number: '1.0-0') + '% of all jobs'" [delta]="delta('rejected')"></app-kpi-card>
+        </div>
+
+        <!-- Sections: one at a time on screen, all of them when printed. -->
+        <div class="er-toggle self-start" role="tablist" aria-label="Report section">
+            <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'overview'"
+                [ngClass]="section === 'overview' ? 'er-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
+            <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
+                [ngClass]="section === 'breakdown' ? 'er-toggle-on' : ''" (click)="section = 'breakdown'">Breakdown</button>
+            <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'attention'"
+                [ngClass]="section === 'attention' ? 'er-toggle-on' : ''" (click)="section = 'attention'">
+                Attention <span class="er-count">{{ attentionTotal }}</span>
+            </button>
+        </div>
+
+        <div class="er-section flex flex-col gap-5" [class.er-hidden]="section !== 'overview'">
+            <div class="er-card p-5">
+                <div class="mb-4 flex items-baseline justify-between gap-3">
+                    <h3 class="er-heading">Pipeline</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-500">Each job sits in one stage. Untick a stage to hide it from the chart.</p>
+                </div>
+                <apx-chart *ngIf="pipelineChart"
+                    [series]="pipelineChart.series" [chart]="pipelineChart.chart" [plotOptions]="pipelineChart.plotOptions"
+                    [xaxis]="pipelineChart.xaxis" [yaxis]="pipelineChart.yaxis" [grid]="pipelineChart.grid" [legend]="pipelineChart.legend"
+                    [tooltip]="pipelineChart.tooltip" [dataLabels]="pipelineChart.dataLabels" [colors]="pipelineChart.colors">
+                </apx-chart>
+                <p *ngIf="!pipelineChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No stages selected.</p>
+                <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-100 dark:border-erp-border-dark pt-4">
+                    <label *ngFor="let stage of r.funnel" class="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" class="h-3.5 w-3.5 cursor-pointer rounded" [checked]="isStageShown(stage.key)" (change)="toggleStage(stage.key)" [style.accentColor]="stageColor(stage.key)" />
+                        <span>{{ stage.label }}</span>
+                        <span class="tabular-nums text-gray-400 dark:text-gray-500">{{ stage.count }}</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="er-card p-5">
+                <div class="mb-2">
+                    <h3 class="er-heading">Sent vs Completed</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-500">Last 12 months, by the month the enquiry was created.</p>
+                </div>
+                <apx-chart *ngIf="trendChart"
+                    [series]="trendChart.series" [chart]="trendChart.chart" [xaxis]="trendChart.xaxis" [yaxis]="trendChart.yaxis"
+                    [stroke]="trendChart.stroke" [fill]="trendChart.fill" [grid]="trendChart.grid" [legend]="trendChart.legend"
+                    [tooltip]="trendChart.tooltip" [dataLabels]="trendChart.dataLabels" [colors]="trendChart.colors">
+                </apx-chart>
+            </div>
+        </div>
+
+        <div class="er-section flex flex-col gap-3" [class.er-hidden]="section !== 'breakdown'">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="er-heading">Breakdown</h3>
+                <div class="er-toggle">
+                    <button *ngFor="let t of breakdownTabs" type="button" class="er-toggle-btn"
+                        [ngClass]="breakdownKey === t.key ? 'er-toggle-on' : ''" (click)="breakdownKey = t.key">{{ t.label }}</button>
+                </div>
+            </div>
+            <app-data-grid rowKey="id" [title]="'By ' + (breakdownKey === 'presale' ? 'Presale Engineer' : 'Department')"
+                [data]="breakdownRows" [columns]="breakdownColumns" [selectable]="false" [pageSize]="10"
+                searchPlaceholder="Search" emptyMessage="No presale jobs for these filters"
+                exportFileName="presale-breakdown.xlsx" exportable></app-data-grid>
+        </div>
+
+        <div class="er-section grid grid-cols-1 gap-5 lg:grid-cols-3" [class.er-hidden]="section !== 'attention'">
+            <div class="er-card lg:col-span-2 flex flex-col">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
+                    <h3 class="er-heading">Needs Attention</h3>
+                    <div class="er-toggle">
+                        <button *ngFor="let t of attentionTabs" type="button" class="er-toggle-btn"
+                            [ngClass]="attentionKey === t.key ? 'er-toggle-on' : ''" (click)="attentionKey = t.key">
+                            {{ t.label }} <span class="er-count">{{ attentionCount(t.key) }}</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
+                    <button *ngFor="let item of attentionItems; trackBy: trackById" type="button"
+                        class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                        (click)="openJob(item)">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ item.enquiryId }} — {{ item.customer }}</span>
+                            <span class="block truncate text-xs text-gray-500 dark:text-gray-400">
+                                {{ item.title }} · {{ item.salesPerson }}<ng-container *ngIf="item.presale"> · with {{ item.presale }}</ng-container>
+                            </span>
+                        </span>
+                        <span class="shrink-0 text-xs tabular-nums"
+                            [ngClass]="attentionKey === 'new' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'">{{ item.days }}d</span>
+                    </button>
+                    <p *ngIf="!attentionItems.length" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">Nothing here — all clear.</p>
+                </div>
+                <p class="border-t border-gray-100 dark:border-erp-border-dark px-5 py-2 text-[11px] text-gray-500 dark:text-gray-500">
+                    Days are counted from when the job was sent, assigned or last reassigned. The longest-waiting 50 are shown.
+                </p>
+            </div>
+
+            <div class="er-card p-5">
+                <h3 class="er-heading mb-1">Why Jobs Are Rejected</h3>
+                <p class="mb-4 text-xs text-gray-500 dark:text-gray-500">Taken from the comment left when a job was rejected.</p>
+                <div class="space-y-3">
+                    <div *ngFor="let reason of r.rejectionReasons" class="flex items-start justify-between gap-3">
+                        <span class="min-w-0 text-[13px] text-gray-700 dark:text-gray-300">{{ reason.reason }}</span>
+                        <span class="shrink-0 text-[13px] font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ reason.count }}</span>
+                    </div>
+                    <p *ngIf="!r.rejectionReasons.length" class="text-sm text-gray-500 dark:text-gray-400">No jobs have been rejected.</p>
+                </div>
+            </div>
+        </div>
+
+        <p class="pb-2 text-center text-[11px] text-gray-400 dark:text-gray-600">Generated {{ r.generatedAt | date: 'dd MMM yyyy, HH:mm' }}</p>
+    </ng-container>
+</div>

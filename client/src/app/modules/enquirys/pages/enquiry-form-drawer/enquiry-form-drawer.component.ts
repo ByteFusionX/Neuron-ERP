@@ -38,6 +38,12 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   customerOptions: SfOption[] = [];
   contactOptions: SfOption[] = [];
   departmentOptions: SfOption[] = [];
+  private readonly defaultSources = ['Referral', 'Website', 'Walk-in', 'Cold Call', 'Exhibition', 'Existing Customer', 'Other'];
+  private readonly defaultCategories = ['Product', 'Project', 'Both', 'Supply only', 'Installation'];
+  private readonly defaultPriorities = ['Low', 'Normal', 'Urgent', 'Critical'];
+  sourceOptions: SfOption[] = this.defaultSources.map((label) => ({ label, value: label }));
+  categoryOptions: SfOption[] = this.defaultCategories.map((label) => ({ label, value: label }));
+  priorityOptions: SfOption[] = this.defaultPriorities.map((label) => ({ label, value: label }));
 
   private fb = inject(FormBuilder);
   private router = inject(Router);
@@ -57,6 +63,11 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     contact: [null as string | null, Validators.required],
     department: [null as string | null, Validators.required],
     title: ['', Validators.required],
+    source: [null as string | null],
+    enquiryCategory: [null as string | null],
+    priority: ['Normal' as string | null],
+    requirement: [''],
+    followUpOutcome: [''],
     date: [this.todayIso(), Validators.required],
     nextFollowUpDate: [this.todayIso(), Validators.required],
     attachments: [[] as File[]],
@@ -154,7 +165,20 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   private reset(): void {
     this.draft?.clear();
     this.contactOptions = [];
-    this.enquiryForm.reset({ client: null, contact: null, department: null, title: '', date: this.todayIso(), nextFollowUpDate: this.todayIso(), attachments: [] });
+    this.enquiryForm.reset({
+      client: null,
+      contact: null,
+      department: null,
+      title: '',
+      source: null,
+      enquiryCategory: null,
+      priority: 'Normal',
+      requirement: '',
+      followUpOutcome: '',
+      date: this.todayIso(),
+      nextFollowUpDate: this.todayIso(),
+      attachments: []
+    });
   }
 
   /** Local calendar date as yyyy-MM-dd (toISOString would shift it by the UTC offset). */
@@ -174,6 +198,11 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       department: v.department,
       salesPerson: this.salesPersonId,
       title: v.title,
+      source: v.source,
+      enquiryCategory: v.enquiryCategory,
+      priority: v.priority,
+      requirement: v.requirement,
+      followUpOutcome: v.followUpOutcome,
       date: v.date,
       nextFollowUpDate: v.nextFollowUpDate,
       attachments: null,

@@ -1,3 +1,4 @@
+import type { PipelineStage } from 'mongoose';
 import { NextFunction, Request, Response } from "express"
 import enquiryModel from "../models/enquiry.model";
 import Employee from '../models/employee.model';
@@ -53,6 +54,19 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
         enquiryData.status = enquiryData.status || 'New'
         enquiryData.date = new Date(enquiryData.date)
         if (enquiryData.nextFollowUpDate) enquiryData.nextFollowUpDate = new Date(enquiryData.nextFollowUpDate)
+        if (enquiryData.followUpOutcome || enquiryData.nextFollowUpDate) {
+            const creator = await getEmployeeData(req.user);
+            enquiryData.lastFollowUpDate = enquiryData.date;
+            enquiryData.followUpHistory = [{
+                date: enquiryData.date,
+                outcome: enquiryData.followUpOutcome || 'Initial follow-up planned',
+                note: enquiryData.requirement || '',
+                nextFollowUpDate: enquiryData.nextFollowUpDate,
+                createdBy: creator?._id?.toString(),
+                createdByName: creator ? `${creator.firstName || ''} ${creator.lastName || ''}`.trim() : '',
+                createdAt: new Date()
+            }];
+        }
         const newEnquiry = new enquiryModel(enquiryData)
         const saveEnquiryData = await newEnquiry.save()
         if (!saveEnquiryData) return res.status(504).json({ err: 'Internal Error' });
@@ -106,6 +120,46 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
     }
 }
 
+export const addFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { enquiryId } = req.params;
+        const { date, outcome, note, nextFollowUpDate } = req.body;
+        if (!ObjectId.isValid(enquiryId)) return res.status(400).json({ success: false, message: 'Invalid enquiry id' });
+        if (!outcome?.trim() && !note?.trim()) return res.status(400).json({ success: false, message: 'Enter a follow-up outcome or note.' });
+
+        const userData: any = await getEmployeeData((req as any).user);
+        const followUpDate = date ? new Date(date) : new Date();
+        const nextDate = nextFollowUpDate ? new Date(nextFollowUpDate) : undefined;
+        const entry = {
+            date: followUpDate,
+            outcome: outcome?.trim() || 'Follow-up',
+            note: note?.trim() || '',
+            nextFollowUpDate: nextDate,
+            createdBy: userData?._id,
+            createdByName: userData ? `${userData.firstName || ''} ${userData.lastName || ''}`.trim() : '',
+            createdAt: new Date()
+        };
+
+        const updateFields: any = {
+            lastFollowUpDate: followUpDate,
+            followUpOutcome: entry.outcome
+        };
+        if (nextDate) updateFields.nextFollowUpDate = nextDate;
+
+        const updated = await enquiryModel.findOneAndUpdate(
+            { _id: enquiryId, isDeleted: { $ne: true } },
+            { $set: updateFields, $push: { followUpHistory: entry } },
+            { new: true }
+        ).populate(['client', 'department', 'salesPerson']);
+
+        if (!updated) return res.status(404).json({ success: false, message: 'Enquiry not found' });
+        return res.status(200).json({ success: true, enquiry: updated });
+    } catch (error) {
+        console.log(error);
+        next(error);
+    }
+}
+
 const titleTokens = (title: string) =>
     new Set((title || '').toLowerCase().replace(/[^a-z0-9s]/g, ' ').split(/s+/).filter(t => t.length > 2));
 
@@ -136,6 +190,58 @@ export const findSimilarEnquiries = async (req: Request, res: Response, next: Ne
         next(error);
     }
 }
+
+export const sendToPresale = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const { enquiryId } = req.params;
+        const enquiry = await enquiryModel.findOne({ _id: enquiryId, isDeleted: { $ne: true } });
+        if (!enquiry) {
+            return res.status(404).json({ success: false, message: 'Enquiry not found' });
+        }
+        const sendable = ['New', 'In Review', 'Rejected by Presale Manager'];
+        if (!sendable.includes(enquiry.status)) {
+            return res.status(400).json({ success: false, message: 'This enquiry has already been sent to presale' });
+        }
+
+        const sender = await getEmployeeData(req.user);
+        await enquiryModel.updateOne(
+            { _id: enquiryId },
+            {
+                $set: {
+                    status: 'Sent to Presales',
+                    'preSale.createdDate': new Date(),
+                    'preSale.newFeedbackAccess': true,
+                    'preSale.seenbyEmployee': false,
+                    'preSale.seenbySalesPerson': false,
+                },
+                $unset: { reAssigned: '', reAssignedDate: '' },
+            }
+        );
+
+        const socket = req.app.get('io') as Server;
+        await createNotificationWithPrivileges(
+            {
+                type: 'AssignedJob',
+                referenceModel: 'Enquiry',
+                title: 'New Presale Job',
+                message: `Enquiry ${enquiry.enquiryId} has been sent to presale and is waiting to be assigned`,
+                sentBy: sender?._id?.toString() || enquiry.salesPerson.toString(),
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() }
+            },
+            {
+                privilegeKey: 'assignedJob',
+                checkFunction: (privileges) => privileges.assignedJob?.assign === true
+            },
+            socket
+        );
+
+        return res.status(200).json({ success: true, status: 'Sent to Presales' });
+    } catch (error) {
+        console.error('Error in sendToPresale:', error);
+        next(error);
+    }
+};
 
 export const assignPresale = async (req: any, res: Response, next: NextFunction) => {
     try {
@@ -315,13 +421,39 @@ export const removeEnquiryAttachment = async (req: any, res: Response) => {
 
 export const getEnquiries = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, search, sortKey, sortDir, salesPerson, status, customer, fromDate, toDate, department, access, userId, createdBy, overdueFollowUp } = req.body;
+        let {
+            page,
+            row,
+            search,
+            sortKey,
+            sortDir,
+            salesPerson,
+            status,
+            customer,
+            fromDate,
+            toDate,
+            department,
+            access,
+            userId,
+            createdBy,
+            overdueFollowUp,
+            todayFollowUp,
+            upcomingFollowUp,
+            source,
+            enquiryCategory,
+            priority,
+            followUpFromDate,
+            followUpToDate,
+        } = req.body;
         let skipNum: number = (page - 1) * row;
 
         let isSalesPerson = salesPerson == null ? true : false;
         let isCustomer = customer == null ? true : false;
         let isStatus = status == null ? true : false;
         let isDepartment = department == null ? true : false;
+        let isSource = source == null ? true : false;
+        let isEnquiryCategory = enquiryCategory == null ? true : false;
+        let isPriority = priority == null ? true : false;
 
         const dateFilter: Record<string, Date> = {};
         if (fromDate) dateFilter.$gte = new Date(fromDate);
@@ -329,6 +461,13 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             const endDate = new Date(toDate);
             endDate.setDate(endDate.getDate() + 1);
             dateFilter.$lt = endDate;
+        }
+        const followUpDateFilter: Record<string, Date> = {};
+        if (followUpFromDate) followUpDateFilter.$gte = new Date(followUpFromDate);
+        if (followUpToDate) {
+            const followUpEndDate = new Date(followUpToDate);
+            followUpEndDate.setDate(followUpEndDate.getDate() + 1);
+            followUpDateFilter.$lt = followUpEndDate;
         }
 
         const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -352,6 +491,10 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
                 { $or: [{ status: status }, { status: { $exists: isStatus } }] },
                 { $or: [{ client: new ObjectId(customer) }, { client: { $exists: isCustomer } }] },
                 Object.keys(dateFilter).length ? { date: dateFilter } : {},
+                Object.keys(followUpDateFilter).length ? { nextFollowUpDate: followUpDateFilter } : {},
+                { $or: [{ source: source }, { source: { $exists: isSource } }] },
+                { $or: [{ enquiryCategory: enquiryCategory }, { enquiryCategory: { $exists: isEnquiryCategory } }] },
+                { $or: [{ priority: priority }, { priority: { $exists: isPriority } }] },
                 {
                     $or: [{ department: new ObjectId(department) }, { department: { $exists: isDepartment } }]
                 }
@@ -381,13 +524,23 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         const creatorFilter = createdBy ? { salesPerson: new ObjectId(createdBy) } : {};
         const baseFilters = { $and: [matchFilters, accessFilter] };
         const filters = { $and: [matchFilters, accessFilter, creatorFilter] }
-        const today = new Date();
-        today.setHours(23, 59, 59, 999);
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        const openFollowUpStatusFilter = { status: { $nin: ['Quoted', 'Lost'] } };
         const overdueFollowUpFilter = overdueFollowUp
-            ? { nextFollowUpDate: { $lte: today }, status: { $nin: ['Quoted', 'Lost'] } }
+            ? { nextFollowUpDate: { $lt: todayStart }, ...openFollowUpStatusFilter }
             : {};
-        const listBaseFilters = { $and: [baseFilters, overdueFollowUpFilter] };
-        const listFilters = { $and: [filters, overdueFollowUpFilter] };
+        const todayFollowUpFilter = todayFollowUp
+            ? { nextFollowUpDate: { $gte: todayStart, $lte: todayEnd }, ...openFollowUpStatusFilter }
+            : {};
+        const upcomingFollowUpFilter = upcomingFollowUp
+            ? { nextFollowUpDate: { $gt: todayEnd }, ...openFollowUpStatusFilter }
+            : {};
+        const listViewFilter = { $and: [overdueFollowUpFilter, todayFollowUpFilter, upcomingFollowUpFilter] };
+        const listBaseFilters = { $and: [baseFilters, listViewFilter] };
+        const listFilters = { $and: [filters, listViewFilter] };
 
         // 'Sended by Presale Engineer' rows are hidden here so paging and counts stay correct.
         const hiddenStatuses = ['Quoted', 'Sended by Presale Engineer'];
@@ -400,13 +553,25 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         ]).exec()
 
         const viewCounts = await enquiryModel.aggregate([
-            { $match: listBaseFilters },
+            { $match: baseFilters },
             { $match: { status: { $nin: hiddenStatuses } } },
             {
                 $facet: {
                     all: [{ $count: 'total' }],
                     mine: [
                         { $match: { salesPerson: new ObjectId(userId) } },
+                        { $count: 'total' }
+                    ],
+                    overdue: [
+                        { $match: { nextFollowUpDate: { $lt: todayStart }, ...openFollowUpStatusFilter } },
+                        { $count: 'total' }
+                    ],
+                    today: [
+                        { $match: { nextFollowUpDate: { $gte: todayStart, $lte: todayEnd }, ...openFollowUpStatusFilter } },
+                        { $count: 'total' }
+                    ],
+                    upcoming: [
+                        { $match: { nextFollowUpDate: { $gt: todayEnd }, ...openFollowUpStatusFilter } },
                         { $count: 'total' }
                     ]
                 }
@@ -418,6 +583,9 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             nextFollowUpDate: 'nextFollowUpDate',
             enquiryId: 'enquiryId',
             description: 'title',
+            source: 'source',
+            priority: 'priority',
+            enquiryCategory: 'enquiryCategory',
             status: 'status'
         };
         // Sorting by a related record's name needs that name pulled in ahead of the sort/paging stages.
@@ -550,6 +718,20 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
                         }
                     }
                 }
+            },
+            {
+                $addFields: {
+                    daysSinceCreated: {
+                        $dateDiff: { startDate: '$date', endDate: '$$NOW', unit: 'day' }
+                    },
+                    daysSinceLastFollowUp: {
+                        $cond: [
+                            { $ifNull: ['$lastFollowUpDate', false] },
+                            { $dateDiff: { startDate: '$lastFollowUpDate', endDate: '$$NOW', unit: 'day' } },
+                            null
+                        ]
+                    }
+                }
             }
         ]);
 
@@ -558,7 +740,10 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             enquiry: enquiryData,
             viewCounts: {
                 all: viewCounts[0]?.all[0]?.total ?? 0,
-                mine: viewCounts[0]?.mine[0]?.total ?? 0
+                mine: viewCounts[0]?.mine[0]?.total ?? 0,
+                overdue: viewCounts[0]?.overdue[0]?.total ?? 0,
+                today: viewCounts[0]?.today[0]?.total ?? 0,
+                upcoming: viewCounts[0]?.upcoming[0]?.total ?? 0
             }
         })
 
@@ -568,12 +753,141 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
     }
 }
 
+const PRESALE_TAB_STATUSES: Record<string, string[]> = {
+    new: ['Sent to Presales'],
+    assignedTab: ['Assigned To Presale Manager', 'Assigned To Presale Engineer', 'Assigned To Presales'],
+    rejected: ['Rejected by Presale Engineer', 'Rejected by Presale Manager'],
+    completedTab: ['Work In Progress'],
+};
+
+/** Per-tab totals for the presale page, honouring the same access scope as the list itself. */
+export const presaleTabCounts = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { access, userId } = req.query;
+        // Same base match as getPreSaleJobs so a tab's badge always equals its row total.
+        const scope: any = {
+            isDeleted: { $ne: true },
+            $and: [{ $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: 'Sent to Presales' }] }],
+        };
+        if (access === 'assigned') {
+            scope.$and.push({
+                $or: [
+                    { 'preSale.presalePerson': new ObjectId(userId as string) },
+                    { reAssigned: new ObjectId(userId as string) },
+                ],
+            });
+        }
+        const entries = await Promise.all(Object.entries(PRESALE_TAB_STATUSES).map(async ([key, statuses]) => {
+            const count = await enquiryModel.countDocuments({ ...scope, status: { $in: statuses } });
+            return [key, count] as const;
+        }));
+        return res.status(200).json(Object.fromEntries(entries));
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** Presale report: counts per tab, per engineer and per department, plus the jobs that have waited longest. */
+export const getPresaleReport = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { department, presale, fromDate, toDate, access, userId } = req.body;
+        const match: any = {
+            isDeleted: { $ne: true },
+            $and: [{ $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: 'Sent to Presales' }] }],
+        };
+        if (department) match.department = new ObjectId(department);
+        const dateFilter: Record<string, Date> = {};
+        if (fromDate) dateFilter.$gte = new Date(fromDate);
+        if (toDate) { const end = new Date(toDate); end.setDate(end.getDate() + 1); dateFilter.$lt = end; }
+        if (Object.keys(dateFilter).length) match.date = dateFilter;
+        if (access === 'assigned') {
+            match.$and.push({ $or: [{ 'preSale.presalePerson': new ObjectId(userId) }, { reAssigned: new ObjectId(userId) }] });
+        } else if (presale) {
+            match.$and.push({ $or: [{ 'preSale.presalePerson': new ObjectId(presale) }, { reAssigned: new ObjectId(presale) }] });
+        }
+
+        const rows: any[] = await enquiryModel.find(match)
+            .select('enquiryId title status date client department salesPerson reAssigned reAssignedDate preSale.presalePerson preSale.createdDate preSale.rejectionHistory')
+            .populate('client', 'companyName').populate('department', 'departmentName')
+            .populate('salesPerson', 'firstName lastName').populate('reAssigned', 'firstName lastName')
+            .populate('preSale.presalePerson', 'firstName lastName').lean();
+
+        const DAY = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const tabOf = (status: string): 'new' | 'assigned' | 'completed' | 'rejected' | null => {
+            if (PRESALE_TAB_STATUSES.new.includes(status)) return 'new';
+            if (PRESALE_TAB_STATUSES.assignedTab.includes(status)) return 'assigned';
+            if (PRESALE_TAB_STATUSES.completedTab.includes(status)) return 'completed';
+            if (PRESALE_TAB_STATUSES.rejected.includes(status)) return 'rejected';
+            return null;
+        };
+        const blank = () => ({ count: 0, new: 0, assigned: 0, completed: 0, rejected: 0 });
+        const kpi = blank();
+        const byEngineer = new Map<string, any>();
+        const byDepartment = new Map<string, any>();
+        const attention: Record<'new' | 'assigned' | 'rejected', any[]> = { new: [], assigned: [], rejected: [] };
+        const reasonMap = new Map<string, { reason: string; count: number }>();
+        const trendMap = new Map<string, { month: string; received: number; completed: number }>();
+        const monthKey = (d: any) => { const t = new Date(d); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`; };
+        for (let i = 11; i >= 0; i--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); const k = monthKey(d); trendMap.set(k, { month: k, received: 0, completed: 0 }); }
+        let waitTotal = 0;
+        const bump = (map: Map<string, any>, id: string, name: string, tab: string) => {
+            const r = map.get(id) || { id, name, ...blank() };
+            r.count++; r[tab]++;
+            map.set(id, r);
+        };
+        const fullName = (p: any) => (p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() : '');
+
+        rows.forEach((e) => {
+            const tab = tabOf(e.status);
+            if (!tab) return;
+            kpi.count++; kpi[tab]++;
+            const holder = e.reAssigned || e.preSale?.presalePerson;
+            bump(byEngineer, holder?._id ? String(holder._id) : 'none', fullName(holder) || 'Unassigned', tab);
+            bump(byDepartment, e.department?._id ? String(e.department._id) : 'none', e.department?.departmentName || '—', tab);
+            const bucket = trendMap.get(monthKey(e.date));
+            if (bucket) { bucket.received++; if (tab === 'completed') bucket.completed++; }
+            (e.preSale?.rejectionHistory || []).forEach((h: any) => {
+                const reason = String(h?.rejectionReason || '').trim() || 'No reason recorded';
+                const r = reasonMap.get(reason) || { reason, count: 0 };
+                r.count++; reasonMap.set(reason, r);
+            });
+            if (tab === 'new' || tab === 'assigned' || tab === 'rejected') {
+                const since = new Date(e.reAssignedDate || e.preSale?.createdDate || e.date).getTime();
+                attention[tab].push({
+                    id: String(e._id), enquiryId: e.enquiryId, title: e.title, customer: e.client?.companyName || '',
+                    salesPerson: fullName(e.salesPerson), presale: fullName(holder), status: e.status,
+                    days: Math.max(0, Math.floor((now - since) / DAY)),
+                });
+                if (tab === 'new') waitTotal += Math.max(0, Math.floor((now - since) / DAY));
+            }
+        });
+
+        const sortRows = (m: Map<string, any>) => [...m.values()].sort((a, b) => b.count - a.count);
+        const oldest = (l: any[]) => l.sort((a, b) => b.days - a.days).slice(0, 50);
+        return res.status(200).json({
+            kpi: { ...kpi, completionRate: kpi.count ? (kpi.completed / kpi.count) * 100 : 0, rejectionRate: kpi.count ? (kpi.rejected / kpi.count) * 100 : 0 },
+            breakdown: { presale: sortRows(byEngineer), department: sortRows(byDepartment) },
+            avgWaitDays: attention.new.length ? waitTotal / attention.new.length : null,
+            funnel: (['new', 'assigned', 'completed', 'rejected'] as const).map((key) => ({
+                key, label: { new: 'New', assigned: 'Assigned', completed: 'Completed', rejected: 'Rejected' }[key], count: kpi[key], pct: kpi.count ? (kpi[key] / kpi.count) * 100 : 0,
+            })),
+            trend: [...trendMap.values()],
+            rejectionReasons: [...reasonMap.values()].sort((a, b) => b.count - a.count).slice(0, 10),
+            attention: { new: oldest(attention.new), assigned: oldest(attention.assigned), rejected: oldest(attention.rejected) },
+            generatedAt: new Date(),
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let page = Number(req.query.page)
         let row = Number(req.query.row)
         let skipNum: number = (page - 1) * row;
-        let { filter, access, userId, search } = req.query;
+        let { filter, access, userId, search, sortKey, sortDir } = req.query;
         let accessFilter: any = {};
         switch (access) {
             case 'assigned':
@@ -586,12 +900,15 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
                 break;
         }
 
+        const tabStatuses = PRESALE_TAB_STATUSES;
         if (filter == 'completed') {
             accessFilter.status = 'Work In Progress'
         } else if (filter == 'reassigned') {
             accessFilter.status = 'Assigned To Presale Engineer'
         } else if (filter == 'assigned') {
             accessFilter.status = { $nin: ['Work In Progress', 'Rejected by Presale Manager'] }
+        } else if (filter == 'new' || filter == 'assignedTab' || filter == 'rejected' || filter == 'completedTab') {
+            accessFilter.status = { $in: tabStatuses[filter] }
         }
 
         // Joined fields (customer/department/assigned-by names) need their lookups run before the
@@ -622,6 +939,16 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
             { $lookup: { from: 'employees', localField: 'salesPerson', foreignField: '_id', as: 'salesPerson' } },
         ];
 
+        const sortFields: Record<string, string> = {
+            enqId: 'enquiryId', customerName: 'client.companyName', description: 'title',
+            assignedBy: 'salesPerson.firstName', department: 'department.departmentName', status: 'status',
+        };
+        const sortField = typeof sortKey === 'string' ? sortFields[sortKey] : undefined;
+        const sortOrder: 1 | -1 = sortDir === 'desc' ? -1 : 1;
+        const sortNeedsLookups = !!sortField && sortField.includes('.');
+        const lookupsBeforeSort = needsJoinedSearch || sortNeedsLookups;
+        const sortStage: PipelineStage = sortField ? { $sort: { [sortField]: sortOrder, _id: sortOrder } } : { $sort: { 'preSale.createdDate': -1 } };
+
         const totalPresale: { total: number }[] = await enquiryModel.aggregate([
             {
                 $match: { status: { $ne: 'Quoted' } }
@@ -634,7 +961,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
                 }
             },
             {
-                $match: { "preSale.presalePerson": { $exists: true, $ne: null } }
+                $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: 'Sent to Presales' }] }
             },
             ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : []),
             {
@@ -655,19 +982,17 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
                 $match: { status: { $ne: 'Quoted' } }
             },
             {
-                $match: { "preSale.presalePerson": { $exists: true, $ne: null } }
+                $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: 'Sent to Presales' }] }
             },
-            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : []),
-            {
-                $sort: { 'preSale.createdDate': -1 }
-            },
+            ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : (sortNeedsLookups ? joinedLookups : [])),
+            sortStage,
             {
                 $skip: skipNum
             },
             {
                 $limit: row
             },
-            ...(needsJoinedSearch ? [] : joinedLookups),
+            ...(lookupsBeforeSort ? [] : joinedLookups),
             {
                 $lookup: {
                     from: 'employees',
@@ -739,7 +1064,17 @@ export const updateEnquiryStatus = async (req: Request, res: Response, next: Nex
             let updateQuote = await quotationModel.updateOne({ enqId: data.id }, { $set: { 'status': 'Work In Progress' } })
             status = 'Quoted';
         }
-        const update = await enquiryModel.findOneAndUpdate({ _id: data.id }, { $set: { status: status, 'preSale.seenbySalesPerson': false, 'preSale.newFeedbackAccess': true } })
+        const updateFields: any = {
+            status: status,
+            'preSale.seenbySalesPerson': false,
+            'preSale.newFeedbackAccess': true
+        };
+        if (status === 'Lost') {
+            updateFields.lostReason = data.lostReason || data.reason || '';
+            if (data.competitorName !== undefined) updateFields.competitorName = data.competitorName;
+            if (data.competitorPriceGap !== undefined) updateFields.competitorPriceGap = data.competitorPriceGap;
+        }
+        const update = await enquiryModel.findOneAndUpdate({ _id: data.id }, { $set: updateFields }, { new: true })
             .populate(['client', 'department', 'salesPerson'])
         if (update && !quote && status === 'Work In Progress') {
             const socket = req.app.get('io') as Server;
@@ -1515,11 +1850,18 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
             return res.status(404).json({ message: 'Something went wrong' });
         }
         const reAssigner = await getEmployeeData(req.user);
-        const reAssignEntry = await buildAssignmentEntry(employeeId, 'reassigned', reAssigner);
+        const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson');
+        // First assignment of a job sent straight to presale: no presalePerson yet, and the
+        // feedback / reject / send routes all read it as the person holding the job.
+        const isFirstAssignment = !existing?.preSale?.presalePerson;
+        const reAssignEntry = await buildAssignmentEntry(employeeId, isFirstAssignment ? 'assigned' : 'reassigned', reAssigner);
         const enquiryUpdate = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId },
             {
-                $set: { reAssigned: employeeId, reAssignedDate: reAssignEntry.date, status: 'Assigned To Presale Engineer', reAssignedSeen: false },
+                $set: {
+                    reAssigned: employeeId, reAssignedDate: reAssignEntry.date, status: 'Assigned To Presale Engineer', reAssignedSeen: false,
+                    ...(isFirstAssignment ? { 'preSale.presalePerson': employeeId } : {}),
+                },
                 $push: { assignmentHistory: reAssignEntry }
             }
         )

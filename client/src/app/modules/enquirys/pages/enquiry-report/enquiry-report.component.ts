@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
+import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
-import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis, ChartComponent } from 'ng-apexcharts';
+import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis } from 'ng-apexcharts';
 import { Observable, Subscription, filter, shareReplay, switchMap, take } from 'rxjs';
 import { ExcelExportService, ExcelSheet } from 'src/app/core/services/export/excel-export.service';
 
@@ -77,13 +77,14 @@ type ReportSection = 'overview' | 'breakdown' | 'attention';
  * Enquiries carry no monetary value, so everything here is a count. "Days to quote" is measured to the
  * quotation raised against the enquiry.
  */
+import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
   selector: 'app-enquiry-report',
   templateUrl: './enquiry-report.component.html',
   styleUrls: ['./enquiry-report.component.css'],
-  imports: [
-    NgIf, NgFor, NgClass, DecimalPipe, DatePipe, RouterLink, NgIcon,
-    ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent,
+  imports: [ViewToggleComponent, 
+    NgIf, NgFor, NgClass, DatePipe, RouterLink, NgIcon,
+    ActionButtonComponent, KpiCardComponent, ReportFiltersComponent,
   ],
 })
 export class EnquiryReportComponent implements OnInit, OnDestroy {

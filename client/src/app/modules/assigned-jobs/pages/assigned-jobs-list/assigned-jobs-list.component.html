@@ -2,8 +2,11 @@
     <app-data-grid #grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
-        title="Assigned Jobs"
+        title="Presale"
         [breadcrumbs]="breadcrumbs"
+        [views]="views"
+        viewUrlParam="tab"
+        (viewChange)="onViewChange($event)"
         rowKey="_id"
         [serverSide]="true"
         [data]="rows"
@@ -13,7 +16,9 @@
         [totalCount]="total"
         emptyMessage="No Data"
         [rowActions]="rowActions"
-        storageKey="assigned-jobs-list"
+        storageKey="presale-jobs"
+        exportable
+        exportFileName="presale-jobs.xlsx"
         [detailLoading]="detailLoading"
         [detailTabs]="detailTabs"
         [detailTitle]="rowTitle"
@@ -21,6 +26,8 @@
         (rowOpen)="onRowOpen($event)"
         (rowAction)="onRowAction($event)"
         (queryChange)="onQueryChange($event)">
+
+        <app-view-toggle dgToolbarExtra label="Presale" active="list" listLink="/assigned-jobs" reportLink="/assigned-jobs/report"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
             <span *ngIf="row.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
@@ -82,7 +89,7 @@
 
     <app-rejection-history-drawer [open]="rejectionsOpen" [rejections]="rejections" (closed)="rejectionsOpen = false"></app-rejection-history-drawer>
     <app-view-estimation [open]="!!estimationTarget" [estimation]="estimationTarget?.estimation ?? null" [enquiryId]="estimationTarget?.enqId ?? ''"
-        editable editMode="emit" (edit)="onEditEstimation($event, estimationTarget?.enqId ?? '')"
+        [editable]="activeTab === 'assigned'" editMode="emit" (edit)="onEditEstimation($event, estimationTarget?.enqId ?? '')"
         (cleared)="onEstimationCleared()" (closed)="estimationTarget = null"></app-view-estimation>
     <app-estimation-form-drawer [open]="estimationFormOpen" [mode]="estimationFormMode" [estimation]="estimationFormSeed" [enqId]="estimationFormEnqId"
         (saved)="onEstimationFormSaved()" (closed)="onEstimationFormClosed()"></app-estimation-form-drawer>

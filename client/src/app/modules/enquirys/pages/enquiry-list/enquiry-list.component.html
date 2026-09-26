@@ -26,15 +26,7 @@
     (rowAction)="onRowAction($event)"
     (create)="openDialog()">
 
-    <div dgToolbarExtra class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-100 dark:bg-erp-surface-dark-alt" role="tablist" aria-label="Enquiry view">
-      <span role="tab" aria-selected="true"
-        class="inline-flex h-7 items-center rounded-md bg-white px-2.5 text-xs font-medium text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100">List</span>
-      <a role="tab" aria-selected="false" routerLink="/enquiry/report" [queryParams]="reportQueryParams"
-        class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-        <ng-icon name="heroChartBar" class="h-4 w-4"></ng-icon>
-        Report
-      </a>
-    </div>
+    <app-view-toggle dgToolbarExtra label="Enquiry" active="list" listLink="/enquiry" reportLink="/enquiry/report" [reportQueryParams]="reportQueryParams"></app-view-toggle>
 
     <ng-template #detailAsideTemplate let-row>
       <app-status-pill [status]="row.status" [toneMap]="statusToneMap"
@@ -60,6 +52,43 @@
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
         <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        <div *ngSwitchCase="'followups'" class="space-y-5">
+          <app-detail-timeline
+            [entries]="followUpTimeline(row)"
+            emptyMessage="No follow-up notes yet."></app-detail-timeline>
+
+          <form [formGroup]="followUpForm" (ngSubmit)="saveFollowUp(row)"
+            class="rounded-md border border-gray-200 bg-white p-4 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+            <div class="grid gap-3 md:grid-cols-2">
+              <label class="block">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Follow-up date</span>
+                <input type="date" formControlName="date"
+                  class="mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100">
+              </label>
+              <label class="block">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Next follow-up</span>
+                <input type="date" formControlName="nextFollowUpDate"
+                  class="mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100">
+              </label>
+            </div>
+            <label class="mt-3 block">
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Outcome</span>
+              <input type="text" formControlName="outcome" placeholder="Called customer, waiting for BOQ, site visit done..."
+                class="mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100">
+            </label>
+            <label class="mt-3 block">
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Notes</span>
+              <textarea formControlName="note" rows="3"
+                class="mt-1 w-full resize-none rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100"></textarea>
+            </label>
+            <div class="mt-3 flex justify-end">
+              <button type="submit" [disabled]="followUpSavingRowId === row._id"
+                class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">
+                {{ followUpSavingRowId === row._id ? 'Saving...' : 'Save Follow-up' }}
+              </button>
+            </div>
+          </form>
+        </div>
         <app-detail-task-list *ngSwitchCase="'events'"
           [items]="eventItems((eventsFor(row) | async) ?? [])"
           defaultFilter="event"
@@ -104,8 +133,6 @@
   </app-data-grid>
 
   <app-enquiry-form-drawer [open]="formOpen" (saved)="onEnquiryCreated($event)" (closed)="onFormClosed()"></app-enquiry-form-drawer>
-
-  <app-assign-presale-drawer [open]="!!assignTarget" [presale]="assignTarget?.preSale" (assigned)="onPresaleAssigned($event)" (closed)="onAssignClosed()"></app-assign-presale-drawer>
 
   <app-enquiry-estimation-view [open]="!!estimationTarget" [enquiry]="estimationTarget?.enquiry" (seen)="onEstimationSeen()" (revised)="onEstimationRevised()" (closed)="estimationTarget = null"></app-enquiry-estimation-view>
 

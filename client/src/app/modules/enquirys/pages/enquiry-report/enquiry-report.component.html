@@ -15,10 +15,7 @@
 
             <div class="flex items-center gap-2 shrink-0">
                 <!-- List | Report. Both carry the same filters through the URL. -->
-                <div class="er-toggle" role="tablist" aria-label="Enquiry view">
-                    <a role="tab" aria-selected="false" routerLink="/enquiry" [queryParams]="listQueryParams" class="er-toggle-btn">List</a>
-                    <span role="tab" aria-selected="true" class="er-toggle-btn er-toggle-on">Report</span>
-                </div>
+                <app-view-toggle label="Enquiry" active="report" listLink="/enquiry" reportLink="/enquiry/report" [listQueryParams]="listQueryParams"></app-view-toggle>
 
                 <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!report">
                     <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
@@ -48,125 +45,30 @@
     <ng-container *ngIf="!loading && report as r">
 
         <!-- KPI strip -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <app-kpi-card label="Enquiries" [value]="r.kpi.totalCount"
                 [foot]="r.kpi.openCount + ' still open'" [delta]="delta('totalCount')"></app-kpi-card>
             <app-kpi-card label="Quoted" [value]="r.kpi.quotedCount" valueClass="text-emerald-600 dark:text-emerald-400"
                 [foot]="'converted to a quotation'" [delta]="delta('quotedCount')"></app-kpi-card>
-            <app-kpi-card label="Conversion" [value]="(r.kpi.conversionRate | number: '1.0-1') + ''" unit="%"
-                [foot]="'of ' + r.kpi.totalCount + ' enquir' + (r.kpi.totalCount === 1 ? 'y' : 'ies')" [delta]="delta('conversionRate')"></app-kpi-card>
             <app-kpi-card label="With Presales" [value]="r.kpi.presalesCount"
                 [foot]="r.kpi.estimatedCount + ' estimated, ready to quote'"></app-kpi-card>
-            <app-kpi-card label="Days to Quote" [value]="r.kpi.avgDaysToQuote !== null ? (r.kpi.avgDaysToQuote | number: '1.0-1') : '—'" unit="days"
-                [foot]="(r.kpi.rejectionRate | number: '1.0-0') + '% rejected by presales'" [delta]="delta('avgDaysToQuote')"></app-kpi-card>
+            <app-kpi-card label="Needs Attention" [value]="attentionTotal"
+                [foot]="'items to follow up'"></app-kpi-card>
         </div>
 
-        <!-- Sections: one at a time on screen, all of them when printed. -->
-        <div class="er-toggle self-start" role="tablist" aria-label="Report section">
-            <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'overview'"
-                [ngClass]="section === 'overview' ? 'er-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
-            <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
-                [ngClass]="section === 'breakdown' ? 'er-toggle-on' : ''" (click)="section = 'breakdown'">Breakdown</button>
-            <button type="button" role="tab" class="er-toggle-btn" [attr.aria-selected]="section === 'attention'"
-                [ngClass]="section === 'attention' ? 'er-toggle-on' : ''" (click)="section = 'attention'">
-                Attention <span class="er-count">{{ attentionTotal }}</span>
-            </button>
-        </div>
-
-        <div class="er-section flex flex-col gap-5" [class.er-hidden]="section !== 'overview'">
-
-        <!-- Pipeline + presale workload -->
         <div class="grid grid-cols-1 gap-5 lg:grid-cols-3">
-            <div class="er-card lg:col-span-2 p-5">
-                <div class="mb-4 flex items-baseline justify-between gap-3">
-                    <h3 class="er-heading">Pipeline</h3>
-                    <p class="text-xs text-gray-500 dark:text-gray-500">Each enquiry sits in one stage. Untick a stage to hide it from the chart.</p>
-                </div>
-
-                <apx-chart *ngIf="pipelineChart"
-                    [series]="pipelineChart.series" [chart]="pipelineChart.chart" [plotOptions]="pipelineChart.plotOptions"
-                    [xaxis]="pipelineChart.xaxis" [yaxis]="pipelineChart.yaxis" [grid]="pipelineChart.grid" [legend]="pipelineChart.legend"
-                    [tooltip]="pipelineChart.tooltip" [dataLabels]="pipelineChart.dataLabels" [colors]="pipelineChart.colors">
-                </apx-chart>
-
-                <p *ngIf="!pipelineChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No stages selected.</p>
-
-                <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-100 dark:border-erp-border-dark pt-4">
-                    <label *ngFor="let stage of r.funnel" class="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-                        <input type="checkbox" class="h-3.5 w-3.5 cursor-pointer rounded" [checked]="isStageShown(stage.key)" (change)="toggleStage(stage.key)" [style.accentColor]="stageColor(stage.key)" />
-                        <span>{{ stage.label }}</span>
-                        <span class="tabular-nums text-gray-400 dark:text-gray-500">{{ stage.count }}</span>
-                    </label>
-                </div>
-                <p class="mt-3 text-[11px] text-gray-500 dark:text-gray-500">
-                    New: not yet sent to presales. With Presales: assigned to a presale manager or engineer. Estimated: presales are done and the enquiry is back with the sales person.
-                </p>
-            </div>
-
             <div class="er-card p-5">
-                <h3 class="er-heading mb-1">Presale Workload</h3>
-                <p class="mb-4 text-xs text-gray-500 dark:text-gray-500">Enquiries each person holds right now.</p>
-                <apx-chart *ngIf="workloadChart"
-                    [series]="workloadChart.series" [chart]="workloadChart.chart" [labels]="workloadChart.labels" [colors]="workloadChart.colors"
-                    [stroke]="workloadChart.stroke" [plotOptions]="workloadChart.plotOptions" [legend]="workloadChart.legend"
-                    [tooltip]="workloadChart.tooltip" [dataLabels]="workloadChart.dataLabels">
-                </apx-chart>
-                <p *ngIf="!workloadChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">{{ r.workload.length ? 'No people selected.' : 'Nothing is with presales right now.' }}</p>
-
-                <div *ngIf="r.workload.length" class="mt-4 flex flex-col gap-2 border-t border-gray-100 dark:border-erp-border-dark pt-4">
-                    <label *ngFor="let w of r.workload; let i = index" class="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-                        <input type="checkbox" class="h-3.5 w-3.5 cursor-pointer rounded" [checked]="isPresaleShown(w.id)" (change)="togglePresale(w.id)" [style.accentColor]="workloadColor(i)" />
-                        <span class="min-w-0 truncate">{{ w.name }}</span>
-                        <span class="ml-auto shrink-0 tabular-nums text-gray-400 dark:text-gray-500">{{ w.count }} · oldest {{ w.oldestDays }}d</span>
-                    </label>
+                <h3 class="er-heading mb-4">Pipeline</h3>
+                <div class="space-y-3">
+                    <button *ngFor="let stage of r.funnel" type="button"
+                        class="flex w-full items-center justify-between gap-3 rounded-md border border-gray-100 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 dark:border-erp-border-dark dark:hover:bg-gray-800"
+                        routerLink="/enquiry" [queryParams]="listQueryParams">
+                        <span class="min-w-0 truncate text-gray-700 dark:text-gray-300">{{ stage.label }}</span>
+                        <span class="shrink-0 font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ stage.count }}</span>
+                    </button>
                 </div>
             </div>
-        </div>
 
-        <!-- Trend -->
-        <div class="er-card p-5">
-            <div class="mb-2">
-                <h3 class="er-heading">Received vs Quoted</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-500">Last 12 months. An enquiry counts as received in the month of its date and as quoted in the month its first quotation was raised.</p>
-            </div>
-            <apx-chart *ngIf="trendChart"
-                [series]="trendChart.series" [chart]="trendChart.chart" [xaxis]="trendChart.xaxis" [yaxis]="trendChart.yaxis"
-                [stroke]="trendChart.stroke" [fill]="trendChart.fill" [grid]="trendChart.grid" [legend]="trendChart.legend"
-                [tooltip]="trendChart.tooltip" [dataLabels]="trendChart.dataLabels" [colors]="trendChart.colors">
-            </apx-chart>
-        </div>
-
-        </div>
-
-        <!-- Breakdown -->
-        <div class="er-section flex flex-col gap-3" [class.er-hidden]="section !== 'breakdown'">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <h3 class="er-heading">Breakdown</h3>
-                <div class="er-toggle">
-                    <button *ngFor="let t of breakdownTabs" type="button" class="er-toggle-btn"
-                        [ngClass]="breakdownKey === t.key ? 'er-toggle-on' : ''" (click)="setBreakdown(t.key)">{{ t.label }}</button>
-                </div>
-            </div>
-            <app-data-grid #breakdownGrid
-                rowKey="id"
-                [title]="breakdownTitle"
-                [data]="breakdownRows"
-                [columns]="breakdownColumns"
-                [selectable]="false"
-                [pageSize]="10"
-                searchPlaceholder="Search"
-                emptyMessage="Nothing to break down for these filters"
-                exportFileName="enquiry-breakdown.xlsx"
-                exportable
-                (rowOpen)="onBreakdownRowOpen($event)">
-            </app-data-grid>
-            <p class="text-xs text-gray-500 dark:text-gray-500">
-                Open a row to see those enquiries in the list. Presale rows count the enquiries each person was last assigned, so they only cover enquiries that reached presales.
-            </p>
-        </div>
-
-        <!-- Attention + rejection reasons -->
-        <div class="er-section grid grid-cols-1 gap-5 lg:grid-cols-3" [class.er-hidden]="section !== 'attention'">
             <div class="er-card lg:col-span-2 flex flex-col">
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
                     <h3 class="er-heading">Needs Attention</h3>
@@ -178,7 +80,7 @@
                     </div>
                 </div>
 
-                <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
+                <div class="max-h-[28rem] overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
                     <button *ngFor="let item of attentionItems; trackBy: trackById" type="button"
                         class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
                         (click)="openEnquiry(item)">
@@ -196,23 +98,6 @@
                     <p *ngIf="!attentionItems.length" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                         Nothing here — every enquiry in this list is on track.
                     </p>
-                </div>
-
-                <p class="border-t border-gray-100 dark:border-erp-border-dark px-5 py-2 text-[11px] text-gray-500 dark:text-gray-500">
-                    Not started: not sent to presales after {{ r.attention.notStartedDays }} days. With presales: no hand-back after {{ r.attention.stuckDays }} days.
-                    Awaiting quote: estimated but still not quoted after {{ r.attention.awaitingQuoteDays }} days. Rejected: sent back by presales and not yet reassigned.
-                </p>
-            </div>
-
-            <div class="er-card p-5">
-                <h3 class="er-heading mb-1">Why Presales Reject</h3>
-                <p class="mb-4 text-xs text-gray-500 dark:text-gray-500">Taken from the reason left at rejection, across every rejection in this period.</p>
-                <div class="space-y-3">
-                    <div *ngFor="let reason of r.rejectionReasons" class="flex items-start justify-between gap-3">
-                        <span class="min-w-0 text-[13px] text-gray-700 dark:text-gray-300">{{ reason.reason }}</span>
-                        <span class="shrink-0 text-[13px] font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ reason.count }}</span>
-                    </div>
-                    <p *ngIf="!r.rejectionReasons.length" class="text-sm text-gray-500 dark:text-gray-400">No enquiries have been rejected in this period.</p>
                 </div>
             </div>
         </div>

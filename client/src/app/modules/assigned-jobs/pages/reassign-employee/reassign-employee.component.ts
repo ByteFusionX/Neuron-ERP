@@ -24,7 +24,7 @@ export class ReassignEmployeeComponent implements OnInit, OnDestroy {
   constructor(
     private dialogRef: MatDialogRef<ReassignEmployeeComponent>,
     private _employeeService: EmployeeService,
-    @Inject(MAT_DIALOG_DATA) public data: { enquiryId: string },
+    @Inject(MAT_DIALOG_DATA) public data: { enquiryId: string; mode?: 'assign' | 'reassign' },
     private _enquiryService: EnquiryService,
   ) { }
 

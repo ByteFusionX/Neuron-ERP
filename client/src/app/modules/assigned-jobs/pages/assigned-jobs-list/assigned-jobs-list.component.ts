@@ -1,9 +1,9 @@
 import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute, Router } from '@angular/router';
-import { AsyncPipe, NgClass, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { AsyncPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
-import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
+import { EnquiryService, PresaleTabCounts } from 'src/app/core/services/enquiry/enquiry.service';
 import { Estimations, feedback, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { saveAs } from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
@@ -20,7 +20,7 @@ import { EventsService } from 'src/app/core/services/events/events.service';
 import { EventActionsService } from 'src/app/core/services/events/event-actions.service';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
-import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailCommentsComponent } from 'src/app/shared/components/detail-panel/detail-comments.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
@@ -28,11 +28,14 @@ import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/
 import { DetailComment, DetailDocument, DetailOverviewSection, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { NgIcon } from '@ng-icons/core';
 
+export type PresaleTab = 'new' | 'assigned' | 'completed' | 'rejected';
+
+import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
   selector: 'app-assigned-jobs-list',
   templateUrl: './assigned-jobs-list.component.html',
   styleUrls: ['./assigned-jobs-list.component.css'],
-  imports: [NgIf, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, NgIcon, DataGridComponent, DetailOverviewComponent, DetailCommentsComponent, DetailDocumentsComponent, DetailTaskListComponent, RejectionHistoryDrawerComponent, ViewEstimationComponent, EstimationFormDrawerComponent]
+  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, NgIcon, DataGridComponent, DetailOverviewComponent, DetailCommentsComponent, DetailDocumentsComponent, DetailTaskListComponent, RejectionHistoryDrawerComponent, ViewEstimationComponent, EstimationFormDrawerComponent]
 })
 export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<any>;
@@ -46,8 +49,20 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'documents', label: 'Documents', icon: 'files' },
   ];
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Sales' }];
+  views: DataGridView[] = [];
   detailLoading = false;
+
+  readonly tabs: { id: PresaleTab; label: string; countKey: keyof PresaleTabCounts; serverFilter: string }[] = [
+    { id: 'new', label: 'New Jobs', countKey: 'new', serverFilter: 'new' },
+    { id: 'assigned', label: 'Assigned Jobs', countKey: 'assignedTab', serverFilter: 'assignedTab' },
+    { id: 'completed', label: 'Completed Jobs', countKey: 'completedTab', serverFilter: 'completedTab' },
+    { id: 'rejected', label: 'Rejected Jobs', countKey: 'rejected', serverFilter: 'rejected' },
+  ];
+  activeTab: PresaleTab = 'assigned';
+  tabCounts: Partial<PresaleTabCounts> = {};
+  canAssign = false;
+  private access: string | undefined;
 
   viewAssignedFor: boolean = false;
   isLoading: boolean = true;
@@ -76,14 +91,28 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   ngOnInit(): void {
     this.buildColumns();
     this.buildRowActions();
-    this._employeeService.employeeData$.subscribe((data) => {
-      this.viewAssignedFor = data?.category.privileges.assignedJob.viewReport == 'all';
-      this.userId = data?._id;
-      this.buildColumns();
-      this.buildRowActions();
-    });
+    this.refreshViews();
+    // Read the ?tab= deep link first so the employee callback below knows whether to default to New.
     this._route.queryParams.subscribe((params) => {
       this.initialPage = params['page'] ? parseInt(params['page'], 10) : 1;
+      const tab = this.tabs.find((t) => t.id === params['tab']);
+      this.hasTabParam = !!tab;
+      if (tab) this.activeTab = tab.id;
+    });
+    this._employeeService.employeeData$.subscribe((data) => {
+      this.viewAssignedFor = data?.category.privileges.assignedJob.viewReport == 'all';
+      this.canAssign = this.isAdminRole(data) || data?.category.privileges.assignedJob?.assign === true;
+      this.access = data?.category.privileges.assignedJob.viewReport;
+      this.userId = data?._id;
+      // Assigners land on the New Jobs queue unless a ?tab= deep link says otherwise.
+      if (this.canAssign && !this.hasTabParam && this.activeTab === 'assigned') {
+        this.activeTab = 'new';
+        this.getJobsData();
+      }
+      this.buildColumns();
+      this.buildRowActions();
+      this.refreshViews();
+      setTimeout(() => this.syncGridView());
     });
     this.getJobsData();
   }
@@ -98,61 +127,131 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   private initialPage = 1;
+  private hasTabParam = false;
+
+  private isAdminRole(employee: any): boolean {
+    const role = employee?.category?.role;
+    return role === 'admin' || role === 'superAdmin';
+  }
+
+  /** New Jobs is only useful to people who can assign; hide it from everyone else. */
+  get visibleTabs() {
+    return this.tabs.filter((t) => t.id !== 'new' || this.canAssign);
+  }
+
+  countFor(key: keyof PresaleTabCounts): number | undefined {
+    return this.tabCounts[key];
+  }
+
+  /** Tabs above the grid, same pattern as quotation views; the grid keeps the active one in ?tab=. */
+  private refreshViews(): void {
+    this.views = this.visibleTabs.map((t) => ({ id: t.id, label: t.label, count: this.countFor(t.countKey), hideCount: this.countFor(t.countKey) === undefined }));
+  }
+
+  /** Makes the grid's active tab match the tab chosen by deep link or role default. */
+  private syncGridView(): void {
+    const view = this.views.find((v) => v.id === this.activeTab);
+    if (this.grid && view && this.grid.activeViewId !== view.id) this.grid.selectView(view);
+  }
+
+  onViewChange(view: DataGridView): void {
+    const tab = view.id as PresaleTab;
+    if (tab === this.activeTab && this.isLoading) return;
+    this.activeTab = tab;
+    this.page = 1;
+    this.buildColumns();
+    this.buildRowActions();
+    this.getJobsData();
+  }
+
+  private loadTabCounts(): void {
+    if (!this.userId) return;
+    this._enquiryService.getPresaleTabCounts(this.access, this.userId).subscribe((counts) => { this.tabCounts = counts; this.refreshViews(); });
+  }
 
   private buildColumns(): void {
     this.columns = [
-      { key: 'enqId', label: 'Enquiry ID', valueGetter: (r) => r.enquiryId, cellClass: (r) => r?.preSale?.seenbyEmployee ? 'text-violet-500' : 'text-orange-500' },
-      { key: 'customerName', label: 'Customer Name', valueGetter: (r) => r.client?.[0]?.companyName },
-      { key: 'description', label: 'Description', valueGetter: (r) => r.title },
-      { key: 'assignedBy', label: 'Assign. By', valueGetter: (r) => `${r.salesPerson?.[0]?.firstName ?? ''} ${r.salesPerson?.[0]?.lastName ?? ''}`.trim() },
-      { key: 'assignedTo', label: 'Reassign. To', visible: this.viewAssignedFor, valueGetter: (r) => r.reAssigned?.[0] ? `${r.reAssigned[0].firstName} ${r.reAssigned[0].lastName}` : '—' },
-      { key: 'department', label: 'Depart.', valueGetter: (r) => r.department?.[0]?.departmentName },
-      { key: 'status', label: 'Status', type: 'badge', visible: this.viewAssignedFor, badgeClasses: this.statusBadgeClasses },
+      { key: 'enqId', sortable: true, label: 'Enquiry ID', valueGetter: (r) => r.enquiryId, cellClass: (r) => r?.preSale?.seenbyEmployee ? 'text-violet-500' : 'text-orange-500' },
+      { key: 'customerName', sortable: true, label: 'Customer Name', valueGetter: (r) => r.client?.[0]?.companyName },
+      { key: 'description', sortable: true, label: 'Description', valueGetter: (r) => r.title },
+      { key: 'assignedBy', sortable: true, label: 'Sent By', valueGetter: (r) => `${r.salesPerson?.[0]?.firstName ?? ''} ${r.salesPerson?.[0]?.lastName ?? ''}`.trim() },
+      { key: 'assignedTo', label: 'Assigned To', locked: true, visible: this.viewAssignedFor && this.activeTab !== 'new', valueGetter: (r) => this.assigneeName(r) },
+      { key: 'department', sortable: true, label: 'Depart.', valueGetter: (r) => r.department?.[0]?.departmentName },
+      { key: 'status', sortable: true, label: 'Status', type: 'badge', locked: true, visible: this.viewAssignedFor, badgeClasses: this.statusBadgeClasses, badgeLabel: (v) => this.statusLabel(v) },
     ];
+  }
+
+  private assigneeName(r: any): string {
+    const person = r.reAssigned?.[0] ?? r.preSale?.presalePerson?.[0];
+    return person ? `${person.firstName} ${person.lastName}` : '—';
+  }
+
+  /** Short badge text; the tab already says which stage a job is in. */
+  private statusLabel(status: string): string {
+    const labels: Record<string, string> = {
+      'Assigned To Presale Engineer': 'Assigned',
+      'Assigned To Presale Manager': 'Assigned',
+      'Assigned To Presales': 'Assigned',
+      'Sent to Presales': 'New',
+      'Rejected by Presale Engineer': 'Rejected',
+      'Rejected by Presale Manager': 'Rejected',
+      'Work In Progress': 'Completed',
+    };
+    return labels[status] ?? status;
   }
 
   readonly statusBadgeClasses: Record<string, string> = {
     'Assigned To Presale Engineer': 'bg-yellow-50 text-yellow-700 ring-yellow-200',
     'Assigned To Presale Manager': 'bg-yellow-50 text-yellow-700 ring-yellow-200',
     'Rejected by Presale Engineer': 'bg-red-50 text-red-700 ring-red-200',
+    'Rejected by Presale Manager': 'bg-red-50 text-red-700 ring-red-200',
+    'Sent to Presales': 'bg-blue-50 text-blue-700 ring-blue-200',
+    'Work In Progress': 'bg-green-50 text-green-700 ring-green-200',
   };
 
   private buildRowActions(): void {
+    const tab = this.activeTab;
+    const inTab = (...tabs: PresaleTab[]) => !tabs.includes(tab);
     this.rowActions = [
       {
-        id: 'reassign', label: 'Reassign', icon: 'transfer', quick: true,
-        hidden: (r) => !this.viewAssignedFor || r.status === 'Assigned To Presale Engineer',
+        id: 'assign', label: 'Assign', icon: 'user', quick: true,
+        hidden: () => tab !== 'new' || !this.canAssign,
       },
       {
-        id: 'feedbackAsk', label: 'Ask For Feedback', icon: 'chat', quick: true,
-        hidden: (r) => !r.preSale?.newFeedbackAccess,
+        id: 'reassign', label: 'Reassign', icon: 'transfer', quick: true,
+        hidden: () => inTab('assigned', 'rejected') || !this.canAssign,
+      },
+      {
+        id: 'feedbackAsk', label: 'Ask For Feedback', icon: 'chat', quick: false,
+        hidden: (r) => tab !== 'assigned' || !r.preSale?.newFeedbackAccess,
       },
       {
         id: 'viewFeedback', label: 'View Feedback', icon: 'eye', quick: true,
-        hidden: (r) => !r.preSale?.feedback?.length,
+        hidden: (r) => inTab('assigned', 'completed') || !r.preSale?.feedback?.length,
         badge: (r) => this.hasUnseenFeedback(r.preSale?.feedback || []),
       },
       {
         id: 'rejectionHistory', label: 'Rejection History', icon: 'info', quick: true,
-        hidden: (r) => r.status !== 'Rejected by Presale Engineer',
+        hidden: (r) => tab !== 'rejected' && !r.preSale?.rejectionHistory?.length,
       },
       {
         id: 'uploadEstimation', label: 'Upload Estimation', icon: 'upload', quick: true,
-        hidden: (r) => !!r.preSale?.estimations,
+        hidden: (r) => tab !== 'assigned' || !!r.preSale?.estimations,
       },
       {
         id: 'viewEstimation', label: 'View Estimation', icon: 'eye', quick: true,
-        hidden: (r) => !r.preSale?.estimations,
+        hidden: (r) => inTab('assigned', 'completed') || !r.preSale?.estimations,
       },
-      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true },
-      { id: 'send', label: 'Send', icon: 'send', quick: true },
+      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: false, hidden: () => tab !== 'assigned' },
+      { id: 'send', label: 'Send', icon: 'send', quick: true, hidden: () => tab !== 'assigned' },
     ];
   }
 
   onRowAction(event: DataGridRowActionEvent<any>): void {
     const { action, row } = event;
     switch (action.id) {
-      case 'reassign': this.onReassignClicks(row._id); break;
+      case 'assign': this.onReassignClicks(row._id, 'assign'); break;
+      case 'reassign': this.onReassignClicks(row._id, 'reassign'); break;
       case 'feedbackAsk': this.onFeedback(row); break;
       case 'viewFeedback': this.viewFeedback(row); break;
       case 'rejectionHistory': this.openReview(row.preSale?.rejectionHistory); break;
@@ -172,11 +271,12 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     if (this.userId) {
       this.isLoading = true;
       this.subscriptions.add(
-        this._enquiryService.getPresale(this.page, this.row, 'assigned', access, this.userId, this.searchQuery).subscribe({
+        this._enquiryService.getPresale(this.page, this.row, this.serverFilter, access, this.userId, this.searchQuery, this.sort).subscribe({
           next: (data) => {
             this.rows = data.enquiry;
             this.total = data.total;
             this.isLoading = false;
+            this.loadTabCounts();
           },
           error: () => {
             this.isLoading = false;
@@ -186,10 +286,17 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     }
   }
 
+  private get serverFilter(): string {
+    return this.tabs.find((t) => t.id === this.activeTab)!.serverFilter;
+  }
+
+  private sort: DataGridQuery['sort'] = { key: null, direction: null };
+
   onQueryChange(query: DataGridQuery): void {
     this.page = query.page;
     this.row = query.pageSize;
     this.searchQuery = query.search;
+    this.sort = query.sort;
     this.getJobsData();
   }
 
@@ -426,9 +533,9 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
 
   // ---- Row actions: reassign / feedback / reject / send -----------------------------------
 
-  onReassignClicks(enqId: string) {
+  onReassignClicks(enqId: string, mode: 'assign' | 'reassign' = 'reassign') {
     const dialog = this._dialog.open(ReassignEmployeeComponent, {
-      data: { enquiryId: enqId }
+      data: { enquiryId: enqId, mode }
     })
     dialog.afterClosed().subscribe((res) => {
       if (res) {
@@ -508,8 +615,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     this.subscriptions.add(
       this._enquiryService.updateEnquiryStatus(selectedEnquiry).subscribe((data) => {
         if (data) {
-          this.rows = this.rows.filter((r) => r._id !== row._id);
-          this.total = this.rows.length;
+          this.getJobsData();
           if (data.quoteId) {
             this.toast.success(`Job has successfully completed and send back to Quotation  \n(${data.quoteId})`)
           } else {
@@ -537,10 +643,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
 
     this._enquiryService.rejectJob(row._id, reason ?? '', 'Manager').subscribe({
       next: (res) => {
-        if (res.success) {
-          this.rows = this.rows.filter((r) => r._id !== row._id);
-          this.total = this.rows.length;
-        }
+        if (res.success) this.getJobsData();
       },
       error: () => {
         this.toast.warning('Something went wrong while rejecting. Please try again later')

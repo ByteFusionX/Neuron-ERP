@@ -5,8 +5,10 @@
       <ng-icon name="heroArrowsRightLeft" class="text-lg"></ng-icon>
     </span>
     <div class="min-w-0 flex-1">
-      <h2 class="text-base font-semibold leading-6">Reassign job</h2>
-      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Pick a new presale engineer to hand this job to.</p>
+      <h2 class="text-base font-semibold leading-6">{{ data.mode === 'assign' ? 'Assign job' : 'Reassign job' }}</h2>
+      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+        {{ data.mode === 'assign' ? 'Pick the presale engineer who will work on this job.' : 'Pick a new presale engineer to hand this job to.' }}
+      </p>
     </div>
     <button type="button" (click)="onClose()" aria-label="Close"
       class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">

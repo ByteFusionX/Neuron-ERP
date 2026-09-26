@@ -10,8 +10,18 @@ export interface Enquiry {
     department: string;
     salesPerson: string;
     title: string;
+    source?: string | null;
+    enquiryCategory?: string | null;
+    priority?: string | null;
+    requirement?: string | null;
+    followUpOutcome?: string | null;
+    lostReason?: string | null;
+    competitorName?: string | null;
+    competitorPriceGap?: string | null;
     date: string;
     nextFollowUpDate?: string;
+    lastFollowUpDate?: string;
+    followUpHistory?: EnquiryFollowUp[];
     attachments: File[];
     presale: Presale;
     status: string;
@@ -34,8 +44,20 @@ export interface getEnquiry {
     department: getDepartment;
     salesPerson: { _id: string, firstName: string, lastName: string };
     title: string;
+    source?: string | null;
+    enquiryCategory?: string | null;
+    priority?: string | null;
+    requirement?: string | null;
+    followUpOutcome?: string | null;
+    lostReason?: string | null;
+    competitorName?: string | null;
+    competitorPriceGap?: string | null;
     date: string;
     nextFollowUpDate?: string;
+    lastFollowUpDate?: string;
+    followUpHistory?: EnquiryFollowUp[];
+    daysSinceCreated?: number;
+    daysSinceLastFollowUp?: number | null;
     attachments: Files[];
     preSale: {
         presalePerson: getEmployeeDetails;
@@ -59,7 +81,21 @@ export interface EnquiryTable {
     viewCounts?: {
         all: number;
         mine: number;
+        overdue: number;
+        today: number;
+        upcoming: number;
     };
+}
+
+export interface EnquiryFollowUp {
+    _id?: string;
+    date: string;
+    outcome?: string;
+    note?: string;
+    nextFollowUpDate?: string;
+    createdBy?: string | getEmployeeDetails;
+    createdByName?: string;
+    createdAt?: string;
 }
 
 export interface FeedbackTable {
@@ -89,11 +125,22 @@ export interface FilterEnquiry {
     sortKey?: string | null;
     sortDir?: 'asc' | 'desc' | null;
     salesPerson: string | null;
+    customer?: string | null;
+    department?: string | null;
     status: string | null;
+    source?: string | null;
+    enquiryCategory?: string | null;
+    priority?: string | null;
     fromDate: string | null;
     toDate: string | null;
+    followUpFromDate?: string | null;
+    followUpToDate?: string | null;
     createdBy?: string | null;
     overdueFollowUp?: boolean;
+    todayFollowUp?: boolean;
+    upcomingFollowUp?: boolean;
+    access?: string;
+    userId?: string;
 }
 
 export interface Files {

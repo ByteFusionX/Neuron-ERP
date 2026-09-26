@@ -10,8 +10,18 @@ interface Enquiry extends Document {
     department: Types.ObjectId;
     salesPerson: Types.ObjectId;
     title: String;
+    source?: string;
+    enquiryCategory?: string;
+    priority?: string;
+    requirement?: string;
+    followUpOutcome?: string;
+    lostReason?: string;
+    competitorName?: string;
+    competitorPriceGap?: string;
     date: string | number | Date;
     nextFollowUpDate?: string | number | Date;
+    lastFollowUpDate?: string | number | Date;
+    followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date }[];
     createdDate: Date;
     preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[] };
     // preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; }[] };
@@ -172,6 +182,36 @@ const assignmentHistorySchema = new Schema({
     }
 });
 
+const followUpHistorySchema = new Schema({
+    date: {
+        type: Date,
+        default: Date.now
+    },
+    outcome: {
+        type: String,
+        trim: true
+    },
+    note: {
+        type: String,
+        trim: true
+    },
+    nextFollowUpDate: {
+        type: Date
+    },
+    createdBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    createdByName: {
+        type: String,
+        trim: true
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
 const enquirySchema = new Schema<Enquiry>({
     client: {
         type: Schema.Types.ObjectId,
@@ -197,12 +237,51 @@ const enquirySchema = new Schema<Enquiry>({
         type: String,
         required: true
     },
+    source: {
+        type: String,
+        trim: true
+    },
+    enquiryCategory: {
+        type: String,
+        trim: true
+    },
+    priority: {
+        type: String,
+        trim: true
+    },
+    requirement: {
+        type: String,
+        trim: true
+    },
+    followUpOutcome: {
+        type: String,
+        trim: true
+    },
+    lostReason: {
+        type: String,
+        trim: true
+    },
+    competitorName: {
+        type: String,
+        trim: true
+    },
+    competitorPriceGap: {
+        type: String,
+        trim: true
+    },
     date: {
         type: Date,
         required: true
     },
     nextFollowUpDate: {
         type: Date,
+    },
+    lastFollowUpDate: {
+        type: Date,
+    },
+    followUpHistory: {
+        type: [followUpHistorySchema],
+        default: []
     },
     createdDate: {
         type: Date,

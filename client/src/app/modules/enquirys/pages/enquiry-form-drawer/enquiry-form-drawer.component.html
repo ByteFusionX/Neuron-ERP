@@ -33,15 +33,21 @@
             <app-sf-field full label="Enquiry Title" [control]="enquiryForm.controls.title">
                 <app-sf-input formControlName="title" placeholder="Title"></app-sf-input>
             </app-sf-field>
-            <app-sf-field label="Date" [control]="enquiryForm.controls.date">
+            <app-sf-field label="Priority" [control]="enquiryForm.controls.priority">
+                <app-sf-select formControlName="priority" [options]="priorityOptions" placeholder="Select priority"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
                 <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
             </app-sf-field>
             <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
                 <app-sf-date formControlName="nextFollowUpDate" displayFormat="dd/MM/yy"></app-sf-date>
             </app-sf-field>
+            <app-sf-field full label="Requirement / Notes" [control]="enquiryForm.controls.requirement">
+                <app-sf-textarea formControlName="requirement" [rows]="4" placeholder="Requirement, scope or important notes"></app-sf-textarea>
+            </app-sf-field>
         </app-sf-section>
 
-        <app-sf-section title="Attachments">
+        <app-sf-section title="Files">
             <app-sf-field label="Files" hint="Optional" [control]="enquiryForm.controls.attachments">
                 <app-sf-file formControlName="attachments" [accept]="acceptedFiles" [maxSizeMb]="5"></app-sf-file>
             </app-sf-field>

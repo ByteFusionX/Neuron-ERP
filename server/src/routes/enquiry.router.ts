@@ -4,12 +4,15 @@ import {
     createEnquiry,
     getEnquiries,
     getPreSaleJobs,
+    getPresaleReport,
     updateEnquiryStatus,
     monthlyEnquiries,
     sendFeedbackRequest,
     getFeedbackRequestsById,
     giveFeedback,
     assignPresale,
+    sendToPresale,
+    presaleTabCounts,
     giveRevision,
     reviseQuoteEstimation,
     presalesCount,
@@ -26,7 +29,8 @@ import {
     updateEnquiryAttachments,
     removeEnquiryAttachment,
     findSimilarEnquiries,
-    getEnquiryReport
+    getEnquiryReport,
+    addFollowUp
 } from "../controllers/enquiry.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const equiRouter = Router()
@@ -38,9 +42,13 @@ equiRouter.post('/get', getEnquiries);
 equiRouter.get('/similar', findSimilarEnquiries);
 equiRouter.post('/report', getEnquiryReport);
 equiRouter.get('/presales', getPreSaleJobs);
+equiRouter.post('/presales/report', getPresaleReport);
+equiRouter.get('/presales/tab-counts', presaleTabCounts);
+equiRouter.patch('/:enquiryId/send-to-presale', sendToPresale);
 equiRouter.patch('/presales/:enquiryId', upload.fields([{ name: 'newPresaleFile' }]), assignPresale);
 equiRouter.patch('/:enquiryId/attachments', upload.array('files'), updateEnquiryAttachments);
 equiRouter.delete('/:enquiryId/attachments/:fileName', removeEnquiryAttachment);
+equiRouter.patch('/:enquiryId/follow-up', addFollowUp);
 equiRouter.put('/update', updateEnquiryStatus);
 equiRouter.get('/monthly', monthlyEnquiries);
 equiRouter.patch('/feedback-request', sendFeedbackRequest);
@@ -58,7 +66,7 @@ equiRouter.get('/presales/count', presalesCount)
 equiRouter.post('/delete', deleteEnquiry);
 equiRouter.delete('/presales/estimation/:enqId', deleteEstimation)
 equiRouter.put('/presales/reject', RejectPresaleJob)
-equiRouter.put('/reassignjob', reAssignJob)
+equiRouter.put('/reassignjob', requirePrivilege("assignedJob", "assign"), reAssignJob)
 
 
 export default equiRouter;
