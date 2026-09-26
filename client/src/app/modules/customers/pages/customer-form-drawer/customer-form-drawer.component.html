@@ -16,8 +16,24 @@
             <app-sf-field label="Billing Address" [control]="customerForm.controls.companyAddress">
                 <app-sf-input formControlName="companyAddress" placeholder="Billing address"></app-sf-input>
             </app-sf-field>
-            <app-sf-field full label="Department" [control]="customerForm.controls.department">
-                <app-sf-radio-group formControlName="department" variant="segmented" [options]="departmentOptions"></app-sf-radio-group>
+            <app-sf-field full label="Departments" [control]="customerForm.controls.departments">
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <label *ngFor="let department of departmentOptions"
+                        class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:bg-blue-50/60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-500/70 dark:hover:bg-blue-950/30"
+                        [class.border-blue-500]="isDepartmentSelected(department.value)"
+                        [class.bg-blue-50]="isDepartmentSelected(department.value)"
+                        [class.dark:border-blue-400]="isDepartmentSelected(department.value)"
+                        [class.dark:bg-blue-950]="isDepartmentSelected(department.value)">
+                        <input type="checkbox"
+                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            [checked]="isDepartmentSelected(department.value)"
+                            (change)="toggleDepartment(department.value, $any($event.target).checked)" />
+                        <span>{{ department.label }}</span>
+                    </label>
+                </div>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Select every company department this customer belongs to. Primary: {{ primaryDepartmentLabel() }}.
+                </p>
             </app-sf-field>
             <app-customer-address-fields class="contents" [group]="customerForm.controls.companyAddressStructured"></app-customer-address-fields>
             <app-sf-field full label="Shipping Address" [control]="customerForm.controls.shippingAddress">

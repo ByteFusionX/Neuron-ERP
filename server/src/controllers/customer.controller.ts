@@ -28,6 +28,22 @@ const normalizeContactDetails = (contactDetails?: any[]): any[] => {
     return contactDetails.map((c, i) => ({ ...c, isPrimary: i === (primaryIndex === -1 ? 0 : primaryIndex) }));
 };
 
+const toObjectIdString = (value: any): string | undefined => {
+    if (!value) return undefined;
+    if (typeof value === 'string') return value;
+    if (value._id) return String(value._id);
+    return String(value);
+};
+
+const normalizeCustomerDepartments = (customerData: any): { department?: string; departments: string[] } => {
+    const selected = Array.isArray(customerData.departments)
+        ? customerData.departments.map(toObjectIdString).filter(Boolean) as string[]
+        : [];
+    const legacyDepartment = toObjectIdString(customerData.department);
+    const departments = Array.from(new Set(selected.length ? selected : legacyDepartment ? [legacyDepartment] : []));
+    return { department: departments[0], departments };
+};
+
 const formatAddress = (structured?: { line1?: string; line2?: string; city?: string; state?: string; country?: string; postalCode?: string }): string | undefined => {
     if (!structured) return undefined;
     const { line1, line2, city, state, country, postalCode } = structured;
@@ -93,6 +109,14 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
             },
             {
                 $lookup: {
+                    from: 'departments',
+                    localField: 'departments',
+                    foreignField: '_id',
+                    as: 'departments',
+                },
+            },
+            {
+                $lookup: {
                     from: 'employees',
                     localField: 'createdBy',
                     foreignField: '_id',
@@ -117,6 +141,7 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
                     companyName: 1,
                     clientRef: 1,
                     department: 1,
+                    departments: 1,
                     companyAddress: 1,
                     createdBy: 1,
                     contactDetails: 1,
@@ -270,6 +295,14 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
             },
             {
                 $lookup: {
+                    from: 'departments',
+                    localField: 'departments',
+                    foreignField: '_id',
+                    as: 'departments',
+                },
+            },
+            {
+                $lookup: {
                     from: 'customertypes',
                     localField: 'customerType',
                     foreignField: '_id',
@@ -338,6 +371,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                     _id: "$_id",
                     clientRef: { $first: "$clientRef" },
                     department: { $first: "$department" },
+                    departments: { $first: "$departments" },
                     companyName: { $first: "$companyName" },
                     companyAddress: { $first: "$companyAddress" },
                     companyAddressStructured: { $first: "$companyAddressStructured" },
@@ -412,6 +446,9 @@ export const getCustomerByCustomerId = async (req: Request, res: Response, next:
                     $lookup: { from: 'departments', localField: 'department', foreignField: '_id', as: 'department' }
                 },
                 {
+                    $lookup: { from: 'departments', localField: 'departments', foreignField: '_id', as: 'departments' }
+                },
+                {
                     $lookup: { from: 'employees', localField: 'createdBy', foreignField: '_id', as: 'createdBy' }
                 },
                 {
@@ -456,6 +493,7 @@ export const getCustomerByCustomerId = async (req: Request, res: Response, next:
                         _id: "$_id",
                         clientRef: { $first: "$clientRef" },
                         department: { $first: "$department" },
+                        departments: { $first: "$departments" },
                         companyName: { $first: "$companyName" },
                         companyAddress: { $first: "$companyAddress" },
                         companyAddressStructured: { $first: "$companyAddressStructured" },
@@ -668,6 +706,9 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
         customerData.normalizedTrn = normalizedTrn;
         customerData.normalizedDomain = normalizedDomain;
         customerData.contactDetails = normalizeContactDetails(customerData.contactDetails);
+        const normalizedDepartments = normalizeCustomerDepartments(customerData);
+        customerData.department = normalizedDepartments.department;
+        customerData.departments = normalizedDepartments.departments;
         if (customerData.companyAddressStructured) {
             customerData.companyAddress = formatAddress(customerData.companyAddressStructured) || customerData.companyAddress;
         }
@@ -701,7 +742,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
 
 export const editCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { id, department, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, shippingSites, sameAsBilling, customerType, trn, paymentTerms, creditLimit, creditStatus, taxExempt, currency, source } = req.body;
+        const { id, department, departments, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, shippingSites, sameAsBilling, customerType, trn, paymentTerms, creditLimit, creditStatus, taxExempt, currency, source } = req.body;
         const companyNameTrimmed = companyName.trim();
         const companyExist = await Customer.findOne({ companyName: new RegExp(`^${companyNameTrimmed}$`, 'i'), _id: { $ne: id } })
         if (companyExist) {
@@ -731,9 +772,11 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
         }
 
         const editor = await getEmployeeData(req.user);
+        const normalizedDepartments = normalizeCustomerDepartments({ department, departments });
         const updatedCustomer = await Customer.findOneAndUpdate({ _id: id }, {
             $set: {
-                department: department,
+                department: normalizedDepartments.department,
+                departments: normalizedDepartments.departments,
                 contactDetails: normalizeContactDetails(contactDetails),
                 companyName: companyName,
                 customerEmailId: customerEmailId,

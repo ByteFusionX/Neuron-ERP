@@ -51,6 +51,7 @@ interface AttachmentEntry {
 export interface Customer extends Document {
   clientRef: string;
   department: Types.ObjectId;
+  departments?: Types.ObjectId[];
   contactDetails: ContactDetail[];
   companyName: string;
   customerType: Types.ObjectId;
@@ -126,6 +127,7 @@ const attachmentSchema = new Schema({
 const customerSchema = new Schema<Customer>({
   clientRef: { type: String, required: true, unique: true },
   department: { type: Schema.Types.ObjectId, ref: "Department", required: true },
+  departments: [{ type: Schema.Types.ObjectId, ref: "Department" }],
   contactDetails: [{ type: contactDetailSchema, required: true }],
   companyName: { type: String, required: true },
   customerType: { type: Schema.Types.ObjectId, ref: "CustomerType", required: true },

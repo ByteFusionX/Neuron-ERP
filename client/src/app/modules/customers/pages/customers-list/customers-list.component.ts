@@ -41,6 +41,9 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   userId: string | undefined;
   shareAccess: boolean | undefined = false;
   transferAccess: boolean | undefined = false;
+  // main left edit/delete open to any viewer; only an explicit false on the role removes them
+  canEditCustomer = true;
+  canDeleteCustomer = true;
   createCustomer: boolean | undefined = false;
   private viewReport: string | undefined;
 
@@ -116,6 +119,8 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         this.createCustomer = privileges?.create;
         this.shareAccess = privileges?.share;
         this.transferAccess = privileges?.transfer;
+        this.canEditCustomer = privileges?.edit !== false;
+        this.canDeleteCustomer = privileges?.delete !== false;
         this.viewReport = privileges?.viewReport;
         this.userId = employee?._id;
         this.detailTabs = this.buildDetailTabs();
@@ -180,12 +185,12 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   private buildRowActions(): void {
     this.rowActions = [
-      { id: 'edit', label: 'Edit', icon: 'pencil', quick: true },
-      { id: 'changeStatus', label: 'Change Status', icon: 'flag' },
+      { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: () => !this.canEditCustomer },
+      { id: 'changeStatus', label: 'Change Status', icon: 'flag', hidden: () => !this.canEditCustomer },
       { id: 'viewShared', label: 'Shared With', icon: 'eye', hidden: (r) => !this.shareAccess || !r.sharedWith?.length },
       { id: 'share', label: 'Share', icon: 'send', hidden: () => !this.shareAccess },
       { id: 'transfer', label: 'Transfer', icon: 'transfer', hidden: (r) => !this.canTransfer(r) },
-      { id: 'delete', label: 'Delete', icon: 'trash', variant: 'danger', divider: true },
+      { id: 'delete', label: 'Delete', icon: 'trash', variant: 'danger', divider: true, hidden: () => !this.canDeleteCustomer },
     ];
   }
 

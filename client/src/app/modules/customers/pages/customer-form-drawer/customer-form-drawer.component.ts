@@ -1,5 +1,5 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
-import { NgIf } from '@angular/common';
+import { NgFor, NgIf } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { HttpEventType } from '@angular/common/http';
@@ -23,6 +23,7 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { CustomerAddressFieldsComponent } from '../../components/address-fields/address-fields.component';
 import { CustomerContactRepeaterComponent } from '../../components/contact-repeater/contact-repeater.component';
 import { CustomerFormStepperComponent } from '../../components/form-stepper/form-stepper.component';
+import { departmentPrivileges } from 'src/app/shared/utils/privilege-fallback';
 
 /**
  * Create and edit a customer in a slide-over.
@@ -32,7 +33,7 @@ import { CustomerFormStepperComponent } from '../../components/form-stepper/form
   selector: 'app-customer-form-drawer',
   standalone: true,
   templateUrl: './customer-form-drawer.component.html',
-  imports: [NgIf, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DetailDocumentsComponent,
+  imports: [NgIf, NgFor, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DetailDocumentsComponent,
     CustomerAddressFieldsComponent, CustomerContactRepeaterComponent, CustomerFormStepperComponent],
 })
 export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
@@ -87,7 +88,8 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   private companyNameWatched = false;
 
   customerForm = this.fb.group({
-    department: [null as string | null, Validators.required],
+    department: [null as string | null],
+    departments: [[] as string[], Validators.required],
     companyName: ['', Validators.required],
     companyAddress: ['', Validators.required],
     companyAddressStructured: this.newAddress(),
@@ -186,7 +188,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.optionsLoaded = true;
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe((e) => {
-        this.canCreateDepartment = !!e?.category?.privileges?.portalManagement?.department;
+        this.canCreateDepartment = departmentPrivileges(e?.category?.privileges).create;
         this.canCreateCustomerType = !!e?.category?.privileges?.portalManagement?.customerType;
       })
     );
@@ -246,7 +248,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   // --- form state ------------------------------------------------------------
 
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
-    1: ['department', 'companyName', 'companyAddress', 'shippingAddress', 'customerType', 'customerEmailId', 'contactNo', 'trn', 'shippingSites'],
+    1: ['departments', 'companyName', 'companyAddress', 'shippingAddress', 'customerType', 'customerEmailId', 'contactNo', 'trn', 'shippingSites'],
     2: ['contactDetails'],
     3: ['paymentTerms', 'creditLimit', 'creditStatus', 'taxExempt', 'currency', 'source'],
   };
@@ -297,7 +299,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.attachments = [];
     this.pendingFiles = [];
     this.customerForm.reset({
-      department: null, companyName: '', companyAddress: '', sameAsBilling: true, shippingAddress: '', customerType: null, customerEmailId: '', contactNo: '', trn: '',
+      department: null, departments: [], companyName: '', companyAddress: '', sameAsBilling: true, shippingAddress: '', customerType: null, customerEmailId: '', contactNo: '', trn: '',
       paymentTerms: null, creditLimit: null, creditStatus: 'Good Standing', taxExempt: false, currency: 'QAR', source: null,
     });
     this.customerForm.controls.companyAddressStructured.reset();
@@ -306,6 +308,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
 
   private seed(c: getCustomer): void {
     const id = (v: any): string | null => v?._id ?? (typeof v === 'string' ? v : null);
+    const departmentIds = (c.departments?.length ? c.departments.map(id) : [id(c.department)]).filter(Boolean) as string[];
     this.contactDetails.clear();
     (c.contactDetails?.length ? c.contactDetails : [null]).forEach((contact: any) => {
       const group = this.newContact();
@@ -313,7 +316,8 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       this.contactDetails.push(group);
     });
     this.customerForm.patchValue({
-      department: id(c.department),
+      department: departmentIds[0] ?? null,
+      departments: departmentIds,
       companyName: c.companyName,
       companyAddress: c.companyAddress,
       sameAsBilling: c.sameAsBilling ?? true,
@@ -344,6 +348,31 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.pendingFiles = [];
     this.customerForm.markAsPristine();
     this.customerForm.markAsUntouched();
+  }
+
+  isDepartmentSelected(departmentId: string): boolean {
+    return (this.customerForm.controls.departments.value ?? []).includes(departmentId);
+  }
+
+  toggleDepartment(departmentId: string, checked: boolean): void {
+    const current = this.customerForm.controls.departments.value ?? [];
+    const next = checked
+      ? Array.from(new Set([...current, departmentId]))
+      : current.filter((id) => id !== departmentId);
+    this.customerForm.controls.departments.setValue(next);
+    this.customerForm.controls.departments.markAsTouched();
+    this.customerForm.controls.departments.markAsDirty();
+    this.syncPrimaryDepartment();
+  }
+
+  primaryDepartmentLabel(): string {
+    const primaryId = this.customerForm.controls.department.value;
+    return this.departmentOptions.find((option) => option.value === primaryId)?.label ?? 'Not selected';
+  }
+
+  private syncPrimaryDepartment(): void {
+    const departments = this.customerForm.controls.departments.value ?? [];
+    this.customerForm.controls.department.setValue(departments[0] ?? null);
   }
 
   private newSite(): FormGroup {
@@ -474,7 +503,9 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.saving = true;
     this.companyExists = false;
     this.duplicateField = null;
+    this.syncPrimaryDepartment();
     const payload: any = this.customerForm.getRawValue();
+    payload.department = payload.departments?.[0] ?? null;
     payload.contactDetails = payload.contactDetails.map((c: any, i: number) => {
       const { _id, ...rest } = c;
       const withPrimary = { ...rest, isPrimary: i === 0 };

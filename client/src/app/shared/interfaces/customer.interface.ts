@@ -54,6 +54,7 @@ export interface getCustomer {
     _id: string;
     clientRef:string;
     department: getDepartment;
+    departments?: getDepartment[];
     contactDetails: ContactDetail[];
     companyName: string;
     companyAddress: string;
