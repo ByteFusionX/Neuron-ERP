@@ -15,10 +15,7 @@
 
             <div class="flex items-center gap-2 shrink-0">
                 <!-- List | Report. Both carry the same filters through the URL. -->
-                <div class="qr-toggle" role="tablist" aria-label="Quotation view">
-                    <a role="tab" aria-selected="false" routerLink="/quotations" [queryParams]="listQueryParams" class="qr-toggle-btn">List</a>
-                    <span role="tab" aria-selected="true" class="qr-toggle-btn qr-toggle-on">Report</span>
-                </div>
+                <app-view-toggle label="Quotation" active="report" listLink="/quotations" reportLink="/quotations/report" [listQueryParams]="listQueryParams"></app-view-toggle>
 
                 <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!report">
                     <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>

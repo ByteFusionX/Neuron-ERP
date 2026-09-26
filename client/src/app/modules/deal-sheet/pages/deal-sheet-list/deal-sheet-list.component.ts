@@ -24,7 +24,7 @@ import {
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailOverviewSection, DetailTableColumn, DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailOverviewField, DetailOverviewSection, DetailTableColumn, DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
@@ -33,6 +33,14 @@ import { UpdatedealsheetComponent } from '../../updatedealsheet-component/update
 /** Deal statuses selectable from the status-change modal; 'pending' is never a target (only a starting point). */
 const DEAL_STATUSES = ['pending', 'approved', 'rejected'] as const;
 type DealStatus = typeof DEAL_STATUSES[number];
+
+interface ApprovalRequiredItem {
+  type?: string;
+  message?: string;
+  approverRole?: string;
+  actual?: number | null;
+  threshold?: number | null;
+}
 
 /**
  * Merged Pending/Approved deal sheet grid, replacing the two separate Material list pages with one
@@ -323,9 +331,29 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       if (!result) return;
       this._quoteService.approveDeal(row._id, result.reason, this.userId).subscribe({
         next: () => { this.toaster.success('Deal approved'); this.getDeals(); },
-        error: (err) => this.toaster.error(err?.error?.message || 'Failed to approve deal'),
+        error: (err) => this.showApprovalGateError(err),
       });
     });
+  }
+
+  private showApprovalGateError(err: any): void {
+    const message = err?.error?.message || 'Failed to approve deal';
+    const missing = Array.isArray(err?.error?.missing) ? err.error.missing : [];
+    const approvalRequired = Array.isArray(err?.error?.approvalRequired) ? err.error.approvalRequired as ApprovalRequiredItem[] : [];
+
+    if (missing.length) {
+      this.toaster.error(`${message}: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` and ${missing.length - 4} more` : ''}`);
+      return;
+    }
+
+    if (approvalRequired.length) {
+      const first = approvalRequired[0];
+      const approver = first?.approverRole ? ` Required approver: ${first.approverRole}.` : '';
+      this.toaster.error(`${first?.message || message}.${approver}`);
+      return;
+    }
+
+    this.toaster.error(message);
   }
 
   rejectDeal(row: Quotatation): void {
@@ -509,6 +537,32 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           ...(deal?.comments?.length ? [{ type: 'field' as const, label: 'Latest Comment', value: deal.comments[deal.comments.length - 1] }] : []),
         ],
       },
+      {
+        title: 'Operations handoff readiness',
+        columns: '2',
+        fields: this.handoffReadinessFields(row),
+      },
+    ];
+  }
+
+  private handoffReadinessFields(row: Quotatation): DetailOverviewField[] {
+    const deal = row.dealData as any;
+    const selectedLines = this.itemRows(row);
+    const hasCurrentAcceptance = !!(row as any).customerAcceptance
+      && (row as any).customerAcceptance.acceptedRevision === (row.revision ?? 0)
+      && Array.isArray((row as any).customerAcceptance.lpoFiles)
+      && (row as any).customerAcceptance.lpoFiles.length > 0;
+    const lineIssues = selectedLines.length
+      ? selectedLines.filter((line) => !line['item'] || !Number(line['qty']) || !Number(line['price'])).length
+      : 1;
+
+    return [
+      { type: 'field', label: 'Payment terms', value: deal?.paymentTerms ? 'Ready' : 'Missing', noHover: true },
+      { type: 'field', label: 'Customer LPO', value: row.lpoFiles?.length ? 'Attached' : 'Missing', noHover: true },
+      { type: 'field', label: 'Accepted revision', value: hasCurrentAcceptance ? `Revision ${row.revision ?? 0}` : 'Needs reconfirmation', noHover: true },
+      { type: 'field', label: 'Execution lines', value: selectedLines.length ? `${selectedLines.length} selected` : 'None selected', numeric: true, noHover: true },
+      { type: 'field', label: 'Line completeness', value: lineIssues ? `${lineIssues} issue${lineIssues === 1 ? '' : 's'} to check` : 'Ready', noHover: true },
+      { type: 'field', label: 'Approval gate', value: 'Checked during approval', noHover: true },
     ];
   }
 }

@@ -53,6 +53,13 @@ interface EditHistoryEntry {
     changes?: FieldChange[];
 }
 
+interface CustomerAcceptance {
+    acceptedRevision: number;
+    acceptedAt: Date;
+    acceptedBy: Types.ObjectId;
+    lpoFiles: [];
+}
+
 /** Content of a quote as it stood before a revision-creating edit. */
 interface QuoteRevision {
     revision: number;
@@ -109,6 +116,7 @@ interface Quotation extends Document {
     editHistory: EditHistoryEntry[];
     revision: number;
     revisions: QuoteRevision[];
+    customerAcceptance: CustomerAcceptance;
 }
 
 export enum quoteStatus {
@@ -293,7 +301,7 @@ const editHistoryEntrySchema = new Schema<EditHistoryEntry>({
     },
     action: {
         type: String,
-        enum: ['Created', 'Updated', 'StatusChanged', 'DealApproved', 'DealRejected', 'DealRevoked'],
+        enum: ['Created', 'Updated', 'StatusChanged', 'CustomerAccepted', 'DealApproved', 'DealRejected', 'DealRevoked'],
         required: true,
     },
     fromStatus: {
@@ -426,6 +434,12 @@ const quotationSchema = new Schema<Quotation>({
         }],
         default: [],
         select: false,
+    },
+    customerAcceptance: {
+        acceptedRevision: { type: Number },
+        acceptedAt: { type: Date },
+        acceptedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        lpoFiles: [],
     },
 });
 

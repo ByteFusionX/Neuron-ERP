@@ -71,12 +71,13 @@ type ReportSection = 'overview' | 'breakdown' | 'attention';
  * stand next to it under the same List | Report toggle. Filters live in the URL, which is what
  * lets the toggle keep them: both routes read the same query params.
  */
+import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
   selector: 'app-quotation-report',
   templateUrl: './quotation-report.component.html',
   styleUrls: ['./quotation-report.component.css'],
   providers: [NumberFormatterPipe, DatePipe],
-  imports: [
+  imports: [ViewToggleComponent, 
     NgIf, NgFor, NgClass, AsyncPipe, DecimalPipe, DatePipe, RouterLink, FormsModule, NgIcon,
     ChartComponent, SmartFormModule, ActionButtonComponent, DataGridComponent, NumberFormatterPipe, KpiCardComponent, ReportFiltersComponent,
   ],

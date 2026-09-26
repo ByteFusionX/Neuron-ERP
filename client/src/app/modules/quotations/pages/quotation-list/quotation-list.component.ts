@@ -50,12 +50,13 @@ import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer
 import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app/shared/components/revision-history-modal/revision-history-modal.component';
 
+import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
     selector: 'app-quotation-list',
     templateUrl: './quotation-list.component.html',
     styleUrls: ['./quotation-list.component.css'],
     providers: [NumberFormatterPipe, DatePipe],
-    imports: [NgIcon, NgIf, NgClass, NgSwitch, NgSwitchCase, NgComponentOutlet, DatePipe, AsyncPipe, RouterLink, DataGridComponent, DataGridFieldComponent, DetailFieldComponent, DetailSectionComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent]
+    imports: [ViewToggleComponent, NgIcon, NgIf, NgClass, NgSwitch, NgSwitchCase, NgComponentOutlet, DatePipe, AsyncPipe, RouterLink, DataGridComponent, DataGridFieldComponent, DetailFieldComponent, DetailSectionComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent]
 })
 export class QuotationListComponent implements AfterViewInit {
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;

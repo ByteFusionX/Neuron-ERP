@@ -34,15 +34,7 @@
             (bulkAction)="onBulkAction($event, grid)"
         (create)="onCreateQuotation()">
         
-        <div dgToolbarExtra class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-100 dark:bg-erp-surface-dark-alt" role="tablist" aria-label="Quotation view">
-            <span role="tab" aria-selected="true"
-                class="inline-flex h-7 items-center rounded-md bg-white px-2.5 text-xs font-medium text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100">List</span>
-            <a role="tab" aria-selected="false" routerLink="/quotations/report" [queryParams]="reportQueryParams"
-                class="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-                <ng-icon name="heroChartBar" class="h-4 w-4"></ng-icon>
-                Report
-            </a>
-        </div>
+        <app-view-toggle dgToolbarExtra label="Quotation" active="list" listLink="/quotations" reportLink="/quotations/report" [reportQueryParams]="reportQueryParams"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
             <span *ngIf="row.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"

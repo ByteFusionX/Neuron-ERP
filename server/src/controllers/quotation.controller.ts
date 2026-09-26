@@ -5,6 +5,8 @@ import Job, { allocateStatus } from '../models/job.model';
 import Department from '../models/department.model';
 import Employee from '../models/employee.model'
 import Customer from '../models/customer.model';
+import ApprovalRule from '../models/approvalRule.model';
+import MasterListItem from '../models/masterListItem.model';
 import Enquiry from "../models/enquiry.model";
 import Product from "../models/products.model";
 import ProductCategory from "../models/productCategory.model";
@@ -30,7 +32,7 @@ const markEnquiryQuotedIfPromoted = async (quote: any, fromStatus?: string, toSt
 }
 
 // An enquiry still with presales has no finished estimation, so it can't be quoted yet.
-const PRESALE_IN_PROGRESS_STATUSES = ['Assigned To Presale Manager', 'Assigned To Presale Engineer', 'Assigned To Presales', 'Rejected by Presale Engineer', 'Rejected by Presale Manager'];
+const PRESALE_IN_PROGRESS_STATUSES = ['Sent to Presales', 'Assigned To Presale Manager', 'Assigned To Presale Engineer', 'Assigned To Presales', 'Rejected by Presale Engineer', 'Rejected by Presale Manager'];
 
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1130,6 +1132,182 @@ const selectedDealLines = (items: any[]): any[] => (Array.isArray(items) ? items
 
 const hasActiveDeal = (quote: any): boolean => !!quote?.dealData?.status && quote.dealData.status !== 'rejected';
 
+const acceptedRevisionMatchesCurrentQuote = (quote: any): boolean =>
+    !!quote?.customerAcceptance
+    && quote.customerAcceptance.acceptedRevision === (quote.revision ?? 0)
+    && Array.isArray(quote.customerAcceptance.lpoFiles)
+    && quote.customerAcceptance.lpoFiles.length > 0;
+
+const isPositiveNumber = (value: any): boolean => Number.isFinite(Number(value)) && Number(value) > 0;
+const isNonNegativeNumber = (value: any): boolean => Number.isFinite(Number(value)) && Number(value) >= 0;
+const hasReferenceValue = (value: any): boolean => !!(typeof value === 'object' ? value?._id : value);
+
+const dealHandoffReadinessIssues = (quote: any): string[] => {
+    const issues: string[] = [];
+    const dealData = quote?.dealData;
+    const selectedLines = selectedDealLines(dealData?.updatedItems);
+
+    if (!String(dealData?.paymentTerms ?? '').trim()) {
+        issues.push('payment terms');
+    }
+    if (!Array.isArray(quote?.lpoFiles) || quote.lpoFiles.length === 0) {
+        issues.push('customer LPO attachment');
+    }
+    if (!acceptedRevisionMatchesCurrentQuote(quote)) {
+        issues.push('customer acceptance for the current quotation revision');
+    }
+    if (!selectedLines.length) {
+        issues.push('at least one selected execution line');
+    }
+
+    selectedLines.forEach((line: any, index: number) => {
+        const label = line?.detail ? `"${line.detail}"` : `#${index + 1}`;
+        if (!String(line?.detail ?? '').trim()) {
+            issues.push(`line ${label} description`);
+        }
+        if (!isPositiveNumber(line?.quantity)) {
+            issues.push(`line ${label} quantity`);
+        }
+        if (!isNonNegativeNumber(line?.unitCost)) {
+            issues.push(`line ${label} unit cost`);
+        }
+        if (!isPositiveNumber(line?.unitSellingPrice)) {
+            issues.push(`line ${label} selling price`);
+        }
+        if (!hasReferenceValue(line?.supplierId) && !String(line?.supplierName ?? '').trim()) {
+            issues.push(`line ${label} supplier`);
+        }
+    });
+
+    (Array.isArray(dealData?.additionalCosts) ? dealData.additionalCosts : []).forEach((cost: any, index: number) => {
+        const label = cost?.name || cost?.type || `#${index + 1}`;
+        if (!String(cost?.type ?? '').trim()) {
+            issues.push(`cost ${label} type`);
+        }
+        if (!isNonNegativeNumber(cost?.value)) {
+            issues.push(`cost ${label} value`);
+        }
+        if (['Additional Cost', 'Supplier Discount'].includes(cost?.type) && !hasReferenceValue(cost?.supplierId)) {
+            issues.push(`cost ${label} supplier`);
+        }
+    });
+
+    return [...new Set(issues)];
+};
+
+const sumSelectedDealSelling = (lines: any[]): number =>
+    lines.reduce((sum: number, line: any) => sum + (Number(line?.unitSellingPrice) || 0) * (Number(line?.quantity) || 0), 0);
+
+const sumSelectedDealCost = (lines: any[]): number =>
+    lines.reduce((sum: number, line: any) => sum + (Number(line?.unitCost) || 0) * (Number(line?.quantity) || 0), 0);
+
+const dealCustomerDiscount = (dealData: any): number => {
+    const lineDiscount = Number(dealData?.totalDiscount) || 0;
+    const costDiscount = (Array.isArray(dealData?.additionalCosts) ? dealData.additionalCosts : [])
+        .filter((cost: any) => cost?.type === 'Customer Discount')
+        .reduce((sum: number, cost: any) => sum + (Number(cost?.value) || 0), 0);
+    return lineDiscount + costDiscount;
+};
+
+const dealAdditionalCostImpact = (dealData: any): number =>
+    (Array.isArray(dealData?.additionalCosts) ? dealData.additionalCosts : [])
+        .reduce((sum: number, cost: any) => {
+            const value = Number(cost?.value) || 0;
+            if (cost?.type === 'Additional Cost') return sum + value;
+            if (cost?.type === 'Supplier Discount') return sum - value;
+            return sum;
+        }, 0);
+
+const paymentTermDays = async (paymentTerms: string): Promise<number | null> => {
+    const trimmedTerms = String(paymentTerms ?? '').trim();
+    if (!trimmedTerms) return null;
+
+    const configuredTerm = await MasterListItem.findOne({
+        list: 'paymentTerms',
+        label: { $regex: `^${trimmedTerms.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+        isActive: true,
+    }).lean();
+    if (Number.isFinite(Number(configuredTerm?.value))) {
+        return Number(configuredTerm?.value);
+    }
+
+    const parsed = trimmedTerms.match(/\d+/);
+    return parsed ? Number(parsed[0]) : null;
+};
+
+const matchesApproverRole = (employee: any, approverRole: any): boolean => {
+    const employeeCategoryId = employee?.category?._id ?? employee?.category;
+    const approverRoleId = approverRole?._id ?? approverRole;
+    return !!employeeCategoryId && !!approverRoleId && employeeCategoryId.toString() === approverRoleId.toString();
+};
+
+const approvalRuleBreaches = async (quote: any, approver: any): Promise<any[]> => {
+    const enabledRules = await ApprovalRule.find({ enabled: true }).populate('approverRole', 'categoryName').lean();
+    if (!enabledRules.length) return [];
+
+    const selectedLines = selectedDealLines(quote?.dealData?.updatedItems);
+    const grossSelling = sumSelectedDealSelling(selectedLines);
+    const customerDiscount = dealCustomerDiscount(quote?.dealData);
+    const netSelling = Math.max(grossSelling - customerDiscount, 0);
+    const totalCost = sumSelectedDealCost(selectedLines) + dealAdditionalCostImpact(quote?.dealData);
+    const discountPercent = grossSelling > 0 ? (customerDiscount / grossSelling) * 100 : 0;
+    const marginPercent = netSelling > 0 ? ((netSelling - totalCost) / netSelling) * 100 : 0;
+    const days = await paymentTermDays(quote?.dealData?.paymentTerms);
+
+    const customer = await Customer.findById(quote?.client, 'companyName creditLimit creditStatus').lean();
+    const creditLimit = Number(customer?.creditLimit);
+    const creditExceptionAmount = Number.isFinite(creditLimit) ? Math.max(netSelling - creditLimit, 0) : 0;
+    const creditStatusRequiresApproval = !!customer?.creditStatus && customer.creditStatus !== 'Good Standing';
+
+    return enabledRules
+        .filter((rule: any) => {
+            const threshold = Number(rule.threshold);
+            if (!Number.isFinite(threshold)) return false;
+
+            switch (rule.type) {
+                case 'discount':
+                    return discountPercent > threshold;
+                case 'margin':
+                    return marginPercent < threshold;
+                case 'paymentTerms':
+                    return days !== null && days > threshold;
+                case 'creditException':
+                    return creditExceptionAmount > threshold || (creditStatusRequiresApproval && netSelling > threshold);
+                case 'deal':
+                    return netSelling > threshold;
+                default:
+                    return false;
+            }
+        })
+        .filter((rule: any) => !matchesApproverRole(approver, rule.approverRole))
+        .map((rule: any) => {
+            const threshold = Number(rule.threshold);
+            const approverRoleName = rule.approverRole?.categoryName || 'Configured approver role';
+            const values: Record<string, number | null> = {
+                discount: Number(discountPercent.toFixed(2)),
+                margin: Number(marginPercent.toFixed(2)),
+                paymentTerms: days,
+                creditException: Number(creditExceptionAmount.toFixed(2)),
+                deal: Number(netSelling.toFixed(2)),
+            };
+            const labels: Record<string, string> = {
+                discount: `Discount ${values.discount}% is above allowed ${threshold}%`,
+                margin: `Margin ${values.margin}% is below required ${threshold}%`,
+                paymentTerms: `Payment terms ${values.paymentTerms} days exceed allowed ${threshold} days`,
+                creditException: `Credit exception ${values.creditException} exceeds allowed ${threshold}`,
+                deal: `Deal value ${values.deal} exceeds approval threshold ${threshold}`,
+            };
+
+            return {
+                type: rule.type,
+                threshold,
+                actual: values[rule.type],
+                approverRole: approverRoleName,
+                message: labels[rule.type],
+            };
+        });
+};
+
 export const updateQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const quoteData = req.body;
@@ -1231,6 +1409,9 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         if (!quote.lpoFiles?.length) {
             return res.status(400).json({ message: "Upload the accepted customer LPO before raising a deal sheet" });
         }
+        if (!acceptedRevisionMatchesCurrentQuote(quote)) {
+            return res.status(409).json({ message: "The uploaded LPO does not match the current quotation revision. Upload the accepted LPO again before raising a deal sheet" });
+        }
         if (hasActiveDeal(quote)) {
             return res.status(409).json({ message: "A deal sheet is already in progress or approved for this quotation" });
         }
@@ -1330,11 +1511,29 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
         if (!quote.lpoFiles?.length) {
             return res.status(400).json({ message: "Customer LPO is required before approving the deal sheet" });
         }
+        if (!acceptedRevisionMatchesCurrentQuote(quote)) {
+            return res.status(409).json({ message: "Customer acceptance is tied to an older quotation revision. Reconfirm the current revision before approval" });
+        }
         if (quote.dealData.status !== 'pending') {
             return res.status(409).json({ message: `Deal sheet is already ${quote.dealData.status}` });
         }
         if (!selectedDealLines(quote.dealData.updatedItems).length) {
             return res.status(400).json({ message: "Deal sheet has no selected lines to hand over" });
+        }
+        const handoffIssues = dealHandoffReadinessIssues(quote);
+        if (handoffIssues.length) {
+            return res.status(400).json({
+                message: "Deal sheet is not ready for operations handoff",
+                missing: handoffIssues
+            });
+        }
+        const approverData = await getEmployeeData(req.user);
+        const approvalBreaches = await approvalRuleBreaches(quote, approverData);
+        if (approvalBreaches.length) {
+            return res.status(403).json({
+                message: "Approval rule authorization is required before this deal can be approved",
+                approvalRequired: approvalBreaches
+            });
         }
         const existingJob = await Job.findOne({ quoteId: req.body.quoteId, isDeleted: { $ne: true } });
         if (existingJob) {
@@ -1518,13 +1717,32 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
             await uploadFileToAws(file.filename, file.path, file.mimetype);
             return { fileName: file.filename, originalname: file.originalname };
         }));
+        const userData = await getEmployeeData(req.user);
+        const acceptedLpoFiles = [...(existingQuote.lpoFiles || []), ...newFiles];
+        const acceptedRevision = existingQuote.revision ?? 0;
 
         // Use $push to append new files to existing array
         const quote = await Quotation.findByIdAndUpdate(
             req.body.quoteId,
             {
-                lpoSubmitted: true,
-                $push: { lpoFiles: { $each: newFiles } }
+                $set: {
+                    lpoSubmitted: true,
+                    customerAcceptance: {
+                        acceptedRevision,
+                        acceptedAt: new Date(),
+                        acceptedBy: userData?._id,
+                        lpoFiles: acceptedLpoFiles,
+                    },
+                },
+                $push: {
+                    lpoFiles: { $each: newFiles },
+                    editHistory: {
+                        editedBy: userData?._id,
+                        editedAt: new Date(),
+                        action: 'CustomerAccepted',
+                        revision: acceptedRevision,
+                    }
+                }
             },
             { new: true } // Return updated document
         );
@@ -2137,11 +2355,21 @@ export const removeLpo = async (req: Request, res: Response, next: NextFunction)
     try {
         const { quoteId, fileName } = req.params;
         const quote = await Quotation.findById(quoteId);
-        if (quote) {
-            quote.lpoFiles = quote.lpoFiles.filter((file: any) => file.fileName !== fileName) as [];
-            await deleteFileFromAws(fileName);
-            await quote.save();
+        if (!quote || quote.isDeleted) {
+            return res.status(404).json({ message: 'Quote not found' });
         }
+        if (hasActiveDeal(quote)) {
+            return res.status(409).json({ message: "LPO files cannot be removed while a deal sheet is in progress or approved" });
+        }
+        const nextLpoFiles = (quote.lpoFiles || []).filter((file: any) => file.fileName !== fileName) as [];
+        quote.lpoFiles = nextLpoFiles as [];
+        if (!nextLpoFiles.length) {
+            quote.set('customerAcceptance', undefined);
+        } else if (quote.customerAcceptance) {
+            quote.customerAcceptance.lpoFiles = nextLpoFiles as [];
+        }
+        await deleteFileFromAws(fileName);
+        await quote.save();
         return res.status(200).json({ success: true });
     } catch (error) {
         console.log(error)

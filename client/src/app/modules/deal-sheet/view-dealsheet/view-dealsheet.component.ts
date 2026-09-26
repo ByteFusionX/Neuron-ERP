@@ -36,6 +36,14 @@ interface ViewDealsheetNavState {
   returnUrl?: string;
 }
 
+interface ApprovalRequiredItem {
+  type?: string;
+  message?: string;
+  approverRole?: string;
+  actual?: number | null;
+  threshold?: number | null;
+}
+
 @Component({
   selector: 'app-view-dealsheet',
   templateUrl: './view-dealsheet.component.html',
@@ -267,11 +275,31 @@ export class ViewDealsheetComponent implements OnInit {
           error: (error) => {
             this.isApproving = false;
             console.error('Error approving deal:', error);
-            this.toast.error('Failed to approve deal');
+            this.showApprovalGateError(error);
           }
         })
       }
     })
+  }
+
+  private showApprovalGateError(error: any): void {
+    const message = error?.error?.message || 'Failed to approve deal';
+    const missing = Array.isArray(error?.error?.missing) ? error.error.missing : [];
+    const approvalRequired = Array.isArray(error?.error?.approvalRequired) ? error.error.approvalRequired as ApprovalRequiredItem[] : [];
+
+    if (missing.length) {
+      this.toast.error(`${message}: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` and ${missing.length - 4} more` : ''}`);
+      return;
+    }
+
+    if (approvalRequired.length) {
+      const first = approvalRequired[0];
+      const approver = first?.approverRole ? ` Required approver: ${first.approverRole}.` : '';
+      this.toast.error(`${first?.message || message}.${approver}`);
+      return;
+    }
+
+    this.toast.error(message);
   }
 
   onReject() {
