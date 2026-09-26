@@ -26,6 +26,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Privileges } from '../../interfaces/employee.interface';
+import { departmentPrivileges } from '../../utils/privilege-fallback';
 import { combineLatest, Observable, Subscription } from 'rxjs';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
@@ -101,7 +102,7 @@ export class SideBarComponent
   > = {
     Announcement: 'announcementCount',
     AssignedJob: 'assignedJobCount',
-    ReAssignedJob: 'reAssignedJobCount',
+    ReAssignedJob: 'assignedJobCount',
     FeedbackRequest: 'enquiryCount',
     Enquiry: 'enquiryCount',
     DealSheet: 'dealSheetCount',
@@ -174,36 +175,10 @@ export class SideBarComponent
           id: 'jobs',
           label: 'Presale',
           icon: 'heroBriefcase',
-          hasDropdown: true,
+          route: '/assigned-jobs',
           privilegeKey: 'assignedJob',
           privilegeValue: 'none',
           notificationKey: 'assignedJobCount',
-          children: [
-            {
-              id: 'assignedJobs',
-              label: 'Assigned Jobs',
-              route: '/assigned-jobs',
-              privilegeKey: 'assignedJob',
-              privilegeValue: 'all',
-              notificationKey: 'assignedJobCount',
-            },
-            {
-              id: 'reassignedJobs',
-              label: 'Reassigned Jobs',
-              route: '/assigned-jobs/reassigned',
-              privilegeKey: 'assignedJob',
-              privilegeValue: 'none',
-              notificationKey: 'reAssignedJobCount',
-              alternateLabel: 'Assigned Jobs',
-              alternateCondition: (privileges) =>
-                privileges?.assignedJob?.viewReport !== 'all',
-            },
-            {
-              id: 'completedJobs',
-              label: 'Completed Jobs',
-              route: '/assigned-jobs/completed',
-            },
-          ],
         },
         {
           id: 'quotations',
@@ -511,16 +486,16 @@ export class SideBarComponent
           label: 'Departments',
           icon: 'heroBuildingLibrary',
           route: '/hr/departments',
-          privilegeKey: 'employee',
-          privilegeValue: 'none',
+          privilegeKey: 'departments',
+          privilegeValue: 'view',
         },
         {
           id: 'hr-roles-privileges',
           label: 'Roles & Privileges',
           icon: 'heroShieldCheck',
           route: '/hr/roles-privileges',
-          privilegeKey: 'employee',
-          privilegeValue: 'none',
+          privilegeKey: 'roles',
+          privilegeValue: 'view',
         },
         {
           id: 'employees',
@@ -724,6 +699,22 @@ export class SideBarComponent
     this.expandActiveRouteMenus(this.currentUrl);
   }
 
+  // Settings sections with sub-pages behave like the module dropdowns: the row toggles the list.
+  toggleSettingsSection(section: { id: string; children?: { path: string }[] }) {
+    if (!section.children?.length) {
+      this.router.navigate(['/settings', section.id]);
+      return;
+    }
+    const key = 'settings:' + section.id;
+    const isActive = this.settingsNav.activeSection?.id === section.id;
+    if (!isActive) {
+      this.expandedMenus[key] = true;
+      this.router.navigate(['/settings', section.id, section.children![0].path]);
+      return;
+    }
+    this.expandedMenus[key] = !this.expandedMenus[key];
+  }
+
   toggleMenu(menuId: string) {
     this.expandedMenus[menuId] = !this.expandedMenus[menuId];
     this.sidebarPrefs.setExpandedMenus(this.expandedMenus);
@@ -764,6 +755,8 @@ export class SideBarComponent
 
   hasAccess(item: MenuItem | SubMenuItem): boolean {
     if (!this.privileges || !item.privilegeKey) return true;
+
+    if (item.privilegeKey === 'departments') return departmentPrivileges(this.privileges).view;
 
     const privilegeObj = this.privileges[item.privilegeKey as keyof Privileges];
     if (!privilegeObj) return false;

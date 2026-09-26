@@ -3,21 +3,26 @@
   <div class="dg-card flex-1 min-w-0 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl overflow-hidden flex flex-col">
 
     <!-- Toolbar / bulk bar -->
-    <div class="relative shrink-0 flex items-center justify-between gap-3 px-5 h-16 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
+    <div class="relative shrink-0 flex items-center justify-between gap-3 px-5 py-4 min-h-16 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
       [ngClass]="selectedKeys.size > 0 ? 'bg-violet-50 dark:bg-violet-950/40' : ''">
       <div *ngIf="loading && data.length" class="dg-progress" role="progressbar" aria-label="Loading"></div>
       <ng-container *ngIf="selectedKeys.size === 0; else bulkBar">
-        <div class="flex items-center gap-2.5 min-w-0">
-          <nav *ngIf="breadcrumbs.length" aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
-            <ng-container *ngFor="let b of breadcrumbs">
-              <a *ngIf="b.link; else crumbText" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+        <div class="flex flex-col justify-center min-w-0">
+          <nav *ngIf="breadcrumbs.length" aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-500 min-w-0 mb-1.5">
+            <ng-container *ngFor="let b of breadcrumbs; let last = last">
+              <a *ngIf="b.link && !last; else crumbText" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
               <ng-template #crumbText><span class="truncate max-w-40">{{ b.label }}</span></ng-template>
-              <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" /></svg>
+              <svg *ngIf="!last" class="w-3 h-3 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" /></svg>
             </ng-container>
           </nav>
-          <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" [attr.aria-current]="breadcrumbs.length ? 'page' : null">{{ title }}</h2>
-          <!-- view tabs carry the counts when views are configured -->
-          <span *ngIf="!allViews.length" class="px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-full tabular-nums">{{ serverSide ? totalCount : (isFiltered ? filteredData.length + ' / ' + data.length : data.length) }}</span>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" [attr.aria-current]="breadcrumbs.length ? 'page' : null">{{ title }}</h2>
+              <!-- view tabs carry the counts when views are configured -->
+              <span *ngIf="!allViews.length" class="inline-flex h-5 min-w-5 items-center justify-center px-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-full tabular-nums">{{ serverSide ? totalCount : (isFiltered ? filteredData.length + ' / ' + data.length : data.length) }}</span>
+            </div>
+            <p *ngIf="subtitle" class="mt-1 text-xs leading-4 text-gray-500 dark:text-gray-400 truncate">{{ subtitle }}</p>
+          </div>
         </div>
       </ng-container>
 

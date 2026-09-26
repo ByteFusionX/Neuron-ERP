@@ -1,10 +1,11 @@
 import {
   Component, ContentChild, ElementRef, EventEmitter, HostBinding, HostListener, Input, OnChanges,
-  Output, SimpleChanges, TemplateRef, booleanAttribute,
+  OnDestroy, Output, SimpleChanges, TemplateRef, booleanAttribute,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
   DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent,
@@ -46,10 +47,11 @@ interface DataGridPrefs {
   templateUrl: './data-grid.component.html',
   styleUrls: ['./data-grid.component.css'],
 })
-export class DataGridComponent<T extends Record<string, any> = any> implements OnChanges {
+export class DataGridComponent<T extends Record<string, any> = any> implements OnChanges, OnDestroy {
   @Input() data: T[] = [];
   @Input() columns: DataGridColumn<T>[] = [];
   @Input() title = '';
+  @Input() subtitle = '';
   /** Parent pages shown before the title, e.g. [{ label: 'Home', link: '/' }]. The title is the current page. */
   @Input() breadcrumbs: DataGridBreadcrumb[] = [];
   @Input() rowKey = 'id';
@@ -77,6 +79,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() searchPlaceholder = 'Search…';
   /** Tabs above the grid, e.g. All / My enquiries / Overdue. The first one is active by default. */
   @Input() views: DataGridView<T>[] = [];
+  /** Sync the active grid view tab into the current URL query string, e.g. `?view=pending`. */
+  @Input({ transform: booleanAttribute }) syncViewWithUrl = true;
+  /** Query-string key used when `syncViewWithUrl` is enabled. Override if a page already owns `view`. */
+  @Input() viewUrlParam = 'view';
   /** Key for remembering columns, page size and views in this browser; nothing is stored when empty. */
   @Input() storageKey = '';
   /** Shows a skeleton in the detail panel body while the host loads the full record. */
@@ -142,8 +148,20 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   private defaultColumns: { key: string; visible: boolean }[] = [];
   private prefs: DataGridPrefs | null = null;
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
+  private routeSub: Subscription | null = null;
+  private pendingRouteViewId: string | null = null;
+  private applyingRouteView = false;
 
-  constructor(private host: ElementRef<HTMLElement>) {}
+  constructor(
+    private host: ElementRef<HTMLElement>,
+    private router: Router,
+    private route: ActivatedRoute,
+  ) {
+    this.routeSub = this.route.queryParamMap.subscribe((params) => {
+      this.pendingRouteViewId = params.get(this.viewUrlParam);
+      this.applyRouteViewIfAvailable();
+    });
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.prefs) this.loadPrefs();
@@ -153,9 +171,15 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       if (this.prefs?.columns) this.applyColumnState(this.prefs.columns);
     }
     if ((changes['views'] || !this.activeViewId) && !this.allViews.some((v) => v.id === this.activeViewId)) {
-      const stored = this.prefs?.activeViewId;
+      const stored = this.routeViewId ?? this.prefs?.activeViewId;
       const view = this.allViews.find((v) => v.id === stored) ?? this.allViews[0];
       if (view) this.applyView(view);
+    }
+    if (changes['viewUrlParam'] || changes['syncViewWithUrl']) {
+      this.pendingRouteViewId = this.route.snapshot.queryParamMap.get(this.viewUrlParam);
+    }
+    if (changes['views'] || changes['viewUrlParam'] || changes['syncViewWithUrl']) {
+      this.applyRouteViewIfAvailable();
     }
     if (changes['data']) {
       const keys = new Set(this.data.map((r) => r[this.rowKey]));
@@ -166,6 +190,11 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     if (changes['detailTabs'] && this.detailTabs.length && !this.activeTab) {
       this.activeTab = this.detailTabs[0].id;
     }
+  }
+
+  ngOnDestroy(): void {
+    this.routeSub?.unsubscribe();
+    if (this.searchDebounce) clearTimeout(this.searchDebounce);
   }
 
   // ---- columns ----
@@ -276,8 +305,42 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.selectedKeys.clear();
     this.emitSelection();
     this.savePrefs();
+    this.updateViewUrl(view.id);
     this.viewChange.emit(view);
     this.emitQuery();
+  }
+
+  private get routeViewId(): string | null {
+    return this.syncViewWithUrl ? this.pendingRouteViewId : null;
+  }
+
+  private applyRouteViewIfAvailable(): void {
+    const id = this.routeViewId;
+    if (!id || !this.allViews.length || id === this.activeViewId) return;
+    const view = this.allViews.find((v) => v.id === id);
+    if (!view) return;
+    this.applyingRouteView = true;
+    try {
+      this.applyView(view);
+      this.selectedKeys.clear();
+      this.emitSelection();
+      this.savePrefs();
+      this.viewChange.emit(view);
+      this.emitQuery();
+    } finally {
+      this.applyingRouteView = false;
+    }
+  }
+
+  private updateViewUrl(viewId: string): void {
+    if (!this.syncViewWithUrl || this.applyingRouteView) return;
+    const current = this.route.snapshot.queryParamMap.get(this.viewUrlParam);
+    if (current === viewId) return;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { [this.viewUrlParam]: viewId },
+      queryParamsHandling: 'merge',
+    });
   }
 
   private applyView(view: DataGridView<T>): void {

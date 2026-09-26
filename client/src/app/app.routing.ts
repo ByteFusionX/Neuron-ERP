@@ -1,5 +1,5 @@
-import { NgModule } from '@angular/core';
-import { RouterModule, Routes } from '@angular/router';
+import { NgModule, inject } from '@angular/core';
+import { Router, RouterModule, Routes } from '@angular/router';
 import { LoginGuard } from './core/guards/login/login.guard';
 import { AuthGuard } from './core/guards/auth/auth.guard';
 import { RoleGuard } from './core/guards/role/role.guard';
@@ -10,8 +10,6 @@ import { HomeLandingComponent } from './modules/home/pages/home-landing/home-lan
 import { CustomersListComponent } from './modules/customers/pages/customers-list/customers-list.component';
 import { AssignedJobsListComponent } from './modules/assigned-jobs/pages/assigned-jobs-list/assigned-jobs-list.component';
 import { UploadEstimationComponent } from './modules/assigned-jobs/pages/upload-estimation/upload-estimation.component';
-import { CompletedJobsListComponent } from './modules/assigned-jobs/pages/completed-jobs-list/completed-jobs-list.component';
-import { ReassignedJobsComponent } from './modules/assigned-jobs/pages/reassigned-jobs/reassigned-jobs.component';
 import { QuotationViewComponent } from './modules/quotations/pages/quotation-view/quotation-view.component';
 import { QuotationListComponent } from './modules/quotations/pages/quotation-list/quotation-list.component';
 import { DealSheetListComponent } from './modules/deal-sheet/pages/deal-sheet-list/deal-sheet-list.component';
@@ -126,10 +124,11 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/assigned-jobs/assigned-jobs.component').then((c) => c.AssignedJobsComponent),
     children: [
       { path: '', component: AssignedJobsListComponent },
+      { path: 'report', loadComponent: () => import('./modules/assigned-jobs/pages/presale-report/presale-report.component').then((c) => c.PresaleReportComponent) },
       { path: 'upload-estimations', component: UploadEstimationComponent },
       { path: 'edit-estimations', component: UploadEstimationComponent },
-      { path: 'completed', component: CompletedJobsListComponent },
-      { path: 'reassigned', component: ReassignedJobsComponent }
+      { path: 'completed', redirectTo: () => inject(Router).parseUrl('/assigned-jobs?tab=completed') },
+      { path: 'reassigned', redirectTo: () => inject(Router).parseUrl('/assigned-jobs?tab=assigned') }
     ]
   },
   {
@@ -193,18 +192,31 @@ export const routes: Routes = [
       },
       {
         path: 'notes-terms',
-        data: { section: 'notes-terms' },
-        loadComponent: () => import('./modules/settings/pages/notes-terms-settings/notes-terms-settings.component').then((c) => c.NotesTermsSettingsComponent),
+        pathMatch: 'full',
+        redirectTo: 'master-data',
       },
       {
         path: 'master-data',
         data: { section: 'master-data' },
-        loadComponent: () => import('./modules/settings/pages/master-data/master-data.component').then((c) => c.MasterDataComponent),
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'customer' },
+          { path: 'customer', loadComponent: () => import('./modules/settings/pages/master-data/customer-data.component').then((c) => c.CustomerDataComponent) },
+          { path: 'product', loadComponent: () => import('./modules/settings/pages/master-data/product-data.component').then((c) => c.ProductDataComponent) },
+          { path: 'purchase', loadComponent: () => import('./modules/settings/pages/master-data/purchase-data.component').then((c) => c.PurchaseDataComponent) },
+          { path: 'sales-documents', loadComponent: () => import('./modules/settings/pages/master-data/sales-documents.component').then((c) => c.SalesDocumentsComponent) },
+          { path: 'notes-terms', loadComponent: () => import('./modules/settings/pages/master-data/notes-terms-data.component').then((c) => c.NotesTermsDataComponent) },
+          { path: 'responsibilities', loadComponent: () => import('./modules/settings/pages/master-data/responsibilities.component').then((c) => c.ResponsibilitiesComponent) },
+        ],
       },
       {
         path: 'approval-rules',
         data: { section: 'approval-rules' },
-        loadComponent: () => import('./modules/settings/pages/approval-rules/approval-rules.component').then((c) => c.ApprovalRulesComponent),
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'rules' },
+          { path: 'rules', loadComponent: () => import('./modules/settings/pages/approval-rules/approval-rules.component').then((c) => c.ApprovalRulesComponent) },
+          { path: 'workflow', loadComponent: () => import('./modules/settings/pages/approval-rules/approval-workflow.component').then((c) => c.ApprovalWorkflowComponent) },
+          { path: 'limits', loadComponent: () => import('./modules/settings/pages/approval-rules/approval-limits.component').then((c) => c.ApprovalLimitsComponent) },
+        ],
       },
       {
         path: 'numbering',

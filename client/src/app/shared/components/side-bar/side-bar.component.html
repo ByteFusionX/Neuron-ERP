@@ -49,11 +49,13 @@
 
           <ng-container *ngFor="let group of settingsNav.groups">
             <p *ngIf="showFullBar" class="mb-1 mt-6 px-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">{{group.label}}</p>
-            <div *ngFor="let section of group.sections" class="my-1 cursor-pointer" [routerLink]="['/settings', section.id]">
+            <ng-container *ngFor="let section of group.sections">
+            <div class="my-1 cursor-pointer"
+              (click)="toggleSettingsSection(section)">
               <div
                 class="rounded-lg hover:bg-violet-50 hover:text-violet-800 dark:text-gray-200 dark:hover:bg-violet-950/40 dark:hover:text-violet-400 flex items-center relative transition-colors"
                 [ngClass]="showFullBar ? 'w-full px-3 py-2' : 'w-full py-2 px-0.5 flex-col justify-center gap-1'"
-                [class.active]="settingsNav.activeSection?.id === section.id">
+                [class.active]="settingsNav.activeSection?.id === section.id && (!section.children?.length || !showFullBar)">
                 <div class="relative flex items-center justify-center">
                   <ng-icon [name]="section.icon" class="text-xl text-gray-600 dark:text-gray-300"></ng-icon>
                 </div>
@@ -64,9 +66,26 @@
                   <p class="mt-0.5 text-sm font-medium truncate">{{section.label}}</p>
                   <span *ngIf="section.planned"
                     class="rounded px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">Soon</span>
+                  <ng-container *ngIf="section.children?.length">
+                    <ng-icon [name]="expandedMenus['settings:' + section.id] ? 'heroChevronUp' : 'heroChevronRight'"
+                      class="text-gray-600 dark:text-gray-300"></ng-icon>
+                  </ng-container>
                 </div>
               </div>
             </div>
+            <div class="overflow-hidden" *ngIf="showFullBar && section.children?.length && expandedMenus['settings:' + section.id]">
+              <ul class="flex flex-col gap-1">
+                <li *ngFor="let child of section.children"
+                  class="ml-8 py-2 px-3 hover:bg-violet-50 hover:text-violet-800 dark:text-gray-200 dark:hover:bg-violet-950/40 dark:hover:text-violet-400 rounded-md cursor-pointer transition-colors"
+                  [routerLink]="['/settings', section.id, child.path]"
+                  routerLinkActive="active">
+                  <button class="relative w-full flex items-center justify-between text-left gap-2 text-sm">
+                    <span>{{child.label}}</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+            </ng-container>
           </ng-container>
 
           <p *ngIf="!settingsNav.loading && !settingsNav.groups.length && settingsNav.search" class="px-3 py-6 text-center text-sm text-gray-400">

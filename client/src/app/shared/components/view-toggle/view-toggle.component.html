@@ -1,0 +1,20 @@
+<div class="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-100 dark:bg-erp-surface-dark-alt" role="tablist" [attr.aria-label]="label + ' view'">
+  @if (active === 'list') {
+    <span role="tab" aria-selected="true" [class]="base + ' ' + on">
+      <ng-icon name="heroListBullet" class="h-4 w-4"></ng-icon>List
+    </span>
+  } @else {
+    <a role="tab" aria-selected="false" [routerLink]="listLink" [queryParams]="listQueryParams" [class]="base + ' ' + off">
+      <ng-icon name="heroListBullet" class="h-4 w-4"></ng-icon>List
+    </a>
+  }
+  @if (active === 'report') {
+    <span role="tab" aria-selected="true" [class]="base + ' ' + on">
+      <ng-icon name="heroChartBar" class="h-4 w-4"></ng-icon>Report
+    </span>
+  } @else {
+    <a role="tab" aria-selected="false" [routerLink]="reportLink" [queryParams]="reportQueryParams" [class]="base + ' ' + off">
+      <ng-icon name="heroChartBar" class="h-4 w-4"></ng-icon>Report
+    </a>
+  }
+</div>

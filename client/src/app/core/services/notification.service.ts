@@ -89,7 +89,7 @@ export class NotificationService {
             case 'AssignedJob':
                 return { routePath: '/assigned-jobs' };
             case 'ReAssignedJob':
-                return { routePath: '/assigned-jobs/reassigned' };
+                return { routePath: '/assigned-jobs' };
 
             case 'FeedbackRequest':
             case 'Enquiry':
