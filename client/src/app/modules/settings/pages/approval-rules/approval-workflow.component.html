@@ -1,6 +1,6 @@
 <!-- Workflow Management -->
-<div class="w-full h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md" *ngIf="this.privileges?.portalManagement?.department || categorySection">
-    <app-settings-section-header label="Approval Limits" description="Approval steps for claims, project claims and purchases." icon="heroShieldCheck"></app-settings-section-header>
+<div class="w-full h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md" *ngIf="canViewDepartments || categorySection">
+    <app-settings-section-header label="Workflow" description="Approval steps for claims, project claims and purchases." icon="heroShieldCheck"></app-settings-section-header>
 
     <div class="mb-3 flex justify-between">
         <div class="flex gap-1">

@@ -320,6 +320,27 @@ export const totalEnquiries = async (req: Request, res: Response, next: NextFunc
     }
 }
 
+// True when parenting `id` under `parentId` would loop (self, or parent already sits below id).
+const parentCreatesLoop = async (id: string, parentId: string): Promise<boolean> => {
+    const seen = new Set<string>()
+    let current: string | null = parentId
+    while (current && !seen.has(current)) {
+        if (current === id) return true
+        seen.add(current)
+        const next: any = await internalDepartment.findById(current, 'parentDepartment').lean()
+        current = next?.parentDepartment ? String(next.parentDepartment) : null
+    }
+    return false
+}
+
+// Soft check: a head who belongs to another department is allowed, but worth flagging. Unassigned is fine.
+const headOutsideDepartment = async (departmentId: string, headId: any): Promise<string | null> => {
+    if (!headId) return null
+    const head: any = await Employee.findById(Array.isArray(headId) ? headId[0] : headId, 'firstName lastName department').lean()
+    if (!head?.department || String(head.department) === String(departmentId)) return null
+    return `${head.firstName} ${head.lastName} belongs to a different department`
+}
+
 export const createInternalDepartment = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const departmentData = req.body
@@ -398,10 +419,19 @@ export const updateInternalDepartment = async (req: Request, res: Response, next
         // Optional fields: only touched when the client sends them.
         if (data.description !== undefined) set.description = data.description
         if (data.parentDepartment !== undefined) {
-            if (data.parentDepartment && String(data.parentDepartment) === String(data._id)) {
-                return res.status(400).json({ message: 'A department cannot be its own parent' })
+            if (data.parentDepartment && await parentCreatesLoop(String(data._id), String(data.parentDepartment))) {
+                return res.status(400).json({ message: 'A department cannot be its own parent or sit under its own sub-department' })
             }
             set.parentDepartment = data.parentDepartment || null
+        }
+        if (data.isActive === false) {
+            const [members, children] = await Promise.all([
+                Employee.countDocuments({ department: data._id, isDeleted: { $ne: true } }),
+                internalDepartment.countDocuments({ parentDepartment: data._id, isDeleted: { $ne: true }, isActive: { $ne: false } }),
+            ])
+            if (members || children) {
+                return res.status(409).json({ message: `Cannot deactivate: ${members} employee(s) and ${children} active sub-department(s) remain. Move them first.` })
+            }
         }
         let department = await internalDepartment.findOneAndUpdate(
             {
@@ -413,7 +443,8 @@ export const updateInternalDepartment = async (req: Request, res: Response, next
 
         if (department) {
             department = await (await internalDepartment.findOne({ _id: department._id })).populate('departmentHead')
-            return res.status(200).json(department)
+            const warning = await headOutsideDepartment(data._id, data.departmentHead)
+            return res.status(200).json(warning ? { ...department.toObject(), warning } : department)
         }
         return res.status(502).json()
     } catch (error) {

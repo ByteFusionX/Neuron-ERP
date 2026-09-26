@@ -4,3 +4,20 @@
     vertical-align: middle;
     height: 100%;
   }
+
+.qt-meta { padding: 0.625rem 0.75rem; min-width: 0; }
+.qt-meta + .qt-meta { border-left: 1px solid #e5e7eb; }
+.qt-meta-label { font-size: 0.6875rem; color: #6b7280; }
+.qt-meta-value {
+  margin-top: 0.125rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:host-context(html.dark) .qt-meta + .qt-meta { border-left-color: #262626; }
+:host-context(html.dark) .qt-meta-label { color: #a1a1a1; }
+:host-context(html.dark) .qt-meta-value { color: #ededed; }

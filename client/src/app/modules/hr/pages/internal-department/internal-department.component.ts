@@ -3,6 +3,7 @@ import { AsyncPipe } from '@angular/common';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription, map } from 'rxjs';
+import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
@@ -38,6 +39,7 @@ export class InternalDepartmentComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) public data: getDepartment,
     private _employeeService: EmployeeService,
     private _profileService: ProfileService,
+    private _toast: ToastrService,
   ) { }
 
   onCloseClicked() {
@@ -95,6 +97,7 @@ export class InternalDepartmentComponent implements OnInit, OnDestroy {
         this._profileService.updateInternalDepartment({ _id: this.data._id, departmentName: this.name.value!, departmentHead: this.head.value!, createdDate: Date.now(), parentDepartment: this.parent.value, description: this.description.value ?? '', ...this.extras() }).subscribe({
           next: (data) => {
             if (data) {
+              if ((data as any).warning) this._toast.warning((data as any).warning)
               this.dialogRef.close(data)
             }
           }

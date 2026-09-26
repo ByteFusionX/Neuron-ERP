@@ -2,10 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { AsyncPipe, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
-import { HrApprovalLimitsComponent } from 'src/app/modules/hr/pages/hr-approval-limits/hr-approval-limits.component';
-import { EmployeeApprovalLimitsComponent } from './employee-approval-limits.component';
 import { ApprovalRule,ApprovalRuleService, ApprovalRuleType } from 'src/app/core/services/approval-rule.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
+import { settingsEditAccess } from '../../settings-edit-access';
 import { GetCategory } from 'src/app/shared/interfaces/employee.interface';
 
 interface RuleRow {
@@ -31,21 +31,16 @@ const RULE_DEFS: { type: ApprovalRuleType; label: string; description: string; u
 @Component({
   selector: 'app-approval-rules',
   standalone: true,
-  imports: [NgFor, NgIf, AsyncPipe, FormsModule, HrApprovalLimitsComponent, EmployeeApprovalLimitsComponent],
+  imports: [NgFor, NgIf, AsyncPipe, FormsModule, SettingsSectionHeaderComponent],
   template: `
-    <div class="flex gap-2 border-b border-gray-200 dark:border-gray-700 px-6 pt-4">
-      <button type="button" *ngFor="let t of tabs" (click)="active = t.id"
-        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-        [class.border-blue-600]="active === t.id" [class.text-blue-600]="active === t.id"
-        [class.border-transparent]="active !== t.id" [class.text-gray-600]="active !== t.id">
-        {{ t.label }}
-      </button>
-    </div>
-
-    <div *ngIf="active === 'rules'" class="p-6 space-y-3">
-      <p class="text-sm text-gray-500 dark:text-gray-400">
-        Define when approval is needed and who approves. Rules are saved here; they are not yet enforced in quotations or deals.
-      </p>
+    <app-settings-section-header label="Rules" description="Thresholds that route a deal to an approver." icon="heroAdjustmentsHorizontal"></app-settings-section-header>
+    <div class="p-6 space-y-3">
+      <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+        <p class="font-semibold">Deal approval rules are active controls.</p>
+        <p class="mt-1 text-blue-800/80 dark:text-blue-200/80">
+          Enabled rules are checked when a pending deal is approved. If a deal breaches a rule, only the configured approver role can approve it.
+        </p>
+      </div>
       <div *ngFor="let r of rules" class="rounded-xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-erp-surface-dark">
         <div class="flex flex-wrap items-center gap-4">
           <div class="min-w-[220px] flex-1">
@@ -65,7 +60,7 @@ const RULE_DEFS: { type: ApprovalRuleType; label: string; description: string; u
             <option [ngValue]="null">Approver role…</option>
             <option *ngFor="let c of (categories$ | async)" [ngValue]="c._id">{{ c.categoryName }}</option>
           </select>
-          <button type="button" (click)="save(r)" [disabled]="r.saving"
+          <button type="button" *ngIf="canEdit()" (click)="save(r)" [disabled]="r.saving"
             class="px-4 py-2 text-sm font-medium text-white rounded-lg bg-violet-700 hover:bg-violet-600 disabled:opacity-50">
             {{ r.saving ? 'Saving…' : 'Save' }}
           </button>
@@ -73,20 +68,12 @@ const RULE_DEFS: { type: ApprovalRuleType; label: string; description: string; u
         <p *ngIf="r.error" class="mt-2 text-xs text-red-600">{{ r.error }}</p>
       </div>
     </div>
-
-    <app-hr-approval-limits *ngIf="active === 'limits'"></app-hr-approval-limits>
-    <app-employee-approval-limits *ngIf="active === 'employee-limits'"></app-employee-approval-limits>
   `,
 })
 export class ApprovalRulesComponent implements OnInit {
-  tabs = [
-    { id: 'rules', label: 'Rules' },
-    { id: 'limits', label: 'Limits' },
-    { id: 'employee-limits', label: 'Employee limits' },
-  ];
-  active = 'rules';
   rules: RuleRow[] = RULE_DEFS.map(d => ({ ...d, enabled: false, threshold: null, approverRole: null, saving: false, error: '' }));
   categories$!: Observable<GetCategory[]>;
+  readonly canEdit = settingsEditAccess('approvalRulesEdit');
 
   constructor(private _rules: ApprovalRuleService, private _employeeService: EmployeeService) {}
 

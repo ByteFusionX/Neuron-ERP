@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
+import { settingsEditAccess } from '../../settings-edit-access';
 import { ApprovalLimit, GetCategory } from 'src/app/shared/interfaces/employee.interface';
 
 interface LimitRow {
@@ -11,7 +13,6 @@ interface LimitRow {
   name: string;
   employeeId: string;
   roleName: string;
-  roleLimit: ApprovalLimit | null;
   maxAmount: number | null;
   maxDiscountPercent: number | null;
   saved: ApprovalLimit;
@@ -19,14 +20,15 @@ interface LimitRow {
 }
 
 @Component({
-  selector: 'app-employee-approval-limits',
+  selector: 'app-approval-limits',
   standalone: true,
-  imports: [NgFor, NgIf, FormsModule],
+  imports: [NgFor, NgIf, FormsModule, SettingsSectionHeaderComponent],
   template: `
+    <app-settings-section-header label="Limits" description="The most each person may approve." icon="heroScale"></app-settings-section-header>
     <div class="p-6">
       <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-        A limit set here replaces the role's limit for that person. Leave a field empty to use the role's value.
-        Limits are saved here; they are not yet enforced in approvals.
+        The most each person may approve. Leave a field empty for no limit.
+        Limits are stored per employee.
       </p>
       <input type="search" [(ngModel)]="search" placeholder="Search by name or ID" aria-label="Search employees"
         class="mb-3 h-9 w-72 rounded-lg border border-gray-200 bg-white px-3 text-sm dark:border-white/10 dark:bg-erp-surface-dark">
@@ -37,37 +39,30 @@ interface LimitRow {
             <tr>
               <th class="px-4 py-3">Employee</th>
               <th class="px-4 py-3">Role</th>
-              <th class="px-4 py-3">Role limit</th>
               <th class="px-4 py-3">Max amount</th>
               <th class="px-4 py-3">Max discount %</th>
               <th class="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngIf="loading"><td colspan="6" class="px-4 py-6 text-center text-gray-500">Loading...</td></tr>
-            <tr *ngIf="!loading && !filtered.length"><td colspan="6" class="px-4 py-6 text-center text-gray-500">No employees found.</td></tr>
+            <tr *ngIf="loading"><td colspan="5" class="px-4 py-6 text-center text-gray-500">Loading...</td></tr>
+            <tr *ngIf="!loading && !filtered.length"><td colspan="5" class="px-4 py-6 text-center text-gray-500">No employees found.</td></tr>
             <tr *ngFor="let r of filtered" class="border-t border-gray-100 dark:border-gray-800">
               <td class="px-4 py-2">
                 <p class="font-medium text-gray-900 dark:text-gray-100">{{ r.name }}</p>
                 <p class="text-xs text-gray-500">{{ r.employeeId }}</p>
               </td>
               <td class="px-4 py-2 text-gray-700 dark:text-gray-300">{{ r.roleName }}</td>
-              <td class="px-4 py-2 text-xs text-gray-500">
-                <ng-container *ngIf="r.roleLimit && (r.roleLimit.maxAmount !== null || r.roleLimit.maxDiscountPercent !== null); else noRoleLimit">
-                  {{ r.roleLimit.maxAmount ?? '-' }} / {{ r.roleLimit.maxDiscountPercent ?? '-' }}%
-                </ng-container>
-                <ng-template #noRoleLimit>Not set</ng-template>
-              </td>
               <td class="px-4 py-2">
-                <input type="number" min="0" [(ngModel)]="r.maxAmount" placeholder="Role default" [attr.aria-label]="'Max amount for ' + r.name"
+                <input type="number" min="0" [(ngModel)]="r.maxAmount" placeholder="No limit" [attr.aria-label]="'Max amount for ' + r.name"
                   class="h-9 w-32 rounded-lg border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-erp-surface-dark">
               </td>
               <td class="px-4 py-2">
-                <input type="number" min="0" max="100" [(ngModel)]="r.maxDiscountPercent" placeholder="Role default" [attr.aria-label]="'Max discount for ' + r.name"
+                <input type="number" min="0" max="100" [(ngModel)]="r.maxDiscountPercent" placeholder="No limit" [attr.aria-label]="'Max discount for ' + r.name"
                   class="h-9 w-32 rounded-lg border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-erp-surface-dark">
               </td>
               <td class="px-4 py-2 text-right whitespace-nowrap">
-                <button type="button" (click)="save(r)" [disabled]="!dirty(r) || r.saving"
+                <button type="button" *ngIf="canEdit()" (click)="save(r)" [disabled]="!dirty(r) || r.saving"
                   class="rounded-lg bg-violet-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-600 disabled:opacity-40">
                   {{ r.saving ? 'Saving...' : 'Save' }}
                 </button>
@@ -79,9 +74,10 @@ interface LimitRow {
     </div>
   `,
 })
-export class EmployeeApprovalLimitsComponent implements OnInit {
+export class ApprovalLimitsComponent implements OnInit {
   private employeeService = inject(EmployeeService);
   private toast = inject(ToastrService);
+  readonly canEdit = settingsEditAccess('approvalRulesEdit');
 
   rows: LimitRow[] = [];
   loading = true;
@@ -110,7 +106,6 @@ export class EmployeeApprovalLimitsComponent implements OnInit {
             name: `${e.firstName} ${e.lastName}`,
             employeeId: e.employeeId,
             roleName: role?.categoryName ?? '-',
-            roleLimit: role?.approvalLimit ?? null,
             maxAmount: saved.maxAmount,
             maxDiscountPercent: saved.maxDiscountPercent,
             saved,
@@ -144,7 +139,7 @@ export class EmployeeApprovalLimitsComponent implements OnInit {
     });
   }
 
-  /** Cleared number inputs come back as null or ''; treat both as "use the role's value". */
+  /** Cleared number inputs come back as null or ''; treat both as "no limit". */
   private norm(v: number | string | null): number | null {
     return v === null || v === '' ? null : Number(v);
   }
