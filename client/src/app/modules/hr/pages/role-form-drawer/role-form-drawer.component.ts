@@ -6,6 +6,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
+import { customerPrivileges, departmentPrivileges, employeePrivileges } from 'src/app/shared/utils/privilege-fallback';
 
 type CheckKey = 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked'
   | 'quotationChecked' | 'jobSheetChecked' | 'purchaseChecked' | 'purchaseOrderChecked' | 'grnChecked' | 'technicalChecked' | 'supplierChecked'
@@ -41,6 +42,19 @@ const scope = (path: string, label = 'Data visibility'): PrivilegeScope => ({ pa
  * Create and edit a role (category) in a slide-over.
  * The host binds `open`, `mode` and (for edit) `category`, and reacts to `saved` / `closed`.
  */
+// Modules being reworked come first, in this order; the rest keep their existing order.
+const PRIORITY_MODULES = ['portal', 'departments', 'employee', 'customer'];
+const orderModules = (modules: PrivilegeModule[]): PrivilegeModule[] => {
+  const rank = (m: PrivilegeModule) => {
+    const i = PRIORITY_MODULES.indexOf(m.key);
+    return i === -1 ? PRIORITY_MODULES.length : i;
+  };
+  return modules
+    .map((m, idx) => ({ m, idx }))
+    .sort((a, b) => rank(a.m) - rank(b.m) || a.idx - b.idx)
+    .map(x => x.m);
+};
+
 @Component({
   selector: 'app-role-form-drawer',
   standalone: true,
@@ -51,6 +65,8 @@ export class RoleFormDrawerComponent implements OnChanges {
   @Input() open = false;
   @Input() mode: 'create' | 'edit' | 'view' = 'create';
   @Input() category: GetCategory | null = null;
+  /** Whether the viewer may switch from the read-only view into editing. */
+  @Input() canEdit = true;
   /** Fires with the saved role once the server accepted the create or edit. */
   @Output() saved = new EventEmitter<GetCategory>();
   @Output() closed = new EventEmitter<void>();
@@ -89,7 +105,7 @@ export class RoleFormDrawerComponent implements OnChanges {
   privilegeSearch = '';
   selectedKey: string | null = null;
 
-  readonly privilegeModules: PrivilegeModule[] = [
+  readonly privilegeModules: PrivilegeModule[] = orderModules([
     {
       key: 'dashboard', label: 'Dashboard', abbr: 'DB', description: 'Revenue and gross profit comparison', alwaysOn: true, flags: [],
       scopes: [{
@@ -100,7 +116,12 @@ export class RoleFormDrawerComponent implements OnChanges {
     },
     {
       key: 'employee', label: 'Employees', abbr: 'EM', description: 'Staff records', master: 'employeeChecked', group: 'employee',
-      scopes: [scope('employee.viewReport')], flags: [{ path: 'employee.create', label: 'Create employees' }],
+      scopes: [scope('employee.viewReport')], flags: [
+        { path: 'employee.create', label: 'Create employees' },
+        { path: 'employee.edit', label: 'Edit employees' },
+        { path: 'employee.delete', label: 'Delete employees' },
+        { path: 'employee.block', label: 'Block / unblock employees' },
+      ],
     },
     {
       key: 'announcement', label: 'Announcements', abbr: 'AN', description: 'Company-wide notices', master: 'announcementChecked', group: 'announcement',
@@ -111,6 +132,8 @@ export class RoleFormDrawerComponent implements OnChanges {
       scopes: [scope('customer.viewReport')],
       flags: [
         { path: 'customer.create', label: 'Create customers' },
+        { path: 'customer.edit', label: 'Edit customers' },
+        { path: 'customer.delete', label: 'Delete customers' },
         { path: 'customer.share', label: 'Share with other employees' },
         { path: 'customer.transfer', label: 'Transfer to other employees' },
       ],
@@ -125,12 +148,12 @@ export class RoleFormDrawerComponent implements OnChanges {
         path: 'assignedJob.viewReport', label: 'Data visibility',
         options: [{ value: 'all', label: 'All presale jobs' }, { value: 'assigned', label: 'Assigned to user' }],
       }],
-      flags: [],
+      flags: [{ path: 'assignedJob.assign', label: 'Assign presale jobs to employees' }],
     },
     {
       key: 'quotation', label: 'Quotations', abbr: 'QT', description: 'Customer quotations', master: 'quotationChecked', group: 'quotation',
       scopes: [scope('quotation.viewReport')],
-      flags: [{ path: 'quotation.create', label: 'Create quotations' }, { path: 'quotation.canApprove', label: 'Approve quotations' }],
+      flags: [{ path: 'quotation.create', label: 'Create quotations' }],
     },
     {
       key: 'dealSheet', label: 'Deal Sheet', abbr: 'DS', description: 'Deal sheet approvals',
@@ -211,16 +234,46 @@ export class RoleFormDrawerComponent implements OnChanges {
       ],
     },
     {
+      key: 'departments', label: 'Departments', abbr: 'DP', description: 'HR departments',
+      scopes: [],
+      flags: [
+        { path: 'departments.view', label: 'Departments (view)' },
+        { path: 'departments.create', label: 'Departments (create)' },
+        { path: 'departments.edit', label: 'Departments (edit)' },
+        { path: 'departments.delete', label: 'Departments (delete)' },
+      ],
+    },
+    {
+      key: 'roles', label: 'Roles & Privileges', abbr: 'RP', description: 'Manage roles and what they can access',
+      scopes: [],
+      flags: [
+        { path: 'roles.view', label: 'Roles (view)' },
+        { path: 'roles.create', label: 'Roles (create)' },
+        { path: 'roles.edit', label: 'Roles (edit)' },
+        { path: 'roles.delete', label: 'Roles (delete)' },
+      ],
+    },
+    {
       key: 'portal', label: 'Settings', abbr: 'ST', description: 'Master data management', master: 'portalChecked', group: 'portal',
       scopes: [],
       flags: [
-        { path: 'portalManagement.department', label: 'Departments (create / edit / delete)' },
         { path: 'portalManagement.notesAndTerms', label: 'Customer notes and T&C (create / edit / delete)' },
         { path: 'portalManagement.companyTarget', label: 'Company target (create / edit)' },
         { path: 'portalManagement.customerType', label: 'Customer type (create / edit)' },
+        { path: 'portalManagement.companyProfileEdit', label: 'Company profile (edit)' },
+        { path: 'portalManagement.numbering', label: 'Numbering (view)' },
+        { path: 'portalManagement.numberingEdit', label: 'Numbering (edit)' },
+        { path: 'portalManagement.masterData', label: 'Master data (view)' },
+        { path: 'portalManagement.masterDataEdit', label: 'Master data (edit)' },
+        { path: 'portalManagement.approvalRules', label: 'Approvals (view)' },
+        { path: 'portalManagement.approvalRulesEdit', label: 'Approvals (edit)' },
+        { path: 'portalManagement.notifications', label: 'Notifications (view)' },
+        { path: 'portalManagement.notificationsEdit', label: 'Notifications (edit)' },
+        { path: 'portalManagement.audit', label: 'Audit & History (view)' },
+        { path: 'portalManagement.auditEdit', label: 'Audit & History (edit)' },
       ],
     },
-  ];
+  ]);
 
   private _fb = inject(FormBuilder);
   private _employeeService = inject(EmployeeService);
@@ -233,10 +286,6 @@ export class RoleFormDrawerComponent implements OnChanges {
     role: ['', Validators.required],
     isSalespersonWithTarget: [false],
     responsibilities: new FormControl<string[]>([], { nonNullable: true }),
-    approvalLimit: this._fb.group({
-      maxAmount: [null as number | null],
-      maxDiscountPercent: [null as number | null],
-    }),
     privileges: this._fb.group({
       dashboard: this._fb.group({
         viewReport: 'all',
@@ -244,7 +293,10 @@ export class RoleFormDrawerComponent implements OnChanges {
       }),
       employee: this._fb.group({
         viewReport: 'none',
-        create: [false]
+        create: [false],
+        edit: [false],
+        delete: [false],
+        block: [false],
       }),
       announcement: this._fb.group({
         viewReport: 'none',
@@ -254,6 +306,8 @@ export class RoleFormDrawerComponent implements OnChanges {
       customer: this._fb.group({
         viewReport: 'none',
         create: [false],
+        edit: [false],
+        delete: [false],
         share: [false],
         transfer: [false],
       }),
@@ -262,12 +316,12 @@ export class RoleFormDrawerComponent implements OnChanges {
         create: [false]
       }),
       assignedJob: this._fb.group({
-        viewReport: 'none'
+        viewReport: 'none',
+        assign: [false],
       }),
       quotation: this._fb.group({
         viewReport: 'none',
         create: [false],
-        canApprove: [false],
       }),
       dealSheet: [false],
       jobSheet: this._fb.group({
@@ -331,11 +385,33 @@ export class RoleFormDrawerComponent implements OnChanges {
         viewMargin: [false],
         overrideDiscount: [false],
       }),
+      departments: this._fb.group({
+        view: [false],
+        create: [false],
+        edit: [false],
+        delete: [false],
+      }),
+      roles: this._fb.group({
+        view: [false],
+        create: [false],
+        edit: [false],
+        delete: [false],
+      }),
       portalManagement: this._fb.group({
-        department: [false],
         notesAndTerms: [false],
         companyTarget: [false],
-        customerType: [false]
+        customerType: [false],
+        numbering: [false],
+        masterData: [false],
+        approvalRules: [false],
+        notifications: [false],
+        audit: [false],
+        companyProfileEdit: [false],
+        numberingEdit: [false],
+        masterDataEdit: [false],
+        approvalRulesEdit: [false],
+        notificationsEdit: [false],
+        auditEdit: [false]
       })
     })
   })
@@ -415,11 +491,13 @@ export class RoleFormDrawerComponent implements OnChanges {
       role: category.role,
       isSalespersonWithTarget: category.isSalespersonWithTarget,
       responsibilities: this.responsibilityKeys(category),
-      approvalLimit: {
-        maxAmount: category.approvalLimit?.maxAmount ?? null,
-        maxDiscountPercent: category.approvalLimit?.maxDiscountPercent ?? null,
-      },
-      privileges: category.privileges as any,
+      // A role that only has the legacy `portalManagement.department` flag shows (and saves) as having the new department flags.
+      privileges: (category.privileges ? {
+        ...category.privileges,
+        departments: departmentPrivileges(category.privileges),
+        employee: { ...category.privileges.employee, ...employeePrivileges(category.privileges) },
+        customer: { ...category.privileges.customer, ...customerPrivileges(category.privileges) },
+      } : category.privileges) as any,
     });
     const compare = this.dashboardGroup.get('compareAgainst');
     if (category.isSalespersonWithTarget) compare?.enable();

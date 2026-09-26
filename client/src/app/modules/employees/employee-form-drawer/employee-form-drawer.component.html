@@ -97,7 +97,7 @@
             </app-sf-field>
         </app-sf-section>
 
-        <app-sf-section *ngIf="showStep(2) && canViewCompensation" title="Compensation"
+        <app-sf-section *ngIf="showStep(2) && showCompensationSection && canViewCompensation" title="Compensation"
             description="Visible only to roles with the view compensation privilege." columns="2" formGroupName="compensation">
             <app-sf-field label="Cost rate / hour" [control]="employeeForm.controls.compensation.controls.costRatePerHour" optional>
                 <app-sf-number formControlName="costRatePerHour" [min]="0" [stepper]="false" placeholder="0.00"></app-sf-number>

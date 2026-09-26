@@ -26,15 +26,6 @@
 
 
 
-    <app-sf-section title="Approval limit" description="The most this role may approve. Leave empty for no limit." columns="2" formGroupName="approvalLimit">
-      <app-sf-field label="Maximum amount" optional [control]="categoryForm.controls.approvalLimit.controls.maxAmount">
-        <app-sf-number formControlName="maxAmount" [min]="0" [stepper]="false" placeholder="No limit"></app-sf-number>
-      </app-sf-field>
-      <app-sf-field label="Maximum discount" optional [control]="categoryForm.controls.approvalLimit.controls.maxDiscountPercent">
-        <app-sf-number formControlName="maxDiscountPercent" [min]="0" [max]="100" [stepper]="false" suffix="%" placeholder="No limit"></app-sf-number>
-      </app-sf-field>
-    </app-sf-section>
-
     <app-sf-section title="Access privileges" description="Switch modules on, then choose what the role can see and do in each.">
       <div class="space-y-3">
 
@@ -187,7 +178,7 @@
   <ng-container sfDrawerFooter>
     <span *ngIf="categoryForm.invalid && categoryForm.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
     <app-action-button variant="secondary" (click)="onClose(false)">{{ viewing ? 'Close' : 'Cancel' }}</app-action-button>
-    <app-action-button *ngIf="viewing" variant="primary" (click)="startEditing()">Edit</app-action-button>
+    <app-action-button *ngIf="viewing && canEdit" variant="primary" (click)="startEditing()">Edit</app-action-button>
     <app-action-button *ngIf="!viewing" variant="primary" type="submit" form="role-form" [disabled]="isSaving">
       {{ isSaving ? 'Saving...' : (isEdit ? 'Save Changes' : 'Create Role') }}
     </app-action-button>

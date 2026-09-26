@@ -1,12 +1,11 @@
-import { SettingsSectionHeaderComponent } from 'src/app/modules/settings/pages/settings-section-header.component';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { NgIf } from '@angular/common';
 import { Subscription, filter, take } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { GetCategory } from 'src/app/shared/interfaces/employee.interface';
+import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
-import { DataGridColumn, DataGridRowAction, DataGridRowActionEvent } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DataGridBreadcrumb, DataGridColumn, DataGridRowAction, DataGridRowActionEvent } from 'src/app/shared/components/data-grid/data-grid.model';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { RoleFormDrawerComponent } from '../role-form-drawer/role-form-drawer.component';
 
@@ -15,7 +14,7 @@ import { RoleFormDrawerComponent } from '../role-form-drawer/role-form-drawer.co
   standalone: true,
   templateUrl: './hr-roles-privileges.component.html',
   styleUrls: ['./hr-roles-privileges.component.css'],
-  imports: [SettingsSectionHeaderComponent, NgIf, DataGridComponent, RoleFormDrawerComponent],
+  imports: [NgIf, DataGridComponent, RoleFormDrawerComponent],
 })
 export class HrRolesPrivilegesComponent implements OnInit, OnDestroy {
   employeeId!: string;
@@ -25,6 +24,7 @@ export class HrRolesPrivilegesComponent implements OnInit, OnDestroy {
   formCategory: GetCategory | null = null;
   isCategoryLoading: boolean = true;
   roles: GetCategory[] = [];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'HR' }];
 
   columns: DataGridColumn<GetCategory>[] = [
     { key: 'categoryName', label: 'Role Name', sortable: true, locked: true },
@@ -32,9 +32,14 @@ export class HrRolesPrivilegesComponent implements OnInit, OnDestroy {
     { key: 'employeeCount', label: 'No. of Employees', type: 'number', sortable: true },
   ];
   rowActions: DataGridRowAction<GetCategory>[] = [
-    { id: 'edit', label: 'Edit', icon: 'pencil', quick: true },
-    { id: 'delete', label: 'Delete', icon: 'trash', variant: 'danger', quick: true },
+    { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: () => !this.privileges?.roles?.edit },
+    { id: 'delete', label: 'Delete', icon: 'trash', variant: 'danger', quick: true, hidden: () => !this.privileges?.roles?.delete },
   ];
+  privileges: Privileges | undefined;
+
+  get gridCreateLabel(): string {
+    return this.privileges?.roles?.create ? 'Create Role' : '';
+  }
 
   private subscriptions = new Subscription();
 
@@ -48,7 +53,8 @@ export class HrRolesPrivilegesComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._employeeService.employeeData$.pipe(filter((e) => !!e), take(1)).subscribe((employee) => {
         this.employeeId = employee?._id!;
-        this.categorySection = employee?.category.role == 'superAdmin';
+        this.privileges = employee?.category?.privileges;
+        this.categorySection = !!this.privileges?.roles?.view;
 
         if (this.categorySection) this.loadCategories();
       })

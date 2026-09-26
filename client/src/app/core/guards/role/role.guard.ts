@@ -43,42 +43,43 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 }
                 break;
 
+            case '/hr/departments':
+            case '/hr/departments/overview':
+                if (!isSuperAdmin && !privileges?.departments?.view) {
+                    router.navigate(['/home']);
+                    return false;
+                }
+                break;
+
+            case '/hr/roles-privileges':
+                if (!isSuperAdmin && !privileges?.roles?.view) {
+                    router.navigate(['/home']);
+                    return false;
+                }
+                break;
+
             case '/announcements':
-                if (privileges?.announcement?.viewReport == 'none') {
+                if (!hasView(privileges?.announcement?.viewReport)) {
                     router.navigate(['/home']);
                     return false;
                 }
                 break;
 
             case '/customers':
-                if (privileges?.customer?.viewReport == 'none') {
+                if (!hasView(privileges?.customer?.viewReport)) {
                     router.navigate(['/home']);
                     return false;
                 }
                 break;
 
             case '/enquiry':
-                if (privileges?.enquiry?.viewReport == 'none') {
+                if (!hasView(privileges?.enquiry?.viewReport)) {
                     router.navigate(['/home']);
                     return false;
                 }
                 break;
 
             case '/assigned-jobs':
-                if (privileges?.assignedJob?.viewReport == 'none' || privileges?.assignedJob?.viewReport == 'assigned') {
-                    router.navigate(['/home']);
-                    return false;
-                }
-                break;
-
-            case '/assigned-jobs/reassigned':
-                if (privileges?.assignedJob?.viewReport == 'none') {
-                    router.navigate(['/home']);
-                    return false;
-                }
-                break;
-
-            case '/assigned-jobs/completed':
                 if (privileges?.assignedJob?.viewReport == 'none') {
                     router.navigate(['/home']);
                     return false;
@@ -93,7 +94,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 break;
 
             case '/job-sheet':
-                if (privileges?.jobSheet?.viewReport == 'none') {
+                if (!hasView(privileges?.jobSheet?.viewReport)) {
                     router.navigate(['/home']);
                     return false;
                 }
@@ -145,7 +146,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                         return false;
                     }
                 } else if (url.startsWith('/purchase') && !url.startsWith('/purchase-order')) {
-                    if (privileges?.purchase?.viewReport == 'none') {
+                    if (!hasView(privileges?.purchase?.viewReport)) {
                         router.navigate(['/home']);
                         return false;
                     }
@@ -166,17 +167,17 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                         return false;
                     }
                 } else if (url.startsWith('/suppliers')) {
-                    if (privileges?.supplier?.viewReport == 'none') {
+                    if (!hasView(privileges?.supplier?.viewReport)) {
                         router.navigate(['/home']);
                         return false;
                     }
                 } else if (url.startsWith('/products')) {
-                    if (privileges?.inventory?.products?.viewReport == 'none') {
+                    if (!hasView(privileges?.inventory?.products?.viewReport)) {
                         router.navigate(['/home']);
                         return false;
                     }
                 } else if (url.startsWith('/stock')) {
-                    if (privileges?.inventory?.stockEntries?.viewReport == 'none') {
+                    if (!hasView(privileges?.inventory?.stockEntries?.viewReport)) {
                         router.navigate(['/home']);
                         return false;
                     }
@@ -258,12 +259,17 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
         return true;
     }
 
+    // A missing view level (role saved before the flag existed) means no access, same as 'none'.
+    function hasView(level?: string): boolean {
+        return !!level && level !== 'none';
+    }
+
     function canViewEmployees(): boolean {
-        return privileges?.employee?.viewReport !== 'none';
+        return hasView(privileges?.employee?.viewReport);
     }
 
     function canViewQuotations(): boolean {
-        return privileges?.quotation?.viewReport !== 'none';
+        return hasView(privileges?.quotation?.viewReport);
     }
 
     function canViewDealSheet(): boolean {

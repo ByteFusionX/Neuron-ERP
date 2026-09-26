@@ -33,7 +33,6 @@ export class EmployeesComponent implements OnInit, OnDestroy {
   isLoading = true;
   createEmployee: boolean | undefined = false;
   canEdit = false;
-  currentUserId: string | undefined;
 
   private sortKey: string | null = null;
   private sortDir: 'asc' | 'desc' | null = null;
@@ -49,7 +48,7 @@ export class EmployeesComponent implements OnInit, OnDestroy {
 
   rowActions: DataGridRowAction<EmployeeRow>[] = [
     { id: 'view', label: 'Open profile', icon: 'eye', quick: true },
-    { id: 'edit', label: 'Edit employee', icon: 'pencil', quick: true, hidden: (r) => !this.canEdit || r._id === this.currentUserId },
+    { id: 'edit', label: 'Edit employee', icon: 'pencil', quick: true, hidden: () => !this.canEdit },
   ];
 
   detailLoading = false;
@@ -86,8 +85,7 @@ export class EmployeesComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((data) => {
         this.createEmployee = data?.category.privileges.employee.create;
-        this.canEdit = !!data;
-        this.currentUserId = data?._id;
+        this.canEdit = !!data && (data.category.privileges.employee.edit ?? !!data.category.privileges.employee.create);
       })
     );
     this.loadLookups();

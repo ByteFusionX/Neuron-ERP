@@ -20,7 +20,7 @@
   >
     <ng-container headerActions>
       <app-action-button variant="primary" *ngIf="!isOwnProfile" (click)="onEmployeeEdit()">Edit</app-action-button>
-      <app-action-button variant="secondary" *ngIf="isSuperAdmin && !isOwnProfile && employeeData" (click)="toggleBlockStatus()">
+      <app-action-button variant="secondary" *ngIf="canBlock && employeeData" (click)="toggleBlockStatus()">
         {{ employeeData.isBlocked ? 'Unblock' : 'Block' }}
       </app-action-button>
       <app-action-button variant="secondary" *ngIf="canDelete" (click)="deleteEmployee()">Delete</app-action-button>
@@ -40,8 +40,8 @@
         <app-detail-field label="Expiry">{{ e.driverLicense?.expiry ? (e.driverLicense!.expiry | date: 'dd MMM yyyy') : '—' }}</app-detail-field>
       </app-detail-section>
 
-      <!-- The API only sends pay data to roles with the view compensation privilege. -->
-      <app-detail-section title="Compensation" *ngIf="e.compensation">
+      <!-- Temporarily hidden until compensation display is re-enabled. -->
+      <app-detail-section title="Compensation" *ngIf="false && e.compensation">
         <app-detail-field label="Cost rate / hour" numeric>{{ e.compensation.costRatePerHour != null ? (e.compensation.costRatePerHour | number: '1.2-2') : '—' }}</app-detail-field>
         <app-detail-field label="Billing rate / hour" numeric>{{ e.compensation.billingRate != null ? (e.compensation.billingRate | number: '1.2-2') : '—' }}</app-detail-field>
       </app-detail-section>

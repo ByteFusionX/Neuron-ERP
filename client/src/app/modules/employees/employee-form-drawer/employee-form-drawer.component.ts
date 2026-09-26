@@ -35,6 +35,7 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
   @ViewChild(SfDrawerComponent) drawer?: SfDrawerComponent;
 
   saving = false;
+  readonly showCompensationSection = false;
   canViewCompensation = false;
   changePassword = false;
   step: 1 | 2 = 1;
@@ -321,7 +322,7 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
         expiry: blank(v.driverLicense.expiry),
       };
     }
-    if (this.canViewCompensation) {
+    if (this.showCompensationSection && this.canViewCompensation) {
       payload.compensation = {
         costRatePerHour: v.compensation.costRatePerHour ?? undefined,
         billingRate: v.compensation.billingRate ?? undefined,

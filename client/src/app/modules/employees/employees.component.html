@@ -51,7 +51,7 @@
         </ng-template>
 
         <ng-template #detailFooterTemplate let-row>
-            <app-action-button *ngIf="canEdit && row._id !== currentUserId" variant="secondary" (click)="openEditDrawer(row)">Edit</app-action-button>
+            <app-action-button *ngIf="canEdit" variant="secondary" (click)="openEditDrawer(row)">Edit</app-action-button>
             <app-action-button variant="primary" (click)="openProfile(row)">Open full profile</app-action-button>
         </ng-template>
 

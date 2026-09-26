@@ -78,6 +78,8 @@ export class ViewEmployeeComponent implements OnInit, OnDestroy {
       this.employeeService.employeeData$.subscribe((employee) => {
         this.currentEmployeeId = employee?._id;
         this.isSuperAdmin = employee?.category?.role === 'superAdmin';
+        this.canDeleteEmployee = this.isSuperAdmin || !!employee?.category?.privileges?.employee?.delete;
+        this.canBlockEmployee = this.isSuperAdmin || !!employee?.category?.privileges?.employee?.block;
         if (!this.employeeData && employee) this.load();
       })
     );
@@ -91,7 +93,11 @@ export class ViewEmployeeComponent implements OnInit, OnDestroy {
     return !!this.employeeData && !!this.currentEmployeeId && this.currentEmployeeId === this.employeeData._id;
   }
 
-  get canDelete(): boolean { return this.isSuperAdmin && !this.isOwnProfile; }
+  canDeleteEmployee = false;
+  canBlockEmployee = false;
+
+  get canDelete(): boolean { return this.canDeleteEmployee && !this.isOwnProfile; }
+  get canBlock(): boolean { return this.canBlockEmployee && !this.isOwnProfile; }
 
   private load(): void {
     const employeeId = this.route.snapshot.paramMap.get('employeeId');

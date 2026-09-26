@@ -1,12 +1,12 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt" *ngIf="categorySection">
-    <app-settings-section-header label="Roles &amp; Privileges" description="Categories of employees and what each one is allowed to see and do." icon="heroUserGroup"></app-settings-section-header>
-
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt" *ngIf="categorySection">
     <app-data-grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
         [showToolbarTools]="false"
         [showDetailPanel]="false"
-        title="Roles"
+        title="Roles &amp; Privileges"
+        subtitle="Categories of employees and what each one is allowed to see and do."
+        [breadcrumbs]="breadcrumbs"
         rowKey="_id"
         storageKey="hr-roles"
         [selectable]="false"
@@ -14,7 +14,7 @@
         [columns]="columns"
         [loading]="isCategoryLoading"
         [rowActions]="rowActions"
-        createLabel="Create Role"
+        [createLabel]="gridCreateLabel"
         searchPlaceholder="Search roles"
         emptyMessage="No roles found"
         (create)="createCategory()"
@@ -23,5 +23,5 @@
     </app-data-grid>
 </div>
 
-<app-role-form-drawer [open]="formOpen" [mode]="formMode" [category]="formCategory"
+<app-role-form-drawer [open]="formOpen" [mode]="formMode" [category]="formCategory" [canEdit]="!!privileges?.roles?.edit"
     (saved)="onFormSaved()" (closed)="formOpen = false"></app-role-form-drawer>

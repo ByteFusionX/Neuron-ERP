@@ -144,7 +144,6 @@ export interface GetCategory {
   isSalespersonWithTarget: boolean;
   /** Keys from the Responsibility master list. Older roles may still hold the retired object shape. */
   responsibilities?: string[] | Record<string, boolean>;
-  approvalLimit?: ApprovalLimit;
   employeeCount?: number;
   privileges: Privileges;
 }
@@ -175,6 +174,9 @@ export interface Privileges {
   employee: {
     viewReport: string;
     create: boolean;
+    edit?: boolean;
+    delete?: boolean;
+    block?: boolean;
     viewCompensation?: boolean;
   };
   announcement: {
@@ -185,6 +187,8 @@ export interface Privileges {
   customer: {
     viewReport: string;
     create: boolean;
+    edit?: boolean;
+    delete?: boolean;
     share: boolean;
     transfer: boolean;
   };
@@ -194,11 +198,11 @@ export interface Privileges {
   };
   assignedJob: {
     viewReport: string;
+    assign?: boolean;
   };
   quotation: {
     viewReport: string;
     create: boolean;
-    canApprove?: boolean;
   };
   jobSheet: {
     viewReport: string;
@@ -262,10 +266,33 @@ export interface Privileges {
     viewMargin: boolean;
     overrideDiscount: boolean;
   };
+  departments?: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+  };
+  roles?: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+  };
   portalManagement: {
-    department: boolean;
+    department?: boolean;
     notesAndTerms: boolean;
     companyTarget: boolean;
     customerType: boolean;
+    numbering: boolean;
+    masterData: boolean;
+    approvalRules: boolean;
+    notifications: boolean;
+    audit: boolean;
+    companyProfileEdit?: boolean;
+    numberingEdit?: boolean;
+    masterDataEdit?: boolean;
+    approvalRulesEdit?: boolean;
+    notificationsEdit?: boolean;
+    auditEdit?: boolean;
   };
 }
