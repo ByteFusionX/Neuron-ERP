@@ -24,8 +24,16 @@ interface Claim {
 interface ClaimStatus {
     status:string;
     role:Types.ObjectId;
+    approver:Types.ObjectId;
+    delegatedFrom?:Types.ObjectId;
+    delegationId?:Types.ObjectId;
     step:number;
     managerApproval:boolean;
+    assignedAt?:Date;
+    escalationDueAt?:Date;
+    escalatedAt?:Date;
+    escalationRole?:Types.ObjectId;
+    originalRole?:Types.ObjectId;
     updatedBy:Types.ObjectId;
     updatedDate:Date;
     comment:string;
@@ -41,6 +49,18 @@ const ClaimStatusSchema = new Schema<ClaimStatus>({
         type: Schema.Types.ObjectId,
         ref: 'Category',
     },
+    approver: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+    },
+    delegatedFrom: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+    },
+    delegationId: {
+        type: Schema.Types.ObjectId,
+        ref: 'WorkflowDelegation',
+    },
     comment: {
         type: String,
         default: ''
@@ -53,6 +73,23 @@ const ClaimStatusSchema = new Schema<ClaimStatus>({
         type: Boolean,
         required: true,
         default: false
+    },
+    assignedAt: {
+        type: Date,
+    },
+    escalationDueAt: {
+        type: Date,
+    },
+    escalatedAt: {
+        type: Date,
+    },
+    escalationRole: {
+        type: Schema.Types.ObjectId,
+        ref: 'Category',
+    },
+    originalRole: {
+        type: Schema.Types.ObjectId,
+        ref: 'Category',
     },
     updatedBy: {
         type: Schema.Types.ObjectId,

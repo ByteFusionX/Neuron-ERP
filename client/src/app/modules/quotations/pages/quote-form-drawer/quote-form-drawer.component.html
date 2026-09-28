@@ -87,6 +87,9 @@
                 <app-sf-field label="Closing Date" [control]="quoteForm.controls.closingDate">
                     <app-sf-date formControlName="closingDate" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
+                <app-sf-field label="Valid Until" [control]="quoteForm.controls.validityDate">
+                    <app-sf-date formControlName="validityDate" displayFormat="dd/MM/yy"></app-sf-date>
+                </app-sf-field>
                 <app-sf-field label="Currency" [control]="quoteForm.controls.currency">
                     <app-sf-select formControlName="currency" [options]="currencyOptions"></app-sf-select>
                 </app-sf-field>
@@ -108,6 +111,22 @@
 
         <!-- Step 3 — notes & terms --------------------------------------------------------- -->
         <ng-container *ngIf="step === 3">
+            <app-sf-section title="Commercial Terms" columns="2"
+                description="Keep the key quote terms structured so they can be searched, reported and printed consistently.">
+                <app-sf-field label="Payment Terms" [control]="quoteForm.controls.paymentTerms">
+                    <app-sf-input formControlName="paymentTerms" placeholder="e.g. 50% advance, 50% on delivery"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Delivery Terms" [control]="quoteForm.controls.deliveryTerms">
+                    <app-sf-input formControlName="deliveryTerms" placeholder="e.g. 4-6 weeks from LPO"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Warranty" [control]="quoteForm.controls.warranty">
+                    <app-sf-input formControlName="warranty" placeholder="e.g. 12 months from delivery"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Delivery Location" [control]="quoteForm.controls.deliveryLocation">
+                    <app-sf-input formControlName="deliveryLocation" placeholder="e.g. customer site / warehouse"></app-sf-input>
+                </app-sf-field>
+            </app-sf-section>
+
             <app-sf-section title="Customer Note"
                 description="Pick a saved note to start from, then edit it — what you type here is what the customer sees.">
                 <app-sf-field label="Insert a saved note">

@@ -112,8 +112,9 @@ export class DealFormComponent implements OnInit, OnChanges {
         .map((item) => ({
           itemName: item.itemName,
           itemDetails: item.itemDetails.map((d) => ({
+            productId: d.productId,
             itemCode: d.itemCode,
-            partNo: (d as any).partNo,
+            partNo: d.partNo,
             detail: d.detail,
             quantity: d.quantity,
             unitCost: d.unitCost,

@@ -27,7 +27,7 @@ import { EventsService } from 'src/app/core/services/events/events.service';
 import { EventActionsService } from 'src/app/core/services/events/event-actions.service';
 import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
-import { LpoUploadModalComponent } from './lpo-upload-modal.component';
+import { LpoUploadModalComponent, LpoUploadModalResult } from './lpo-upload-modal.component';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { NgIcon } from '@ng-icons/core';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
@@ -90,11 +90,16 @@ export class QuotationListComponent implements AfterViewInit {
   rows: Quotatation[] = [];
   columns: DataGridColumn<Quotatation>[] = [];
   rowActions: DataGridRowAction<Quotatation>[] = [];
-  views: DataGridView<Quotatation>[] = [{ id: 'all', label: 'All' }];
+  views: DataGridView<Quotatation>[] = [
+    { id: 'all', label: 'All' },
+    { id: 'pending-deal', label: 'Pending Deal', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'pending' }] },
+    { id: 'rejected-deal', label: 'Rejected Deal', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'rejected' }] },
+    { id: 'ready-for-job', label: 'Ready For Job', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'approved' }] },
+  ];
   bulkActions: DataGridBulkAction[] = [
     { id: 'delete', label: 'Delete', variant: 'danger' },
   ];
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Sales' }, { label: 'Quotations' }];
   density: 'comfortable' | 'compact' = 'comfortable';
   rowAccent = (r: Quotatation): 'danger' | 'warning' | 'info' | null =>
     r.dealData && !r.dealData.seenedBySalsePerson ? 'warning' : null;
@@ -862,19 +867,22 @@ export class QuotationListComponent implements AfterViewInit {
 
   startLpoUpload(row: Quotatation): void {
     if (!this.canUploadLpo(row)) return;
-    this.modal.open<File[]>(LpoUploadModalComponent, {
+    this.modal.open<LpoUploadModalResult>(LpoUploadModalComponent, {
       width: '680px',
       data: { context: row.quoteId || (row._id as string), acceptedFiles: this.acceptedFiles },
-    }).afterClosed().subscribe((files) => {
-      if (files?.length) { this.uploadLpoFiles(row, files); }
+    }).afterClosed().subscribe((result) => {
+      if (result?.files?.length) { this.uploadLpoFiles(row, result); }
     });
   }
 
-  uploadLpoFiles(row: Quotatation, files: File[]): void {
+  uploadLpoFiles(row: Quotatation, result: LpoUploadModalResult): void {
+    const files = result.files || [];
     if (!files.length || this.isUploadingFiles || !this.canUploadLpo(row)) return;
     const rowIndex = this.rows.indexOf(row);
     const formData = new FormData();
     formData.append('quoteId', row._id as string);
+    if (result.customerPoNumber) formData.append('customerPoNumber', result.customerPoNumber);
+    if (result.acceptedByName) formData.append('acceptedByName', result.acceptedByName);
     files.forEach((file) => formData.append('files', file));
 
     this.isUploadingFiles = true;
@@ -883,6 +891,7 @@ export class QuotationListComponent implements AfterViewInit {
         this.isUploadingFiles = false;
         if (quote) {
           this.rows[rowIndex].lpoFiles = quote.lpoFiles;
+          this.rows[rowIndex].customerAcceptance = quote.customerAcceptance;
           const uploaded = this.rows[rowIndex];
           if (uploaded.status === 'Won' && !(uploaded.dealData as any)?._id) this.dealQuote = uploaded;
         }
@@ -985,10 +994,11 @@ export class QuotationListComponent implements AfterViewInit {
     this._employeeService.employeeData$.subscribe((data) => {
       this.createQuotation = data?.category.privileges.quotation.create;
       this.isSuperAdmin = data?.category.role === 'superAdmin';
-      if (data?._id && this.views.length === 1) {
+      if (data?._id && !this.views.some((view) => view.id === 'mine')) {
         this.views = [
-          ...this.views,
+          this.views[0],
           { id: 'mine', label: 'My Quotations', filters: [{ id: 1, key: 'salesPerson', op: 'eq', value: data._id }] },
+          ...this.views.slice(1),
         ];
       }
     });
@@ -1077,8 +1087,32 @@ export class QuotationListComponent implements AfterViewInit {
     };
   }
 
+  private handoverStep(row: Quotatation): { stage: string; next: string; tone: 'neutral' | 'info' | 'warn' | 'good' | 'bad' } {
+    const dealStatus = row.dealData?.status?.toLowerCase();
+    if (row.status !== QuoteStatus.Won) {
+      return { stage: 'Quotation not won', next: 'Mark the quote Won after customer confirmation.', tone: row.status === QuoteStatus.Lost ? 'bad' : 'neutral' };
+    }
+    if (!row.lpoFiles?.length) {
+      return { stage: 'Waiting for customer LPO', next: 'Upload the customer LPO to accept the quote.', tone: 'warn' };
+    }
+    if (!row.dealData || !(row.dealData as any)._id) {
+      return { stage: 'LPO received', next: 'Convert the quotation to a deal sheet.', tone: 'info' };
+    }
+    if (dealStatus === 'pending') {
+      return { stage: 'Deal sheet pending approval', next: 'Wait for deal sheet approval before job handover.', tone: 'warn' };
+    }
+    if (dealStatus === 'approved') {
+      return { stage: 'Deal sheet approved', next: 'Create or continue the job sheet from the Job Sheet module.', tone: 'good' };
+    }
+    if (dealStatus === 'rejected') {
+      return { stage: 'Deal sheet rejected', next: 'Revise and resubmit the deal sheet, or update the quote status.', tone: 'bad' };
+    }
+    return { stage: `Deal sheet ${dealStatus || 'in progress'}`, next: 'Review the deal sheet status.', tone: 'info' };
+  }
+
   /** Details tab config for a quotation row: General/Description sections plus Deal Status when a deal exists. */
   overviewSections(row: Quotatation): DetailOverviewSection[] {
+    const handover = this.handoverStep(row);
     return [
       {
         title: 'General',
@@ -1091,6 +1125,9 @@ export class QuotationListComponent implements AfterViewInit {
           { type: 'field', label: 'Department', value: this.departmentNames(row) },
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.date, 'dd MMM yyyy') },
           { type: 'dg', key: 'closingDate' },
+          { type: 'field', label: 'Valid Until', value: row.validityDate ? this.datePipe.transform(row.validityDate, 'dd MMM yyyy') : '—', noHover: true },
+          { type: 'field', label: 'Payment Terms', value: row.paymentTerms || '—', noHover: true },
+          { type: 'field', label: 'Delivery Terms', value: row.deliveryTerms || '—', noHover: true },
           // Only worth a row once the quote has actually been revised.
           ...(row.revision ? [{ type: 'field' as const, label: 'Revision', value: `Rev ${row.revision}`, noHover: true }] : []),
         ],
@@ -1103,6 +1140,19 @@ export class QuotationListComponent implements AfterViewInit {
             onSave: (newValue) => this.updateQuotationSubject(row, newValue),
           },
           { type: 'field', label: 'Amount', value: this.formatAmount(row), numeric: true, noHover: true },
+          { type: 'field', label: 'Lost Reason', value: row.lostReason || '—', noHover: true, visible: row.status === 'Lost' },
+          { type: 'field', label: 'Customer PO', value: row.customerAcceptance?.customerPoNumber || '—', noHover: true, visible: !!row.customerAcceptance },
+          { type: 'field', label: 'Accepted By', value: row.customerAcceptance?.acceptedByName || '—', noHover: true, visible: !!row.customerAcceptance },
+        ],
+      },
+      {
+        title: 'Handover',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Current step', value: handover.stage, pill: true, tone: handover.tone, noHover: true },
+          { type: 'field', label: 'Next action', value: handover.next, noHover: true },
+          { type: 'field', label: 'LPO status', value: row.lpoFiles?.length ? `${row.lpoFiles.length} file(s) uploaded` : 'Not uploaded', noHover: true },
+          { type: 'field', label: 'Deal sheet', value: row.dealData?.dealId || 'Not created', noHover: true },
         ],
       },
     ];

@@ -11,11 +11,17 @@ export interface LpoUploadModalData {
   acceptedFiles: string;
 }
 
+export interface LpoUploadModalResult {
+  files: File[];
+  customerPoNumber?: string;
+  acceptedByName?: string;
+}
+
 /**
  * Upload-files modal for the quotation detail panel's Documents tab, mirroring
  * EventCreateModalComponent's layout so both "add" flows feel the same.
  *
- *   modal.open<File[]>(LpoUploadModalComponent, { width: '520px', data: { context, acceptedFiles } })
+ *   modal.open<LpoUploadModalResult>(LpoUploadModalComponent, { width: '520px', data: { context, acceptedFiles } })
  */
 @Component({
   selector: 'app-lpo-upload-modal',
@@ -46,6 +52,14 @@ export interface LpoUploadModalData {
       <div class="flex-1 overflow-y-auto px-6 py-6 min-h-[280px]">
         <p class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Files</p>
         <app-sf-file [(ngModel)]="files" [accept]="data?.acceptedFiles || ''" [maxSizeMb]="5" [disabled]="uploading"></app-sf-file>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+          <app-sf-field label="Customer PO / LPO No.">
+            <app-sf-input [(ngModel)]="customerPoNumber" [ngModelOptions]="{ standalone: true }" placeholder="e.g. PO-1245"></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="Accepted By">
+            <app-sf-input [(ngModel)]="acceptedByName" [ngModelOptions]="{ standalone: true }" placeholder="Customer contact name"></app-sf-input>
+          </app-sf-field>
+        </div>
       </div>
 
       <footer class="flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
@@ -63,10 +77,12 @@ export interface LpoUploadModalData {
   styles: [':host{display:block}'],
 })
 export class LpoUploadModalComponent {
-  private dialogRef = inject<ModalRef<File[]>>(ModalRef);
+  private dialogRef = inject<ModalRef<LpoUploadModalResult>>(ModalRef);
   data = inject(MODAL_DATA, { optional: true }) as LpoUploadModalData | null;
 
   files: File[] = [];
+  customerPoNumber = '';
+  acceptedByName = '';
   uploading = false;
 
   close(): void {
@@ -75,6 +91,10 @@ export class LpoUploadModalComponent {
 
   submit(): void {
     if (!this.files.length || this.uploading) return;
-    this.dialogRef.close(this.files);
+    this.dialogRef.close({
+      files: this.files,
+      customerPoNumber: this.customerPoNumber.trim(),
+      acceptedByName: this.acceptedByName.trim(),
+    });
   }
 }

@@ -213,6 +213,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   customerFacts: QvFact[] = [];
   enquiryFacts: QvFact[] = [];
   dealFacts: QvFact[] = [];
+  handoverFacts: QvFact[] = [];
+  lifecycleFacts: QvFact[] = [];
 
   private subscriptions = new Subscription();
   private confirm = inject(ConfirmDialogService);
@@ -516,6 +518,113 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       });
   }
 
+  onRequestApproval(): void {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    this.quotationService.requestQuoteApproval(q._id).subscribe({
+      next: (res) => {
+        const count = res?.approvalRequired?.length || 0;
+        this.toast.success(count ? `Approval requested for ${count} rule breach(es).` : 'No approval needed for this quote.');
+        this.reload$.next();
+      },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to request approval.'),
+    });
+  }
+
+  onApproveQuote(decision: 'approved' | 'rejected'): void {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const reason = window.prompt(decision === 'approved' ? 'Approval note' : 'Rejection reason') || '';
+    if (decision === 'rejected' && !reason.trim()) {
+      this.toast.error('Rejection reason is required.');
+      return;
+    }
+    this.quotationService.decideQuoteApproval(q._id, decision, reason).subscribe({
+      next: () => {
+        this.toast.success(decision === 'approved' ? 'Quote approved to send.' : 'Quote approval rejected.');
+        this.reload$.next();
+      },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to update approval.'),
+    });
+  }
+
+  onSendQuote(): void {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const defaultRecipient = q.attention?.email || q.client?.customerEmailId || '';
+    const recipient = window.prompt('Recipient email', defaultRecipient);
+    if (!recipient?.trim()) return;
+    const note = window.prompt('Send note', '') || '';
+    this.quotationService.sendQuote(q._id, { recipient: recipient.trim(), emailStatus: 'sent', note }).subscribe({
+      next: () => {
+        this.toast.success('Quote send tracked.');
+        this.reload$.next();
+      },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to track quote send.'),
+    });
+  }
+
+  onUpdateFollowUp(): void {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const nextFollowUpDate = window.prompt('Next follow-up date (YYYY-MM-DD)', q.followUp?.nextFollowUpDate?.slice(0, 10) || '');
+    if (nextFollowUpDate === null) return;
+    const note = window.prompt('Follow-up note', q.followUp?.note || '') || '';
+    this.quotationService.updateQuoteFollowUp(q._id, { nextFollowUpDate, note }).subscribe({
+      next: () => {
+        this.toast.success('Follow-up updated.');
+        this.reload$.next();
+      },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to update follow-up.'),
+    });
+  }
+
+  onCustomerDecision(decision: 'accepted' | 'rejected' | 'no_response'): void {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const reason = window.prompt(decision === 'accepted' ? 'Acceptance note' : decision === 'rejected' ? 'Lost reason' : 'No-response note', '') || '';
+    if (decision === 'rejected' && !reason.trim()) {
+      this.toast.error('Lost reason is required.');
+      return;
+    }
+    const competitor = decision === 'rejected' ? (window.prompt('Competitor', '') || '') : '';
+    const lostValueRaw = decision === 'rejected' ? (window.prompt('Expected value lost', '') || '') : '';
+    const expectedValueLost = lostValueRaw.trim() ? Number(lostValueRaw) : undefined;
+    this.quotationService.recordCustomerDecision(q._id, { decision, reason, competitor, expectedValueLost }).subscribe({
+      next: () => {
+        this.toast.success('Customer decision recorded.');
+        this.reload$.next();
+      },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to record customer decision.'),
+    });
+  }
+
+  onUpdateOptionalDecisions(): void {
+    const q = this.quoteData;
+    if (!q?._id) return;
+    const decisions: { itemId: string; decision: 'pending' | 'accepted' | 'declined' }[] = [];
+    (q.optionalItems || []).forEach((option) => {
+      (option.items || []).filter((item) => item.isOptional).forEach((item: any) => {
+        const current = item.customerDecision || (item.includeInTotal ? 'accepted' : 'pending');
+        const answer = window.prompt(`Decision for optional item "${item.itemName}" (pending/accepted/declined)`, current);
+        if (answer && ['pending', 'accepted', 'declined'].includes(answer)) {
+          decisions.push({ itemId: item._id, decision: answer as any });
+        }
+      });
+    });
+    if (!decisions.length) {
+      this.toast.info('No optional item decisions changed.');
+      return;
+    }
+    this.quotationService.updateOptionalItemDecisions(q._id, decisions).subscribe({
+      next: () => {
+        this.toast.success('Optional item decisions updated.');
+        this.reload$.next();
+      },
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to update optional item decisions.'),
+    });
+  }
+
   viewAttachments(): void {
     const enquiry = this.quoteData?.enqId;
     if (!enquiry?.attachments?.length) {
@@ -579,6 +688,15 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     Created: ['Drafted', 'neutral'],
     Updated: ['Edited', 'info'],
     StatusChanged: ['Status changed', 'info'],
+    QuoteSent: ['Quote sent', 'info'],
+    ApprovalRequested: ['Approval requested', 'warn'],
+    ApprovalApproved: ['Send approved', 'good'],
+    ApprovalRejected: ['Send rejected', 'bad'],
+    FollowUpUpdated: ['Follow-up updated', 'info'],
+    CustomerAccepted: ['Customer accepted', 'good'],
+    CustomerRejected: ['Customer rejected', 'bad'],
+    CustomerNoResponse: ['No response', 'warn'],
+    OptionalItemsDecided: ['Optional items decided', 'info'],
     DealApproved: ['Deal approved', 'good'],
     DealRejected: ['Deal rejected', 'bad'],
     DealRevoked: ['Approval revoked', 'warn'],
@@ -994,6 +1112,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     const date = (v?: string | Date | null) => (v ? this.formatDate(v as string) : '');
     const clientId = (q.client as any)?._id;
     const d = q.dealData;
+    const handover = this.handoverStep(q);
 
     this.customerFacts = keep([
       { label: 'Customer ID', value: q.client?.clientRef || '', link: ['/customers'], queryParams: { search: q.client?.companyName } },
@@ -1008,6 +1127,32 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       { label: 'Date', value: date(q.enqId?.date) },
       { label: 'Sales person', value: this.personName(q.enqId?.salesPerson) },
       { label: 'Pre-sale', value: this.personName(q.enqId?.preSale?.presalePerson) },
+    ]);
+
+    this.handoverFacts = keep([
+      { label: 'Current step', value: handover.stage, pill: true, tone: handover.tone },
+      { label: 'Next action', value: handover.next },
+      { label: 'Customer LPO', value: q.lpoFiles?.length ? `${q.lpoFiles.length} file(s) uploaded` : 'Not uploaded' },
+      { label: 'Customer PO', value: q.customerAcceptance?.customerPoNumber || '' },
+      { label: 'Accepted by', value: q.customerAcceptance?.acceptedByName || '' },
+    ]);
+
+    const lastSent = (q.sendHistory || [])[q.sendHistory?.length ? q.sendHistory.length - 1 : 0];
+    const followUpDue = q.followUp?.nextFollowUpDate ? new Date(q.followUp.nextFollowUpDate) : null;
+    const isFollowUpOverdue = !!followUpDue && followUpDue.getTime() < new Date().setHours(0, 0, 0, 0);
+    this.lifecycleFacts = keep([
+      { label: 'Lifecycle', value: this.lifecycleStage(q), pill: true, tone: this.lifecycleTone(q) },
+      { label: 'Approval', value: q.approval?.status || 'not_required', pill: true, tone: q.approval?.status === 'approved' ? 'good' : q.approval?.status === 'pending' ? 'warn' : q.approval?.status === 'rejected' ? 'bad' : 'neutral' },
+      { label: 'Last sent', value: lastSent ? `${date(lastSent.sentAt)} to ${lastSent.recipient}` : '' },
+      { label: 'Sent revision', value: q.currentSentRevision !== undefined ? `Rev ${q.currentSentRevision}` : '' },
+      { label: 'Next follow-up', value: q.followUp?.nextFollowUpDate ? date(q.followUp.nextFollowUpDate) : '', tone: isFollowUpOverdue ? 'bad' : null },
+      { label: 'Last activity', value: q.followUp?.lastActivityDate ? date(q.followUp.lastActivityDate) : '' },
+      { label: 'Customer decision', value: q.customerDecision?.decision || '', pill: true, tone: q.customerDecision?.decision === 'accepted' ? 'good' : q.customerDecision?.decision === 'rejected' ? 'bad' : 'warn' },
+      { label: 'Lost competitor', value: q.customerDecision?.competitor || '' },
+      { label: 'Payment terms', value: q.paymentTerms || '' },
+      { label: 'Delivery terms', value: q.deliveryTerms || '' },
+      { label: 'Warranty', value: q.warranty || '' },
+      { label: 'Delivery location', value: q.deliveryLocation || '' },
     ]);
 
     this.dealFacts = d
@@ -1026,6 +1171,47 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
           { label: 'Comments', value: (d.comments || []).join(' · ') },
         ])
       : [];
+  }
+
+  private handoverStep(q: getQuotatation): { stage: string; next: string; tone: DetailTone } {
+    const dealStatus = q.dealData?.status?.toLowerCase();
+    if (q.status !== QuoteStatus.Won) {
+      return { stage: 'Quotation not won', next: 'Mark the quote Won after customer confirmation.', tone: q.status === QuoteStatus.Lost ? 'bad' : 'neutral' };
+    }
+    if (!q.lpoFiles?.length) {
+      return { stage: 'Waiting for customer LPO', next: 'Upload the customer LPO to accept the quote.', tone: 'warn' };
+    }
+    if (!q.dealData || !(q.dealData as any)._id) {
+      return { stage: 'LPO received', next: 'Convert the quotation to a deal sheet.', tone: 'info' };
+    }
+    if (dealStatus === 'pending') {
+      return { stage: 'Deal sheet pending approval', next: 'Wait for deal sheet approval before job handover.', tone: 'warn' };
+    }
+    if (dealStatus === 'approved') {
+      return { stage: 'Deal sheet approved', next: 'Create or continue the job sheet from the Job Sheet module.', tone: 'good' };
+    }
+    if (dealStatus === 'rejected') {
+      return { stage: 'Deal sheet rejected', next: 'Revise and resubmit the deal sheet, or update the quote status.', tone: 'bad' };
+    }
+    return { stage: `Deal sheet ${dealStatus || 'in progress'}`, next: 'Review the deal sheet status.', tone: 'info' };
+  }
+
+  private lifecycleStage(q: getQuotatation): string {
+    if (q.status === QuoteStatus.Draft) return 'Draft';
+    if (q.approval?.status === 'pending') return 'Ready for internal review';
+    if (q.approval?.status === 'approved') return 'Approved to send';
+    if (q.sendHistory?.length && q.status === QuoteStatus.QuoteSubmitted) return 'Sent';
+    if (q.status === QuoteStatus.UnderNegotiation) return 'Negotiation';
+    if ([QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.Expired].includes(q.status as QuoteStatus)) return q.status;
+    return q.status || 'Work in progress';
+  }
+
+  private lifecycleTone(q: getQuotatation): DetailTone {
+    if (q.status === QuoteStatus.Won) return 'good';
+    if (q.status === QuoteStatus.Lost) return 'bad';
+    if (q.status === QuoteStatus.Expired) return 'neutral';
+    if (q.approval?.status === 'pending') return 'warn';
+    return q.sendHistory?.length ? 'info' : 'neutral';
   }
 
   /** Every file the quote can reach, tagged with where it came from (shown in the row's meta line). */

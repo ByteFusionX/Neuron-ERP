@@ -107,14 +107,19 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     currency: ['QAR', Validators.required],
     quoteCompany: [null as string | null, Validators.required],
     closingDate: ['', Validators.required],
+    validityDate: ['', Validators.required],
     optionalItems: this.fb.array([] as any[]),
     customerNote: ['', Validators.required],
     termsAndCondition: ['', Validators.required],
+    paymentTerms: [''],
+    deliveryTerms: [''],
+    warranty: [''],
+    deliveryLocation: [''],
     enqId: [null as string | null],
   });
   /** Step 1 and step 3 own these; step 2 owns `optionalItems`. */
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
-    1: ['client', 'attention', 'departments', 'subject', 'date', 'closingDate', 'currency', 'quoteCompany'],
+    1: ['client', 'attention', 'departments', 'subject', 'date', 'closingDate', 'validityDate', 'currency', 'quoteCompany'],
     2: ['optionalItems'],
     3: ['customerNote', 'termsAndCondition'],
   };
@@ -286,11 +291,16 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       attention: id(q.attention),
       date: day(q.date),
       closingDate: day(q.closingDate),
+      validityDate: day(q.validityDate || q.closingDate),
       subject: q.subject ?? '',
       currency: q.currency ?? 'QAR',
       quoteCompany: q.quoteCompany ?? null,
       customerNote: text(q.customerNote),
       termsAndCondition: text(q.termsAndCondition),
+      paymentTerms: q.paymentTerms ?? '',
+      deliveryTerms: q.deliveryTerms ?? '',
+      warranty: q.warranty ?? '',
+      deliveryLocation: q.deliveryLocation ?? '',
     });
     this.setDepartments(departments);
     this.seeding = false;
@@ -311,7 +321,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.itemEntry ? this.itemEntry.reset() : this.optionalItems.clear();
     this.quoteForm.reset({
       client: null, attention: null, date: this.todayIso(), department: null, departments: [], subject: '',
-      currency: 'QAR', quoteCompany: null, closingDate: '', customerNote: '', termsAndCondition: '', enqId: null,
+      currency: 'QAR', quoteCompany: null, closingDate: '', validityDate: '', customerNote: '', termsAndCondition: '',
+      paymentTerms: '', deliveryTerms: '', warranty: '', deliveryLocation: '', enqId: null,
     });
     this.step = 1;
   }
@@ -438,8 +449,13 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       currency: v.currency,
       quoteCompany: v.quoteCompany,
       closingDate: v.closingDate,
+      validityDate: v.validityDate || v.closingDate,
       customerNote: v.customerNote,
       termsAndCondition: v.termsAndCondition,
+      paymentTerms: v.paymentTerms,
+      deliveryTerms: v.deliveryTerms,
+      warranty: v.warranty,
+      deliveryLocation: v.deliveryLocation,
       optionalItems: JSON.parse(JSON.stringify(v.optionalItems ?? [])),
     };
     if (status) payload.status = status;

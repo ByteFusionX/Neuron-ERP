@@ -7,6 +7,9 @@ const invoiceSchema = new Schema({
     jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: true },
     salesperson: { type: Schema.Types.ObjectId, ref: 'Employee' }, // Assuming Employee model for salesperson
     amount: { type: Number, required: true },
+    subTotal: { type: Number },
+    taxAmount: { type: Number, default: 0 },
+    taxExempt: { type: Boolean, default: false },
     paymentTerms: { type: String },
     status: {
         type: String,

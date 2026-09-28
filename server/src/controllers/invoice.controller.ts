@@ -9,6 +9,7 @@ import { applyDnItemRejections, RejectDnItemInput } from './deliveryNote.control
 import { createCreditNote } from './creditNote.controller';
 import { createNotificationWithPrivileges } from './notification.controller';
 import { Server } from 'socket.io';
+import { getCustomerCommercialGuard, normalizeTaxForCustomer } from '../common/customer-commercial-guards';
 
 export const getInvoices = async (req: Request, res: Response) => {
     try {
@@ -103,6 +104,15 @@ export const getInvoices = async (req: Request, res: Response) => {
 export const createInvoice = async (req: Request, res: Response) => {
     try {
         const { invoiceNo, date, customer, jobId, salesperson, amount, status, items, paymentTerms, parentInvoiceId, paymentStatus } = req.body;
+        const customerGuard = await getCustomerCommercialGuard(customer, Number(amount) || 0);
+        if (customerGuard.blocked || customerGuard.warnings.length) {
+            return res.status(409).json({
+                success: false,
+                message: customerGuard.message || customerGuard.warnings[0],
+                commercialWarnings: customerGuard.warnings
+            });
+        }
+        const normalizedTaxPayload = normalizeTaxForCustomer(req.body, customerGuard.customer);
 
         const legacyPaymentStatusMap: Record<string, string> = {
             Paid: 'Paid',
@@ -132,10 +142,13 @@ export const createInvoice = async (req: Request, res: Response) => {
             customer,
             jobId,
             salesperson,
-            amount,
+            amount: normalizedTaxPayload.amount,
+            subTotal: normalizedTaxPayload.subTotal,
+            taxAmount: customerGuard.customer?.taxExempt ? 0 : normalizedTaxPayload.taxAmount,
+            taxExempt: !!customerGuard.customer?.taxExempt,
             status: normalizedStatus,
             paymentStatus: normalizedPaymentStatus,
-            items,
+            items: normalizedTaxPayload.items,
             paymentTerms,
             createdBy: employee._id
         });

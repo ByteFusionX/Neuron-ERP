@@ -1,6 +1,8 @@
 import { Schema, Document, model, Types } from "mongoose";
 
 interface QuoteItemDetail {
+    /** The catalogue product this line was picked from. itemCode/partNo stay as saved snapshots. */
+    productId?: Types.ObjectId;
     detail: string;
     quantity: number;
     unitCost: number;
@@ -21,6 +23,8 @@ interface QuoteItem {
     itemName: string;
     isOptional?: boolean;
     includeInTotal?: boolean;
+    customerDecision?: string;
+    customerDecisionAt?: Date;
     itemDetails: QuoteItemDetail[]
 }
 
@@ -53,10 +57,50 @@ interface EditHistoryEntry {
     changes?: FieldChange[];
 }
 
+interface QuoteSendRecord {
+    revision: number;
+    sentAt: Date;
+    sentBy: Types.ObjectId;
+    recipient: string;
+    emailStatus: string;
+    pdfFileName?: string;
+    note?: string;
+}
+
+interface QuoteApproval {
+    status: string;
+    requestedAt?: Date;
+    requestedBy?: Types.ObjectId;
+    approvedAt?: Date;
+    approvedBy?: Types.ObjectId;
+    rejectedAt?: Date;
+    rejectedBy?: Types.ObjectId;
+    reason?: string;
+    breaches?: any[];
+}
+
+interface FollowUp {
+    nextFollowUpDate?: Date;
+    reminderOwner?: Types.ObjectId;
+    lastActivityDate?: Date;
+    note?: string;
+}
+
+interface CustomerDecision {
+    decision: string;
+    decidedAt: Date;
+    decidedBy: Types.ObjectId;
+    reason?: string;
+    competitor?: string;
+    expectedValueLost?: number;
+}
+
 interface CustomerAcceptance {
     acceptedRevision: number;
     acceptedAt: Date;
     acceptedBy: Types.ObjectId;
+    customerPoNumber?: string;
+    acceptedByName?: string;
     lpoFiles: [];
 }
 
@@ -72,6 +116,11 @@ interface QuoteRevision {
         optionalItems: OptionalItems[];
         customerNote: string;
         termsAndCondition: string;
+        paymentTerms?: string;
+        deliveryTerms?: string;
+        warranty?: string;
+        deliveryLocation?: string;
+        validityDate?: Date;
     };
 }
 
@@ -103,6 +152,21 @@ interface Quotation extends Document {
     optionalItems: OptionalItems[];
     customerNote: string;
     termsAndCondition: string;
+    paymentTerms: string;
+    deliveryTerms: string;
+    warranty: string;
+    deliveryLocation: string;
+    validityDate: Date;
+    expiryReminderDate: Date;
+    expiryReminderSentAt: Date;
+    sendHistory: QuoteSendRecord[];
+    currentSentRevision: number;
+    approval: QuoteApproval;
+    followUp: FollowUp;
+    customerDecision: CustomerDecision;
+    lostReason: string;
+    lostAt: Date;
+    lostBy: Types.ObjectId;
     status: string;
     createdBy: Types.ObjectId;
     lpoFiles: [];
@@ -132,6 +196,13 @@ export enum quoteStatus {
 }
 
 const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
+    // Durable link back to the inventory catalogue. itemCode/partNo below remain plain-string
+    // snapshots on purpose: a saved quote must not change if the product is later renamed.
+    productId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Product',
+        required: false,
+    },
     detail: {
         type: String,
         required: true,
@@ -203,6 +274,15 @@ const quoteItem = new Schema<QuoteItem>({
     includeInTotal: {
         type: Boolean,
         default: false,
+    },
+    customerDecision: {
+        type: String,
+        enum: ['pending', 'accepted', 'declined'],
+        default: 'pending',
+    },
+    customerDecisionAt: {
+        type: Date,
+        required: false,
     },
     itemDetails: {
         type: [quoteItemDetailsSchema],
@@ -301,7 +381,7 @@ const editHistoryEntrySchema = new Schema<EditHistoryEntry>({
     },
     action: {
         type: String,
-        enum: ['Created', 'Updated', 'StatusChanged', 'CustomerAccepted', 'DealApproved', 'DealRejected', 'DealRevoked'],
+        enum: ['Created', 'Updated', 'StatusChanged', 'QuoteSent', 'ApprovalRequested', 'ApprovalApproved', 'ApprovalRejected', 'FollowUpUpdated', 'CustomerAccepted', 'CustomerRejected', 'CustomerNoResponse', 'OptionalItemsDecided', 'DealApproved', 'DealRejected', 'DealRevoked'],
         required: true,
     },
     fromStatus: {
@@ -382,6 +462,88 @@ const quotationSchema = new Schema<Quotation>({
         type: String,
         required: function (this: Quotation) { return this.status !== quoteStatus.Draft; },
     },
+    paymentTerms: {
+        type: String,
+        required: false,
+    },
+    deliveryTerms: {
+        type: String,
+        required: false,
+    },
+    warranty: {
+        type: String,
+        required: false,
+    },
+    deliveryLocation: {
+        type: String,
+        required: false,
+    },
+    validityDate: {
+        type: Date,
+        required: false,
+    },
+    expiryReminderDate: {
+        type: Date,
+        required: false,
+    },
+    expiryReminderSentAt: {
+        type: Date,
+        required: false,
+    },
+    sendHistory: {
+        type: [{
+            revision: { type: Number, required: true },
+            sentAt: { type: Date, default: Date.now },
+            sentBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+            recipient: { type: String, required: true },
+            emailStatus: { type: String, enum: ['prepared', 'sent', 'failed'], default: 'prepared' },
+            pdfFileName: { type: String },
+            note: { type: String },
+        }],
+        default: [],
+    },
+    currentSentRevision: {
+        type: Number,
+        required: false,
+    },
+    approval: {
+        status: { type: String, enum: ['not_required', 'required', 'pending', 'approved', 'rejected'], default: 'not_required' },
+        requestedAt: { type: Date },
+        requestedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        approvedAt: { type: Date },
+        approvedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        rejectedAt: { type: Date },
+        rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        reason: { type: String },
+        breaches: { type: [Schema.Types.Mixed], default: [] },
+    },
+    followUp: {
+        nextFollowUpDate: { type: Date },
+        reminderOwner: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        lastActivityDate: { type: Date },
+        note: { type: String },
+    },
+    customerDecision: {
+        decision: { type: String, enum: ['accepted', 'rejected', 'no_response'] },
+        decidedAt: { type: Date },
+        decidedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        reason: { type: String },
+        competitor: { type: String },
+        expectedValueLost: { type: Number },
+    },
+    lostReason: {
+        type: String,
+        required: false,
+    },
+    lostAt: {
+        type: Date,
+        required: false,
+    },
+    lostBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+        required: false,
+    },
     status: {
         type: String,
         enum: Object.values(quoteStatus),
@@ -439,6 +601,8 @@ const quotationSchema = new Schema<Quotation>({
         acceptedRevision: { type: Number },
         acceptedAt: { type: Date },
         acceptedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        customerPoNumber: { type: String },
+        acceptedByName: { type: String },
         lpoFiles: [],
     },
 });

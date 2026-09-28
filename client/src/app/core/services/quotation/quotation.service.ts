@@ -53,7 +53,7 @@ export class QuotationService {
     return this.http.post<{ quoteId: string }>(`${this.api}/quotation/nextQuoteId`, quoteData)
   }
 
-  getProductSuggestions(params: { search: string; departments?: string[]; category?: string }): Observable<{ success: boolean; message: string; data: { _id: string; productCategory: { _id: string; categoryName: string }; productDescription: string }[] }> {
+  getProductSuggestions(params: { search: string; departments?: string[]; category?: string }): Observable<{ success: boolean; message: string; data: { _id: string; productCategory: { _id: string; categoryName: string }; productDescription: string; partNo?: string; itemCode?: string; unitOfMeasure?: string; availableQuantity?: number; reservedQuantity?: number; quarantinedQuantity?: number }[] }> {
     let httpParams: any = { search: params.search || '' };
     if (params.departments?.length) {
       httpParams.departments = params.departments.join(',');
@@ -66,6 +66,30 @@ export class QuotationService {
 
   updateQuoteStatus(quoteId: string, status: QuoteStatus, reason?: string): Observable<QuoteStatus> {
     return this.http.patch<QuoteStatus>(`${this.api}/quotation/status/${quoteId}`, { status, reason })
+  }
+
+  requestQuoteApproval(quoteId: string): Observable<any> {
+    return this.http.post<any>(`${this.api}/quotation/approval/request/${quoteId}`, {}, { context: context() })
+  }
+
+  decideQuoteApproval(quoteId: string, decision: 'approved' | 'rejected', reason?: string): Observable<any> {
+    return this.http.post<any>(`${this.api}/quotation/approval/decision/${quoteId}`, { decision, reason }, { context: context() })
+  }
+
+  sendQuote(quoteId: string, data: { recipient: string; emailStatus?: 'prepared' | 'sent' | 'failed'; pdfFileName?: string; note?: string }): Observable<Quotatation> {
+    return this.http.post<Quotatation>(`${this.api}/quotation/send/${quoteId}`, data, { context: context() })
+  }
+
+  updateQuoteFollowUp(quoteId: string, data: { nextFollowUpDate?: string; reminderOwner?: string; note?: string }): Observable<Quotatation> {
+    return this.http.patch<Quotatation>(`${this.api}/quotation/follow-up/${quoteId}`, data, { context: context() })
+  }
+
+  recordCustomerDecision(quoteId: string, data: { decision: 'accepted' | 'rejected' | 'no_response'; reason?: string; competitor?: string; expectedValueLost?: number }): Observable<Quotatation> {
+    return this.http.patch<Quotatation>(`${this.api}/quotation/customer-decision/${quoteId}`, data, { context: context() })
+  }
+
+  updateOptionalItemDecisions(quoteId: string, decisions: { itemId: string; decision: 'pending' | 'accepted' | 'declined' }[]): Observable<Quotatation> {
+    return this.http.patch<Quotatation>(`${this.api}/quotation/optional-decisions/${quoteId}`, { decisions }, { context: context() })
   }
 
   saveDealSheet(dealDatas: dealData, quoteId?: string): Observable<Quotatation> {
@@ -404,6 +428,9 @@ export class QuotationService {
               ['', '', '', '', { style: 'stableHead', text: 'Closing Date:', alignment: 'left' }, { style: 'stableHead', text: quoteData.closingDate ? new Date(quoteData.closingDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Client Tel:', alignment: 'left' }, { style: 'tableHead', text: `+974 ${quoteData.attention.phoneNo}`, alignment: 'left' }, { style: 'tableHead', text: 'FAX:', alignment: 'center' }, { style: 'tableHead', text: '+974', alignment: 'left' }, { style: 'tableHead', text: 'Salesperson:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.createdBy.firstName + ' ' + quoteData.createdBy.lastName}`, alignment: 'left' }],
               [{ style: 'tableHead', text: 'Subject:', alignment: 'left' }, { style: 'tableHead', text: quoteData.subject, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Quote Ref:', alignment: 'left' }, { style: 'quoteId', text: quoteData.quoteId, alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Payment Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.paymentTerms || '', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'tableHead', text: quoteData.validityDate ? new Date(quoteData.validityDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Delivery Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryTerms || '', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
+              [{ style: 'tableHead', text: 'Warranty:', alignment: 'left' }, { style: 'tableHead', text: quoteData.warranty || '', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Delivery Location:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryLocation || '', alignment: 'left' }],
             ]
           }
         },
@@ -415,6 +442,19 @@ export class QuotationService {
           ]
           : []),
         ...tables,
+        ...(quoteData.paymentTerms || quoteData.deliveryTerms || quoteData.warranty || quoteData.deliveryLocation || quoteData.validityDate ? [
+          { text: 'COMMERCIAL TERMS', style: 'subHeading' },
+          {
+            ul: [
+              ...(quoteData.paymentTerms ? [`Payment Terms: ${quoteData.paymentTerms}`] : []),
+              ...(quoteData.deliveryTerms ? [`Delivery Terms: ${quoteData.deliveryTerms}`] : []),
+              ...(quoteData.warranty ? [`Warranty: ${quoteData.warranty}`] : []),
+              ...(quoteData.deliveryLocation ? [`Delivery Location: ${quoteData.deliveryLocation}`] : []),
+              ...(quoteData.validityDate ? [`Valid Until: ${new Date(quoteData.validityDate).toLocaleDateString('en-GB')}`] : []),
+            ],
+            style: 'text'
+          }
+        ] : []),
         { text: 'TERMS & CONDITIONS', style: 'subHeading' },
         { text: quoteData.termsAndCondition, style: 'text' },
         { text: 'Notes', style: 'subHeading' },

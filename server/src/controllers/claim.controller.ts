@@ -45,7 +45,11 @@ export const createClaim = async (req: any, res: Response, next: NextFunction) =
         }
 
         const workflowFeature = type === 'project' ? 'projectClaim' : 'claim';
-        const approvalStatus = await getWorkflowSteps(workflowFeature, employee._id.toString());
+        const approvalStatus = await getWorkflowSteps(workflowFeature, employee._id.toString(), {
+            amount: Number(amount),
+            type,
+            category
+        });
         category = category ? category : 'others';
 
         const claimData: any = {
@@ -525,7 +529,11 @@ export const updateClaimStatus = async (req: Request, res: Response, next: NextF
             });
         }
 
-        const updatedApprovalStatus = await updateApprovalStatus(status, claim.approvalStatus, comment, employee);
+        const updatedApprovalStatus = await updateApprovalStatus(status, claim.approvalStatus, comment, employee, {
+            amount: claim.amount,
+            type: claim.type,
+            category: claim.category
+        });
         claim.approvalStatus = updatedApprovalStatus;
 
         await claim.save();

@@ -30,6 +30,14 @@
       <app-action-button variant="secondary" [disabled]="isPreviewing" (click)="onPreviewPdf()">
         {{ isPreviewing ? 'Preparing…' : 'Preview' }}
       </app-action-button>
+      <app-action-button variant="secondary" (click)="onRequestApproval()">Check approval</app-action-button>
+      <app-action-button variant="secondary" *ngIf="q.approval?.status === 'pending' && isSuperAdmin" (click)="onApproveQuote('approved')">Approve send</app-action-button>
+      <app-action-button variant="secondary" *ngIf="q.approval?.status === 'pending' && isSuperAdmin" (click)="onApproveQuote('rejected')">Reject send</app-action-button>
+      <app-action-button variant="secondary" (click)="onSendQuote()">Send quote</app-action-button>
+      <app-action-button variant="secondary" (click)="onUpdateFollowUp()">Follow up</app-action-button>
+      <app-action-button variant="secondary" (click)="onUpdateOptionalDecisions()">Optional decisions</app-action-button>
+      <app-action-button variant="secondary" (click)="onCustomerDecision('accepted')">Customer accepted</app-action-button>
+      <app-action-button variant="secondary" (click)="onCustomerDecision('rejected')">Customer rejected</app-action-button>
       <app-action-button variant="secondary" [disabled]="isDownloadingStamped" (click)="onDownloadPdf(true)">
         {{ isDownloadingStamped ? 'Generating…' : 'Stamped PDF' }}
       </app-action-button>
@@ -53,6 +61,20 @@
     </div>
 
     <ng-container sidebar>
+      <app-detail-section title="Lifecycle" *ngIf="lifecycleFacts.length">
+        <app-detail-field *ngFor="let f of lifecycleFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
+          <app-detail-badge *ngIf="f.pill" class="capitalize" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
+          <ng-container *ngIf="!f.pill">{{ f.value }}</ng-container>
+        </app-detail-field>
+      </app-detail-section>
+
+      <app-detail-section title="Handover" *ngIf="handoverFacts.length">
+        <app-detail-field *ngFor="let f of handoverFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
+          <app-detail-badge *ngIf="f.pill" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
+          <ng-container *ngIf="!f.pill">{{ f.value }}</ng-container>
+        </app-detail-field>
+      </app-detail-section>
+
       <app-detail-section title="Deal" *ngIf="dealFacts.length">
         <app-detail-field *ngFor="let f of dealFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
           <app-detail-badge *ngIf="f.pill" class="capitalize" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
@@ -97,6 +119,26 @@
             <app-detail-field label="Quoting Company" stacked>{{ q.quoteCompany || 'N/A' }}</app-detail-field>
             <app-detail-field label="Status" stacked>{{ q.status || 'N/A' }}</app-detail-field>
             <app-detail-field label="Department" stacked>{{ q.department?.departmentName || 'N/A' }}</app-detail-field>
+          </div>
+        </app-detail-section>
+
+        <app-detail-section title="Approval" *ngIf="q.approval?.status && q.approval?.status !== 'not_required'">
+          <div class="mb-3 flex items-center gap-2">
+            <app-detail-badge class="capitalize" [label]="q.approval?.status || ''" [tone]="q.approval?.status === 'approved' ? 'good' : q.approval?.status === 'rejected' ? 'bad' : 'warn'"></app-detail-badge>
+            <span *ngIf="q.approval?.reason" class="text-xs italic text-gray-500 dark:text-gray-400">“{{ q.approval?.reason }}”</span>
+          </div>
+
+          <div *ngIf="q.approval?.breaches?.length" class="space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Rule breaches requiring approval</p>
+            <ul class="space-y-1.5">
+              <li
+                *ngFor="let b of q.approval?.breaches"
+                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+              >
+                <span>{{ b.message }}</span>
+                <span *ngIf="b.approverRole" class="ml-2 text-xs text-amber-700/80 dark:text-amber-300/70">— needs {{ b.approverRole }}</span>
+              </li>
+            </ul>
           </div>
         </app-detail-section>
       </div>

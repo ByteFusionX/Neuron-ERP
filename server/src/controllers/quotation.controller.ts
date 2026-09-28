@@ -10,8 +10,12 @@ import MasterListItem from '../models/masterListItem.model';
 import Enquiry from "../models/enquiry.model";
 import Product from "../models/products.model";
 import ProductCategory from "../models/productCategory.model";
+import StockEntry from "../models/stockEntry.model";
+import StockBlock from "../models/stockBlock.model";
+import StockReservation from "../models/stockReservation.model";
+import StockMovement from "../models/stockMovement.model";
 import { Server } from "socket.io";
-import { calculateDiscountPrice, getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
+import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
@@ -19,6 +23,7 @@ import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import Event from '../models/events.model'
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
+import { getCustomerCommercialGuard, estimateQuoteValue, normalizeTaxForCustomer } from "../common/customer-commercial-guards";
 
 /**
  * Marks the source enquiry as Quoted the first time a quotation leaves Draft.
@@ -33,6 +38,138 @@ const markEnquiryQuotedIfPromoted = async (quote: any, fromStatus?: string, toSt
 
 // An enquiry still with presales has no finished estimation, so it can't be quoted yet.
 const PRESALE_IN_PROGRESS_STATUSES = ['Sent to Presales', 'Assigned To Presale Manager', 'Assigned To Presale Engineer', 'Assigned To Presales', 'Rejected by Presale Engineer', 'Rejected by Presale Manager'];
+
+const ACTIVE_EXPIRABLE_QUOTE_STATUSES = [
+    quoteStatus.WorkInProgress,
+    quoteStatus.ReadyForSubmission,
+    quoteStatus.QuoteSubmitted,
+    quoteStatus.UnderNegotiation,
+    quoteStatus.UnderReview,
+];
+
+const CUSTOMER_SENT_STATUSES = [quoteStatus.QuoteSubmitted, quoteStatus.UnderNegotiation, quoteStatus.Won, quoteStatus.Lost];
+
+const normalizeQuoteValidity = (quoteData: any) => {
+    if (!quoteData) return;
+    if (!quoteData.validityDate && quoteData.closingDate) quoteData.validityDate = quoteData.closingDate;
+    if (!quoteData.closingDate && quoteData.validityDate) quoteData.closingDate = quoteData.validityDate;
+    if (!quoteData.expiryReminderDate && quoteData.validityDate) {
+        const reminderDate = new Date(quoteData.validityDate);
+        if (!Number.isNaN(reminderDate.getTime())) {
+            reminderDate.setDate(reminderDate.getDate() - 3);
+            quoteData.expiryReminderDate = reminderDate;
+        }
+    }
+};
+
+const quoteLines = (quote: any): any[] =>
+    (Array.isArray(quote?.optionalItems) ? quote.optionalItems : [])
+        .flatMap((option: any) => Array.isArray(option?.items) ? option.items : [])
+        .flatMap((item: any) => Array.isArray(item?.itemDetails)
+            ? item.itemDetails.map((detail: any) => ({ item, detail }))
+            : []);
+
+const quoteGrossSelling = (quote: any): number =>
+    quoteLines(quote)
+        .filter(({ item }) => !(item?.isOptional && !item?.includeInTotal))
+        .reduce((sum: number, { detail }) => sum + (Number(detail?.unitSellingPrice) || 0) * (Number(detail?.quantity) || 0), 0);
+
+const quoteGrossCost = (quote: any): number =>
+    quoteLines(quote)
+        .filter(({ item }) => !(item?.isOptional && !item?.includeInTotal))
+        .reduce((sum: number, { detail }) => sum + (Number(detail?.unitCost) || 0) * (Number(detail?.quantity) || 0), 0);
+
+const quoteCustomerDiscount = (quote: any): number =>
+    (Array.isArray(quote?.optionalItems) ? quote.optionalItems : [])
+        .reduce((sum: number, option: any) => sum + (Number(option?.totalDiscount) || 0), 0);
+
+const quoteApprovalBreaches = async (quote: any, actor: any): Promise<any[]> => {
+    const enabledRules = await ApprovalRule.find({ enabled: true }).populate('approverRole', 'categoryName').lean();
+    if (!enabledRules.length) return [];
+
+    const grossSelling = quoteGrossSelling(quote);
+    const customerDiscount = quoteCustomerDiscount(quote);
+    const netSelling = Math.max(grossSelling - customerDiscount, 0);
+    const totalCost = quoteGrossCost(quote);
+    const discountPercent = grossSelling > 0 ? (customerDiscount / grossSelling) * 100 : 0;
+    const marginPercent = netSelling > 0 ? ((netSelling - totalCost) / netSelling) * 100 : 0;
+    const days = await paymentTermDays(quote?.paymentTerms);
+
+    const customer = await Customer.findById(quote?.client, 'companyName creditLimit creditStatus').lean();
+    const creditLimit = Number(customer?.creditLimit);
+    const creditExceptionAmount = Number.isFinite(creditLimit) ? Math.max(netSelling - creditLimit, 0) : 0;
+    const creditStatusRequiresApproval = !!customer?.creditStatus && customer.creditStatus !== 'Good Standing';
+
+    return enabledRules
+        .filter((rule: any) => {
+            const threshold = Number(rule.threshold);
+            if (!Number.isFinite(threshold)) return false;
+            switch (rule.type) {
+                case 'discount':
+                    return discountPercent > threshold;
+                case 'margin':
+                    return marginPercent < threshold;
+                case 'paymentTerms':
+                    return days !== null && days > threshold;
+                case 'creditException':
+                    return creditExceptionAmount > threshold || (creditStatusRequiresApproval && netSelling > threshold);
+                case 'deal':
+                    return netSelling > threshold;
+                default:
+                    return false;
+            }
+        })
+        .filter((rule: any) => !matchesApproverRole(actor, rule.approverRole))
+        .map((rule: any) => {
+            const threshold = Number(rule.threshold);
+            const values: Record<string, number | null> = {
+                discount: Number(discountPercent.toFixed(2)),
+                margin: Number(marginPercent.toFixed(2)),
+                paymentTerms: days,
+                creditException: Number(creditExceptionAmount.toFixed(2)),
+                deal: Number(netSelling.toFixed(2)),
+            };
+            const labels: Record<string, string> = {
+                discount: `Discount ${values.discount}% is above allowed ${threshold}%`,
+                margin: `Margin ${values.margin}% is below required ${threshold}%`,
+                paymentTerms: `Payment terms ${values.paymentTerms} days exceed allowed ${threshold} days`,
+                creditException: `Credit exception ${values.creditException} exceeds allowed ${threshold}`,
+                deal: `Quote value ${values.deal} exceeds approval threshold ${threshold}`,
+            };
+            return {
+                type: rule.type,
+                threshold,
+                actual: values[rule.type],
+                approverRole: rule.approverRole?.categoryName || 'Configured approver role',
+                message: labels[rule.type],
+            };
+        });
+};
+
+const expireOverdueQuotes = async () => {
+    const now = new Date();
+    await Quotation.updateMany(
+        {
+            isDeleted: { $ne: true },
+            status: { $in: ACTIVE_EXPIRABLE_QUOTE_STATUSES },
+            $or: [
+                { validityDate: { $lt: now } },
+                { validityDate: { $exists: false }, closingDate: { $lt: now } },
+            ],
+        },
+        {
+            $set: { status: quoteStatus.Expired },
+            $push: {
+                editHistory: {
+                    editedAt: now,
+                    action: 'StatusChanged',
+                    toStatus: quoteStatus.Expired,
+                    reason: 'Automatically expired after the quote validity date passed',
+                }
+            }
+        }
+    );
+};
 
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -58,10 +195,16 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
             }
         }
 
+        const customerGuard = await getCustomerCommercialGuard(quoteData.client, estimateQuoteValue(quoteData));
+        if (customerGuard.blocked) {
+            return res.status(409).json({ success: false, message: customerGuard.message });
+        }
+        Object.assign(quoteData, normalizeTaxForCustomer(quoteData, customerGuard.customer));
         
         const createdBy = await getEmployeeData(userToken)
         quoteData.createdBy = createdBy._id
         normalizeQuoteDepartments(quoteData)
+        normalizeQuoteValidity(quoteData)
 
         let quoteId: string | undefined = await generateQuoteId(quoteData.department, quoteData.createdBy, quoteData.date);
         if (!quoteId && quoteData.status === quoteStatus.Draft) {
@@ -97,7 +240,10 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         }
 
         if (saveQuote) {
-            return res.status(200).json(saveQuote)
+            return res.status(200).json({
+                ...(saveQuote.toObject ? saveQuote.toObject() : saveQuote),
+                commercialWarnings: customerGuard.warnings
+            })
         }
         return res.status(502).json()
     } catch (error) {
@@ -244,6 +390,7 @@ const quotationLookupStages = [
 
 export const getQuotations = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        await expireOverdueQuotes();
         let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir } = req.body;
 
         page = Math.max(1, parseInt(page) || 1);
@@ -338,6 +485,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 
 export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
     try {
+        await expireOverdueQuotes();
         const { id } = req.params;
         const { access, userId } = req.body ?? {};
 
@@ -448,11 +596,13 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
                 accessFilter = { createdBy: new ObjectId(userId) };
                 break;
             case 'reported':
-                accessFilter = { createdBy: { $in: reportedToUserIds } };
+                // Union in admin/superAdmin-authored deals: they fall outside the reportingTo
+                // hierarchy but still need a manager who can see and act on them.
+                accessFilter = { createdBy: { $in: [...reportedToUserIds, ...await getAdminAuthoredEmployeeIds()] } };
                 break;
             case 'createdAndReported':
                 reportedToUserIds.push(new ObjectId(userId));
-                accessFilter = { createdBy: { $in: reportedToUserIds } };
+                accessFilter = { createdBy: { $in: [...reportedToUserIds, ...await getAdminAuthoredEmployeeIds()] } };
                 break;
 
             default:
@@ -1060,25 +1210,31 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         if (quoteStatusRequiresReason(statusCheck.status, status) && !String(reason ?? '').trim()) {
             return res.status(400).json({ message: status === quoteStatus.Lost ? "A reason is required when marking a quote as Lost" : "A reason is required for this status change" });
         }
+        if (status === quoteStatus.QuoteSubmitted && statusCheck.approval?.status && ['required', 'pending', 'rejected'].includes(statusCheck.approval.status)) {
+            return res.status(403).json({ message: "This quotation requires approval before it can be submitted to the customer" });
+        }
         // Once a deal sheet is raised (and not rejected) the order is in handover; it must not be silently undone from here.
         if (statusCheck.status === quoteStatus.Won && statusCheck.dealData?.status && statusCheck.dealData.status !== 'rejected') {
             return res.status(400).json({ message: "A deal sheet is in progress or approved, so this quote can no longer leave Won" });
         }
 
+        const editorData = await getEmployeeData(req.user);
+        const targetStatus = status;
+
         type UpdateQuery = {
-            $set?: { status: string; lpoFiles?: any[] };
+            $set?: { status: string; lpoFiles?: any[]; lostReason?: string; lostAt?: Date; lostBy?: any; customerDecision?: any; followUp?: any };
             $unset?: { [key: string]: number };
             $push?: { editHistory: any };
         };
 
         let updateObject: UpdateQuery = {
-            $set: { status }
+            $set: { status: targetStatus }
         };
 
         if (statusCheck.status === 'Won') {
             updateObject = {
                 $set: {
-                    status,
+                    status: targetStatus,
                     lpoFiles: [] // Set to empty array
                 },
                 $unset: {
@@ -1086,21 +1242,39 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
                 }
             };
         }
+        if (targetStatus === quoteStatus.Lost) {
+            updateObject.$set!.lostReason = String(reason ?? '').trim();
+            updateObject.$set!.lostAt = new Date();
+            updateObject.$set!.lostBy = editorData?._id;
+            updateObject.$set!.customerDecision = {
+                decision: 'rejected',
+                decidedAt: new Date(),
+                decidedBy: editorData?._id,
+                reason: String(reason ?? '').trim(),
+            };
+        }
+        if (CUSTOMER_SENT_STATUSES.includes(targetStatus)) {
+            updateObject.$set!.followUp = {
+                ...((statusCheck.followUp as any)?.toObject ? (statusCheck.followUp as any).toObject() : statusCheck.followUp || {}),
+                lastActivityDate: new Date(),
+            };
+        }
 
         // Leaving Won discards the deal sheet and LPO files, so the history records what was removed.
         const discarded = statusCheck.status === quoteStatus.Won
             ? [statusCheck.dealData?.dealId && `deal sheet ${statusCheck.dealData.dealId}`, statusCheck.lpoFiles?.length && `${statusCheck.lpoFiles.length} LPO file(s)`].filter(Boolean)
             : [];
-        const historyReason = [String(reason ?? '').trim(), discarded.length ? `Removed: ${discarded.join(', ')}` : ''].filter(Boolean).join(' — ');
-
-        const editorData = await getEmployeeData(req.user);
+        const historyReason = [
+            String(reason ?? '').trim(),
+            discarded.length ? `Removed: ${discarded.join(', ')}` : ''
+        ].filter(Boolean).join(' — ');
         updateObject.$push = {
             editHistory: {
                 editedBy: editorData?._id,
                 editedAt: new Date(),
                 action: 'StatusChanged',
                 fromStatus: statusCheck.status,
-                toStatus: status,
+                toStatus: targetStatus,
                 ...(historyReason ? { reason: historyReason } : {}),
             }
         };
@@ -1112,8 +1286,8 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         );
 
         if (quoteUpdated) {
-            await markEnquiryQuotedIfPromoted(quoteUpdated, statusCheck.status, status);
-            return res.status(200).json(status);
+            await markEnquiryQuotedIfPromoted(quoteUpdated, statusCheck.status, targetStatus);
+            return res.status(200).json(targetStatus);
         }
         return res.status(404).json({ message: "Quote not found" });
     } catch (error) {
@@ -1124,7 +1298,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
 
 /** Statuses before the quote has gone to the customer: edits there don't create revisions. */
 const UNSENT_QUOTE_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
-const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'currency'];
+const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'paymentTerms', 'deliveryTerms', 'warranty', 'deliveryLocation', 'validityDate', 'currency'];
 
 const selectedDealLines = (items: any[]): any[] => (Array.isArray(items) ? items : [])
     .flatMap((item: any) => Array.isArray(item?.itemDetails) ? item.itemDetails : [])
@@ -1318,6 +1492,7 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         delete quoteData.revision;
         delete quoteData.revisions;
         normalizeQuoteDepartments(quoteData)
+        normalizeQuoteValidity(quoteData)
 
         const existingQuote = await Quotation.findById(quoteId).lean();
         if (existingQuote) {
@@ -1376,6 +1551,11 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
                     optionalItems: existingQuote.optionalItems,
                     customerNote: existingQuote.customerNote,
                     termsAndCondition: existingQuote.termsAndCondition,
+                    paymentTerms: existingQuote.paymentTerms,
+                    deliveryTerms: existingQuote.deliveryTerms,
+                    warranty: existingQuote.warranty,
+                    deliveryLocation: existingQuote.deliveryLocation,
+                    validityDate: existingQuote.validityDate || existingQuote.closingDate,
                 },
             };
         }
@@ -1396,6 +1576,254 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
     }
 }
 
+export const requestQuoteApproval = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        if (quote.status === quoteStatus.Expired) return res.status(400).json({ message: "Expired quotes cannot be sent for approval" });
+
+        const actor = await getEmployeeData(req.user);
+        const breaches = await quoteApprovalBreaches(quote, actor);
+        const status = breaches.length ? 'pending' : 'not_required';
+        const now = new Date();
+        const approval = breaches.length
+            ? { status, requestedAt: now, requestedBy: actor?._id, breaches }
+            : { status, approvedAt: now, approvedBy: actor?._id, breaches: [] };
+
+        const updated = await Quotation.findByIdAndUpdate(
+            quoteId,
+            {
+                $set: { approval },
+                $push: {
+                    editHistory: {
+                        editedBy: actor?._id,
+                        editedAt: now,
+                        action: breaches.length ? 'ApprovalRequested' : 'ApprovalApproved',
+                        reason: breaches.length ? breaches.map((b: any) => b.message).join(' | ') : 'No approval rules breached',
+                    }
+                }
+            },
+            { new: true }
+        );
+        return res.status(200).json({ approval: updated?.approval, approvalRequired: breaches });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const decideQuoteApproval = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const { decision, reason } = req.body;
+        if (!['approved', 'rejected'].includes(decision)) {
+            return res.status(400).json({ message: "Decision must be approved or rejected" });
+        }
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        const actor = await getEmployeeData(req.user);
+        const now = new Date();
+        const set: any = {
+            'approval.status': decision,
+            'approval.reason': String(reason || '').trim(),
+        };
+        if (decision === 'approved') {
+            set['approval.approvedAt'] = now;
+            set['approval.approvedBy'] = actor?._id;
+        } else {
+            set['approval.rejectedAt'] = now;
+            set['approval.rejectedBy'] = actor?._id;
+        }
+        const updated = await Quotation.findByIdAndUpdate(
+            quoteId,
+            {
+                $set: set,
+                $push: {
+                    editHistory: {
+                        editedBy: actor?._id,
+                        editedAt: now,
+                        action: decision === 'approved' ? 'ApprovalApproved' : 'ApprovalRejected',
+                        reason: String(reason || '').trim(),
+                    }
+                }
+            },
+            { new: true }
+        );
+        return res.status(200).json({ approval: updated?.approval });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const sendQuote = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const { recipient, emailStatus = 'prepared', pdfFileName, note } = req.body;
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        if (!String(recipient || '').trim()) return res.status(400).json({ message: "Recipient is required" });
+        if (quote.approval?.status && ['required', 'pending', 'rejected'].includes(quote.approval.status)) {
+            return res.status(403).json({ message: "Approve this quotation before sending it to the customer" });
+        }
+        const actor = await getEmployeeData(req.user);
+        const now = new Date();
+        const revision = quote.revision ?? 0;
+        const nextStatus = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission, quoteStatus.UnderReview].includes(quote.status as quoteStatus)
+            ? quoteStatus.QuoteSubmitted
+            : quote.status;
+        const record = {
+            revision,
+            sentAt: now,
+            sentBy: actor?._id,
+            recipient: String(recipient).trim(),
+            emailStatus: ['prepared', 'sent', 'failed'].includes(emailStatus) ? emailStatus : 'prepared',
+            ...(pdfFileName ? { pdfFileName } : {}),
+            ...(note ? { note } : {}),
+        };
+        const updated = await Quotation.findByIdAndUpdate(
+            quoteId,
+            {
+                $set: {
+                    status: nextStatus,
+                    currentSentRevision: revision,
+                    'followUp.lastActivityDate': now,
+                },
+                $push: {
+                    sendHistory: record,
+                    editHistory: {
+                        editedBy: actor?._id,
+                        editedAt: now,
+                        action: 'QuoteSent',
+                        fromStatus: quote.status,
+                        toStatus: nextStatus,
+                        revision,
+                        reason: `Sent to ${record.recipient} (${record.emailStatus})`,
+                    }
+                }
+            },
+            { new: true }
+        );
+        return res.status(200).json(updated);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateQuoteFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const { nextFollowUpDate, reminderOwner, note } = req.body;
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        const actor = await getEmployeeData(req.user);
+        const followUp: any = {
+            ...((quote.followUp as any)?.toObject ? (quote.followUp as any).toObject() : quote.followUp || {}),
+            lastActivityDate: new Date(),
+            note: String(note || '').trim(),
+        };
+        if (nextFollowUpDate) followUp.nextFollowUpDate = new Date(nextFollowUpDate);
+        if (reminderOwner) followUp.reminderOwner = reminderOwner;
+        const updated = await Quotation.findByIdAndUpdate(
+            quoteId,
+            {
+                $set: { followUp },
+                $push: { editHistory: { editedBy: actor?._id, editedAt: new Date(), action: 'FollowUpUpdated', reason: followUp.note } }
+            },
+            { new: true }
+        );
+        return res.status(200).json(updated);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const recordCustomerDecision = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const { decision, reason, competitor, expectedValueLost } = req.body;
+        if (!['accepted', 'rejected', 'no_response'].includes(decision)) {
+            return res.status(400).json({ message: "Decision must be accepted, rejected, or no_response" });
+        }
+        if (decision === 'rejected' && !String(reason || '').trim()) {
+            return res.status(400).json({ message: "A rejection reason is required" });
+        }
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        const actor = await getEmployeeData(req.user);
+        const nextStatus = decision === 'accepted' ? quoteStatus.Won : decision === 'rejected' ? quoteStatus.Lost : quote.status;
+        const now = new Date();
+        const customerDecision: any = {
+            decision,
+            decidedAt: now,
+            decidedBy: actor?._id,
+            reason: String(reason || '').trim(),
+            competitor: String(competitor || '').trim(),
+        };
+        if (Number.isFinite(Number(expectedValueLost))) customerDecision.expectedValueLost = Number(expectedValueLost);
+        const updated = await Quotation.findByIdAndUpdate(
+            quoteId,
+            {
+                $set: {
+                    status: nextStatus,
+                    customerDecision,
+                    ...(decision === 'rejected' ? { lostReason: customerDecision.reason, lostAt: now, lostBy: actor?._id } : {}),
+                    'followUp.lastActivityDate': now,
+                },
+                $push: {
+                    editHistory: {
+                        editedBy: actor?._id,
+                        editedAt: now,
+                        action: decision === 'accepted' ? 'CustomerAccepted' : decision === 'rejected' ? 'CustomerRejected' : 'CustomerNoResponse',
+                        fromStatus: quote.status,
+                        toStatus: nextStatus,
+                        revision: quote.revision ?? 0,
+                        reason: [customerDecision.reason, customerDecision.competitor ? `Competitor: ${customerDecision.competitor}` : ''].filter(Boolean).join(' | '),
+                    }
+                }
+            },
+            { new: true }
+        );
+        return res.status(200).json(updated);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateOptionalItemDecisions = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { quoteId } = req.params;
+        const { decisions } = req.body;
+        if (!Array.isArray(decisions)) return res.status(400).json({ message: "Decisions array is required" });
+        const quote = await Quotation.findById(quoteId);
+        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
+        const byId = new Map(decisions.map((d: any) => [String(d.itemId), d.decision]));
+        const now = new Date();
+        quote.optionalItems = (quote.optionalItems || []).map((option: any) => {
+            option.items = (option.items || []).map((item: any) => {
+                const decision = byId.get(String(item._id));
+                if (decision && ['pending', 'accepted', 'declined'].includes(decision)) {
+                    item.customerDecision = decision;
+                    item.customerDecisionAt = now;
+                    if (item.isOptional) item.includeInTotal = decision === 'accepted';
+                }
+                return item;
+            });
+            return option;
+        }) as any;
+        const actor = await getEmployeeData(req.user);
+        quote.editHistory.push({
+            editedBy: actor?._id,
+            editedAt: now,
+            action: 'OptionalItemsDecided',
+            reason: `${decisions.length} optional item decision(s) updated`,
+        } as any);
+        await quote.save();
+        return res.status(200).json(quote);
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const saveDealSheet = async (req: any, res: Response, next: NextFunction) => {
     try {
         const { quoteId } = req.params;
@@ -1415,6 +1843,10 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         if (hasActiveDeal(quote)) {
             return res.status(409).json({ message: "A deal sheet is already in progress or approved for this quotation" });
         }
+        const customerGuard = await getCustomerCommercialGuard(quote.client, estimateQuoteValue(quote));
+        if (customerGuard.blocked) {
+            return res.status(409).json({ message: customerGuard.message });
+        }
 
         let parsedDealData: any;
         try {
@@ -1422,6 +1854,7 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         } catch {
             return res.status(400).json({ message: "Invalid deal sheet payload" });
         }
+        parsedDealData = normalizeTaxForCustomer(parsedDealData, customerGuard.customer);
         const { paymentTerms, items, removedFiles, existingFiles, costs, totalDiscount } = parsedDealData;
         if (!String(paymentTerms ?? '').trim()) {
             return res.status(400).json({ message: "Payment terms are required before raising a deal sheet" });
@@ -1489,7 +1922,10 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
 
         if (quoteUpdated) {
-            return res.status(200).json(quoteUpdated)
+            return res.status(200).json({
+                ...(quoteUpdated.toObject ? quoteUpdated.toObject() : quoteUpdated),
+                commercialWarnings: customerGuard.warnings
+            })
         }
         return res.status(502).json()
     } catch (error) {
@@ -1539,6 +1975,16 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
         if (existingJob) {
             return res.status(409).json({ message: "A job already exists for this quotation" });
         }
+        const customerGuard = await getCustomerCommercialGuard(quote.client, estimateQuoteValue(quote));
+        if (customerGuard.blocked || customerGuard.warnings.length) {
+            return res.status(403).json({
+                message: customerGuard.message || "Customer credit approval is required before this deal can be approved",
+                approvalRequired: customerGuard.warnings.map((warning) => ({
+                    type: 'creditException',
+                    actual: warning
+                }))
+            });
+        }
 
         const jobId = await generateJobId()
         const jobData = {
@@ -1558,6 +2004,40 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 }
             )
             if (quoteUpdate) {
+                const selectedLines = selectedDealLines(quote.dealData.updatedItems)
+                    .filter((line: any) => hasReferenceValue(line?.partNo) && isPositiveNumber(line?.quantity));
+                const expiresAt = quote.validityDate ? new Date(quote.validityDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                for (const line of selectedLines) {
+                    const productId = typeof line.partNo === 'object' ? line.partNo._id : line.partNo;
+                    const reservation = await StockReservation.create({
+                        product: productId,
+                        quote: quote._id,
+                        job: saveJob._id,
+                        customer: quote.client,
+                        sourceType: 'Deal',
+                        sourceRef: saveJob._id,
+                        quantity: Number(line.quantity),
+                        reservedFrom: new Date(),
+                        expiresAt,
+                        status: 'Active',
+                        createdBy: approverData?._id,
+                        createdDate: new Date(),
+                        updatedDate: new Date(),
+                        isDeleted: false,
+                    });
+                    await StockMovement.create({
+                        product: reservation.product,
+                        movementType: 'Reservation',
+                        reservedQuantity: reservation.quantity,
+                        referenceType: 'Job',
+                        referenceId: saveJob._id,
+                        remarks: `Reserved on deal approval for job ${jobId}`,
+                        movementDate: new Date(),
+                        createdBy: approverData?._id,
+                        createdDate: new Date(),
+                    });
+                }
+
                 const socket = req.app.get('io') as Server;
                 const quotation = await Quotation.findById(jobData.quoteId);
                 if (quotation) {
@@ -1720,6 +2200,8 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
         const userData = await getEmployeeData(req.user);
         const acceptedLpoFiles = [...(existingQuote.lpoFiles || []), ...newFiles];
         const acceptedRevision = existingQuote.revision ?? 0;
+        const customerPoNumber = String(req.body.customerPoNumber || '').trim();
+        const acceptedByName = String(req.body.acceptedByName || '').trim();
 
         // Use $push to append new files to existing array
         const quote = await Quotation.findByIdAndUpdate(
@@ -1731,6 +2213,8 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
                         acceptedRevision,
                         acceptedAt: new Date(),
                         acceptedBy: userData?._id,
+                        ...(customerPoNumber ? { customerPoNumber } : {}),
+                        ...(acceptedByName ? { acceptedByName } : {}),
                         lpoFiles: acceptedLpoFiles,
                     },
                 },
@@ -1741,6 +2225,7 @@ export const uploadLpo = async (req: any, res: Response, next: NextFunction) => 
                         editedAt: new Date(),
                         action: 'CustomerAccepted',
                         revision: acceptedRevision,
+                        reason: [customerPoNumber ? `Customer PO ${customerPoNumber}` : '', acceptedByName ? `Accepted by ${acceptedByName}` : ''].filter(Boolean).join(' — '),
                     }
                 }
             },
@@ -1880,6 +2365,7 @@ const tally = (map: Map<string, any>, id: string, name: string, value: number, w
 
 export const getReportDetails = async (req: Request, res: Response) => {
     try {
+        await expireOverdueQuotes();
         let { salesPerson, customer, fromDate, toDate, department, access, userId } = req.body;
         let isSalesPerson = salesPerson == null ? true : false;
         let isCustomer = customer == null ? true : false;
@@ -2263,14 +2749,78 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
         const limitValue = Math.min(Math.max(parseInt(limit as string, 10) || 20, 1), 50);
 
         const suggestions = await Product.find(filter)
-            .select('productCategory productDescription')
+            .select('productCategory productDescription partNo itemCode unitOfMeasure type defaultSellingPrice estimatedCost defaultVendor')
             .populate('productCategory', 'categoryName')
-            .limit(limitValue);
+            .limit(limitValue)
+            .lean();
+
+        const productIds = suggestions.map((product: any) => product._id);
+        const stockEntries = productIds.length ? await StockEntry.find({
+            partNo: { $in: productIds },
+            isDeleted: { $ne: true },
+        }).select('_id partNo quantity isQuarantined').lean() : [];
+
+        const activeBlocks = stockEntries.length ? await StockBlock.find({
+            stockEntryId: { $in: stockEntries.map((entry: any) => entry._id) },
+            isDeleted: { $ne: true },
+            toDate: { $gte: new Date() },
+        }).select('stockEntryId quantity').lean() : [];
+
+        const blockedByEntryId = new Map<string, number>();
+        activeBlocks.forEach((block: any) => {
+            const entryId = block.stockEntryId?.toString();
+            if (entryId) {
+                blockedByEntryId.set(entryId, (blockedByEntryId.get(entryId) || 0) + (block.quantity || 0));
+            }
+        });
+
+        const stockByProduct = new Map<string, { onHandQuantity: number; blockedQuantity: number; quarantinedQuantity: number }>();
+        stockEntries.forEach((entry: any) => {
+            const productId = entry.partNo?.toString();
+            if (!productId) return;
+            const current = stockByProduct.get(productId) || { onHandQuantity: 0, blockedQuantity: 0, quarantinedQuantity: 0 };
+            if (entry.isQuarantined) {
+                current.quarantinedQuantity += entry.quantity || 0;
+            } else {
+                current.onHandQuantity += entry.quantity || 0;
+                current.blockedQuantity += blockedByEntryId.get(entry._id.toString()) || 0;
+            }
+            stockByProduct.set(productId, current);
+        });
+
+        const reservations = productIds.length ? await StockReservation.aggregate([
+            {
+                $match: {
+                    product: { $in: productIds },
+                    isDeleted: { $ne: true },
+                    status: 'Active',
+                    expiresAt: { $gte: new Date() },
+                },
+            },
+            { $group: { _id: '$product', quantity: { $sum: '$quantity' } } },
+        ]) : [];
+        const reservationByProduct = new Map<string, number>();
+        reservations.forEach((reservation: any) => reservationByProduct.set(reservation._id.toString(), reservation.quantity || 0));
+
+        const suggestionsWithAvailability = suggestions.map((product: any) => {
+            const stock = stockByProduct.get(product._id.toString()) || { onHandQuantity: 0, blockedQuantity: 0, quarantinedQuantity: 0 };
+            const reservationQuantity = reservationByProduct.get(product._id.toString()) || 0;
+            const reservedQuantity = stock.blockedQuantity + reservationQuantity;
+            return {
+                ...product,
+                onHandQuantity: stock.onHandQuantity,
+                blockedQuantity: stock.blockedQuantity,
+                reservationQuantity,
+                reservedQuantity,
+                quarantinedQuantity: stock.quarantinedQuantity,
+                availableQuantity: Math.max(0, stock.onHandQuantity - reservedQuantity),
+            };
+        });
 
         return res.status(200).json({
             success: true,
             message: 'Product suggestions fetched successfully',
-            data: suggestions,
+            data: suggestionsWithAvailability,
         });
     } catch (error) {
         console.error(error);
@@ -2301,7 +2851,7 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
     try {
         const { quoteId } = req.params;
         const quote = await Quotation.findById(quoteId)
-            .select('+revisions revision subject currency optionalItems customerNote termsAndCondition createdBy')
+            .select('+revisions revision subject currency optionalItems customerNote termsAndCondition paymentTerms deliveryTerms warranty deliveryLocation validityDate closingDate createdBy')
             .lean();
 
         if (!quote) {
@@ -2341,6 +2891,11 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
                         optionalItems: quote.optionalItems,
                         customerNote: quote.customerNote,
                         termsAndCondition: quote.termsAndCondition,
+                        paymentTerms: quote.paymentTerms,
+                        deliveryTerms: quote.deliveryTerms,
+                        warranty: quote.warranty,
+                        deliveryLocation: quote.deliveryLocation,
+                        validityDate: quote.validityDate || quote.closingDate,
                     },
                 },
                 ...revisions,

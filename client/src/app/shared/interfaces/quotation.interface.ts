@@ -8,6 +8,8 @@ export interface QuoteItem {
     itemName: string;
     isOptional?: boolean;
     includeInTotal?: boolean;
+    customerDecision?: 'pending' | 'accepted' | 'declined';
+    customerDecisionAt?: string;
     itemDetails: QuoteItemDetail[]
 }
 
@@ -18,7 +20,10 @@ export interface OptionalItems {
 
 export interface QuoteItemDetail {
     _id: string;
+    /** Catalogue product this line came from; itemCode/partNo are snapshots taken at save time. */
+    productId?: string;
     itemCode?: string;
+    partNo?: string;
     detail: string;
     quantity: number;
     unitCost: number;
@@ -45,6 +50,11 @@ export interface QuoteRevisionSnapshot {
     optionalItems: OptionalItems[];
     customerNote: string;
     termsAndCondition: string;
+    paymentTerms?: string;
+    deliveryTerms?: string;
+    warranty?: string;
+    deliveryLocation?: string;
+    validityDate?: string;
 }
 
 export interface QuoteRevision {
@@ -72,7 +82,7 @@ export interface FieldChange {
 export interface EditHistoryEntry {
     editedBy: getEmployee;
     editedAt: string;
-    action: 'Created' | 'Updated' | 'StatusChanged' | 'DealApproved' | 'DealRejected' | 'DealRevoked';
+    action: 'Created' | 'Updated' | 'StatusChanged' | 'QuoteSent' | 'ApprovalRequested' | 'ApprovalApproved' | 'ApprovalRejected' | 'FollowUpUpdated' | 'CustomerAccepted' | 'CustomerRejected' | 'CustomerNoResponse' | 'OptionalItemsDecided' | 'DealApproved' | 'DealRejected' | 'DealRevoked';
     fromStatus?: string;
     toStatus?: string;
     reason?: string;
@@ -95,11 +105,33 @@ export interface Quotatation {
     optionalItems: OptionalItems[];
     customerNote: DefaultAndText;
     termsAndCondition: DefaultAndText;
+    paymentTerms?: string;
+    deliveryTerms?: string;
+    warranty?: string;
+    deliveryLocation?: string;
+    validityDate?: string;
+    expiryReminderDate?: string;
+    sendHistory?: QuoteSendRecord[];
+    currentSentRevision?: number;
+    approval?: QuoteApproval;
+    followUp?: QuoteFollowUp;
+    customerDecision?: QuoteCustomerDecision;
+    lostReason?: string;
+    lostAt?: string;
+    lostBy?: getEmployee | string;
     createdBy: getEmployee;
     status: QuoteStatus;
     lpoFiles: File[];
     lpoValue: string;
     lpoSubmitted: boolean;
+    customerAcceptance?: {
+        acceptedRevision?: number;
+        acceptedAt?: string;
+        acceptedBy?: getEmployee | string;
+        customerPoNumber?: string;
+        acceptedByName?: string;
+        lpoFiles?: [];
+    };
     enqId: string;
     dealData: dealData;
     rfqNo: string;
@@ -126,10 +158,32 @@ export interface getQuotatation {
     optionalItems: OptionalItems[];
     customerNote: DefaultAndText;
     termsAndCondition: DefaultAndText;
+    paymentTerms?: string;
+    deliveryTerms?: string;
+    warranty?: string;
+    deliveryLocation?: string;
+    validityDate?: string;
+    expiryReminderDate?: string;
+    sendHistory?: QuoteSendRecord[];
+    currentSentRevision?: number;
+    approval?: QuoteApproval;
+    followUp?: QuoteFollowUp;
+    customerDecision?: QuoteCustomerDecision;
+    lostReason?: string;
+    lostAt?: string;
+    lostBy?: getEmployee | string;
     createdBy: getEmployee;
     status: QuoteStatus;
     lpoFiles: [];
     lpoSubmitted: boolean;
+    customerAcceptance?: {
+        acceptedRevision?: number;
+        acceptedAt?: string;
+        acceptedBy?: getEmployee | string;
+        customerPoNumber?: string;
+        acceptedByName?: string;
+        lpoFiles?: [];
+    };
     enqId: getEnquiry;
     dealData: dealData;
     rfqNo: string;
@@ -171,12 +225,55 @@ export interface quotatationForm {
     optionalItems: OptionalItems[];
     customerNote: DefaultAndText;
     termsAndCondition: DefaultAndText;
+    paymentTerms?: string;
+    deliveryTerms?: string;
+    warranty?: string;
+    deliveryLocation?: string;
+    validityDate?: string;
     createdBy: string | getEmployee | undefined;
     status: QuoteStatus;
     rfqNo: string;
     closingDate: string;
     saveNote?: string;
     editHistory?: EditHistoryEntry[];
+}
+
+export interface QuoteSendRecord {
+    revision: number;
+    sentAt: string;
+    sentBy?: getEmployee | string;
+    recipient: string;
+    emailStatus: 'prepared' | 'sent' | 'failed';
+    pdfFileName?: string;
+    note?: string;
+}
+
+export interface QuoteApproval {
+    status: 'not_required' | 'required' | 'pending' | 'approved' | 'rejected';
+    requestedAt?: string;
+    requestedBy?: getEmployee | string;
+    approvedAt?: string;
+    approvedBy?: getEmployee | string;
+    rejectedAt?: string;
+    rejectedBy?: getEmployee | string;
+    reason?: string;
+    breaches?: { type?: string; message?: string; actual?: number; threshold?: number; approverRole?: string }[];
+}
+
+export interface QuoteFollowUp {
+    nextFollowUpDate?: string;
+    reminderOwner?: getEmployee | string;
+    lastActivityDate?: string;
+    note?: string;
+}
+
+export interface QuoteCustomerDecision {
+    decision: 'accepted' | 'rejected' | 'no_response';
+    decidedAt: string;
+    decidedBy?: getEmployee | string;
+    reason?: string;
+    competitor?: string;
+    expectedValueLost?: number;
 }
 
 export enum QuoteStatus {
