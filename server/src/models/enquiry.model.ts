@@ -21,9 +21,9 @@ interface Enquiry extends Document {
     date: string | number | Date;
     nextFollowUpDate?: string | number | Date;
     lastFollowUpDate?: string | number | Date;
-    followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date }[];
+    followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date, correctionOf?: Types.ObjectId | null }[];
     createdDate: Date;
-    preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[] };
+    preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId } };
     // preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; }[] };
     assignedFiles: []
     status: string;
@@ -110,6 +110,27 @@ const rejectionHistorySchema = new Schema({
     }
 });
 
+const assignApprovalSchema = new Schema({
+    stepIndex: {
+        type: Number,
+        default: 0
+    },
+    role: {
+        type: Schema.Types.ObjectId,
+        ref: 'Category'
+    },
+    assignedAt: {
+        type: Date
+    },
+    escalationDueAt: {
+        type: Date
+    },
+    escalatedFrom: {
+        type: Schema.Types.ObjectId,
+        ref: 'Category'
+    },
+}, { _id: false });
+
 const preSaleSchema = new Schema({
     presalePerson: {
         type: Schema.Types.ObjectId,
@@ -145,7 +166,8 @@ const preSaleSchema = new Schema({
         type: Date,
         default: Date.now()
     },
-    rejectionHistory: [rejectionHistorySchema]
+    rejectionHistory: [rejectionHistorySchema],
+    assignApproval: assignApprovalSchema
 })
 
 
@@ -209,6 +231,10 @@ const followUpHistorySchema = new Schema({
     createdAt: {
         type: Date,
         default: Date.now
+    },
+    correctionOf: {
+        type: Schema.Types.ObjectId,
+        default: null
     }
 });
 

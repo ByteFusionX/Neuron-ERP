@@ -96,6 +96,7 @@ export interface EnquiryFollowUp {
     createdBy?: string | getEmployeeDetails;
     createdByName?: string;
     createdAt?: string;
+    correctionOf?: string | null;
 }
 
 export interface FeedbackTable {

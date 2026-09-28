@@ -3,6 +3,7 @@
     class="flex-1 min-h-0"
     [fillHeight]="true"
     title="Enquiries"
+    subtitle="Track and manage customer enquiries from first contact through to quotation"
     [breadcrumbs]="breadcrumbs"
     rowKey="_id"
     [serverSide]="true"
@@ -40,61 +41,76 @@
       <div class="enquiry-meta"><p class="enquiry-meta-label">Date</p><p class="enquiry-meta-value">{{ row.date | date: 'dd MMM yyyy' }}</p></div>
     </ng-template>
 
-    <ng-template #detailFooterTemplate let-row>
-      <span *ngIf="row.status !== 'Ready for Quotation'" class="mr-auto text-xs text-amber-700 dark:text-amber-300">
-        Mark this enquiry Ready for Quotation before creating a quote.
-      </span>
-      <app-action-button variant="primary" [disabled]="row.status !== 'Ready for Quotation'" (click)="createQuote(row)">
-        Create Quote
-      </app-action-button>
+    <ng-template #detailFooterTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <app-action-button *ngSwitchCase="'followups'" variant="primary" (click)="onAddFollowUp(row)">
+          Add Follow-up
+        </app-action-button>
+        <app-action-button *ngSwitchCase="'events'" variant="primary" (click)="onAddEvent(row)">
+          Add Event
+        </app-action-button>
+        <ng-container *ngSwitchCase="'documents'">
+          <app-action-button *ngIf="canUploadAttachments(row)" variant="primary" [disabled]="uploadRowId === row._id" (click)="uploadRowId = row._id">
+            Add Document
+          </app-action-button>
+        </ng-container>
+        <ng-container *ngSwitchDefault>
+          <span *ngIf="row.status !== 'Ready for Quotation'" class="mr-auto text-xs text-amber-700 dark:text-amber-300">
+            Mark this enquiry Ready for Quotation before creating a quote.
+          </span>
+          <app-action-button variant="primary" [disabled]="row.status !== 'Ready for Quotation'" (click)="createQuote(row)">
+            Create Quote
+          </app-action-button>
+        </ng-container>
+      </ng-container>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
       <ng-container [ngSwitch]="tab">
         <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
-        <div *ngSwitchCase="'followups'" class="space-y-5">
-          <app-detail-timeline
-            [entries]="followUpTimeline(row)"
-            emptyMessage="No follow-up notes yet."></app-detail-timeline>
-
-          <form [formGroup]="followUpForm" (ngSubmit)="saveFollowUp(row)"
-            class="rounded-md border border-gray-200 bg-white p-4 dark:border-erp-border-dark dark:bg-erp-surface-dark">
-            <div class="grid gap-3 md:grid-cols-2">
-              <label class="block">
-                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Follow-up date</span>
-                <input type="date" formControlName="date"
-                  class="mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100">
-              </label>
-              <label class="block">
-                <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Next follow-up</span>
-                <input type="date" formControlName="nextFollowUpDate"
-                  class="mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100">
-              </label>
+        <div *ngSwitchCase="'followups'" class="space-y-3">
+          <div *ngFor="let f of followUpItems(row)"
+            class="rounded-lg border border-gray-200 bg-white p-3.5 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <span class="grid h-7 w-7 shrink-0 place-content-center rounded-md bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                  <app-dp-icon name="clock" size="w-4 h-4"></app-dp-icon>
+                </span>
+                <div class="min-w-0">
+                  <p class="text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ f.outcome }}</p>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ f.date }}<ng-container *ngIf="f.createdByName"> · {{ f.createdByName }}</ng-container>
+                  </p>
+                </div>
+              </div>
+              <div class="flex shrink-0 items-center gap-1.5">
+                <span *ngIf="f.nextFollowUpDate" class="rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset"
+                  [ngClass]="f.overdue ? 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-400 dark:ring-red-900' : 'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900'">
+                  Next: {{ f.nextFollowUpDate }}
+                </span>
+                <button type="button" (click)="onCorrectFollowUp(row, f)" title="Log a correction to this entry"
+                  class="rounded-md p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+                  <app-dp-icon name="pencil" size="w-3.5 h-3.5"></app-dp-icon>
+                </button>
+              </div>
             </div>
-            <label class="mt-3 block">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Outcome</span>
-              <input type="text" formControlName="outcome" placeholder="Called customer, waiting for BOQ, site visit done..."
-                class="mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100">
-            </label>
-            <label class="mt-3 block">
-              <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Notes</span>
-              <textarea formControlName="note" rows="3"
-                class="mt-1 w-full resize-none rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm text-gray-900 outline-none focus:border-violet-500 dark:border-erp-border-dark dark:bg-erp-surface-dark-alt dark:text-gray-100"></textarea>
-            </label>
-            <div class="mt-3 flex justify-end">
-              <button type="submit" [disabled]="followUpSavingRowId === row._id"
-                class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">
-                {{ followUpSavingRowId === row._id ? 'Saving...' : 'Save Follow-up' }}
-              </button>
-            </div>
-          </form>
+            <p *ngIf="f.correctionOfOutcome" class="mt-1.5 flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+              <app-dp-icon name="refresh" size="w-3 h-3"></app-dp-icon>
+              Correction of "{{ f.correctionOfOutcome }}"
+            </p>
+            <p *ngIf="f.note" class="mt-2 whitespace-pre-line text-xs text-gray-600 dark:text-gray-300">{{ f.note }}</p>
+          </div>
+          <div *ngIf="!followUpItems(row).length"
+            class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-erp-border-dark">
+            <app-dp-icon name="clock" size="w-6 h-6" class="text-gray-400"></app-dp-icon>
+            <p class="text-[13px] text-gray-500 dark:text-gray-400">No follow-up notes yet.</p>
+          </div>
         </div>
         <app-detail-task-list *ngSwitchCase="'events'"
           [items]="eventItems((eventsFor(row) | async) ?? [])"
           defaultFilter="event"
           [showTasks]="false"
           [showEvents]="true"
-          addable
           (add)="onAddEvent(row)"
           (toggle)="onToggleEvent(row, $event)"
           (eventOutcome)="onEventOutcome(row, $event.item, $event.status)"
@@ -108,10 +124,8 @@
           <app-detail-documents *ngIf="uploadRowId !== row._id; else uploadZone"
             title="Enquiry files"
             [documents]="enquiryDocuments(row)"
-            [uploadable]="canUploadAttachments(row)"
             [removable]="canUploadAttachments(row)"
             [removeDetails]="documentRemoveDetails(row)"
-            (upload)="uploadRowId = row._id"
             (open)="onDocumentOpen(row, $event)"
             (download)="onDocumentDownload(row, $event)"
             (remove)="onDocumentRemove(row, $event)"></app-detail-documents>

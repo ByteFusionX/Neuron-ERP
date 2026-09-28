@@ -134,7 +134,7 @@ export class EnquiryEstimationViewComponent implements OnChanges, OnDestroy {
     }
     this.isSaving = true;
     this.subscriptions.add(
-      this.enquiryService.sendRevision(this.form.getRawValue().comment!, this.enquiry._id).subscribe({
+      this.enquiryService.quoteRevision(this.form.getRawValue().comment!, this.enquiry._id).subscribe({
         next: (res: any) => {
           this.isSaving = false;
           if (res.success) this.revised.emit();

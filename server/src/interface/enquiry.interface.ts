@@ -24,6 +24,7 @@ export interface Enquiry {
         createdBy?: string;
         createdByName?: string;
         createdAt?: string | Date;
+        correctionOf?: string | null;
     }[];
     attachments: string[];
     preSale: {

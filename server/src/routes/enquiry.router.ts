@@ -32,7 +32,7 @@ import {
     getEnquiryReport,
     addFollowUp
 } from "../controllers/enquiry.controller";
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const equiRouter = Router()
 
 equiRouter.use(requirePrivilege("enquiry"));
@@ -44,17 +44,17 @@ equiRouter.post('/report', getEnquiryReport);
 equiRouter.get('/presales', getPreSaleJobs);
 equiRouter.post('/presales/report', getPresaleReport);
 equiRouter.get('/presales/tab-counts', presaleTabCounts);
-equiRouter.patch('/:enquiryId/send-to-presale', sendToPresale);
-equiRouter.patch('/presales/:enquiryId', upload.fields([{ name: 'newPresaleFile' }]), assignPresale);
-equiRouter.patch('/:enquiryId/attachments', upload.array('files'), updateEnquiryAttachments);
-equiRouter.delete('/:enquiryId/attachments/:fileName', removeEnquiryAttachment);
-equiRouter.patch('/:enquiryId/follow-up', addFollowUp);
-equiRouter.put('/update', updateEnquiryStatus);
+equiRouter.patch('/:enquiryId/send-to-presale', requireUnlessDenied("enquiry", "reassign"), sendToPresale);
+equiRouter.patch('/presales/:enquiryId', requireUnlessDenied("enquiry", "reassign"), upload.fields([{ name: 'newPresaleFile' }]), assignPresale);
+equiRouter.patch('/:enquiryId/attachments', requireUnlessDenied("enquiry", "edit"), upload.array('files'), updateEnquiryAttachments);
+equiRouter.delete('/:enquiryId/attachments/:fileName', requireUnlessDenied("enquiry", "edit"), removeEnquiryAttachment);
+equiRouter.patch('/:enquiryId/follow-up', requireUnlessDenied("enquiry", "edit"), addFollowUp);
+equiRouter.put('/update', requireUnlessDenied("enquiry", "edit"), updateEnquiryStatus);
 equiRouter.get('/monthly', monthlyEnquiries);
-equiRouter.patch('/feedback-request', sendFeedbackRequest);
-equiRouter.patch('/give-feedback', giveFeedback);
-equiRouter.patch('/revision/:enquiryId', giveRevision);
-equiRouter.patch('/quoteRevision/:enquiryId', reviseQuoteEstimation);
+equiRouter.patch('/feedback-request', requireUnlessDenied("enquiry", "feedback"), sendFeedbackRequest);
+equiRouter.patch('/give-feedback', requireUnlessDenied("enquiry", "feedback"), giveFeedback);
+equiRouter.patch('/revision/:enquiryId', requireUnlessDenied("enquiry", "revision"), giveRevision);
+equiRouter.patch('/quoteRevision/:enquiryId', requireUnlessDenied("enquiry", "revision"), reviseQuoteEstimation);
 equiRouter.get('/feedback-request/:employeeId', getFeedbackRequestsById);
 equiRouter.post('/upload-estimation', uploadEstimations)
 equiRouter.post('/markAsSeenEstimation', markAsSeenEstimation);
@@ -63,9 +63,9 @@ equiRouter.post('/markAsSeenedReassingedJob', markAsSeenReAssingedJob);
 equiRouter.post('/markAsSeenFeeback', markAsSeenFeedback);
 equiRouter.patch('/markAsSeenFeebackResponse', markFeedbackResponseAsViewed);
 equiRouter.get('/presales/count', presalesCount)
-equiRouter.post('/delete', deleteEnquiry);
-equiRouter.delete('/presales/estimation/:enqId', deleteEstimation)
-equiRouter.put('/presales/reject', RejectPresaleJob)
+equiRouter.post('/delete', requireUnlessDenied("enquiry", "delete"), deleteEnquiry);
+equiRouter.delete('/presales/estimation/:enqId', requireUnlessDenied("enquiry", "delete"), deleteEstimation)
+equiRouter.put('/presales/reject', requireUnlessDenied("enquiry", "reassign"), RejectPresaleJob)
 equiRouter.put('/reassignjob', requirePrivilege("assignedJob", "assign"), reAssignJob)
 
 

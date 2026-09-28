@@ -21,6 +21,16 @@
     <app-sf-field label="Employee">
       <app-sf-combobox [options]="employeeOptions" [(ngModel)]="selectedEmployee" placeholder="Select employee"></app-sf-combobox>
     </app-sf-field>
+
+    @if (data.mode === 'assign') {
+      <app-sf-field label="Comment" class="mt-4 block">
+        <app-sf-textarea [(ngModel)]="comment" placeholder="Add a comment for the presale engineer"></app-sf-textarea>
+      </app-sf-field>
+
+      <app-sf-field label="Attachments" class="mt-4 block">
+        <app-sf-file [(ngModel)]="presaleFiles"></app-sf-file>
+      </app-sf-field>
+    }
   </div>
 
   <!-- Footer -->

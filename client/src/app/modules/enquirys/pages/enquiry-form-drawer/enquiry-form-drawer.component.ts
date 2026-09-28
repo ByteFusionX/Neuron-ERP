@@ -1,5 +1,5 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
-import { DatePipe, NgIf } from '@angular/common';
+import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
@@ -21,7 +21,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
   selector: 'app-enquiry-form-drawer',
   standalone: true,
   templateUrl: './enquiry-form-drawer.component.html',
-  imports: [NgIf, DatePipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent],
+  imports: [NgIf, NgFor, NgClass, DatePipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent],
 })
 export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -33,6 +33,15 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
 
   saving = false;
   salesPersonName = '';
+  step: 1 | 2 = 1;
+  readonly steps = [
+    { n: 1 as const, label: 'Customer & Details' },
+    { n: 2 as const, label: 'Requirement & Files' },
+  ];
+  private readonly stepControls: Record<1 | 2, string[]> = {
+    1: ['client', 'contact', 'department', 'title', 'priority', 'source', 'date', 'nextFollowUpDate'],
+    2: ['requirement', 'attachments'],
+  };
   readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
 
   customerOptions: SfOption[] = [];
@@ -85,7 +94,37 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['open'] && this.open) this.ensureOptions();
+    if (changes['open'] && this.open) {
+      this.ensureOptions();
+      this.step = 1;
+    }
+  }
+
+  // --- stepping ----------------------------------------------------------------
+
+  /** A step is complete when every control it owns is valid. */
+  isStepValid(step: 1 | 2): boolean {
+    return this.stepControls[step].every((name) => this.enquiryForm.get(name)?.valid);
+  }
+
+  private markStepTouched(step: 1 | 2): void {
+    this.stepControls[step].forEach((name) => this.enquiryForm.get(name)?.markAllAsTouched());
+  }
+
+  goToStep(step: 1 | 2): void {
+    if (step > this.step && !this.isStepValid(this.step)) {
+      this.markStepTouched(this.step);
+      return;
+    }
+    this.step = step;
+  }
+
+  nextStep(): void {
+    if (this.step < 2) this.goToStep(2);
+  }
+
+  previousStep(): void {
+    if (this.step > 1) this.step = 1;
   }
 
   ngOnDestroy(): void {
@@ -179,6 +218,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       nextFollowUpDate: this.todayIso(),
       attachments: []
     });
+    this.step = 1;
   }
 
   /** Local calendar date as yyyy-MM-dd (toISOString would shift it by the UTC offset). */
@@ -216,6 +256,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   private isReady(): boolean {
     if (this.enquiryForm.invalid || !this.salesPersonId) {
       this.enquiryForm.markAllAsTouched();
+      const firstIncomplete = ([1, 2] as const).find((s) => !this.isStepValid(s));
+      if (firstIncomplete) this.step = firstIncomplete;
       this.toaster.warning('Check the fields properly!', 'Warning !');
       return false;
     }

@@ -27,15 +27,21 @@ import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel
 import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/detail-task-list.component';
 import { DetailComment, DetailDocument, DetailOverviewSection, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { NgIcon } from '@ng-icons/core';
+import { WorkflowService } from 'src/app/core/services/workflow.service';
+import { ApprovalStep, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
+import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-journey/approval-journey.component';
+import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
 
-export type PresaleTab = 'new' | 'assigned' | 'completed' | 'rejected';
+const DEFAULT_ESCALATION_HOURS = 48;
+
+export type PresaleTab = 'all' | 'new' | 'assigned' | 'completed' | 'rejected';
 
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
   selector: 'app-assigned-jobs-list',
   templateUrl: './assigned-jobs-list.component.html',
   styleUrls: ['./assigned-jobs-list.component.css'],
-  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, NgIcon, DataGridComponent, DetailOverviewComponent, DetailCommentsComponent, DetailDocumentsComponent, DetailTaskListComponent, RejectionHistoryDrawerComponent, ViewEstimationComponent, EstimationFormDrawerComponent]
+  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, NgIcon, DataGridComponent, DetailOverviewComponent, DetailCommentsComponent, DetailDocumentsComponent, DetailTaskListComponent, ApprovalJourneyComponent, RejectionHistoryDrawerComponent, ViewEstimationComponent, EstimationFormDrawerComponent]
 })
 export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<any>;
@@ -45,15 +51,17 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   rowActions: DataGridRowAction<any>[] = [];
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'feedback', label: 'Feedback', icon: 'chat' },
     { id: 'comments', label: 'Comments', icon: 'chat' },
-    { id: 'events', label: 'Events', icon: 'calendar' },
+    { id: 'progress', label: 'Progress', icon: 'account_tree' },
     { id: 'documents', label: 'Documents', icon: 'files' },
   ];
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Sales' }];
   views: DataGridView[] = [];
   detailLoading = false;
 
-  readonly tabs: { id: PresaleTab; label: string; countKey: keyof PresaleTabCounts; serverFilter: string }[] = [
+  readonly tabs: { id: PresaleTab; label: string; countKey: keyof PresaleTabCounts | 'all'; serverFilter: string }[] = [
+    { id: 'all', label: 'All Jobs', countKey: 'all', serverFilter: 'all' },
     { id: 'new', label: 'New Jobs', countKey: 'new', serverFilter: 'new' },
     { id: 'assigned', label: 'Assigned Jobs', countKey: 'assignedTab', serverFilter: 'assignedTab' },
     { id: 'completed', label: 'Completed Jobs', countKey: 'completedTab', serverFilter: 'completedTab' },
@@ -75,6 +83,8 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
 
   userId!: string | undefined;
 
+  presaleWorkflowSteps: ApprovalStep[] = [];
+
   private confirm = inject(ConfirmDialogService);
 
   constructor(
@@ -84,6 +94,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     private _employeeService: EmployeeService,
     private _eventsService: EventsService,
     private _eventActions: EventActionsService,
+    private _workflowService: WorkflowService,
     private _route: ActivatedRoute,
     private _router: Router,
   ) { }
@@ -92,6 +103,12 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     this.buildColumns();
     this.buildRowActions();
     this.refreshViews();
+    this.subscriptions.add(
+      this._workflowService.getWorkflows({ feature: WorkflowFeature.PRESALE }).subscribe((response) => {
+        const workflow = response?.data?.[0];
+        this.presaleWorkflowSteps = [...(workflow?.steps ?? [])].sort((a, b) => a.order - b.order);
+      })
+    );
     // Read the ?tab= deep link first so the employee callback below knows whether to default to New.
     this._route.queryParams.subscribe((params) => {
       this.initialPage = params['page'] ? parseInt(params['page'], 10) : 1;
@@ -139,7 +156,12 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     return this.tabs.filter((t) => t.id !== 'new' || this.canAssign);
   }
 
-  countFor(key: keyof PresaleTabCounts): number | undefined {
+  countFor(key: keyof PresaleTabCounts | 'all'): number | undefined {
+    if (key === 'all') {
+      const { new: n, assignedTab, completedTab, rejected } = this.tabCounts;
+      if (n === undefined && assignedTab === undefined && completedTab === undefined && rejected === undefined) return undefined;
+      return (n ?? 0) + (assignedTab ?? 0) + (completedTab ?? 0) + (rejected ?? 0);
+    }
     return this.tabCounts[key];
   }
 
@@ -177,7 +199,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       { key: 'assignedBy', sortable: true, label: 'Sent By', valueGetter: (r) => `${r.salesPerson?.[0]?.firstName ?? ''} ${r.salesPerson?.[0]?.lastName ?? ''}`.trim() },
       { key: 'assignedTo', label: 'Assigned To', locked: true, visible: this.viewAssignedFor && this.activeTab !== 'new', valueGetter: (r) => this.assigneeName(r) },
       { key: 'department', sortable: true, label: 'Depart.', valueGetter: (r) => r.department?.[0]?.departmentName },
-      { key: 'status', sortable: true, label: 'Status', type: 'badge', locked: true, visible: this.viewAssignedFor, badgeClasses: this.statusBadgeClasses, badgeLabel: (v) => this.statusLabel(v) },
+      { key: 'status', sortable: true, label: 'Status', type: 'badge', locked: true, visible: this.viewAssignedFor || this.activeTab === 'all', badgeClasses: this.statusBadgeClasses, badgeLabel: (v) => this.statusLabel(v) },
     ];
   }
 
@@ -227,7 +249,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       },
       {
         id: 'viewFeedback', label: 'View Feedback', icon: 'eye', quick: true,
-        hidden: (r) => inTab('assigned', 'completed') || !r.preSale?.feedback?.length,
+        hidden: (r) => inTab('assigned', 'completed', 'all') || !r.preSale?.feedback?.length,
         badge: (r) => this.hasUnseenFeedback(r.preSale?.feedback || []),
       },
       {
@@ -240,10 +262,13 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       },
       {
         id: 'viewEstimation', label: 'View Estimation', icon: 'eye', quick: true,
-        hidden: (r) => inTab('assigned', 'completed') || !r.preSale?.estimations,
+        hidden: (r) => inTab('assigned', 'completed', 'all') || !r.preSale?.estimations,
       },
       { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: false, hidden: () => tab !== 'assigned' },
-      { id: 'send', label: 'Send', icon: 'send', quick: true, hidden: () => tab !== 'assigned' },
+      {
+        id: 'send', label: 'Send', icon: 'send', quick: true,
+        hidden: (r) => tab !== 'assigned' || this.hasPendingFeedbackRequest(r),
+      },
     ];
   }
 
@@ -332,6 +357,78 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
         ],
       },
     ];
+  }
+
+  // ---- Progress tab: presale assignment escalation ladder ----------------------------------
+
+  private roleLabel(step: ApprovalStep): string {
+    const role: any = step.role;
+    return (role && typeof role === 'object') ? (role.categoryName ?? '—') : '—';
+  }
+
+  private initials(name: string): string {
+    const parts = (name || '?').trim().split(/\s+/);
+    return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
+  }
+
+  /** Mirrors the server's lazy escalation resolution (presaleAssignment.service.ts) so the panel
+   * reflects steps whose window has elapsed even before the next assign attempt persists it. */
+  private resolveAssignment(row: any, steps: ApprovalStep[]): { index: number; dueAt: Date | null } {
+    const approval = row?.preSale?.assignApproval;
+    if (!approval || !steps.length) return { index: 0, dueAt: null };
+    let index = approval.stepIndex ?? 0;
+    let dueAt = approval.escalationDueAt ? new Date(approval.escalationDueAt) : null;
+    const now = new Date();
+    while (index < steps.length - 1 && dueAt && dueAt <= now) {
+      index += 1;
+      const hours = (steps[index] as any).escalationHours || DEFAULT_ESCALATION_HOURS;
+      dueAt = new Date(dueAt.getTime() + hours * 60 * 60 * 1000);
+    }
+    return { index, dueAt };
+  }
+
+  /** Builds the escalation ladder for this job, ticking off roles it has already moved past.
+   * Listed backward (last/current-most role first) so the top of the panel shows who is next. */
+  progressStages(row: any): ApprovalJourneyStage[] {
+    const steps = this.presaleWorkflowSteps;
+    if (!steps.length) {
+      return [{ key: 'empty', variant: 'empty', icon: 'help_outline', title: 'No presale workflow configured', subtitle: 'An admin can set one up in Settings → Workflow.' }];
+    }
+
+    const { index: currentIndex, dueAt } = this.resolveAssignment(row, steps);
+
+    const stages: ApprovalJourneyStage[] = steps.map((step, i) => {
+      const roleName = this.roleLabel(step);
+      const isDone = i < currentIndex;
+      const isCurrent = i === currentIndex;
+      const isLast = i === steps.length - 1;
+      const hours = step.escalationHours ?? DEFAULT_ESCALATION_HOURS;
+
+      let subtitle: string;
+      if (isDone) {
+        subtitle = 'Assignment window elapsed — responsibility moved to the next role.';
+      } else if (isCurrent) {
+        subtitle = isLast
+          ? 'Final fallback — responsible now and does not escalate further.'
+          : `Responsible now — escalates to the next role after ${hours}h if not assigned${dueAt ? ` (by ${dueAt.toLocaleString()})` : ''}.`;
+      } else {
+        subtitle = isLast
+          ? `Final fallback — takes over ${hours}h after reaching this role if still unassigned.`
+          : `Takes over ${hours}h after reaching this role if still unassigned, then escalates further.`;
+      }
+
+      return {
+        key: `step-${i}`,
+        variant: isDone ? 'done' : isCurrent ? 'current' : 'stage',
+        icon: isDone ? 'check_circle' : undefined,
+        initials: isDone ? undefined : this.initials(roleName),
+        stepNumber: i + 1,
+        title: roleName,
+        subtitle,
+      } as ApprovalJourneyStage;
+    });
+
+    return stages.reverse();
   }
 
   commentsFor(row: any): DetailComment[] {
@@ -593,9 +690,17 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     this.rejectionsOpen = true;
   }
 
+  hasPendingFeedbackRequest(row: any): boolean {
+    return (row.preSale?.feedback || []).some((fb: any) => !fb.feedback);
+  }
+
   async onSendClicked(row: any): Promise<void> {
     if (!row.preSale?.estimations) {
       this.toast.warning('Please complete the estimation Uploads');
+      return;
+    }
+    if (this.hasPendingFeedbackRequest(row)) {
+      this.toast.warning('A feedback request is still awaiting a response. Please wait before sending this job back to enquiry.');
       return;
     }
     const { confirmed } = await this.confirm.open({

@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { DatePipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgIcon } from '@ng-icons/core';
-import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis } from 'ng-apexcharts';
+import { ApexAxisChartSeries, ApexChart, ApexDataLabels, ApexFill, ApexGrid, ApexLegend, ApexNonAxisChartSeries, ApexPlotOptions, ApexStroke, ApexTooltip, ApexXAxis, ApexYAxis, ChartComponent } from 'ng-apexcharts';
 import { Observable, Subscription, filter, shareReplay, switchMap, take } from 'rxjs';
 import { ExcelExportService, ExcelSheet } from 'src/app/core/services/export/excel-export.service';
 
@@ -55,7 +55,7 @@ type PipelineChart = {
 };
 
 type WorkloadChart = {
-  series: number[];
+  series: ApexNonAxisChartSeries;
   chart: ApexChart;
   labels: string[];
   colors: string[];
@@ -82,9 +82,9 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   selector: 'app-enquiry-report',
   templateUrl: './enquiry-report.component.html',
   styleUrls: ['./enquiry-report.component.css'],
-  imports: [ViewToggleComponent, 
+  imports: [ViewToggleComponent,
     NgIf, NgFor, NgClass, DatePipe, RouterLink, NgIcon,
-    ActionButtonComponent, KpiCardComponent, ReportFiltersComponent,
+    ChartComponent, ActionButtonComponent, DataGridComponent, KpiCardComponent, ReportFiltersComponent,
   ],
 })
 export class EnquiryReportComponent implements OnInit, OnDestroy {

@@ -65,7 +65,7 @@ export class EnquiryService {
     return this.http.put<{ update: getEnquiry, quoteId: string | undefined }>(`${this.api}/enquiry/update`, selectedEnquiry)
   }
 
-  addFollowUp(enquiryId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null }): Observable<{ success: boolean; enquiry: getEnquiry }> {
+  addFollowUp(enquiryId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null; correctionOf?: string | null }): Observable<{ success: boolean; enquiry: getEnquiry }> {
     return this.http.patch<{ success: boolean; enquiry: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/follow-up`, data)
   }
 
@@ -118,7 +118,7 @@ export class EnquiryService {
     return this.http.get<FeedbackTable>(`${this.api}/enquiry/feedback-request/${employeeId}?page=${page}&row=${row}`)
   }
 
-  giveFeedback(feedbackBody: { enquiryId: string, feedback: string, feedbackId: string }) {
+  giveFeedback(feedbackBody: { enquiryId: string, feedback: string, feedbackId: string, action: 'send' | 'revise' }) {
     return this.http.patch(`${this.api}/enquiry/give-feedback`, feedbackBody)
   }
 
@@ -126,8 +126,8 @@ export class EnquiryService {
     return this.http.patch(`${this.api}/enquiry/revision/${enquiryId}`, { revisionComment })
   }
 
-  quoteRevision(revisionComment: string, enquiryId: string, quoteId: string) {
-    return this.http.patch(`${this.api}/enquiry/quoteRevision/${enquiryId}`, { revisionComment, quoteId })
+  quoteRevision(revisionComment: string, enquiryId: string) {
+    return this.http.patch(`${this.api}/enquiry/quoteRevision/${enquiryId}`, { revisionComment })
   }
 
   presalesCounts(access?: string, userId?: string): Observable<{ pending: number, completed: number }> {

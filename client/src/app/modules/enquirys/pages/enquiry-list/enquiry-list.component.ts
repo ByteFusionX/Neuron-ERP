@@ -6,13 +6,13 @@ import {
   FormControl,
   FormsModule,
   ReactiveFormsModule,
-  Validators,
 } from '@angular/forms';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import {
+  EnquiryFollowUp,
   EnquiryTable,
   getEnquiry,
   Presale,
@@ -29,6 +29,8 @@ import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.i
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import {
   NgIf,
+  NgFor,
+  NgClass,
   NgSwitch,
   NgSwitchCase,
   DatePipe,
@@ -49,6 +51,7 @@ import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel
 import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/detail-task-list.component';
 import { DetailDocument, DetailOverviewSection, DetailTaskItem, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ENQUIRY_STATUS_TONES, STATUS_TONE_CLASSES } from 'src/app/shared/components/status-indicator/status-tone';
 import { StatusPillComponent } from 'src/app/shared/components/status-indicator/status-pill.component';
@@ -57,7 +60,19 @@ import { EventsService } from 'src/app/core/services/events/events.service';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
+import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
+
+interface FollowUpListItem {
+  id: string;
+  outcome: string;
+  note: string;
+  date: string;
+  createdByName: string;
+  nextFollowUpDate: string;
+  overdue: boolean;
+  correctionOfOutcome: string;
+}
 
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
@@ -69,6 +84,8 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
     ReactiveFormsModule,
     SmartFormModule,
     NgIf,
+    NgFor,
+    NgClass,
     NgSwitch,
     NgSwitchCase,
     DatePipe,
@@ -79,6 +96,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
     DetailDocumentsComponent,
     DetailTaskListComponent,
     DetailTimelineComponent,
+    DetailPanelIconComponent,
     ActionButtonComponent,
     EnquiryFormDrawerComponent,
     EnquiryEstimationViewComponent,
@@ -128,7 +146,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     { id: 'overdue', label: 'Overdue' },
     { id: 'upcoming', label: 'Upcoming' },
   ];
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Sales' }, { label: 'Enquiries' }];
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
@@ -196,13 +214,6 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   formData = this.fb.group({
     fromDate: new FormControl(),
     toDate: new FormControl(),
-  });
-
-  followUpForm = this.fb.group({
-    date: [this.todayIso(), Validators.required],
-    outcome: ['', Validators.required],
-    note: [''],
-    nextFollowUpDate: [''],
   });
 
   ngOnInit(): void {
@@ -335,7 +346,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', quick: true, hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
       { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['New', 'In Review', 'Rejected by Presale Manager'].includes(row.status) },
       { id: 'readyForQuote', label: 'Mark Ready for Quotation', icon: 'check', quick: true, hidden: (row) => !this.canMarkReadyForQuotation(row) },
-      { id: 'markLost', label: 'Mark Lost', icon: 'x', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted'].includes(row.status) || this.isAssignedToPresale(row.status) },
+      { id: 'markLost', label: 'Mark Lost', icon: 'close', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted'].includes(row.status) || this.isAssignedToPresale(row.status) },
       { id: 'review', label: 'View Rejection', icon: 'info', panel: true, hidden: (row) => row.status !== 'Rejected by Presale Manager' },
       { id: 'delete', label: 'Delete Enquiry', icon: 'trash', variant: 'danger', divider: true, hidden: (row) => !this.isDeleteOption || this.isAssignedToPresale(row.status) },
     ];
@@ -582,43 +593,77 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   openFollowUps(row: getEnquiry): void {
     if (!this.grid) return;
-    this.followUpForm.reset({
-      date: this.todayIso(),
-      outcome: '',
-      note: '',
-      nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : '',
-    });
     this.grid.activeTab = 'followups';
     this.grid.openRow(row);
   }
 
-  followUpTimeline(row: getEnquiry): DetailTimelineEntry[] {
-    return (row.followUpHistory || [])
+  onAddFollowUp(row: getEnquiry): void {
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: {
+        context: row.enquiryId || row._id,
+        nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : null,
+      },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.saveFollowUp(row, result);
+    });
+  }
+
+  onCorrectFollowUp(row: getEnquiry, item: FollowUpListItem): void {
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: {
+        context: row.enquiryId || row._id,
+        nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : null,
+        correcting: { id: item.id, outcome: item.outcome },
+      },
+    }).afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.saveFollowUp(row, result);
+    });
+  }
+
+  private followUpItemsCache = new Map<string, { history: EnquiryFollowUp[] | undefined; items: FollowUpListItem[] }>();
+
+  /**
+   * Memoized on the row's followUpHistory reference: called directly from the template's *ngFor,
+   * so returning a fresh array/objects every call would make Angular tear down and rebuild the
+   * follow-up cards on every change-detection tick, invalidating in-flight clicks on their buttons.
+   */
+  followUpItems(row: getEnquiry): FollowUpListItem[] {
+    const history = row.followUpHistory;
+    const cached = this.followUpItemsCache.get(row._id);
+    if (cached && cached.history === history) return cached.items;
+
+    const list = history || [];
+    const outcomeById = new Map(list.map((entry) => [entry._id, entry.outcome || 'Follow-up']));
+    const items = list
       .slice()
       .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
       .map((entry) => ({
-        text: entry.note ? `${entry.outcome || 'Follow-up'} - ${entry.note}` : (entry.outcome || 'Follow-up'),
-        meta: this.progressMeta([
-          entry.createdByName || this.employeeName(entry.createdBy),
-          this.progressDate(entry.date),
-          entry.nextFollowUpDate ? `Next: ${this.displayDate(entry.nextFollowUpDate)}` : '',
-        ]),
-        tone: entry.nextFollowUpDate && new Date(entry.nextFollowUpDate) < new Date() ? 'warn' : 'good',
+        id: entry._id || '',
+        outcome: entry.outcome || 'Follow-up',
+        note: entry.note || '',
+        date: this.progressDate(entry.date),
+        createdByName: entry.createdByName || this.employeeName(entry.createdBy),
+        nextFollowUpDate: entry.nextFollowUpDate ? this.displayDate(entry.nextFollowUpDate) : '',
+        overdue: !!entry.nextFollowUpDate && new Date(entry.nextFollowUpDate) < new Date(),
+        correctionOfOutcome: entry.correctionOf ? (outcomeById.get(entry.correctionOf) || '') : '',
       }));
+    this.followUpItemsCache.set(row._id, { history, items });
+    return items;
   }
 
-  saveFollowUp(row: getEnquiry): void {
-    if (this.followUpForm.invalid || this.followUpSavingRowId) {
-      this.followUpForm.markAllAsTouched();
-      return;
-    }
-    const value = this.followUpForm.getRawValue();
+  saveFollowUp(row: getEnquiry, value: FollowUpModalResult): void {
+    if (this.followUpSavingRowId) return;
     this.followUpSavingRowId = row._id;
     this._enquiryService.addFollowUp(row._id, {
       date: value.date || this.todayIso(),
       outcome: value.outcome || '',
       note: value.note || '',
       nextFollowUpDate: value.nextFollowUpDate || null,
+      correctionOf: value.correctionOf || null,
     }).subscribe({
       next: (response) => {
         const updated = response.enquiry;
@@ -628,7 +673,6 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         row.followUpHistory = updated.followUpHistory;
         row.daysSinceLastFollowUp = 0;
         this.followUpSavingRowId = null;
-        this.followUpForm.reset({ date: this.todayIso(), outcome: '', note: '', nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : '' });
         this.dataSource._updateChangeSubscription();
         this.toaster.success('Follow-up saved');
       },

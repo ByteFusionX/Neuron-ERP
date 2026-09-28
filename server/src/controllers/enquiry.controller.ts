@@ -6,12 +6,14 @@ import Department from '../models/department.model';
 import customerModel from "../models/customer.model";
 import { Enquiry } from "../interface/enquiry.interface";
 import { Server } from "socket.io";
-import quotationModel from "../models/quotation.model";
+import quotationModel, { quoteStatus } from "../models/quotation.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
 import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
+import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
+import { buildAssignmentChain, resolveCurrentAssignmentStep } from "../services/presaleAssignment.service";
 const { ObjectId } = require('mongodb')
 
 const buildAssignmentEntry = async (employeeId: any, action: 'assigned' | 'reassigned', assignedBy: any) => {
@@ -42,6 +44,10 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
         })) : [];
 
         const enquiryData = <Enquiry>JSON.parse(req.body.enquiryData)
+        const customerGuard = await getCustomerCommercialGuard((enquiryData as any).client);
+        if (customerGuard.blocked) {
+            return res.status(409).json({ success: false, message: customerGuard.message });
+        }
 
         let enqId: string = await generateEnquiryId(enquiryData.department, enquiryData.salesPerson, enquiryData.date as string);
 
@@ -113,7 +119,10 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
             }
         ]);
 
-        return res.status(200).json(savedEnquiryData[0]);
+        return res.status(200).json({
+            ...savedEnquiryData[0],
+            commercialWarnings: customerGuard.warnings
+        });
     } catch (error) {
         console.log(error)
         next(error)
@@ -123,9 +132,10 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
 export const addFollowUp = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { enquiryId } = req.params;
-        const { date, outcome, note, nextFollowUpDate } = req.body;
+        const { date, outcome, note, nextFollowUpDate, correctionOf } = req.body;
         if (!ObjectId.isValid(enquiryId)) return res.status(400).json({ success: false, message: 'Invalid enquiry id' });
         if (!outcome?.trim() && !note?.trim()) return res.status(400).json({ success: false, message: 'Enter a follow-up outcome or note.' });
+        if (correctionOf && !ObjectId.isValid(correctionOf)) return res.status(400).json({ success: false, message: 'Invalid follow-up entry to correct' });
 
         const userData: any = await getEmployeeData((req as any).user);
         const followUpDate = date ? new Date(date) : new Date();
@@ -137,7 +147,8 @@ export const addFollowUp = async (req: Request, res: Response, next: NextFunctio
             nextFollowUpDate: nextDate,
             createdBy: userData?._id,
             createdByName: userData ? `${userData.firstName || ''} ${userData.lastName || ''}`.trim() : '',
-            createdAt: new Date()
+            createdAt: new Date(),
+            correctionOf: correctionOf || null
         };
 
         const updateFields: any = {
@@ -204,6 +215,7 @@ export const sendToPresale = async (req: any, res: Response, next: NextFunction)
         }
 
         const sender = await getEmployeeData(req.user);
+        const assignApproval = await buildAssignmentChain();
         await enquiryModel.updateOne(
             { _id: enquiryId },
             {
@@ -213,8 +225,9 @@ export const sendToPresale = async (req: any, res: Response, next: NextFunction)
                     'preSale.newFeedbackAccess': true,
                     'preSale.seenbyEmployee': false,
                     'preSale.seenbySalesPerson': false,
+                    ...(assignApproval ? { 'preSale.assignApproval': assignApproval } : {}),
                 },
-                $unset: { reAssigned: '', reAssignedDate: '' },
+                $unset: { reAssigned: '', reAssignedDate: '', ...(assignApproval ? {} : { 'preSale.assignApproval': '' }) },
             }
         );
 
@@ -1064,6 +1077,13 @@ export const updateEnquiryStatus = async (req: Request, res: Response, next: Nex
             let updateQuote = await quotationModel.updateOne({ enqId: data.id }, { $set: { 'status': 'Work In Progress' } })
             status = 'Quoted';
         }
+        if (status === 'Work In Progress') {
+            const existingEnquiry = await enquiryModel.findById(data.id);
+            const hasPendingFeedback = existingEnquiry?.preSale?.feedback?.some((fb: any) => !fb.feedback);
+            if (hasPendingFeedback) {
+                return res.status(400).json({ message: 'A feedback request is still awaiting a response. Please wait for it before sending this job back to enquiry.' });
+            }
+        }
         const updateFields: any = {
             status: status,
             'preSale.seenbySalesPerson': false,
@@ -1309,17 +1329,33 @@ export const getFeedbackRequestsById = async (req: Request, res: Response, next:
 
 export const giveFeedback = async (req: any, res: Response, next: NextFunction) => {
     try {
-        let { enquiryId, feedbackId, feedback } = req.body;
+        let { enquiryId, feedbackId, feedback, action } = req.body;
+
+        const setFields: any = {
+            "preSale.feedback.$.feedback": feedback,
+            "preSale.feedback.$.seenByFeedbackRequester": false,
+            'preSale.newFeedbackAccess': true,
+        };
+
+        if (action === 'revise') {
+            const existingEnquiry = await enquiryModel.findById(enquiryId);
+            setFields.status = existingEnquiry?.reAssigned ? 'Assigned To Presale Engineer' : 'Assigned To Presale Manager';
+            setFields['preSale.seenbyEmployee'] = false;
+            setFields['preSale.createdDate'] = Date.now();
+        } else {
+            // Approving feedback auto-sends the job back to enquiry, same as the presale "Send" action.
+            setFields.status = 'Work In Progress';
+            setFields['preSale.seenbySalesPerson'] = false;
+        }
+
+        const update: any = { $set: setFields };
+        if (action === 'revise') {
+            update.$push = { 'preSale.revisionComment': feedback };
+        }
 
         const result = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId, "preSale.feedback._id": feedbackId },
-            {
-                $set: {
-                    "preSale.feedback.$.feedback": feedback,
-                    "preSale.feedback.$.seenByFeedbackRequester": false,
-                    'preSale.newFeedbackAccess': true,
-                }
-            },
+            update,
             { new: true }
         );
 
@@ -1410,13 +1446,16 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
 
 export const reviseQuoteEstimation = async (req: any, res: Response, next: NextFunction) => {
     try {
-        let { revisionComment, quoteId } = req.body;
+        let { revisionComment } = req.body;
         let enquiryId = req.params.enquiryId;
+        const quote = await quotationModel.findOne({ enqId: enquiryId });
+        const existingEnquiry = await enquiryModel.findById(enquiryId);
+        const revisionStatus = existingEnquiry?.reAssigned ? 'Assigned To Presale Engineer' : 'Assigned To Presale Manager';
         const result = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId },
             {
                 $push: { 'preSale.revisionComment': revisionComment },
-                status: 'Assigned To Presale Manager',
+                status: revisionStatus,
                 'preSale.seenbyEmployee': false,
                 'preSale.newFeedbackAccess': true,
                 'preSale.createdDate': Date.now()
@@ -1424,7 +1463,9 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
             { new: true }
         );
 
-        await quotationModel.updateOne({ _id: quoteId }, { $set: { status: "revised" } })
+        if (quote) {
+            await quotationModel.updateOne({ _id: quote._id }, { $set: { status: "revised" } })
+        }
 
         const socket = req.app.get('io') as Server;
         const presalePerson = result.preSale.presalePerson.toString();
@@ -1473,6 +1514,7 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
                         'optionalItems': optionalItems,
                         'currency': currency,
                         'totalDiscount': totalDiscount,
+                        'status': quote.status === 'revised' ? quoteStatus.WorkInProgress : quote.status,
                     }
                 }
             );
@@ -1485,6 +1527,9 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
                     'preSale.estimations.optionalItems': optionalItems,
                     'preSale.estimations.currency': currency,
                     'preSale.estimations.presaleNote': preSaleNote,
+                },
+                $unset: {
+                    'preSale.revisionComment': ''
                 }
             }
         );
@@ -1850,10 +1895,27 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
             return res.status(404).json({ message: 'Something went wrong' });
         }
         const reAssigner = await getEmployeeData(req.user);
-        const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson');
+        const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson preSale.assignApproval');
         // First assignment of a job sent straight to presale: no presalePerson yet, and the
         // feedback / reject / send routes all read it as the person holding the job.
         const isFirstAssignment = !existing?.preSale?.presalePerson;
+
+        // If a presale escalation workflow is configured, only the role currently holding
+        // the assignment responsibility (which moves up the configured chain once a step's
+        // time window elapses) may assign the job - everyone else is frozen out.
+        let resolvedAssignApproval = existing?.preSale?.assignApproval;
+        if (resolvedAssignApproval) {
+            resolvedAssignApproval = await resolveCurrentAssignmentStep(resolvedAssignApproval);
+            const reAssignerRoleId = (reAssigner?.category as any)?._id || reAssigner?.category;
+            const currentRoleId = (resolvedAssignApproval.role as any)?._id || resolvedAssignApproval.role;
+            if (!reAssignerRoleId || !currentRoleId || reAssignerRoleId.toString() !== currentRoleId.toString()) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Assignment responsibility for this job has moved to another role in the presale workflow. You can no longer assign it.'
+                });
+            }
+        }
+
         const reAssignEntry = await buildAssignmentEntry(employeeId, isFirstAssignment ? 'assigned' : 'reassigned', reAssigner);
         const enquiryUpdate = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId },
@@ -1861,6 +1923,7 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
                 $set: {
                     reAssigned: employeeId, reAssignedDate: reAssignEntry.date, status: 'Assigned To Presale Engineer', reAssignedSeen: false,
                     ...(isFirstAssignment ? { 'preSale.presalePerson': employeeId } : {}),
+                    ...(resolvedAssignApproval ? { 'preSale.assignApproval': resolvedAssignApproval } : {}),
                 },
                 $push: { assignmentHistory: reAssignEntry }
             }

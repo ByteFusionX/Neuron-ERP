@@ -56,23 +56,37 @@
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
                 </ng-container>
 
+                <ng-container *ngSwitchCase="'feedback'">
+                    <div class="space-y-3 p-1" *ngIf="row.preSale?.feedback?.length; else noFeedbackYet">
+                        <div *ngFor="let fb of row.preSale.feedback"
+                            class="rounded-lg border-2 px-4 py-3 dark:border-erp-border-dark"
+                            [ngClass]="fb.seenByFeedbackRequester === false ? 'border-orange-500' : 'border-gray-200'">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                        {{ fb.employeeId?.firstName }} {{ fb.employeeId?.lastName }}
+                                    </h4>
+                                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400" *ngIf="fb.comment">Asked: {{ fb.comment }}</p>
+                                    <p class="mt-1 text-sm text-gray-700 dark:text-gray-300" *ngIf="fb.feedback; else awaitingResponse">{{ fb.feedback }}</p>
+                                    <ng-template #awaitingResponse>
+                                        <p class="mt-1 text-sm italic text-amber-600 dark:text-amber-400">Awaiting response — sending back to Enquiry is on hold until this is answered.</p>
+                                    </ng-template>
+                                </div>
+                                <span *ngIf="fb.seenByFeedbackRequester === false" class="shrink-0 rounded-xl bg-orange-200 px-2 py-1 text-xs text-orange-600">New</span>
+                            </div>
+                        </div>
+                    </div>
+                    <ng-template #noFeedbackYet>
+                        <p class="p-4 text-sm text-gray-500 dark:text-gray-400">No feedback has been requested for this job yet.</p>
+                    </ng-template>
+                </ng-container>
+
                 <ng-container *ngSwitchCase="'comments'">
                     <app-detail-comments [comments]="commentsFor(row)" emptyMessage="No comments for this job."></app-detail-comments>
                 </ng-container>
 
-                <ng-container *ngSwitchCase="'events'">
-                    <app-detail-task-list
-                        [items]="eventItems((eventsFor(row) | async) ?? [])"
-                        defaultFilter="event"
-                        [showTasks]="false"
-                        [showEvents]="true"
-                        addable
-                        (add)="onAddEvent(row)"
-                        (toggle)="onToggleEvent(row, $event)"
-                        (eventOutcome)="onEventOutcome(row, $event.item, $event.status)"
-                        (remove)="onDeleteEvent(row, $event)"
-                        (previewFile)="onPreviewEventFile($event.file)"
-                        (deleteFile)="onDeleteEventFile(row, $event.item, $event.file)"></app-detail-task-list>
+                <ng-container *ngSwitchCase="'progress'">
+                    <app-approval-journey [stages]="progressStages(row)" orientation="vertical" [rejectionNote]="null"></app-approval-journey>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'documents'">

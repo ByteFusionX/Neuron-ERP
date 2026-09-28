@@ -1,7 +1,26 @@
-<app-sf-drawer title="Create Enquiry" subtitle="Customer, contact and enquiry details" width="720px"
+<app-sf-drawer title="Create Enquiry" [subtitle]="steps[step - 1].label" width="720px"
     [open]="open" [dirty]="enquiryForm.dirty" (closed)="onDrawerClosed($event)">
 
     <span sfDrawerHeader *ngIf="draftRef.savedAt" class="text-xs text-gray-400 dark:text-gray-500">Draft saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
+
+    <!-- Stepper -->
+    <ol class="mb-5 flex items-center gap-2">
+        <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+            <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+                [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+                (click)="goToStep(s.n)">
+                <span class="grid h-6 w-6 shrink-0 place-content-center rounded-full text-[11px] font-semibold"
+                    [ngClass]="s.n === step
+                        ? 'bg-violet-600 text-white'
+                        : (s.n < step && isStepValid(s.n))
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">{{ s.n }}</span>
+                <span class="truncate text-xs font-medium"
+                    [ngClass]="s.n === step ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'">{{ s.label }}</span>
+            </button>
+            <span *ngIf="s.n < 2" class="h-px w-4 shrink-0 bg-gray-200 dark:bg-erp-border-dark"></span>
+        </li>
+    </ol>
 
     <form id="enquiry-form" [formGroup]="enquiryForm" sfDraft="enquiry-list-create" #draftRef="sfDraft"
         [sfDraftExclude]="['attachments']" (ngSubmit)="submit()" novalidate>
@@ -14,51 +33,67 @@
             </span>
         </div>
 
-        <app-sf-section title="Customer" columns="2">
-            <app-sf-field label="Client" [control]="enquiryForm.controls.client">
-                <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
-            </app-sf-field>
-            <app-sf-field label="Point of Contact" hint="Select client first" [control]="enquiryForm.controls.contact">
-                <app-sf-combobox formControlName="contact" [options]="contactOptions" placeholder="Select contact"></app-sf-combobox>
-            </app-sf-field>
-            <app-sf-field label="Department" [control]="enquiryForm.controls.department">
-                <app-sf-combobox formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
-            </app-sf-field>
-            <app-sf-field label="Sales Person">
-                <app-sf-input [ngModelOptions]="{ standalone: true }" [ngModel]="salesPersonName" [readonly]="true"></app-sf-input>
-            </app-sf-field>
-        </app-sf-section>
+        <!-- Step 1 — customer & details ------------------------------------------- -->
+        <ng-container *ngIf="step === 1">
+            <app-sf-section title="Customer" columns="2">
+                <app-sf-field label="Client" [control]="enquiryForm.controls.client">
+                    <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
+                </app-sf-field>
+                <app-sf-field label="Point of Contact" hint="Select client first" [control]="enquiryForm.controls.contact">
+                    <app-sf-combobox formControlName="contact" [options]="contactOptions" placeholder="Select contact"></app-sf-combobox>
+                </app-sf-field>
+                <app-sf-field label="Department" [control]="enquiryForm.controls.department">
+                    <app-sf-combobox formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
+                </app-sf-field>
+                <app-sf-field label="Sales Person">
+                    <app-sf-input [ngModelOptions]="{ standalone: true }" [ngModel]="salesPersonName" [readonly]="true"></app-sf-input>
+                </app-sf-field>
+            </app-sf-section>
 
-        <app-sf-section title="Details" columns="2">
-            <app-sf-field full label="Enquiry Title" [control]="enquiryForm.controls.title">
-                <app-sf-input formControlName="title" placeholder="Title"></app-sf-input>
-            </app-sf-field>
-            <app-sf-field label="Priority" [control]="enquiryForm.controls.priority">
-                <app-sf-select formControlName="priority" [options]="priorityOptions" placeholder="Select priority"></app-sf-select>
-            </app-sf-field>
-            <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
-                <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
-            </app-sf-field>
-            <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
-                <app-sf-date formControlName="nextFollowUpDate" displayFormat="dd/MM/yy"></app-sf-date>
-            </app-sf-field>
-            <app-sf-field full label="Requirement / Notes" [control]="enquiryForm.controls.requirement">
-                <app-sf-textarea formControlName="requirement" [rows]="4" placeholder="Requirement, scope or important notes"></app-sf-textarea>
-            </app-sf-field>
-        </app-sf-section>
+            <app-sf-section title="Details" columns="2">
+                <app-sf-field full label="Enquiry Title" [control]="enquiryForm.controls.title">
+                    <app-sf-input formControlName="title" placeholder="Title"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Priority" [control]="enquiryForm.controls.priority">
+                    <app-sf-select formControlName="priority" [options]="priorityOptions" placeholder="Select priority"></app-sf-select>
+                </app-sf-field>
+                <app-sf-field label="Source" hint="Optional" [control]="enquiryForm.controls.source">
+                    <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="Select source"></app-sf-select>
+                </app-sf-field>
+                <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
+                    <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
+                </app-sf-field>
+                <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
+                    <app-sf-date formControlName="nextFollowUpDate" displayFormat="dd/MM/yy"></app-sf-date>
+                </app-sf-field>
+            </app-sf-section>
+        </ng-container>
 
-        <app-sf-section title="Files">
-            <app-sf-field label="Files" hint="Optional" [control]="enquiryForm.controls.attachments">
-                <app-sf-file formControlName="attachments" [accept]="acceptedFiles" [maxSizeMb]="5"></app-sf-file>
-            </app-sf-field>
-        </app-sf-section>
+        <!-- Step 2 — requirement / notes & files ------------------------------------------- -->
+        <ng-container *ngIf="step === 2">
+            <app-sf-section title="Requirement / Notes">
+                <app-sf-field full label="Requirement / Notes" [control]="enquiryForm.controls.requirement">
+                    <app-sf-textarea formControlName="requirement" [rows]="6" placeholder="Requirement, scope or important notes"></app-sf-textarea>
+                </app-sf-field>
+            </app-sf-section>
+
+            <app-sf-section title="Files">
+                <app-sf-field label="Files" hint="Optional" [control]="enquiryForm.controls.attachments">
+                    <app-sf-file formControlName="attachments" [accept]="acceptedFiles" [maxSizeMb]="5"></app-sf-file>
+                </app-sf-field>
+            </app-sf-section>
+        </ng-container>
     </form>
 
     <ng-container sfDrawerFooter>
         <!-- Leaves for the customer form; the draft is saved first so this form comes back filled in. -->
-        <app-action-button class="mr-auto" variant="tool" [disabled]="saving" (click)="createCustomer()">+ Create Customer</app-action-button>
-        <app-action-button variant="secondary" (click)="cancel()">Cancel</app-action-button>
-        <app-action-button variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
+        <app-action-button *ngIf="step === 1" class="mr-auto" variant="tool" [disabled]="saving" (click)="createCustomer()">+ Create Customer</app-action-button>
+
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="secondary" (click)="previousStep()">Back</app-action-button>
+
+        <app-action-button *ngIf="step === 1" variant="primary" (click)="nextStep()">Next: {{ steps[1].label }}</app-action-button>
+        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
             {{ saving ? 'Creating…' : 'Create Enquiry' }}
         </app-action-button>
     </ng-container>
