@@ -1,0 +1,55 @@
+<div class="qr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+
+    <div class="qr-card shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <nav aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
+                    <a *ngFor="let b of breadcrumbs" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+                    <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+                    </svg>
+                </nav>
+                <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Suppliers</h2>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <app-view-toggle label="Supplier" active="report" listLink="/suppliers" reportLink="/suppliers/report" [listQueryParams]="listQueryParams"></app-view-toggle>
+                <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!suppliers.length">Excel</app-action-button>
+            </div>
+        </div>
+
+        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the suppliers."
+            (valuesChange)="onFilterChange($event)"></app-report-filters>
+    </div>
+
+    <div *ngIf="loading" class="qr-card grid place-content-center py-20 text-sm text-gray-500 dark:text-gray-400">
+        Building report…
+    </div>
+
+    <div *ngIf="!loading && failed" class="qr-card grid place-content-center gap-3 py-20 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-300">The report could not be generated.</p>
+        <p class="text-xs text-gray-500 dark:text-gray-500">Try a narrower date range, or reload the page.</p>
+    </div>
+
+    <ng-container *ngIf="!loading && !failed">
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <app-kpi-card label="Total Suppliers" [value]="totalSuppliers"></app-kpi-card>
+            <app-kpi-card label="Pending" [value]="pendingCount" valueClass="text-amber-600 dark:text-amber-400"></app-kpi-card>
+            <app-kpi-card label="Approved" [value]="approvedCount" valueClass="text-emerald-600 dark:text-emerald-400"></app-kpi-card>
+            <app-kpi-card label="Rejected" [value]="rejectedCount" valueClass="text-red-600 dark:text-red-400"></app-kpi-card>
+            <app-kpi-card label="Credit Exposure" [value]="totalCreditExposure | number: '1.0-0'" foot="Approved suppliers only"></app-kpi-card>
+        </div>
+
+        <div class="qr-card p-4">
+            <div class="mb-3 flex items-center justify-between">
+                <h3 class="qr-heading">Breakdown</h3>
+                <div class="qr-toggle">
+                    <button *ngFor="let t of breakdownTabs" type="button" class="qr-toggle-btn" [class.qr-toggle-on]="breakdownKey === t.key" (click)="setBreakdown(t.key)">{{ t.label }}</button>
+                </div>
+            </div>
+            <app-data-grid #breakdownGrid rowKey="id" [data]="breakdownRows" [columns]="breakdownColumns"
+                [selectable]="false" [showToolbarTools]="false" [showTitleBlock]="false" [showDetailPanel]="false"
+                emptyMessage="No suppliers match these filters" (rowOpen)="onBreakdownRowOpen($event)"></app-data-grid>
+        </div>
+    </ng-container>
+</div>

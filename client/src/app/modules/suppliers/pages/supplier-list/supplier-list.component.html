@@ -1,0 +1,85 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Suppliers"
+        subtitle="Manage supplier records, approvals and banking details"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="total"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        searchPlaceholder="Search by supplier name or id"
+        emptyMessage="No suppliers found"
+        [createLabel]="canCreate ? 'Create Supplier' : ''"
+        [rowActions]="rowActions"
+        [views]="views"
+        (viewChange)="onViewChange($event)"
+        storageKey="supplier-list"
+        exportable
+        exportFileName="suppliers.xlsx"
+        [detailTabs]="detailTabs"
+        [detailTitle]="supplierTitle"
+        [detailSubtitle]="supplierSubtitle"
+        (queryChange)="onQueryChange($event)"
+        (rowOpen)="onRowOpen()"
+        (cellEdit)="onCellEdit($event)"
+        (rowAction)="onRowAction($event)"
+        (create)="onCreateSupplier()">
+
+        <app-view-toggle dgToolbarExtra label="Supplier" active="list" listLink="/suppliers" reportLink="/suppliers/report" [reportQueryParams]="reportQueryParams"></app-view-toggle>
+
+        <ng-template #detailAsideTemplate let-row>
+            <span *ngIf="row.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
+                [ngClass]="statusBadgeClasses[row.status] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ row.status }}</span>
+            <ng-template #asideStatusEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
+        </ng-template>
+
+        <ng-template #detailMetaTemplate let-row>
+            <div class="sp-meta">
+                <p class="sp-meta-label">Category</p>
+                <p class="sp-meta-value">{{ row.category?.departmentName }}</p>
+            </div>
+            <div class="sp-meta">
+                <p class="sp-meta-label">Type</p>
+                <p class="sp-meta-value">{{ row.supplierType }}</p>
+            </div>
+            <div class="sp-meta">
+                <p class="sp-meta-label">Credit Limit</p>
+                <p class="sp-meta-value">{{ row.creditValue | number }}</p>
+            </div>
+            <div class="sp-meta">
+                <p class="sp-meta-label">Created</p>
+                <p class="sp-meta-value">{{ row.createdDate | date: 'dd MMM yyyy' }}</p>
+            </div>
+        </ng-template>
+
+        <ng-template #detailFooterTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="tab === 'detail' && row.status === 'Pending'" variant="secondary" (click)="openEditDrawer(row)">Edit</app-action-button>
+        </ng-template>
+
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'detail'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                    <app-detail-table class="mt-5" title="Products" [columns]="productColumns" [rows]="productRows(row)" emptyMessage="No products listed."></app-detail-table>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'banking'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="bankingSections(row)"></app-detail-overview>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'history'">
+                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No approval or rejection history yet."></app-detail-timeline>
+                </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
+
+    <!-- Create and edit share one drawer; the list only decides which mode to open it in. -->
+    <app-supplier-form-drawer [open]="formOpen" [mode]="formMode" [supplier]="formSupplier"
+        (saved)="getSuppliers()" (closed)="onFormClosed()"></app-supplier-form-drawer>
+</div>

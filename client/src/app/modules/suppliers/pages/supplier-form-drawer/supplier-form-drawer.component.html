@@ -1,0 +1,155 @@
+<app-sf-drawer [title]="title" [subtitle]="subtitle" width="760px"
+    [open]="open" [dirty]="supplierForm.dirty" (closed)="onDrawerClosed($event)">
+
+    <!-- Stepper -->
+    <app-supplier-form-stepper [steps]="steps" [current]="step" [isStepValid]="isStepValid.bind(this)"
+        (stepClick)="goToStep($any($event))"></app-supplier-form-stepper>
+
+    <form id="supplier-form" [formGroup]="supplierForm" (ngSubmit)="submit()" novalidate>
+
+        <!-- Step 1 — supplier, address & contact ---------------------------------------- -->
+        <app-sf-section *ngIf="step === 1" title="Supplier" columns="2">
+            <app-sf-field label="Supplier Id">
+                <app-sf-input formControlName="supplierId" [readonly]="true"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Supplier Name" [control]="supplierForm.controls.supplierName">
+                <app-sf-input formControlName="supplierName" placeholder="Supplier name"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Category" [control]="supplierForm.controls.category">
+                <app-sf-select formControlName="category" [options]="categoryOptions" placeholder="Select category"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Supplier Type" [control]="supplierForm.controls.supplierType">
+                <app-sf-select formControlName="supplierType" [options]="supplierTypeOptions" placeholder="Select type"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Credit Days" [control]="supplierForm.controls.creditDays">
+                <app-sf-number formControlName="creditDays"></app-sf-number>
+            </app-sf-field>
+            <app-sf-field label="Credit Limit" [control]="supplierForm.controls.creditValue">
+                <app-sf-number formControlName="creditValue"></app-sf-number>
+            </app-sf-field>
+        </app-sf-section>
+
+        <div *ngIf="step === 1" formGroupName="address">
+            <app-sf-section title="Address" columns="2">
+                <app-sf-field full label="Location" [control]="supplierForm.controls.address.controls.location">
+                    <app-sf-input formControlName="location" placeholder="Location"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="City">
+                    <app-sf-input formControlName="city"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Street No">
+                    <app-sf-input formControlName="streetNo"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Building No">
+                    <app-sf-input formControlName="buildingNo"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Zone No">
+                    <app-sf-input formControlName="zoneNo"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="PO Box">
+                    <app-sf-input formControlName="poBox"></app-sf-input>
+                </app-sf-field>
+            </app-sf-section>
+        </div>
+
+        <div *ngIf="step === 1" formGroupName="contactDetails">
+            <app-sf-section title="Contact" columns="2">
+                <app-sf-field label="Contact Name" [control]="supplierForm.controls.contactDetails.controls.name">
+                    <app-sf-input formControlName="name"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Email" [control]="supplierForm.controls.contactDetails.controls.email">
+                    <app-sf-input formControlName="email" type="email"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Phone" [control]="supplierForm.controls.contactDetails.controls.phoneNumber">
+                    <app-sf-input formControlName="phoneNumber"></app-sf-input>
+                </app-sf-field>
+            </app-sf-section>
+        </div>
+
+        <!-- Step 2 — products -------------------------------------------------------------- -->
+        <app-sf-section *ngIf="step === 2" title="Products">
+            <div formArrayName="products" class="col-span-full space-y-3">
+                <div *ngFor="let product of products.controls; let i = index" [formGroupName]="i"
+                    class="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 dark:border-erp-border-dark p-3 sm:grid-cols-2">
+                    <app-sf-field label="Product Name" [control]="product.get('productName')">
+                        <app-sf-input formControlName="productName"></app-sf-input>
+                    </app-sf-field>
+                    <app-sf-field label="Payment Term" [control]="product.get('paymentTerm')">
+                        <app-sf-input formControlName="paymentTerm"></app-sf-input>
+                    </app-sf-field>
+                    <app-sf-field label="Contact Name">
+                        <app-sf-input formControlName="contactName"></app-sf-input>
+                    </app-sf-field>
+                    <app-sf-field label="Contact Email" [control]="product.get('contactEmail')">
+                        <app-sf-input formControlName="contactEmail" type="email"></app-sf-input>
+                    </app-sf-field>
+                    <app-sf-field label="Contact No">
+                        <app-sf-input formControlName="contactNo"></app-sf-input>
+                    </app-sf-field>
+                    <div class="flex items-end">
+                        <button type="button" class="text-xs font-medium text-red-600 hover:underline dark:text-red-400" (click)="removeProduct(i)">Remove product</button>
+                    </div>
+                </div>
+                <button type="button" class="text-xs font-medium text-violet-700 hover:underline dark:text-violet-400" (click)="addProduct()">+ Add product</button>
+            </div>
+        </app-sf-section>
+
+        <!-- Step 3 — bank details & documents ------------------------------------------------ -->
+        <app-sf-section *ngIf="step === 3" title="Documents">
+            <div class="col-span-full space-y-3">
+                <ul *ngIf="existingDocuments.length" class="divide-y divide-gray-100 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark">
+                    <li *ngFor="let doc of existingDocuments; let i = index" class="flex items-center justify-between px-3 py-2 text-[13px]">
+                        <span class="truncate text-gray-800 dark:text-gray-100">{{ doc.originalname }}</span>
+                        <button type="button" class="text-xs text-red-600 hover:underline dark:text-red-400" (click)="removeExistingDocument(i)">Remove</button>
+                    </li>
+                </ul>
+                <app-sf-field label="Upload Documents">
+                    <app-sf-file [(ngModel)]="newDocuments" [ngModelOptions]="{ standalone: true }"
+                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx" [maxSizeMb]="10"></app-sf-file>
+                </app-sf-field>
+            </div>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="step === 3" title="Banking">
+            <div class="col-span-full">
+                <button type="button" class="mb-3 text-xs font-medium text-violet-700 hover:underline dark:text-violet-400" (click)="toggleBankDetails()">
+                    {{ showBankDetails ? 'Hide banking details' : 'Add banking details' }}
+                </button>
+            </div>
+            <ng-container *ngIf="showBankDetails" formGroupName="bankDetails">
+                <app-sf-field label="Bank Name"><app-sf-input formControlName="bankName"></app-sf-input></app-sf-field>
+                <app-sf-field label="Branch"><app-sf-input formControlName="branch"></app-sf-input></app-sf-field>
+                <app-sf-field label="Account Name"><app-sf-input formControlName="accountName"></app-sf-input></app-sf-field>
+                <app-sf-field label="Account Number"><app-sf-input formControlName="accountNumber"></app-sf-input></app-sf-field>
+                <app-sf-field label="IBAN"><app-sf-input formControlName="iban"></app-sf-input></app-sf-field>
+                <app-sf-field label="Swift Code"><app-sf-input formControlName="swiftCode"></app-sf-input></app-sf-field>
+                <app-sf-field label="Currency"><app-sf-input formControlName="currency"></app-sf-input></app-sf-field>
+                <app-sf-field label="Bank Country"><app-sf-input formControlName="bankCountry"></app-sf-input></app-sf-field>
+                <app-sf-field full label="Bank Address"><app-sf-input formControlName="bankAddress"></app-sf-input></app-sf-field>
+                <app-sf-field full label="Banking Documents">
+                    <app-sf-file [(ngModel)]="newBankDocuments" [ngModelOptions]="{ standalone: true }"
+                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx" [maxSizeMb]="10"></app-sf-file>
+                </app-sf-field>
+            </ng-container>
+        </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2 || step === 3" variant="secondary" (click)="previousStep()">Back</app-action-button>
+
+        <!-- Editing already has the data, so saving is offered on every step too. -->
+        <app-action-button *ngIf="isEdit && (step === 1 || step === 2)" variant="tool" [disabled]="saving" (click)="submit()">
+            {{ saving ? 'Saving…' : 'Save Changes' }}
+        </app-action-button>
+
+        <app-action-button *ngIf="step === 1 || step === 2" variant="primary" (click)="nextStep()">
+            Next: {{ steps[step].label }}
+        </app-action-button>
+        <app-action-button *ngIf="step === 3" variant="primary" type="submit" form="supplier-form" [disabled]="saving">
+            {{ saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create Supplier') }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>
