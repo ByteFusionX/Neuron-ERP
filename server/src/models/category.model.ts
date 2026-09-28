@@ -38,6 +38,14 @@ export interface Privileges {
   enquiry: {
     viewReport: string;
     create: boolean;
+    // Retrofitted gates for previously ungated actions (Phase 0 workflow-engine
+    // prerequisite). Undefined = allowed, matching pre-existing behavior on
+    // roles saved before this field existed; explicit false denies.
+    edit?: boolean;
+    reassign?: boolean;
+    feedback?: boolean;
+    revision?: boolean;
+    delete?: boolean;
   };
   assignedJob: {
     viewReport: string;
@@ -46,6 +54,10 @@ export interface Privileges {
   quotation: {
     viewReport: string;
     create: boolean;
+    edit?: boolean;
+    statusUpdate?: boolean;
+    lpo?: boolean;
+    delete?: boolean;
   };
   jobSheet: {
     viewReport: string;

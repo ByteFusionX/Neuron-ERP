@@ -10,6 +10,7 @@ import { emailQueue } from "../common/queues/email.queue";
 import purchaseRequestModel from "../models/purchaseRequest.model";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
+import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
 
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
    try {
@@ -175,6 +176,13 @@ export const assignEngineer = async (req: Request, res: Response, next: NextFunc
             message: "Job ID, Engineer ID, Assigned By, Project Type, Customer ID, and Priority are required"
          });
       }
+      const customerGuard = await getCustomerCommercialGuard(customerId);
+      if (customerGuard.blocked) {
+         return res.status(409).json({
+            success: false,
+            message: customerGuard.message
+         });
+      }
 
       // Check if engineer exists
       const engineer = await employeeModel.findById(engineerId);
@@ -273,6 +281,13 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
 
       const assignedBy = userData._id;
       const { engineerId, comment, projectType, customerId, priority } = req.body;
+      const customerGuard = await getCustomerCommercialGuard(customerId);
+      if (customerGuard.blocked) {
+         return res.status(409).json({
+            success: false,
+            message: customerGuard.message
+         });
+      }
 
       const technicalProject = await technicalModel.create({
          assignedTo: engineerId,

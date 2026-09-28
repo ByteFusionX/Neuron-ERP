@@ -5,21 +5,29 @@ import { SfOption } from 'src/app/shared/components/smart-form';
 /**
  * One row offered under an item-name or description field.
  *
- * The catalogue is today's only source (see `CatalogueSuggestionSource`). Inventory is the intended
- * second source: a source that returns `source: 'inventory'` rows may also fill `uom`, `unitCost`,
- * `supplierId` and `stockOnHand` — `applySuggestion` already patches those through, so nothing in
- * this component has to change when stock lookup lands.
+ * `CatalogueSuggestionSource` fills every field below from the product catalogue, stock included.
+ * Another source (a different module's inventory view) can implement the same interface and return
+ * `source: 'inventory'`; `applySuggestion` patches whatever a row carries and skips what it omits.
  */
 export interface ItemSuggestion {
+  /** The catalogue product's id — stored on the line as `productId`. */
   _id: string;
   categoryName: string;
   description: string;
   source: 'catalogue' | 'inventory';
-  /** Populated by inventory sources only; unused until stock lookup exists. */
+  itemCode?: string;
+  partNo?: string;
   uom?: string;
   unitCost?: number;
+  unitSellingPrice?: number;
   supplierId?: string;
+  /** Stock position at lookup time. Displayed on the row; never written to the line. */
   stockOnHand?: number;
+  stockAvailable?: number;
+  stockReserved?: number;
+  stockQuarantined?: number;
+  /** 'Service'/'Non-Stock Product' rows have no stock position to show. */
+  productType?: string;
 }
 
 export interface ItemSuggestionQuery {
@@ -58,6 +66,8 @@ export interface CreateProductRequest {
 
 /** The shape `app-item-entry` reads and writes. Matches the saved quotation payload. */
 export interface ItemEntryLineValue {
+  /** Set when the line was picked from a suggestion; links the saved line to its catalogue product. */
+  productId?: string | { _id?: string } | null;
   itemCode?: string;
   partNo?: string;
   detail?: string;
@@ -68,6 +78,8 @@ export interface ItemEntryLineValue {
   availability?: string;
   supplierId?: string | { _id?: string } | null;
   uom?: string;
+  /** Purchase mode only: the host's handle for mapping an edited line back to its saved record. */
+  lineKey?: string | null;
 }
 
 export interface ItemEntryItemValue {

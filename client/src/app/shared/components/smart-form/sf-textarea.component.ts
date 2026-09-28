@@ -12,7 +12,8 @@ import { SF_STYLES } from './sf.model';
   template: `
     <textarea #ta class="sf-input block py-2 leading-5" [style.resize]="autoresize ? 'none' : 'vertical'"
       [id]="inputId" [rows]="rows" [value]="value ?? ''" [placeholder]="placeholder" [disabled]="disabled" [readOnly]="readonly"
-      [attr.maxlength]="maxlength" (input)="update(ta.value); resize(ta)" (blur)="touch()"></textarea>
+      [attr.maxlength]="maxlength" (input)="update(ta.value); resize(ta)" (blur)="touch()"
+      (keydown.enter)="noEnter && $event.preventDefault()"></textarea>
     <p *ngIf="maxlength" class="mt-1 text-right text-[11px] tabular-nums"
       [ngClass]="(value?.length || 0) >= maxlength ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'">{{ value?.length || 0 }} / {{ maxlength }}</p>
   `,
@@ -22,6 +23,7 @@ export class SfTextareaComponent extends SfControl<string> {
   @Input() rows = 3;
   @Input() maxlength: number | null = null;
   @Input({ transform: booleanAttribute }) autoresize = false;
+  @Input({ transform: booleanAttribute }) noEnter = false;
 
   resize(ta: HTMLTextAreaElement): void {
     if (!this.autoresize) return;

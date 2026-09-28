@@ -32,4 +32,13 @@ export class SidebarPreferencesService {
   setExpandedMenus(expandedMenus: { [key: string]: boolean }): void {
     localStorage.setItem(this.key('expandedMenus'), JSON.stringify(expandedMenus));
   }
+
+  getCollapsedGroups(): { [key: string]: boolean } {
+    const raw = localStorage.getItem(this.key('collapsedGroups'));
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  setCollapsedGroups(collapsedGroups: { [key: string]: boolean }): void {
+    localStorage.setItem(this.key('collapsedGroups'), JSON.stringify(collapsedGroups));
+  }
 }

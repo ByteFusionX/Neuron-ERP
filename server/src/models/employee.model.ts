@@ -34,6 +34,10 @@ interface Employee extends Document {
   driverLicense?: { number?: string; licenseClass?: string; expiry?: Date };
   compensation?: { costRatePerHour?: number; billingRate?: number };
   employmentHistory?: EmploymentHistory[];
+  // Individual grants on top of the role's privileges (same shape as Category.privileges,
+  // but sparse — only the flags explicitly granted to this one person are set). Additive
+  // only: requirePrivilege never lets this revoke something the role already allows.
+  extraPrivileges?: Record<string, any>;
 }
 
 interface EmploymentHistory {
@@ -223,6 +227,10 @@ const employeeSchema = new Schema<Employee>({
       },
     ],
     default: undefined,
+  },
+  extraPrivileges: {
+    type: Object,
+    required: false,
   },
 });
 

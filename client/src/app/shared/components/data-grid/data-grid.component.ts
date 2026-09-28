@@ -52,6 +52,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() columns: DataGridColumn<T>[] = [];
   @Input() title = '';
   @Input() subtitle = '';
+  /** Hides the title/subtitle block in the toolbar and shrinks its padding. Title is still used for aria-labels. */
+  @Input() showTitleBlock = true;
   /** Parent pages shown before the title, e.g. [{ label: 'Home', link: '/' }]. The title is the current page. */
   @Input() breadcrumbs: DataGridBreadcrumb[] = [];
   @Input() rowKey = 'id';

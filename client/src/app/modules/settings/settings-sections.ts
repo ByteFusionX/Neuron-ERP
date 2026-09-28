@@ -6,7 +6,8 @@ export type SettingsSectionId =
   | 'approval-rules'
   | 'numbering'
   | 'notifications'
-  | 'audit';
+  | 'audit'
+  | 'employee-privileges';
 
 export interface SettingsAccess {
   privileges?: Privileges;
@@ -84,6 +85,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'Workflow',
     keywords: ['alert', 'email', 'reminder', 'overdue', 'pending'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.notifications,
+  },
+  {
+    id: 'employee-privileges',
+    label: 'Individual Privileges',
+    description: 'Grant one extra privilege flag to a specific employee, on top of what their role already allows.',
+    icon: 'heroKey',
+    group: 'Access',
+    keywords: ['privilege', 'permission', 'flag', 'grant', 'override', 'access', 'individual', 'responsibility'],
+    canView: ({ privileges }) => !!privileges?.roles?.edit,
   },
   {
     id: 'audit',

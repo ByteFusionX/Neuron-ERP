@@ -93,6 +93,41 @@
   background: #1a1a1a;
 }
 
+/* Thin scrollbar for the tabs strip when it overflows horizontally */
+.dp-tabs-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.dp-tabs-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.dp-tabs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dp-tabs-scroll::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 9999px;
+}
+
+.dp-tabs-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;
+}
+
+:host-context(html.dark) .dp-tabs-scroll {
+  scrollbar-color: #3f3f46 transparent;
+}
+
+:host-context(html.dark) .dp-tabs-scroll::-webkit-scrollbar-thumb {
+  background-color: #3f3f46;
+}
+
+:host-context(html.dark) .dp-tabs-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #52525b;
+}
+
 /* tablet and below: full-screen overlay; the list underneath keeps its scroll position */
 @media (max-width: 1024px) {
   :host {

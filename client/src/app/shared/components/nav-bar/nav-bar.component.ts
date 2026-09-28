@@ -17,14 +17,16 @@ import { MsalService } from '@azure/msal-angular';
 import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
 import { ThemeService } from 'src/app/core/services/theme.service';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { SearchFieldComponent } from '../search-field/search-field.component';
 
 @Component({
     selector: 'app-nav-bar',
     templateUrl: './nav-bar.component.html',
     styleUrls: ['./nav-bar.component.css'],
-    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent,MatTooltipModule]
+    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent,MatTooltipModule,SearchFieldComponent]
 })
 export class NavBarComponent {
+  globalSearch: string = '';
   textNotificationCount$!: Observable<{viewed:TextNotification[],unviewed:TextNotification[]}>;
   textNotificationBadgeCount$!: Observable<number>;
   announcementNotificationCount$!: Observable<number>;

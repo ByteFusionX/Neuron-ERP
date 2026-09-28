@@ -34,6 +34,7 @@ import { NotificationCounts, TextNotification } from '../../interfaces/notificat
 import { ThemeService } from 'src/app/core/services/theme.service';
 import { FormsModule } from '@angular/forms';
 import { SettingsNavService } from 'src/app/modules/settings/settings-nav.service';
+import { SearchFieldComponent } from '../search-field/search-field.component';
 
 interface MenuItem {
   id: string;
@@ -62,6 +63,7 @@ interface SubMenuItem {
 interface MenuCategory {
   id: string;
   label: string;
+  group?: string;
   items: MenuItem[];
 }
 
@@ -70,7 +72,7 @@ interface MenuCategory {
   templateUrl: './side-bar.component.html',
   styleUrls: ['./side-bar.component.css'],
   animations: [sideBarState, dropDownMenuSate, buttonSlideState, slideLogoState],
-  imports: [CommonModule, IconsModule, RouterModule, FormsModule],
+  imports: [CommonModule, IconsModule, RouterModule, FormsModule, SearchFieldComponent],
   standalone: true,
 })
 export class SideBarComponent
@@ -88,6 +90,14 @@ export class SideBarComponent
   privileges!: Privileges | undefined;
   mySubscription: Subscription = new Subscription();
   expandedMenus: { [key: string]: boolean } = {};
+  collapsedGroups: { [key: string]: boolean } = {};
+  menuSearch: string = '';
+  readonly groupIcons: { [group: string]: string } = {
+    'Sales & Jobs': 'heroBriefcase',
+    Operations: 'heroTruck',
+    Finance: 'heroBanknotes',
+    Administration: 'heroUserGroup',
+  };
   // Tracks the navigation target url, not this.router.url (which only updates
   // once a navigation is committed, so it can't be trusted mid-navigation).
   private currentUrl: string;
@@ -151,8 +161,22 @@ export class SideBarComponent
       ],
     },
     {
+      id: 'sales-dashboard',
+      label: '',
+      group: 'Sales & Jobs',
+      items: [
+        {
+          id: 'sales-dashboard',
+          label: 'Dashboard',
+          icon: 'heroChartBar',
+          route: '/reports/sales-dashboard',
+        },
+      ],
+    },
+    {
       id: 'sales',
       label: 'Sales',
+      group: 'Sales & Jobs',
       items: [
         {
           id: 'customers',
@@ -202,50 +226,35 @@ export class SideBarComponent
     {
       id: 'jobs',
       label: 'Jobs',
+      group: 'Sales & Jobs',
       items: [
         {
           id: 'jobSheet',
           label: 'Job Sheet',
           icon: 'heroClipboardDocument',
+          route: '/job-sheet',
           privilegeKey: 'jobSheet',
-          hasDropdown: true,
           privilegeValue: 'none',
-          children: [
-            {
-              id: 'pendingJobSheet',
-              label: 'Pending',
-              route: '/job-sheet/pending',
-              privilegeKey: 'jobSheet',
-              privilegeValue: 'none',
-            },
-            {
-              id: 'openToWorkJobSheet',
-              label: 'Open to work',
-              route: '/job-sheet/open-to-work',
-              privilegeKey: 'jobSheet',
-              privilegeValue: 'none',
-            },
-            {
-              id: 'inProgressJobSheet',
-              label: 'In progress',
-              route: '/job-sheet/in-progress',
-              privilegeKey: 'jobSheet',
-              privilegeValue: 'none',
-            },
-            {
-              id: 'completedJobSheet',
-              label: 'Completed',
-              route: '/job-sheet/completed',
-              privilegeKey: 'jobSheet',
-              privilegeValue: 'none',
-            },
-          ],
+        },
+      ],
+    },
+    {
+      id: 'operations-dashboard',
+      label: '',
+      group: 'Operations',
+      items: [
+        {
+          id: 'operations-dashboard',
+          label: 'Dashboard',
+          icon: 'heroChartBar',
+          route: '/reports/operations-dashboard',
         },
       ],
     },
     {
       id: 'procurement',
       label: 'Purchase',
+      group: 'Operations',
       items: [
         {
           id: 'suppliers',
@@ -253,21 +262,8 @@ export class SideBarComponent
           icon: 'heroBuildingOffice',
           route: '/suppliers',
           privilegeKey: 'supplier',
-          hasDropdown: true,
           privilegeValue: 'none',
-          children: [
-            {
-              id: 'pendingSuppliers',
-              label: 'Pending',
-              route: '/suppliers/pendings',
-              notificationKey: 'supplierCount',
-            },
-            {
-              id: 'approvedSuppliers',
-              label: 'Approved',
-              route: '/suppliers/approved',
-            },
-          ],
+          notificationKey: 'supplierCount',
         },
         {
           id: 'purchase',
@@ -279,16 +275,10 @@ export class SideBarComponent
           notificationKey: 'purchaseCount',
           children: [
             {
-              id: 'pendingPurchase',
-              label: 'Pending PR',
-              route: '/purchase/pendings',
+              id: 'purchaseRequests',
+              label: 'PR',
+              route: '/purchase/pr',
               notificationKey: 'purchaseCount',
-            },
-            {
-              id: 'approvedPurchase',
-              label: 'Approved PR',
-              route: '/purchase/approves',
-              notificationKey: 'purchaseApprovedCount',
             },
           ],
         },
@@ -329,8 +319,66 @@ export class SideBarComponent
       ],
     },
     {
+      id: 'inventory',
+      label: 'Inventory',
+      group: 'Operations',
+      items: [
+        {
+          id: 'Products',
+          label: 'Products',
+          icon: 'heroCube',
+          route: '/products',
+          privilegeKey: 'inventory',
+          privilegeValue: 'none',
+          inventorySubKey: 'products',
+        },
+        {
+          id: 'stockEntries',
+          label: 'Stocks',
+          icon: 'heroCube',
+          hasDropdown: true,
+          privilegeKey: 'inventory',
+          privilegeValue: 'none',
+          inventorySubKey: 'stockEntries',
+          children: [
+            {
+              id: 'stockOverview',
+              label: 'Overview',
+              route: '/stock/overview',
+            },
+            {
+              id: 'inventoryPlanning',
+              label: 'Planning',
+              route: '/stock/planning',
+            },
+            // Reservations demoted from main nav: it's transactional detail
+            // that Planning already aggregates, and deal approval now
+            // creates reservations automatically. Route stays live at
+            // /stock/reservations; re-add here if it needs to be a
+            // first-class page again.
+            {
+              id: 'stockLedger',
+              label: 'Stock Ledger',
+              route: '/stock/ledger',
+            },
+            {
+              id: 'stockEntriesList',
+              label: 'Stock Entries',
+              route: '/stock/stock-entries',
+            },
+            {
+              id: 'stockOnHold',
+              label: 'Stock Holds',
+              route: '/stock/stock-holds',
+            },
+          ],
+        },
+      ],
+    },
+    {
       id: 'technicalCategory',
       label: 'Technical',
+      group: 'Operations',
       items: [
         {
           id: 'technical',
@@ -377,44 +425,9 @@ export class SideBarComponent
       ],
     },
     {
-      id: 'inventory',
-      label: 'Inventory',
-      items: [
-        {
-          id: 'Products',
-          label: 'Products',
-          icon: 'heroCube',
-          route: '/products',
-          privilegeKey: 'inventory',
-          privilegeValue: 'none',
-          inventorySubKey: 'products',
-        },
-        {
-          id: 'stockEntries',
-          label: 'Stocks',
-          icon: 'heroCube',
-          hasDropdown: true,
-          privilegeKey: 'inventory',
-          privilegeValue: 'none',
-          inventorySubKey: 'stockEntries',
-          children: [
-            {
-              id: 'stockEntriesList',
-              label: 'Stock Entries',
-              route: '/stock/stock-entries',
-            },
-            {
-              id: 'stockOnHold',
-              label: 'Stock Holds',
-              route: '/stock/stock-holds',
-            },
-          ],
-        },
-      ],
-    },
-    {
       id: 'administration',
       label: 'Logistics',
+      group: 'Operations',
       items: [
         {
           id: 'dispatch',
@@ -466,8 +479,22 @@ export class SideBarComponent
       ],
     },
     {
+      id: 'finance-dashboard',
+      label: '',
+      group: 'Finance',
+      items: [
+        {
+          id: 'finance-dashboard',
+          label: 'Dashboard',
+          icon: 'heroChartBar',
+          route: '/reports/finance-dashboard',
+        },
+      ],
+    },
+    {
       id: 'finance',
       label: 'Finance',
+      group: 'Finance',
       items: [
         {
           id: 'finance',
@@ -478,38 +505,9 @@ export class SideBarComponent
       ],
     },
     {
-      id: 'hr',
-      label: 'HR',
-      items: [
-        {
-          id: 'hr-departments',
-          label: 'Departments',
-          icon: 'heroBuildingLibrary',
-          route: '/hr/departments',
-          privilegeKey: 'departments',
-          privilegeValue: 'view',
-        },
-        {
-          id: 'hr-roles-privileges',
-          label: 'Roles & Privileges',
-          icon: 'heroShieldCheck',
-          route: '/hr/roles-privileges',
-          privilegeKey: 'roles',
-          privilegeValue: 'view',
-        },
-        {
-          id: 'employees',
-          label: 'Employees',
-          icon: 'heroIdentification',
-          route: '/hr/employees',
-          privilegeKey: 'employee',
-          privilegeValue: 'none',
-        },
-      ],
-    },
-    {
-      id: 'people',
-      label: 'People',
+      id: 'claims',
+      label: 'Claims',
+      group: 'Finance',
       items: [
         {
           id: 'claims',
@@ -540,6 +538,50 @@ export class SideBarComponent
         },
       ],
     },
+    {
+      id: 'hr-dashboard',
+      label: '',
+      group: 'Administration',
+      items: [
+        {
+          id: 'hr-dashboard',
+          label: 'Dashboard',
+          icon: 'heroChartBar',
+          route: '/reports/hr-dashboard',
+        },
+      ],
+    },
+    {
+      id: 'hr',
+      label: 'HR',
+      group: 'Administration',
+      items: [
+        {
+          id: 'hr-departments',
+          label: 'Departments',
+          icon: 'heroBuildingLibrary',
+          route: '/hr/departments',
+          privilegeKey: 'departments',
+          privilegeValue: 'view',
+        },
+        {
+          id: 'hr-roles-privileges',
+          label: 'Roles & Privileges',
+          icon: 'heroShieldCheck',
+          route: '/hr/roles-privileges',
+          privilegeKey: 'roles',
+          privilegeValue: 'view',
+        },
+        {
+          id: 'employees',
+          label: 'Employees',
+          icon: 'heroIdentification',
+          route: '/hr/employees',
+          privilegeKey: 'employee',
+          privilegeValue: 'none',
+        },
+      ],
+    },
   ];
 
   constructor(
@@ -557,6 +599,7 @@ export class SideBarComponent
       if (event instanceof NavigationEnd) {
         this.activeLink = event.urlAfterRedirects;
         this.isSettingsRoute = event.urlAfterRedirects.split('?')[0].startsWith('/settings');
+        this.openActiveGroup(event.urlAfterRedirects);
         this.scrollActiveItemIntoView();
       }
     });
@@ -593,6 +636,9 @@ export class SideBarComponent
     // Auto-expand the dropdown matching the current URL immediately, so a
     // fresh page load/refresh doesn't depend on catching a NavigationStart event.
     this.expandActiveRouteMenus(this.currentUrl);
+
+    this.collapsedGroups = { ...this.sidebarPrefs.getCollapsedGroups() };
+    this.openActiveGroup(this.currentUrl);
 
     setTimeout(() => {
       this.showTabs = true;
@@ -836,9 +882,102 @@ export class SideBarComponent
   }
 
   get visibleCategories(): MenuCategory[] {
-    return this.menuCategories.filter((category) =>
-      this.categoryHasAccess(category),
+    const searching = !!this.menuSearch.trim() && this.showFullBar;
+    return this.menuCategories.filter(
+      (category) =>
+        this.categoryHasAccess(category) &&
+        (!searching ||
+          category.items.some((item) => this.hasAccess(item) && this.itemMatchesSearch(item))),
     );
+  }
+
+  // True when the category at this index starts a new run of categories sharing
+  // the same `group` (e.g. the first of Purchase/Inventory/Technical/Logistics
+  // under "Operations"). Ungrouped categories always start their own run, so the
+  // minimised rail can draw one divider per group instead of per category.
+  isNewGroup(index: number): boolean {
+    const categories = this.visibleCategories;
+    const category = categories[index];
+    const prev = categories[index - 1];
+    if (!prev) return true;
+    return prev.group !== category?.group;
+  }
+
+  // Accordion: opening a group closes the others, so the menu stays short.
+  toggleGroup(group: string): void {
+    const opening = !!this.collapsedGroups[group];
+    Object.keys(this.groupIcons).forEach((g) => (this.collapsedGroups[g] = true));
+    this.collapsedGroups[group] = !opening;
+    this.sidebarPrefs.setCollapsedGroups(this.collapsedGroups);
+  }
+
+  // Groups are collapsed unless opened; searching temporarily opens them all.
+  isGroupCollapsed(group?: string): boolean {
+    if (!group || this.menuSearch.trim()) return false;
+    return this.collapsedGroups[group] !== false;
+  }
+
+  getGroupIcon(group: string): string {
+    return this.groupIcons[group] ?? 'heroChartBar';
+  }
+
+  // Rolled-up unread count for a collapsed group header.
+  getGroupBadgeCount(group: string): number {
+    let total = 0;
+    this.menuCategories
+      .filter((category) => category.group === group)
+      .forEach((category) =>
+        category.items
+          .filter((item) => this.hasAccess(item))
+          .forEach((item) => {
+            if (item.children?.length) {
+              item.children.forEach((child) => (total += this.getSubMenuBadgeCount(child)));
+            } else {
+              total += this.getTopLevelBadgeCount(item);
+            }
+          }),
+      );
+    return total;
+  }
+
+  private openActiveGroup(url: string) {
+    const path = url.split('?')[0];
+    const category = this.menuCategories.find((c) =>
+      c.items.some(
+        (item) =>
+          (item.route && path.startsWith(item.route)) ||
+          item.children?.some((child) => path.startsWith(child.route)),
+      ),
+    );
+    if (!category?.group) return;
+    Object.keys(this.groupIcons).forEach((g) => (this.collapsedGroups[g] = true));
+    this.collapsedGroups[category.group] = false;
+    this.sidebarPrefs.setCollapsedGroups(this.collapsedGroups);
+  }
+
+  private searchMatches(label: string): boolean {
+    const term = this.menuSearch.trim().toLowerCase();
+    return !term || label.toLowerCase().includes(term);
+  }
+
+  itemMatchesSearch(item: MenuItem): boolean {
+    return (
+      this.searchMatches(item.label) ||
+      !!item.children?.some((child) => this.subItemMatchesSearch(item, child))
+    );
+  }
+
+  // Children of a matching parent stay visible; otherwise only matching children show.
+  subItemMatchesSearch(item: MenuItem, child: SubMenuItem): boolean {
+    return (
+      this.searchMatches(item.label) ||
+      this.searchMatches(this.getSubMenuLabel(child)) ||
+      this.searchMatches(child.label)
+    );
+  }
+
+  clearSearch(): void {
+    this.menuSearch = '';
   }
 
   private computeNotificationCounts(

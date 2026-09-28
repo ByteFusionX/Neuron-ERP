@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import axios from "axios";
 import employeeModel from "../../models/employee.model";
+import categoryModel from "../../models/category.model";
 import mongoose from "mongoose";
 
 
@@ -423,6 +424,26 @@ export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> 
         return reportedIds;
     } catch (error) {
         console.error('Error fetching reported employees:', error);
+        return [];
+    }
+};
+
+// Records created/actioned from an admin or superAdmin account have no real place in the
+// reportingTo hierarchy (they don't "report to" anyone's manager), so a plain hierarchy
+// walk (getAllReportedEmployees) never surfaces them - they become invisible to the manager
+// who's actually supposed to see/approve them once a real employee's work was done under an
+// admin/superAdmin login. Callers doing "my team" visibility (deal sheet queues, etc.) should
+// union this in alongside getAllReportedEmployees so those records aren't orphaned from view.
+export const getAdminAuthoredEmployeeIds = async (): Promise<ObjectId[]> => {
+    try {
+        const adminCategoryIds = await categoryModel.find({ role: { $in: ['admin', 'superAdmin'] } }, '_id').lean();
+        const employees = await employeeModel.find(
+            { category: { $in: adminCategoryIds.map((c: any) => c._id) } },
+            '_id'
+        ).lean();
+        return employees.map((e: any) => new ObjectId(e._id));
+    } catch (error) {
+        console.error('Error fetching admin-authored employee ids:', error);
         return [];
     }
 };

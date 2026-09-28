@@ -57,19 +57,24 @@ export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?:
       return next();
     }
 
-    if (privilege == null) {
+    // Individual grants on top of the role: additive only, so an unset/false role privilege
+    // can be topped up per-person, but this can never take away what the role already allows.
+    const extra = resolvePrivilege(employee.extraPrivileges, moduleKey);
+
+    if (action) {
+      if (privilege?.[action] === true || extra?.[action] === true) {
+        return next();
+      }
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    if (action) {
-      if (privilege[action] !== true) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-      return next();
+    if (privilege == null && extra == null) {
+      return res.status(403).json({ message: "Forbidden" });
     }
 
-    const viewReport = typeof privilege === "boolean" ? privilege : privilege.viewReport;
-    if (!viewReport || viewReport === "none") {
+    const viewReport = typeof privilege === "boolean" ? privilege : privilege?.viewReport;
+    const extraViewReport = typeof extra === "boolean" ? extra : extra?.viewReport;
+    if ((!viewReport || viewReport === "none") && (!extraViewReport || extraViewReport === "none")) {
       return res.status(403).json({ message: "Forbidden" });
     }
 

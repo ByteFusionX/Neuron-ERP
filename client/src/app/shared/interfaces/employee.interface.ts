@@ -45,6 +45,8 @@ export interface getEmployeeDetails {
   /** Only present when the viewer has employee.viewCompensation. */
   compensation?: Compensation;
   employmentHistory?: EmploymentHistoryEntry[];
+  /** Individual grants on top of the role's privileges. Additive only — see server employee.model.ts. */
+  extraPrivileges?: Record<string, any>;
 }
 
 export type ContractType = 'permanent' | 'fixed-term' | 'probation' | 'contractor' | 'intern';
@@ -195,6 +197,11 @@ export interface Privileges {
   enquiry: {
     viewReport: string;
     create: boolean;
+    edit?: boolean;
+    reassign?: boolean;
+    feedback?: boolean;
+    revision?: boolean;
+    delete?: boolean;
   };
   assignedJob: {
     viewReport: string;
@@ -203,6 +210,10 @@ export interface Privileges {
   quotation: {
     viewReport: string;
     create: boolean;
+    edit?: boolean;
+    statusUpdate?: boolean;
+    lpo?: boolean;
+    delete?: boolean;
   };
   jobSheet: {
     viewReport: string;

@@ -1,14 +1,13 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { FormArray, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 
 /** Add/remove list of contact-detail cards bound to a FormArray of contact FormGroups. */
 @Component({
   selector: 'app-customer-contact-repeater',
   standalone: true,
-  imports: [NgFor, NgIf, ReactiveFormsModule, SmartFormModule, ActionButtonComponent],
+  imports: [NgFor, NgIf, ReactiveFormsModule, SmartFormModule],
   template: `
     <div *ngFor="let contact of contacts.controls; let i = index" [formGroup]="contact"
       class="rounded-lg border border-gray-200 p-3 dark:border-erp-border-dark">
@@ -42,9 +41,6 @@ import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form'
           <app-sf-input formControlName="phoneNo" type="tel" placeholder="Phone number"></app-sf-input>
         </app-sf-field>
       </div>
-    </div>
-    <div>
-      <app-action-button variant="tool" (click)="add.emit()">+ Add Contact</app-action-button>
     </div>
   `,
 })

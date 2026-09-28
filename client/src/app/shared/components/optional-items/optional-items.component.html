@@ -392,6 +392,14 @@
                       )
                     "
                   />
+                  <div
+                    *ngIf="getStockWarning(optionIndex, itemIndex, itemDetailIndex)"
+                    class="mt-1 text-[11px] leading-tight"
+                    [class.text-red-600]="hasStockShortage(optionIndex, itemIndex, itemDetailIndex)"
+                    [class.text-emerald-600]="!hasStockShortage(optionIndex, itemIndex, itemDetailIndex)"
+                  >
+                    {{ getStockWarning(optionIndex, itemIndex, itemDetailIndex) }}
+                  </div>
                 </td>
                 <td class="border px-2 py-2 text-center">
                   <input

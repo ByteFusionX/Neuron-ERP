@@ -6,8 +6,10 @@ import { ItemSuggestion, ItemSuggestionQuery, ItemSuggestionSource } from './ite
 /**
  * Backs `app-item-entry`'s suggestions with the product catalogue.
  *
- * This is the seam for widening the sources: an inventory-backed source would implement the same
- * interface and return `source: 'inventory'` rows carrying uom/unitCost/supplierId/stockOnHand.
+ * `/quotation/product-suggestions` already resolves each product's stock position (on hand, blocked,
+ * reserved, quarantined) and its default pricing, so everything is mapped through here: the row both
+ * autofills the line and shows live availability. This is also the seam for widening the sources —
+ * another source implements the same interface and returns `source: 'inventory'` rows.
  */
 @Injectable()
 export class CatalogueSuggestionSource implements ItemSuggestionSource {
@@ -21,6 +23,17 @@ export class CatalogueSuggestionSource implements ItemSuggestionSource {
         categoryName: p.productCategory?.categoryName || '',
         description: p.productDescription || '',
         source: 'catalogue',
+        itemCode: p.itemCode || '',
+        partNo: p.partNo || '',
+        uom: p.unitOfMeasure || '',
+        unitCost: p.estimatedCost ?? undefined,
+        unitSellingPrice: p.defaultSellingPrice ?? undefined,
+        supplierId: p.defaultVendor?._id || p.defaultVendor || undefined,
+        stockOnHand: p.onHandQuantity ?? undefined,
+        stockAvailable: p.availableQuantity ?? undefined,
+        stockReserved: p.reservedQuantity ?? undefined,
+        stockQuarantined: p.quarantinedQuantity ?? undefined,
+        productType: p.type || '',
       }))));
   }
 }

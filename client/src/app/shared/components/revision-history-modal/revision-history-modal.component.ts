@@ -41,11 +41,12 @@ interface SnapshotItem {
   detail: string;
   quantity: number | string;
   uom: string;
+  unitSellingPrice: number | string;
 }
 
 /** One item line that differs from the previous revision. */
 interface ItemChange {
-  kind: 'added' | 'removed' | 'qty';
+  kind: 'added' | 'removed' | 'qty' | 'price';
   name: string;
   detail: string;
   /** Human text for the change, e.g. "10 nos → 12 nos". */
@@ -58,6 +59,11 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
   optionalItems: 'Items',
   customerNote: 'Customer notes',
   termsAndCondition: 'Terms & conditions',
+  paymentTerms: 'Payment terms',
+  deliveryTerms: 'Delivery terms',
+  warranty: 'Warranty',
+  deliveryLocation: 'Delivery location',
+  validityDate: 'Validity date',
 };
 
 /**
@@ -146,6 +152,7 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
                       <th class="px-3 py-2 text-left font-medium">Item</th>
                       <th class="px-3 py-2 text-left font-medium">Detail</th>
                       <th class="px-3 py-2 text-right font-medium">Qty</th>
+                      <th class="px-3 py-2 text-right font-medium">Unit Price</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100 dark:divide-erp-border-dark">
@@ -153,6 +160,7 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
                       <td class="px-3 py-2 align-top text-gray-900 dark:text-gray-100">{{ it.name }}</td>
                       <td class="px-3 py-2 align-top text-gray-600 dark:text-gray-400">{{ it.detail }}</td>
                       <td class="whitespace-nowrap px-3 py-2 text-right align-top tabular-nums text-gray-600 dark:text-gray-400">{{ it.quantity }} {{ it.uom }}</td>
+                      <td class="whitespace-nowrap px-3 py-2 text-right align-top tabular-nums text-gray-600 dark:text-gray-400">{{ it.unitSellingPrice }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -242,6 +250,7 @@ export class RevisionHistoryModalComponent {
   private diffItems(before: SnapshotItem[], after: SnapshotItem[]): ItemChange[] {
     const key = (i: SnapshotItem) => `${i.name}\u0000${i.detail}`;
     const qty = (i: SnapshotItem) => `${i.quantity} ${i.uom}`.trim();
+    const price = (i: SnapshotItem) => `${i.unitSellingPrice ?? ''}`.trim();
     const prev = new Map(before.map((i) => [key(i), i]));
     const next = new Map(after.map((i) => [key(i), i]));
     const out: ItemChange[] = [];
@@ -249,6 +258,7 @@ export class RevisionHistoryModalComponent {
       const old = prev.get(k);
       if (!old) out.push({ kind: 'added', name: i.name, detail: i.detail, text: qty(i) });
       else if (qty(old) !== qty(i)) out.push({ kind: 'qty', name: i.name, detail: i.detail, text: `${qty(old)} → ${qty(i)}` });
+      else if (price(old) !== price(i)) out.push({ kind: 'price', name: i.name, detail: i.detail, text: `${price(old) || '—'} → ${price(i) || '—'}` });
     }
     for (const [k, i] of prev) if (!next.has(k)) out.push({ kind: 'removed', name: i.name, detail: i.detail, text: qty(i) });
     return out;
@@ -260,7 +270,7 @@ export class RevisionHistoryModalComponent {
     for (const option of snapshot?.optionalItems || []) {
       for (const item of option?.items || []) {
         for (const d of item?.itemDetails || []) {
-          out.push({ name: item.itemName, detail: d.detail, quantity: d.quantity ?? '', uom: d.uom ?? '' });
+          out.push({ name: item.itemName, detail: d.detail, quantity: d.quantity ?? '', uom: d.uom ?? '', unitSellingPrice: d.unitSellingPrice ?? '' });
         }
       }
     }
@@ -270,6 +280,9 @@ export class RevisionHistoryModalComponent {
   private buildClauses(snapshot: QuoteRevisionSnapshot): DetailClause[] {
     const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
     return [
+      { id: 'paymentTerms', title: 'Payment Terms', body: text(snapshot?.paymentTerms) },
+      { id: 'deliveryTerms', title: 'Delivery Terms', body: text(snapshot?.deliveryTerms) },
+      { id: 'validityDate', title: 'Valid Until', body: snapshot?.validityDate ? new Date(snapshot.validityDate).toLocaleDateString('en-GB') : '' },
       { id: 'notes', title: 'Customer Notes', body: text(snapshot?.customerNote) },
       { id: 'terms', title: 'Terms and Conditions', body: text(snapshot?.termsAndCondition) },
     ].filter((c): c is DetailClause => !!c.body);

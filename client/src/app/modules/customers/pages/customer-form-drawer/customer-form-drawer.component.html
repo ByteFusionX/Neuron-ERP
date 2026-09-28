@@ -118,11 +118,6 @@
                     (remove)="onAttachmentRemove($event)"></app-detail-documents>
                 <app-sf-file class="mt-3 block" [(ngModel)]="pendingFiles" [ngModelOptions]="{standalone: true}"
                     [accept]="acceptedFiles" [maxSizeMb]="5" [disabled]="uploadingAttachments"></app-sf-file>
-                <div class="mt-3 flex justify-end">
-                    <app-action-button variant="tool" [disabled]="uploadingAttachments || !pendingFiles.length" (click)="uploadPendingAttachments()">
-                        {{ uploadingAttachments ? 'Uploading…' : 'Upload' + (pendingFiles.length ? ' (' + pendingFiles.length + ')' : '') }}
-                    </app-action-button>
-                </div>
             </ng-container>
             <ng-template #createAttachments>
                 <app-sf-file [(ngModel)]="pendingFiles" [ngModelOptions]="{standalone: true}" [accept]="acceptedFiles" [maxSizeMb]="5"></app-sf-file>
@@ -132,9 +127,15 @@
     </form>
 
     <ng-container sfDrawerFooter>
-        <app-action-button *ngIf="step === 1 && canCreateCustomerType" variant="tool" (click)="createCustomerType()">+ Create Customer Type</app-action-button>
-        <app-action-button *ngIf="step === 2 && canCreateDepartment" variant="tool" (click)="createCustomerDepartment()">+ Create Department</app-action-button>
-        <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+        <div class="mr-auto flex items-center gap-2">
+            <app-action-button *ngIf="step === 1 && canCreateCustomerType" variant="tool" (click)="createCustomerType()">+ Create Customer Type</app-action-button>
+            <app-action-button *ngIf="step === 2 && canCreateDepartment" variant="tool" (click)="createCustomerDepartment()">+ Create Department</app-action-button>
+            <app-action-button *ngIf="step === 2" variant="tool" (click)="addContact()">+ Add Contact</app-action-button>
+            <app-action-button *ngIf="step === 3 && isEdit" variant="tool" [disabled]="uploadingAttachments || !pendingFiles.length" (click)="uploadPendingAttachments()">
+                {{ uploadingAttachments ? 'Uploading…' : 'Upload' + (pendingFiles.length ? ' (' + pendingFiles.length + ')' : '') }}
+            </app-action-button>
+            <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+        </div>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2 || step === 3" variant="secondary" (click)="previousStep()">Back</app-action-button>

@@ -20,6 +20,22 @@ interface Product {
     defaultTaxRate?: number;
     defaultSellingPrice?: number;
     estimatedCost?: number;
+    trackingType?: string;
+    costMethod?: string;
+    defaultVendor?: Types.ObjectId;
+    reorderMin?: number;
+    reorderMax?: number;
+    reorderPoint?: number;
+    leadTimeDays?: number;
+    barcode?: string;
+    specs?: string;
+    images?: string[];
+    alternativeProducts?: Types.ObjectId[];
+    uomConversions?: {
+        fromUom: string;
+        toUom: string;
+        factor: number;
+    }[];
     isActive: boolean;
     approvalStatus: ProductApprovalStatus;
     approvedBy?: Types.ObjectId;
@@ -83,6 +99,60 @@ const productSchema = new Schema<Product>({
     },
     estimatedCost: {
         type: Number,
+    },
+    trackingType: {
+        type: String,
+        enum: ['None', 'Serial', 'Batch'],
+        default: 'None',
+    },
+    costMethod: {
+        type: String,
+        enum: ['Standard', 'Weighted Average', 'FIFO'],
+        default: 'Weighted Average',
+    },
+    defaultVendor: {
+        type: Schema.Types.ObjectId,
+        ref: 'Supplier',
+    },
+    reorderMin: {
+        type: Number,
+        min: 0,
+    },
+    reorderMax: {
+        type: Number,
+        min: 0,
+    },
+    reorderPoint: {
+        type: Number,
+        min: 0,
+    },
+    leadTimeDays: {
+        type: Number,
+        min: 0,
+    },
+    barcode: {
+        type: String,
+        trim: true,
+    },
+    specs: {
+        type: String,
+        trim: true,
+    },
+    images: {
+        type: [String],
+        default: [],
+    },
+    alternativeProducts: [{
+        type: Schema.Types.ObjectId,
+        ref: 'Product',
+    }],
+    uomConversions: {
+        type: [{
+            fromUom: { type: String, trim: true },
+            toUom: { type: String, trim: true },
+            factor: { type: Number, min: 0 },
+        }],
+        default: [],
     },
     isActive: {
         type: Boolean,

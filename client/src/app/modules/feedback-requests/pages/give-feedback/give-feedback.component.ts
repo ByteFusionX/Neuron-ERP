@@ -17,9 +17,9 @@ export class GiveFeedbackComponent {
     public dialogRef: MatDialogRef<GiveFeedbackComponent>,
   ) {  }
 
-  onSubmit(){
+  onSubmit(action: 'send' | 'revise'){
     if(this.feedback){
-      this.dialogRef.close(this.feedback)
+      this.dialogRef.close({ feedback: this.feedback, action })
     }else{
       this.showError = true;
     }

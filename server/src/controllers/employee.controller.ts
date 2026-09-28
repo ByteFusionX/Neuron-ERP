@@ -1151,6 +1151,47 @@ export const setEmployeeApprovalLimit = async (
   }
 };
 
+// Sets or clears one individual privilege flag for this employee, on top of their role.
+// Body: { modulePath: "dealSheet" | "purchase.canApprovePR" | ..., action?: "canApprovePR", value: boolean }.
+// modulePath may itself already be the leaf key (e.g. "dealSheet") when the role's privilege
+// for that module has no sub-actions (a plain boolean), in which case `action` is omitted.
+export const setEmployeeExtraPrivilege = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { employeeId } = req.params;
+    const { modulePath, action, value } = req.body ?? {};
+    if (!modulePath || typeof modulePath !== "string") {
+      return res.status(400).json({ message: "modulePath is required" });
+    }
+    if (typeof value !== "boolean") {
+      return res.status(400).json({ message: "value must be a boolean" });
+    }
+
+    const fullPath = action ? `${modulePath}.${action}` : modulePath;
+    const fieldPath = `extraPrivileges.${fullPath}`;
+
+    const update = value === false
+      ? { $unset: { [fieldPath]: "" } }
+      : { $set: { [fieldPath]: true } };
+
+    const employee = await Employee.findByIdAndUpdate(
+      employeeId,
+      update,
+      { new: true, projection: { extraPrivileges: 1 } },
+    );
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+    return res.status(200).json(employee.extraPrivileges ?? {});
+  } catch (error) {
+    console.log(error);
+    next(error);
+  }
+};
+
 export const blockEmployee = async (
   req: Request,
   res: Response,

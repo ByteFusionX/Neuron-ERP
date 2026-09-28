@@ -55,6 +55,10 @@ export class EditHistoryModalComponent {
           title = `Status changed by ${who}`;
           icon = 'heroArrowPath';
           break;
+        case 'CustomerAccepted':
+          title = `Customer accepted by ${who}`;
+          icon = 'heroCheckCircle';
+          break;
         case 'DealApproved':
           title = `Deal approved by ${who}`;
           icon = 'heroCheckCircle';

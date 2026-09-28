@@ -188,9 +188,9 @@ export class FeedbackRequestsComponent {
       width: '500px',
     })
 
-    dialog.afterClosed().subscribe((feedback: string) => {
-      if (feedback) {
-        const feedbackBody = { enquiryId, feedback, feedbackId }
+    dialog.afterClosed().subscribe((result: { feedback: string, action: 'send' | 'revise' }) => {
+      if (result?.feedback) {
+        const feedbackBody = { enquiryId, feedback: result.feedback, feedbackId, action: result.action }
         this._enquiryService.giveFeedback(feedbackBody).subscribe((res: any) => {
           if (res.success) {
             this.dataSource.data.splice(index, 1);

@@ -18,6 +18,7 @@ import {
   getProcurementEmployees,
   blockEmployee,
   setEmployeeApprovalLimit,
+  setEmployeeExtraPrivilege,
 } from "../controllers/employee.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const empRouter = Router();
@@ -68,6 +69,11 @@ empRouter.patch(
   "/block/:employeeId",
   requirePrivilege("employee", "block", "employee.create"),
   blockEmployee,
+);
+empRouter.patch(
+  "/extra-privilege/:employeeId",
+  requirePrivilege("employee", "edit", "employee.create"),
+  setEmployeeExtraPrivilege,
 );
 
 export default empRouter;

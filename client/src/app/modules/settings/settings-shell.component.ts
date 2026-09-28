@@ -9,7 +9,7 @@ import { SettingsNavService } from './settings-nav.service';
   imports: [NgIf, RouterOutlet],
   template: `
     <div class="h-full bg-gray-50 dark:bg-erp-surface-dark-alt">
-      <div class="p-6">
+      <div class="h-full p-6">
         <router-outlet></router-outlet>
       </div>
     </div>

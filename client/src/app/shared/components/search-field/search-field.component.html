@@ -1,0 +1,14 @@
+<div class="relative w-full">
+  <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500"
+    fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="M20 20l-3.5-3.5" />
+  </svg>
+  <input type="search" [ngModel]="value" (ngModelChange)="onInput($event)" [placeholder]="placeholder"
+    (keydown.escape)="clear()"
+    [ngClass]="size === 'sm' ? 'h-8 pr-7' : 'h-[2.125rem] pr-8'"
+    class="w-full pl-8 text-[0.8125rem] rounded-lg border border-gray-200 dark:border-neutral-800 bg-white dark:bg-[#111111] text-gray-700 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-neutral-500 outline-none focus:border-violet-600 focus:shadow-[0_0_0_3px_rgb(124_58_237_/_0.15)] transition" />
+  <button *ngIf="value" type="button" (click)="clear()"
+    class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex">
+    <ng-icon name="heroXMark" class="text-sm"></ng-icon>
+  </button>
+</div>

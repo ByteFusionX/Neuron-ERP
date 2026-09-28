@@ -1,6 +1,6 @@
 <div class="w-full h-16 flex sticky top-0 z-20">
     <div class="w-full border-b border-l border-erp-border bg-erp-surface dark:bg-erp-surface-dark dark:border-erp-border-dark">
-        <div class="flex justify-between items-center">
+        <div class="relative flex justify-between items-center">
             <div class="w-16 h-16 flex justify-center items-center shrink-0">
                 <div class="w-9 h-9 rounded-full flex justify-center items-center hover:bg-violet-50 dark:hover:bg-violet-950/40 cursor-pointer transition-colors"
                     (click)="reduceSideBar()">
@@ -12,13 +12,9 @@
                     </ng-template>
                 </div>
             </div>
-            <div class="flex-1 flex justify-center px-4">
-                <div class="w-full max-w-md relative">
-                    <ng-icon name="heroMagnifyingGlass"
-                        class="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-gray-400 dark:text-gray-500"></ng-icon>
-                    <input type="text" placeholder="Search orders, customers, projects..."
-                        class="w-full h-9 pl-9 pr-3 rounded-md bg-erp-bg dark:bg-erp-surface-dark-alt text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 border border-erp-border dark:border-erp-border-dark focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-700 focus:border-violet-300 dark:focus:border-violet-700 transition" />
-                </div>
+            <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md px-4">
+                <app-search-field [value]="globalSearch" (valueChange)="globalSearch = $event" size="md"
+                    placeholder="Search orders, customers, projects..."></app-search-field>
             </div>
             <div class="flex me-5 justify-center items-center gap-4 shrink-0">
                 <button (click)="toggleTheme()" title="Toggle dark mode"

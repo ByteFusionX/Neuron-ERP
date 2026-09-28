@@ -16,16 +16,11 @@ import { DealSheetListComponent } from './modules/deal-sheet/pages/deal-sheet-li
 import { ViewDealsheetComponent } from './modules/deal-sheet/view-dealsheet/view-dealsheet.component';
 import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.component';
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
-import { PendingSuppliersComponent } from './modules/suppliers/pages/pending-suppliers/pending-suppliers.component';
-import { CreateSupplierComponent } from './modules/suppliers/pages/create-supplier/create-supplier.component';
-import { SupplierViewComponent } from './modules/suppliers/pages/supplier-view/supplier-view.component';
-import { PendingPurchaseComponent } from './modules/purchase/pages/pendings-purchase/pendings-purchase.component';
-import { ApprovedPurchaseComponent } from './modules/purchase/pages/approved-purchase/approved.component';
+import { PurchaseRequestListComponent } from './modules/purchase/pages/purchase-request-list/purchase-request-list.component';
 import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
 import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
 import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sheet/comparison-sheet.component';
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
-import { OpenToWorckComponent } from './modules/job-sheet/pages/open-to-work/open-to-work.component';
 import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-summary/comparison-summary.component';
 import { InitiateLpoComponent } from './modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { IssueLpoComponent } from './modules/purchase-order/pages/issue-lpo/issue-lpo.component';
@@ -52,7 +47,11 @@ import { BillingSummaryComponent } from './modules/technical/projects/add-projec
 import { RequestForApprovalsComponent } from './modules/claims/request-for-approvals/request-for-approvals.component';
 import { AllProductsComponent } from './modules/products/all-products.component';
 import { StockEntriesComponent } from './modules/stocks/pages/stock-entries/stock-entries.component';
+import { StockOverviewComponent } from './modules/stocks/pages/stock-overview/stock-overview.component';
 import { StockHoldsComponent } from './modules/stocks/pages/stock-holds/stock-holds.component';
+import { InventoryPlanningComponent } from './modules/stocks/pages/inventory-planning/inventory-planning.component';
+import { StockReservationsComponent } from './modules/stocks/pages/stock-reservations/stock-reservations.component';
+import { StockLedgerComponent } from './modules/stocks/pages/stock-ledger/stock-ledger.component';
 import { CreateStockComponent } from './modules/stocks/modals/create-stock/create-stock.component';
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
 import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
@@ -163,11 +162,8 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/job-sheet/job-sheet.component').then((c) => c.JobSheetComponent),
     children: [
-      { path: '', redirectTo: 'pending', pathMatch: 'full' },
-      { path: 'pending', canActivate: [RoleGuard], component: JobListComponent },
-      { path: 'open-to-work', canActivate: [RoleGuard], component: OpenToWorckComponent },
-      { path: 'in-progress', canActivate: [RoleGuard], component: OpenToWorckComponent },
-      { path: 'completed', canActivate: [RoleGuard], component: JobListComponent },
+      { path: '', canActivate: [RoleGuard], component: JobListComponent },
+      { path: 'report', canActivate: [RoleGuard], loadComponent: () => import('./modules/job-sheet/pages/job-report/job-report.component').then((c) => c.JobReportComponent) },
     ]
   },
   {
@@ -233,6 +229,11 @@ export const routes: Routes = [
         data: { section: 'audit' },
         loadComponent: () => import('./modules/settings/pages/audit/audit-settings.component').then((c) => c.AuditSettingsComponent),
       },
+      {
+        path: 'employee-privileges',
+        data: { section: 'employee-privileges' },
+        loadComponent: () => import('./modules/settings/pages/employee-privileges/employee-privileges.component').then((c) => c.EmployeePrivilegesComponent),
+      },
     ]
   },
   {
@@ -264,15 +265,23 @@ export const routes: Routes = [
     ]
   },
   {
+    path: 'reports',
+    canActivate: [AuthGuard],
+    loadComponent: () => import('./modules/reports/reports.component').then((c) => c.ReportsComponent),
+    children: [
+      { path: 'operations-dashboard', loadComponent: () => import('./modules/reports/pages/operations-dashboard/operations-dashboard.component').then((c) => c.OperationsDashboardComponent) },
+      { path: 'sales-dashboard', loadComponent: () => import('./modules/reports/pages/sales-dashboard/sales-dashboard.component').then((c) => c.SalesDashboardComponent) },
+      { path: 'hr-dashboard', loadComponent: () => import('./modules/reports/pages/hr-dashboard/hr-dashboard.component').then((c) => c.HrDashboardComponent) },
+      { path: 'finance-dashboard', loadComponent: () => import('./modules/reports/pages/finance-dashboard/finance-dashboard.component').then((c) => c.FinanceDashboardComponent) },
+    ]
+  },
+  {
     path: 'suppliers',
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/suppliers/suppliers.component').then((c) => c.SuppliersComponent),
     children: [
-      { path: 'pendings', component: PendingSuppliersComponent },
-      { path: 'approved', component: PendingSuppliersComponent },
-      { path: 'create', component: CreateSupplierComponent },
-      { path: 'edit/:id', component: CreateSupplierComponent },
-      { path: ':id', component: SupplierViewComponent }
+      { path: '', canActivate: [RoleGuard], loadComponent: () => import('./modules/suppliers/pages/supplier-list/supplier-list.component').then((c) => c.SupplierListComponent) },
+      { path: 'report', canActivate: [RoleGuard], loadComponent: () => import('./modules/suppliers/pages/supplier-report/supplier-report.component').then((c) => c.SupplierReportComponent) },
     ]
   },
   {
@@ -280,8 +289,9 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/purchase/purchase.component').then((c) => c.PurchaseComponent),
     children: [
-      { path: 'pendings', component: PendingPurchaseComponent },
-      { path: 'approves', component: ApprovedPurchaseComponent },
+      { path: 'pr', component: PurchaseRequestListComponent },
+      { path: 'pendings', redirectTo: 'pr' },
+      { path: 'approves', redirectTo: 'pr' },
       { path: 'create', component: CreatePurchaseComponent },
       { path: 'supplier-discount/:purchaseId', component: SupplierDiscountComponent },
       { path: 'comparison-sheet/:purchaseId', component: ComparisonSheetComponent },
@@ -357,14 +367,19 @@ export const routes: Routes = [
   {
     path: 'stocks',
     pathMatch: 'full',
-    redirectTo: 'stock/stock-entries'
+    redirectTo: 'stock/overview'
   },
   {
     path: 'stock',
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/stocks/stocks.component').then((c) => c.StocksComponent),
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'stock-entries' },
+      { path: '', pathMatch: 'full', redirectTo: 'overview' },
+      { path: 'overview', component: StockOverviewComponent },
+      { path: 'overview/report', loadComponent: () => import('./modules/stocks/pages/stock-overview-report/stock-overview-report.component').then((c) => c.StockOverviewReportComponent) },
+      { path: 'planning', component: InventoryPlanningComponent },
+      { path: 'reservations', component: StockReservationsComponent },
+      { path: 'ledger', component: StockLedgerComponent },
       { path: 'stock-entries', component: StockEntriesComponent },
       { path: 'stock-holds', component: StockHoldsComponent },
       { path: 'create', component: CreateStockComponent }

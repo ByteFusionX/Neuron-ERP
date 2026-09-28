@@ -34,6 +34,12 @@ interface ProductSuggestion {
   _id: string;
   productCategory: { _id: string; categoryName: string };
   productDescription: string;
+  partNo?: string;
+  itemCode?: string;
+  unitOfMeasure?: string;
+  availableQuantity?: number;
+  reservedQuantity?: number;
+  quarantinedQuantity?: number;
 }
 
 @Component({
@@ -237,9 +243,39 @@ export class OptionalItemsComponent implements OnInit {
       itemNameControl.setValue(suggestion.productCategory?.categoryName || '');
     }
     const itemDetailsArray = this.getItemDetailsArrayControls(i, j);
-    itemDetailsArray?.at(k)?.get('detail')?.setValue(suggestion.productDescription || '');
+    itemDetailsArray?.at(k)?.patchValue({
+      detail: suggestion.productDescription || '',
+      itemCode: suggestion.itemCode || suggestion.partNo || '',
+      uom: suggestion.unitOfMeasure || '',
+      availability: (suggestion.availableQuantity || 0) > 0 ? 'Ex-Stock' : 'Check Stock',
+      liveAvailableQuantity: suggestion.availableQuantity || 0,
+    });
     this.itemDetailSuggestions[`${i}-${j}-${k}`] = [];
     this.activeDetailSuggestionKey = null;
+  }
+
+  getLiveAvailableQuantity(i: number, j: number, k: number): number | null {
+    const control = this.getItemDetailsArrayControls(i, j)?.at(k)?.get('liveAvailableQuantity');
+    const value = control?.value;
+    return value === null || value === undefined || value === '' ? null : Number(value);
+  }
+
+  getStockWarning(i: number, j: number, k: number): string {
+    const available = this.getLiveAvailableQuantity(i, j, k);
+    if (available === null || Number.isNaN(available)) {
+      return '';
+    }
+    const quantity = Number(this.getItemDetailsArrayControls(i, j)?.at(k)?.get('quantity')?.value || 0);
+    if (quantity > available) {
+      return `Warning: quoted ${quantity} exceeds live available ${available}.`;
+    }
+    return available <= 0 ? 'Warning: no live available stock found.' : `Live available: ${available}`;
+  }
+
+  hasStockShortage(i: number, j: number, k: number): boolean {
+    const available = this.getLiveAvailableQuantity(i, j, k);
+    const quantity = Number(this.getItemDetailsArrayControls(i, j)?.at(k)?.get('quantity')?.value || 0);
+    return available !== null && !Number.isNaN(available) && quantity > available;
   }
 
   closeItemDetailSuggestions(i: number, j: number, k: number): void {
@@ -268,8 +304,24 @@ export class OptionalItemsComponent implements OnInit {
 
   createProductTarget: string | null = null;
 
-  onProductCreated(_product: any): void {
+  onProductCreated(product: any): void {
     if (!this.createProductTarget) return;
+    const [i, j, k] = this.createProductTarget.split('-').map((value) => Number(value));
+    const itemGroup = this.getItemAtOption(i)?.at(j) as FormGroup;
+    const detailGroup = this.getItemDetailsArrayControls(i, j)?.at(k) as FormGroup;
+
+    if (itemGroup && product?.productCategory?.categoryName) {
+      itemGroup.get('itemName')?.setValue(product.productCategory.categoryName);
+    }
+
+    detailGroup?.patchValue({
+      detail: product?.productDescription || detailGroup.get('detail')?.value || '',
+      itemCode: product?.itemCode || product?.partNo || '',
+      uom: product?.unitOfMeasure || '',
+      availability: 'New Product',
+      liveAvailableQuantity: 0,
+    });
+
     this.itemDetailSuggestions[this.createProductTarget] = [];
     this.activeDetailSuggestionKey = null;
     this.createProductTarget = null;
@@ -370,6 +422,7 @@ export class OptionalItemsComponent implements OnInit {
                   [Validators.required, Validators.min(0)],
                 ],
                 availability: ['', Validators.required],
+                liveAvailableQuantity: [null],
                 supplierId: [''],
                 uom: [''],
               }),
@@ -396,6 +449,7 @@ export class OptionalItemsComponent implements OnInit {
             profit: ['', [Validators.required, Validators.min(0)]],
             unitSellingPrice: ['', Validators.min(0)],
             availability: ['', Validators.required],
+            liveAvailableQuantity: [null],
             supplierId: [''],
             uom: [''],
           }),
@@ -413,6 +467,7 @@ export class OptionalItemsComponent implements OnInit {
       profit: ['', [Validators.required, Validators.min(0)]],
       unitSellingPrice: ['', Validators.min(0)],
       availability: ['', Validators.required],
+      liveAvailableQuantity: [null],
       supplierId: [''],
       uom: [''],
     });
@@ -476,6 +531,7 @@ export class OptionalItemsComponent implements OnInit {
           profit,
           unitSellingPrice: detail.unitSellingPrice,
           availability: detail.availability,
+          liveAvailableQuantity: detail.liveAvailableQuantity ?? null,
           supplierId: detail.supplierId,
           uom: detail.uom,
         });

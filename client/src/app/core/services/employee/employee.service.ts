@@ -128,12 +128,22 @@ export class EmployeeService {
     return this.http.get<{ _id: string; employeeId: string; firstName: string; lastName: string; category: string; approvalLimit?: ApprovalLimit }[] | null>(`${this.api}/employee`)
   }
 
+  /** All active employees with their individually-granted privilege flags; category is the role id, not populated. */
+  getEmployeeExtraPrivileges() {
+    return this.http.get<{ _id: string; employeeId: string; firstName: string; lastName: string; category: string; extraPrivileges?: Record<string, any> }[] | null>(`${this.api}/employee`)
+  }
+
   setEmployeeApprovalLimit(employeeId: string, limit: ApprovalLimit) {
     return this.http.patch<ApprovalLimit>(`${this.api}/employee/approval-limit/${employeeId}`, limit)
   }
 
   blockEmployee(employeeId: string) {
     return this.http.patch(`${this.api}/employee/block/${employeeId}`, {})
+  }
+
+  /** Grants (value: true) or revokes (value: false) one individual privilege flag for this employee, on top of their role. */
+  setEmployeeExtraPrivilege(employeeId: string, modulePath: string, value: boolean, action?: string) {
+    return this.http.patch<Record<string, any>>(`${this.api}/employee/extra-privilege/${employeeId}`, { modulePath, action, value })
   }
 
   getEmployee() {

@@ -3,11 +3,11 @@
   <div class="dg-card flex-1 min-w-0 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl overflow-hidden flex flex-col">
 
     <!-- Toolbar / bulk bar -->
-    <div class="relative shrink-0 flex items-center justify-between gap-3 px-5 py-4 min-h-16 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
-      [ngClass]="selectedKeys.size > 0 ? 'bg-violet-50 dark:bg-violet-950/40' : ''">
+    <div class="relative shrink-0 flex items-center justify-between gap-3 px-5 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
+      [ngClass]="[selectedKeys.size > 0 ? 'bg-violet-50 dark:bg-violet-950/40' : '', showTitleBlock ? 'py-4 min-h-16' : 'py-2']">
       <div *ngIf="loading && data.length" class="dg-progress" role="progressbar" aria-label="Loading"></div>
       <ng-container *ngIf="selectedKeys.size === 0; else bulkBar">
-        <div class="flex flex-col justify-center min-w-0">
+        <div *ngIf="showTitleBlock" class="flex flex-1 flex-col justify-center min-w-0">
           <nav *ngIf="breadcrumbs.length" aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-500 min-w-0 mb-1.5">
             <ng-container *ngFor="let b of breadcrumbs; let last = last">
               <a *ngIf="b.link && !last; else crumbText" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
@@ -24,6 +24,7 @@
             <p *ngIf="subtitle" class="mt-1 text-xs leading-4 text-gray-500 dark:text-gray-400 truncate">{{ subtitle }}</p>
           </div>
         </div>
+        <div *ngIf="!showTitleBlock" class="flex-1 min-w-0"></div>
       </ng-container>
 
       <ng-template #bulkBar>
@@ -49,6 +50,11 @@
           </div>
         </div>
       </ng-template>
+
+      <!-- Extra toolbar actions projected by the host page, centered in the header -->
+      <div *ngIf="selectedKeys.size === 0" class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+        <ng-content select="[dgToolbarExtra]"></ng-content>
+      </div>
 
       <div *ngIf="selectedKeys.size === 0" class="flex items-center gap-2 shrink-0">
       <!-- Search -->
@@ -144,9 +150,6 @@
         </svg>
         Export
       </button>
-
-      <!-- Extra toolbar actions projected by the host page -->
-      <ng-content select="[dgToolbarExtra]"></ng-content>
 
       <!-- Column visibility -->
       <div *ngIf="showToolbarTools" class="relative">

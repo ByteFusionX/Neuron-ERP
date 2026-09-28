@@ -45,9 +45,14 @@ import {
     /* The numeric strip is dense on purpose: seven fields per line have to fit without a horizontal scrollbar. */
     .ie-strip { display: grid; gap: 0.375rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     @media (min-width: 640px) { .ie-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-    @media (min-width: 1400px) { .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 11.5fr) minmax(0, 10.5fr) minmax(0, 6.5fr) minmax(0, 7fr); } }
+    @media (min-width: 1400px) {
+      .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 11.5fr) minmax(0, 10.5fr) minmax(0, 6.5fr) minmax(0, 7fr); }
+      /* Purchase drops the margin column (no customer-facing margin for supplier lines), so it's one column short of the default strip. */
+      .ie-strip.ie-strip-purchase { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 11.5fr) minmax(0, 10.5fr) minmax(0, 6.5fr) minmax(0, 7fr); }
+    }
     .ie-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     .ie-labels > span:nth-child(n+3):nth-child(-n+7), .ie-labels > span:nth-child(n+10) { text-align: right; }
+    .ie-labels.ie-strip-purchase > span:nth-child(n+3):nth-child(-n+6), .ie-labels.ie-strip-purchase > span:nth-child(n+9) { text-align: right; }
     .ie-cell { display: flex; align-items: center; min-height: 2.25rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; background: #f9fafb; color: #111827; }
     :host-context(html.dark) .ie-cell { background: rgba(31, 41, 55, 0.5); color: #f3f4f6; }
     .ie-total { display: flex; align-items: center; justify-content: flex-end; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; font-variant-numeric: tabular-nums; font-weight: 500; background: #f9fafb; color: #111827; }
@@ -66,8 +71,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
    * 'quote' authors items. 'deal' converts an existing quote: the structure is fixed, every line gets
    * an "include in deal" tick, and only ticked lines are priced, validated and totalled. The seed
    * (`seedOptionalItems`) supplies the quoted numbers; unticking a line restores them.
+   * 'purchase' is a single flat list: no options or optional items, cost and price are independent,
+   * each line carries a host-owned `lineKey`.
    */
-  @Input() mode: 'quote' | 'deal' = 'quote';
+  @Input() mode: 'quote' | 'deal' | 'purchase' = 'quote';
   /** The sticky totals bar. A host that shows its own summary (deal adjustments, say) turns it off. */
   @Input() showTotalsBar = true;
   /** Keeps the totals bar but drops the option tabs and item cards, for a host step that only needs the summary. */
@@ -96,7 +103,18 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   /** Department/segment ids to narrow suggestions to. Falls back to the host form's `departments`. */
   @Input() suggestionScopeIds: string[] | null = null;
 
+  /** Purchase mode: linked part numbers for the part-no picker. */
+  /** Purchase mode: a per-line "Compare" button; emits `compareClicked`. */
+  @Input() showCompareButton = false;
+  /** Purchase mode: the Compare button's text for a line (e.g. a quote count). Null: "Compare". */
+  @Input() compareLabel: ((i: number, j: number, k: number) => string) | null = null;
+  /** Purchase mode: lines the host has frozen (already committed upstream) render read-only. */
+  @Input() lineLocked: ((i: number, j: number, k: number) => boolean) | null = null;
+  /** Purchase mode: a short badge shown beside a line's description. */
+  @Input() lineBadge: ((i: number, j: number, k: number) => string | null) | null = null;
+
   @Output() totals = new EventEmitter<ItemEntryTotals>();
+  @Output() compareClicked = new EventEmitter<{ i: number; j: number; k: number }>();
   @Output() previousJobsClicked = new EventEmitter<void>();
   @Output() createProductRequested = new EventEmitter<CreateProductRequest>();
   /** Deal mode: which option the user is working in. */
@@ -157,6 +175,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
    */
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['supplierOptions'] && this.supplierOptions) this.resolvedSupplierOptions = this.supplierOptions;
+    if (changes['lineLocked'] && !changes['lineLocked'].isFirstChange()) this.applyLineLocks();
 
     const seed = changes['seedOptionalItems'];
     if (!seed || seed.isFirstChange() || !this.seedOptionalItems?.length) return;
@@ -168,6 +187,67 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   get isDeal(): boolean { return this.mode === 'deal'; }
+  get isPurchase(): boolean { return this.mode === 'purchase'; }
+  get optionsEnabled(): boolean { return this.allowOptions && !this.isPurchase; }
+  get optionalItemsEnabled(): boolean { return this.allowOptionalItems && !this.isPurchase; }
+
+  isLineLocked(i: number, j: number, k: number): boolean {
+    return this.isPurchase && !!this.lineLocked?.(i, j, k);
+  }
+
+  isItemLocked(i: number, j: number): boolean {
+    if (!this.isPurchase || !this.lineLocked) return false;
+    return (this.detailsAt(i, j)?.controls || []).some((_, k) => this.lineLocked!(i, j, k));
+  }
+
+  badgeFor(i: number, j: number, k: number): string | null {
+    return this.isPurchase && this.lineBadge ? this.lineBadge(i, j, k) : null;
+  }
+
+  compareLabelFor(i: number, j: number, k: number): string {
+    return this.compareLabel?.(i, j, k) || 'Compare';
+  }
+
+  supplierLabel(id: string | null): string {
+    return (id && this.resolvedSupplierOptions.find((o) => o.value === id)?.label) || '—';
+  }
+
+  /** Informational only in purchase mode: nothing writes it back to the price. */
+  lineMargin(i: number, j: number, k: number): number | null {
+    const d = this.detailsAt(i, j)?.at(k);
+    const c = Number(d?.get('unitCost')?.value) || 0;
+    const p = Number(d?.get('unitSellingPrice')?.value) || 0;
+    return c && p ? ((p - c) / p) * 100 : null;
+  }
+
+  private static readonly LOCKABLE = ['itemCode', 'partNo', 'detail', 'quantity', 'unitCost', 'profit', 'unitSellingPrice', 'availability', 'supplierId', 'uom'];
+
+  /**
+   * Controls are disabled one by one rather than the whole line group: a disabled group would drop
+   * out of `optionalItems.value` and shift the indices the totals and the host's lookups rely on.
+   */
+  applyLineLocks(): void {
+    if (!this.isPurchase) return;
+    this.optionalItems.controls.forEach((_, i) => {
+      this.itemsAt(i)?.controls.forEach((item, j) => {
+        const details = this.detailsAt(i, j)?.controls || [];
+        let allLocked = details.length > 0;
+        details.forEach((line, k) => {
+          const locked = this.isLineLocked(i, j, k);
+          if (!locked) allLocked = false;
+          ItemEntryComponent.LOCKABLE.forEach((name) => {
+            const c = line.get(name);
+            if (!c) return;
+            if (locked && c.enabled) c.disable({ emitEvent: false });
+            else if (!locked && c.disabled) c.enable({ emitEvent: false });
+          });
+        });
+        const name = item.get('itemName');
+        if (allLocked && name?.enabled) name.disable({ emitEvent: false });
+        else if (!allLocked && name?.disabled) name.enable({ emitEvent: false });
+      });
+    });
+  }
 
   selectOption(i: number): void {
     this.selectedOption = i;
@@ -209,20 +289,24 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   private createDetail(): FormGroup {
     const deal = this.isDeal;
+    const purchase = this.isPurchase;
     const group = this._fb.group({
+      // Hidden: set only by `applySuggestion`, cleared when the user retypes the line by hand.
+      productId: [null as string | null],
       itemCode: [''],
       partNo: [''],
       detail: ['', deal ? [] : Validators.required],
       quantity: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
       unitCost: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
       // A deal may sell below cost, so no negative-margin rule there.
-      profit: [null as number | null, deal ? [this.whenTicked(Validators.required)] : [Validators.required, Validators.min(0), this.nonNegativeProfitValidator()]],
-      unitSellingPrice: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
-      availability: ['', deal ? [] : Validators.required],
+      profit: [null as number | null, deal ? [this.whenTicked(Validators.required)] : purchase ? [] : [Validators.required, Validators.min(0), this.nonNegativeProfitValidator()]],
+      unitSellingPrice: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : purchase ? [Validators.min(0)] : [Validators.required, Validators.min(0)]],
+      availability: ['', deal || purchase ? [] : Validators.required],
       // null, not '': the server casts this to an ObjectId and an empty string fails the cast.
       supplierId: [null as string | null, deal ? [this.whenTicked(this.supplierRequired)] : []],
       uom: [''],
     });
+    if (purchase) (group as FormGroup).addControl('lineKey', this._fb.control(null as string | null));
     if (deal) {
       (group as FormGroup).addControl('dealSelected', this._fb.control(false));
       // Every line is listed read-only; ticking it unlocks just that row for editing.
@@ -255,6 +339,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       price().setValue(Math.ceil(c / (1 - m)), { emitEvent: false });
       this.deriving = false;
     };
+
+    // A purchase line's cost (what we pay) and price (what the deal sold it at) are separate facts.
+    if (purchase) return group;
 
     this.subs.add(cost().valueChanges.subscribe(fromCostAndMargin));
     this.subs.add(margin().valueChanges.subscribe(fromCostAndMargin));
@@ -357,6 +444,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     });
     if (!this.optionalItems.length) this.addOption();
     this.selectedOption = 0;
+    this.applyLineLocks();
     this.emitTotals();
   }
 
@@ -378,6 +466,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     if (this.isDeal && !this.originals.has(group)) this.originals.set(group, { ...d });
     this.deriving = true;
     group.patchValue({
+      productId: (typeof d.productId === 'object' ? d.productId?._id : d.productId) || null,
       itemCode: d.itemCode ?? '',
       partNo: d.partNo ?? '',
       detail: d.detail ?? '',
@@ -388,6 +477,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       availability: d.availability ?? '',
       supplierId: (typeof d.supplierId === 'object' ? d.supplierId?._id : d.supplierId) || null,
       uom: d.uom ?? '',
+      ...(this.isPurchase ? { lineKey: d.lineKey ?? null } : {}),
     }, { emitEvent: false });
     this.deriving = false;
     group.updateValueAndValidity();
@@ -480,6 +570,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   onDetailInput(i: number, j: number, k: number): void {
+    const detail = this.detailsAt(i, j)?.at(k) as FormGroup | undefined;
+    // Editing the description by hand means the line no longer describes the product that was
+    // picked, so the link is dropped rather than left pointing at something else.
+    detail?.get('productId')?.setValue(null, { emitEvent: false });
     const term = (this.detailsAt(i, j)?.at(k)?.get('detail')?.value || '').toString().trim();
     const category = ((this.itemsAt(i).at(j) as FormGroup).get('itemName')?.value || '').toString().trim();
     this.queueSearch(`${i}-${j}-${k}`, term, category);
@@ -508,11 +602,45 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     const detail = this.detailsAt(i, j)?.at(k ?? 0) as FormGroup | undefined;
     detail?.get('detail')?.setValue(s.description, { emitEvent: false });
     if (detail) {
-      if (s.uom) detail.get('uom')?.setValue(s.uom, { emitEvent: false });
-      if (s.supplierId) detail.get('supplierId')?.setValue(s.supplierId, { emitEvent: false });
-      if (s.unitCost != null) detail.get('unitCost')?.setValue(s.unitCost);
+      // The product link plus its snapshot identifiers always come from the picked row.
+      detail.get('productId')?.setValue(s._id, { emitEvent: false });
+      this.fillIfEmpty(detail, 'itemCode', s.itemCode);
+      this.fillIfEmpty(detail, 'partNo', s.partNo);
+      this.fillIfEmpty(detail, 'uom', s.uom);
+      this.fillIfEmpty(detail, 'supplierId', s.supplierId);
+      // Pricing stays event-emitting so the margin/selling-price derivation reruns.
+      if (s.unitCost != null && detail.get('unitCost')?.value == null) detail.get('unitCost')?.setValue(s.unitCost);
+      if (s.unitSellingPrice != null && detail.get('unitSellingPrice')?.value == null) {
+        detail.get('unitSellingPrice')?.setValue(s.unitSellingPrice);
+      }
     }
     this.closeSuggestions();
+  }
+
+  /** Suggestions must never overwrite something the user already typed on the line. */
+  private fillIfEmpty(group: FormGroup, name: string, value: string | undefined): void {
+    const control = group.get(name);
+    if (!control || !value) return;
+    const current = control.value;
+    if (current === null || current === undefined || current === '') control.setValue(value, { emitEvent: false });
+  }
+
+  /** Stock line shown under a suggestion. Null for rows with no stock position to report. */
+  stockSummary(s: ItemSuggestion): string | null {
+    if (s.productType && s.productType !== 'Stock Product') return null;
+    if (s.stockOnHand == null) return null;
+    const parts = [`${s.stockAvailable ?? s.stockOnHand} available`, `${s.stockOnHand} on hand`];
+    if (s.stockReserved) parts.push(`${s.stockReserved} reserved`);
+    if (s.stockQuarantined) parts.push(`${s.stockQuarantined} quarantined`);
+    return parts.join(' · ');
+  }
+
+  /** Green when there is free stock, amber when it is all committed, grey when there is none. */
+  stockTone(s: ItemSuggestion): string {
+    const available = s.stockAvailable ?? s.stockOnHand ?? 0;
+    if (available > 0) return 'text-emerald-700 dark:text-emerald-400';
+    if ((s.stockOnHand ?? 0) > 0) return 'text-amber-700 dark:text-amber-400';
+    return 'text-gray-400 dark:text-gray-500';
   }
 
   closeSuggestions(): void {

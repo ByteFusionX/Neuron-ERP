@@ -140,7 +140,15 @@ export class RoleFormDrawerComponent implements OnChanges {
     },
     {
       key: 'enquiry', label: 'Enquiries', abbr: 'EN', description: 'Incoming sales enquiries', master: 'enquiryChecked', group: 'enquiry',
-      scopes: [scope('enquiry.viewReport')], flags: [{ path: 'enquiry.create', label: 'Create enquiries' }],
+      scopes: [scope('enquiry.viewReport')],
+      flags: [
+        { path: 'enquiry.create', label: 'Create enquiries' },
+        { path: 'enquiry.edit', label: 'Edit enquiries / attachments / follow-up' },
+        { path: 'enquiry.reassign', label: 'Send to presale / assign / reassign' },
+        { path: 'enquiry.feedback', label: 'Request and give feedback' },
+        { path: 'enquiry.revision', label: 'Give revision / revise quote estimation' },
+        { path: 'enquiry.delete', label: 'Delete enquiries / estimations' },
+      ],
     },
     {
       key: 'assignedJob', label: 'Assigned Jobs', abbr: 'AJ', description: 'Presale jobs', master: 'assignedJobsChecked', group: 'assignedJob',
@@ -153,7 +161,13 @@ export class RoleFormDrawerComponent implements OnChanges {
     {
       key: 'quotation', label: 'Quotations', abbr: 'QT', description: 'Customer quotations', master: 'quotationChecked', group: 'quotation',
       scopes: [scope('quotation.viewReport')],
-      flags: [{ path: 'quotation.create', label: 'Create quotations' }],
+      flags: [
+        { path: 'quotation.create', label: 'Create quotations' },
+        { path: 'quotation.edit', label: 'Edit quotations' },
+        { path: 'quotation.statusUpdate', label: 'Update quotation status' },
+        { path: 'quotation.lpo', label: 'Upload / remove LPO' },
+        { path: 'quotation.delete', label: 'Delete quotations' },
+      ],
     },
     {
       key: 'dealSheet', label: 'Deal Sheet', abbr: 'DS', description: 'Deal sheet approvals',
@@ -313,7 +327,15 @@ export class RoleFormDrawerComponent implements OnChanges {
       }),
       enquiry: this._fb.group({
         viewReport: 'none',
-        create: [false]
+        create: [false],
+        // Default true: these gate actions that were previously ungated, so an
+        // unset/undefined value (existing roles) and an explicit true (new
+        // roles created through this form) both mean "allowed".
+        edit: [true],
+        reassign: [true],
+        feedback: [true],
+        revision: [true],
+        delete: [true],
       }),
       assignedJob: this._fb.group({
         viewReport: 'none',
@@ -322,6 +344,10 @@ export class RoleFormDrawerComponent implements OnChanges {
       quotation: this._fb.group({
         viewReport: 'none',
         create: [false],
+        edit: [true],
+        statusUpdate: [true],
+        lpo: [true],
+        delete: [true],
       }),
       dealSheet: [false],
       jobSheet: this._fb.group({
