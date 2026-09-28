@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -129,6 +129,24 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   /** Keyed `i-j` for item names and `i-j-k` for descriptions. */
   suggestions: Record<string, ItemSuggestion[]> = {};
   activeSuggestionKey: string | null = null;
+  /** Keyboard-highlighted row in the open dropdown; -1 means nothing highlighted, `rows.length` means the "Create product" row. */
+  highlightedIndex = -1;
+
+  /** Catalogue palette: the item it adds lines to, or null when closed. */
+  palette: { i: number; j: number } | null = null;
+  paletteTerm = '';
+  paletteRows: ItemSuggestion[] = [];
+  paletteIndex = 0;
+  paletteLoading = false;
+  /** Lines added in this palette session, shown as feedback since the palette stays open. */
+  paletteAdded = 0;
+  /** The item card the user last worked in; Ctrl+K opens the palette for it. */
+  private lastItem: { i: number; j: number } | null = null;
+  private paletteSearch$ = new Subject<string>();
+  /** Focuses the palette's search box as soon as it renders. */
+  @ViewChild('paletteInput') set paletteInput(ref: ElementRef<HTMLInputElement> | undefined) {
+    if (ref) setTimeout(() => ref.nativeElement.focus());
+  }
 
   private search$ = new Subject<{ key: string; term: string; category: string }>();
   private subs = new Subscription();
@@ -162,7 +180,25 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         )
         .subscribe(({ key, rows }) => {
           this.suggestions[key] = rows;
-          this.activeSuggestionKey = rows.length ? key : null;
+          this.highlightedIndex = rows.length ? 0 : -1;
+          // A description field (3-part key) still opens on zero matches, to offer "+ Create product".
+          const isDetailKey = key.split('-').length === 3;
+          this.activeSuggestionKey = rows.length || (isDetailKey && this.allowCreateProduct) ? key : null;
+        }),
+    );
+
+    this.subs.add(
+      this.paletteSearch$
+        .pipe(
+          debounceTime(200),
+          distinctUntilChanged(),
+          // The palette searches the whole catalogue, not just the item's category: it is for finding.
+          switchMap((term) => term.length >= 2 ? this.fetchSuggestions('palette', term, '') : of({ key: 'palette', rows: [] as ItemSuggestion[] })),
+        )
+        .subscribe(({ rows }) => {
+          this.paletteRows = rows;
+          this.paletteIndex = 0;
+          this.paletteLoading = false;
         }),
     );
 
@@ -592,6 +628,41 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return this.activeSuggestionKey === key ? this.suggestions[key] || [] : [];
   }
 
+  /** Whether the open dropdown for `key` offers a trailing "+ Create product" row. */
+  createRowAvailable(key: string, k: number | null): boolean {
+    return k !== null && this.allowCreateProduct && this.activeSuggestionKey === key;
+  }
+
+  /** Arrow Up/Down moves the highlight, Enter applies the highlighted row (or opens create), Escape closes. */
+  onSuggestionKeydown(event: KeyboardEvent, key: string, i: number, j: number, k: number | null): void {
+    if (this.activeSuggestionKey !== key) return;
+    const rows = this.suggestionsFor(key);
+    const createAvailable = this.createRowAvailable(key, k);
+    const total = rows.length + (createAvailable ? 1 : 0);
+    if (!total && event.key !== 'Escape') return;
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.highlightedIndex = (this.highlightedIndex + 1) % total;
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.highlightedIndex = (this.highlightedIndex - 1 + total) % total;
+        break;
+      case 'Enter':
+        if (this.highlightedIndex < 0) return;
+        event.preventDefault();
+        if (this.highlightedIndex < rows.length) this.applySuggestion(i, j, k, rows[this.highlightedIndex]);
+        else if (createAvailable) this.requestCreateProduct(i, j, k as number);
+        break;
+      case 'Escape':
+        event.preventDefault();
+        this.closeSuggestions();
+        break;
+    }
+  }
+
   /** Applies a picked suggestion. Inventory rows will additionally carry uom/unitCost/supplierId. */
   applySuggestion(i: number, j: number, k: number | null, s: ItemSuggestion): void {
     const itemGroup = this.itemsAt(i).at(j) as FormGroup;
@@ -645,6 +716,122 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   closeSuggestions(): void {
     this.activeSuggestionKey = null;
+    this.highlightedIndex = -1;
+  }
+
+  // --- catalogue palette -------------------------------------------------------
+
+  /** Records which item card the user is working in, so Ctrl+K knows where to add lines. */
+  trackItem(i: number, j: number): void {
+    this.lastItem = { i, j };
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return;
+    if (this.isDeal || this.itemsHidden || !this.source || this.palette) return;
+    const target = this.lastItem && this.itemsAt(this.lastItem.i)?.at(this.lastItem.j)
+      ? this.lastItem : { i: this.selectedOption, j: this.itemsAt(this.selectedOption).length - 1 };
+    event.preventDefault();
+    this.openPalette(target.i, target.j);
+  }
+
+  openPalette(i: number, j: number): void {
+    this.closeSuggestions();
+    this.palette = { i, j };
+    this.paletteTerm = '';
+    this.paletteRows = [];
+    this.paletteIndex = 0;
+    this.paletteAdded = 0;
+    this.paletteLoading = false;
+    // Resets distinctUntilChanged, so re-searching the previous session's term still fires.
+    this.paletteSearch$.next('');
+  }
+
+  closePalette(): void {
+    this.palette = null;
+  }
+
+  get paletteItemName(): string {
+    const p = this.palette;
+    return p ? ((this.itemsAt(p.i).at(p.j) as FormGroup)?.get('itemName')?.value || '').toString().trim() : '';
+  }
+
+  /** Rows plus the trailing "Create product" row once a search has come back. */
+  get paletteTotal(): number {
+    return this.paletteRows.length + (this.paletteCreateAvailable ? 1 : 0);
+  }
+
+  get paletteCreateAvailable(): boolean {
+    return this.allowCreateProduct && !this.paletteLoading && this.paletteTerm.trim().length >= 2;
+  }
+
+  onPaletteInput(term: string): void {
+    this.paletteTerm = term;
+    const trimmed = term.trim();
+    this.paletteLoading = trimmed.length >= 2;
+    if (trimmed.length < 2) this.paletteRows = [];
+    this.paletteSearch$.next(trimmed);
+  }
+
+  onPaletteKeydown(event: KeyboardEvent): void {
+    const total = this.paletteTotal;
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        if (total) this.paletteIndex = (this.paletteIndex + 1) % total;
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        if (total) this.paletteIndex = (this.paletteIndex - 1 + total) % total;
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (this.paletteIndex < this.paletteRows.length) this.pickFromPalette(this.paletteRows[this.paletteIndex]);
+        else if (this.paletteCreateAvailable) this.createFromPalette();
+        break;
+      case 'Escape':
+        event.preventDefault();
+        event.stopPropagation();
+        this.closePalette();
+        break;
+    }
+  }
+
+  /**
+   * Adds the product as a line on the palette's item: into the last line if it is still blank,
+   * otherwise as a new line. The palette stays open so several products can be added in a row.
+   */
+  pickFromPalette(s: ItemSuggestion): void {
+    const p = this.palette;
+    const details = p && this.detailsAt(p.i, p.j);
+    if (!p || !details) return;
+    const last = details.at(details.length - 1) as FormGroup | undefined;
+    const blank = last && !(last.get('detail')?.value || '').toString().trim() && !last.get('productId')?.value;
+    if (!blank) details.push(this.createDetail());
+    this.applySuggestion(p.i, p.j, details.length - 1, s);
+    // A freshly added product line starts at one unit; the user adjusts from there.
+    const line = details.at(details.length - 1);
+    if (line.get('quantity')?.value == null) line.get('quantity')?.setValue(1);
+    this.paletteAdded++;
+    this.paletteTerm = '';
+    this.paletteRows = [];
+    this.paletteIndex = 0;
+    this.paletteSearch$.next('');
+  }
+
+  /** Hands the typed text to the host's create-product flow, prefilled on a blank line. */
+  createFromPalette(): void {
+    const p = this.palette;
+    const details = p && this.detailsAt(p.i, p.j);
+    if (!p || !details) return;
+    const last = details.at(details.length - 1) as FormGroup | undefined;
+    const blank = last && !(last.get('detail')?.value || '').toString().trim();
+    if (!blank) details.push(this.createDetail());
+    details.at(details.length - 1).get('detail')?.setValue(this.paletteTerm.trim());
+    const k = details.length - 1;
+    this.closePalette();
+    this.requestCreateProduct(p.i, p.j, k);
   }
 
   requestCreateProduct(i: number, j: number, k: number): void {

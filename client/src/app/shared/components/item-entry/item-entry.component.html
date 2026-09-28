@@ -41,7 +41,7 @@
     <div *ngIf="i === selectedOption" class="flex flex-col gap-3">
 
       <ng-container *ngIf="!itemsHidden">
-      <div *ngFor="let item of itemsAt(i).controls; let j = index" [formGroup]="$any(item)"
+      <div *ngFor="let item of itemsAt(i).controls; let j = index" [formGroup]="$any(item)" (focusin)="trackItem(i, j)"
         class="rounded-xl border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark">
 
         <!-- Item header -->
@@ -51,12 +51,14 @@
           <span *ngIf="isDeal" class="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{{ item.get('itemName')?.value }}</span>
           <div *ngIf="!isDeal" class="relative min-w-0 flex-1">
             <app-sf-input formControlName="itemName" placeholder="Item name (e.g. CCTV Cameras)"
-              (input)="onItemNameInput(i, j)" (focusout)="closeSuggestions()"></app-sf-input>
+              (input)="onItemNameInput(i, j)" (keydown)="onSuggestionKeydown($event, i + '-' + j, i, j, null)"
+              (focusout)="closeSuggestions()"></app-sf-input>
             <div *ngIf="suggestionsFor(i + '-' + j) as rows">
               <div *ngIf="rows.length"
                 class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-erp-border-dark dark:bg-erp-surface-dark">
-                <button *ngFor="let s of rows" type="button"
+                <button *ngFor="let s of rows; let idx = index" type="button"
                   class="block w-full px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
+                  [class.bg-violet-50]="highlightedIndex === idx" [class.dark:bg-violet-950]="highlightedIndex === idx"
                   (mousedown)="$event.preventDefault(); applySuggestion(i, j, null, s)">
                   <span class="font-medium text-gray-900 dark:text-gray-100">{{ s.categoryName }}</span>
                   <span class="mt-0.5 block truncate text-gray-500 dark:text-gray-500">{{ s.description }}</span>
@@ -113,27 +115,32 @@
               <div *ngIf="!isDeal" class="relative">
                 <app-sf-textarea formControlName="detail" [rows]="2"
                   placeholder="Description — **bold** and {highlight} are supported"
-                  (input)="onDetailInput(i, j, k)" (focusout)="closeSuggestions()"></app-sf-textarea>
+                  (input)="onDetailInput(i, j, k)" (keydown)="onSuggestionKeydown($event, i + '-' + j + '-' + k, i, j, k)"
+                  (focusout)="closeSuggestions()"></app-sf-textarea>
                 <span *ngIf="badgeFor(i, j, k) as badge"
                   class="absolute right-2 top-2 rounded-md border border-sky-300 bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:border-sky-700/60 dark:bg-sky-900/40 dark:text-sky-300">{{ badge }}</span>
-                <div *ngIf="suggestionsFor(i + '-' + j + '-' + k) as rows">
-                  <div *ngIf="rows.length"
-                    class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark shadow-lg">
-                    <button *ngFor="let s of rows" type="button"
-                      class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
-                      (mousedown)="$event.preventDefault(); applySuggestion(i, j, k, s)">
-                      <span class="block truncate">{{ s.description }}</span>
-                      <span class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
-                        <span *ngIf="s.itemCode" class="rounded bg-gray-100 px-1 py-px font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ s.itemCode }}</span>
-                        <span *ngIf="s.partNo" class="text-gray-500 dark:text-gray-500">P/N {{ s.partNo }}</span>
-                        <span *ngIf="s.uom" class="text-gray-400 dark:text-gray-600">{{ s.uom }}</span>
-                        <span *ngIf="s.unitSellingPrice != null" class="tabular-nums text-gray-500 dark:text-gray-400">{{ s.unitSellingPrice | number: '1.2-2' }} {{ currency }}</span>
-                        <span *ngIf="stockSummary(s) as stock" class="font-medium tabular-nums" [ngClass]="stockTone(s)">{{ stock }}</span>
-                      </span>
-                    </button>
-                    <button *ngIf="allowCreateProduct" type="button"
-                      class="block w-full border-t border-gray-100 px-3 py-2 text-left text-xs font-medium text-violet-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-violet-400 dark:hover:bg-gray-800"
-                      (mousedown)="$event.preventDefault(); requestCreateProduct(i, j, k)">+ Create product</button>
+                <div *ngIf="activeSuggestionKey === (i + '-' + j + '-' + k)">
+                  <div class="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark shadow-lg">
+                    <ng-container *ngIf="suggestionsFor(i + '-' + j + '-' + k) as rows">
+                      <button *ngFor="let s of rows; let idx = index" type="button"
+                        class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                        [class.bg-violet-50]="highlightedIndex === idx" [class.dark:bg-violet-950]="highlightedIndex === idx"
+                        (mousedown)="$event.preventDefault(); applySuggestion(i, j, k, s)">
+                        <span class="block truncate">{{ s.description }}</span>
+                        <span class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
+                          <span *ngIf="s.itemCode" class="rounded bg-gray-100 px-1 py-px font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ s.itemCode }}</span>
+                          <span *ngIf="s.partNo" class="text-gray-500 dark:text-gray-500">P/N {{ s.partNo }}</span>
+                          <span *ngIf="s.uom" class="text-gray-400 dark:text-gray-600">{{ s.uom }}</span>
+                          <span *ngIf="s.unitSellingPrice != null" class="tabular-nums text-gray-500 dark:text-gray-400">{{ s.unitSellingPrice | number: '1.2-2' }} {{ currency }}</span>
+                          <span *ngIf="stockSummary(s) as stock" class="font-medium tabular-nums" [ngClass]="stockTone(s)">{{ stock }}</span>
+                        </span>
+                      </button>
+                      <p *ngIf="!rows.length" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-500">No matching products in the catalogue.</p>
+                      <button *ngIf="createRowAvailable(i + '-' + j + '-' + k, k)" type="button"
+                        class="block w-full border-t border-gray-100 px-3 py-2 text-left text-xs font-medium text-violet-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-violet-400 dark:hover:bg-gray-800"
+                        [class.bg-violet-50]="highlightedIndex === rows.length" [class.dark:bg-violet-950]="highlightedIndex === rows.length"
+                        (mousedown)="$event.preventDefault(); requestCreateProduct(i, j, k)">+ Create product</button>
+                    </ng-container>
                   </div>
                 </div>
               </div>
@@ -184,9 +191,13 @@
           </div>
         </div>
 
-        <div *ngIf="!isDeal" class="border-t border-gray-100 dark:border-erp-border-dark px-3 py-1.5">
+        <div *ngIf="!isDeal" class="flex items-center gap-1 border-t border-gray-100 dark:border-erp-border-dark px-3 py-1.5">
           <app-action-button variant="ghost" (click)="addDetail(i, j)">
             <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add line
+          </app-action-button>
+          <app-action-button *ngIf="!isItemLocked(i, j)" variant="ghost" (click)="openPalette(i, j)">
+            <ng-icon name="heroMagnifyingGlass" class="h-3.5 w-3.5"></ng-icon> Search catalogue
+            <kbd class="ml-1 rounded border border-gray-200 px-1 text-[10px] font-medium text-gray-400 dark:border-erp-border-dark">Ctrl K</kbd>
           </app-action-button>
         </div>
       </div>
@@ -239,4 +250,64 @@
       </div>
     </div>
   </ng-container>
+</div>
+
+<!-- Catalogue palette: search the whole catalogue and add products as lines, keyboard first. -->
+<div *ngIf="palette" class="fixed inset-0 z-[1000] flex items-start justify-center bg-gray-900/40 px-4 pt-[12vh] backdrop-blur-sm"
+  (mousedown)="closePalette()">
+  <div role="dialog" aria-modal="true" aria-label="Search catalogue"
+    class="flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-erp-border-dark dark:bg-erp-surface-dark"
+    (mousedown)="$event.stopPropagation()">
+    <div class="flex items-center gap-2 border-b border-gray-100 px-4 dark:border-erp-border-dark">
+      <ng-icon name="heroMagnifyingGlass" class="h-4 w-4 shrink-0 text-gray-400"></ng-icon>
+      <input #paletteInput type="text" [value]="paletteTerm" (input)="onPaletteInput($any($event.target).value)" (keydown)="onPaletteKeydown($event)"
+        placeholder="Search products by name, item code or part no…" autocomplete="off"
+        role="combobox" aria-expanded="true" aria-controls="ie-palette-list"
+        class="h-12 min-w-0 flex-1 border-0 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-100" />
+      <span *ngIf="paletteLoading" class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-gray-300 border-t-violet-600"></span>
+    </div>
+    <p class="border-b border-gray-100 px-4 py-1.5 text-[11px] text-gray-500 dark:border-erp-border-dark">
+      Adding to <span class="font-semibold text-gray-700 dark:text-gray-300">{{ paletteItemName || 'Item ' + (palette.j + 1) }}</span>
+      <span *ngIf="paletteAdded" class="ml-2 rounded bg-emerald-100 px-1.5 py-px font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ paletteAdded }} added</span>
+    </p>
+
+    <div id="ie-palette-list" role="listbox" class="min-h-0 flex-1 overflow-y-auto py-1">
+      <button *ngFor="let s of paletteRows; let idx = index" type="button" role="option" [attr.aria-selected]="paletteIndex === idx"
+        class="flex w-full items-start gap-3 px-4 py-2 text-left"
+        [ngClass]="paletteIndex === idx ? 'bg-violet-50 dark:bg-violet-950/60' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+        (mouseenter)="paletteIndex = idx" (click)="pickFromPalette(s)">
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-[13px] text-gray-900 dark:text-gray-100">{{ s.description }}</p>
+          <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+            <span *ngIf="s.categoryName" class="text-gray-500">{{ s.categoryName }}</span>
+            <span *ngIf="s.itemCode" class="rounded bg-gray-100 px-1 py-px font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ s.itemCode }}</span>
+            <span *ngIf="s.partNo" class="text-gray-500">P/N {{ s.partNo }}</span>
+            <span *ngIf="stockSummary(s) as stock" class="font-medium tabular-nums" [ngClass]="stockTone(s)">{{ stock }}</span>
+          </p>
+        </div>
+        <div class="shrink-0 text-right text-[11px] tabular-nums">
+          <p *ngIf="s.unitSellingPrice != null" class="font-semibold text-gray-900 dark:text-gray-100">{{ s.unitSellingPrice | number: '1.2-2' }} {{ currency }}</p>
+          <p *ngIf="s.unitCost != null" class="text-gray-500">cost {{ s.unitCost | number: '1.2-2' }}</p>
+          <p *ngIf="s.uom" class="text-gray-400">{{ s.uom }}</p>
+        </div>
+      </button>
+
+      <p *ngIf="paletteTerm.trim().length < 2" class="px-4 py-6 text-center text-xs text-gray-500">Type at least 2 characters to search the catalogue.</p>
+      <p *ngIf="paletteTerm.trim().length >= 2 && !paletteLoading && !paletteRows.length" class="px-4 py-4 text-center text-xs text-gray-500">
+        No products match “{{ paletteTerm.trim() }}”.
+      </p>
+      <button *ngIf="paletteCreateAvailable" type="button" role="option" [attr.aria-selected]="paletteIndex === paletteRows.length"
+        class="flex w-full items-center gap-2 border-t border-gray-100 px-4 py-2 text-left text-xs font-medium text-violet-700 dark:border-erp-border-dark dark:text-violet-400"
+        [ngClass]="paletteIndex === paletteRows.length ? 'bg-violet-50 dark:bg-violet-950/60' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
+        (mouseenter)="paletteIndex = paletteRows.length" (click)="createFromPalette()">
+        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create product “{{ paletteTerm.trim() }}”
+      </button>
+    </div>
+
+    <div class="flex items-center gap-4 border-t border-gray-100 bg-gray-50 px-4 py-2 text-[11px] text-gray-500 dark:border-erp-border-dark dark:bg-gray-900/50">
+      <span><kbd class="rounded border border-gray-300 bg-white px-1 dark:border-gray-600 dark:bg-gray-800">↑</kbd> <kbd class="rounded border border-gray-300 bg-white px-1 dark:border-gray-600 dark:bg-gray-800">↓</kbd> navigate</span>
+      <span><kbd class="rounded border border-gray-300 bg-white px-1 dark:border-gray-600 dark:bg-gray-800">Enter</kbd> add line</span>
+      <span><kbd class="rounded border border-gray-300 bg-white px-1 dark:border-gray-600 dark:bg-gray-800">Esc</kbd> close</span>
+    </div>
+  </div>
 </div>
