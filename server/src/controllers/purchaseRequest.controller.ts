@@ -21,6 +21,16 @@ const normalizePartNumberValue = (value: any) => {
     return new ObjectId(candidate);
 };
 
+const numericValue = (value: any): number | null => {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : null;
+};
+
+const purchaseApprovalContext = (purchaseRequest: any) => ({
+    amount: numericValue(purchaseRequest?.totalLpo ?? purchaseRequest?.mrRequest?.totalPurchase),
+    discountPercent: numericValue(purchaseRequest?.supplierDiscounts?.totalDiscount),
+});
+
 // Create a new Purchase Request
 export const createPurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -129,7 +139,7 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
 
         if (status && status !== PurchaseRequestStatus.Drafted) {
             try {
-                const approvalStatus = await getWorkflowSteps('purchaseApproval', employee._id.toString());
+                const approvalStatus = await getWorkflowSteps('purchaseApproval', employee._id.toString(), purchaseApprovalContext(requestData));
                 requestData.approvalStatus = approvalStatus;
             } catch (error) {
                 console.error('Error initializing workflow steps:', error);
@@ -1994,7 +2004,13 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             });
         }
 
-        const updatedApprovalStatus = await updateApprovalStatus(status, purchaseRequest.approvalStatus, comment || '', employee);
+        const updatedApprovalStatus = await updateApprovalStatus(
+            status,
+            purchaseRequest.approvalStatus,
+            comment || '',
+            employee,
+            purchaseApprovalContext(purchaseRequest)
+        );
         purchaseRequest.approvalStatus = updatedApprovalStatus;
 
         const hasRejected = updatedApprovalStatus.some((approval: any) => approval.status === 'rejected');
@@ -2034,34 +2050,32 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
                 .filter((approval: any) => approval.status === 'pending')
                 .sort((a: any, b: any) => a.step - b.step);
 
-            const nextApproval = pendingStatuses[0];
+            const nextStep = pendingStatuses[0]?.step;
+            const nextApprovals = pendingStatuses.filter((approval: any) => approval.step === nextStep);
 
-            if (nextApproval) {
+            if (nextApprovals.length) {
                 const nextApproverIds = new Set<string>();
-                const isManagerStep = !!nextApproval.managerApproval;
+                const managerStepIds = new Set<string>();
 
-                if (isManagerStep) {
-                    const requester = await Employee.findById(purchaseRequest.createdBy)
-                        .populate('reportingTo')
-                        .lean();
-                    const manager: any = (requester as any)?.reportingTo;
-                    if (manager?._id) {
-                        nextApproverIds.add(manager._id.toString());
-                    }
-                } else if (nextApproval.role) {
-                    const nextRoleId =
-                        (nextApproval.role as any)?._id?.toString() ||
-                        nextApproval.role?.toString();
+                for (const nextApproval of nextApprovals) {
+                    if (nextApproval.managerApproval && nextApproval.approver) {
+                        nextApproverIds.add(nextApproval.approver.toString());
+                        managerStepIds.add(nextApproval.approver.toString());
+                    } else if (nextApproval.role) {
+                        const nextRoleId =
+                            (nextApproval.role as any)?._id?.toString() ||
+                            nextApproval.role?.toString();
 
-                    if (nextRoleId) {
-                        const approverEmployees = await Employee.find({
-                            category: nextRoleId,
-                            isDeleted: { $ne: true },
-                            isBlocked: { $ne: true },
-                        }).lean();
+                        if (nextRoleId) {
+                            const approverEmployees = await Employee.find({
+                                category: nextRoleId,
+                                isDeleted: { $ne: true },
+                                isBlocked: { $ne: true },
+                            }).lean();
 
-                        for (const approver of approverEmployees) {
-                            nextApproverIds.add(approver._id.toString());
+                            for (const approver of approverEmployees) {
+                                nextApproverIds.add(approver._id.toString());
+                            }
                         }
                     }
                 }
@@ -2086,7 +2100,7 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
                                     return false;
                                 }
 
-                                if (isManagerStep) {
+                                if (managerStepIds.has(employeeId)) {
                                     return true;
                                 }
 
@@ -2855,8 +2869,8 @@ export const getConvertibleJobs = async (req: Request, res: Response, next: Next
             {
                 $match: {
                     isDeleted: { $ne: true },
-                    allocateStatus: allocateStatus.OpenToWork,
-                    procurementPerson: employee._id
+                    allocateStatus: allocateStatus.OpenToWork
+                    // procurementPerson filter removed for now
                 }
             },
             {

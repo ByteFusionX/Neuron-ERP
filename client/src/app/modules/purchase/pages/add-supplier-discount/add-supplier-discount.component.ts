@@ -1,46 +1,36 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
-import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatDialogRef } from '@angular/material/dialog';
-import { NgIcon } from '@ng-icons/core';
-import { ToastrService } from 'ngx-toastr';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+import { ModalRef } from 'src/app/shared/components/modal';
+import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 
+export interface AddSupplierDiscountResult {
+  supplierId: string;
+  discount: number;
+}
+
+/** Pick a supplier and a discount amount. Closes with the form value, or undefined on cancel. */
 @Component({
   selector: 'app-add-supplier-discount',
-  imports: [
-    CommonModule,
-    NgIcon,
-    FormsModule,
-    ReactiveFormsModule,
-    FormFieldComponent,
-    SelectDropdownComponent
-  ],
+  imports: [CommonModule, ReactiveFormsModule, SmartFormModule, DetailPanelIconComponent, ActionButtonComponent],
   templateUrl: './add-supplier-discount.component.html',
   styleUrl: './add-supplier-discount.component.css'
 })
 export class AddSupplierDiscountComponent implements OnInit {
-
   private fb = inject(FormBuilder)
-  private toaster = inject(ToastrService)
   private supplierService = inject(SupplierService)
-  isSubmitted = signal<boolean>(false);
+  private modalRef = inject<ModalRef<AddSupplierDiscountResult>>(ModalRef);
+
   suppliers = signal<any[]>([])
+  supplierOptions = computed<SfOption[]>(() => this.suppliers().map((s) => ({ label: s.supplierName, value: s._id })));
 
   supplierForm: FormGroup = this.fb.group({
     supplierId: ['', [Validators.required]],
-    discount: ['', [Validators.required]],
-    // discountType: ['', [Validators.required]]
+    discount: [null, [Validators.required, Validators.min(0)]],
   })
-
-  discountTypes = [
-    { id: 'Flat', name: 'Flat' },
-    { id: 'Percentage', name: 'Percentage' },
-  ];
-
-  constructor(private dialogRef: MatDialogRef<AddSupplierDiscountComponent>) { }
 
   ngOnInit(): void {
     this.supplierService.supplierList().subscribe({
@@ -53,15 +43,15 @@ export class AddSupplierDiscountComponent implements OnInit {
   }
 
   onCloseClicks() {
-    this.dialogRef.close()
+    this.modalRef.close()
   }
 
   onSubmit() {
     if (this.supplierForm.invalid) {
-      this.toaster.warning("Please fill all required fields correctly")
-    } else {
-      this.dialogRef.close(this.supplierForm.value)
+      this.supplierForm.markAllAsTouched();
+      return;
     }
+    this.modalRef.close(this.supplierForm.value)
   }
 
   get f() {

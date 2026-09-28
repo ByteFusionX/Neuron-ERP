@@ -1,15 +1,22 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
-import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { TechnicalService } from 'src/app/core/services/technical.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { NgIcon } from '@ng-icons/core';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { ToastrService } from 'ngx-toastr';
 import { v4 as uuidv4 } from 'uuid';
 import { FileService } from 'src/app/core/services/file.service';
 import { HttpEventType } from '@angular/common/http';
-import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
+import { MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+
+export interface MaterialRequestModalData {
+  purchaseId: string;
+  jobId: string;
+  onDataChange?: () => void;
+}
 
 interface MaterialRequest {
   itemName: string;
@@ -22,18 +29,13 @@ interface MaterialRequest {
 
 @Component({
   selector: 'app-material-request-modal',
-  imports: [
-    CommonModule,
-    NgIcon,
-    NumberFormatterPipe,
-    ModalLayoutComponent
-  ],
+  imports: [CommonModule, NumberFormatterPipe, ActionButtonComponent, DetailBadgeComponent, DetailPanelIconComponent],
   templateUrl: './material-request-modal.component.html',
   styleUrl: './material-request-modal.component.css'
 })
 export class MaterialRequestModalComponent implements OnInit {
-  private dialogRef = inject(MatDialogRef<MaterialRequestModalComponent>);
-  private data = inject(MAT_DIALOG_DATA);
+  private dialogRef = inject<ModalRef<{ success: boolean }>>(ModalRef);
+  private data = inject(MODAL_DATA) as MaterialRequestModalData;
   private technicalService = inject(TechnicalService);
   private purchaseService = inject(PurchaseService);
   private toaster = inject(ToastrService);

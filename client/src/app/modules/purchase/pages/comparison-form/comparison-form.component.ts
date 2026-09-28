@@ -1,15 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
-import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+import { MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
+import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { QuoteItemDetails, Comparisons } from 'src/app/shared/interfaces/purchase.interface';
 
-interface ComparisonFormData {
+export interface ComparisonFormData {
   itemDetail?: QuoteItemDetails;
   existingComparison?: Comparisons;
   isEditMode?: boolean;
@@ -18,32 +18,26 @@ interface ComparisonFormData {
 
 @Component({
   selector: 'app-comparison-form',
-  imports: [
-    CommonModule,
-    FormsModule,
-    ReactiveFormsModule,
-    FormFieldComponent,
-    IconsModule,
-    SelectDropdownComponent
-  ],
+  imports: [CommonModule, ReactiveFormsModule, SmartFormModule, DetailPanelIconComponent, ActionButtonComponent],
   templateUrl: './comparison-form.component.html',
   styleUrl: './comparison-form.component.css'
 })
 export class ComparisonFormComponent implements OnInit {
 
   private fb = inject(FormBuilder)
-  private dialogRef = inject(MatDialogRef<ComparisonFormComponent>)
+  private modalRef = inject<ModalRef<any>>(ModalRef)
   private supplierService = inject(SupplierService)
   private toaster = inject(ToastrService)
-  private data = inject<ComparisonFormData>(MAT_DIALOG_DATA, { optional: true })
+  private data = inject(MODAL_DATA, { optional: true }) as ComparisonFormData | null
 
-  isSubmitted = signal<boolean>(false);
   suppliers = signal<any[]>([])
+  supplierOptions = computed<SfOption[]>(() => this.suppliers().map((s) => ({ label: s.supplierName, value: s._id })));
   isEditMode = signal<boolean>(false);
+  itemName = (this.data?.itemDetail as any)?.detail || '';
 
   comparisonForm: FormGroup = this.fb.group({
     supplierName: [''],
-    supplierId: [''],
+    supplierId: ['', Validators.required],
     quantity: [null, Validators.required],
     unitPrice: [null, Validators.required],
     etaTerms: ['', Validators.required],
@@ -109,31 +103,25 @@ export class ComparisonFormComponent implements OnInit {
 
   onSubmit() {
     if (this.comparisonForm.invalid) {
-      this.toaster.warning('Please fill all required fields')
+      this.comparisonForm.markAllAsTouched();
       return;
-    } else {
-      const supplierId = this.comparisonForm.value.supplierId;
-      const supplier = this.suppliers().find((item) => supplierId == item._id)
-      if (supplier) {
-        this.comparisonForm.patchValue({ supplierName: supplier.supplierName })
-      } else if (this.isEditMode() && this.comparisonForm.value.supplierName) {
-        // Keep existing supplier name if supplier not found in list (shouldn't happen, but safety check)
-      } else {
-        this.toaster.error('Supplier not found');
-        return;
-      }
-      const data = this.comparisonForm.value
-      this.dialogRef.close(data)
     }
+    const supplierId = this.comparisonForm.value.supplierId;
+    const supplier = this.suppliers().find((item) => supplierId == item._id)
+    if (supplier) {
+      this.comparisonForm.patchValue({ supplierName: supplier.supplierName })
+    } else if (!(this.isEditMode() && this.comparisonForm.value.supplierName)) {
+      this.toaster.error('Supplier not found');
+      return;
+    }
+    this.modalRef.close(this.comparisonForm.value)
   }
 
   onCancel() {
-    this.comparisonForm.reset();
-    this.dialogRef.close()
+    this.modalRef.close()
   }
 
   get f() {
     return this.comparisonForm.controls;
   }
-
 }

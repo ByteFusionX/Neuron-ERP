@@ -4,9 +4,15 @@ export interface filterJob {
     search: string;
     page: number;
     row: number;
-    status: number;
+    status?: number | string | null;
     selectedMonth?: number;
     selectedYear?: number;
+    salesPerson?: string | null;
+    access?: string;
+    userId?: string;
+    allocateStatus?: allocateStatus | null;
+    sortKey?: string | null;
+    sortDir?: 'asc' | 'desc' | null;
 }
 
 export interface getJob {
@@ -19,12 +25,15 @@ export interface getJob {
     updatedDate?: string;
     clientDetails?: any;
     salesPersonDetails?: any;
+    departmentDetails?: any;
     purchaseNo?: any;
     mr?: any
     supplierDiscounts?:any;
     allocateStatus: allocateStatus
     allocateType: allocateType
     hasPurchaseRequest?: boolean;
+    comment?: string;
+    lpoValue?: number;
     procurementPerson?: {
         _id: string;
         firstName: string;

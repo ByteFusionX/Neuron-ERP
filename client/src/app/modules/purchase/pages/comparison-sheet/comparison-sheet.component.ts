@@ -1,18 +1,25 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { AfterViewInit, Component, computed, EventEmitter, HostBinding, inject, Input, OnDestroy, OnInit, Output, signal } from '@angular/core';
 import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { PurchaseData, ProductPartNumber, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
 import { ComparisonFormComponent } from '../comparison-form/comparison-form.component';
 import { Subscription } from 'rxjs';
-import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ToastrService } from 'ngx-toastr';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
+import { ModalService } from 'src/app/shared/components/modal';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { DetailCalloutComponent } from 'src/app/shared/components/detail-panel/detail-callout.component';
+import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+import {
+  DetailViewBreadcrumb,
+  DetailViewShellComponent,
+  DetailViewStat,
+} from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 
 interface PartNumberDropdownOption {
   label: string;
@@ -22,24 +29,43 @@ interface PartNumberDropdownOption {
 
 @Component({
   selector: 'app-comparison-sheet',
-  imports: [ProductFormDrawerComponent, 
+  imports: [
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
-    FormFieldComponent,
-    SelectDropdownComponent,
-    IconsModule
+    ProductFormDrawerComponent,
+    SmartFormModule,
+    DetailViewShellComponent,
+    ActionButtonComponent,
+    DetailBadgeComponent,
+    DetailCalloutComponent,
+    DetailPanelIconComponent,
   ],
   templateUrl: './comparison-sheet.component.html',
   styleUrl: './comparison-sheet.component.css'
 })
-export class ComparisonSheetComponent implements OnInit, OnDestroy {
+export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestroy {
+  /** Renders the comparison sheet in a slide-over instead of as a page, stacked above the create/edit PR drawer. */
+  @Input() drawer = false;
+  /** Drawer mode: the PR to compare against (replaces the `purchaseId` route param). */
+  @Input() purchaseIdInput: string | null = null;
+  /** Drawer mode: the item being compared (replaces the `selectedItem` query param). */
+  @Input() selectedItemIdInput: string | null = null;
+  /** Drawer mode: comparisons were saved, so the host drawer should refresh its data. */
+  @Output() saved = new EventEmitter<void>();
+  /** Drawer mode: the slide-out animation finished; the host can unmount. */
+  @Output() closed = new EventEmitter<void>();
+
+  @HostBinding('style.display') get hostDisplay(): string | null {
+    return this.drawer ? 'contents' : null;
+  }
+
   private fb = inject(FormBuilder);
   private purchaseService = inject(PurchaseService)
   private productService = inject(ProductService)
   private router = inject(Router)
   private route = inject(ActivatedRoute)
-  private _dialog = inject(MatDialog)
+  private modal = inject(ModalService)
   private subscriptions = new Subscription()
   private toaster = inject(ToastrService)
 
@@ -54,6 +80,44 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   originalDescription = signal<string>('')
   currency = signal<string>('')
 
+  breadcrumbs = computed<DetailViewBreadcrumb[]>(() => [
+    { label: 'Home', link: '/' },
+    { label: 'PR', link: '/purchase/pr' },
+    { label: this.purchaseData()?.purchaseNo || 'Purchase', link: ['/purchase/edit', this.purchaseId] },
+    { label: 'Comparison sheet' },
+  ]);
+
+  subtitle = computed(() => {
+    const p: any = this.purchaseData();
+    const jobId = p?.jobId?.jobId || (typeof p?.jobId === 'string' ? p.jobId : '');
+    return [p?.purchaseNo, jobId ? `Job ${jobId}` : ''].filter(Boolean).join(' · ');
+  });
+
+  selectedQuantity = computed(() => {
+    this.purchaseData();
+    return this.findSelectedItemDetail()?.quantity ?? 0;
+  });
+
+  private lowestTotal = computed(() => {
+    const list = this.comparisonList();
+    return list.length > 1 ? Math.min(...list.map((c) => Number(c.totalCost) || 0)) : null;
+  });
+
+  stats = computed<DetailViewStat[]>(() => {
+    const list = this.comparisonList();
+    const selected = list.find((c) => c.selected);
+    const fmt = (n: number) => `${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${this.currency()}`.trim();
+    const lowest = this.lowestTotal();
+    const over = selected && lowest !== null ? (Number(selected.totalCost) || 0) - lowest : 0;
+    return [
+      { label: 'Quotes', value: String(list.length) },
+      { label: 'Selected supplier', value: selected?.supplierName || '—' },
+      { label: 'Selected total', value: selected ? fmt(Number(selected.totalCost) || 0) : '—' },
+      { label: 'Lowest quote', value: lowest !== null ? fmt(lowest) : '—' },
+      { label: 'Above lowest', value: fmt(over), danger: over > 0 },
+    ];
+  });
+
   comparisonForm: FormGroup = this.fb.group({
     purchaseNo: ['', [Validators.required]],
     jobId: ['', [Validators.required]],
@@ -63,21 +127,40 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   })
 
   ngOnInit(): void {
-    this.purchaseId = this.route.snapshot.paramMap.get('purchaseId') || '';
-    
+    this.purchaseId = (this.drawer ? this.purchaseIdInput : this.route.snapshot.paramMap.get('purchaseId')) || '';
+
     if (!this.purchaseId) {
       this.toaster.error('Invalid purchase ID');
-      this.router.navigate(['/purchase/pendings']);
+      if (this.drawer) {
+        this.closed.emit();
+      } else {
+        this.router.navigate(['/purchase/pr']);
+      }
       return;
     }
 
-    // Get selected item ID from query params if provided
-    const selectedItemId = this.route.snapshot.queryParamMap.get('selectedItem');
+    // Get the selected item ID from the drawer input or the page's query params
+    const selectedItemId = this.drawer ? this.selectedItemIdInput : this.route.snapshot.queryParamMap.get('selectedItem');
     if (selectedItemId) {
       this.selectedItemId.set(selectedItemId);
     }
 
     this.loadPurchaseData();
+  }
+
+  ngAfterViewInit(): void {
+    // Mounted closed and opened on the next tick so the drawer slides in instead of appearing.
+    if (this.drawer) setTimeout(() => (this.drawerShown = true));
+  }
+
+  // --- Drawer mode -------------------------------------------------------------------
+
+  drawerShown = false;
+
+  closeDrawer(): void {
+    if (!this.drawerShown) return;
+    this.drawerShown = false;
+    setTimeout(() => this.closed.emit(), 250);
   }
 
   loadPurchaseData(): void {
@@ -95,7 +178,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
         error: (error) => {
           console.error('Error loading purchase data:', error);
           this.toaster.error('Failed to load purchase data');
-          this.router.navigate(['/purchase/pendings']);
+          this.router.navigate(['/purchase/pr']);
         }
       })
     );
@@ -160,7 +243,12 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Comparisons updated successfully');
-            this.router.navigate(['/purchase/edit', this.purchaseId]);
+            if (this.drawer) {
+              this.saved.emit();
+              this.closeDrawer();
+            } else {
+              this.router.navigate(['/purchase/edit', this.purchaseId]);
+            }
           }
         },
         error: (error) => {
@@ -172,7 +260,11 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
   }
 
   onClose() {
-    this.router.navigate(['/purchase/edit', this.purchaseId]);
+    if (this.drawer) {
+      this.closeDrawer();
+    } else {
+      this.router.navigate(['/purchase/edit', this.purchaseId]);
+    }
   }
 
   get f() {
@@ -256,11 +348,9 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     const selectedItemDetail = this.findSelectedItemDetail();
     const quantity = selectedItemDetail?.quantity || 0;
 
-    const dialog = this._dialog.open(ComparisonFormComponent, {
-      width: '500px',
-      disableClose: true,
-      maxHeight: '90vh',
-      autoFocus: false,
+    const dialog = this.modal.open<any>(ComparisonFormComponent, {
+      width: '600px',
+      closeOnBackdrop: false,
       data: {
         itemDetail: selectedItemDetail,
         quantity: quantity,
@@ -268,7 +358,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
       }
     })
 
-    dialog.afterClosed().subscribe((res) => {
+    dialog.afterClosed().subscribe((res: any) => {
       if (res) {
         const updated = [...this.comparisonList()];
         if (updated.length === 0) {
@@ -288,11 +378,9 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     const selectedItemDetail = this.findSelectedItemDetail();
     const wasSelected = comparison.selected;
 
-    const dialog = this._dialog.open(ComparisonFormComponent, {
-      width: '500px',
-      disableClose: true,
-      maxHeight: '90vh',
-      autoFocus: false,
+    const dialog = this.modal.open<any>(ComparisonFormComponent, {
+      width: '600px',
+      closeOnBackdrop: false,
       data: {
         itemDetail: selectedItemDetail,
         existingComparison: comparison,
@@ -302,7 +390,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
       }
     })
 
-    dialog.afterClosed().subscribe((res) => {
+    dialog.afterClosed().subscribe((res: any) => {
       if (res) {
         const updated = [...this.comparisonList()];
         updated[index] = {
@@ -329,12 +417,18 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     this.comparisonList.set(comparisonList)
   }
 
+  isLowest(comparison: any): boolean {
+    const lowest = this.lowestTotal();
+    return lowest !== null && (Number(comparison.totalCost) || 0) === lowest;
+  }
+
   getSelectedComparison() {
     return this.comparisonList().find(item => item.selected) || null;
   }
 
   onAddSupplier() {
-    this.router.navigate(['/suppliers/create']);
+    // The suppliers module now creates via an in-page drawer rather than a routed create page.
+    this.router.navigate(['/suppliers']);
   }
 
   onPartNumberSelected(selection: string | string[]) {
@@ -379,7 +473,7 @@ export class ComparisonSheetComponent implements OnInit, OnDestroy {
     };
     const filtered = this.partNumberOptions().filter(opt => opt.value !== option.value);
     this.partNumberOptions.set([option, ...filtered]);
-        this.onPartNumberSelected(option.value);
+    this.onPartNumberSelected(option.value);
     this.loadPartNumbers();
   }
 

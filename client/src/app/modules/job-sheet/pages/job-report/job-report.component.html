@@ -1,0 +1,183 @@
+<div class="jr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+
+    <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
+    <div class="jr-card shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <nav aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
+                    <a *ngFor="let b of breadcrumbs" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+                    <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+                    </svg>
+                </nav>
+                <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Job Sheet</h2>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <!-- List | Report. Both carry the same filters through the URL. -->
+                <app-view-toggle label="Job Sheet" active="report" listLink="/job-sheet" reportLink="/job-sheet/report" [listQueryParams]="listQueryParams"></app-view-toggle>
+
+                <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!jobs.length">
+                    <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    Excel
+                </app-action-button>
+                <app-action-button variant="tool" (click)="exportPdf()" [disabled]="!jobs.length">
+                    <ng-icon name="heroPrinter" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    PDF
+                </app-action-button>
+            </div>
+        </div>
+
+        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the jobs."
+            (valuesChange)="onFilterChange($event)"></app-report-filters>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading" class="jr-card grid place-content-center py-20 text-sm text-gray-500 dark:text-gray-400">
+        Building report…
+    </div>
+
+    <div *ngIf="!loading && failed" class="jr-card grid place-content-center gap-3 py-20 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-300">The report could not be generated.</p>
+        <p class="text-xs text-gray-500 dark:text-gray-500">Try a narrower date range, or reload the page.</p>
+    </div>
+
+    <ng-container *ngIf="!loading && !failed">
+
+        <!-- KPI strip -->
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <app-kpi-card label="Total Jobs" [value]="totalJobs" [foot]="totalJobs + ' job' + (totalJobs === 1 ? '' : 's')" [delta]="delta('totalJobs')"></app-kpi-card>
+            <app-kpi-card label="Pending" [value]="pendingCount" valueClass="text-amber-600 dark:text-amber-400"></app-kpi-card>
+            <app-kpi-card label="Open To Work" [value]="openToWorkCount" valueClass="text-sky-600 dark:text-sky-400"></app-kpi-card>
+            <app-kpi-card label="In Progress" [value]="inProgressCount" valueClass="text-violet-600 dark:text-violet-400"></app-kpi-card>
+            <app-kpi-card label="Completed" [value]="completedCount" valueClass="text-emerald-600 dark:text-emerald-400"
+                [foot]="(totalLpoValue | numberFormatter) + ' QAR total LPO'" [delta]="delta('completedCount')"></app-kpi-card>
+        </div>
+
+        <!-- Sections: one at a time on screen, all of them when printed. -->
+        <div class="jr-toggle self-start" role="tablist" aria-label="Report section">
+            <button type="button" role="tab" class="jr-toggle-btn" [attr.aria-selected]="section === 'overview'"
+                [ngClass]="section === 'overview' ? 'jr-toggle-on' : ''" (click)="section = 'overview'">Overview</button>
+            <button type="button" role="tab" class="jr-toggle-btn" [attr.aria-selected]="section === 'breakdown'"
+                [ngClass]="section === 'breakdown' ? 'jr-toggle-on' : ''" (click)="section = 'breakdown'">Breakdown</button>
+            <button type="button" role="tab" class="jr-toggle-btn" [attr.aria-selected]="section === 'attention'"
+                [ngClass]="section === 'attention' ? 'jr-toggle-on' : ''" (click)="section = 'attention'">
+                Attention <span class="jr-count">{{ attentionTotal }}</span>
+            </button>
+        </div>
+
+        <div class="jr-section flex flex-col gap-5" [class.jr-hidden]="section !== 'overview'">
+
+        <!-- Pipeline -->
+        <div class="jr-card p-5">
+            <div class="mb-4 flex items-baseline justify-between gap-3">
+                <h3 class="jr-heading">Pipeline</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-500">Each job sits in one status. Untick a status to hide it from the chart.</p>
+            </div>
+
+            <apx-chart *ngIf="pipelineChart"
+                [series]="pipelineChart.series" [chart]="pipelineChart.chart" [plotOptions]="pipelineChart.plotOptions"
+                [xaxis]="pipelineChart.xaxis" [yaxis]="pipelineChart.yaxis" [grid]="pipelineChart.grid" [legend]="pipelineChart.legend"
+                [tooltip]="pipelineChart.tooltip" [dataLabels]="pipelineChart.dataLabels" [colors]="pipelineChart.colors">
+            </apx-chart>
+
+            <p *ngIf="!pipelineChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No statuses selected.</p>
+
+            <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-gray-100 dark:border-erp-border-dark pt-4">
+                <label *ngFor="let stage of stages" class="flex cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" class="h-3.5 w-3.5 cursor-pointer rounded" [checked]="isStageShown(stage.key)" (change)="toggleStage(stage.key)" />
+                    <span>{{ stage.label }}</span>
+                    <span class="tabular-nums text-gray-400 dark:text-gray-500">{{ stage.count }} · {{ stage.value | numberFormatter }} QAR</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Trend -->
+        <div class="jr-card p-5">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="jr-heading">Created vs Completed</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-500">Last 12 months. A job counts as completed in the month its status last changed.</p>
+                </div>
+                <div class="jr-toggle">
+                    <button type="button" class="jr-toggle-btn" [ngClass]="trendMetric === 'count' ? 'jr-toggle-on' : ''" (click)="setTrendMetric('count')">Count</button>
+                    <button type="button" class="jr-toggle-btn" [ngClass]="trendMetric === 'value' ? 'jr-toggle-on' : ''" (click)="setTrendMetric('value')">Value</button>
+                </div>
+            </div>
+            <apx-chart *ngIf="trendChart"
+                [series]="trendChart.series" [chart]="trendChart.chart" [xaxis]="trendChart.xaxis" [yaxis]="trendChart.yaxis"
+                [stroke]="trendChart.stroke" [fill]="trendChart.fill" [grid]="trendChart.grid" [legend]="trendChart.legend"
+                [tooltip]="trendChart.tooltip" [dataLabels]="trendChart.dataLabels" [colors]="trendChart.colors">
+            </apx-chart>
+            <p *ngIf="!trendChart" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">Nothing to trend for these filters.</p>
+        </div>
+
+        </div>
+
+        <!-- Breakdown -->
+        <div class="jr-section flex flex-col gap-3" [class.jr-hidden]="section !== 'breakdown'">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="jr-heading">Breakdown</h3>
+                <div class="jr-toggle">
+                    <button *ngFor="let t of breakdownTabs" type="button" class="jr-toggle-btn"
+                        [ngClass]="breakdownKey === t.key ? 'jr-toggle-on' : ''" (click)="setBreakdown(t.key)">{{ t.label }}</button>
+                </div>
+            </div>
+            <app-data-grid #breakdownGrid
+                rowKey="id"
+                [title]="'By ' + (breakdownKey === 'salesPerson' ? 'Sales Person' : 'Department')"
+                [data]="breakdownRows"
+                [columns]="breakdownColumns"
+                [selectable]="false"
+                [pageSize]="10"
+                searchPlaceholder="Search"
+                emptyMessage="Nothing to break down for these filters"
+                exportFileName="job-sheet-breakdown.xlsx"
+                exportable
+                (rowOpen)="onBreakdownRowOpen($event)">
+            </app-data-grid>
+            <p class="text-xs text-gray-500 dark:text-gray-500">
+                Open a row to see those jobs in the list.
+            </p>
+        </div>
+
+        <!-- Attention -->
+        <div class="jr-section grid grid-cols-1 gap-5" [class.jr-hidden]="section !== 'attention'">
+            <div class="jr-card flex flex-col">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
+                    <h3 class="jr-heading">Needs Attention</h3>
+                    <div class="jr-toggle">
+                        <button type="button" class="jr-toggle-btn" [ngClass]="attentionKey === 'onHold' ? 'jr-toggle-on' : ''" (click)="attentionKey = 'onHold'">
+                            On Hold <span class="jr-count">{{ attentionCount('onHold') }}</span>
+                        </button>
+                        <button type="button" class="jr-toggle-btn" [ngClass]="attentionKey === 'idle' ? 'jr-toggle-on' : ''" (click)="attentionKey = 'idle'">
+                            Idle <span class="jr-count">{{ attentionCount('idle') }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
+                    <button *ngFor="let item of attentionItems; trackBy: trackById" type="button"
+                        class="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                        (click)="openJob(item)">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ item.jobId }} — {{ item.customer }}</span>
+                            <span class="block truncate text-xs text-gray-500 dark:text-gray-400">{{ item.status }} · {{ item.salesPerson }}</span>
+                        </span>
+                        <span class="shrink-0 text-right">
+                            <span class="block text-[13px] tabular-nums font-medium text-gray-900 dark:text-gray-100">{{ item.lpoValue | numberFormatter }}</span>
+                            <span class="block text-xs tabular-nums text-amber-600 dark:text-amber-400">{{ attentionDaysLabel(item) }}</span>
+                        </span>
+                    </button>
+                    <p *ngIf="!attentionItems.length" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                        Nothing here — every job is on track.
+                    </p>
+                </div>
+
+                <p class="border-t border-gray-100 dark:border-erp-border-dark px-5 py-2 text-[11px] text-gray-500 dark:text-gray-500">
+                    Idle means a job hasn't moved in 14 days and isn't yet completed. Completed jobs are left out.
+                </p>
+            </div>
+        </div>
+    </ng-container>
+</div>

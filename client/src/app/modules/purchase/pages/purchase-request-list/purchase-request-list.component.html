@@ -1,0 +1,78 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Purchase Requests"
+        subtitle="Track and manage purchase requests"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="total"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        searchPlaceholder="Search by PR No"
+        emptyMessage="No purchase requests found"
+        createLabel="Create PR"
+        [rowActions]="rowActions"
+        [views]="views"
+        storageKey="purchase-request-list"
+        [detailLoading]="detailLoading"
+        [detailTabs]="detailTabs"
+        [detailTitle]="prTitle"
+        [detailSubtitle]="prSubtitle"
+        (queryChange)="onQueryChange($event)"
+        (rowOpen)="onRowOpen()"
+        (rowAction)="onRowAction($event)"
+        (create)="onCreatePr()">
+
+        <ng-template #detailMetaTemplate let-row>
+            <div class="pr-meta">
+                <p class="pr-meta-label">Customer</p>
+                <p class="pr-meta-value">{{ row.customerId?.companyName }}</p>
+            </div>
+            <div class="pr-meta">
+                <p class="pr-meta-label">Job ID</p>
+                <p class="pr-meta-value">{{ row.jobId?.jobId || '-' }}</p>
+            </div>
+            <div class="pr-meta">
+                <p class="pr-meta-label">Amount</p>
+                <p class="pr-meta-value">{{ formatAmount(row) }}</p>
+            </div>
+            <div class="pr-meta">
+                <p class="pr-meta-label">Date</p>
+                <p class="pr-meta-value">{{ (row.approvedDate || row.createdAt) | date: 'dd MMM yyyy' }}</p>
+            </div>
+        </ng-template>
+
+        <ng-template #detailFooterTemplate let-row>
+            <app-action-button variant="secondary" (click)="onEditPr(row, $event)">Edit</app-action-button>
+            <app-action-button variant="primary" (click)="openFullPurchase(row, $event)">Open full purchase</app-action-button>
+        </ng-template>
+
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'overview'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'items'">
+                    <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals [currency]="row.currency"></app-detail-table>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'history'">
+                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No approval history yet."></app-detail-timeline>
+                </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
+</div>
+
+<!-- Mounted only while open, so each opening starts a fresh form. -->
+<app-create-purchase *ngIf="createDrawerOpen" [drawer]="true" [withoutJob]="createDrawerWithoutJob"
+    (saved)="onCreateDrawerSaved()" (closed)="onCreateDrawerClosed()"></app-create-purchase>
+
+<!-- Mounted only while open, so each opening starts from a fresh load of that PR. -->
+<app-create-purchase *ngIf="editDrawerOpen" [drawer]="true" [editPurchaseId]="editDrawerPurchaseId"
+    (saved)="onEditDrawerSaved()" (closed)="onEditDrawerClosed()"></app-create-purchase>

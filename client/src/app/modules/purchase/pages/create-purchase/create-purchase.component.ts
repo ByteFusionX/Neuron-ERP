@@ -1,26 +1,33 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnDestroy, OnInit, signal, Type } from '@angular/core';
-import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ResizableComponent } from '../../../../shared/components/resizable/resizable.component';
+import { AfterViewInit, Component, computed, effect, EventEmitter, HostBinding, inject, Input, OnDestroy, OnInit, Output, signal, untracked } from '@angular/core';
+import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { MatDialog } from '@angular/material/dialog';
 import { MrRequestComponent } from '../mr-request/mr-request.component';
 import { MaterialRequestModalComponent } from '../material-request-modal/material-request-modal.component';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { JobService } from 'src/app/core/services/job/job.service';
-import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
-import { NgIcon } from '@ng-icons/core';
-import { MatTooltip } from '@angular/material/tooltip';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
+import { ComparisonSheetComponent } from '../comparison-sheet/comparison-sheet.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { ModalService } from 'src/app/shared/components/modal';
+import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
+import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+import { ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
+import {
+  DetailViewBadge,
+  DetailViewBreadcrumb,
+  DetailViewShellComponent,
+  DetailViewStat,
+} from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 
 interface PartNumberDropdownOption {
   label: string;
@@ -30,23 +37,43 @@ interface PartNumberDropdownOption {
 
 @Component({
   selector: 'app-create-purchase',
-  imports: [ProductFormDrawerComponent, 
+  imports: [
+    CommonModule,
     ReactiveFormsModule,
     FormsModule,
-    CommonModule,
-    ResizableComponent,
-    FormFieldComponent,
-    SelectDropdownComponent,
-    NumberFormatterPipe,
-    NgIcon,
-    MatTooltip,
+    ProductFormDrawerComponent,
+    ComparisonSheetComponent,
+    SmartFormModule,
+    DetailViewShellComponent,
+    ActionButtonComponent,
+    DetailBadgeComponent,
+    DetailFieldComponent,
+    DetailPanelIconComponent,
+    ItemEntryComponent,
   ],
   templateUrl: './create-purchase.component.html',
   styleUrl: './create-purchase.component.css',
 })
-export class CreatePurchaseComponent implements OnInit, OnDestroy {
+export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy {
+  /** Renders the create form in a slide-over instead of as a page. The host mounts it per opening. */
+  @Input() drawer = false;
+  /** Drawer mode: job to preselect (replaces the `jobId` query param of the page). */
+  @Input() initialJobId: string | null = null;
+  /** Drawer mode: start as a general purchase (replaces the `withoutJob` query param). */
+  @Input() withoutJob = false;
+  /** Drawer mode: an existing PR to edit (replaces the `/purchase/edit/:id` route param). */
+  @Input() editPurchaseId: string | null = null;
+  /** Drawer mode: a PR was created or saved as a draft, so the list should reload. */
+  @Output() saved = new EventEmitter<void>();
+  /** Drawer mode: the slide-out animation finished; the host can unmount. */
+  @Output() closed = new EventEmitter<void>();
+
+  @HostBinding('style.display') get hostDisplay(): string | null {
+    return this.drawer ? 'contents' : null;
+  }
+
   private fb = inject(FormBuilder);
-  private _dialog = inject(MatDialog)
+  private modal = inject(ModalService)
   private router = inject(Router)
   private route = inject(ActivatedRoute)
   private toaster = inject(ToastrService)
@@ -61,7 +88,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   prSequence: string = '0001'
   purchaseJobData!: any;
   purchaseNo!: string;
-  isAddingItem: boolean = false;
   purchaseId: string | null = null;
 
   itemsList = signal<any[]>([])
@@ -74,9 +100,153 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   currency = signal<string>('')
   isJobLess: boolean = false;
   currentEmployeeName = signal<string>('');
-  editingItemKey: string | null = null;
-  editBuffer: any = null;
   suppliersList = signal<any[]>([]);
+
+  // header / view model
+  breadcrumbs: DetailViewBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR', link: '/purchase/pr' }];
+  badges = signal<DetailViewBadge[]>([]);
+  headerSubtitle = signal<string>('');
+  stats = signal<DetailViewStat[]>([]);
+  jobOptions = computed<SfOption[]>(() => this.jobSheets().map((j: any) => ({ label: j.jobId, value: j._id, description: j.clientDetails?.companyName })));
+  supplierOptions = computed<SfOption[]>(() => this.suppliersList().map((s) => ({ label: s.supplierName, value: s._id })));
+  itemCount = computed(() => this.itemsList().reduce((n, item: any) => n + (item.itemDetails?.length || 0), 0));
+
+  // --- Item entry ----------------------------------------------------------------------
+  // Integration boundary: `itemsList` (and `saveItemsToBackend`) stays the source of truth because the
+  // comparison sheet, MR linkage and supplier discounts all key off the saved item records. The
+  // shared editor gets its own option → items → details array seeded from that list; every line
+  // carries a `lineKey` so an edited/reordered/removed line can be mapped back to its saved record.
+
+  entryForm: FormGroup = this.fb.group({ optionalItems: this.fb.array([]) });
+  get entryItems(): FormArray { return this.entryForm.get('optionalItems') as FormArray; }
+  liveTotalLpo = signal<number>(0);
+
+  /** A new list means the editor reseeds from it, so whatever it held is no longer unsaved work. */
+  private resetEntryDirty = effect(() => {
+    this.itemsList();
+    untracked(() => this.entryItems.markAsPristine());
+  });
+
+  entrySeed = computed<ItemEntryOptionValue[]>(() => [{
+    totalDiscount: null,
+    items: this.itemsList().map((item: any, i: number) => ({
+      itemName: item.itemName || '',
+      itemDetails: (item.itemDetails || []).map((d: any, j: number) => ({
+        itemCode: d.itemCode || '',
+        partNo: this.getPartNumberValue(d.partNo),
+        detail: d.detail || '',
+        quantity: d.quantity ?? null,
+        unitCost: d.unitCost ?? null,
+        unitSellingPrice: d.unitSellingPrice ?? null,
+        availability: d.availability || '',
+        supplierId: d.supplierId || null,
+        uom: d.uom || '',
+        lineKey: this.lineKeyOf(i, j, d),
+      })),
+    })),
+  }]);
+
+  private originalsByKey = computed(() => {
+    const map = new Map<string, any>();
+    this.itemsList().forEach((item: any, i: number) =>
+      (item.itemDetails || []).forEach((d: any, j: number) => map.set(this.lineKeyOf(i, j, d), d)));
+    return map;
+  });
+
+  private lineKeyOf(i: number, j: number, detail: any): string {
+    return detail?._id || `idx-${i}-${j}`;
+  }
+
+  private originalAt(i: number, j: number, k: number): any | undefined {
+    const items = this.entryItems.at(i)?.get('items') as FormArray | null;
+    const details = items?.at(j)?.get('itemDetails') as FormArray | null;
+    const key = details?.at(k)?.get('lineKey')?.value;
+    return key ? this.originalsByKey().get(key) : undefined;
+  }
+
+  /** Deal-sheet lines are fixed on a job-linked PR; only lines added here stay editable. */
+  lineLocked = (i: number, j: number, k: number): boolean => {
+    if (this.isJobLess) return false;
+    const original = this.originalAt(i, j, k);
+    return !!original && !original.isNewlyAdded;
+  };
+
+  lineBadge = (i: number, j: number, k: number): string | null =>
+    this.originalAt(i, j, k)?.fromMrRequest ? 'MR' : null;
+
+  compareLabel = (i: number, j: number, k: number): string => {
+    const count = this.originalAt(i, j, k)?.comparisons?.length || 0;
+    return count ? `${count} quotes` : 'Compare';
+  };
+
+  onEntryCompare({ i, j, k }: { i: number; j: number; k: number }): void {
+    this.onComparisonClicks(this.originalAt(i, j, k) ?? ({} as QuoteItemDetails));
+  }
+
+  private lineHasContent(d: any): boolean {
+    return !!(d?.detail || '').toString().trim() || d?.quantity != null || d?.unitCost != null;
+  }
+
+  private recomputeLiveTotal(): void {
+    const byKey = this.originalsByKey();
+    let total = 0;
+    (this.entryItems.getRawValue()?.[0]?.items || []).forEach((item: any) =>
+      (item.itemDetails || []).forEach((d: any) => {
+        if (d.lineKey && byKey.get(d.lineKey)?.fromMrRequest) return;
+        total += (+d.quantity || 0) * (+d.unitCost || 0);
+      }));
+    this.liveTotalLpo.set(total);
+  }
+
+  /** Translates the editor back into the `itemsList` shape, keeping each saved line's hidden fields. */
+  private collectEntryItems(): any[] | null {
+    const byKey = this.originalsByKey();
+    let invalid = false;
+    const items: any[] = [];
+
+    (this.entryItems.getRawValue()?.[0]?.items || []).forEach((item: any) => {
+      const details = (item.itemDetails || []).filter((d: any) => this.lineHasContent(d)).map((d: any) => {
+        const { lineKey, profit, ...fields } = d;
+        if (!(fields.detail || '').toString().trim() || !(+fields.quantity > 0) || !(+fields.unitCost > 0)) invalid = true;
+        const original = lineKey ? byKey.get(lineKey) : undefined;
+        return {
+          ...(original ?? { isNewlyAdded: true, merged: false, comparisons: [] }),
+          ...fields,
+          partNo: fields.partNo || '',
+          supplierId: fields.supplierId || original?.supplierId || '',
+        };
+      });
+      if (!details.length) return;
+      const itemName = (item.itemName || '').toString().trim() || details[0].detail || 'Item';
+      items.push({ itemName, itemDetails: details });
+    });
+
+    if (invalid) {
+      this.toaster.warning('Please fill all required fields!');
+      return null;
+    }
+    return items;
+  }
+
+  /** Pulls unsaved editor changes into `itemsList` before a whole-form save. */
+  private syncEntryToList(): boolean {
+    if (!this.entryItems.dirty) return true;
+    const items = this.collectEntryItems();
+    if (!items) return false;
+    this.itemsList.set(items);
+    this.updateTotalLpo();
+    this.entryItems.markAsPristine();
+    return true;
+  }
+
+  onSaveEntryItems(): void {
+    const items = this.collectEntryItems();
+    if (!items) return;
+    this.itemsList.set(items);
+    this.updateTotalLpo();
+    this.entryItems.markAsPristine();
+    this.saveItemsToBackend(items);
+  }
 
   purchaseForm: FormGroup = this.fb.group({
     customerId: ['', [Validators.required]],
@@ -153,21 +323,21 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     const url = this.route.snapshot.routeConfig?.path || '';
-    this.isEditing = url.includes('edit');
-    
+    this.isEditing = !!this.editPurchaseId || (!this.drawer && url.includes('edit'));
+
     if (this.isEditing) {
-      this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
+      this.purchaseId = this.drawer ? this.editPurchaseId : <string>this.route.snapshot.paramMap.get('id');
       this.loadPurchaseData();
     } else {
       this.purchaseForm.reset();
       this.getPurchaseNo();
       
-      const jobId = this.route.snapshot.queryParamMap.get('jobId');
+      const jobId = this.drawer ? this.initialJobId : this.route.snapshot.queryParamMap.get('jobId');
       if (jobId) {
         this.requestedJobId.set(jobId);
       }
 
-      if (this.route.snapshot.queryParamMap.get('withoutJob') === 'true') {
+      if (this.drawer ? this.withoutJob : this.route.snapshot.queryParamMap.get('withoutJob') === 'true') {
         this.toggleJobLess(true);
       }
 
@@ -181,6 +351,79 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     (this.purchaseForm.get('items') as FormArray).valueChanges.subscribe(() => {
       this.updateTotalLpo();
     });
+
+    this.subscriptions.add(this.entryItems.valueChanges.subscribe(() => this.recomputeLiveTotal()));
+
+    this.refreshHeader();
+    this.subscriptions.add(this.purchaseForm.valueChanges.subscribe(() => this.refreshHeader()));
+  }
+
+  ngAfterViewInit(): void {
+    // Mounted closed and opened on the next tick so the drawer slides in instead of appearing.
+    if (this.drawer) setTimeout(() => (this.drawerShown = true));
+  }
+
+  // --- Drawer mode -------------------------------------------------------------------
+
+  drawerShown = false;
+
+  drawerSubtitle(): string {
+    const subtitle = this.headerSubtitle();
+    const pr = this.f['purchaseNo'].value;
+    return pr ? `${pr} · ${subtitle}` : subtitle;
+  }
+
+  /** Items auto-save to a server draft, so only an unsaved pick or a half-typed row counts as dirty. */
+  isDrawerDirty(): boolean {
+    return this.entryItems.dirty || (!this.purchaseId && (!!this.requestedJobId() || this.itemCount() > 0));
+  }
+
+  closeDrawer(): void {
+    if (!this.drawerShown) return;
+    this.drawerShown = false;
+    // A draft may already exist (items auto-save), so let the list pick it up.
+    if (this.purchaseId) this.saved.emit();
+    setTimeout(() => this.closed.emit(), 250);
+  }
+
+  /** After create/draft: the page returns to the list, the drawer just closes over it. */
+  private backToList(): void {
+    if (this.drawer) {
+      this.saved.emit();
+      this.closeDrawer();
+      return;
+    }
+    this.router.navigate(['/purchase/pr'], this.isJobLess ? { queryParams: { view: 'general' } } : {});
+  }
+
+  /** Header badges/stats; kept in signals so the shell's inputs only change when the form does. */
+  private refreshHeader(): void {
+    const v = this.purchaseForm.getRawValue();
+    const total = this.calculateTotalLpo();
+    const money = `${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${this.currency()}`.trim();
+    const status = v.status || (this.isEditing ? '' : 'New');
+    const tones: Record<string, DetailViewBadge['tone']> = { Pending: 'warn', Approved: 'good', Rejected: 'bad', Drafted: 'neutral', New: 'info' };
+
+    this.badges.set([
+      ...(status ? [{ label: status, tone: tones[status] ?? 'neutral' }] : []),
+      ...(this.isJobLess ? [{ label: 'General purchase', tone: 'info' as const }] : []),
+    ]);
+    this.headerSubtitle.set(this.isJobLess
+      ? (this.suppliersList().find((s) => s._id === v.supplierId)?.supplierName || 'No supplier selected')
+      : (v.customer || 'No job selected'));
+    this.stats.set(this.isJobLess
+      ? [
+          { label: 'PR No', value: v.purchaseNo || '—' },
+          { label: 'Items', value: String(this.itemCount()) },
+          { label: 'Total LPO value', value: money },
+        ]
+      : [
+          { label: 'PR No', value: v.purchaseNo || '—' },
+          { label: 'Job ID', value: this.isEditing ? (v.jobId || '—') : (this.selectedJobSheet as any)?.jobId || '—' },
+          { label: 'Deal sheet', value: v.dealSheetId || '—' },
+          { label: 'Items', value: String(this.itemCount()) },
+          { label: 'Total LPO value', value: money },
+        ]);
   }
 
   selectJobById(jobId: string): void {
@@ -270,6 +513,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onSubmit(): void {
+    if (!this.syncEntryToList()) return;
     this.purchaseForm.get('status')?.setValue('Pending')
     if (this.isEditing) {
       this.onEditSubmits()
@@ -279,6 +523,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onDraftClicks() {
+    if (!this.syncEntryToList()) return;
     if (this.purchaseId) {
       this.updatePurchaseDraft();
     } else {
@@ -296,7 +541,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
           if (res.success && res.data?._id) {
             this.purchaseId = res.data._id;
             this.toaster.success('Purchase saved as draft');
-            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
+            this.backToList();
           }
         },
         error: (error) => {
@@ -316,7 +561,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase updated successfully');
-            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
+            this.backToList();
           }
         },
         error: (error) => {
@@ -344,7 +589,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase uploaded successfully');
-            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
+            this.backToList();
           }
         },
         error: (error) => {
@@ -364,7 +609,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase updated successfully');
-            this.router.navigate(['/purchase/pendings'], this.isJobLess ? { queryParams: { sourceType: 'general' } } : {});
+            this.backToList();
           }
         },
         error: (error) => {
@@ -398,10 +643,14 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
 
 
   onDiscardClicks() {
+    if (this.drawer) {
+      this.closeDrawer();
+      return;
+    }
     const isJobLess = this.isJobLess;
     this.purchaseForm.reset()
     this.itemsList.set([])
-    this.router.navigate(['/purchase/pendings'], isJobLess ? { queryParams: { sourceType: 'general' } } : {})
+    this.router.navigate(['/purchase/pr'], isJobLess ? { queryParams: { view: 'general' } } : {})
   }
 
   createSupplierGroup(): FormGroup {
@@ -635,11 +884,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }
 
     this.ensurePurchaseId().then((purchaseId) => {
-      const dialogRef = this._dialog.open(MrRequestComponent, {
-        width: '550px',
-        disableClose: true,
-        maxHeight: '90vh',
-        autoFocus: false,
+      const dialogRef = this.modal.open<{ success: boolean }>(MrRequestComponent, {
+        width: '560px',
+        closeOnBackdrop: false,
         data: { purchaseId }
       });
 
@@ -658,11 +905,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }
 
     this.ensurePurchaseId().then((purchaseId) => {
-      const dialogRef = this._dialog.open(MaterialRequestModalComponent, {
-        width: '800px',
-        disableClose: true,
-        maxHeight: '90vh',
-        autoFocus: false,
+      const dialogRef = this.modal.open<{ success: boolean }>(MaterialRequestModalComponent, {
+        width: '880px',
+        closeOnBackdrop: false,
         data: {
           purchaseId,
           jobId: this.purchaseForm.get('job')?.value,
@@ -703,6 +948,7 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
   }
 
   onJobSelected(selected: string | string[]) {
+    if (!selected) return;
     this.purchaseForm.reset();
     this.purchaseForm.get('purchaseNo')?.setValue(this.purchaseNo);
     this.purchaseId = null;
@@ -734,10 +980,27 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     item.comparison = true;
 
     this.ensurePurchaseId().then((purchaseId) => {
-      this.router.navigate(['/purchase/comparison-sheet', purchaseId], {
-        queryParams: { selectedItem: item._id }
-      });
+      // Stacked drawer instead of navigating away, so this form isn't lost mid-edit.
+      this.comparisonDrawerPurchaseId = purchaseId;
+      this.comparisonDrawerItemId = item._id!;
+      this.comparisonDrawerOpen = true;
     }).catch(() => {});
+  }
+
+  // --- Comparison sheet drawer -------------------------------------------------------
+
+  comparisonDrawerOpen = false;
+  comparisonDrawerPurchaseId: string | null = null;
+  comparisonDrawerItemId: string | null = null;
+
+  onComparisonDrawerSaved(): void {
+    if (this.purchaseId) this.loadPurchaseData();
+  }
+
+  onComparisonDrawerClosed(): void {
+    this.comparisonDrawerOpen = false;
+    this.comparisonDrawerPurchaseId = null;
+    this.comparisonDrawerItemId = null;
   }
 
   onComparisonSummaryClicks() {
@@ -799,28 +1062,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     }, 0);
   }
 
-  formatPartNumber(partNo: any): string {
-    if (!partNo) return '-';
-    if (typeof partNo === 'string') {
-      // Look up the part number from options to get the full object
-      const option = this.partNumberOptions().find(opt => opt.value === partNo);
-      if (option?.data) {
-        const code = option.data.partNo || '';
-        if (code) {
-          return `${code}`;
-        }
-        return code || partNo;
-      }
-      return partNo;
-    }
-    const code = partNo?.partNo || '';
-    if (code) {
-      return `${code}`;
-    }
-    return code || '-';
-  }
-
-
   updateTotalLpo() {
     this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
   }
@@ -829,135 +1070,9 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     return this.purchaseForm.controls;
   }
 
-  getNewItemGroup(): FormGroup {
-    const itemsArray = this.purchaseForm.get('items') as FormArray;
-    return itemsArray.at(itemsArray.length - 1) as FormGroup;
-  }
-
-  getNewItemDetailGroup(): FormGroup {
-    return this.getNewItemGroup().get('itemDetails')?.get('0') as FormGroup;
-  }
-
   onAddColumnClicks() {
     const itemsArray = this.purchaseForm.get('items') as FormArray;
     itemsArray.push(this.createQuoteItemGroup());
-    this.isAddingItem = true;
-  }
-
-  onDiscardNewItem() {
-    const itemsArray = this.purchaseForm.get('items') as FormArray;
-    if (itemsArray.length > 0) {
-      itemsArray.removeAt(itemsArray.length - 1);
-      this.isAddingItem = false;
-    }
-  }
-
-  onSaveNewItem() {
-    const itemsArray = this.purchaseForm.get('items') as FormArray;
-    const lastItem = itemsArray.at(itemsArray.length - 1) as FormGroup;
-    if (!lastItem) {
-      this.toaster.warning('No item to save!');
-      return;
-    }
-
-    const itemValue = lastItem.value;
-
-    const hasRequiredValues =
-      itemValue.itemDetails?.[0]?.detail &&
-      itemValue.itemDetails[0]?.unitCost > 0 &&
-      itemValue.itemDetails[0]?.quantity > 0;
-
-    if (!hasRequiredValues) {
-      this.toaster.warning('Please fill all required fields!');
-      return;
-    }
-
-    // Ensure itemName is set - use detail if itemName is empty
-    if (!itemValue.itemName || itemValue.itemName.trim() === '') {
-      itemValue.itemName = itemValue.itemDetails?.[0]?.detail || 'Item';
-    }
-
-    if (itemValue.itemDetails && itemValue.itemDetails.length > 0) {
-      itemValue.itemDetails = itemValue.itemDetails.map((detail: any) => ({
-        ...detail,
-        isNewlyAdded: true,
-        merged: false
-      }));
-    }
-
-    const updatedItemsList = [...(this.itemsList() || []), itemValue];
-    this.itemsList.set(updatedItemsList);
-    
-    this.isAddingItem = false;
-    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
-
-    this.saveItemsToBackend(updatedItemsList);
-  }
-
-  isEditingItem(i: number, j: number): boolean {
-    return this.editingItemKey === `${i}-${j}`;
-  }
-
-  onEditItemClick(i: number, j: number): void {
-    const item = this.itemsList()[i]?.itemDetails?.[j];
-    if (!item) return;
-    this.editingItemKey = `${i}-${j}`;
-    this.editBuffer = {
-      detail: item.detail,
-      quantity: item.quantity,
-      unitCost: item.unitCost,
-      unitSellingPrice: item.unitSellingPrice,
-      partNo: typeof item.partNo === 'object' && item.partNo?._id ? item.partNo._id : (item.partNo || '')
-    };
-  }
-
-  onEditPartNumberSelected(event: string | string[]): void {
-    const value = Array.isArray(event) ? event[0] : event;
-    this.editBuffer.partNo = (value || '').trim();
-  }
-
-  onCancelEditItem(): void {
-    this.editingItemKey = null;
-    this.editBuffer = null;
-  }
-
-  onSaveEditedItem(i: number, j: number): void {
-    if (!this.editBuffer) return;
-
-    if (!this.editBuffer.detail || !(this.editBuffer.quantity > 0) || !(this.editBuffer.unitCost > 0)) {
-      this.toaster.warning('Please fill all required fields!');
-      return;
-    }
-
-    const updatedList = [...this.itemsList()];
-    const updatedItem = { ...updatedList[i] };
-    const updatedDetails = [...updatedItem.itemDetails];
-    updatedDetails[j] = { ...updatedDetails[j], ...this.editBuffer };
-    updatedItem.itemDetails = updatedDetails;
-    updatedList[i] = updatedItem;
-
-    this.itemsList.set(updatedList);
-    this.editingItemKey = null;
-    this.editBuffer = null;
-    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
-    this.saveItemsToBackend(updatedList);
-  }
-
-  onDeleteItemClick(i: number, j: number): void {
-    const updatedList = [...this.itemsList()];
-    const updatedItem = { ...updatedList[i] };
-    const updatedDetails = updatedItem.itemDetails.filter((_: any, idx: number) => idx !== j);
-
-    if (updatedDetails.length === 0) {
-      updatedList.splice(i, 1);
-    } else {
-      updatedItem.itemDetails = updatedDetails;
-      updatedList[i] = updatedItem;
-    }
-
-    this.itemsList.set(updatedList);
-    this.purchaseForm.get('totalLpo')?.setValue(this.calculateTotalLpo(), { emitEvent: false });
-    this.saveItemsToBackend(updatedList);
   }
 
   saveItemsToBackend(updatedItemsList: any[]): void {
@@ -1034,7 +1149,12 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (res.success) {
             this.toaster.success('Purchase Updated Successfully');
-            this.router.navigate(['/purchase/view-purchase', this.purchaseId]);
+            if (this.drawer) {
+              this.saved.emit();
+              this.closeDrawer();
+            } else {
+              this.router.navigate(['/purchase/view-purchase', this.purchaseId]);
+            }
           }
         },
         error: (error) => {
@@ -1117,12 +1237,6 @@ export class CreatePurchaseComponent implements OnInit, OnDestroy {
     if (!partNo) return '';
     if (typeof partNo === 'string') return partNo;
     return partNo._id || '';
-  }
-
-  onPartNumberSelected(event: string | string[], itemDetailControl: AbstractControl): void {
-    const value = Array.isArray(event) ? event[0] : event;
-    const normalized = (value || '').trim();
-    itemDetailControl.get('partNo')?.setValue(normalized || '', { emitEvent: false });
   }
 
   convertPartNoIdsToObjects(items: any[]): any[] {

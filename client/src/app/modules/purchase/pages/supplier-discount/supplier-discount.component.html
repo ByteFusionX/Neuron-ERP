@@ -1,94 +1,64 @@
-<div class="m-6 bg-white rounded-lg">
-    <div class="px-5 py-3 border-b">
-        <h3 class="text-md font-medium">Supplier Discount</h3>
+<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-detail-view-shell
+    class="min-h-0 flex-1"
+    [loading]="isLoading()"
+    [breadcrumbs]="breadcrumbs"
+    avatarText="SD"
+    title="Supplier discounts"
+    [subtitle]="subtitle"
+    [stats]="stats"
+    [hasSidebar]="false"
+    [tabParam]="''"
+  >
+    <ng-container headerActions>
+      <app-action-button *ngIf="isExist" variant="ghost" (click)="onClearClicks()">Clear all</app-action-button>
+      <app-action-button (click)="onClose()">Discard</app-action-button>
+      <app-action-button variant="primary" (click)="onSubmit()">Save &amp; exit</app-action-button>
+    </ng-container>
+
+    <div tabBody class="mx-auto max-w-3xl space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Discounts received</h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Discounts are deducted from the PR cost when calculating profit.</p>
+        </div>
+        <app-action-button variant="secondary" (click)="onAddFieldClicks()">Add discount</app-action-button>
+      </div>
+
+      <div class="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
+        <ul *ngIf="getSuppliers().length; else emptyTpl" class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+          <li *ngFor="let supplier of getSuppliers(); let i = index" class="group flex items-center gap-3 px-4 py-3">
+            <app-detail-avatar [name]="supplier.supplierId?.supplierName || '?'" size="sm"></app-detail-avatar>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ supplier.supplierId?.supplierName || 'Unknown supplier' }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Discount #{{ i + 1 }}</p>
+            </div>
+            <span class="text-[13px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+              − {{ supplier.discount | number: '1.2-2' }} {{ currency() }}
+            </span>
+            <button type="button" (click)="onDeleteSupplier(i)" aria-label="Remove discount" title="Remove discount"
+              class="grid h-8 w-8 place-content-center rounded-md text-gray-400 opacity-60 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 dark:hover:bg-red-950/40">
+              <app-dp-icon name="trash" size="w-4 h-4"></app-dp-icon>
+            </button>
+          </li>
+        </ul>
+
+        <div *ngIf="getSuppliers().length" class="flex items-center justify-between border-t border-gray-200 bg-gray-50/70 px-4 py-3 dark:border-erp-border-dark dark:bg-black/20">
+          <span class="text-[13px] font-medium text-gray-700 dark:text-gray-300">Total discount received</span>
+          <span class="text-base font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ (supplierForm.get('totalDiscount')?.value || 0) | number: '1.2-2' }} {{ currency() }}</span>
+        </div>
+
+        <ng-template #emptyTpl>
+          <div class="grid place-content-center gap-2 px-6 py-12 text-center">
+            <span class="mx-auto grid h-10 w-10 place-content-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/5">
+              <app-dp-icon name="tag" size="w-5 h-5"></app-dp-icon>
+            </span>
+            <p class="text-[13px] font-medium text-gray-900 dark:text-gray-100">No supplier discounts yet</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Add a discount for each supplier that gave one on this purchase.</p>
+            <app-action-button class="mx-auto mt-2" variant="primary" (click)="onAddFieldClicks()">Add discount</app-action-button>
+          </div>
+        </ng-template>
+      </div>
     </div>
-    <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
-        <div class="m-10">
-            <div class="flex gap-3">
-                <app-form-field label="jobId" [control]="f['jobId']" [isSubmitted]="isSubmitted()"
-                    placeholder="Enter Job Id" class="w-full" [readonly]="true">
-                </app-form-field>
-                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()"
-                    placeholder="Enter PR No" class="w-full" [readonly]="true">
-                </app-form-field>
-            </div>
-            <div class="w-full flex justify-end">
-                <button class="px-5 py-2 bg-violet-600 text-sm text-white hover:bg-violet-400 rounded my-2"
-                    (click)="onAddFieldClicks()" type="button">+ Add
-                    Field</button>
-            </div>
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border">
-                <thead class="text-xs text-gray-700 uppercase bg-violet-50">
-                    <tr>
-                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
-                            <div class="px-2 py-3">SL.NO</div>
-                        </th>
-                        <th scope="col" resizable key="supplierName" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Supplier Name</div>
-                        </th>
-                        <th scope="col" resizable key="discountValue" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Discount Value</div>
-                        </th>
-                        <th scope="col" resizable key="discountValue" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Actions</div>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <ng-container *ngIf="getSuppliers().length > 0; else elseSupplier">
-                        <ng-container *ngFor="let supplier of getSuppliers(); let i = index">
-                            <tr class="bg-white border-b text-gray-800">
-                                <td class="px-2  border text-center">
-                                    {{i+1}}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                  {{supplier.supplierId.supplierName}}
-                                </td>
-                                <td class="px-2 py-2 border text-center ">
-                                    {{supplier.discount}} {{ currency() }}
-                                </td>
-                                <td class="px-2 py-2 text-center">
-                                    <button class="text-red-600 hover:text-red-800" (click)="onDeleteSupplier(i)"
-                                        matTooltip="Delete Discount" matTooltipPosition="above">
-                                        <ng-icon name="heroTrash"></ng-icon>
-                                    </button>
-                                </td>
-                            </tr>
-                        </ng-container>
-                        <tr>
-                            <td colspan="12">
-                                <div class="bg-gray-100 p-2 w-full md:flex justify-end border mb-8">
-                                    <div class="w-1/3 flex gap-3 items-center">
-                                        <span>Total Discount received:</span>
-                                        <input type="text" class="px-3 py-1.5 outline-none rounded"
-                                            formControlName="totalDiscount" readonly
-                                            [value]="(supplierForm.get('totalDiscount')?.value | number:'1.2-2') + ' ' + currency()">
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    </ng-container>
-                    <ng-template #elseSupplier>
-                        <tr>
-                            <td colspan="12" class="text-center p-2 text-md">Suppliers Empty</td>
-                        </tr>
-                    </ng-template>
-                </tbody>
-            </table>
-        </div>
-        <div class="w-full md:flex justify-between gap-3 mb-3 px-8 py-3 border-t">
-            <div>
-                <button *ngIf="isExist"
-                    class="w-fit px-5 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 disabled:border-gray-500 disabled:ring-0"
-                    type="button" (click)="onClearClicks()">Clear</button>
-            </div>
-            <div class="flex gap-3">
-                <button class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
-                    type="button" (click)="onClose()">Discard</button>
-                <button
-                    class="w-fit px-3 py-2 text-sm border bg-violet-600 hover:bg-violet-500 text-white rounded mb-3">Save
-                    & Exit</button>
-            </div>
-        </div>
-    </form>
+  </app-detail-view-shell>
 </div>

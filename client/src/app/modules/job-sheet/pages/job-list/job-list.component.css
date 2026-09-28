@@ -1,6 +1,9 @@
-.ng-select .ng-select-container {
-    height: 45px;
-    --tw-bg-opacity: 1;
-    background-color: rgb(229 231 235 / var(--tw-bg-opacity));
-    border: none;
-}
+.js-meta { padding: 0.625rem 0.75rem; min-width: 0; }
+.js-meta + .js-meta { border-left: 1px solid #e5e7eb; }
+.js-meta-label { font-size: 0.6875rem; color: #6b7280; }
+.js-meta-value { margin-top: 0.125rem; font-size: 0.8125rem; font-weight: 500; color: #111827;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+:host-context(html.dark) .js-meta + .js-meta { border-left-color: #262626; }
+:host-context(html.dark) .js-meta-label { color: #a1a1a1; }
+:host-context(html.dark) .js-meta-value { color: #ededed; }

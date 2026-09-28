@@ -1,24 +1,47 @@
-import { Component, inject, OnDestroy, signal } from '@angular/core';
-import { ActivatedRoute, Router, TitleStrategy } from '@angular/router';
+import { Component, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
+import { CommonModule, DatePipe } from '@angular/common';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { FileService } from 'src/app/core/services/file.service';
-import { Comparisons, PurchaseData, PurchaseStatus } from 'src/app/shared/interfaces/purchase.interface';
-import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
+import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { CommonModule } from '@angular/common';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
 import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
+import {
+  DetailViewBadge,
+  DetailViewBreadcrumb,
+  DetailViewShellComponent,
+  DetailViewStat,
+  DetailViewTab,
+} from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
+import { DetailMetricsComponent } from 'src/app/shared/components/detail-panel/detail-metrics.component';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import {
+  DetailMetric,
+  DetailOverviewSection,
+  DetailTableColumn,
+  DetailTimelineEntry,
+} from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
+
+const STATUS_TONES: Record<string, DetailTone> = {
+  Pending: 'warn',
+  Approved: 'good',
+  Rejected: 'bad',
+  Drafted: 'neutral',
+};
 
 @Component({
   selector: 'app-view-purchase',
-  imports: [IconsModule, ButtonComponent, CommonModule],
+  imports: [CommonModule, DetailViewShellComponent, ActionButtonComponent, DetailTableComponent, DetailMetricsComponent, DetailTimelineComponent],
+  providers: [DatePipe],
   templateUrl: './view-purchase.component.html',
   styleUrls: ['./view-purchase.component.css']
 })
@@ -28,9 +51,11 @@ export class ViewPurchaseComponent {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
+  private confirmDialog = inject(ConfirmDialogService);
   private fileService = inject(FileService);
   private supplierService = inject(SupplierService)
   private employeeService = inject(EmployeeService)
+  private datePipe = inject(DatePipe);
 
   purchase: PurchaseData | null = null;
   isLoading = true;
@@ -45,12 +70,39 @@ export class ViewPurchaseComponent {
   canApprovePR = false;
   currentEmployeeId: string | null = null;
 
+  // view model — rebuilt by buildView() whenever the purchase or supplier list changes
+  tab = 'items';
+  readonly tabs: DetailViewTab[] = [
+    { id: 'items', label: 'Items' },
+    { id: 'summary', label: 'Summary' },
+    { id: 'history', label: 'Approval history' },
+  ];
+  breadcrumbs: DetailViewBreadcrumb[] = [];
+  badges: DetailViewBadge[] = [];
+  stats: DetailViewStat[] = [];
+  subtitle = '';
+  avatarText = 'PR';
+  sidebarSections: DetailOverviewSection[] = [];
+  itemColumns: DetailTableColumn[] = [];
+  itemRows: Record<string, any>[] = [];
+  summaryMetrics: DetailMetric[] = [];
+  historyEntries: DetailTimelineEntry[] = [];
+
+  get isManual(): boolean {
+    return this.purchase?.sourceType === 'manual';
+  }
+
+  get dealId(): string | null {
+    return (this.purchase as any)?.jobId?.quoteId?.dealData?.dealId || null;
+  }
+
   ngOnInit(): void {
     this.loadPurchase();
 
     this.supplierService.supplierList().subscribe({
       next: (res) => {
         this.suppliersList.set(res.data)
+        this.buildView();
       }, error: (error) => {
         console.log(error);
       }
@@ -82,23 +134,131 @@ export class ViewPurchaseComponent {
     if (!this.purchaseId) {
       this.isLoading = false;
       this.notificationService.error('Invalid Purchase Id');
-      this.router.navigate(['/purchase/pendings']);
+      this.router.navigate(['/purchase/pr']);
       return;
     }
 
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
         this.purchase = response.data;
-        console.log(response, 'response') 
-        console.log(this.purchase, 'this.purchase')
+        this.buildView();
         this.isLoading = false;
       },
       error: (error) => {
         this.notificationService.error('Failed to load purchase details');
         console.error('Error loading purchase:', error);
         this.isLoading = false;
-        this.router.navigate(['/purchase/pendings']);
+        this.router.navigate(['/purchase/pr']);
       }
+    });
+  }
+
+  private money(value: number | null | undefined): string {
+    const n = Number(value) || 0;
+    const formatted = n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return this.purchase?.currency ? `${formatted} ${this.purchase.currency}` : formatted;
+  }
+
+  private fullName(person: any): string {
+    return person?.firstName ? `${person.firstName} ${person.lastName ?? ''}`.trim() : '-';
+  }
+
+  private buildView(): void {
+    const p: any = this.purchase;
+    if (!p) return;
+
+    const manual = this.isManual;
+    const prCost = (p.totalPRCost || 0) - (p.totalDiscountReceived || 0);
+    const profit = this.getProfitMargin(p.lpoValue || 0, prCost);
+    const diff = (profit || 0) - (p.dealProfit || 0);
+
+    this.breadcrumbs = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR', link: '/purchase/pr' }, { label: p.purchaseNo }];
+    this.badges = p.status ? [{ label: p.status, tone: STATUS_TONES[p.status] ?? 'neutral' }] : [];
+    if (manual) this.badges.push({ label: 'General purchase', tone: 'info' });
+    this.subtitle = manual ? (p.supplierId?.supplierName || '') : (p.customerId?.companyName || '');
+
+    this.stats = manual
+      ? [{ label: 'Total LPO value', value: this.money(p.totalLpo) }]
+      : [
+          { label: 'LPO value', value: this.money(p.lpoValue) },
+          { label: 'Cost as per PR', value: this.money(prCost) },
+          { label: 'Cost as per deal sheet', value: this.money(p.totalDealCost) },
+          { label: 'Profit margin', value: this.money(profit), danger: profit < 0 },
+          { label: 'Difference in profit', value: this.money(diff), danger: diff < 0 },
+        ];
+
+    this.sidebarSections = [
+      {
+        title: 'Purchase',
+        fields: [
+          { type: 'field', label: 'Purchase No', value: p.purchaseNo, numeric: true },
+          { type: 'field', label: 'Job ID', value: p.jobId?.jobId?.jobId || p.jobId?.jobId, visible: !manual },
+          { type: 'field', label: 'Deal Sheet ID', value: this.dealId || '-', visible: !manual },
+          { type: 'field', label: 'Supplier', value: p.supplierId?.supplierName || '-', visible: manual },
+          { type: 'field', label: 'Created By', value: this.fullName(p.createdBy) },
+          { type: 'field', label: 'Created On', value: this.datePipe.transform(p.createdAt, 'dd MMM yyyy') },
+          { type: 'field', label: 'Approved On', value: this.datePipe.transform(p.approvedDate, 'dd MMM yyyy'), visible: !!p.approvedDate },
+        ],
+      },
+      {
+        title: 'Customer',
+        visible: !manual,
+        fields: [
+          { type: 'field', label: 'Customer', value: p.customerId?.companyName },
+          { type: 'field', label: 'Sales Manager', value: this.fullName(p.jobId?.quoteId?.createdBy) },
+          { type: 'field', label: 'Procurement Person', value: this.fullName(p.procurementPerson) },
+        ],
+      },
+    ];
+
+    this.itemColumns = [
+      { key: 'item', label: 'Item', type: 'stack', subKey: 'partNo' },
+      ...(manual || !p.jobId?._id ? [] : [{ key: 'tag', label: '', type: 'badge', badgeTones: { New: 'info', Merged: 'good' } } as DetailTableColumn]),
+      { key: 'qty', label: 'Qty', type: 'number', align: 'right' },
+      { key: 'unitCost', label: 'Unit cost', type: 'currency' },
+      { key: 'totalCost', label: 'Total cost', type: 'currency', total: true, emphasis: true },
+      ...(manual ? [] : [
+        { key: 'unitSelling', label: 'Unit selling', type: 'currency' },
+        { key: 'totalSelling', label: 'Total selling', type: 'currency', total: true },
+        { key: 'supplier', label: 'Approved supplier' },
+        { key: 'eta', label: 'ETA terms', wrap: true },
+      ] as DetailTableColumn[]),
+    ];
+
+    this.itemRows = this.getSelectedRows(p.items).map((row) => ({
+      item: row.detail.detail,
+      partNo: this.formatPartNumber(row.detail.partNo),
+      tag: this.getItemStatus(row.detail)?.label ?? '',
+      qty: row.detail.quantity,
+      unitCost: row.selectedSupplier.unitPrice,
+      totalCost: (row.selectedSupplier.unitPrice || 0) * (row.detail.quantity || 0),
+      unitSelling: row.detail.unitSellingPrice,
+      totalSelling: (row.detail.quantity || 0) * (row.detail.unitSellingPrice || 0),
+      supplier: row.selectedSupplier.supplierName,
+      eta: row.selectedSupplier.etaTerms || '-',
+    }));
+
+    this.summaryMetrics = manual
+      ? [{ label: 'Total LPO value', value: this.money(p.totalLpo) }]
+      : [
+          { label: 'LPO value', value: this.money(p.lpoValue) },
+          { label: 'Total discount received', value: this.money(p.totalDiscountReceived), tone: p.totalDiscountReceived ? 'good' : undefined },
+          { label: 'Total cost as per PR', value: this.money(prCost) },
+          { label: 'Total cost as per deal sheet', value: this.money(p.totalDealCost) },
+          { label: 'Profit margin', value: this.money(profit), tone: profit < 0 ? 'bad' : 'good' },
+          { label: 'Deal profit', value: this.money(p.dealProfit) },
+          { label: 'Difference in profit', value: this.money(diff), tone: diff < 0 ? 'bad' : diff > 0 ? 'good' : undefined },
+        ];
+
+    this.historyEntries = (p.approvalStatus ?? []).map((approval: any) => {
+      const by = approval.updatedBy ? this.fullName(approval.updatedBy) : 'Pending';
+      const when = approval.updatedAt ? this.datePipe.transform(approval.updatedAt, 'dd MMM yyyy, h:mm a') : '';
+      const tone = approval.status === 'approved' ? 'good' : approval.status === 'rejected' ? 'bad' : 'neutral';
+      return {
+        text: `Step ${approval.step} ${approval.status || 'pending'}`,
+        meta: [by, when].filter(Boolean).join(' · '),
+        tone,
+      } as DetailTimelineEntry;
     });
   }
 
@@ -171,216 +331,149 @@ export class ViewPurchaseComponent {
 
   hasNewItemsToMerge(): boolean {
     if (!this.purchase?.items) return false;
-    
-    return this.purchase.items.some((item: any) => 
+
+    return this.purchase.items.some((item: any) =>
       item.itemDetails?.some((detail: any) => detail.isNewlyAdded && !detail.merged)
     );
   }
 
   hasMergedItems(): boolean {
     if (!this.purchase?.items) return false;
-    
-    return this.purchase.items.some((item: any) => 
+
+    return this.purchase.items.some((item: any) =>
       item.itemDetails?.some((detail: any) => detail.merged)
     );
   }
 
-  getItemStatus(detail: any): { label: string; class: string } | null {
-    if (detail.merged) {
-      return { label: 'Merged', class: 'bg-green-100 text-green-700' };
-    }
-    if (detail.isNewlyAdded) {
-      return { label: 'New', class: 'bg-blue-100 text-blue-700' };
-    }
+  getItemStatus(detail: any): { label: string } | null {
+    if (detail.merged) return { label: 'Merged' };
+    if (detail.isNewlyAdded) return { label: 'New' };
     return null;
   }
 
-  onMergeItems(): void {
+  async onMergeItems(): Promise<void> {
     if (!this.purchase?._id) return;
 
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Merge Items to Deal Sheet',
-        description: 'Are you sure you want to merge all newly added items to the deal sheet?',
-        icon: 'heroArrowRightCircle',
-        IconColor: 'green'
-      }
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Merge items to deal sheet',
+      message: 'All newly added items on this purchase request will be merged into the deal sheet.',
+      confirmLabel: 'Merge items',
     });
+    if (!confirmed) return;
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.isMerging = true;
-        this.purchaseService.mergeItemsToDealSheet(this.purchaseId).subscribe({
-          next: () => {
-            this.loadPurchase();
-            this.isMerging = false;
-            this.notificationService.success('Items merged to deal sheet successfully');
-          },
-          error: (error) => {
-            this.notificationService.error(error.error?.message || 'Failed to merge items');
-            this.isMerging = false;
-          }
-        });
+    this.isMerging = true;
+    this.purchaseService.mergeItemsToDealSheet(this.purchaseId).subscribe({
+      next: () => {
+        this.loadPurchase();
+        this.isMerging = false;
+        this.notificationService.success('Items merged to deal sheet successfully');
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to merge items');
+        this.isMerging = false;
       }
     });
   }
 
-  onRevokeMerge(): void {
+  async onRevokeMerge(): Promise<void> {
     if (!this.purchase?._id) return;
 
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Revoke Merged Items',
-        description: 'Are you sure you want to revoke the merged items from the deal sheet?',
-        icon: 'heroArrowLeftCircle',
-        IconColor: 'orange'
-      }
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'warning',
+      title: 'Revoke merged items',
+      message: 'The merged items will be removed from the deal sheet.',
+      confirmLabel: 'Revoke merge',
     });
+    if (!confirmed) return;
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.isRevoking = true;
-        this.purchaseService.revokeMergedItems(this.purchaseId).subscribe({
-          next: () => {
-            this.loadPurchase();
-            this.isRevoking = false;
-            this.notificationService.success('Merged items revoked successfully');
-          },
-          error: (error) => {
-            this.notificationService.error(error.error?.message || 'Failed to revoke merged items');
-            this.isRevoking = false;
-          }
-        });
+    this.isRevoking = true;
+    this.purchaseService.revokeMergedItems(this.purchaseId).subscribe({
+      next: () => {
+        this.loadPurchase();
+        this.isRevoking = false;
+        this.notificationService.success('Merged items revoked successfully');
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to revoke merged items');
+        this.isRevoking = false;
       }
     });
   }
 
-  onApprove() {
+  async onApprove(): Promise<void> {
     if (!this.purchase?._id || !this.canApproveOrReject()) return;
 
-    const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
-      data: {
-        title: 'Approve Purchase',
-        description: 'Are you sure you want to approve this purchase? You can optionally add a comment.',
-        icon: 'heroCheckCircle',
-        iconColor: 'green',
-        confirmButtonText: 'Approve',
-        requireComment: false,
-        commentLabel: 'Approval Comment',
-        commentPlaceholder: 'Enter your approval comment here...'
-      }
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Approve purchase request',
+      message: 'This purchase request will be approved and move on to LPO.',
+      details: [
+        { label: 'PR No', value: this.purchase.purchaseNo || '-' },
+        { label: 'LPO value', value: this.money(this.isManual ? (this.purchase as any).totalLpo : (this.purchase as any).lpoValue) },
+      ],
+      confirmLabel: 'Approve',
+      reason: 'optional',
+      reasonLabel: 'Approval comment',
     });
+    if (!confirmed) return;
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result?.isConfirmed) {
-        this.isApproving = true;
-        this.purchaseService.updatePurchaseStatus(
-          this.purchaseId,
-          'approved',
-          result.comment,
-        ).subscribe({
-          next: (res) => {
-            this.notificationService.success('Purchase approved successfully');
-            this.isApproving = false;
-            if (res?.data) {
-              this.purchase = res.data;
-            }
-            this.router.navigate(['/purchase/pendings']);
-          },
-          error: (error) => {
-            this.notificationService.error(error.error?.message || 'Failed to approve purchase');
-            this.isApproving = false;
-          }
-        });
-      }
-    });
-  }
-
-  onReject() {
-    if (!this.purchase?._id || !this.canApproveOrReject()) return;
-
-    const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
-      data: {
-        title: 'Reject Purchase',
-        description: 'Are you sure you want to reject this purchase? Please provide a reason.',
-        icon: 'heroXCircle',
-        iconColor: 'red',
-        confirmButtonText: 'Reject',
-        requireComment: true,
-        commentLabel: 'Rejection Reason',
-        commentPlaceholder: 'Enter your rejection reason here...'
-      }
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result?.isConfirmed) {
-        if (!result.comment || result.comment.trim() === '') {
-          this.notificationService.error('Rejection reason is required');
-          return;
+    this.isApproving = true;
+    this.purchaseService.updatePurchaseStatus(this.purchaseId, 'approved', reason ?? '').subscribe({
+      next: (res) => {
+        this.notificationService.success('Purchase approved successfully');
+        this.isApproving = false;
+        if (res?.data) {
+          this.purchase = res.data;
         }
-        
-        this.isRejecting = true;
-        this.purchaseService.updatePurchaseStatus(
-          this.purchaseId,
-          'rejected',
-          result.comment,
-        ).subscribe({
-          next: (res) => {
-            this.notificationService.success('Purchase rejected successfully');
-            this.isRejecting = false;
-            if (res?.data) {
-              this.purchase = res.data;
-            }
-            this.router.navigate(['/purchase/pendings']);
-          },
-          error: (error) => {
-            this.notificationService.error(error.error?.message || 'Failed to reject purchase');
-            this.isRejecting = false;
-          }
-        });
+        this.router.navigate(['/purchase/pr']);
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to approve purchase');
+        this.isApproving = false;
       }
     });
   }
 
-  getTotalUnitCost(items: any[]): number {
-    if (!Array.isArray(items)) return 0;
+  async onReject(): Promise<void> {
+    if (!this.purchase?._id || !this.canApproveOrReject()) return;
 
-    return items.reduce((total, item) => {
-      if (Array.isArray(item.itemDetails)) {
-        const itemTotal = item.itemDetails.reduce((subTotal: any, detail: any) => {
-          return subTotal + (detail.unitCost || 0);
-        }, 0);
-        return total + itemTotal;
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: 'Reject purchase request',
+      message: 'This purchase request will be sent back to its creator.',
+      details: [{ label: 'PR No', value: this.purchase.purchaseNo || '-' }],
+      confirmLabel: 'Reject',
+      reason: true,
+      reasonLabel: 'Rejection reason',
+    });
+    if (!confirmed) return;
+    if (!reason || reason.trim() === '') {
+      this.notificationService.error('Rejection reason is required');
+      return;
+    }
+
+    this.isRejecting = true;
+    this.purchaseService.updatePurchaseStatus(this.purchaseId, 'rejected', reason).subscribe({
+      next: (res) => {
+        this.notificationService.success('Purchase rejected successfully');
+        this.isRejecting = false;
+        if (res?.data) {
+          this.purchase = res.data;
+        }
+        this.router.navigate(['/purchase/pr']);
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to reject purchase');
+        this.isRejecting = false;
       }
-      return total;
-    }, 0);
-  }
-
-  getSelectedTotal(items: any[]): number {
-    if (!Array.isArray(items)) return 0;
-
-    return items.reduce((total, item) => {
-      if (Array.isArray(item.itemDetails)) {
-        const itemTotal = item.itemDetails.reduce((subTotal: any, detail: any) => {
-          if (Array.isArray(detail.comparisons)) {
-            const selected = detail.comparisons.find((c: any) => c.selected === true);
-            if (selected) {
-              return subTotal + (selected.unitPrice * selected.quantity);
-            }
-          }
-          return subTotal;
-        }, 0);
-        return total + itemTotal;
-      }
-      return total;
-    }, 0);
+    });
   }
 
   getProfitMargin(totalCost: number, discountedCost: number): number {
     if (!discountedCost || discountedCost <= 0) return 0;
     return (totalCost - discountedCost) || 0;
   }
-
 
   onEdit() {
     if (!this.purchase?._id) return;
@@ -460,23 +553,6 @@ export class ViewPurchaseComponent {
     }
     const code = partNo?.partNo || '';
     return code || '-';
-  }
-
-  onExit() {
-    this.router.navigate(['/purchase/pendings']);
-  }
-
-  getStatusClass(status?: string): string {
-    switch (status) {
-      case 'Pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Approved':
-        return 'bg-green-100 text-green-800';
-      case 'Rejected':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
   }
 
   showStatusHistory(): void {

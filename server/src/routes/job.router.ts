@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getJobSalesPerson, jobList, totalJob, updateJobStatus, deleteJob, jobSheets, oneJobSheet, updateAllocateType, getDropdownListForTechnical, getUnassignedProjectAndAMCJobs, transferProcurementPerson, getJobHistory, jobSheetsWithCompletedPO, jobSheetsWithApprovedPR, jobSheetsWithApprovedPOAndNoGRN, getPreviousJobItemsByClient } from "../controllers/job.controller";
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const jobRouter = Router()
 
 // Lightweight Job ID lookups are used as reference-data dropdowns by other
@@ -15,10 +15,10 @@ jobRouter.get('/previousJobItems/:clientId', getPreviousJobItemsByClient)
 jobRouter.use(requirePrivilege("jobSheet"));
 
 jobRouter.post('/getJobs', jobList)
-jobRouter.patch('/status/:jobId', updateJobStatus)
+jobRouter.patch('/status/:jobId', requireUnlessDenied("jobSheet", "statusUpdate"), updateJobStatus)
 jobRouter.get('/total', totalJob)
 jobRouter.get('/sales', getJobSalesPerson)
-jobRouter.post('/delete', deleteJob)
+jobRouter.post('/delete', requireUnlessDenied("jobSheet", "delete"), deleteJob)
 jobRouter.get('/jobIdDatas/:id', oneJobSheet)
 jobRouter.post('/updateAllocateType', requirePrivilege("jobSheet", "allocateJobs"), updateAllocateType)
 jobRouter.get('/technical', getDropdownListForTechnical)

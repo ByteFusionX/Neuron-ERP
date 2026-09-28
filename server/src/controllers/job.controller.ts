@@ -23,7 +23,6 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
 
         let matchFilters: any = {
             isDeleted: { $ne: true },
-            allocateStatus,
             $and: [
                 {
                     $or: [
@@ -36,8 +35,12 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
             ]
         };
 
+        if (allocateStatus) {
+            matchFilters.allocateStatus = allocateStatus;
+        }
+
         let sortAggregate = {}
-        
+
 
         if (allocateStatus == "OpenToWork") {
             sortAggregate = { updatedDate : -1 }

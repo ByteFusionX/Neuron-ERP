@@ -1,343 +1,153 @@
-<div class="bg-white m-6 rounded-lg">
-    <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">{{ isEditing ? 'Edit' : 'Create' }} Purchase Requisition</h3>
-    </div>
-    <form [formGroup]="purchaseForm">
-        <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
-            <div class="flex items-center gap-2 mb-4" *ngIf="!isEditing">
-                <input type="checkbox" id="isJobLess" class="h-4 w-4"
-                    [checked]="isJobLess" (change)="toggleJobLess($any($event.target).checked)" />
-                <label for="isJobLess" class="text-sm font-medium">Create without a Job</label>
-            </div>
-            <div class="flex flex-col md:flex-row md:mb-5 gap-3" *ngIf="!isJobLess">
-                @if(!isEditing) {
-                <app-select-dropdown [options]="jobSheets()" label="Job Id" optionLabel="jobId" optionValue="_id"
-                    formControlName="jobId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()"
-                    class="w-full" (onSelected)="onJobSelected($event)" [selected]="requestedJobId()">
-                </app-select-dropdown>
-                }@else {
-                <app-form-field label="Job Id" [control]="f['jobId']" [isSubmitted]="isSubmitted()" class="w-full"
-                    [readonly]="true">
-                </app-form-field>
-                }
-                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()" class="w-full"
-                    [readonly]="true">
-                </app-form-field>
-                <app-form-field label="Deal Sheet Id" [control]="f['dealSheetId']" [isSubmitted]="isSubmitted()"
-                    class="w-full" [readonly]="true">
-                </app-form-field>
-            </div>
-            <div class="flex flex-col md:flex-row md:mb-5 gap-3" *ngIf="isJobLess">
-                <app-form-field label="PR No" [control]="f['purchaseNo']" [isSubmitted]="isSubmitted()" class="w-full"
-                    [readonly]="true">
-                </app-form-field>
-                <app-form-field label="Created By" [control]="f['salesManager']" [isSubmitted]="isSubmitted()"
-                    class="w-full" [readonly]="true">
-                </app-form-field>
-                <app-select-dropdown [options]="suppliersList()" label="Supplier" optionLabel="supplierName"
-                    optionValue="_id" formControlName="supplierId" placeholder="Select Supplier"
-                    [selected]="f['supplierId'].value" class="w-full">
-                </app-select-dropdown>
-            </div>
-            <div class="flex flex-col md:flex-row mb-3 gap-3" *ngIf="!isJobLess">
-                <app-form-field label="Customer" [control]="f['customer']" [isSubmitted]="isSubmitted()" class="w-full"
-                    [readonly]="true">
-                </app-form-field>
-                <app-form-field label="Sales Manager" [control]="f['salesManager']" [isSubmitted]="isSubmitted()"
-                    class="w-full" [readonly]="true">
-                </app-form-field>
-            </div>
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 mb-5">
-                <thead class="text-xs text-gray-700 uppercase bg-violet-50">
-                    <tr>
-                        <th scope="col" resizable key="no" class=" border-l border-r border-t text-center">
-                            <div class="px-2 py-3">SL.NO</div>
-                        </th>
-                        <th scope="col" resizable key="itemDetails" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Item Details</div>
-                        </th>
-                        <th scope="col" resizable key="partNumber" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Part Number</div>
-                        </th>
-                        <th scope="col" resizable key="qty" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">QTY</div>
-                        </th>
-                        <th scope="col" resizable key="unitCost" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Unit Cost</div>
-                        </th>
-                        <th scope="col" resizable key="totalCost" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Total Cost</div>
-                        </th>
-                        <th *ngIf="!isJobLess" scope="col" resizable key="unitPrice" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Unit Selling Price</div>
-                        </th>
-                        <th *ngIf="!isJobLess" scope="col" resizable key="totalPrice" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Total Selling Price</div>
-                        </th>
-                        <th scope="col" resizable key="actions" class="border-l border-r border-t text-center">
-                            <div class="px-6 py-3">Actions</div>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <ng-container *ngIf="selectedJobSheet || isJobLess">
-                        <ng-container *ngIf="itemsList()?.length; else noItems">
-                            <!-- Table Content -->
-                            <ng-container *ngFor="let items of itemsList(); let i = index">
-                                <ng-container *ngFor="let item of items.itemDetails; let j = index">
-                                    <tr class="bg-white border-b text-gray-800 py-2" [ngClass]="{'bg-gray-50': item.fromMrRequest}" *ngIf="!isEditingItem(i, j)">
-                                        <td class="px-2 border text-center">{{ (i +1 ) * (j + 1) }}</td>
-                                        <td class="px-2 py-2 border text-center text-sm">
-                                            {{ item.detail }}
-                                            <span *ngIf="item.fromMrRequest" class="ml-1 text-xs text-violet-600">(MR)</span>
-                                        </td>
-                                        <td class="px-2 py-2 border text-center text-sm">{{ formatPartNumber(item.partNo) }}</td>
-                                        <td class="py-2 text-center">{{ item.quantity | numberFormatter }}</td>
-                                        <td class="px-2 py-2 border text-center" >
-                                            {{ item.unitCost | numberFormatter }} {{ currency() }}
-                                        </td>
-                                        <td class="px-2 py-2 border text-center">
-                                            {{ item.unitCost * item.quantity | numberFormatter }} {{ currency() }}
-                                        </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && !item.fromMrRequest">
-                                            {{ item.unitSellingPrice  | numberFormatter }} {{ currency() }}
-                                        </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && item.fromMrRequest">
-                                            <span class="text-gray-400">-</span>
-                                        </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && !item.fromMrRequest">
-                                            {{ (item.unitSellingPrice ) * item.quantity | numberFormatter }} {{ currency() }}
-                                        </td>
-                                        <td class="px-2 py-2 border text-center" *ngIf="!isJobLess && item.fromMrRequest">
-                                            <span class="text-gray-400">-</span>
-                                        </td>
-                                        <td class="px-2 py-2 border text-center">
-                                            <div class="flex items-center justify-center gap-2" *ngIf="!isJobLess">
-                                                <button type="button"
-                                                    [ngClass]="{'text-orange-500 hover:text-orange-600': !(item.comparisons?.length > 0), 'text-violet-600 hover:text-violet-700': item.comparisons?.length > 0}"
-                                                    class="text-violet-600 hover:text-violet-700 hover:underline"
-                                                    (click)="onComparisonClicks(item)">
-                                                    <ng-icon
-                                                        [name]="item.comparisons?.length > 0 ? 'heroCheck' : 'heroPlus'"
-                                                        class="text-sm"></ng-icon> Comparison
-                                                </button>
-                                            </div>
-                                            <div class="flex items-center justify-center gap-2" *ngIf="isJobLess">
-                                                <button type="button" class="text-violet-600 hover:text-violet-700"
-                                                    (click)="onEditItemClick(i, j)" title="Edit">
-                                                    <ng-icon name="heroPencilSquare" class="text-sm"></ng-icon>
-                                                </button>
-                                                <button type="button" class="text-red-600 hover:text-red-800"
-                                                    (click)="onDeleteItemClick(i, j)" title="Delete">
-                                                    <ng-icon name="heroTrash" class="text-sm"></ng-icon>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <tr *ngIf="isEditingItem(i, j)" class="bg-violet-50 border-b text-gray-800 py-2">
-                                        <td class="px-2 text-center border"></td>
-                                        <td class="px-2 py-2 text-center border">
-                                            <textarea class="px-2 py-1 rounded w-full outline-none" rows="2"
-                                                placeholder="Item Details" [(ngModel)]="editBuffer.detail" [ngModelOptions]="{standalone: true}"></textarea>
-                                        </td>
-                                        <td class="px-2 py-2 text-center border p-1">
-                                            <app-select-dropdown
-                                                [options]="partNumberOptions()"
-                                                optionLabel="label"
-                                                optionValue="value"
-                                                placeholder="Select Part Number"
-                                                [selected]="editBuffer.partNo"
-                                                (onSelected)="onEditPartNumberSelected($event)"
-                                                [defaultClass]="false"
-                                                class="w-full text-sm">
-                                            </app-select-dropdown>
-                                        </td>
-                                        <td class="px-2 py-2 text-center border">
-                                            <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
-                                                [(ngModel)]="editBuffer.quantity" [ngModelOptions]="{standalone: true}" placeholder="0" />
-                                        </td>
-                                        <td class="px-2 py-2 text-center border">
-                                            <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
-                                                [(ngModel)]="editBuffer.unitCost" [ngModelOptions]="{standalone: true}" placeholder="0" />
-                                        </td>
-                                        <td class="px-2 py-2 text-center border">
-                                            {{ (editBuffer.quantity || 0) * (editBuffer.unitCost || 0) | number:'1.2-2' }} {{ currency() }}
-                                        </td>
-                                        <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
-                                            <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
-                                                [(ngModel)]="editBuffer.unitSellingPrice" [ngModelOptions]="{standalone: true}" placeholder="0" />
-                                        </td>
-                                        <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
-                                            {{ (editBuffer.quantity || 0) * (editBuffer.unitSellingPrice || editBuffer.unitCost || 0) | number:'1.2-2' }} {{ currency() }}
-                                        </td>
-                                        <td class="px-2 py-2 border text-center">
-                                            <div class="flex items-center justify-center gap-2">
-                                                <button type="button" class="text-violet-600 hover:text-violet-700"
-                                                    (click)="onSaveEditedItem(i, j)" title="Save">
-                                                    <ng-icon name="heroCheck" class="text-sm"></ng-icon>
-                                                </button>
-                                                <button type="button" class="text-red-600 hover:text-red-800"
-                                                    (click)="onCancelEditItem()" title="Cancel">
-                                                    <ng-icon name="heroXMark" class="text-sm"></ng-icon>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </ng-container>
-                            </ng-container>
-                        </ng-container>
+<!-- Full page: used for /purchase/edit/:id. Create opens the same form in a drawer from the PR list. -->
+<div *ngIf="!drawer" class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-detail-view-shell
+    class="min-h-0 flex-1"
+    [breadcrumbs]="breadcrumbs"
+    avatarText="PR"
+    [title]="(isEditing ? 'Edit' : 'New') + ' purchase requisition'"
+    [badges]="badges()"
+    [subtitle]="headerSubtitle()"
+    [stats]="stats()"
+    [hasSidebar]="false"
+    [tabParam]="''"
+  >
+    <ng-container headerActions>
+      <app-action-button (click)="onDiscardClicks()">Discard</app-action-button>
+      <app-action-button *ngIf="!isEditing" (click)="onDraftClicks()">Save as draft</app-action-button>
+      <app-action-button variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
+    </ng-container>
 
-                        <!-- When no itemsList but selectedJobSheet exists -->
-                        <ng-template #noItems>
-                            <tr *ngIf="!isAddingItem">
-                                <td colspan="10" class="bg-gray-100 border">
-                                    <p class="text-center text-base p-2">Items empty</p>
-                                </td>
-                            </tr>
-                        </ng-template>
-
-                        <ng-container *ngIf="isAddingItem" [formGroup]="getNewItemGroup()">
-
-                            <tr [formGroup]="getNewItemDetailGroup()">
-                                <td class="px-2 text-center border"></td>
-                                <td class="px-2 py-2 text-center border">
-                                    <textarea class="px-2 py-1 rounded w-full outline-none" rows="2"
-                                        placeholder="Item Details" formControlName="detail"></textarea>
-                                </td>
-                                <td class="px-2 py-2 text-center border p-1">
-                                    <app-select-dropdown
-                                        formControlName="partNo"
-                                        [options]="partNumberOptions()"
-                                        optionLabel="label"
-                                        optionValue="value"
-                                        placeholder="Select Part Number"
-                                        [isSubmitted]="isSubmitted()"
-                                        (onSelected)="onPartNumberSelected($event, getNewItemDetailGroup())"
-                                        [footerLabel]="'Create Part Number'"
-                                        (footerAction)="onCreatePartNumber()"
-                                        [defaultClass]="false"
-                                        class="w-full text-sm">
-                                    </app-select-dropdown>
-                                </td>
-                                <td class="px-2 py-2 text-center border">
-                                    <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
-                                        formControlName="quantity" placeholder="0" />
-                                </td>
-                                <td class="px-2 py-2 text-center border">
-                                    <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
-                                        formControlName="unitCost" placeholder="0" />
-                                </td>
-                                <td class="px-2 py-2 text-center border">
-                                    {{ getNewItemDetailGroup().value.quantity *
-                                    getNewItemDetailGroup().value.unitCost | number:'1.2-2' }} {{ currency() }}
-                                </td>
-                                <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
-                                    <input type="number" class="px-2 py-1 text-center outline-none rounded w-full"
-                                        formControlName="unitSellingPrice" placeholder="0" />
-                                </td>
-                                <td *ngIf="!isJobLess" class="px-2 py-2 text-center border">
-                                    {{ getNewItemDetailGroup().value.quantity *
-                                    (getNewItemDetailGroup().value.unitSellingPrice || getNewItemDetailGroup().value.unitCost) | number:'1.2-2' }} {{ currency() }}
-                                </td>
-                                <td class="px-2 py-2 border text-center">
-                                    <button class="text-red-600 hover:text-red-800" (click)="onDiscardNewItem()">
-                                        <ng-icon name="heroXMark" class="text-md"></ng-icon>
-                                    </button>
-                                </td>
-                            </tr>
-                        </ng-container>
-
-                        <tr>
-                            <td [attr.colspan]="isJobLess ? 4 : 6" class="align-top bg-gray-100 border">
-                                <div class=" p-2 w-full h-full md:flex md:items-center justify-between ">
-                                    <div>
-                                        <button *ngIf="!isAddingItem"
-                                            class="bg-violet-600 text-white text-sm px-3 py-1.5 rounded hover:bg-violet-500"
-                                            (click)="onAddColumnClicks()">
-                                            + Additional Item
-                                        </button>
-                                        <button *ngIf="isAddingItem"
-                                            class="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-sm text-white rounded"
-                                            (click)="onSaveNewItem()">Save Item</button>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-2 py-2 border text-right text-sm text-gray-600">
-                                Total LPO Value
-                            </td>
-                            <td class="px-2 py-2 border text-center font-semibold">
-                                {{ purchaseForm.get('totalLpo')?.value | number: '1.2-2' }} {{ currency() }}
-                            </td>
-                            <td class="px-2 py-2 border text-center"></td>
-                        </tr>
-                    </ng-container>
-
-                    <ng-container *ngIf="!selectedJobSheet && !isJobLess">
-                        <tr>
-                            <td colspan="10" class="bg-gray-100 border">
-                                <p class="text-center text-base p-2">No job selected</p>
-                            </td>
-                        </tr>
-                    </ng-container>
-                </tbody>
-            </table>
-            <div class="w-full flex md:justify-between" *ngIf="!isJobLess">
-                <button [ngClass]="{'invisible': !selectedJobSheet}"
-                    class="bg-violet-600 text-white text-sm px-4 py-2 rounded hover:bg-violet-500 flex items-center gap-2 h-fit"
-                    (click)="onGetMaterialRequestsClicks()">
-                    <ng-icon name="heroPlus" class="text-sm"></ng-icon>
-                    Get Items from Material Requests
-                </button>
-                <div class="md:w-1/3 flex flex-col md:items-end mt-6">
-                    <div class="flex items-center gap-2">
-                        <ng-icon *ngIf="!checkMRExists()" name="heroInformationCircle" class="text-md text-orange-500"
-                            matTooltip="Not Uploaded" matTooltipPosition="above"
-                            matTooltipClass="mat-tooltip"></ng-icon>
-                        <button
-                            class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
-                            type="button" (click)="onMrRequestClicks()">MR Request</button>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <ng-icon *ngIf="!checkSupplierExists()" name="heroInformationCircle"
-                            class="text-md text-orange-500" matTooltip="Not Uploaded" matTooltipPosition="above"
-                            matTooltipClass="mat-tooltip"></ng-icon>
-                        <button
-                            class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
-                            type="button" (click)="onSupplierClicks()">Supplier
-                            Discount</button>
-                    </div>
-                </div>
-            </div>
-            <div class="w-full flex md:justify-between">
-                <button
-                    class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400"
-                    type="button" (click)="onFinalDasdboardClicks()">Final
-                    Dashboard</button>
-                <button *ngIf="!isJobLess"
-                    class="w-fit px-3 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 outline-none"
-                    type="button" (click)="onComparisonSummaryClicks()">Comparison
-                    Summary</button>
-            </div>
-        </div>
-        <ng-container >
-            <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
-                <div class="md:flex gap-3">
-                    @if(!isEditing) {
-                    <button
-                        class="w-fit px-3 py-2 text-sm border border-orange-500 hover:ring-1 hover:ring-orange-400 rounded mb-3"
-                        type="button" (click)="onDraftClicks()">Save
-                        & Exit</button>
-                    }
-                    <button
-                        class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
-                        type="button" (click)="onDiscardClicks()">Discard</button>
-                </div>
-                <button class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3"
-                    type="button" (click)="onSubmit()">Submit
-                    for Approval</button>
-            </div>
-        </ng-container>
-    </form>
+    <div tabBody><ng-container *ngTemplateOutlet="formBody"></ng-container></div>
+  </app-detail-view-shell>
 </div>
 
+<!-- Drawer: create from the PR list, same shape as the quotation create drawer. -->
+<app-sf-drawer #prDrawer *ngIf="drawer" [title]="(isEditing ? 'Edit' : 'New') + ' purchase requisition'" [subtitle]="drawerSubtitle()"
+  width="min(1200px, 96vw)" [open]="drawerShown" [dirty]="isDrawerDirty()" (closed)="closeDrawer()">
+  <span sfDrawerHeader class="flex flex-wrap gap-1.5">
+    <app-detail-badge *ngFor="let b of badges()" [label]="b.label" [tone]="b.tone || 'neutral'"></app-detail-badge>
+  </span>
+
+  <ng-container *ngTemplateOutlet="formBody"></ng-container>
+
+  <ng-container sfDrawerFooter>
+    <span *ngIf="purchaseId && !isEditing" class="mr-auto text-xs text-gray-400 dark:text-gray-500">Draft {{ f['purchaseNo'].value }} saved</span>
+    <app-action-button variant="secondary" (click)="prDrawer.requestClose()">Cancel</app-action-button>
+    <app-action-button *ngIf="!isEditing" variant="tool" (click)="onDraftClicks()">Save as draft</app-action-button>
+    <app-action-button variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
+  </ng-container>
+</app-sf-drawer>
+
+<ng-template #formBody>
+<form [formGroup]="purchaseForm" class="space-y-5" [class.mx-auto]="!drawer" [class.max-w-6xl]="!drawer" (ngSubmit)="$event.preventDefault()">
+
+  <!-- 1. source -->
+  <section class="cp-card">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="cp-title">{{ isJobLess ? 'General purchase' : 'Job' }}</h2>
+        <p class="cp-sub">{{ isJobLess ? 'A purchase that is not tied to a job — pick the supplier directly.' : 'Items, customer and pricing come from the job\'s deal sheet.' }}</p>
+      </div>
+      <app-sf-switch *ngIf="!isEditing" class="shrink-0" label="Create without a job"
+        [ngModel]="isJobLess" (ngModelChange)="toggleJobLess($event)" [ngModelOptions]="{ standalone: true }"></app-sf-switch>
+    </div>
+
+    <div class="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ng-container *ngIf="!isJobLess">
+        <app-sf-field *ngIf="!isEditing" label="Job" required class="sm:col-span-2">
+          <app-sf-combobox [options]="jobOptions()" placeholder="Search job ID"
+            [ngModel]="requestedJobId()" (ngModelChange)="onJobSelected($event)" [ngModelOptions]="{ standalone: true }"></app-sf-combobox>
+        </app-sf-field>
+        <app-detail-field *ngIf="isEditing" label="Job ID" stacked>{{ f['jobId'].value || '—' }}</app-detail-field>
+        <app-detail-field label="PR No" stacked numeric>{{ f['purchaseNo'].value || '—' }}</app-detail-field>
+        <app-detail-field label="Deal sheet" stacked>{{ f['dealSheetId'].value || '—' }}</app-detail-field>
+        <app-detail-field label="Customer" stacked>{{ f['customer'].value || '—' }}</app-detail-field>
+        <app-detail-field label="Sales manager" stacked>{{ f['salesManager'].value || '—' }}</app-detail-field>
+      </ng-container>
+
+      <ng-container *ngIf="isJobLess">
+        <app-detail-field label="PR No" stacked numeric>{{ f['purchaseNo'].value || '—' }}</app-detail-field>
+        <app-detail-field label="Created by" stacked>{{ f['salesManager'].value || '—' }}</app-detail-field>
+        <app-sf-field label="Supplier" class="sm:col-span-2">
+          <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Search supplier"></app-sf-combobox>
+        </app-sf-field>
+      </ng-container>
+    </div>
+  </section>
+
+  <!-- 2. items -->
+  <section class="cp-card !p-0">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div class="flex items-center gap-2">
+        <h2 class="cp-title">Items</h2>
+        <app-detail-badge *ngIf="itemCount()" [label]="itemCount() + ''" tone="neutral"></app-detail-badge>
+      </div>
+      <div class="flex flex-wrap gap-2" *ngIf="selectedJobSheet || isJobLess">
+        <app-action-button *ngIf="!isJobLess" variant="tool" (click)="onGetMaterialRequestsClicks()">From material requests</app-action-button>
+        <app-action-button variant="primary" [disabled]="!entryItems.dirty" (click)="onSaveEntryItems()">Save items</app-action-button>
+      </div>
+    </div>
+
+    <ng-container *ngIf="selectedJobSheet || isJobLess; else noJob">
+      <div class="border-t border-gray-100 dark:border-erp-border-dark p-4">
+        <app-item-entry mode="purchase" [optionalItems]="entryItems" [seedOptionalItems]="entrySeed()"
+          [currency]="currency() || 'QAR'" [showTotalsBar]="false" [supplierOptions]="supplierOptions()"
+          [allowCreateProduct]="true"
+          [lineLocked]="lineLocked" [lineBadge]="lineBadge" [compareLabel]="compareLabel"
+          [showCompareButton]="!isJobLess" (compareClicked)="onEntryCompare($event)"
+          (createProductRequested)="onCreatePartNumber()"></app-item-entry>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t border-gray-100 dark:border-erp-border-dark px-4 py-2.5">
+        <span class="text-xs font-medium uppercase tracking-wide text-gray-500">Total LPO value</span>
+        <span class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ liveTotalLpo() | number: '1.2-2' }} <span class="text-xs font-normal text-gray-500">{{ currency() }}</span></span>
+      </div>
+    </ng-container>
+
+    <ng-template #noJob>
+      <div class="border-t border-gray-100 dark:border-erp-border-dark !py-10 text-center text-gray-500 dark:text-gray-400">Select a job to load its items.</div>
+    </ng-template>
+  </section>
+
+  <!-- 3. workflow -->
+  <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <button *ngIf="!isJobLess" type="button" class="cp-tile" (click)="onMrRequestClicks()">
+      <span class="cp-tile-icon"><app-dp-icon name="send" size="w-4 h-4"></app-dp-icon></span>
+      <span class="min-w-0 flex-1 text-left">
+        <span class="cp-tile-title">MR request</span>
+        <span class="cp-tile-sub">{{ checkMRExists() ? 'Requested from engineer' : 'Not requested yet' }}</span>
+      </span>
+      <span class="h-2 w-2 shrink-0 rounded-full" [ngClass]="checkMRExists() ? 'bg-emerald-500' : 'bg-amber-400'"></span>
+    </button>
+    <button *ngIf="!isJobLess" type="button" class="cp-tile" (click)="onSupplierClicks()">
+      <span class="cp-tile-icon"><app-dp-icon name="tag" size="w-4 h-4"></app-dp-icon></span>
+      <span class="min-w-0 flex-1 text-left">
+        <span class="cp-tile-title">Supplier discount</span>
+        <span class="cp-tile-sub">{{ checkSupplierExists() ? 'Discounts recorded' : 'None recorded' }}</span>
+      </span>
+      <span class="h-2 w-2 shrink-0 rounded-full" [ngClass]="checkSupplierExists() ? 'bg-emerald-500' : 'bg-amber-400'"></span>
+    </button>
+    <button *ngIf="!isJobLess" type="button" class="cp-tile" (click)="onComparisonSummaryClicks()">
+      <span class="cp-tile-icon"><app-dp-icon name="chart" size="w-4 h-4"></app-dp-icon></span>
+      <span class="min-w-0 flex-1 text-left">
+        <span class="cp-tile-title">Comparison summary</span>
+        <span class="cp-tile-sub">Approved vs. all supplier quotes</span>
+      </span>
+    </button>
+    <button type="button" class="cp-tile" (click)="onFinalDasdboardClicks()">
+      <span class="cp-tile-icon"><app-dp-icon name="eye" size="w-4 h-4"></app-dp-icon></span>
+      <span class="min-w-0 flex-1 text-left">
+        <span class="cp-tile-title">Final dashboard</span>
+        <span class="cp-tile-sub">Review costs and profit</span>
+      </span>
+    </button>
+  </section>
+</form>
+</ng-template>
+
+
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
+
+<!-- Stacked above this drawer (or full page) so comparing quotes never navigates away from an in-progress PR. -->
+<app-comparison-sheet *ngIf="comparisonDrawerOpen" [drawer]="true" [purchaseIdInput]="comparisonDrawerPurchaseId" [selectedItemIdInput]="comparisonDrawerItemId"
+  (saved)="onComparisonDrawerSaved()" (closed)="onComparisonDrawerClosed()"></app-comparison-sheet>

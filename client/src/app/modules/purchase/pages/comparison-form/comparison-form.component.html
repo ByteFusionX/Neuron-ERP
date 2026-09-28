@@ -1,58 +1,53 @@
-<div class="overflow-y-auto">
-  <div class="px-5 py-3 border-b w-full flex justify-between">
-    <h3 class="text-md font-medium">Comparison Form</h3>
-    <button class="bg-gray-200 rounded flex items-center justify-center p-1" (click)="onCancel()"><ng-icon
-        name="heroXMark" class="text-md"></ng-icon></button>
-  </div>
-  <form [formGroup]="comparisonForm" (ngSubmit)="onSubmit()">
-    <div class="gap-3 border p-4 rounded-md flex flex-col">
-
-      <app-select-dropdown [options]="suppliers()" label="Supplier" optionLabel="supplierName" optionValue="_id"
-        formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()" class="w-full">
-      </app-select-dropdown>
-      <div class="flex gap-3">
-        <app-form-field label="QTY" type="number" [control]="f['quantity']" [isSubmitted]="isSubmitted()"
-          placeholder="Enter quantity" class="col-span-1"></app-form-field>
-
-        <app-form-field label="Unit Selling Cost" type="number" [control]="f['unitPrice']" [isSubmitted]="isSubmitted()"
-          placeholder="Enter unit cost" class="col-span-1"></app-form-field>
-
-        <app-form-field label="Total Selling Cost" type="number" [control]="f['totalCost']"
-          [isSubmitted]="isSubmitted()" placeholder="Auto Calculated" class="col-span-1"
-          [readonly]="true"></app-form-field>
-      </div>
-
-
-      <div class="flex flex-col">
-        <label for="etaTerms" class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">ETA
-          Terms</label>
-        <textarea class="p-2 rounded bg-gray-200 outline-none" rows="2" formControlName="etaTerms"
-          placeholder="Enter ETA Terms"></textarea>
-      </div>
-      <div class="flex flex-col">
-        <label for="paymentTerms" class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">Payment
-          Terms</label>
-        <textarea class="p-2 rounded bg-gray-200 outline-none" rows="2" formControlName="paymentTerms"
-          placeholder="Enter Payment Terms"></textarea>
-      </div>
-      <!-- <app-form-field label="ETA Terms" [control]="f['etaTerms']" [isSubmitted]="isSubmitted()"
-        placeholder="Enter ETA Terms" class="col-span-2"></app-form-field> -->
-      <!-- <app-form-field label="Payment Terms" [control]="f['paymentTerms']" [isSubmitted]="isSubmitted()"
-        placeholder="Enter payment terms" class="col-span-2"></app-form-field> -->
-
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+    <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-100 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-900">
+      <app-dp-icon name="building" size="w-5 h-5"></app-dp-icon>
+    </span>
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold leading-6">{{ isEditMode() ? 'Edit supplier quote' : 'Add supplier quote' }}</h2>
+      <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <ng-container *ngIf="itemName; else noItem">
+          Comparing prices for
+          <span class="inline-flex max-w-[18rem] items-center truncate rounded-md bg-gray-100 px-1.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ itemName }}</span>
+        </ng-container>
+        <ng-template #noItem>Enter a supplier's price and terms for this item.</ng-template>
+      </p>
     </div>
+    <button type="button" (click)="onCancel()" aria-label="Close"
+      class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+      <app-dp-icon name="close" size="w-4 h-4"></app-dp-icon>
+    </button>
+  </header>
 
-    <div class="border-t">
-      <div class="mx-5 my-3 flex justify-end items-center gap-3">
-        <!-- <button
-          class="w-fit px-5 py-2 text-sm border border-violet-500 rounded mb-3 hover:ring-1 hover:ring-violet-400 disabled:border-gray-500 disabled:ring-0"
-          type="button">Clear</button> -->
-        <div class="flex gap-3">
-          <button type="button" class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded"
-            (click)="onCancel()">Discard</button>
-          <button class="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded">Submit</button>
+  <form id="comparison-form" [formGroup]="comparisonForm" (ngSubmit)="onSubmit()" novalidate class="overflow-y-auto px-6 py-5">
+    <div class="grid gap-4 sm:grid-cols-3">
+      <app-sf-field label="Supplier" [control]="f['supplierId']" full>
+        <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Search supplier"></app-sf-combobox>
+      </app-sf-field>
+
+      <app-sf-field label="Quantity" [control]="f['quantity']">
+        <app-sf-number formControlName="quantity" placeholder="0"></app-sf-number>
+      </app-sf-field>
+      <app-sf-field label="Unit price" [control]="f['unitPrice']">
+        <app-sf-number formControlName="unitPrice" placeholder="0.00" [stepper]="false"></app-sf-number>
+      </app-sf-field>
+      <app-sf-field label="Total cost" hint="Quantity × unit price">
+        <div class="flex h-9 items-center justify-end rounded-lg bg-gray-50 px-3 text-[13px] font-semibold tabular-nums text-gray-900 ring-1 ring-inset ring-gray-200 dark:bg-white/5 dark:text-gray-100 dark:ring-erp-border-dark">
+          {{ (f['totalCost'].value || 0) | number: '1.2-2' }}
         </div>
-      </div>
+      </app-sf-field>
+
+      <app-sf-field label="ETA terms" [control]="f['etaTerms']" full>
+        <app-sf-textarea formControlName="etaTerms" placeholder="e.g. 2–3 weeks from LPO" [rows]="2" autoresize noEnter></app-sf-textarea>
+      </app-sf-field>
+      <app-sf-field label="Payment terms" [control]="f['paymentTerms']" full>
+        <app-sf-textarea formControlName="paymentTerms" placeholder="e.g. 30 days credit" [rows]="2" autoresize noEnter></app-sf-textarea>
+      </app-sf-field>
     </div>
   </form>
+
+  <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+    <app-action-button variant="secondary" (click)="onCancel()">Cancel</app-action-button>
+    <app-action-button variant="primary" type="submit" form="comparison-form">{{ isEditMode() ? 'Save changes' : 'Add quote' }}</app-action-button>
+  </footer>
 </div>

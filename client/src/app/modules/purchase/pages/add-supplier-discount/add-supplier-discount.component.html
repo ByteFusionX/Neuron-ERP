@@ -1,28 +1,29 @@
-<div class="">
-    <div class="px-5 py-3 border-b w-full flex justify-between">
-        <h3 class="text-md font-medium">New Supplier Discount</h3>
-        <button class="bg-gray-200 rounded flex items-center justify-center p-1" (click)="onCloseClicks()"><ng-icon
-                name="heroXMark" class="text-md"></ng-icon></button>
+<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
+  <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
+    <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-100 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-900">
+      <app-dp-icon name="tag" size="w-5 h-5"></app-dp-icon>
+    </span>
+    <div class="min-w-0 flex-1">
+      <h2 class="text-base font-semibold leading-6">New supplier discount</h2>
+      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Record a discount received from a supplier on this purchase.</p>
     </div>
-    <form [formGroup]="supplierForm" (ngSubmit)="onSubmit()">
-        <div class="m-5">
-            <app-select-dropdown [options]="suppliers()" label="Supplier" optionLabel="supplierName" optionValue="_id"
-                formControlName="supplierId" placeholder="Select Job Id" [isSubmitted]="isSubmitted()"
-                class="w-full -m-1">
-            </app-select-dropdown>
-            <!-- <app-radio-group label="Discount Type" [options]="discountTypes" formControlName="discountType"
-                [isSubmitted]="isSubmitted()" [showOtherOption]="true" class="w-full" [showOtherOption]="false">
-            </app-radio-group> -->
-            <app-form-field label="Discount" [control]="f['discount']" [isSubmitted]="isSubmitted()"
-                placeholder="Enter Discount Value" class="w-full" type="number">
-            </app-form-field>
-        </div>
-        <div class="border-t">
-            <div class="mx-5 my-3 flex justify-end items-center gap-3">
-                <button class="px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm rounded"
-                    (click)="onCloseClicks()" type="button">Discard</button>
-                <button class="px-3 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded">Submit</button>
-            </div>
-        </div>
-    </form>
+    <button type="button" (click)="onCloseClicks()" aria-label="Close"
+      class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+      <app-dp-icon name="close" size="w-4 h-4"></app-dp-icon>
+    </button>
+  </header>
+
+  <form id="supplier-discount-form" [formGroup]="supplierForm" (ngSubmit)="onSubmit()" novalidate class="space-y-4 overflow-y-auto px-6 py-5">
+    <app-sf-field label="Supplier" [control]="f['supplierId']">
+      <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Search supplier"></app-sf-combobox>
+    </app-sf-field>
+    <app-sf-field label="Discount" [control]="f['discount']">
+      <app-sf-number formControlName="discount" placeholder="0.00" [stepper]="false"></app-sf-number>
+    </app-sf-field>
+  </form>
+
+  <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
+    <app-action-button variant="secondary" (click)="onCloseClicks()">Cancel</app-action-button>
+    <app-action-button variant="primary" type="submit" form="supplier-discount-form">Add discount</app-action-button>
+  </footer>
 </div>

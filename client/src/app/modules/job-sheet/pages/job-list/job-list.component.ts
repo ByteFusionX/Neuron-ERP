@@ -1,657 +1,530 @@
 import { HttpEventType } from '@angular/common/http';
-import { Component } from '@angular/core';
-import { MatTableDataSource, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow } from '@angular/material/table';
-import { BehaviorSubject, Observable, Subscription, catchError, tap, throwError } from 'rxjs';
-import { JobService } from 'src/app/core/services/job/job.service';
-import { JobStatus, JobTable, allocateStatus, allocateType, getJob } from 'src/app/shared/interfaces/job.interface';
-import { saveAs } from 'file-saver'
-import { ToastrService } from 'ngx-toastr';
+import { AsyncPipe, DatePipe, NgClass, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { Component, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { FormBuilder, FormControl, FormsModule } from '@angular/forms';
-import { GeneratePdfReport } from 'src/app/core/services/generateReport.service';
+import { ActivatedRoute, Router } from '@angular/router';
+import { BehaviorSubject, Observable, Subscription, forkJoin, of } from 'rxjs';
+import { ToastrService } from 'ngx-toastr';
+import * as FileSaver from 'file-saver';
+
+import { JobService } from 'src/app/core/services/job/job.service';
+import { JobHistoryService } from 'src/app/core/services/job/job-history.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
-import { getQuotatation, Quotatation } from 'src/app/shared/interfaces/quotation.interface';
-import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
-import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
-import { LoadingBarService } from '@ngx-loading-bar/core';
-import { getCreators } from 'src/app/shared/interfaces/employee.interface';
-import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
-import * as pdfMake from 'pdfmake/build/pdfmake';
-import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
-import { ActivatedRoute, Router, NavigationEnd } from '@angular/router';
-import { filter } from 'rxjs/operators';
-import { NgIf, NgFor, AsyncPipe, DatePipe } from '@angular/common';
-import { NgIcon } from '@ng-icons/core';
-import { MatMenuTrigger, MatMenu } from '@angular/material/menu';
-import { GenerateReportComponent } from '../../../../shared/components/generate-report/generate-report.component';
-import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
-import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
-import { MatTooltip } from '@angular/material/tooltip';
-import { MatProgressBar } from '@angular/material/progress-bar';
-import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
-import { NumberFormatterPipe as NumberFormatterPipe_1 } from '../../../../shared/pipes/numFormatter.pipe';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AllocateTypeModalComponent } from '../allocate-type-modal/allocate-type-modal.component';
-import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { MrRequestComponent } from 'src/app/modules/purchase/pages/mr-request/mr-request.component';
-import { JobHistoryModalComponent } from 'src/app/shared/components/job-history-modal/job-history-modal.component';
+import { TransferProcurementPersonComponent } from '../transfer-procurement-person/transfer-procurement-person.component';
+
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import {
+  DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridColumn,
+  DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView
+} from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailOverviewSection, DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
+import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
+
+import { allocateStatus, filterJob, getJob, JobTable } from 'src/app/shared/interfaces/job.interface';
+import { JobWorkflowTimeline, TimelineEvent } from 'src/app/shared/interfaces/job-history.interface';
+import { environment } from 'src/environments/environment';
 
 @Component({
   selector: 'app-job-list',
   templateUrl: './job-list.component.html',
   styleUrls: ['./job-list.component.css'],
-  providers: [NumberFormatterPipe],
-  imports: [NgIf, NgIcon, MatMenuTrigger, MatMenu, GenerateReportComponent, FormsModule, NgSelectComponent, NgFor, NgOptionComponent, SkeltonLoadingComponent, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatTooltip, MatProgressBar, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, PaginationComponent, AsyncPipe, DatePipe, NumberFormatterPipe_1]
+  providers: [NumberFormatterPipe, DatePipe],
+  imports: [
+    NgIf, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe,
+    DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, ActionButtonComponent, ViewToggleComponent,
+  ],
 })
 export class JobListComponent {
+  rows: getJob[] = [];
+  columns: DataGridColumn<getJob>[] = [];
+  rowActions: DataGridRowAction<getJob>[] = [];
+  views: DataGridView<getJob>[] = [
+    { id: 'all', label: 'All', filters: [] },
+    { id: 'pending', label: 'Pending', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.Pending }] },
+    { id: 'open-to-work', label: 'Open To Work', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.OpenToWork }] },
+    { id: 'in-progress', label: 'In Progress', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.WorkInProgress }] },
+    { id: 'completed', label: 'Completed', filters: [{ id: 1, key: 'allocateStatus', op: 'eq', value: allocateStatus.Completed }] },
+  ];
+  bulkActions: DataGridBulkAction[] = [{ id: 'delete', label: 'Delete', variant: 'danger' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Job Sheet' }];
 
-  selectedDateFormat: string = "monthly";
-  selectedEmployee: string | null = null;
-  selectedFile!: string | undefined;
-  progress: number = 0
-  reportDate: string = '';
-  searchQuery: string = '';
+  detailLoading = false;
+  detailTabs: DataGridDetailTab[] = [
+    { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'comments', label: 'Comments', icon: 'calendar' },
+    { id: 'lpo', label: 'Documents', icon: 'eye' },
+    { id: 'workflow', label: 'Workflow', icon: 'activity' },
+  ];
 
-  isEnter: boolean = false;
-  lastStatus!: JobStatus;
-  jobStatuses = Object.values(JobStatus);
-  employees$!: Observable<getCreators[]>;
+  jobTitle = (r: getJob) => r.jobId ?? '';
+  jobSubtitle = (r: getJob) => r.clientDetails?.companyName ?? '';
 
-  totalLpoValue: number = 0;
-  total: number = 0;
-  page: number = 1;
-  row: number = 10;
-  currentMonthIndex: number = new Date().getMonth();
-  currentYear: string = new Date().getFullYear().toString();
+  readonly allocateStatusBadgeClasses: Record<string, string> = {
+    [allocateStatus.Pending]: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
+    [allocateStatus.OpenToWork]: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
+    [allocateStatus.WorkInProgress]: 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900 dark:border-violet-900',
+    [allocateStatus.Completed]: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
+  };
 
-  private subject = new BehaviorSubject<{ page: number, row: number }>({ page: this.page, row: this.row });
-
-  jobId: string | null = null
-
-  dataSource = new MatTableDataSource<getJob>()
-  filteredData = new MatTableDataSource<getJob>()
-
-  isLoading: boolean = true;
-  isEmpty: boolean = false;
-  isDeleteOption: boolean = false;
-  loader = this.loadingBar.useRef();
+  isLoading = true;
+  isFiltered = false;
+  isDeleteOption = false;
   canAllocateJobs = false;
-  isCompletedRoute = false;
+  canConvertToPurchase = false;
+  canTransferProcurementPerson = false;
 
+  total = 0;
+  totalLpoValue = 0;
+  private activeViewId = 'all';
+  page = 1;
+  row = 10;
+  searchQuery = '';
+  sortKey: string | null = null;
+  sortDir: 'asc' | 'desc' | null = null;
+  selectedEmployee: string | null = null;
+
+  private confirm = inject(ConfirmDialogService);
   private subscriptions = new Subscription();
 
-
-  constructor(private _jobService: JobService,
-    private toast: ToastrService,
-    private _dialog: MatDialog,
-    private _fb: FormBuilder,
-    private _generatePdfSerive: GeneratePdfReport,
+  constructor(
+    private _jobService: JobService,
+    private _jobHistoryService: JobHistoryService,
     private _employeeService: EmployeeService,
-    private _quotationService: QuotationService,
-    private loadingBar: LoadingBarService,
-    private router: Router,
-    private route: ActivatedRoute,
-    private purchaseService: PurchaseService,
-  ) { }
+    private _dialog: MatDialog,
+    private _router: Router,
+    private _route: ActivatedRoute,
+    private toast: ToastrService,
+    private numberFormat: NumberFormatterPipe,
+  ) {}
 
-  checkPrivileges(): void {
-    this._employeeService.employeeData$.subscribe((data) => {
-      if (data?.category?.privileges) {
-        this.canAllocateJobs = data.category.privileges.jobSheet?.allocateJobs || false;
-      }
-    });
-  }
-
-  ngOnInit() {
+  ngOnInit(): void {
     this.checkPrivileges();
-    this.isCompletedRoute = this.router.url.includes('/completed');
-    this.employees$ = this._jobService.getJobSalesPerson();
-    this.currentYear = new Date().getFullYear().toString();
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    this.currentMonthIndex = new Date().getMonth();
-    const currentMonthName = monthNames[this.currentMonthIndex];
+    this.buildColumns();
+    this.buildRowActions();
 
-    this.reportDate = `${currentMonthName} - ${this.currentYear}`;
-
-    // Read URL parameters
-    this.route.queryParams.subscribe(params => {
+    this._route.queryParams.subscribe((params) => {
       this.page = params['page'] ? parseInt(params['page']) : 1;
       this.row = params['row'] ? parseInt(params['row']) : 10;
       this.searchQuery = params['search'] || '';
       this.selectedEmployee = params['employee'] || null;
-      this.selectedStatus = params['status'] ? params['status'] : null;
-
-      // Update subject with the values from URL
-      this.subject.next({ page: this.page, row: this.row });
-
-      // If any filter is applied from URL, update the isEnter flag
-      if (this.searchQuery) {
-        this.isEnter = true;
-      }
+      this.activeViewId = this.views.some((v) => v.id === params['view']) ? params['view'] : 'all';
+      this.isFiltered = !!(this.searchQuery || this.selectedEmployee);
+      this.getJobs();
     });
+  }
 
-    // Reload data when route path changes (e.g., from /pending to /completed)
+  ngOnDestroy(): void {
+    this.subscriptions.unsubscribe();
+  }
+
+  private checkPrivileges(): void {
     this.subscriptions.add(
-      this.router.events.pipe(
-        filter(event => event instanceof NavigationEnd)
-      ).subscribe(() => {
-        if (this.router.url.includes('/job-sheet/pending') || this.router.url.includes('/job-sheet/completed')) {
-          this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-        }
+      this._employeeService.employeeData$.subscribe((data) => {
+        this.canAllocateJobs = data?.category?.privileges?.jobSheet?.allocateJobs || false;
+        this.canConvertToPurchase = data?.category?.privileges?.purchase?.create || false;
+        this.canTransferProcurementPerson = data?.category?.privileges?.jobSheet?.transferProcurementPerson || false;
+        this.isDeleteOption = data?.category?.role === 'superAdmin';
       })
     );
+  }
 
-    this.subscriptions.add(
-      this.subject.subscribe((data) => {
-        this.page = data.page;
-        this.row = data.row;
-        // Update URL parameters for pagination
-        this.updateUrlParams();
-        this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-      })
-    );
+  private buildColumns(): void {
+    this.columns = [
+      { key: 'updatedDate', label: 'Date', type: 'date', sortable: true, width: '120px' },
+      { key: 'jobId', label: 'Job Id', sortable: true },
+      { key: 'customerName', label: 'Customer', valueGetter: (r) => r.clientDetails?.companyName },
+      { key: 'description', label: 'Description', valueGetter: (r) => r.quotation?.subject },
+      { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
+      { key: 'department', label: 'Department', valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },
+      { key: 'quoteId', label: 'Quote Id', valueGetter: (r) => r.quotation?.quoteId },
+      { key: 'dealId', label: 'Deal Id', valueGetter: (r) => (r.quotation?.dealData as any)?.dealId ?? '' },
+      { key: 'procurementPerson', label: 'Procurement Person', valueGetter: (r) => this.fullName(r.procurementPerson) },
+      { key: 'lpoValue', label: 'LPO Value', valueGetter: (r) => `${this.numberFormat.transform(r.lpoValue ?? 0)} QAR` },
+      {
+        key: 'allocateStatus', label: 'Allocate Status', type: 'badge',
+        badgeClasses: this.allocateStatusBadgeClasses,
+      },
+    ];
+  }
 
+  private buildRowActions(): void {
+    this.rowActions = [
+      {
+        id: 'allocate', label: 'Allocate', icon: 'refresh', quick: true,
+        hidden: (r) => !this.canAllocateJobs || r.allocateStatus === allocateStatus.Completed,
+      },
+      {
+        id: 'delete', label: 'Delete', icon: 'trash', quick: true, variant: 'danger',
+        hidden: () => !this.isDeleteOption,
+      },
+    ];
+  }
+
+  private fullName(person?: { firstName?: string; lastName?: string } | null): string {
+    return person ? `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim() : '';
+  }
+
+  onViewChange(view: DataGridView<getJob>): void {
+    this.activeViewId = view.id;
+    this.refreshViewCounts();
+  }
+
+  private refreshViewCounts(): void {
+    this.views = this.views.map((v) => ({ ...v, count: v.id === this.activeViewId ? this.total : undefined, hideCount: v.id !== this.activeViewId }));
+  }
+
+  onQueryChange(query: DataGridQuery): void {
+    this.searchQuery = query.search;
+    this.page = query.page;
+    this.row = query.pageSize;
+    this.sortKey = query.sort.key;
+    this.sortDir = query.sort.direction;
+    this.isFiltered = !!this.searchQuery;
+    this.getJobs();
+    this.updateUrlParams();
+  }
+
+  private updateUrlParams(): void {
+    this._router.navigate([], {
+      relativeTo: this._route,
+      queryParams: {
+        page: this.page !== 1 ? this.page : null,
+        row: this.row !== 10 ? this.row : null,
+        search: this.searchQuery || null,
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  private currentAllocateStatus(query?: DataGridQuery): allocateStatus | null {
+    const view = this.views.find((v) => v.id === this.activeViewId);
+    const filter = view?.filters?.find((f) => f.key === 'allocateStatus');
+    return (filter?.value as allocateStatus) ?? null;
+  }
+
+  getJobs(): void {
+    this.isLoading = true;
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((employee) => {
-        if (employee?.category.role == 'superAdmin') {
-          this.isDeleteOption = true;
-        }
-      })
-    );
-  }
+        const access = employee?.category?.privileges?.jobSheet?.viewReport;
+        const userId = employee?._id;
 
-  selectedStatus!: number | null;
+        const filterData: filterJob = {
+          search: this.searchQuery,
+          page: this.page,
+          row: this.row,
+          status: null,
+          salesPerson: this.selectedEmployee,
+          access,
+          userId,
+          allocateStatus: this.currentAllocateStatus(),
+          sortKey: this.sortKey,
+          sortDir: this.sortDir,
+        };
 
-  formData = this._fb.group({
-    fromDate: new FormControl(),
-    toDate: new FormControl(),
-  });
-
-  status: { value: string }[] = [
-    { value: 'Work In Progress' },
-    { value: 'Delivered' },
-    { value: 'Partially Delivered' },
-    { value: 'Completed' },
-    { value: 'Cancelled' },
-    { value: 'On Hold' },
-    { value: 'Invoiced' }
-  ];
-
-  // Update URL parameters with current filter and pagination state
-  updateUrlParams() {
-    const queryParams: any = {};
-
-    queryParams.page = this.page !== 1 ? this.page : null;
-    queryParams.row = this.row !== 10 ? this.row : null;
-    queryParams.search = this.searchQuery ? this.searchQuery : null;
-    queryParams.employee = this.selectedEmployee;
-    queryParams.status = this.selectedStatus;
-
-    // Navigate with the updated query parameters without reloading the page
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: queryParams,
-      queryParamsHandling: 'merge', // preserve other query params
-      replaceUrl: true // don't add to browser history for every filter change
-    });
-  }
-
-  onfilterApplied() {
-    this.page = 1
-    this.updateUrlParams();
-    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-  }
-
-  ngModelChange() {
-    if (this.searchQuery == '' && this.isEnter) {
-      this.page = 1;
-      this.onSearch();
-      this.isEnter = !this.isEnter;
-    }
-  }
-
-  onSearch() {
-    this.isEnter = true;
-    this.isLoading = true;
-    this.page = 1
-    this.updateUrlParams();
-    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-  }
-
-  displayedColumns: string[] = ['updatedDate', 'jobId', 'customerName', 'description', 'salesPersonName', 'department', 'quotations', 'dealSheet', 'comment', 'lpo', 'lpoValue', 'action'];
-
-  getAllJobs(selectedMonth?: number, selectedYear?: string) {
-    this.isLoading = true;
-
-    let access;
-    let userId;
-    this._employeeService.employeeData$.subscribe((employee) => {
-      access = employee?.category.privileges.jobSheet.viewReport;
-      userId = employee?._id;
-    });
-
-    this.isCompletedRoute = this.router.url.includes('/completed');
-    const allocateStatusFilter = this.isCompletedRoute ? allocateStatus.Completed : allocateStatus.Pending;
-
-    let filterData = {
-      search: this.searchQuery,
-      page: this.page,
-      row: this.row,
-      salesPerson: this.selectedEmployee,
-      status: this.selectedStatus as number,
-      selectedMonth: selectedMonth,
-      selectedYear: selectedYear as unknown as number,
-      access: access,
-      userId: userId,
-      allocateStatus: allocateStatusFilter
-    };
-
-    this.subscriptions.add(
-      this._jobService.getJobs(filterData).subscribe({
-        next: (data: JobTable) => {
-          this.dataSource.data = [...data.job];
-          this.filteredData.data = data.job;
-          this.total = data.total;
-          this.totalLpoValue = data.totalLpo;
-          this.isEmpty = data.total === 0;
-          this.isLoading = false;
-        },
-        error: ((error) => {
-          this.dataSource.data = [];
-          this.isLoading = false;
-          this.isEmpty = true;
-        })
-      })
-    );
-  }
-
-  handleNotClose(event: MouseEvent) {
-    event.stopPropagation();
-  }
-
-  onDownloadClicks(file: any) {
-    this.selectedFile = file.fileName;
-    this.subscriptions.add(
-      this._jobService.downloadFile(file.fileName)
-        .subscribe({
-          next: (event) => {
-            if (event.type === HttpEventType.DownloadProgress) {
-              this.progress = Math.round(100 * event.loaded / event.total);
-            } else if (event.type === HttpEventType.Response) {
-              const fileContent: Blob = new Blob([event['body']]);
-              saveAs(fileContent, file.originalname);
-              this.clearProgress();
-            }
+        this._jobService.getJobs(filterData).subscribe({
+          next: (data: JobTable) => {
+            this.rows = data ? [...data.job] : [];
+            this.total = data ? data.total : 0;
+            this.totalLpoValue = data ? data.totalLpo : 0;
+            this.refreshViewCounts();
+            this.isLoading = false;
           },
-          error: (error) => {
-            if (error.status == 404) {
-              this.selectedFile = undefined;
-              this.toast.warning('Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.');
-            }
-          }
-        })
+          error: () => {
+            this.rows = [];
+            this.isLoading = false;
+          },
+        });
+      })
     );
   }
 
-  clearProgress() {
-    setTimeout(() => {
-      this.selectedFile = undefined;
-      this.progress = 0;
-    }, 1000);
+  onRowOpen(): void {
+    this.detailLoading = true;
+    setTimeout(() => (this.detailLoading = false), 250);
   }
 
-  onGenerateReport() {
-    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-  }
-
-  onViewDealSheet(quoteData: Quotatation, salesPerson: any, customer: any, jobId?: string) {
-    quoteData.createdBy = salesPerson;
-    quoteData.client = customer;
-    let priceDetails = {
-      totalSellingPrice: 0,
-      totalCost: 0,
-      profit: 0,
-      perc: 0
-    };
-
-    const quoteItems = quoteData.dealData.updatedItems.map((item) => {
-      let itemSelected = 0;
-
-      item.itemDetails.map((itemDetail) => {
-        if (itemDetail.dealSelected) {
-          itemSelected++;
-          priceDetails.totalSellingPrice += itemDetail.unitSellingPrice * itemDetail.quantity;
-          priceDetails.totalCost += itemDetail.quantity * itemDetail.unitCost;
-          return itemDetail;
-        }
-        return;
-      });
-
-      if (itemSelected) return item;
-
-      return;
-    });
-
-    quoteData.dealData.additionalCosts.forEach((cost, i: number) => {
-      if (cost.type == 'Additional Cost') {
-        priceDetails.totalCost += cost.value;
-      } else if (cost.type === 'Supplier Discount') {
-        priceDetails.totalCost -= cost.value;
-      } else if (cost.type === 'Customer Discount') {
-        priceDetails.totalSellingPrice -= cost.value;
-      } else {
-        priceDetails.totalCost += cost.value;
-      }
-    });
-
-    priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
-    priceDetails.perc = (priceDetails.profit / priceDetails.totalSellingPrice) * 100;
-
-    this._dialog.open(ApproveDealComponent,
-      {
-        data: { approval: false, quoteData, quoteItems, priceDetails, jobId },
-        width: '1200x'
-      });
-  }
-
-  onViewPDF(file: any) {
-    // Check if the file is a PDF
-    if (file.fileName && file.fileName.toLowerCase().endsWith('.pdf')) {
-      this.subscriptions.add(
-        this._jobService.downloadFile(file.fileName)
-          .subscribe({
-            next: (event) => {
-              if (event.type === HttpEventType.Response) {
-                const fileContent: Blob = new Blob([event['body']], { type: 'application/pdf' });
-
-                // Create an object URL for the PDF blob
-                const fileURL = URL.createObjectURL(fileContent);
-
-                // Open the PDF in a new tab
-                window.open(fileURL, '_blank');
-
-                // Optionally revoke the object URL after some time
-                setTimeout(() => {
-                  URL.revokeObjectURL(fileURL);
-                }, 10000);
-              }
-            },
-            error: (error) => {
-              if (error.status === 404) {
-                this.toast.warning('Sorry, The requested file was not found on the server. Please ensure that the file exists and try again.');
-              } else {
-                this.toast.error('An error occurred while trying to view the PDF. Please try again later.');
-              }
-            }
-          })
-      );
-    } else {
-      // If the file is not a PDF, show a toaster notification
-      this.toast.warning('This file type is not supported for viewing. Please download and view the file.');
+  onRowAction(event: DataGridRowActionEvent<getJob>): void {
+    const { action, row } = event;
+    switch (action.id) {
+      case 'allocate':
+        this.openAllocateTypeSelecter(row);
+        break;
+      case 'delete':
+        this.onDeleteJob(row);
+        break;
     }
   }
 
-  onPreviewPdf(quotedData: getQuotatation, salesPerson: any, customer: any, attention: any) {
-    this.loader.start();
-    quotedData.createdBy = salesPerson;
-    quotedData.client = customer;
-    quotedData.attention = attention;
-    let quoteData: getQuotatation = quotedData;
-    const pdfDoc = this._quotationService.generatePDF(quoteData, true);
-    pdfDoc.then((pdf) => {
-      pdf.getBlob((blob: Blob) => {
-        let url = window.URL.createObjectURL(blob);
+  onBulkAction({ action, rows }: DataGridBulkActionEvent<getJob>, grid: DataGridComponent<getJob>): void {
+    if (action.id !== 'delete') return;
+    if (!this.isDeleteOption) {
+      this.toast.warning('You do not have permission to delete jobs');
+      return;
+    }
 
-        let dialogRef = this._dialog.open(PdfPreviewComponent,
-          { data: { url: url, formatedQuote: quoteData } });
-      });
+    const count = `${rows.length} job${rows.length === 1 ? '' : 's'}`;
+    const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Delete ${count}?`,
+        description: 'This cannot be undone.',
+        icon: 'heroExclamationCircle',
+        IconColor: 'orange',
+      },
     });
-    this.loader.complete();
-  }
-
-  onStatus(event: Event, status: JobStatus) {
-    event.stopPropagation();
-    this.lastStatus = status;
-  }
-
-  updateStatus(i: number, jobId: string, status: JobStatus) {
-    this.dataSource.data[i].status = this.lastStatus;
-    this.filteredData.data[i].status = this.lastStatus;
-
-    const dialogRef = this._dialog.open(ConfirmationDialogComponent,
-      {
-        data: {
-          title: `Are you absolutely sure?`,
-          description: `This action cannot be undone. This will permanently change the status to ${status}.`,
-          icon: 'heroExclamationCircle',
-          IconColor: 'orange'
-        }
-      });
 
     dialogRef.afterClosed().subscribe((approved: boolean) => {
-      if (approved) {
-        this._jobService.updateJobStatus(jobId, status).subscribe((res: JobStatus) => {
-          this.dataSource.data[i].status = res;
-          this.filteredData.data[i].status = res;
-        });
-      }
-    });
-  }
-
-  generatePdf(dateRange: { selectedMonth?: number, selectedYear: number, selectedMonthName?: string, download: boolean }) {
-    if (dateRange.selectedMonth && dateRange.selectedYear) {
-      this.reportDate = `${dateRange.selectedMonthName} - ${dateRange.selectedYear}`;
-      this.getJobsForPdf(dateRange.selectedMonth, dateRange.selectedYear).subscribe(() => {
-        if (dateRange.download) {
-          this.generatePdfAfterDataFetch();
-        }
+      if (!approved) return;
+      const employee = this._employeeService.employeeToken();
+      const deleteRequests = rows.map((r) => this._jobService.deleteJob({ dataId: r._id, employeeId: employee.id }));
+      forkJoin(deleteRequests.length ? deleteRequests : [of(null)]).subscribe({
+        next: () => {
+          grid.clearSelection();
+          grid.notify(`${count} deleted`);
+          this.getJobs();
+        },
+        error: () => this.toast.error('Failed to delete one or more jobs'),
       });
-    } else {
-      this.reportDate = `${dateRange.selectedYear}`;
-      this.getJobsForPdf(undefined, dateRange.selectedYear).subscribe(() => {
-        if (dateRange.download) {
-          this.generatePdfAfterDataFetch();
-        }
-      });
+    });
+  }
+
+  onDeleteJob(row: getJob): void {
+    if (!this.isDeleteOption) {
+      this.toast.warning('You do not have permission to delete jobs');
+      return;
     }
-  }
-
-  getJobsForPdf(selectedMonth?: number, selectedYear?: number): Observable<JobTable> {
-    this.isLoading = true;
-    let access;
-    let userId;
-    this._employeeService.employeeData$.subscribe((employee) => {
-      access = employee?.category.privileges.jobSheet.viewReport;
-      userId = employee?._id;
-    });
-
-    let filterData = {
-      search: this.searchQuery,
-      page: this.page,
-      row: this.row,
-      status: this.selectedStatus as number,
-      salesPerson: this.selectedEmployee,
-      selectedMonth: selectedMonth,
-      selectedYear: selectedYear,
-      access: access,
-      userId: userId
-    };
-
-    return this._jobService.getJobs(filterData).pipe(
-      tap((data: JobTable) => {
-        this.dataSource.data = [...data.job];
-        this.filteredData.data = data.job;
-        this.totalLpoValue = data.totalLpo;
-        this.total = data.total;
-        this.isEmpty = data.total === 0;
-        this.isLoading = false;
-      }),
-      catchError((error) => {
-        this.dataSource.data = [];
-        this.isLoading = false;
-        this.isEmpty = true;
-        return throwError(error);
-      })
-    );
-  }
-
-  generatePdfAfterDataFetch() {
-    if (!this.isEmpty) {
-      const tableHeader: string[] = ['JobId', 'Customer', 'Description', 'Sales Person', 'Department', 'Quote', 'Deal', 'LPO Val.', 'Status'];
-      const tableData = this.dataSource.data.map((data: any) => {
-        return [
-          data.jobId,
-          data.clientDetails.companyName,
-          data.quotation.subject,
-          `${data.salesPersonDetails[0].firstName} ${data.salesPersonDetails[0].lastName}`,
-          data.departmentDetails[0].departmentName,
-          data.quotation.quoteId,
-          data.quotation.dealData.dealId,
-          `${data.lpoValue.toFixed(2)} QAR`,
-          data.status
-        ];
-      });
-      const width = ['auto', '*', '*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'];
-      this._generatePdfSerive.generatePdf('Job Report', this.reportDate, tableData, tableHeader, width);
-    } else {
-      this.toast.warning('No Data to generate Report');
-    }
-  }
-
-  onViewComment(comment: string) {
-    this._dialog.open(ViewCommentComponent, {
-      width: '500px',
-      data: { comment }
-    });
-  }
-
-  onRemoveReport() {
-    this.reportDate = '';
-    this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-  }
-
-  formatNumber(value: any, minimumFractionDigits: number = 2, maximumFractionDigits: number = 2): string {
-    if (isNaN(value)) {
-      return '';
-    }
-
-    return parseFloat(value).toLocaleString('en-US', {
-      minimumFractionDigits,
-      maximumFractionDigits
-    });
-  }
-
-  clearFilter() {
-    this.searchQuery = ''; // Clear the search query
-    this.selectedEmployee = null; // Reset selected employee
-    this.selectedStatus = null; // Reset selected status
-
-    // Reset pagination
-    this.page = 1;
-    this.row = 10;
-    this.subject.next({ page: this.page, row: this.row });
-
-    // Update URL to clear parameters
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: {},
-      replaceUrl: true
-    });
-
-    // Apply filters (which will now be the default values)
-    this.onfilterApplied();
-  }
-
-  onPageNumberClick(event: { page: number, row: number }) {
-    this.subject.next(event);
-  }
-
-  openJobHistory(job: getJob) {
-    this._dialog.open(JobHistoryModalComponent, {
-      data: { jobId: job._id, jobIdString: job.jobId },
-      width: '900px',
-      maxWidth: '95vw',
-      maxHeight: '95vh',
-      disableClose: false
-    });
-  }
-
-  openAllocateTypeSelecter(data: getJob) {
-    const dialogRef = this._dialog.open(AllocateTypeModalComponent, {
-      data: data,
-      width: '500px',
-      disableClose: true
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) {
-        this.handleAllocationTypeSelection(result.id, result.jobId, result.allocationType, result.procurementPerson);
-      } else {
-        // User cancelled or closed dialog without selection
-        console.log('Dialog was cancelled');
-      }
-    });
-  }
-
-  // Optional: Create a separate method to handle the selection
-  private handleAllocationTypeSelection(id: string, jobId: string, allocationType: allocateType, procurementPerson?: string): void {
-    const data = {
-      id,
-      jobId,
-      allocationType,
-      procurementPerson
-    };
-
-    this._jobService.updateAllocateType(data as any).subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.toast.success('Job Allocated successfully');
-          this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-
-        }
-      },
-      error: (err) => {
-        console.error('Update failed:', err);
-        // Optionally show error toast/message
-      },
-    });
-  }
-
-
-  onDeleteJob(jobId: string) {
     const employee = this._employeeService.employeeToken();
     const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Delete Job',
         description: 'Are you sure you want to delete this job? This action cannot be undone.',
         icon: 'heroExclamationTriangle',
-        IconColor: 'red'
-      }
+        IconColor: 'red',
+      },
     });
 
     dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this._jobService.deleteJob({ dataId: jobId, employeeId: employee.id }).subscribe({
-          next: () => {
+      if (!result) return;
+      this._jobService.deleteJob({ dataId: row._id, employeeId: employee.id }).subscribe({
+        next: () => {
           this.toast.success('Job deleted successfully');
-          this.getAllJobs(this.currentMonthIndex + 1, this.currentYear);
-          },
-          error: (error) => {
-            this.toast.error('Failed to delete job');
-          }
-        });
-      }
+          this.getJobs();
+        },
+        error: () => this.toast.error('Failed to delete job'),
+      });
     });
   }
 
-  purchaseRequest(jobId: string) {
+  openAllocateTypeSelecter(row: getJob): void {
+    if (!this.canAllocateJobs) {
+      this.toast.warning('You do not have permission to allocate jobs');
+      return;
+    }
+    const dialogRef = this._dialog.open(AllocateTypeModalComponent, {
+      data: row,
+      width: '500px',
+      disableClose: true,
+    });
 
+    dialogRef.afterClosed().subscribe((result) => {
+      if (!result) return;
+      this._jobService.updateAllocateType({
+        id: result.id,
+        jobId: result.jobId,
+        allocationType: result.allocationType,
+        procurementPerson: result.procurementPerson,
+      }).subscribe({
+        next: (res) => {
+          if (res.success) {
+            this.toast.success('Job Allocated successfully');
+            this.getJobs();
+          }
+        },
+        error: () => this.toast.error('Failed to allocate job'),
+      });
+    });
   }
 
-  onMrRequestClicks() {
-    this._dialog.open(MrRequestComponent, {
-      width: '550px'
-    })
+  onTransferProcurementPerson(row: getJob): void {
+    if (!this.canTransferProcurementPerson) {
+      this.toast.warning('You do not have permission to transfer procurement person');
+      return;
+    }
+    const dialogRef = this._dialog.open(TransferProcurementPersonComponent, {
+      data: { jobId: row._id, currentProcurementPerson: row.procurementPerson },
+      width: '500px',
+      disableClose: true,
+    });
+
+    dialogRef.afterClosed().subscribe((result) => {
+      if (!result?.procurementPersonId) return;
+      this._jobService.transferProcurementPerson(row._id, result.procurementPersonId).subscribe({
+        next: (response) => {
+          if (response.success) {
+            this.toast.success('Procurement person transferred successfully');
+            this.getJobs();
+          }
+        },
+        error: (error) => this.toast.error(error?.error?.message || 'Failed to transfer procurement person'),
+      });
+    });
   }
+
+  canTransfer(row: getJob): boolean {
+    return this.canTransferProcurementPerson &&
+      (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
+  }
+
+  onConvertToPurchase(row: getJob): void {
+    this._router.navigate(['/purchase/create'], { queryParams: { jobId: row.jobId } });
+  }
+
+  canConvert(row: getJob): boolean {
+    return this.canConvertToPurchase && !row.hasPurchaseRequest &&
+      (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
+  }
+
+  // ---- Details tab -----------------------------------------------------------------------
+
+  overviewSections(row: getJob): DetailOverviewSection[] {
+    return [
+      {
+        title: 'General',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Job Id', value: row.jobId, numeric: true },
+          { type: 'dg', key: 'allocateStatus' },
+          { type: 'field', label: 'Allocate Type', value: row.allocateType || '—' },
+          { type: 'field', label: 'Customer', value: row.clientDetails?.companyName },
+          { type: 'field', label: 'Sales Person', value: this.fullName(row.salesPersonDetails?.[0]) },
+          { type: 'field', label: 'Department', value: row.departmentDetails?.[0]?.departmentName ?? '' },
+          { type: 'field', label: 'Date', value: row.updatedDate ? new Date(row.updatedDate).toLocaleDateString() : '—' },
+          { type: 'field', label: 'Procurement Person', value: this.fullName(row.procurementPerson) || '—', visible: !!row.procurementPerson },
+        ],
+      },
+      {
+        title: 'Quotation',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Quote Id', value: row.quotation?.quoteId, numeric: true },
+          { type: 'field', label: 'Deal Id', value: (row.quotation?.dealData as any)?.dealId || '—' },
+          { type: 'field', label: 'Description', value: row.quotation?.subject },
+          { type: 'field', label: 'LPO Value', value: `${this.numberFormat.transform(row.lpoValue ?? 0)} QAR`, numeric: true },
+        ],
+      },
+    ];
+  }
+
+  // ---- Comments tab -----------------------------------------------------------------------
+
+  commentSections(row: getJob): DetailOverviewSection[] {
+    return [
+      {
+        title: 'Comment',
+        fields: [
+          { type: 'field', label: 'Comment', value: row.comment || '—' },
+        ],
+      },
+    ];
+  }
+
+  // ---- Documents / LPO tab ------------------------------------------------------------------
+
+  lpoDocuments(row: getJob): DetailDocument[] {
+    return (row.quotation?.lpoFiles || []).map((file: any) => ({
+      id: file.fileName,
+      name: file.originalname,
+      kind: this.lpoFileKind(file),
+    }));
+  }
+
+  private lpoFileKind(file: any): string {
+    const name: string = file?.originalname || file?.fileName || '';
+    const ext = name.split('.').pop();
+    return ext ? ext.toUpperCase().slice(0, 4) : 'FILE';
+  }
+
+  private findLpoFile(row: getJob, doc: DetailDocument): any {
+    return row.quotation?.lpoFiles?.find((file: any) => file.fileName === doc.id);
+  }
+
+  onLpoPreviewDoc(row: getJob, doc: DetailDocument): void {
+    const file = this.findLpoFile(row, doc);
+    if (!file) return;
+    if (!file.fileName?.toLowerCase().endsWith('.pdf')) {
+      window.open(`${environment.api}/file/${file.fileName}`, '_blank');
+      return;
+    }
+    this._jobService.downloadFile(file.fileName).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.Response) {
+          const blob = new Blob([event.body], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+        }
+      },
+      error: (error) => {
+        if (error.status === 404) this.toast.warning('Sorry, the requested file was not found on the server.');
+        else this.toast.error('An error occurred while trying to view the file.');
+      },
+    });
+  }
+
+  onLpoDownloadDoc(row: getJob, doc: DetailDocument): void {
+    const file = this.findLpoFile(row, doc);
+    if (!file) return;
+    this._jobService.downloadFile(file.fileName).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.Response) {
+          FileSaver.saveAs(new Blob([event.body]), file.originalname);
+        }
+      },
+      error: (error) => {
+        if (error.status === 404) this.toast.warning('Sorry, the requested file was not found on the server.');
+        else this.toast.error('An error occurred while downloading the file.');
+      },
+    });
+  }
+
+  // ---- Workflow tab -----------------------------------------------------------------------
+
+  private workflowCache = new Map<string, BehaviorSubject<JobWorkflowTimeline | null>>();
+
+  workflowFor(row: getJob): Observable<JobWorkflowTimeline | null> {
+    const id = row._id;
+    let subject = this.workflowCache.get(id);
+    if (!subject) {
+      subject = new BehaviorSubject<JobWorkflowTimeline | null>(null);
+      this.workflowCache.set(id, subject);
+      this._jobHistoryService.getJobHistory(id).subscribe({
+        next: (res) => subject!.next(res.success ? res.data : null),
+        error: () => subject!.next(null),
+      });
+    }
+    return subject.asObservable();
+  }
+
+  eventTone(event: TimelineEvent): string {
+    switch (event.status) {
+      case 'success': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900';
+      case 'error': return 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900';
+      case 'warning': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900';
+      default: return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900';
+    }
+  }
+
+  eventPerformedBy(event: TimelineEvent): string {
+    return event.performedBy ? this.fullName(event.performedBy) : '';
+  }
+
+  trackByEventId = (_: number, e: TimelineEvent) => e.id;
 }
