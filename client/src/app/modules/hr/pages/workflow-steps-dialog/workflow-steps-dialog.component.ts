@@ -95,7 +95,7 @@ export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
                         order: this.getNextOrder()
                     };
 
-                    if (!this.steps.some(step => step.role === newStep.role)) {
+                    if (!this.steps.some(step => this.getRoleId(step) === selectedCategoryId)) {
                         this.steps.push(newStep);
                         this.selectedCategory.reset();
                     } else {
@@ -120,6 +120,10 @@ export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
         this.steps.forEach((step, index) => {
             step.order = index + 1;
         });
+    }
+
+    private getRoleId(step: any): string | undefined {
+        return typeof step?.role === 'string' ? step.role : step?.role?._id;
     }
 
     private getNextOrder(): number {
@@ -147,16 +151,16 @@ export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
             return;
         }
 
-        this.steps = this.steps.map(step => ({
+        const payloadSteps = this.steps.map(step => ({
             order: step.order,
-            role: step.role?._id
+            role: this.getRoleId(step) || ''
         }));
 
         this.isSaving = true;
 
         if (this.data.isEdit && this.data.workflowId) {
             const updateData: UpdateWorkflowRequest = {
-                steps: this.steps,
+                steps: payloadSteps,
                 needsManagerApproval: this.needsManagerApproval.value || false
             };
 
@@ -180,7 +184,7 @@ export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
         } else {
             const createData: CreateWorkflowRequest = {
                 feature: this.data.feature,
-                steps: this.steps,
+                steps: payloadSteps,
                 needsManagerApproval: this.needsManagerApproval.value || false
             };
 
@@ -208,7 +212,8 @@ export class WorkflowStepsDialogComponent implements OnInit, OnDestroy {
         const featureNames: Record<WorkflowFeature, string> = {
             [WorkflowFeature.CLAIM]: 'Claim',
             [WorkflowFeature.PROJECT_CLAIM]: 'Project Claim',
-            [WorkflowFeature.PURCHASE_APPROVAL]: 'Purchase Approval'
+            [WorkflowFeature.PURCHASE_APPROVAL]: 'Purchase Approval',
+            [WorkflowFeature.PRESALE]: 'Presale Assignment'
         };
         const featureName = featureNames[this.data.feature];
         return this.data.isEdit ? `Edit ${featureName} Workflow` : `Create ${featureName} Workflow`;

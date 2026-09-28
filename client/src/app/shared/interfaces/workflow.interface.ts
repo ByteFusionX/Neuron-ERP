@@ -1,6 +1,7 @@
 export interface ApprovalStep {
     role: string;
     order: number;
+    escalationHours?: number;
 }
 
 export interface ApprovalStepUI {
@@ -56,9 +57,10 @@ export interface WorkflowFilter {
 }
 
 export enum WorkflowFeature {
-    CLAIM = 'claim',
+    PRESALE = 'presale',
+    PURCHASE_APPROVAL = 'purchaseApproval',
     PROJECT_CLAIM = 'projectClaim',
-    PURCHASE_APPROVAL = 'purchaseApproval'
+    CLAIM = 'claim',
 }
 
 export interface DeleteWorkflowResponse {

@@ -1,62 +1,212 @@
-<!-- Workflow Management -->
-<div class="w-full h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md" *ngIf="canViewDepartments || categorySection">
-    <app-settings-section-header label="Workflow" description="Approval steps for claims, project claims and purchases." icon="heroShieldCheck"></app-settings-section-header>
+<!-- Workflow -->
+<div class="h-full" *ngIf="canViewDepartments || categorySection">
+    <div class="h-full min-h-0">
+        <app-data-grid
+            #workflowGrid
+            class="flex-1 min-h-0"
+            [fillHeight]="true"
+            [data]="gridRows"
+            [columns]="columns"
+            [rowActions]="rowActions"
+            [detailTabs]="detailTabs"
+            [breadcrumbs]="breadcrumbs"
+            [loading]="isWorkflowLoading"
+            [selectable]="false"
+            [showToolbarTools]="false"
+            title="Workflow"
+            subtitle="Approval steps for presale assignment and purchases."
+            rowKey="_id"
+            storageKey="approval-workflow"
+            emptyMessage="No workflows found"
+            searchPlaceholder="Search features…"
+            [detailTitle]="detailTitle"
+            [detailSubtitle]="detailSubtitle"
+            detailBreadcrumb="Workflow"
+            (rowAction)="onGridRowAction($event)">
 
-    <div class="mb-3 flex justify-between">
-        <div class="flex gap-1">
-            <i><ng-icon name="heroSquares2X2" class="text-orange-400 text-lg mt-[1px]"></ng-icon></i>
-            <p class="font-medium text-orange-400">Workflow Management:</p>
-        </div>
-    </div>
-    <div>
-        <div class="h-full h-max-80 overflow-hidden overflow-y-auto example border">
-            <table mat-table [dataSource]="workflowDataSource" class="rounded-lg table-fixed">
-
-                <!-- slNo Column -->
-                <ng-container matColumnDef="slNo">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        No </th>
-                    <td mat-cell *matCellDef="let element; let i=index"> {{i+1}} </td>
-                </ng-container>
-
-                <!-- Feature Column -->
-                <ng-container matColumnDef="feature">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Feature </th>
-                    <td mat-cell *matCellDef="let element">
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium">{{ getFeatureDisplayName(element.feature) }}</span>
-                        </div>
-                    </td>
-                </ng-container>
-
-                <!-- Steps Column -->
-                <ng-container matColumnDef="steps">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Approval Steps </th>
-                    <td mat-cell *matCellDef="let element">
-                        <button
-                            class="bg-violet-700 px-4 py-2 text-white hover:bg-violet-600 rounded-md text-sm font-medium transition-colors"
-                            (click)="openWorkflowStepsDialog(element.feature, element.workflow)">
-                            {{ getStepsButtonText(element) }}
-                        </button>
-                    </td>
-                </ng-container>
-
-                <tr mat-header-row *matHeaderRowDef="workflowDisplayedColumns; sticky: true"></tr>
-                <tr mat-row *matRowDef="let row; columns: workflowDisplayedColumns;"></tr>
-            </table>
-            <div *ngIf="workflows.length === 0 && !isWorkflowLoading" class="w-full flex justify-center items-center">
-                <div class="p-3 flex flex-col justify-center items-center">
-                    <img src="assets/images/empty.png" alt="">
-                    <p class="m-2 text-center text-gray-500">No Workflows Found</p>
+            <ng-template #detailMetaTemplate let-row>
+                <div class="qt-meta">
+                    <p class="qt-meta-label">Status</p>
+                    <p class="qt-meta-value">{{ row.status }}</p>
                 </div>
-            </div>
-            <app-skelton-loading *ngIf="isWorkflowLoading" [lineLength]="2"></app-skelton-loading>
-        </div>
+                <div class="qt-meta">
+                    <p class="qt-meta-label">Approvers</p>
+                    <p class="qt-meta-value">{{ row.stepsCount }}</p>
+                </div>
+                <div class="qt-meta">
+                    <p class="qt-meta-label">Manager</p>
+                    <p class="qt-meta-value">{{ row.managerApproval }}</p>
+                </div>
+            </ng-template>
+
+            <ng-template #detailTemplate let-row>
+                <div class="space-y-4">
+                    <!-- ================= VIEW MODE ================= -->
+                    <div *ngIf="!isEditing(row)">
+                        <app-approval-journey [stages]="journeyStages(row)" orientation="vertical"></app-approval-journey>
+                    </div>
+
+                    <!-- ================= BUILDER MODE (inline editable journey) ================= -->
+                    <section *ngIf="isEditing(row)">
+                        <div *ngIf="isDirty" class="mb-3 flex justify-end">
+                            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Unsaved changes</span>
+                        </div>
+
+                        <div>
+                            <!-- Submitted -->
+                            <div class="flex items-stretch gap-2.5">
+                                <div class="flex flex-col items-center">
+                                    <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-4 bg-sky-100 text-sky-600 ring-sky-50 dark:bg-sky-500/20 dark:text-sky-300 dark:ring-sky-500/5">
+                                        <span class="material-icons text-[16px]">send</span>
+                                    </span>
+                                    <span class="my-1 w-0.5 flex-1 rounded bg-gray-200 dark:bg-gray-700"></span>
+                                </div>
+                                <div class="min-w-0 flex-1 pb-3 pt-1">
+                                    <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">Submitted</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Requester opens the request</p>
+                                </div>
+                            </div>
+
+                            <!-- Manager toggle stage -->
+                            <div class="flex items-stretch gap-2.5">
+                                <div class="flex flex-col items-center">
+                                    <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-4"
+                                        [ngClass]="draftManagerApproval ? 'bg-amber-100 text-amber-600 ring-amber-50 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/5' : 'border-2 border-dashed border-gray-300 text-gray-400 dark:border-gray-600'">
+                                        <span class="material-icons text-[16px]">supervisor_account</span>
+                                    </span>
+                                    <span class="my-1 w-0.5 flex-1 rounded bg-gray-200 dark:bg-gray-700"></span>
+                                </div>
+                                <div class="min-w-0 flex-1 pb-3 pt-1">
+                                    <button type="button" (click)="toggleManagerApproval()" [disabled]="!canDisableManagerApproval"
+                                        class="flex w-full items-center justify-between gap-3 rounded-xl border p-2.5 text-left transition"
+                                        [class.cursor-not-allowed]="!canDisableManagerApproval"
+                                        [ngClass]="draftManagerApproval ? 'border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10' : 'border-dashed border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-800/30'">
+                                        <span class="min-w-0">
+                                            <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Manager first</span>
+                                            <span class="block text-xs text-gray-500 dark:text-gray-400">
+                                                {{ canDisableManagerApproval ? "Requester's direct manager reviews before any role." : "Mandatory first step — add another approver to make this optional." }}
+                                            </span>
+                                        </span>
+                                        <span class="relative h-5 w-9 shrink-0 rounded-full transition" [ngClass]="draftManagerApproval ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'">
+                                            <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all" [ngClass]="draftManagerApproval ? 'left-[18px]' : 'left-0.5'"></span>
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Draggable role stages -->
+                            <div cdkDropList (cdkDropListDropped)="onDrop($event)">
+                                <div *ngFor="let step of draftSteps; let i = index; let first = first; let last = last" cdkDrag class="flex items-stretch gap-2.5">
+                                    <div class="flex flex-col items-center">
+                                        <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-semibold text-white ring-4 ring-violet-50 dark:ring-violet-500/10">
+                                            {{ initials(step.roleName) }}
+                                            <span class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold text-violet-700 ring-1 ring-violet-200 dark:bg-gray-900 dark:text-violet-300 dark:ring-violet-500/40">{{ i + 1 }}</span>
+                                        </span>
+                                        <span class="my-1 w-0.5 flex-1 rounded bg-gray-200 dark:bg-gray-700"></span>
+                                    </div>
+                                    <div class="group mb-3 flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm transition hover:border-violet-300 hover:shadow dark:border-erp-border-dark dark:bg-gray-800/60">
+                                        <span cdkDragHandle class="material-icons cursor-grab text-[18px] text-gray-300 group-hover:text-gray-500" title="Drag to reorder">drag_indicator</span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">{{ step.roleName }}</span>
+                                            <span class="block text-xs text-gray-500 dark:text-gray-400">Stage {{ i + 1 }}{{ first ? ' · first role reviewer' : '' }}{{ last ? ' · final sign-off' : '' }}</span>
+                                        </span>
+                                        <label *ngIf="!first" class="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400" [title]="last ? 'Hours allowed for this role to complete the task' : 'Hours before this step escalates to the next role'">
+                                            <input type="number" min="1" [(ngModel)]="step.escalationHours"
+                                                class="w-12 border-0 bg-transparent p-0 text-right text-xs text-gray-900 focus:outline-none focus:ring-0 dark:text-gray-100" />
+                                            <span>h</span>
+                                        </label>
+                                        <span class="flex items-center gap-0.5 opacity-60 transition group-hover:opacity-100">
+                                            <button type="button" (click)="moveStep(i, -1)" [disabled]="first" class="rounded-md p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-gray-700" title="Move up">
+                                                <span class="material-icons text-[18px]">keyboard_arrow_up</span>
+                                            </button>
+                                            <button type="button" (click)="moveStep(i, 1)" [disabled]="last" class="rounded-md p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-gray-700" title="Move down">
+                                                <span class="material-icons text-[18px]">keyboard_arrow_down</span>
+                                            </button>
+                                            <button type="button" (click)="removeStep(i)" class="rounded-md p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10" title="Remove">
+                                                <span class="material-icons text-[18px]">close</span>
+                                            </button>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Add role dropdown, sits above Approved -->
+                            <div class="flex items-stretch gap-2.5">
+                                <div class="flex flex-col items-center">
+                                    <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-violet-300 text-violet-400 dark:border-violet-500/40">
+                                        <span class="material-icons text-[16px]">add</span>
+                                    </span>
+                                    <span class="my-1 w-0.5 flex-1 rounded bg-gray-200 dark:bg-gray-700"></span>
+                                </div>
+                                <div class="relative min-w-0 flex-1 pb-3 pt-1">
+                                    <button type="button" (click)="roleMenuOpen = !roleMenuOpen"
+                                        class="flex w-full items-center justify-between gap-2 rounded-xl border border-dashed border-gray-200 bg-gray-50/60 px-3 py-2 text-left transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800/30 dark:hover:bg-gray-800/50">
+                                        <span class="min-w-0">
+                                            <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Add an approver role</span>
+                                            <span class="block text-xs text-gray-500 dark:text-gray-400">Pick a role to add another stage</span>
+                                        </span>
+                                        <span class="material-icons text-[18px] text-gray-400">expand_more</span>
+                                    </button>
+
+                                    <div *ngIf="roleMenuOpen" class="fixed inset-0 z-10" (click)="roleMenuOpen = false"></div>
+
+                                    <div *ngIf="roleMenuOpen"
+                                        class="absolute left-0 top-full z-20 mt-2 w-72 rounded-xl border border-gray-100 bg-white p-2 shadow-lg dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                                        <label class="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 dark:border-gray-700 dark:bg-gray-800 dark:focus-within:ring-violet-500/20">
+                                            <span class="material-icons text-[18px] text-gray-400">search</span>
+                                            <input type="text" [(ngModel)]="roleSearch" placeholder="Search roles…" autofocus
+                                                class="w-full border-0 bg-transparent p-0 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-gray-100" />
+                                        </label>
+
+                                        <div class="mt-2 max-h-64 space-y-1 overflow-y-auto">
+                                            <button type="button" *ngFor="let role of filteredRoles" (click)="addRole(role); roleMenuOpen = false"
+                                                class="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-violet-50 dark:hover:bg-violet-500/10">
+                                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-50 text-[11px] font-semibold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">{{ initials(role.categoryName) }}</span>
+                                                <span class="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-gray-200">{{ role.categoryName }}</span>
+                                                <span class="material-icons text-[18px] text-gray-300 transition group-hover:text-violet-600">add_circle</span>
+                                            </button>
+                                            <p *ngIf="!filteredRoles.length" class="py-6 text-center text-xs text-gray-500 dark:text-gray-400">
+                                                {{ roleSearch ? 'No roles match "' + roleSearch + '"' : 'Every role is already in the route.' }}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <p *ngIf="!draftSteps.length" class="mt-2 text-xs text-gray-500 dark:text-gray-400">Pick at least one role — they'll appear above, in the order you add them.</p>
+                                </div>
+                            </div>
+
+                            <!-- Approved -->
+                            <div class="flex items-stretch gap-2.5">
+                                <div class="flex flex-col items-center">
+                                    <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-4 bg-green-100 text-green-600 ring-green-50 dark:bg-green-500/20 dark:text-green-300 dark:ring-green-500/5">
+                                        <span class="material-icons text-[16px]">verified</span>
+                                    </span>
+                                </div>
+                                <div class="min-w-0 flex-1 pt-1">
+                                    <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">Approved</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Request is fully signed off</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+            </ng-template>
+
+            <ng-template #detailFooterTemplate let-row>
+                <ng-container *ngIf="!isEditing(row); else editingFooter">
+                    <app-action-button *ngIf="canEdit" variant="primary" (click)="startEdit(row)">
+                        {{ row.stepsCount ? 'Customize route' : 'Build route' }}
+                    </app-action-button>
+                </ng-container>
+                <ng-template #editingFooter>
+                    <app-action-button variant="secondary" [disabled]="isSaving" (click)="cancelEdit()">Discard</app-action-button>
+                    <app-action-button variant="primary" [disabled]="isSaving || !draftSteps.length || !isDirty" (click)="saveFlow(row)">
+                        {{ isSaving ? 'Saving…' : 'Save route' }}
+                    </app-action-button>
+                </ng-template>
+            </ng-template>
+        </app-data-grid>
     </div>
 </div>
-<!-- /Workflow Management -->
+<!-- /Workflow -->
