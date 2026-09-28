@@ -1,26 +1,36 @@
-<data-table
-  #tableComponent
-  [data]="tableData()"
-  [columns]="tableColumns"
-  [defaultColumns]="defaultColumns"
-  [isLoading]="isLoading()"
-  [isEmpty]="isEmpty()"
-  [totalItems]="totalItems()"
-  [tableId]="tableId"
-  [title]="title"
-  [enableExport]="true"
-  (rowClick)="onRowClick($event)"
-  (actionClick)="onActionClick($event)"
-  (filterChange)="onFilterChange($event)"
-  (paginationChange)="onPaginationChange($event)"
-  (inlineDelete)="onInlineDelete($event)">
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Stock Entries"
+    subtitle="Inbound stock received against purchase orders and GRNs"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="totalItems()"
+    [data]="tableData()"
+    [columns]="columns"
+    [loading]="isLoading()"
+    [pageSize]="row"
+    searchPlaceholder="Search item, part no, description..."
+    emptyMessage="No stock entries found"
+    createLabel="Add Stock Entry"
+    [rowActions]="rowActions"
+    exportable
+    exportFileName="stock-entries.xlsx"
+    [detailTabs]="detailTabs"
+    [detailTitle]="detailTitle"
+    [detailSubtitle]="detailSubtitle"
+    (queryChange)="onQueryChange($event)"
+    (rowAction)="onRowAction($event)"
+    (create)="onCreateStockEntry()">
 
-  <ng-template #sideColumn>
-    <div class="flex flex-wrap items-center gap-3 justify-end">
-      <app-btn theme="primary" (buttonClick)="onCreateStockEntry()">
-        <ng-icon name="heroPlus"></ng-icon>
-        Add Stock Entry
-      </app-btn>
-    </div>
-  </ng-template>
-</data-table>
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <ng-container *ngSwitchCase="'overview'">
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        </ng-container>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+</div>

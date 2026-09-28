@@ -1,0 +1,103 @@
+<div class="sr-page h-full overflow-y-auto bg-gray-50 dark:bg-erp-surface-dark-alt p-6 flex flex-col gap-5">
+
+    <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
+    <div class="sr-card shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <nav aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
+                    <a *ngFor="let b of breadcrumbs" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+                    <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+                    </svg>
+                </nav>
+                <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Overview</h2>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <!-- List | Report. Both carry the same filters through the URL. -->
+                <app-view-toggle label="Stock" active="report" listLink="/stock/overview" reportLink="/stock/overview/report" [listQueryParams]="listQueryParams"></app-view-toggle>
+
+                <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!rows.length">
+                    <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
+                    Excel
+                </app-action-button>
+            </div>
+        </div>
+
+        <app-report-filters [fields]="filterFields" [values]="filters" hint="Showing a filtered slice of the stock overview."
+            (valuesChange)="onFilterChange($event)"></app-report-filters>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="loading" class="sr-card grid place-content-center py-20 text-sm text-gray-500 dark:text-gray-400">
+        Building report…
+    </div>
+
+    <div *ngIf="!loading && failed" class="sr-card grid place-content-center gap-3 py-20 text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-300">The report could not be generated.</p>
+        <p class="text-xs text-gray-500 dark:text-gray-500">Try narrower filters, or reload the page.</p>
+    </div>
+
+    <ng-container *ngIf="!loading && !failed">
+
+        <!-- KPI strip -->
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <app-kpi-card label="Item / Warehouse Rows" [value]="summary.totalItems"></app-kpi-card>
+            <app-kpi-card label="On Hand" [value]="summary.totalOnHand | numberFormatter"></app-kpi-card>
+            <app-kpi-card label="Reserved" [value]="summary.totalReserved | numberFormatter" valueClass="text-amber-600 dark:text-amber-400"></app-kpi-card>
+            <app-kpi-card label="Available" [value]="summary.totalAvailable | numberFormatter" valueClass="text-emerald-600 dark:text-emerald-400"></app-kpi-card>
+            <app-kpi-card label="Quarantine" [value]="summary.totalQuarantined | numberFormatter" valueClass="text-red-600 dark:text-red-400"></app-kpi-card>
+            <app-kpi-card label="Stock Value" [value]="summary.totalValue | numberFormatter" valueClass="text-violet-600 dark:text-violet-400"></app-kpi-card>
+        </div>
+
+        <!-- Breakdown -->
+        <div class="sr-card flex flex-col gap-3 p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="sr-heading">Breakdown</h3>
+                <div class="sr-toggle">
+                    <button *ngFor="let t of breakdownTabs" type="button" class="sr-toggle-btn"
+                        [ngClass]="breakdownKey === t.key ? 'sr-toggle-on' : ''" (click)="setBreakdown(t.key)">{{ t.label }}</button>
+                </div>
+            </div>
+            <app-data-grid #breakdownGrid
+                rowKey="id"
+                [title]="'By ' + (breakdownKey === 'productSegment' ? 'Segment' : breakdownKey === 'warehouseName' ? 'Warehouse' : 'Category')"
+                [data]="breakdownRows"
+                [columns]="breakdownColumns"
+                [selectable]="false"
+                [pageSize]="10"
+                searchPlaceholder="Search"
+                emptyMessage="Nothing to break down for these filters"
+                exportFileName="stock-overview-breakdown.xlsx"
+                exportable
+                (rowOpen)="onBreakdownRowOpen($event)">
+            </app-data-grid>
+            <p class="text-xs text-gray-500 dark:text-gray-500">
+                Open a row to see those stock rows in the list.
+            </p>
+        </div>
+
+        <!-- Exceptions -->
+        <div class="sr-card flex flex-col">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5 py-3">
+                <h3 class="sr-heading">Exceptions</h3>
+                <span class="sr-count">{{ exceptionRows.length }}</span>
+            </div>
+
+            <div class="max-h-96 overflow-y-auto divide-y divide-gray-100 dark:divide-erp-border-dark">
+                <div *ngFor="let item of exceptionRows; trackBy: trackById" class="flex items-center gap-3 px-5 py-3">
+                    <span class="min-w-0 flex-1">
+                        <span class="block truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ item.itemCode }} — {{ item.productDescription }}</span>
+                        <span class="block truncate text-xs text-gray-500 dark:text-gray-400">{{ item.warehouseName }}</span>
+                    </span>
+                    <span class="shrink-0 text-right">
+                        <span class="block text-xs tabular-nums text-red-600 dark:text-red-400">{{ exceptionReason(item) }}</span>
+                    </span>
+                </div>
+                <p *ngIf="!exceptionRows.length" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    Nothing here — every item has available stock and no quarantine.
+                </p>
+            </div>
+        </div>
+    </ng-container>
+</div>

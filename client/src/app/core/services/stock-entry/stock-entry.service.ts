@@ -104,6 +104,112 @@ export interface StockEntryListResponse {
   };
 }
 
+export interface StockOverview {
+  productId: string;
+  warehouseId: string;
+  itemCode: string;
+  partNo: string;
+  productDescription: string;
+  productType: string;
+  uom: string;
+  productSegment: string;
+  productCategory: string;
+  warehouseName: string;
+  onHandQuantity: number;
+  blockedQuantity?: number;
+  reservationQuantity?: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  quarantinedQuantity: number;
+  stockValue: number;
+  quarantineValue?: number;
+  stockEntryCount: number;
+  earliestStockDate?: Date | string | null;
+  latestStockDate?: Date | string | null;
+  rowNo?: number;
+}
+
+export interface StockOverviewResponse {
+  success: boolean;
+  message: string;
+  data: {
+    overview: StockOverview[];
+    summary: {
+      totalItems: number;
+      totalOnHand: number;
+      totalReserved: number;
+      totalAvailable: number;
+      totalQuarantined: number;
+      totalValue: number;
+      exceptionCount: number;
+    };
+    pagination: StockEntryPagination;
+  };
+}
+
+export interface StockOverviewQueryParams {
+  page?: number;
+  row?: number;
+  search?: string;
+  productCategory?: string;
+  productSegment?: string;
+  targetWarehouse?: string;
+  lowStock?: boolean;
+}
+
+export interface InventoryPlanningRow {
+  productId: string;
+  warehouseId: string;
+  itemCode: string;
+  partNo: string;
+  productDescription: string;
+  warehouseName: string;
+  uom: string;
+  onHandQuantity: number;
+  blockedQuantity: number;
+  reservationQuantity: number;
+  availableNow: number;
+  incomingQuantity: number;
+  purchaseIncomingQuantity?: number;
+  outgoingQuantity: number;
+  reservationOutgoingQuantity?: number;
+  deliveryOutgoingQuantity?: number;
+  dealOutgoingQuantity?: number;
+  canSellSoon: number;
+  reorderPoint?: number;
+  expectedArrivalDate?: string | null;
+}
+
+export interface StockReservation {
+  _id?: string;
+  product: any;
+  warehouse?: any;
+  quote?: any;
+  customer?: any;
+  sourceType: string;
+  quantity: number;
+  reservedFrom: string;
+  expiresAt: string;
+  status: string;
+  releaseReason?: string;
+}
+
+export interface StockMovement {
+  _id?: string;
+  product: any;
+  warehouse?: any;
+  movementType: string;
+  quantityIn: number;
+  quantityOut: number;
+  reservedQuantity: number;
+  unitCost?: number;
+  totalCost?: number;
+  referenceType?: string;
+  referenceNo?: string;
+  remarks?: string;
+  movementDate: string;
+}
+
 export interface StockEntryQueryParams {
   page?: number;
   row?: number;
@@ -141,6 +247,51 @@ export class StockEntryService {
       params: httpParams,
       context: context()
     });
+  }
+
+  getStockOverview(params: StockOverviewQueryParams = {}): Observable<StockOverviewResponse> {
+    let httpParams = new HttpParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        httpParams = httpParams.set(key, String(value));
+      }
+    });
+
+    return this.http.get<StockOverviewResponse>(`${this.api}/stock-entry/overview`, {
+      params: httpParams,
+      context: context()
+    });
+  }
+
+  getInventoryPlanning(params: { search?: string; targetWarehouse?: string } = {}): Observable<{ success: boolean; message: string; data: InventoryPlanningRow[] }> {
+    let httpParams = new HttpParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        httpParams = httpParams.set(key, String(value));
+      }
+    });
+    return this.http.get<{ success: boolean; message: string; data: InventoryPlanningRow[] }>(`${this.api}/stock-entry/planning`, { params: httpParams, context: context() });
+  }
+
+  getStockReservations(params: { status?: string } = {}): Observable<{ success: boolean; message: string; data: StockReservation[] }> {
+    let httpParams = new HttpParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        httpParams = httpParams.set(key, String(value));
+      }
+    });
+    return this.http.get<{ success: boolean; message: string; data: StockReservation[] }>(`${this.api}/stock-entry/reservations`, { params: httpParams, context: context() });
+  }
+
+  getStockMovements(params: { product?: string; warehouse?: string; limit?: number } = {}): Observable<{ success: boolean; message: string; data: StockMovement[] }> {
+    let httpParams = new HttpParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        httpParams = httpParams.set(key, String(value));
+      }
+    });
+    return this.http.get<{ success: boolean; message: string; data: StockMovement[] }>(`${this.api}/stock-entry/movements`, { params: httpParams, context: context() });
   }
 
   getStockEntryById(id: string): Observable<StockEntry> {

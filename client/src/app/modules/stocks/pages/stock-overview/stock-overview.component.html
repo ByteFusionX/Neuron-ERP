@@ -1,0 +1,25 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Overview"
+    subtitle="Live available stock by item and warehouse."
+    [breadcrumbs]="breadcrumbs"
+    rowKey="itemCode"
+    [serverSide]="true"
+    [totalCount]="totalItems()"
+    [data]="tableData()"
+    [columns]="columns"
+    [loading]="isLoading()"
+    [pageSize]="row"
+    searchPlaceholder="Search item, part no, description..."
+    emptyMessage="No stock rows found"
+    [views]="views"
+    (viewChange)="onViewChange($event)"
+    exportable
+    exportFileName="stock-overview.xlsx"
+    (queryChange)="onQueryChange($event)">
+
+    <app-view-toggle dgToolbarExtra label="Stock" active="list" listLink="/stock/overview" reportLink="/stock/overview/report"></app-view-toggle>
+  </app-data-grid>
+</div>

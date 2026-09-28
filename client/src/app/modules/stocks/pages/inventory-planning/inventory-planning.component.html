@@ -1,0 +1,48 @@
+<div class="h-full p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <div class="mb-5">
+    <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Incoming / Outgoing Planning</h1>
+    <p class="text-sm text-gray-500">Read-only view of what can be used now versus soon.</p>
+  </div>
+
+  <div class="overflow-auto rounded-lg border bg-white dark:bg-erp-surface-dark">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-100 text-left text-xs uppercase text-gray-600">
+        <tr>
+          <th class="px-4 py-3">Item</th>
+          <th class="px-4 py-3">Warehouse</th>
+          <th class="px-4 py-3 text-right">On Hand</th>
+          <th class="px-4 py-3 text-right">Outgoing</th>
+          <th class="px-4 py-3 text-right">Reservations</th>
+          <th class="px-4 py-3 text-right">Deliveries</th>
+          <th class="px-4 py-3 text-right">Deals</th>
+          <th class="px-4 py-3 text-right">Available Now</th>
+          <th class="px-4 py-3 text-right">Incoming</th>
+          <th class="px-4 py-3">Expected</th>
+          <th class="px-4 py-3 text-right">Can Sell Soon</th>
+          <th class="px-4 py-3 text-right">Reorder Point</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="isLoading()"><td colspan="12" class="px-4 py-6 text-center text-gray-500">Loading...</td></tr>
+        <tr *ngFor="let row of rows()" class="border-t">
+          <td class="px-4 py-3">
+            <div class="font-medium text-gray-900">{{ row.itemCode || row.partNo }}</div>
+            <div class="text-xs text-gray-500">{{ row.productDescription }}</div>
+          </td>
+          <td class="px-4 py-3">{{ row.warehouseName }}</td>
+          <td class="px-4 py-3 text-right">{{ row.onHandQuantity }}</td>
+          <td class="px-4 py-3 text-right text-amber-600">{{ row.outgoingQuantity }}</td>
+          <td class="px-4 py-3 text-right">{{ row.reservationOutgoingQuantity || 0 }}</td>
+          <td class="px-4 py-3 text-right">{{ row.deliveryOutgoingQuantity || 0 }}</td>
+          <td class="px-4 py-3 text-right">{{ row.dealOutgoingQuantity || 0 }}</td>
+          <td class="px-4 py-3 text-right text-emerald-600 font-semibold">{{ row.availableNow }}</td>
+          <td class="px-4 py-3 text-right">{{ row.incomingQuantity }}</td>
+          <td class="px-4 py-3 text-xs text-gray-500">{{ row.expectedArrivalDate ? (row.expectedArrivalDate | date:'mediumDate') : '-' }}</td>
+          <td class="px-4 py-3 text-right font-semibold">{{ row.canSellSoon }}</td>
+          <td class="px-4 py-3 text-right">{{ row.reorderPoint || 0 }}</td>
+        </tr>
+        <tr *ngIf="!isLoading() && !rows().length"><td colspan="12" class="px-4 py-6 text-center text-gray-500">No planning rows found.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
