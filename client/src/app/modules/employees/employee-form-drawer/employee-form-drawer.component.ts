@@ -6,6 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
 import { CreateEmployee, GetCategory, getEmployeeDetails } from 'src/app/shared/interfaces/employee.interface';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
@@ -39,6 +40,8 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
   canViewCompensation = false;
   changePassword = false;
   step: 1 | 2 = 1;
+  microsoftId: string | null = null;
+  savingMicrosoftLink = false;
 
   categoryOptions: SfOption[] = [];
   departmentOptions: SfOption[] = [];
@@ -50,6 +53,7 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
   private toaster = inject(ToastrService);
   private employeeService = inject(EmployeeService);
   private profileService = inject(ProfileService);
+  private confirmDialog = inject(ConfirmDialogService);
   private subscriptions = new Subscription();
   private optionsLoaded = false;
   private userRole = 'user';
@@ -191,6 +195,7 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
   private seedFromEmployee(e: getEmployeeDetails): void {
     const day = (v?: string | null): string => (v ? v.substring(0, 10) : '');
     this.resetForm();
+    this.microsoftId = e.microsoftId ?? null;
     this.employeeForm.patchValue({
       firstName: e.firstName,
       lastName: e.lastName,
@@ -225,6 +230,7 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
 
   private resetForm(): void {
     this.step = 1;
+    this.microsoftId = null;
     this.changePassword = false;
     this.passwordControl.disable();
     this.employeeForm.reset({
@@ -259,6 +265,53 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
     this.changePassword = true;
     this.passwordControl.enable();
     this.passwordControl.setValue('');
+  }
+
+  // --- Microsoft account link (edit only) -------------------------------------
+
+  async linkMicrosoftAccount(): Promise<void> {
+    if (!this.employee?._id) return;
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'note',
+      title: this.microsoftId ? 'Relink Microsoft account' : 'Link Microsoft account',
+      message: 'Paste the Azure AD object ID (oid) for the account this employee should sign in with. Use this when their ERP email doesn\'t match their Microsoft email/UPN, so the normal sign-in linking can\'t match them automatically.',
+      reason: true,
+      reasonLabel: 'Azure AD object ID (oid)',
+      confirmLabel: this.microsoftId ? 'Relink' : 'Link',
+    });
+    const microsoftId = reason?.trim();
+    if (!confirmed || !microsoftId) return;
+
+    this.savingMicrosoftLink = true;
+    this.employeeService.setEmployeeMicrosoftId(this.employee._id, microsoftId).subscribe({
+      next: (res) => {
+        this.savingMicrosoftLink = false;
+        this.microsoftId = res.microsoftId;
+        this.toaster.success('Microsoft account linked');
+      },
+      error: () => (this.savingMicrosoftLink = false),
+    });
+  }
+
+  async unlinkMicrosoftAccount(): Promise<void> {
+    if (!this.employee?._id) return;
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'warning',
+      title: 'Unlink Microsoft account',
+      message: 'This employee will no longer be able to sign in until they\'re relinked (either automatically, if their ERP email matches their Microsoft email, or manually here).',
+      confirmLabel: 'Unlink',
+    });
+    if (!confirmed) return;
+
+    this.savingMicrosoftLink = true;
+    this.employeeService.setEmployeeMicrosoftId(this.employee._id, null).subscribe({
+      next: (res) => {
+        this.savingMicrosoftLink = false;
+        this.microsoftId = res.microsoftId;
+        this.toaster.success('Microsoft account unlinked');
+      },
+      error: () => (this.savingMicrosoftLink = false),
+    });
   }
 
   generatePassword(): void {

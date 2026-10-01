@@ -19,8 +19,10 @@ import {
   blockEmployee,
   setEmployeeApprovalLimit,
   setEmployeeExtraPrivilege,
+  setEmployeeMicrosoftId,
 } from "../controllers/employee.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import passport from "passport";
 const empRouter = Router();
 
 // /get, /login, /check, and the lookup routes below are self-service or
@@ -56,7 +58,10 @@ empRouter.patch(
   requirePrivilege("employee", "edit", "employee.create"),
   setEmployeeApprovalLimit,
 );
-empRouter.post("/login", login);
+// /login is globally exempt from the app's own JWT middleware (there's no
+// employeeToken yet at login time) but is gated here on the caller's Azure AD
+// access token so `login` can trust req.user.
+empRouter.post("/login", passport.authenticate("oauth-bearer", { session: false }), login);
 empRouter.get("/get", getEmployee);
 // Deprecated: Use /notification endpoint instead for privilege-aware notifications
 // empRouter.get('/notifications', getNotificationCounts)
@@ -74,6 +79,14 @@ empRouter.patch(
   "/extra-privilege/:employeeId",
   requirePrivilege("employee", "edit", "employee.create"),
   setEmployeeExtraPrivilege,
+);
+// Manual Microsoft account link/relink — recovers logins that /login's
+// email-based auto-link can never fix (ERP email doesn't match Azure
+// identity, or the employee's Azure account changed).
+empRouter.patch(
+  "/microsoft-link/:employeeId",
+  requirePrivilege("employee", "edit", "employee.create"),
+  setEmployeeMicrosoftId,
 );
 
 export default empRouter;

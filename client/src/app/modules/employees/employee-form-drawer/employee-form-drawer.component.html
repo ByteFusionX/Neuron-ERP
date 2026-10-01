@@ -43,7 +43,7 @@
             <app-sf-field label="Last name" [control]="employeeForm.controls.lastName">
                 <app-sf-input formControlName="lastName" placeholder="Last name"></app-sf-input>
             </app-sf-field>
-            <app-sf-field label="Email" [control]="employeeForm.controls.email">
+            <app-sf-field label="Email" [control]="employeeForm.controls.email" hint="Must match this employee's Microsoft account email — sign-in is Microsoft-only, so without it they can't log in.">
                 <app-sf-input formControlName="email" type="email" placeholder="name@company.com"></app-sf-input>
             </app-sf-field>
             <app-sf-field label="Contact no." [control]="employeeForm.controls.contactNo">
@@ -70,6 +70,27 @@
             <app-sf-field label="Reporting to" optional>
                 <app-sf-combobox formControlName="reportingTo" [options]="reportingChoices" placeholder="No one"></app-sf-combobox>
             </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section *ngIf="isEdit && showStep(1)" title="Microsoft sign-in"
+            description="Sign-in is Microsoft-only. Use this if the employee can't log in because their ERP email doesn't match their Microsoft account.">
+            <div class="col-span-2 flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-erp-border-dark px-3 py-2">
+                <div class="min-w-0">
+                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300">
+                        {{ microsoftId ? 'Linked' : 'Not linked' }}
+                    </p>
+                    <p *ngIf="microsoftId" class="truncate text-[11px] text-gray-400 dark:text-gray-500">{{ microsoftId }}</p>
+                    <p *ngIf="!microsoftId" class="text-[11px] text-gray-400 dark:text-gray-500">Login will fail until this account is linked.</p>
+                </div>
+                <div class="flex shrink-0 gap-2">
+                    <app-action-button variant="tool" [disabled]="savingMicrosoftLink" (click)="linkMicrosoftAccount()">
+                        {{ microsoftId ? 'Relink' : 'Link' }}
+                    </app-action-button>
+                    <app-action-button *ngIf="microsoftId" variant="secondary" [disabled]="savingMicrosoftLink" (click)="unlinkMicrosoftAccount()">
+                        Unlink
+                    </app-action-button>
+                </div>
+            </div>
         </app-sf-section>
 
         <app-sf-section *ngIf="isEdit && showStep(1)" title="Change record"

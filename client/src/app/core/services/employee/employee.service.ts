@@ -1,4 +1,4 @@
-import { HttpClient, HttpContext } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap, tap } from 'rxjs';
 import { ApprovalLimit, CreateEmployee, FilterEmployee, GetCategory, Responsibility, getEmployee, getEmployeeByID, Target } from 'src/app/shared/interfaces/employee.interface';
@@ -103,12 +103,18 @@ export class EmployeeService {
     return this.http.delete(`${this.api}/responsibility/${id}`)
   }
 
-  employeeLogin(employeeData: Object): Observable<login> {
-    return this.http.post(`${this.api}/employee/login`, employeeData)
-  }
+  // employeeId/password login is disabled in favor of Azure AD login (see
+  // login-page.component). Restore its call site to re-enable it.
+  // employeeLogin(employeeData: Object): Observable<login> {
+  //   return this.http.post(`${this.api}/employee/login`, employeeData)
+  // }
 
-  employeeLoginWithMicrosoft(): Observable<login> {
-    return this.http.post(`${this.api}/employee/login`, {})
+  // There's no employeeToken yet at login time, so the Azure access token is
+  // attached explicitly here rather than relying on JwtInterceptor.
+  employeeLoginWithMicrosoft(azureAccessToken: string): Observable<login> {
+    return this.http.post(`${this.api}/employee/login`, {}, {
+      headers: new HttpHeaders({ Authorization: `Bearer ${azureAccessToken}` })
+    })
   }
 
   getToken(): string | null {
@@ -144,6 +150,11 @@ export class EmployeeService {
   /** Grants (value: true) or revokes (value: false) one individual privilege flag for this employee, on top of their role. */
   setEmployeeExtraPrivilege(employeeId: string, modulePath: string, value: boolean, action?: string) {
     return this.http.patch<Record<string, any>>(`${this.api}/employee/extra-privilege/${employeeId}`, { modulePath, action, value })
+  }
+
+  /** Manually links (or, with null, clears) this employee's Microsoft account for Azure AD sign-in. */
+  setEmployeeMicrosoftId(employeeId: string, microsoftId: string | null) {
+    return this.http.patch<{ microsoftId: string | null }>(`${this.api}/employee/microsoft-link/${employeeId}`, { microsoftId })
   }
 
   getEmployee() {

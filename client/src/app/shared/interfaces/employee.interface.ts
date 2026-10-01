@@ -47,6 +47,8 @@ export interface getEmployeeDetails {
   employmentHistory?: EmploymentHistoryEntry[];
   /** Individual grants on top of the role's privileges. Additive only — see server employee.model.ts. */
   extraPrivileges?: Record<string, any>;
+  /** Azure AD object id this employee is linked to for Microsoft sign-in, if any. */
+  microsoftId?: string | null;
 }
 
 export type ContractType = 'permanent' | 'fixed-term' | 'probation' | 'contractor' | 'intern';

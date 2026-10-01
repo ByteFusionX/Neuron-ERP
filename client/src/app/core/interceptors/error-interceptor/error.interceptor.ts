@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpRequest, HttpHandler, HttpEvent, HttpInterceptor, HttpErrorResponse, HttpContextToken } from '@angular/common/http';
 import { Observable, catchError, throwError } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
+import { clearSessionStorage } from 'src/app/shared/utils/clear-session.util';
 import { Router } from '@angular/router';
 import { MsalService } from '@azure/msal-angular';
 import { normalizeApiError } from '../../errors/api-error';
@@ -27,8 +28,11 @@ export class ErrorInterceptor implements HttpInterceptor {
               break;
             case 401:
               this.toast.warning('Access Denied, Please sign in again.')
-              localStorage.clear();
-              sessionStorage.clear();
+              clearSessionStorage();
+              // Keep MSAL's notion of the signed-in account in sync with the
+              // app JWT — otherwise a re-click of "Continue with Microsoft"
+              // silently reuses the now-invalid session instead of prompting.
+              this.msalService.instance.setActiveAccount(null);
               this.router.navigate(['/login'])
               break;
             case 400:

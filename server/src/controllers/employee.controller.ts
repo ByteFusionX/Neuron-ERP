@@ -901,41 +901,46 @@ const generateEmployeeId = async () => {
   }
 };
 
-// Azure AD login is temporarily disabled in favor of employeeId/password login.
-// Restore this function (and jwt.middleware.ts's passport-azure-ad path) to re-enable it.
+// employeeId/password login is disabled in favor of Azure AD login.
+// Restore this function (and swap employee.router.ts's /login gate back to
+// no auth) to re-enable it.
 // export const login = async (
 //   req: Request,
 //   res: Response,
 //   next: NextFunction,
 // ) => {
 //   try {
-//     const token = req.user as any;
-//     const oid = token.oid;
+//     const { employeeId, password } = req.body;
 //
-//     let employeeData = await Employee.findOne(
-//       {
-//         microsoftId: oid,
-//         isDeleted: { $ne: true },
-//       },
-//       { password: 0 },
-//     ).populate("category");
+//     const employee = await Employee.findOne({
+//       employeeId: employeeId,
+//       isDeleted: { $ne: true },
+//       isBlocked: { $ne: true },
+//     }).select("+password");
 //
-//     if (!employeeData) {
-//       const email = token.email || token.upn;
-//       const employee = await Employee.findOneAndUpdate(
-//         { email, isDeleted: { $ne: true } },
-//         { microsoftId: oid },
-//       );
-//       employeeData = employee;
+//     if (!employee) {
+//       return res.send({ employeeNotFoundError: true });
 //     }
 //
-//     if (!employeeData) return res.status(401).json({ message: "Unauthorized" });
+//     // Supports both bcrypt-hashed passwords (set via the app) and plaintext
+//     // passwords (e.g. set by hand directly in MongoDB).
+//     const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(employee.password || "");
+//     const passwordMatch = isBcryptHash
+//       ? await bcrypt.compare(password, employee.password)
+//       : password === employee.password;
 //
-//     res.status(200).json({
-//       message: "Login successful",
-//       employee: employeeData,
-//       token: token,
-//     });
+//     if (!passwordMatch) {
+//       return res.send({ passwordNotMatchError: true });
+//     }
+//
+//     const payload = { id: employee._id, employeeId: employee.employeeId };
+//     const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+//
+//     const employeeData = await Employee.findById(employee._id, {
+//       password: 0,
+//     }).populate("category");
+//
+//     res.status(200).json({ token, employeeData });
 //   } catch (error) {
 //     console.log(error);
 //     return next(error);
@@ -948,27 +953,36 @@ export const login = async (
   next: NextFunction,
 ) => {
   try {
-    const { employeeId, password } = req.body;
+    // employee.router.ts gates this route on passport's Azure AD bearer
+    // strategy, so req.user is the verified Microsoft access token claims.
+    const azureToken = req.user as any;
+    const oid = azureToken.oid;
 
-    const employee = await Employee.findOne({
-      employeeId: employeeId,
+    let employee = await Employee.findOne({
+      microsoftId: oid,
       isDeleted: { $ne: true },
       isBlocked: { $ne: true },
     }).select("+password");
 
     if (!employee) {
-      return res.send({ employeeNotFoundError: true });
+      const email = azureToken.email || azureToken.upn || azureToken.preferred_username;
+      // Only link on first sign-in — an employee record that's already linked
+      // to a different Azure identity must not be silently re-linked just
+      // because an email happened to match.
+      employee = await Employee.findOneAndUpdate(
+        {
+          email,
+          microsoftId: { $exists: false },
+          isDeleted: { $ne: true },
+          isBlocked: { $ne: true },
+        },
+        { microsoftId: oid },
+        { new: true },
+      ).select("+password");
     }
 
-    // Supports both bcrypt-hashed passwords (set via the app) and plaintext
-    // passwords (e.g. set by hand directly in MongoDB).
-    const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(employee.password || "");
-    const passwordMatch = isBcryptHash
-      ? await bcrypt.compare(password, employee.password)
-      : password === employee.password;
-
-    if (!passwordMatch) {
-      return res.send({ passwordNotMatchError: true });
+    if (!employee) {
+      return res.send({ employeeNotFoundError: true });
     }
 
     const payload = { id: employee._id, employeeId: employee.employeeId };
@@ -982,6 +996,55 @@ export const login = async (
   } catch (error) {
     console.log(error);
     return next(error);
+  }
+};
+
+// Admin recovery path for the case the auto-link in `login` can never handle:
+// the employee's ERP email doesn't match their Azure identity (or their Azure
+// identity changed), so first-sign-in linking never fires and they're stuck.
+// Body: { microsoftId: string | null } — null clears an existing link.
+export const setEmployeeMicrosoftId = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { employeeId } = req.params;
+    const { microsoftId } = req.body ?? {};
+
+    if (microsoftId !== null && (typeof microsoftId !== "string" || !microsoftId.trim())) {
+      return res.status(400).json({ message: "microsoftId must be a non-empty string or null" });
+    }
+
+    if (microsoftId) {
+      const conflict = await Employee.findOne({
+        microsoftId,
+        _id: { $ne: employeeId },
+        isDeleted: { $ne: true },
+      });
+      if (conflict) {
+        return res.status(409).json({
+          message: `This Microsoft account is already linked to ${conflict.firstName} ${conflict.lastName}`,
+        });
+      }
+    }
+
+    const update = microsoftId
+      ? { $set: { microsoftId } }
+      : { $unset: { microsoftId: "" } };
+
+    const employee = await Employee.findOneAndUpdate(
+      { _id: employeeId, isDeleted: { $ne: true } },
+      update,
+      { new: true, projection: { microsoftId: 1, firstName: 1, lastName: 1 } },
+    );
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+    return res.status(200).json({ microsoftId: employee.microsoftId ?? null });
+  } catch (error) {
+    console.log(error);
+    next(error);
   }
 };
 
