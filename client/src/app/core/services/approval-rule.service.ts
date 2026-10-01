@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 
-export type ApprovalRuleType = 'discount' | 'margin' | 'paymentTerms' | 'creditException' | 'deal';
+export type ApprovalRuleType = 'discount' | 'margin' | 'paymentTerms' | 'creditException' | 'deal' | 'poValue' | 'priceVariance' | 'purchaseOverSold' | 'overReceipt' | 'grnPriceVariance';
 
 export interface ApprovalRule {
   _id?: string;
@@ -11,6 +11,7 @@ export interface ApprovalRule {
   enabled: boolean;
   threshold: number | null;
   approverRole: { _id: string; categoryName: string } | string | null;
+  disabledPlaces?: string[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -23,7 +24,7 @@ export class ApprovalRuleService {
     return this.http.get<{ success: boolean; data: ApprovalRule[] }>(`${this.api}/approval-rule`);
   }
 
-  saveRule(type: ApprovalRuleType, body: { enabled: boolean; threshold: number | null; approverRole: string | null }): Observable<{ success: boolean; data: ApprovalRule }> {
+  saveRule(type: ApprovalRuleType, body: { enabled: boolean; threshold: number | null; approverRole: string | null; disabledPlaces?: string[] }): Observable<{ success: boolean; data: ApprovalRule }> {
     return this.http.put<{ success: boolean; data: ApprovalRule }>(`${this.api}/approval-rule/${type}`, body);
   }
 }

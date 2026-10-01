@@ -1,6 +1,6 @@
 import { Types, model, Schema } from "mongoose";
 
-export const APPROVAL_RULE_TYPES = ['discount', 'margin', 'paymentTerms', 'creditException', 'deal'] as const;
+export const APPROVAL_RULE_TYPES = ['discount', 'margin', 'paymentTerms', 'creditException', 'deal', 'poValue', 'priceVariance', 'purchaseOverSold', 'overReceipt', 'grnPriceVariance'] as const;
 
 export interface ApprovalRule {
     type: typeof APPROVAL_RULE_TYPES[number];
@@ -9,6 +9,8 @@ export interface ApprovalRule {
     // days for paymentTerms, amount for creditException/deal). Unused if null.
     threshold: number | null;
     approverRole: Types.ObjectId | null;
+    // Place ids (see the client's rule definitions) where this rule is switched off individually.
+    disabledPlaces: string[];
 }
 
 const approvalRuleSchema = new Schema<ApprovalRule>({
@@ -16,6 +18,7 @@ const approvalRuleSchema = new Schema<ApprovalRule>({
     enabled: { type: Boolean, default: false },
     threshold: { type: Number, default: null, min: 0 },
     approverRole: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+    disabledPlaces: { type: [String], default: [] },
 });
 
 export default model<ApprovalRule>('ApprovalRule', approvalRuleSchema);

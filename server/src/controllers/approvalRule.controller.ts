@@ -18,7 +18,7 @@ export const saveApprovalRule = async (req: Request, res: Response) => {
         if (!(APPROVAL_RULE_TYPES as readonly string[]).includes(type)) {
             return res.status(400).json({ success: false, message: "Invalid rule type" });
         }
-        const { enabled, threshold, approverRole } = req.body;
+        const { enabled, threshold, approverRole, disabledPlaces } = req.body;
         const t = threshold === null || threshold === '' || threshold === undefined ? null : Number(threshold);
         if (t !== null && (Number.isNaN(t) || t < 0)) {
             return res.status(400).json({ success: false, message: "Threshold must be a non-negative number" });
@@ -26,9 +26,11 @@ export const saveApprovalRule = async (req: Request, res: Response) => {
         if (enabled && !approverRole) {
             return res.status(400).json({ success: false, message: "Choose an approver role to enable this rule" });
         }
+        const update: Record<string, unknown> = { type, enabled: !!enabled, threshold: t, approverRole: approverRole || null };
+        if (Array.isArray(disabledPlaces)) update.disabledPlaces = disabledPlaces.filter((p) => typeof p === 'string');
         const rule = await ApprovalRule.findOneAndUpdate(
             { type },
-            { type, enabled: !!enabled, threshold: t, approverRole: approverRole || null },
+            update,
             { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
         ).populate('approverRole', 'categoryName');
         return res.status(200).json({ success: true, data: rule });

@@ -156,7 +156,9 @@ export class RoleFormDrawerComponent implements OnChanges {
         path: 'assignedJob.viewReport', label: 'Data visibility',
         options: [{ value: 'all', label: 'All presale jobs' }, { value: 'assigned', label: 'Assigned to user' }],
       }],
-      flags: [{ path: 'assignedJob.assign', label: 'Assign presale jobs to employees' }],
+      flags: [
+        { path: 'assignedJob.assign', label: 'Assign presale jobs to employees' },
+      ],
     },
     {
       key: 'quotation', label: 'Quotations', abbr: 'QT', description: 'Customer quotations', master: 'quotationChecked', group: 'quotation',

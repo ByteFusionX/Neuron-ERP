@@ -1,0 +1,29 @@
+.qt-meta { padding: 0.625rem 0.75rem; min-width: 0; }
+.qt-meta + .qt-meta { border-left: 1px solid #e5e7eb; }
+.qt-meta-label { font-size: 0.6875rem; color: #6b7280; }
+.qt-meta-value {
+  margin-top: 0.125rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:host-context(html.dark) .qt-meta + .qt-meta { border-left-color: #262626; }
+:host-context(html.dark) .qt-meta-label { color: #a1a1a1; }
+:host-context(html.dark) .qt-meta-value { color: #ededed; }
+
+.rules-applied { margin: 1.5rem calc(var(--dp-pad, 1.25rem) * -1) 0; padding: 1.5rem var(--dp-pad, 1.25rem) 0; border-top: 1px solid #d1d5db; }
+.rules-applied-title { margin-bottom: 0.5rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #6b7280; }
+.rules-applied-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.5rem 0; }
+.rules-applied-row + .rules-applied-row { border-top: 1px solid #f3f4f6; }
+.rules-applied-module { font-size: 0.8125rem; font-weight: 500; color: #111827; }
+.rules-applied-where { font-size: 0.75rem; color: #6b7280; }
+
+:host-context(html.dark) .rules-applied { border-top-color: #3f3f46; }
+:host-context(html.dark) .rules-applied-title,
+:host-context(html.dark) .rules-applied-where { color: #a1a1a1; }
+:host-context(html.dark) .rules-applied-row + .rules-applied-row { border-top-color: #262626; }
+:host-context(html.dark) .rules-applied-module { color: #ededed; }

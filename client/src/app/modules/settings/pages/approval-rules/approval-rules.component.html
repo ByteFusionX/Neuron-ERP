@@ -1,0 +1,66 @@
+<!-- Rules -->
+<div class="h-full">
+    <app-data-grid
+        #rulesGrid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        [tallRows]="true"
+        [data]="rules"
+        [columns]="columns"
+        [rowActions]="rowActions"
+        [breadcrumbs]="breadcrumbs"
+        [loading]="isLoading"
+        [selectable]="false"
+        [showToolbarTools]="false"
+        title="Rules"
+        subtitle="Thresholds that route a deal to an approver."
+        rowKey="_id"
+        storageKey="approval-rules"
+        emptyMessage="No rules found"
+        searchPlaceholder="Search rules…"
+        [detailTabs]="detailTabs"
+        [detailTitle]="detailTitle"
+        [detailSubtitle]="detailSubtitle"
+        detailBreadcrumb="Rules"
+        (cellEdit)="onCellEdit($event)"
+        (rowAction)="onRowAction($event)">
+
+        <ng-template #detailMetaTemplate let-row>
+            <div class="qt-meta"><p class="qt-meta-label">Status</p><p class="qt-meta-value">{{ row.enabled ? 'Enabled' : 'Disabled' }}</p></div>
+            <div class="qt-meta"><p class="qt-meta-label">Threshold</p><p class="qt-meta-value">{{ row.threshold ?? '—' }} {{ row.unit }}</p></div>
+            <div class="qt-meta"><p class="qt-meta-label">Approver</p><p class="qt-meta-value">{{ roleName(row.approverRole) }}</p></div>
+        </ng-template>
+
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container *ngIf="tab === 'overview'">
+                <app-detail-overview [grid]="rulesGrid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+
+                <p *ngIf="row.error" class="mt-3 text-xs text-red-600">{{ row.error }}</p>
+
+                <div class="rules-applied" *ngIf="row.places.length">
+                    <p class="rules-applied-title">Applied in</p>
+                    <div *ngFor="let place of row.places" class="rules-applied-row">
+                        <div class="min-w-0">
+                            <p class="rules-applied-module">{{ place.module }}</p>
+                            <p class="rules-applied-where">{{ place.where }}</p>
+                        </div>
+                        <app-action-button
+                            [variant]="placeEnabled(row, place) ? 'secondary' : 'primary'"
+                            [disabled]="!canEdit() || !row.enabled || row.saving"
+                            (click)="togglePlace(row, place)">
+                            {{ placeEnabled(row, place) ? 'Disable' : 'Enable' }}
+                        </app-action-button>
+                    </div>
+                    <p *ngIf="!row.enabled" class="rules-applied-where">Enable the rule to switch individual places on.</p>
+                </div>
+            </ng-container>
+        </ng-template>
+
+        <ng-template #detailFooterTemplate let-row>
+            <app-action-button [variant]="row.enabled ? 'secondary' : 'primary'" [disabled]="!canEdit() || row.saving" (click)="toggleEnabled(row)">
+                {{ row.saving ? 'Saving…' : (row.enabled ? 'Disable rule' : 'Enable rule') }}
+            </app-action-button>
+        </ng-template>
+    </app-data-grid>
+</div>
+<!-- /Rules -->
