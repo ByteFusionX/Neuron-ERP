@@ -9,6 +9,8 @@ import Enquiry from '../models/enquiry.model'
 import Quotation from '../models/quotation.model'
 import Job from '../models/job.model'
 import CustomerType from '../models/customerType.model'
+import Event from '../models/events.model'
+import { createAppOnlyCalendarService, isAppOnlyCalendarEnabled } from '../services/calendar.service'
 
 const allowedModels = ['Employee', 'Customer', 'Quotation', 'Enquiry', 'Department', 'InternalDepartment', 'Category', 'Job', 'CustomerType'];
 
@@ -28,9 +30,31 @@ export const newTrash = async (from: string, dataId: string, employee: string) =
 }
 
 
+// When an Enquiry/Quotation leaves the trash for good, cancel its synced Outlook events.
+// Needs the app-only fallback (no user token here); best-effort, never blocks the purge.
+const removeOutlookEventsFor = async (expired: any[]) => {
+    if (!isAppOnlyCalendarEnabled()) return;
+    const ids = expired
+        .filter((t) => t.deletedFrom === 'Enquiry' || t.deletedFrom === 'Quotation')
+        .map((t) => t.deletedData);
+    if (!ids.length) return;
+    const events: any[] = await Event.find({ collectionId: { $in: ids }, outlookEventId: { $exists: true, $ne: null } }).populate('createdBy', 'email');
+    for (const ev of events) {
+        try {
+            if (!ev.createdBy?.email) continue;
+            const calendar = await createAppOnlyCalendarService(ev.createdBy.email);
+            await calendar.deleteEvent(ev.outlookEventId);
+            await Event.updateOne({ _id: ev._id }, { $unset: { outlookEventId: 1 }, $set: { outlookSyncStatus: 'not-synced' } });
+        } catch (syncError) {
+            console.error('Outlook delete on trash purge failed:', syncError);
+        }
+    }
+}
+
 export const fetchTrash = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        await removeOutlookEventsFor(await Trash.find({ date: { $lt: oneDayAgo } }));
         const result = await Trash.deleteMany({ date: { $lt: oneDayAgo } });
         const trashes = await Trash.find().populate(['deletedData', 'deletedBy']).sort({ date: -1 })
         return res.status(200).json(trashes)

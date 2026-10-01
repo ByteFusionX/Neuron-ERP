@@ -41,6 +41,7 @@ import purchaseOrderRouter from "./routes/purchaseOrder.router";
 import workflowRouter from './routes/workflow.router';
 import approvalRuleRouter from './routes/approvalRule.router';
 import systemSettingRouter from './routes/systemSetting.router';
+import auditLogRouter from './routes/auditLog.router';
 import masterListRouter from './routes/masterList.router';
 import numberingRouter from './routes/numbering.router';
 import { bearerStrategyOptions } from './common/utils/tokenValidator';
@@ -139,6 +140,7 @@ app.use('/technical', technicalRouter)
 app.use('/workflow', workflowRouter)
 app.use('/approval-rule', approvalRuleRouter)
 app.use('/system-setting', systemSettingRouter)
+app.use('/audit-log', auditLogRouter)
 app.use('/master-list', masterListRouter)
 app.use('/numbering', numberingRouter)
 app.use('/claim', claimRouter)

@@ -1,10 +1,11 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { NgFor, NgIf } from '@angular/common';
+import { NgClass, NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
 import { SystemSettingService } from 'src/app/core/services/system-setting.service';
 import { settingsEditAccess } from '../../settings-edit-access';
 import { SettingsSectionHeaderComponent } from '../settings-section-header.component';
+import { AuditLogListComponent } from './audit-log-list.component';
 
 const AREA_DEFS: { id: string; label: string; description: string }[] = [
   { id: 'documents', label: 'Documents', description: 'Enquiries, quotations, deal sheets, jobs and other business documents.' },
@@ -17,10 +18,21 @@ const AREA_DEFS: { id: string; label: string; description: string }[] = [
 @Component({
   selector: 'app-audit-settings',
   standalone: true,
-  imports: [NgFor, NgIf, FormsModule, SettingsSectionHeaderComponent],
+  imports: [NgClass, NgFor, NgIf, FormsModule, SettingsSectionHeaderComponent, AuditLogListComponent],
   template: `
     <div class="w-full h-full bg-white dark:bg-erp-surface-dark p-6 rounded-md">
       <app-settings-section-header sectionId="audit"></app-settings-section-header>
+      <div class="mb-4 flex gap-1 border-b border-gray-200 dark:border-white/10" role="tablist">
+        <button type="button" role="tab" *ngFor="let t of tabs" (click)="tab = t.id" [attr.aria-selected]="tab === t.id"
+          class="-mb-px border-b-2 px-4 py-2 text-sm font-medium"
+          [ngClass]="tab === t.id ? 'border-violet-600 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-700'">
+          {{ t.label }}
+        </button>
+      </div>
+
+      <app-audit-log-list *ngIf="tab === 'history'"></app-audit-log-list>
+
+      <ng-container *ngIf="tab === 'settings'">
       <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
         Choose what changes are recorded and how long history is kept. These choices are saved here; recording is not yet driven by them.
       </p>
@@ -51,6 +63,7 @@ const AREA_DEFS: { id: string; label: string; description: string }[] = [
         class="mt-4 rounded-lg bg-violet-700 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 disabled:opacity-50">
         {{ saving ? 'Saving...' : 'Save' }}
       </button>
+      </ng-container>
     </div>
   `,
 })
@@ -58,6 +71,12 @@ export class AuditSettingsComponent implements OnInit {
   private settings = inject(SystemSettingService);
   private toast = inject(ToastrService);
   readonly canEdit = settingsEditAccess('auditEdit');
+
+  readonly tabs: { id: 'history' | 'settings'; label: string }[] = [
+    { id: 'history', label: 'Activity log' },
+    { id: 'settings', label: 'Recording & retention' },
+  ];
+  tab: 'history' | 'settings' = 'history';
 
   readonly defs = AREA_DEFS;
   areas: Record<string, boolean> = {};

@@ -9,7 +9,14 @@ interface events {
     summary: string,
     eventFiles: any,
     status: string,
-    createdBy:any
+    createdBy:any,
+    endDate?: Date,
+    location?: string,
+    attendees?: string[],
+    syncToOutlook?: boolean,
+    onlineMeeting?: boolean,
+    outlookEventId?: string,
+    outlookSyncStatus?: string
 }
 
 const eventSchema = new Schema<events>({
@@ -49,7 +56,34 @@ const eventSchema = new Schema<events>({
         ref: 'Employee',
         required: true
     },
-    eventFiles: []
+    eventFiles: [],
+    // Outlook calendar sync (one-way push). All optional so existing events are unaffected.
+    endDate: {
+        type: Date
+    },
+    location: {
+        type: String
+    },
+    attendees: {
+        type: [String],
+        default: []
+    },
+    syncToOutlook: {
+        type: Boolean,
+        default: false
+    },
+    onlineMeeting: {
+        type: Boolean,
+        default: false
+    },
+    outlookEventId: {
+        type: String
+    },
+    outlookSyncStatus: {
+        type: String,
+        enum: ['not-synced', 'synced', 'failed'],
+        default: 'not-synced'
+    }
 })
 
 export default model<events>('Event', eventSchema)

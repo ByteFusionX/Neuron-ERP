@@ -9,4 +9,11 @@ export interface Events {
     status: string,
     createdBy:any,
     eventFiles?: { fileName: string, originalname: string }[],
+    endDate?: Date,
+    location?: string,
+    attendees?: string[],
+    onlineMeeting?: boolean,
+    syncToOutlook?: boolean,
+    outlookEventId?: string,
+    outlookSyncStatus?: string,
 }
