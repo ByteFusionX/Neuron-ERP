@@ -2,7 +2,7 @@
 
     <!-- Header — same shell and spacing as the grid's toolbar, so List and Report read as one screen. -->
     <div class="sr-card shrink-0">
-        <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
+        <div class="relative flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="flex items-center gap-2.5 min-w-0">
                 <nav aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
                     <a *ngFor="let b of breadcrumbs" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
@@ -13,10 +13,12 @@
                 <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Overview</h2>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0">
-                <!-- List | Report. Both carry the same filters through the URL. -->
+            <!-- List | Report, centered in the header to match the list tab's toolbar. -->
+            <div class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
                 <app-view-toggle label="Stock" active="report" listLink="/stock/overview" reportLink="/stock/overview/report" [listQueryParams]="listQueryParams"></app-view-toggle>
+            </div>
 
+            <div class="flex items-center gap-2 shrink-0">
                 <app-action-button variant="tool" (click)="exportExcel()" [disabled]="!rows.length">
                     <ng-icon name="heroArrowDownTray" class="h-4 w-4 text-gray-500 dark:text-gray-400"></ng-icon>
                     Excel
