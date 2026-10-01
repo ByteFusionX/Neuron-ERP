@@ -1,42 +1,34 @@
-import { Component, HostListener, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, Validators } from '@angular/forms';
-import { Observable } from 'rxjs';
-import { MODAL_DATA, ModalRef } from '../../modal';
-import { SmartFormModule } from '../../smart-form';
-import { SfOption } from '../../smart-form/sf.model';
+import { FormModalShellComponent, MODAL_DATA, ModalRef } from '../../modal';
+import { SfOption, SmartFormModule } from '../../smart-form';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { UploadFileComponent } from '../../upload-file/upload-file.component';
 import { DetailTaskItem } from '../detail-panel.model';
-import { DetailPanelIconComponent } from '../detail-panel-icon.component';
-import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 
 export interface EventCreateModalData {
   /** Record the event belongs to, shown as a chip in the header, e.g. a project or quotation name. */
   context?: string;
   /** When provided, "Create another" is offered: each event is passed here and the modal stays open. */
   onCreate?: (event: DetailTaskItem) => void;
-  /** Shows the "Assigned To" field, populated from `employees`. */
-  assignable?: boolean;
-  /** Employee list for the "Assigned To" field; required when `assignable` is true. */
-  employees?: Observable<getEmployee[]>;
-  /** Shows the "Contact Person" field, populated from `contactPersons`. */
-  contactPersonable?: boolean;
-  /** Customer contact list for the "Contact Person" field; required when `contactPersonable` is true. */
-  contactPersons?: SfOption[];
   /** Shows the file-attachment field. */
   attachable?: boolean;
   /** Makes the description field required and labels it "Summary" instead of "Description". */
   requireSummary?: boolean;
+  /** Shows the "Add to Outlook calendar" option (with Teams meeting and attendees). */
+  outlookSync?: boolean;
 }
 
 /** Result of a successful submit: the generic item plus fields callers need to persist it themselves. */
 export interface EventModalResult extends DetailTaskItem {
-  /** Selected employee id, present when the modal was opened with `assignable: true`. */
-  employeeId?: string;
   /** Raw files to upload, present when the modal was opened with `attachable: true`. */
   files?: File[];
-  /** Selected customer contact id, present when the modal was opened with `contactPersonable: true`. */
-  contactPersonId?: string;
+  syncToOutlook?: boolean;
+  onlineMeeting?: boolean;
+  attendees?: string[];
+  /** ISO end timestamp; only set when the modal shows the time fields. */
+  endDate?: string;
 }
 
 /**
@@ -48,32 +40,15 @@ export interface EventModalResult extends DetailTaskItem {
 @Component({
   selector: 'app-event-create-modal',
   standalone: true,
-  imports: [CommonModule, SmartFormModule, DetailPanelIconComponent, UploadFileComponent],
+  imports: [CommonModule, SmartFormModule, FormModalShellComponent, UploadFileComponent],
   template: `
-    <div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
-      <!-- Header -->
-      <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
-        <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900">
-          <app-dp-icon name="calendar" size="w-5 h-5"></app-dp-icon>
-        </span>
-        <div class="min-w-0 flex-1">
-          <h2 class="text-base font-semibold leading-6">New event</h2>
-          <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-            <ng-container *ngIf="data?.context; else noCtx">
-              Adding to
-              <span class="inline-flex max-w-[16rem] items-center truncate rounded-md bg-gray-100 px-1.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ data?.context }}</span>
-            </ng-container>
-            <ng-template #noCtx>Schedule a meeting, visit or milestone.</ng-template>
-          </p>
-        </div>
-        <button type="button" (click)="close()" aria-label="Close"
-          class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
-          <app-dp-icon name="close" size="w-4 h-4"></app-dp-icon>
-        </button>
-      </header>
-
-      <!-- Body -->
-      <form id="event-create-form" [formGroup]="form" (ngSubmit)="submit()" novalidate class="flex-1 overflow-y-auto px-6 py-5">
+    <app-form-modal-shell
+      icon="calendar" tone="sky" title="New event"
+      [context]="data?.context" contextEmptyText="Schedule a meeting, visit or milestone."
+      formId="event-create-form" [invalid]="form.invalid && submitted"
+      submitLabel="Create event" submitShortcutVerb="create"
+      (closed)="close()">
+      <form id="event-create-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <app-sf-section title="What's happening" columns="1">
           <app-sf-field label="Title" [control]="form.controls.title">
             <app-sf-input formControlName="title" placeholder="e.g. Site inspection" [maxlength]="120" clearable></app-sf-input>
@@ -86,20 +61,32 @@ export interface EventModalResult extends DetailTaskItem {
 
         <app-sf-section title="When & where" columns="2">
           <app-sf-field label="Date" [control]="form.controls.date">
-            <app-sf-date formControlName="date"></app-sf-date>
+            <app-sf-date formControlName="date" [min]="today"></app-sf-date>
           </app-sf-field>
-          <app-sf-field label="Location" optional [control]="form.controls.location">
-            <app-sf-input formControlName="location" placeholder="e.g. Main building" clearable></app-sf-input>
+          <app-sf-field *ngIf="data?.outlookSync" label="Time" [control]="form.controls.startTime">
+            <app-sf-date type="time" formControlName="startTime"></app-sf-date>
           </app-sf-field>
+          <div class="col-span-2">
+            <app-sf-field label="Location" optional [control]="form.controls.location">
+              <app-sf-input formControlName="location" placeholder="e.g. Main building" clearable></app-sf-input>
+            </app-sf-field>
+          </div>
         </app-sf-section>
 
-        <app-sf-section *ngIf="data?.assignable || data?.contactPersonable" title="Ownership" columns="2">
-          <app-sf-field *ngIf="data?.assignable" label="Assigned To" [control]="form.controls.employeeId">
-            <app-sf-select formControlName="employeeId" [options]="employeeOptions" placeholder="Select employee"></app-sf-select>
-          </app-sf-field>
-          <app-sf-field *ngIf="data?.contactPersonable" label="Contact Person" optional [control]="form.controls.contactPersonId">
-            <app-sf-select formControlName="contactPersonId" [options]="data?.contactPersons || []" placeholder="Select contact person"></app-sf-select>
-          </app-sf-field>
+        <app-sf-section *ngIf="data?.outlookSync" title="Outlook calendar" columns="1">
+          <label class="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input type="checkbox" class="h-4 w-4 rounded border-gray-300 accent-violet-600" [checked]="syncToOutlook" (change)="syncToOutlook = !syncToOutlook" />
+            Add to Outlook calendar
+          </label>
+          <ng-container *ngIf="syncToOutlook">
+            <label class="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input type="checkbox" class="h-4 w-4 rounded border-gray-300 accent-violet-600" [checked]="onlineMeeting" (change)="onlineMeeting = !onlineMeeting" />
+              Teams meeting
+            </label>
+            <app-sf-field label="Attendees" optional [control]="form.controls.attendees">
+              <app-sf-combobox formControlName="attendees" [options]="employeeOptions" multiple placeholder="Search active employees…"></app-sf-combobox>
+            </app-sf-field>
+          </ng-container>
         </app-sf-section>
 
         <app-sf-section *ngIf="data?.attachable" title="Attachments" columns="1">
@@ -107,66 +94,58 @@ export interface EventModalResult extends DetailTaskItem {
         </app-sf-section>
       </form>
 
-      <!-- Footer -->
-      <footer class="flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
-        <label *ngIf="data?.onCreate" class="inline-flex cursor-pointer select-none items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-          <input type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 accent-violet-600" [checked]="createAnother" (change)="createAnother = !createAnother" />
-          Create another
-        </label>
-        <span *ngIf="form.invalid && submitted" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
-        <span class="ml-auto hidden text-[11px] text-gray-400 sm:inline">
-          <kbd class="rounded border border-gray-200 bg-white px-1 font-sans dark:border-erp-border-dark dark:bg-gray-800">Ctrl</kbd>
-          + <kbd class="rounded border border-gray-200 bg-white px-1 font-sans dark:border-erp-border-dark dark:bg-gray-800">Enter</kbd> to create
-        </span>
-        <div class="flex gap-2 max-sm:ml-auto">
-          <button type="button" (click)="close()"
-            class="rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-[13px] font-medium text-gray-700 transition hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
-          <button type="submit" form="event-create-form"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-[13px] font-medium text-white shadow-sm transition hover:bg-violet-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
-            <app-dp-icon name="plus" size="w-3.5 h-3.5"></app-dp-icon>Create event
-          </button>
-        </div>
-      </footer>
-    </div>
+      <label footerExtra *ngIf="data?.onCreate" class="inline-flex cursor-pointer select-none items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+        <input type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 accent-violet-600" [checked]="createAnother" (change)="createAnother = !createAnother" />
+        Create another
+      </label>
+    </app-form-modal-shell>
   `,
   styles: [':host{display:block}'],
 })
 export class EventCreateModalComponent implements OnInit {
+  get today(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   private fb = inject(FormBuilder);
+  private employees = inject(EmployeeService);
   private dialogRef = inject<ModalRef<EventModalResult>>(ModalRef);
   data = inject(MODAL_DATA, { optional: true }) as EventCreateModalData | null;
 
   submitted = false;
   createAnother = false;
   files: File[] = [];
+  syncToOutlook = false;
+  onlineMeeting = false;
+
   employeeOptions: SfOption[] = [];
 
   form = this.fb.group({
+    attendees: [[] as string[]],
     title: ['', [Validators.required, Validators.maxLength(120)]],
     description: ['', Validators.maxLength(1000)],
     date: [null as string | null, Validators.required],
+    startTime: ['09:00'],
     location: ['', Validators.maxLength(120)],
-    employeeId: [null as string | null],
-    contactPersonId: [null as string | null],
   });
 
   ngOnInit(): void {
-    if (this.data?.assignable && this.data.employees) {
-      this.data.employees.subscribe((employees) => {
-        this.employeeOptions = (employees || []).map((e) => ({ value: e._id, label: `${e.firstName} ${e.lastName}` }));
+    if (this.data?.outlookSync) {
+      this.form.controls.startTime.addValidators(Validators.required);
+      // /employee already excludes deleted and blocked staff; attendees also need a mailbox.
+      this.employees.getAllEmployees().subscribe({
+        next: (list) => {
+          this.employeeOptions = (list || [])
+            .filter((e) => !e.isBlocked && !!e.email)
+            .map((e) => ({ label: `${e.firstName} ${e.lastName}`.trim(), value: e.email, description: e.email }));
+        },
+        error: () => { this.employeeOptions = []; },
       });
     }
     if (this.data?.requireSummary) {
       this.form.controls.description.addValidators(Validators.required);
       this.form.controls.description.updateValueAndValidity();
-    }
-  }
-
-  @HostListener('keydown', ['$event'])
-  onKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      this.submit();
     }
   }
 
@@ -181,24 +160,29 @@ export class EventCreateModalComponent implements OnInit {
       return;
     }
     const v = this.form.getRawValue();
-    const employeeName = this.employeeOptions.find((o) => o.value === v.employeeId)?.label;
+    const attendees = v.attendees || [];
+    // With the time field shown, date becomes a full ISO timestamp built from the local date + time.
+    let date: string | undefined = v.date ?? undefined;
+    if (this.data?.outlookSync && v.date) {
+      date = new Date(`${v.date}T${v.startTime}`).toISOString();
+    }
     const event: EventModalResult = {
+      syncToOutlook: this.syncToOutlook,
+      onlineMeeting: this.syncToOutlook && this.onlineMeeting,
+      attendees: this.syncToOutlook ? attendees : [],
       id: `event-${Date.now()}`,
       kind: 'event',
       title: v.title!.trim(),
       description: v.description?.trim() || undefined,
-      date: v.date ?? undefined,
+      date,
       location: v.location?.trim() || undefined,
       deletable: true,
-      assignee: employeeName,
-      employeeId: v.employeeId ?? undefined,
       files: this.data?.attachable ? this.files : undefined,
-      contactPersonId: v.contactPersonId ?? undefined,
     };
 
     if (this.createAnother && this.data?.onCreate) {
       this.data.onCreate(event);
-      this.form.reset({ ...this.form.getRawValue(), title: '', description: '', location: '', employeeId: null, contactPersonId: null });
+      this.form.reset({ ...this.form.getRawValue(), title: '', description: '', location: '', attendees: [] });
       this.files = [];
       this.submitted = false;
       return;

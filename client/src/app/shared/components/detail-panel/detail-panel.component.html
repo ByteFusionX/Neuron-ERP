@@ -33,7 +33,7 @@
 
   <!-- Tabs (sticky while the body scrolls) -->
   <nav *ngIf="tabs.length" role="tablist"
-    class="dp-tabs-scroll sticky top-0 z-10 bg-white dark:bg-erp-surface-dark flex flex-nowrap items-center gap-x-5 px-5 border-b border-gray-300 dark:border-neutral-700 overflow-x-auto overflow-y-hidden">
+    class="dp-tabs-scroll sticky top-0 z-10 bg-gray-50 dark:bg-erp-surface-dark-alt flex flex-nowrap items-center gap-x-5 px-5 border-b border-gray-300 dark:border-neutral-700 overflow-x-auto overflow-y-hidden">
     <button *ngFor="let t of tabs" type="button" role="tab" (click)="selectTab(t.id)"
       [attr.aria-selected]="activeTab === t.id"
       class="flex items-center gap-1.5 py-2.5 text-sm whitespace-nowrap shrink-0 border-b-2 -mb-px transition-colors"

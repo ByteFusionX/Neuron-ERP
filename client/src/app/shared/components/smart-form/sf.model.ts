@@ -8,15 +8,14 @@ export interface SfOption<V = any> {
 /** Shared control styles. Angular's ng-invalid/ng-touched classes land on each control's host element. */
 export const SF_STYLES = `
   :host { display: block; }
-  .sf-input { width: 100%; min-height: 2.25rem; padding: 0 0.75rem; font-size: 0.8125rem; color: #111827; background: #fff;
-    border: 1px solid #d1d5db; border-radius: 0.5rem; outline: none; transition: border-color 120ms ease, box-shadow 120ms ease; }
+  .sf-input { width: 100%; min-height: 2.125rem; padding: 0 0.75rem; font-size: 0.8125rem; color: #374151; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 0.5rem; outline: none; transition: border-color 150ms ease, box-shadow 150ms ease; }
   .sf-input::placeholder, .sf-bare::placeholder { color: #9ca3af; }
-  .sf-input:hover { border-color: #9ca3af; }
   .sf-input:focus, .sf-input:focus-within { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15); }
   .sf-input:disabled, .sf-input.sf-disabled { background: #f9fafb; color: #9ca3af; cursor: not-allowed; border-color: #e5e7eb; }
   :host(.ng-invalid.ng-touched) .sf-input { border-color: #ef4444; }
   :host(.ng-invalid.ng-touched) .sf-input:focus, :host(.ng-invalid.ng-touched) .sf-input:focus-within { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15); }
-  .sf-bare { flex: 1; min-width: 0; height: 2.125rem; border: 0; outline: 0; background: transparent; font: inherit; color: inherit; padding: 0; }
+  .sf-bare { flex: 1; min-width: 0; height: 2rem; border: 0; outline: 0; background: transparent; font: inherit; color: inherit; padding: 0; }
   .sf-bare:disabled { cursor: not-allowed; }
   .sf-check, .sf-radio { appearance: none; flex-shrink: 0; width: 1rem; height: 1rem; margin-top: 0.125rem; background: #fff;
     border: 1px solid #d1d5db; cursor: pointer; transition: all 120ms ease; }
@@ -30,9 +29,8 @@ export const SF_STYLES = `
   :host(.ng-invalid.ng-touched) .sf-check { border-color: #ef4444; }
 
   /* Dark mode */
-  :host-context(html.dark) .sf-input { color: #ededed; background: #111111; border-color: #262626; }
-  :host-context(html.dark) .sf-input::placeholder, :host-context(html.dark) .sf-bare::placeholder { color: #8f8f8f; }
-  :host-context(html.dark) .sf-input:hover { border-color: #525252; }
+  :host-context(html.dark) .sf-input { color: #e5e7eb; background: #111111; border-color: #262626; }
+  :host-context(html.dark) .sf-input::placeholder, :host-context(html.dark) .sf-bare::placeholder { color: #737373; }
   :host-context(html.dark) .sf-input:focus, :host-context(html.dark) .sf-input:focus-within { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25); }
   :host-context(html.dark) .sf-input:disabled, :host-context(html.dark) .sf-input.sf-disabled { background: #1a1a1a; color: #8f8f8f; border-color: #262626; }
   :host-context(html.dark) .sf-check, :host-context(html.dark) .sf-radio { background-color: #111111; border-color: #525252; }

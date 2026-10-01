@@ -10,7 +10,6 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { ModalService } from 'src/app/shared/components/modal';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { SfOption } from 'src/app/shared/components/smart-form';
 import { DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
 import { ContactDetail } from 'src/app/shared/interfaces/customer.interface';
@@ -61,21 +60,13 @@ export class EventActionsService {
   }
 
   create(opts: CreateEventOptions): Observable<boolean> {
-    const contactPersons: SfOption[] = (opts.contactDetails || []).map((c) => ({
-      label: `${c.firstName} ${c.lastName}`,
-      value: c._id,
-    }));
-
     return new Observable<boolean>((subscriber) => {
       this.modal.open<EventModalResult>(EventCreateModalComponent, {
         width: '560px',
         data: {
           context: opts.context,
-          assignable: true,
-          employees: this.employees.getAllEmployees(),
-          contactPersonable: true,
-          contactPersons,
           requireSummary: true,
+          outlookSync: true,
         },
       }).afterClosed().subscribe((event) => {
         if (!event) { subscriber.next(false); subscriber.complete(); return; }
@@ -85,12 +76,16 @@ export class EventActionsService {
           collectionId: opts.collectionId,
           event: event.title,
           date: event.date,
-          employee: event.employeeId,
-          contactPerson: event.contactPersonId,
+          endDate: event.endDate,
           summary: event.description,
+          location: event.location,
+          syncToOutlook: event.syncToOutlook,
+          onlineMeeting: event.onlineMeeting,
+          attendees: event.attendees,
         }));
-        this.events.newEvent(formData).subscribe({
+        this.events.newEvent(formData, !!event.syncToOutlook).subscribe({
           next: (res) => {
+            if (res?.outlookWarning) { this.toast.warning(res.outlookWarning); }
             if (res?.event) { this.toast.success(res.message || 'Event created successfully'); }
             subscriber.next(!!res?.event);
             subscriber.complete();

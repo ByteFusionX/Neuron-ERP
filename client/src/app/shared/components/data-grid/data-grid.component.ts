@@ -13,6 +13,11 @@ import {
   DataGridRowActionEvent, DataGridSortState, DataGridToast, DataGridView,
 } from './data-grid.model';
 import { DataGridAutofocusDirective } from './data-grid-autofocus.directive';
+import { SfInputComponent } from '../smart-form/sf-input.component';
+import { SfSelectComponent } from '../smart-form/sf-select.component';
+import { SfNumberComponent } from '../smart-form/sf-number.component';
+import { SfDateComponent } from '../smart-form/sf-date.component';
+import { SfOption } from '../smart-form/sf.model';
 import { STATUS_TONE_CLASSES, statusTone } from '../status-indicator/status-tone';
 import { DetailPanelComponent } from '../detail-panel/detail-panel.component';
 import { DetailPanelIconComponent } from '../detail-panel/detail-panel-icon.component';
@@ -23,6 +28,7 @@ interface DataGridPrefs {
   activeViewId?: string;
   customViews?: DataGridView[];
   density?: 'comfortable' | 'compact';
+  viewOrder?: string[];
 }
 
 /**
@@ -43,7 +49,7 @@ interface DataGridPrefs {
   // A `title` input must not leak onto the host as a native browser tooltip.
   host: { '[attr.title]': 'null' },
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink,DataGridAutofocusDirective, DetailPanelComponent, DetailPanelIconComponent, MatTooltipModule],
+  imports: [CommonModule, FormsModule, RouterLink,DataGridAutofocusDirective, DetailPanelComponent, DetailPanelIconComponent, MatTooltipModule, SfInputComponent, SfSelectComponent, SfNumberComponent, SfDateComponent],
   templateUrl: './data-grid.component.html',
   styleUrls: ['./data-grid.component.css'],
 })
@@ -91,6 +97,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() detailLoading = false;
   /** Row height; the user's choice is remembered with `storageKey`. */
   @Input() density: 'comfortable' | 'compact' = 'comfortable';
+  /** Match the row height of grids that show a row-actions button (e.g. enquiry). */
+  @Input() tallRows = false;
   /** Left-edge accent for rows that need attention (overdue, blocked) */
   @Input() rowAccent?: (row: T) => 'danger' | 'warning' | 'info' | null | undefined;
   /** Shows an Export button that downloads the filtered rows (visible columns) as .xlsx. Defaults to `<title>.xlsx`. */
@@ -143,6 +151,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   activeViewId = '';
   customViews: DataGridView<T>[] = [];
+  /** User-chosen order of view tabs (ids), remembered with `storageKey`. */
+  viewOrder: string[] = [];
   saveViewOpen = false;
   newViewName = '';
   dragKey: string | null = null;
@@ -281,7 +291,52 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   // ---- views ----
   get allViews(): DataGridView<T>[] {
-    return [...this.views, ...this.customViews];
+    const all = [...this.views, ...this.customViews];
+    if (!this.viewOrder.length) return all;
+    const rank = (v: DataGridView<T>) => {
+      const i = this.viewOrder.indexOf(v.id);
+      return i < 0 ? this.viewOrder.length : i;
+    };
+    // stable sort: tabs not in the saved order keep their natural position after the ordered ones
+    return all.map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map((x) => x.v);
+  }
+
+  // ---- view tab drag & drop ----
+  dragViewId: string | null = null;
+  dragOverViewId: string | null = null;
+
+  onViewDragStart(view: DataGridView<T>, event: DragEvent): void {
+    this.dragViewId = view.id;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', view.id);
+    }
+  }
+
+  onViewDragOver(view: DataGridView<T>, event: DragEvent): void {
+    if (!this.dragViewId) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    this.dragOverViewId = view.id;
+  }
+
+  onViewDrop(target: DataGridView<T>, event: DragEvent): void {
+    event.preventDefault();
+    const sourceId = this.dragViewId;
+    this.onViewDragEnd();
+    if (!sourceId || sourceId === target.id) return;
+    const ids = this.allViews.map((v) => v.id);
+    const from = ids.indexOf(sourceId);
+    const to = ids.indexOf(target.id);
+    if (from < 0 || to < 0) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    this.viewOrder = ids;
+    this.savePrefs();
+  }
+
+  onViewDragEnd(): void {
+    this.dragViewId = null;
+    this.dragOverViewId = null;
   }
 
   get activeView(): DataGridView<T> | undefined {
@@ -421,6 +476,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     if (this.prefs.pageSize && this.pageSizeOptions.includes(this.prefs.pageSize)) this.pageSize = this.prefs.pageSize;
     this.customViews = (this.prefs.customViews ?? []) as DataGridView<T>[];
     if (this.prefs.density) this.density = this.prefs.density;
+    this.viewOrder = this.prefs.viewOrder ?? [];
   }
 
   private savePrefs(): void {
@@ -431,6 +487,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       activeViewId: this.activeViewId,
       customViews: this.customViews,
       density: this.density,
+      viewOrder: this.viewOrder,
     };
     try {
       localStorage.setItem(this.prefsKey, JSON.stringify(this.prefs));
@@ -581,7 +638,37 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     this.filterMenuOpen = !this.filterMenuOpen;
   }
 
-  onDraftColumnChange(key: string): void {
+  // Smart-form selects re-render their <option>s whenever the array identity changes, so keep each list stable until its content changes.
+  private optionCache = new Map<string, { sig: string; out: SfOption[] }>();
+
+  private cachedOptions(name: string, sig: string, build: () => SfOption[]): SfOption[] {
+    const hit = this.optionCache.get(name);
+    if (hit?.sig === sig) return hit.out;
+    const out = build();
+    this.optionCache.set(name, { sig, out });
+    return out;
+  }
+
+  get columnSelectOptions(): SfOption[] {
+    return this.cachedOptions('columns', this.columns.map((c) => c.key + c.label).join('|'), () => this.columns.map((c) => ({ label: c.label, value: c.key })));
+  }
+
+  get sortSelectOptions(): SfOption[] {
+    return this.cachedOptions('sort', this.sortableColumns.map((c) => c.key + c.label).join('|'), () => this.sortableColumns.map((c) => ({ label: c.label, value: c.key })));
+  }
+
+  get operatorSelectOptions(): SfOption[] {
+    const ops = this.operatorsFor(this.draftColumn);
+    return this.cachedOptions('operators', ops.map((o) => o.value).join('|'), () => ops);
+  }
+
+  get valueSelectOptions(): SfOption[] {
+    const opts = this.optionsFor(this.draftColumn);
+    return this.cachedOptions('values', opts.map((o) => o.value + ':' + o.label).join('|'), () => opts);
+  }
+
+  onDraftColumnChange(key: string | null): void {
+    if (!key) return;
     const col = this.columns.find((c) => c.key === key);
     this.draftFilter = { key, op: this.operatorsFor(col)[0].value, value: '', or: this.draftFilter.or };
   }

@@ -280,18 +280,6 @@ tr:hover .dg-editable {
   cursor: default;
 }
 
-.dg-search {
-  width: 14rem;
-  height: 2rem;
-  padding: 0 0.75rem 0 2rem;
-  font-size: 0.8125rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  outline: none;
-  background: #fff;
-}
-
-.dg-search:focus,
 .dg-field:focus {
   border-color: #7c3aed;
   box-shadow: 0 0 0 3px rgb(124 58 237 / 0.15);
@@ -309,14 +297,12 @@ tr:hover .dg-editable {
   background: #fff;
 }
 
-:host-context(html.dark) .dg-search,
 :host-context(html.dark) .dg-field {
   color: #d4d4d4;
   background: #111111;
   border-color: #262626;
 }
 
-:host-context(html.dark) .dg-search::placeholder,
 :host-context(html.dark) .dg-field::placeholder {
   color: #8f8f8f;
 }
@@ -402,6 +388,11 @@ tr:hover .dg-editable {
 
 .dg-view-tab:hover {
   color: #111827;
+}
+
+/* drop target while dragging a tab */
+.dg-view-dragover {
+  box-shadow: -2px 0 0 0 #7c3aed;
 }
 
 .dg-view-active {
@@ -566,3 +557,5 @@ tr:hover .dg-editable {
     animation: none;
   }
 }
+
+.dg-tall .dg-td { height: 3.3125rem; }

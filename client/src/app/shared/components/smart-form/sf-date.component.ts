@@ -5,8 +5,8 @@ import { SF_STYLES } from './sf.model';
 
 /**
  * Value is the native string: yyyy-MM-dd, yyyy-MM-ddTHH:mm, HH:mm or yyyy-MM. ISO strings are accepted on write.
- * By default the browser draws the field. Pass `displayFormat` (e.g. `dd/MM/yy`) on a plain `date` field to show a
- * fixed format instead; a hidden native input still supplies the calendar and the stored value is unchanged.
+ * A plain `date` field shows `dd/MM/yy` by default (or the `displayFormat` you pass); a hidden native input still
+ * supplies the calendar and the stored value is unchanged. Other types are drawn by the browser.
  */
 @Component({
   selector: 'app-sf-date',
@@ -34,8 +34,8 @@ export class SfDateComponent extends SfControl<string> {
   @Input() type: 'date' | 'datetime-local' | 'time' | 'month' = 'date';
   @Input() min: string | null = null;
   @Input() max: string | null = null;
-  /** Fixed display for `type="date"`: `dd/MM/yy` or `dd/MM/yyyy`. Omit to use the browser's own format. */
-  @Input() displayFormat: 'dd/MM/yy' | 'dd/MM/yyyy' | null = null;
+  /** Fixed display for `type="date"`: `dd/MM/yy` (default) or `dd/MM/yyyy`. Pass `null` to use the browser's own format. */
+  @Input() displayFormat: 'dd/MM/yy' | 'dd/MM/yyyy' | null = 'dd/MM/yy';
 
   /** Browsers only open the picker from the calendar icon by default; open it from anywhere in the field. */
   openPicker(input: HTMLInputElement): void {

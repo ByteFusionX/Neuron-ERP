@@ -78,8 +78,7 @@ export class EventsListComponent implements OnInit, OnDestroy {
     dialog.afterClosed().subscribe((res) => {
       if (res && res.event) {
         this.fetchEvents()
-        this.toaster.success(res.message || 'Event created successfully');
-      }
+        this.toaster.success(res.message || 'Event created successfully');      }
     })
   }
 

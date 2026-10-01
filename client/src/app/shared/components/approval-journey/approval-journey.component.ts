@@ -22,6 +22,7 @@ export class ApprovalJourneyComponent {
     end: 'bg-green-100 text-green-600 ring-green-50 dark:bg-green-500/20 dark:text-green-300 dark:ring-green-500/5',
     done: 'bg-green-600 text-white ring-green-50 dark:ring-green-500/10',
     current: 'bg-amber-500 text-white ring-amber-50 dark:ring-amber-500/10',
+    rejected: 'bg-red-600 text-white ring-red-50 dark:ring-red-500/10',
   };
 
   isMuted(stage: ApprovalJourneyStage): boolean {

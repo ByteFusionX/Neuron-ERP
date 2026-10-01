@@ -5,6 +5,15 @@ export interface ConfirmDetail {
   value: string;
 }
 
+/** One radio option in a dialog that asks the user to pick how to proceed. */
+export interface ConfirmChoice {
+  value: string;
+  label: string;
+  hint?: string;
+  /** Extra friction for a destructive option: the user must type this to confirm while it is selected. */
+  typeToConfirm?: string;
+}
+
 export interface ConfirmConfig {
   tone: ConfirmTone;
   title: string;
@@ -21,6 +30,10 @@ export interface ConfirmConfig {
   reasonLabel?: string;
   /** User must type this exact text (e.g. a record number) to enable the confirm button. */
   typeToConfirm?: string;
+  /** Radio options shown above the reason box; the picked value comes back as `choice`. */
+  choices?: ConfirmChoice[];
+  /** Value of the choice selected when the dialog opens (defaults to the first). */
+  defaultChoice?: string;
   /** Note tone only: hide the cancel button and show a single acknowledge button. */
   acknowledgeOnly?: boolean;
 }
@@ -28,6 +41,7 @@ export interface ConfirmConfig {
 export interface ConfirmResult {
   confirmed: boolean;
   reason?: string;
+  choice?: string;
 }
 
 export const CONFIRM_TONES: Record<ConfirmTone, { confirmLabel: string; icon: string; iconBox: string; button: string }> = {

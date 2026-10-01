@@ -9,6 +9,7 @@ import { NgSelectModule } from '@ng-select/ng-select';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { UploadFileComponent } from '../upload-file/upload-file.component';
 import { EventsService } from 'src/app/core/services/events/events.service';
+import { ToastrService } from 'ngx-toastr';
 
 @Component({
     selector: 'app-events',
@@ -24,6 +25,13 @@ export class EventsComponent implements OnInit, OnDestroy {
   selectedEvent!: string;
   selectedDate!: string;
   summary!: string;
+  selectedEndDate!: string;
+  location: string = '';
+  attendees: string[] = [];
+  syncToOutlook: boolean = false;
+  onlineMeeting: boolean = false;
+  endDateError: boolean = false;
+  attendeesError: boolean = false;
   employeeError: boolean = false;
   fileError: boolean = false;
   commentError: boolean = false;
@@ -40,6 +48,7 @@ export class EventsComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) public data: { collectionId: string, from: string },
     private _employeeService: EmployeeService,
     private _eventService: EventsService,
+    private _toastr: ToastrService,
   ) { }
 
   ngOnInit(): void {
@@ -73,13 +82,21 @@ export class EventsComponent implements OnInit, OnDestroy {
     this.validateComment();
     this.validateDate();
     
-    if (this.eventError || this.employeeError || this.commentError || this.dateError) {
+    this.validateEndDate();
+    this.validateAttendees();
+
+    if (this.eventError || this.employeeError || this.commentError || this.dateError || this.endDateError || this.attendeesError) {
       this.isSaving = false;
       return;
     }
-    
+
     this.isSaving = true;
     const eventData = {
+      endDate: this.selectedEndDate || undefined,
+      location: this.location?.trim() || undefined,
+      attendees: this.syncToOutlook ? this.attendees : [],
+      syncToOutlook: this.syncToOutlook,
+      onlineMeeting: this.syncToOutlook && this.onlineMeeting,
       from: this.data.from,
       collectionId: this.data.collectionId,
       event: this.selectedEvent,
@@ -99,8 +116,11 @@ export class EventsComponent implements OnInit, OnDestroy {
     }
 
     this.subscriptions.add(
-      this._eventService.newEvent(formData).subscribe({
+      this._eventService.newEvent(formData, this.syncToOutlook).subscribe({
         next: (res) => {
+          if (res?.outlookWarning) {
+            this._toastr.warning(res.outlookWarning);
+          }
           if (res) {
             this.dialogRef.close(res)
           }
@@ -150,6 +170,16 @@ export class EventsComponent implements OnInit, OnDestroy {
     } else {
       this.eventError = false
     }
+  }
+
+  validateEndDate() {
+    this.endDateError = !!this.selectedEndDate && !!this.selectedDate &&
+      new Date(this.selectedEndDate).getTime() <= new Date(this.selectedDate).getTime();
+  }
+
+  validateAttendees() {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    this.attendeesError = this.syncToOutlook && this.attendees.some((email) => !emailPattern.test(email));
   }
 
   validateDate() {

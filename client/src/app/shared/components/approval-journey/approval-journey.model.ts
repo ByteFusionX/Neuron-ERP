@@ -1,4 +1,4 @@
-export type ApprovalJourneyStageVariant = 'start' | 'manager' | 'stage' | 'empty' | 'end' | 'done' | 'current';
+export type ApprovalJourneyStageVariant = 'start' | 'manager' | 'stage' | 'empty' | 'end' | 'done' | 'current' | 'rejected';
 
 export interface ApprovalJourneyStage {
   key: string;

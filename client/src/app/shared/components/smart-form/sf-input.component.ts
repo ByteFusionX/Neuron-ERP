@@ -11,8 +11,11 @@ import { SF_STYLES } from './sf.model';
   providers: [{ provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => SfInputComponent), multi: true }],
   template: `
     <div class="sf-input flex items-center gap-2" [class.sf-disabled]="disabled">
+      <svg *ngIf="type === 'search'" class="pointer-events-none h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="M20 20l-3.5-3.5" />
+      </svg>
       <span *ngIf="prefix" class="shrink-0 text-gray-400 dark:text-gray-500">{{ prefix }}</span>
-      <input class="sf-bare" [id]="inputId" [type]="type === 'password' && reveal ? 'text' : type"
+      <input class="sf-bare" [id]="inputId" [type]="type === 'password' && reveal ? 'text' : type === 'search' ? 'text' : type"
         [value]="value ?? ''" [placeholder]="placeholder" [disabled]="disabled" [readOnly]="readonly"
         [attr.maxlength]="maxlength" [attr.autocomplete]="autocomplete"
         (input)="update($any($event.target).value)" (blur)="touch()" />

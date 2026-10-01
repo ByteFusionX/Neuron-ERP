@@ -8,16 +8,9 @@
       <div *ngIf="loading && data.length" class="dg-progress" role="progressbar" aria-label="Loading"></div>
       <ng-container *ngIf="selectedKeys.size === 0; else bulkBar">
         <div *ngIf="showTitleBlock" class="flex flex-1 flex-col justify-center min-w-0">
-          <nav *ngIf="breadcrumbs.length" aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-500 min-w-0 mb-1.5">
-            <ng-container *ngFor="let b of breadcrumbs; let last = last">
-              <a *ngIf="b.link && !last; else crumbText" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
-              <ng-template #crumbText><span class="truncate max-w-40">{{ b.label }}</span></ng-template>
-              <svg *ngIf="!last" class="w-3 h-3 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" /></svg>
-            </ng-container>
-          </nav>
           <div class="min-w-0">
             <div class="flex items-center gap-2.5 min-w-0">
-              <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate" [attr.aria-current]="breadcrumbs.length ? 'page' : null">{{ title }}</h2>
+              <h2 class="text-base font-semibold leading-5 text-gray-900 dark:text-gray-100 truncate">{{ title }}</h2>
               <!-- view tabs carry the counts when views are configured -->
               <span *ngIf="!allViews.length" class="inline-flex h-5 min-w-5 items-center justify-center px-1.5 text-[11px] font-semibold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-full tabular-nums">{{ serverSide ? totalCount : (isFiltered ? filteredData.length + ' / ' + data.length : data.length) }}</span>
             </div>
@@ -58,12 +51,9 @@
 
       <div *ngIf="selectedKeys.size === 0" class="flex items-center gap-2 shrink-0">
       <!-- Search -->
-      <div class="relative">
-        <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="M20 20l-3.5-3.5" />
-        </svg>
-        <input type="search" class="dg-search" [placeholder]="searchPlaceholder" [attr.aria-label]="'Search ' + title"
-          [ngModel]="searchTerm" (ngModelChange)="onSearch($event)" />
+      <div class="w-56">
+        <app-sf-input type="search" clearable [placeholder]="searchPlaceholder" [attr.aria-label]="'Search ' + title"
+          [ngModel]="searchTerm" (ngModelChange)="onSearch($event ?? '')"></app-sf-input>
       </div>
 
       <!-- Filter builder -->
@@ -87,21 +77,22 @@
                 {{ j ? 'OR with last' : 'AND' }}
               </button>
             </div>
-            <select class="dg-field" [ngModel]="draftFilter.key" (ngModelChange)="onDraftColumnChange($event)" aria-label="Field">
-              <option *ngFor="let c of columns" [ngValue]="c.key">{{ c.label }}</option>
-            </select>
-            <select class="dg-field" [(ngModel)]="draftFilter.op" aria-label="Operator">
-              <option *ngFor="let o of operatorsFor(draftColumn)" [ngValue]="o.value">{{ o.label }}</option>
-            </select>
+            <app-sf-select [options]="columnSelectOptions" [ngModel]="draftFilter.key" (ngModelChange)="onDraftColumnChange($event)"></app-sf-select>
+            <app-sf-select [options]="operatorSelectOptions" [(ngModel)]="draftFilter.op"></app-sf-select>
             <ng-container *ngIf="draftFilter.op !== 'empty'">
-              <select *ngIf="optionsFor(draftColumn).length; else freeValue" class="dg-field" [(ngModel)]="draftFilter.value" aria-label="Value">
-                <option value="" disabled>Select value</option>
-                <option *ngFor="let o of optionsFor(draftColumn)" [ngValue]="o.value">{{ o.label }}</option>
-              </select>
+              <app-sf-select *ngIf="optionsFor(draftColumn).length; else freeValue" [options]="valueSelectOptions" placeholder="Select value"
+                [(ngModel)]="draftFilter.value"></app-sf-select>
               <ng-template #freeValue>
-                <input class="dg-field" [(ngModel)]="draftFilter.value" placeholder="Value" aria-label="Value"
-                  [type]="draftColumn?.type === 'date' ? 'date' : (draftColumn?.type === 'number' || draftColumn?.type === 'currency') ? 'number' : 'text'"
-                  (keydown.enter)="applyDraftFilter()" />
+                <div (keydown.enter)="applyDraftFilter()">
+                  <app-sf-date *ngIf="draftColumn?.type === 'date'; else notDate" [(ngModel)]="draftFilter.value"></app-sf-date>
+                  <ng-template #notDate>
+                    <app-sf-number *ngIf="draftColumn?.type === 'number' || draftColumn?.type === 'currency'; else textValue" [stepper]="false" placeholder="Value"
+                      [(ngModel)]="draftFilter.value"></app-sf-number>
+                    <ng-template #textValue>
+                      <app-sf-input placeholder="Value" [(ngModel)]="draftFilter.value"></app-sf-input>
+                    </ng-template>
+                  </ng-template>
+                </div>
               </ng-template>
             </ng-container>
             <div class="flex justify-end gap-2 pt-1">
@@ -127,10 +118,7 @@
           <div class="fixed inset-0 z-20" (click)="sortMenuOpen = false"></div>
           <div class="dg-pop absolute right-0 mt-2 w-60 z-30 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg p-3 space-y-2">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500">Sort by</p>
-            <select class="dg-field" [ngModel]="sort.key" (ngModelChange)="setSort($event)" aria-label="Sort field">
-              <option [ngValue]="null">None</option>
-              <option *ngFor="let c of sortableColumns" [ngValue]="c.key">{{ c.label }}</option>
-            </select>
+            <app-sf-select [options]="sortSelectOptions" placeholder="None" [ngModel]="sort.key" (ngModelChange)="setSort($event)"></app-sf-select>
             <div class="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800" role="radiogroup" aria-label="Sort direction">
               <button *ngFor="let d of ['asc', 'desc']" type="button" role="radio" [disabled]="!sort.key"
                 [attr.aria-checked]="sort.direction === d" (click)="setSort(sort.key, $any(d))"
@@ -211,6 +199,9 @@
     <div *ngIf="allViews.length" role="tablist" [attr.aria-label]="title + ' views'"
       class="dg-view-tabs shrink-0 flex flex-wrap items-center gap-x-5 gap-y-1 px-5 border-b border-gray-100 dark:border-erp-border-dark">
       <button *ngFor="let v of allViews" type="button" role="tab" class="dg-view-tab group/view"
+        draggable="true" (dragstart)="onViewDragStart(v, $event)" (dragover)="onViewDragOver(v, $event)"
+        (drop)="onViewDrop(v, $event)" (dragend)="onViewDragEnd()"
+        [class.opacity-40]="dragViewId === v.id" [class.dg-view-dragover]="dragOverViewId === v.id && dragViewId !== v.id"
         [class.dg-view-active]="v.id === activeViewId" [attr.aria-selected]="v.id === activeViewId" (click)="selectView(v)">
         {{ v.label }}
         <span *ngIf="!v.hideCount && (!loading || data.length); else countSkel" class="dg-view-count tabular-nums">{{ viewCount(v) }}</span>
@@ -286,7 +277,7 @@
 
     <!-- Table -->
     <div class="dg-scroll overflow-auto" [style.maxHeight]="fillHeight ? null : maxHeight" (scroll)="closeActionMenu()">
-      <table class="w-full text-sm border-separate border-spacing-0" [class.dg-compact]="density === 'compact'">
+      <table class="w-full text-sm border-separate border-spacing-0" [class.dg-compact]="density === 'compact'" [class.dg-tall]="tallRows">
         <thead>
           <tr>
             <th *ngIf="selectable" class="dg-th w-12 !pl-5">
@@ -460,15 +451,20 @@
     <div class="fixed inset-0 z-40" (click)="closeActionMenu()"></div>
     <div class="dg-pop fixed z-50 w-48 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl shadow-lg p-1"
       [style.top.px]="actionMenu.top" [style.left.px]="actionMenu.left" role="menu">
-      <ng-container *ngFor="let a of visibleRowActions(actionMenu.row)">
-        <div *ngIf="a.divider" class="my-1 h-px bg-gray-100 dark:bg-erp-border-dark"></div>
-        <button type="button" role="menuitem" (click)="runRowAction(a)"
-          class="w-full flex items-center gap-1.5 px-2.5 h-8 text-sm rounded-lg text-left transition-colors"
-          [ngClass]="a.variant === 'danger' ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
-          <span *ngIf="hasActionBadge(a, actionMenu.row)" class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
-          {{ a.label }}
-        </button>
+      <ng-container *ngIf="visibleRowActions(actionMenu.row).length; else noRowActions">
+        <ng-container *ngFor="let a of visibleRowActions(actionMenu.row)">
+          <div *ngIf="a.divider" class="my-1 h-px bg-gray-100 dark:bg-erp-border-dark"></div>
+          <button type="button" role="menuitem" (click)="runRowAction(a)"
+            class="w-full flex items-center gap-1.5 px-2.5 h-8 text-sm rounded-lg text-left transition-colors"
+            [ngClass]="a.variant === 'danger' ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
+            <span *ngIf="hasActionBadge(a, actionMenu.row)" class="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
+            {{ a.label }}
+          </button>
+        </ng-container>
       </ng-container>
+      <ng-template #noRowActions>
+        <p class="px-2.5 py-2 text-sm text-gray-400 dark:text-gray-500 text-center">No actions available</p>
+      </ng-template>
     </div>
   </ng-container>
 

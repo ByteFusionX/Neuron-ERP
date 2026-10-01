@@ -14,7 +14,7 @@ import { CommonModule } from '@angular/common';
   template: `
     <div class="sfd-backdrop fixed inset-0 z-[60] bg-gray-900/30 dark:bg-black/50" [class.sfd-open]="open" (click)="requestClose()"></div>
     <aside role="dialog" aria-modal="true" [attr.aria-label]="title" [attr.aria-hidden]="!open" [attr.inert]="open ? null : ''"
-      class="sfd-panel fixed inset-y-0 right-0 z-[61] flex w-full flex-col bg-white dark:bg-erp-surface-dark shadow-2xl" [class.sfd-open]="open" [style.maxWidth]="width">
+      class="sfd-panel fixed inset-y-0 right-0 z-[61] flex w-full flex-col bg-gray-50 dark:bg-erp-surface-dark-alt shadow-2xl" [class.sfd-open]="open" [style.maxWidth]="width">
       <header class="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-gray-100 dark:border-erp-border-dark px-5">
         <div class="min-w-0">
           <h2 class="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{{ title }}</h2>
@@ -41,7 +41,7 @@ import { CommonModule } from '@angular/common';
         </span>
       </div>
 
-      <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-erp-border-dark bg-gray-50/70 dark:bg-gray-900/40 px-6 py-3">
+      <footer class="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 dark:border-erp-border-dark bg-white dark:bg-erp-surface-dark px-6 py-3">
         <ng-content select="[sfDrawerFooter]"></ng-content>
       </footer>
     </aside>
