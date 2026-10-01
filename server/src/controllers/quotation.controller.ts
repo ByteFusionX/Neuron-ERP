@@ -15,6 +15,8 @@ import StockBlock from "../models/stockBlock.model";
 import StockReservation from "../models/stockReservation.model";
 import StockMovement from "../models/stockMovement.model";
 import { Server } from "socket.io";
+import { logEnquiryAudit } from "../services/enquiryAudit.service";
+import { cancelOpenFollowUp } from "../services/enquiryFollowUp.service";
 import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
@@ -30,10 +32,16 @@ import { getCustomerCommercialGuard, estimateQuoteValue, normalizeTaxForCustomer
  * Creating a quote directly at a non-draft status handles this inline in `saveQuotation`;
  * this covers the draft-then-promote path, where the flip is deliberately deferred.
  */
-const markEnquiryQuotedIfPromoted = async (quote: any, fromStatus?: string, toStatus?: string) => {
+const markEnquiryQuotedIfPromoted = async (quote: any, fromStatus?: string, toStatus?: string, req?: any) => {
     if (!quote?.enqId) return;
     if (fromStatus !== quoteStatus.Draft || !toStatus || toStatus === quoteStatus.Draft) return;
+    const before: any = await Enquiry.findById(quote.enqId).select('status').lean();
+    // Already handed over via "Convert to quote"; the quotation's progress no longer touches the enquiry.
+    if (['quoted', 'Quoted'].includes(before?.status)) return;
     await Enquiry.findByIdAndUpdate(quote.enqId, { status: 'Quoted' });
+    await cancelOpenFollowUp(quote.enqId, 'Enquiry quoted');
+    await logEnquiryAudit(req, quote.enqId, 'quoted', `Quotation ${quote.quoteId || ''} issued`.replace(/\s+/g, ' '),
+        [{ label: 'Status', from: before?.status, to: 'Quoted' }]);
 }
 
 // An enquiry still with presales has no finished estimation, so it can't be quoted yet.
@@ -190,9 +198,6 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
             if (PRESALE_IN_PROGRESS_STATUSES.includes(linkedEnquiry.status)) {
                 return res.status(409).json({ success: false, message: 'This enquiry is still with presales. Complete the presales workflow before creating a quote.' });
             }
-            if (linkedEnquiry.status !== 'Ready for Quotation') {
-                return res.status(409).json({ success: false, message: 'Mark the enquiry as Ready for Quotation before creating a quote.' });
-            }
         }
 
         const customerGuard = await getCustomerCommercialGuard(quoteData.client, estimateQuoteValue(quoteData));
@@ -229,8 +234,11 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
                 // A draft is not a quotation the customer has seen, so the enquiry keeps its current
                 // status until the quote leaves Draft (see `updateQuotationStatus`). Flipping it early
                 // would drop the enquiry out of the pending lists, which filter on status != 'Quoted'.
-                if (quoteData.status !== quoteStatus.Draft) {
+                if (quoteData.status !== quoteStatus.Draft && !['quoted', 'Quoted'].includes(enquiry.status)) {
                     await Enquiry.findByIdAndUpdate(quoteData.enqId, { status: 'Quoted' });
+                    await cancelOpenFollowUp(quoteData.enqId, 'Enquiry quoted');
+                    await logEnquiryAudit(req, quoteData.enqId, 'quoted', 'Quotation created',
+                        [{ label: 'Status', from: enquiry.status, to: 'Quoted' }]);
                 }
             } else {
                 console.log(`Enquiry with ID ${quoteData.enqId} not found.`);
@@ -1286,7 +1294,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         );
 
         if (quoteUpdated) {
-            await markEnquiryQuotedIfPromoted(quoteUpdated, statusCheck.status, targetStatus);
+            await markEnquiryQuotedIfPromoted(quoteUpdated, statusCheck.status, targetStatus, req);
             return res.status(200).json(targetStatus);
         }
         return res.status(404).json({ message: "Quote not found" });
@@ -1566,7 +1574,7 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         )
 
         if (quoteUpdated) {
-            await markEnquiryQuotedIfPromoted(quoteUpdated, existingQuote?.status, quoteData.status);
+            await markEnquiryQuotedIfPromoted(quoteUpdated, existingQuote?.status, quoteData.status, req);
             return res.status(200).json(quoteUpdated)
         }
         return res.status(502).json()

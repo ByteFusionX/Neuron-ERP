@@ -42,8 +42,14 @@ export class EnquiryService {
     return this.http.patch<{ success: boolean }>(`${this.api}/enquiry/presales/${enquiryId}`, formData)
   }
 
-  sendToPresale(enquiryId: string): Observable<{ success: boolean }> {
-    return this.http.patch<{ success: boolean }>(`${this.api}/enquiry/${enquiryId}/send-to-presale`, {})
+  /** `note` is required by the server when resending an estimated or rejected enquiry. */
+  sendToPresale(enquiryId: string, note?: string): Observable<{ success: boolean; status?: string }> {
+    return this.http.patch<{ success: boolean; status?: string }>(`${this.api}/enquiry/${enquiryId}/send-to-presale`, { note })
+  }
+
+  /** Marks the enquiry quoted. The quotation owns the process from here. */
+  convertToQuote(enquiryId: string): Observable<{ success: boolean; status: string }> {
+    return this.http.patch<{ success: boolean; status: string }>(`${this.api}/enquiry/${enquiryId}/convert-to-quote`, {})
   }
 
   getPresaleTabCounts(access?: string, userId?: string): Observable<PresaleTabCounts> {
@@ -65,12 +71,28 @@ export class EnquiryService {
     return this.http.put<{ update: getEnquiry, quoteId: string | undefined }>(`${this.api}/enquiry/update`, selectedEnquiry)
   }
 
-  addFollowUp(enquiryId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null; correctionOf?: string | null }): Observable<{ success: boolean; enquiry: getEnquiry }> {
-    return this.http.patch<{ success: boolean; enquiry: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/follow-up`, data)
+  scheduleFollowUp(enquiryId: string, data: { dueDate: string; note?: string }): Observable<{ success: boolean; enquiry: getEnquiry }> {
+    return this.http.patch<{ success: boolean; enquiry: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/follow-up/schedule`, data)
   }
 
-  rejectJob(enqId: any, comment: string, role: string): Observable<{ success: boolean }> {
-    return this.http.put<{ success: boolean }>(`${this.api}/enquiry/presales/reject`, { enqId, comment, role })
+  completeFollowUp(enquiryId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null }): Observable<{ success: boolean; enquiry: getEnquiry }> {
+    return this.http.patch<{ success: boolean; enquiry: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/follow-up/complete`, data)
+  }
+
+  cancelFollowUp(enquiryId: string, reason?: string): Observable<{ success: boolean; enquiry: getEnquiry }> {
+    return this.http.patch<{ success: boolean; enquiry: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/follow-up/cancel`, { reason })
+  }
+
+  rejectJob(enqId: any, comment: string, role: string, clearEstimation = false): Observable<{ success: boolean }> {
+    return this.http.put<{ success: boolean }>(`${this.api}/enquiry/presales/reject`, { enqId, comment, role, clearEstimation })
+  }
+
+  returnJob(enqId: string): Observable<{ success: boolean; message: string }> {
+    return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/return`, { enqId })
+  }
+
+  selfAssignJob(enqId: string): Observable<{ success: boolean; message: string }> {
+    return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/self-assign`, { enqId })
   }
 
   emitToQuote(enquiry: getEnquiry | undefined) {
@@ -110,7 +132,8 @@ export class EnquiryService {
     return this.http.delete(`${this.api}/enquiry/presales/estimation/${enquiryId}`)
   }
 
-  sendFeedbackRequest(feedbackBody: { enquiryId: string, employeeId: string, comment: string }) {
+  /** The server sends the request to whoever assigned the job. */
+  sendFeedbackRequest(feedbackBody: { enquiryId: string, comment: string }) {
     return this.http.patch(`${this.api}/enquiry/feedback-request`, feedbackBody)
   }
 
@@ -158,7 +181,7 @@ export class EnquiryService {
     return this.http.post<any>(`${this.api}/enquiry/delete`, data, { context: context() });
   }
 
-  reassignjob(data: { enquiryId: string, employeeId: string }): Observable<any> {
+  reassignjob(data: { enquiryId: string, employeeId: string, comment?: string }): Observable<any> {
     return this.http.put<any>(`${this.api}/enquiry/reassignjob`, data)
   }
 
@@ -172,7 +195,7 @@ export class EnquiryService {
 
 }
 
-export interface PresaleTabCounts { new: number; assignedTab: number; rejected: number; completedTab: number; }
+export interface PresaleTabCounts { new: number; assignedTab: number; rejected: number; resolve: number; completedTab: number; cancelledTab: number; }
 
 export interface PresaleReportRow { id: string; name: string; count: number; new: number; assigned: number; completed: number; rejected: number; }
 export interface PresaleReportItem { id: string; enquiryId: string; title: string; customer: string; salesPerson: string; presale: string; status: string; days: number; }

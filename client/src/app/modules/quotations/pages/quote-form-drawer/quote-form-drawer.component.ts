@@ -327,6 +327,11 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.step = 1;
   }
 
+  get today(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   /** Local calendar date as yyyy-MM-dd (toISOString would shift it by the UTC offset). */
   private todayIso(): string {
     const d = new Date();
@@ -498,7 +503,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
         this.finish();
         this.toaster.success(
           fromEnquiry
-            ? 'Saved as a draft. The enquiry keeps its current status until the quote is submitted.'
+            ? 'Saved as a draft. Continue it from the quotation list.'
             : 'Quotation saved as a draft.',
           'Saved'
         );
@@ -526,7 +531,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
               ? 'This quotation has already been sent. If the items, notes, terms or currency changed, the current version is kept as a revision. Say what changed.'
               : 'Say what you changed. It is recorded in the quotation history.'
             : this.sourceEnquiry
-              ? 'This will create the quotation and mark the source enquiry as Quoted.'
+              ? 'This will create the quotation from the converted enquiry. Add a note to record why.'
               : 'This will create the quotation. Add a note to record why.',
           icon: 'heroExclamationTriangle',
           iconColor: 'orange',

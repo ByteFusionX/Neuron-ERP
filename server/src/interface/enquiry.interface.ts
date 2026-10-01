@@ -25,6 +25,10 @@ export interface Enquiry {
         createdByName?: string;
         createdAt?: string | Date;
         correctionOf?: string | null;
+        status?: 'scheduled' | 'done' | 'cancelled';
+        dueDate?: string | Date;
+        completedAt?: string | Date;
+        cancelReason?: string;
     }[];
     attachments: string[];
     preSale: {

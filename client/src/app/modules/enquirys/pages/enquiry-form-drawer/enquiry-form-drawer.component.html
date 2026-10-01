@@ -64,15 +64,15 @@
                     <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
-                    <app-sf-date formControlName="nextFollowUpDate" displayFormat="dd/MM/yy"></app-sf-date>
+                    <app-sf-date formControlName="nextFollowUpDate" [min]="today" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
             </app-sf-section>
         </ng-container>
 
         <!-- Step 2 — requirement / notes & files ------------------------------------------- -->
         <ng-container *ngIf="step === 2">
-            <app-sf-section title="Requirement / Notes">
-                <app-sf-field full label="Requirement / Notes" [control]="enquiryForm.controls.requirement">
+            <app-sf-section title="Notes">
+                <app-sf-field full label="Requirement" [control]="enquiryForm.controls.requirement">
                     <app-sf-textarea formControlName="requirement" [rows]="6" placeholder="Requirement, scope or important notes"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>

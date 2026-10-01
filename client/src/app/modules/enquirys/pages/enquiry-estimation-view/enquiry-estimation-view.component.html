@@ -2,6 +2,9 @@
     [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed()">
 
     <ng-container *ngIf="estimations">
+        <p *ngIf="readOnly" class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+            From a rejected round. This estimation was not approved, so use it for reference only.
+        </p>
         <div *ngIf="options.length > 1" class="mb-4 flex flex-wrap items-center gap-2">
             <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Option</span>
             <button *ngFor="let o of options; let i = index" type="button"
@@ -81,7 +84,7 @@
         </ng-container>
         <ng-template #reviseBtn>
             <app-action-button variant="secondary" (click)="onDrawerClosed()">Close</app-action-button>
-            <app-action-button variant="primary" (click)="toggleRevision()">Revise</app-action-button>
+            <app-action-button *ngIf="!readOnly" variant="primary" (click)="toggleRevision()">Revise</app-action-button>
         </ng-template>
     </ng-container>
 </app-sf-drawer>

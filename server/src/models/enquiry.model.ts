@@ -21,9 +21,9 @@ interface Enquiry extends Document {
     date: string | number | Date;
     nextFollowUpDate?: string | number | Date;
     lastFollowUpDate?: string | number | Date;
-    followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date, correctionOf?: Types.ObjectId | null }[];
+    followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date, correctionOf?: Types.ObjectId | null, status?: 'scheduled' | 'done' | 'cancelled', dueDate?: Date, completedAt?: Date, cancelReason?: string }[];
     createdDate: Date;
-    preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId } };
+    preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId }, status?: string };
     // preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; }[] };
     assignedFiles: []
     status: string;
@@ -167,7 +167,19 @@ const preSaleSchema = new Schema({
         default: Date.now()
     },
     rejectionHistory: [rejectionHistorySchema],
-    assignApproval: assignApprovalSchema
+    assignApproval: assignApprovalSchema,
+    status: {
+        type: String,
+        enum: ['new', 'assigned', 'in review', 'rejected', 'returned', 'in revision', 'approved', 'completed', 'cancelled'],
+        default: 'new'
+    },
+    // Set when the enquiry is marked Lost while presale is still working on it.
+    cancelReason: {
+        type: String
+    },
+    cancelledAt: {
+        type: Date
+    }
 })
 
 
@@ -185,7 +197,7 @@ const assignmentHistorySchema = new Schema({
     },
     action: {
         type: String,
-        enum: ['assigned', 'reassigned'],
+        enum: ['assigned', 'reassigned', 'self-assigned'],
         default: 'assigned'
     },
     role: {
@@ -231,6 +243,23 @@ const followUpHistorySchema = new Schema({
     createdAt: {
         type: Date,
         default: Date.now
+    },
+    // scheduled = open follow-up awaiting action; done = logged; cancelled = closed without action.
+    // Entries saved before this field existed have no status and are read as done.
+    status: {
+        type: String,
+        enum: ['scheduled', 'done', 'cancelled'],
+        default: 'done'
+    },
+    dueDate: {
+        type: Date
+    },
+    completedAt: {
+        type: Date
+    },
+    cancelReason: {
+        type: String,
+        trim: true
     },
     correctionOf: {
         type: Schema.Types.ObjectId,
@@ -324,6 +353,7 @@ const enquirySchema = new Schema<Enquiry>({
     status: {
         type: String,
         enum: [
+            // legacy values - kept for backward compatibility with existing documents, not used by new code paths
             'New',
             'In Review',
             'Sent to Presales',
@@ -337,8 +367,17 @@ const enquirySchema = new Schema<Enquiry>({
             'Rejected by Presale Engineer',
             'Rejected by Presale Manager',
             'Sended by Presale Engineer',
+            // current values - used by new code paths going forward
+            'new',
+            'in progress',
+            'in presales',
+            'rejected',
+            'estimated',
+            'revision',
+            'quoted',
+            'lost',
         ],
-        default: 'New',
+        default: 'new',
         required: true
     },
     isDeleted: {
@@ -347,7 +386,7 @@ const enquirySchema = new Schema<Enquiry>({
     },
     reAssigned: {
         type: Schema.Types.ObjectId,
-    },
+    },  
     reAssignedDate: {
         type: Date,
     },

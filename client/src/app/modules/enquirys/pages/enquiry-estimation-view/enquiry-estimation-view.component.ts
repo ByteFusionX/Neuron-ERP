@@ -24,6 +24,8 @@ import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 export class EnquiryEstimationViewComponent implements OnChanges, OnDestroy {
   @Input() open = false;
   @Input() enquiry: any = null;
+  /** Estimation kept from a rejected round: shown for reference, with no Revise request. */
+  @Input() readOnly = false;
   /** Fired once the sales person who owns the enquiry has opened the estimate. */
   @Output() seen = new EventEmitter<void>();
   /** Fired after a revision request has been sent to presales. */

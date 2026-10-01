@@ -221,6 +221,11 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     this.step = 1;
   }
 
+  get today(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   /** Local calendar date as yyyy-MM-dd (toISOString would shift it by the UTC offset). */
   private todayIso(): string {
     const d = new Date();

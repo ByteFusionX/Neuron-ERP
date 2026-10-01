@@ -11,6 +11,8 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import {
   EnquiryFollowUp,
   EnquiryTable,
@@ -24,8 +26,7 @@ import { ToastrService } from 'ngx-toastr';
 import { EnquiryEstimationViewComponent } from '../enquiry-estimation-view/enquiry-estimation-view.component';
 import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
-import { RejectionHistoryDrawerComponent, RejectionEntry } from '../rejection-history-drawer/rejection-history-drawer.component';
-import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
+import { getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import {
   NgIf,
@@ -51,6 +52,8 @@ import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel
 import { DetailTaskListComponent } from 'src/app/shared/components/detail-panel/detail-task-list.component';
 import { DetailDocument, DetailOverviewSection, DetailTaskItem, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-journey/approval-journey.component';
+import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
 import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ENQUIRY_STATUS_TONES, STATUS_TONE_CLASSES } from 'src/app/shared/components/status-indicator/status-tone';
@@ -60,21 +63,38 @@ import { EventsService } from 'src/app/core/services/events/events.service';
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { ModalService } from 'src/app/shared/components/modal';
 import { EventCreateModalComponent, EventModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/event-create-modal.component';
+import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
 import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 
 interface FollowUpListItem {
   id: string;
+  status: 'done' | 'cancelled';
   outcome: string;
   note: string;
   date: string;
   createdByName: string;
-  nextFollowUpDate: string;
+}
+
+/** The enquiry's single open follow-up: what the Follow-ups tab leads with and what "Mark done" closes. */
+interface OpenFollowUp {
+  due: string;
+  dueIso: string;
   overdue: boolean;
-  correctionOfOutcome: string;
+  note: string;
+}
+
+interface FollowUpView {
+  open: OpenFollowUp | null;
+  history: FollowUpListItem[];
 }
 
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
+const PRESALE_AUDIT_ACTIONS = new Set([
+  'sent-to-presale', 'resent-to-presale', 'presale-rejected', 'presale-returned',
+  'estimation-uploaded', 'estimation-deleted', 'revision-requested',
+]);
+
 @Component({
   selector: 'app-enquiry-list',
   templateUrl: './enquiry-list.component.html',
@@ -96,11 +116,11 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
     DetailDocumentsComponent,
     DetailTaskListComponent,
     DetailTimelineComponent,
+    ApprovalJourneyComponent,
     DetailPanelIconComponent,
     ActionButtonComponent,
     EnquiryFormDrawerComponent,
     EnquiryEstimationViewComponent,
-    RejectionHistoryDrawerComponent,
     RouterLink,
     NgIcon,
   ],
@@ -116,8 +136,6 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   isLoading: boolean = true;
   isEmpty: boolean = false;
   estimationTarget: { index: number; enquiry: getEnquiry } | null = null;
-  rejectionsOpen = false;
-  rejections: RejectionEntry[] = [];
   isFiltered: boolean = false;
   isDeleteOption: boolean = false;
   createEnquiry: boolean | undefined = false;
@@ -125,7 +143,10 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   status: { name: string; label: string }[] = [
     { name: 'New', label: 'New' },
+    { name: 'In Review', label: 'In Review' },
     { name: 'Work In Progress', label: 'In Progress' },
+    { name: 'Sent to Presales', label: 'In Presales' },
+    { name: 'estimated', label: 'Estimated' },
     { name: 'Ready for Quotation', label: 'Ready for Quotation' },
     { name: 'Quoted', label: 'Quoted' },
     { name: 'Lost', label: 'Lost' },
@@ -141,18 +162,20 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   rowActions: DataGridRowAction<getEnquiry>[] = [];
   views: DataGridView<getEnquiry>[] = [
     { id: 'all', label: 'All' },
+    { id: 'presales', label: 'Presales' },
     { id: 'mine', label: 'My Enquiries' },
-    { id: 'today', label: 'Today' },
     { id: 'overdue', label: 'Overdue' },
+    { id: 'today', label: 'Today' },
     { id: 'upcoming', label: 'Upcoming' },
   ];
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Sales' }, { label: 'Enquiries' }];
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'progress', label: 'Progress', icon: 'activity' },
-    { id: 'documents', label: 'Documents', icon: 'files' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
   readonly statusToneMap = ENQUIRY_STATUS_TONES;
   readonly statusBadgeClasses: Record<string, string> = Object.fromEntries(
@@ -162,7 +185,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   statusLabel = (status: string): string => {
     if (status === 'Work In Progress') return 'In Progress';
     if (status?.startsWith('Assigned To Presale')) return 'In Presales';
-    if (status === 'Sent to Presales') return 'In Presales';
+    if (status === 'Sent to Presales' || status === 'in presales') return 'In Presales';
+    if (status === 'rejected') return 'Rejected';
+    if (status === 'revision') return 'Revision';
     return status;
   };
   enquiryTitle = (row: getEnquiry) => row.enquiryId ?? '';
@@ -187,6 +212,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   sortDir: 'asc' | 'desc' | null = null;
   activeViewId: string = 'all';
   private eventsCache = new Map<string, BehaviorSubject<Events[]>>();
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
   followUpSavingRowId: string | null = null;
 
   private subscriptions = new Subscription();
@@ -196,6 +222,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   private confirm = inject(ConfirmDialogService);
+  private auditLog = inject(AuditLogService);
 
   constructor(
     private fb: FormBuilder,
@@ -339,17 +366,24 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private buildRowActions(): void {
-    this.rowActions = [
-      { id: 'upload', label: 'Upload Files', icon: 'upload', quick: true, hidden: (row) => !!row.attachments?.length || !this.canUploadAttachments(row) },
-      { id: 'followUp', label: 'Add Follow-up', icon: 'chat', quick: true, hidden: (row) => ['Quoted', 'Lost'].includes(row.status) },
-      { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, badge: (row) => row.preSale?.seenbySalesPerson === false, hidden: (row) => !this.canViewEstimations(row) },
-      { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', quick: true, hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
-      { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['New', 'In Review', 'Rejected by Presale Manager'].includes(row.status) },
-      { id: 'readyForQuote', label: 'Mark Ready for Quotation', icon: 'check', quick: true, hidden: (row) => !this.canMarkReadyForQuotation(row) },
-      { id: 'markLost', label: 'Mark Lost', icon: 'close', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted'].includes(row.status) || this.isAssignedToPresale(row.status) },
-      { id: 'review', label: 'View Rejection', icon: 'info', panel: true, hidden: (row) => row.status !== 'Rejected by Presale Manager' },
-      { id: 'delete', label: 'Delete Enquiry', icon: 'trash', variant: 'danger', divider: true, hidden: (row) => !this.isDeleteOption || this.isAssignedToPresale(row.status) },
+    const actions: (DataGridRowAction<getEnquiry> & { hidden: (row: getEnquiry) => boolean })[] = [
+      { id: 'followUp', label: 'Follow-ups', icon: 'chat', quick: true, hidden: (row) => ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status) },
+      { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, hidden: (row) => !this.canViewEstimations(row) },
+      { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
+      { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['New', 'In Review'].includes(row.status) },
+      { id: 'resendToPresale', label: 'Resend to Presale', icon: 'refresh', quick: true, hidden: (row) => !this.canResendToPresale(row) },
+      { id: 'convertToQuote', label: 'Convert to Quote', icon: 'check', quick: true, hidden: (row) => !this.canConvertToQuote(row) },
+      { id: 'markLost', label: 'Mark Lost', icon: 'close', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted', 'lost', 'quoted'].includes(row.status) },
     ];
+    // A lost enquiry is closed: no actions on the row, hover or menu.
+    this.rowActions = actions.map((action) => ({
+      ...action,
+      hidden: (row: getEnquiry) => this.isLost(row) || action.hidden(row),
+    }));
+  }
+
+  isLost(row: getEnquiry): boolean {
+    return String(row?.status || '').toLowerCase() === 'lost';
   }
 
   private setColumnOptions(key: string, editorOptions: { label: string; value: any }[]): void {
@@ -362,7 +396,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.searchQuery = query.search;
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
-    this.activeViewId = query.viewId;
+    // Saved (custom) views are built on a base view; the server only understands the base view ids.
+    const activeView = this.grid?.allViews.find((view) => view.id === query.viewId);
+    this.activeViewId = activeView?.custom ? (activeView.baseViewId ?? 'all') : query.viewId;
     const value = (key: string) => query.filters.find((filter) => filter.key === key && filter.op === 'is')?.value ?? null;
     this.selectedSalesPerson = value('salesPerson');
     this.selectedCustomer = value('customer');
@@ -386,45 +422,47 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     const index = this.dataSource.data.indexOf(row);
     const click = new Event('click');
     switch (action.id) {
-      case 'upload': this.startAttachmentUpload(row); break;
       case 'followUp': this.openFollowUps(row); break;
       case 'estimations': this.onViewPresale(click, index, row); break;
       case 'presaleHistory': this.openPresaleProgress(row); break;
       case 'sendToPresale': this.onSendToPresale(row); break;
-      case 'readyForQuote': this.markReadyForQuotation(row); break;
+      case 'resendToPresale': this.onResendToPresale(row); break;
+      case 'convertToQuote': this.convertToQuote(row); break;
       case 'markLost': this.markLost(row); break;
-      case 'review': this.openReview((row.preSale as any)?.rejectionHistory); break;
-      case 'delete': this.deleteEnquiry(row._id, row.status); break;
     }
   }
 
-  createQuote(row: getEnquiry): void {
-    if (row.status !== 'Ready for Quotation') {
-      this.toaster.warning('Mark this enquiry as Ready for Quotation before creating a quote.');
-      return;
-    }
-    this._enquiryService.emitToQuote(row);
-    this.router.navigate(['/quotations']);
-  }
-
-  canMarkReadyForQuotation(row: getEnquiry): boolean {
+  /** Only in progress or estimated enquiries (plus legacy equivalents) can be handed to quotations. */
+  canConvertToQuote(row: getEnquiry): boolean {
     if (!row.client || !row.contact || !row.title?.trim()) return false;
-    return ['New', 'In Review', 'Work In Progress', 'Rejected by Presale Manager'].includes(row.status)
-      || (!!row.preSale?.estimations && !this.isAssignedToPresale(row.status));
+    return ['in progress', 'estimated', 'Work In Progress', 'Ready for Quotation'].includes(row.status);
   }
 
-  markReadyForQuotation(row: getEnquiry): void {
-    if (!this.canMarkReadyForQuotation(row)) {
+  /** After the confirm, the enquiry is Quoted and the rest of the process lives on the quotation. */
+  async convertToQuote(row: getEnquiry): Promise<void> {
+    if (!this.canConvertToQuote(row)) {
       this.toaster.warning('Customer, contact and requirement summary are required before quotation.');
       return;
     }
-    this._enquiryService.updateEnquiryStatus({ id: row._id, status: 'Ready for Quotation' }).subscribe({
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Convert to quote?',
+      message: `Enquiry ${row.enquiryId} will be marked Quoted and a quotation will open with its details prefilled.`,
+      consequence: 'Everything after this happens on the quotation. Its outcome, even if lost, does not change the enquiry.',
+      confirmLabel: 'Convert',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this._enquiryService.convertToQuote(row._id).subscribe({
       next: (res) => {
-        row.status = res.update?.status ?? 'Ready for Quotation';
+        if (!res.success) return;
+        row.status = res.status;
         this.dataSource._updateChangeSubscription();
-        this.toaster.success('Enquiry marked Ready for Quotation');
+        this.toaster.success('Enquiry converted to quote');
+        this._enquiryService.emitToQuote(row);
+        this.router.navigate(['/quotations']);
       },
-      error: () => this.toaster.error('Failed to update enquiry status'),
+      error: () => this.toaster.error('Failed to convert enquiry to quote'),
     });
   }
 
@@ -437,7 +475,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         { label: 'Enquiry', value: row.enquiryId ?? '' },
         { label: 'Customer', value: row.client?.companyName ?? '' },
       ],
-      consequence: 'The reason will stay on the enquiry for reporting and review.',
+      consequence: this.isAssignedToPresale(row.status)
+        ? 'Presale is still working on this enquiry. Its presale job will be cancelled with this reason, and the presale team will be notified.'
+        : 'The reason will stay on the enquiry for reporting and review.',
       confirmLabel: 'Mark lost',
       cancelLabel: 'Keep active',
       reason: true,
@@ -448,6 +488,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       next: (res) => {
         row.status = res.update?.status ?? 'Lost';
         row.lostReason = res.update?.lostReason ?? reason ?? '';
+        if (res.update?.preSale) row.preSale = res.update.preSale;
         this.dataSource._updateChangeSubscription();
         this.toaster.success('Enquiry marked Lost');
       },
@@ -472,18 +513,31 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   followUpCellClass(row: getEnquiry): string | null {
-    if (!row.nextFollowUpDate || ['Quoted', 'Lost'].includes(row.status)) return null;
+    if (!row.nextFollowUpDate || ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status)) return null;
     const followUp = new Date(row.nextFollowUpDate);
     const today = new Date();
     today.setHours(23, 59, 59, 999);
     return followUp <= today ? 'font-semibold text-red-600 dark:text-red-400' : null;
   }
 
-  presaleProgress(row: getEnquiry): DetailTimelineEntry[] {
+  presaleProgress(row: getEnquiry): ApprovalJourneyStage[] {
     const enquiry = row as any;
     const preSale = enquiry.preSale;
-    const entries: Array<DetailTimelineEntry & { date?: string | Date | null }> = [];
+    const entries: Array<{ text: string; meta?: string; tone: 'good' | 'bad' | 'warn'; date?: string | Date | null }> = [];
     const assignmentHistory = enquiry.assignmentHistory || [];
+
+    // The journey starts when the enquiry was sent to presales.
+    const sentDate = preSale?.createdDate ?? assignmentHistory[0]?.date;
+    const wasSent = !!(preSale?.presalePerson || assignmentHistory.length || preSale?.rejectionHistory?.length || preSale?.status === 'cancelled');
+    if (!wasSent) return [];
+    {
+      entries.push({
+        text: 'Sent to presales',
+        meta: this.progressMeta([this.progressDate(sentDate)]),
+        tone: 'good',
+        date: sentDate,
+      });
+    }
 
     if (assignmentHistory.length) {
       assignmentHistory.forEach((entry: any) => {
@@ -537,7 +591,13 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       return new Date(first.date).getTime() - new Date(second.date).getTime();
     });
 
-    entries.push(preSale?.estimations
+    if (preSale?.status === 'cancelled') {
+      entries.push({
+        text: 'Presale cancelled — enquiry lost',
+        meta: this.progressMeta([preSale.cancelReason || enquiry.lostReason, this.progressDate(preSale.cancelledAt)]),
+        tone: 'bad',
+      });
+    } else entries.push(preSale?.estimations
       ? {
           text: 'Estimation uploaded',
           meta: this.employeeName(enquiry.reAssigned || preSale.presalePerson) || undefined,
@@ -549,7 +609,14 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
           tone: 'warn',
         });
 
-    return entries;
+    // Same vertical journey the presale panel's Progress tab uses.
+    return entries.map((entry, i) => ({
+      key: `progress-${i}`,
+      variant: entry.tone === 'bad' ? 'rejected' : entry.tone === 'warn' ? 'current' : 'done',
+      icon: entry.tone === 'bad' ? 'close' : entry.tone === 'warn' ? 'schedule' : 'check_circle',
+      title: entry.text,
+      subtitle: entry.meta,
+    } as ApprovalJourneyStage));
   }
 
   private employeeName(person: any): string {
@@ -597,88 +664,116 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.grid.openRow(row);
   }
 
-  onAddFollowUp(row: getEnquiry): void {
+  /** Quoted and lost enquiries are done being chased. */
+  isFollowUpClosed(row: getEnquiry): boolean {
+    return ['quoted', 'lost'].includes(String(row.status || '').toLowerCase());
+  }
+
+  onScheduleFollowUp(row: getEnquiry): void {
+    const open = this.followUpView(row).open;
     this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
       width: '520px',
-      data: {
-        context: row.enquiryId || row._id,
-        nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : null,
-      },
+      data: { context: row.enquiryId || row._id, mode: 'schedule', dueDate: open?.dueIso || null },
     }).afterClosed().subscribe((result) => {
-      if (!result) return;
-      this.saveFollowUp(row, result);
+      if (result?.mode === 'schedule') this.saveFollowUp(row, this._enquiryService.scheduleFollowUp(row._id, { dueDate: result.dueDate, note: result.note }), 'Follow-up scheduled');
     });
   }
 
-  onCorrectFollowUp(row: getEnquiry, item: FollowUpListItem): void {
+  onLogFollowUp(row: getEnquiry): void {
+    const open = this.followUpView(row).open;
     this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
       width: '520px',
-      data: {
-        context: row.enquiryId || row._id,
-        nextFollowUpDate: row.nextFollowUpDate ? new Date(row.nextFollowUpDate).toISOString().slice(0, 10) : null,
-        correcting: { id: item.id, outcome: item.outcome },
-      },
+      data: { context: row.enquiryId || row._id, mode: 'complete', plannedFor: open?.due || null },
     }).afterClosed().subscribe((result) => {
-      if (!result) return;
-      this.saveFollowUp(row, result);
+      if (result?.mode === 'complete') {
+        this.saveFollowUp(row, this._enquiryService.completeFollowUp(row._id, {
+          date: result.date, outcome: result.outcome, note: result.note, nextFollowUpDate: result.nextFollowUpDate,
+        }), 'Follow-up logged');
+      }
     });
   }
 
-  private followUpItemsCache = new Map<string, { history: EnquiryFollowUp[] | undefined; items: FollowUpListItem[] }>();
+  async onCancelFollowUp(row: getEnquiry): Promise<void> {
+    const open = this.followUpView(row).open;
+    if (!open) return;
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Cancel Follow-up',
+      message: 'Close this follow-up without logging an outcome?',
+      details: [{ label: 'Planned for', value: open.due }],
+      reason: 'optional',
+      confirmLabel: 'Cancel follow-up',
+      cancelLabel: 'Keep',
+    });
+    if (!confirmed) return;
+    this.saveFollowUp(row, this._enquiryService.cancelFollowUp(row._id, reason), 'Follow-up cancelled');
+  }
+
+  private followUpViewCache = new Map<string, { history: EnquiryFollowUp[] | undefined; next: string | undefined; view: FollowUpView }>();
 
   /**
-   * Memoized on the row's followUpHistory reference: called directly from the template's *ngFor,
-   * so returning a fresh array/objects every call would make Angular tear down and rebuild the
-   * follow-up cards on every change-detection tick, invalidating in-flight clicks on their buttons.
+   * Memoized on the row's followUpHistory reference and next date: called directly from the template,
+   * so returning fresh objects every call would make Angular tear down and rebuild the cards on every
+   * change-detection tick, invalidating in-flight clicks on their buttons.
    */
-  followUpItems(row: getEnquiry): FollowUpListItem[] {
+  followUpView(row: getEnquiry): FollowUpView {
     const history = row.followUpHistory;
-    const cached = this.followUpItemsCache.get(row._id);
-    if (cached && cached.history === history) return cached.items;
+    const cached = this.followUpViewCache.get(row._id);
+    if (cached && cached.history === history && cached.next === row.nextFollowUpDate) return cached.view;
 
     const list = history || [];
-    const outcomeById = new Map(list.map((entry) => [entry._id, entry.outcome || 'Follow-up']));
-    const items = list
-      .slice()
-      .sort((first, second) => new Date(second.date).getTime() - new Date(first.date).getTime())
+    const openEntry = list.find((entry) => entry.status === 'scheduled');
+    // Enquiries from before follow-up tasks have only the scalar date; treat it as the open follow-up.
+    const dueRaw = openEntry?.dueDate || row.nextFollowUpDate;
+    const isClosed = this.isFollowUpClosed(row);
+    const dueDate = dueRaw ? new Date(dueRaw) : null;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const open: OpenFollowUp | null = dueDate && !isClosed ? {
+      due: this.displayDate(dueRaw),
+      dueIso: dueDate.toISOString().slice(0, 10),
+      overdue: dueDate < startOfToday,
+      note: openEntry?.note || '',
+    } : null;
+
+    // Newest first. Entries are stored oldest-first, so reversing before the (stable) sort keeps
+    // same-day entries in newest-first order too.
+    const items: FollowUpListItem[] = [...list]
+      .reverse()
+      .filter((entry) => entry.status !== 'scheduled')
+      .sort((first, second) => new Date(second.completedAt || second.date).getTime() - new Date(first.completedAt || first.date).getTime())
       .map((entry) => ({
         id: entry._id || '',
-        outcome: entry.outcome || 'Follow-up',
-        note: entry.note || '',
+        status: entry.status === 'cancelled' ? 'cancelled' as const : 'done' as const,
+        outcome: entry.status === 'cancelled' ? 'Follow-up cancelled' : (entry.outcome || 'Follow-up'),
+        note: (entry.status === 'cancelled' ? entry.cancelReason : entry.note) || '',
         date: this.progressDate(entry.date),
         createdByName: entry.createdByName || this.employeeName(entry.createdBy),
-        nextFollowUpDate: entry.nextFollowUpDate ? this.displayDate(entry.nextFollowUpDate) : '',
-        overdue: !!entry.nextFollowUpDate && new Date(entry.nextFollowUpDate) < new Date(),
-        correctionOfOutcome: entry.correctionOf ? (outcomeById.get(entry.correctionOf) || '') : '',
       }));
-    this.followUpItemsCache.set(row._id, { history, items });
-    return items;
+    const view = { open, history: items };
+    this.followUpViewCache.set(row._id, { history, next: row.nextFollowUpDate, view });
+    return view;
   }
 
-  saveFollowUp(row: getEnquiry, value: FollowUpModalResult): void {
+  private saveFollowUp(row: getEnquiry, request: Observable<{ success: boolean; enquiry: getEnquiry }>, successMessage: string): void {
     if (this.followUpSavingRowId) return;
     this.followUpSavingRowId = row._id;
-    this._enquiryService.addFollowUp(row._id, {
-      date: value.date || this.todayIso(),
-      outcome: value.outcome || '',
-      note: value.note || '',
-      nextFollowUpDate: value.nextFollowUpDate || null,
-      correctionOf: value.correctionOf || null,
-    }).subscribe({
+    request.subscribe({
       next: (response) => {
         const updated = response.enquiry;
         row.nextFollowUpDate = updated.nextFollowUpDate;
         row.lastFollowUpDate = updated.lastFollowUpDate;
         row.followUpOutcome = updated.followUpOutcome;
         row.followUpHistory = updated.followUpHistory;
-        row.daysSinceLastFollowUp = 0;
+        if (updated.lastFollowUpDate) row.daysSinceLastFollowUp = 0;
         this.followUpSavingRowId = null;
+        this.refreshHistory(row);
         this.dataSource._updateChangeSubscription();
-        this.toaster.success('Follow-up saved');
+        this.toaster.success(successMessage);
       },
-      error: () => {
+      error: (err) => {
         this.followUpSavingRowId = null;
-        this.toaster.error('Failed to save follow-up');
+        this.toaster.error(err?.error?.message || 'Failed to save follow-up');
       },
     });
   }
@@ -705,6 +800,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
           { type: 'field', label: 'Requirement / Notes', value: row.requirement || '—', noHover: true },
           { type: 'field', label: 'Follow-up Outcome', value: row.followUpOutcome || '—', noHover: true },
           { type: 'field', label: 'Lost Reason', value: row.lostReason || '—', noHover: true },
+          { type: 'field', label: 'Presale Rejection Reason', value: this.rejectionReason(row) || '—', noHover: true, visible: row.status === 'rejected' },
         ]
       },
     ];
@@ -727,12 +823,20 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     ];
   }
 
+  private static readonly PREVIEW_MIME: Record<string, string> = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', svg: 'image/svg+xml', txt: 'text/plain',
+  };
+
   onDocumentOpen(row: getEnquiry, document: DetailDocument): void {
     const fileName = row.attachments?.map((f: any) => f.fileName ?? f.filename).find((n: string) => n === document.id);
     if (!fileName) return;
     this._enquiryService.getFile(fileName).subscribe({
       next: (blob: Blob) => {
-        const url = window.URL.createObjectURL(blob);
+        // S3 often serves octet-stream, which makes the browser download instead of preview.
+        const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+        const mime = EnquiryListComponent.PREVIEW_MIME[ext];
+        const url = window.URL.createObjectURL(mime ? new Blob([blob], { type: mime }) : blob);
         window.open(url, '_blank');
         setTimeout(() => window.URL.revokeObjectURL(url), 60000);
       },
@@ -747,6 +851,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this._enquiryService.removeEnquiryAttachment(row._id, document.id).subscribe({
       next: (res: any) => {
         row.attachments = res?.data?.attachments ?? (row.attachments ?? []).filter((f: any) => (f.fileName ?? f.filename) !== document.id);
+        this.refreshHistory(row);
         this.toaster.success('File deleted');
       },
       error: () => this.toaster.error('Failed to delete file'),
@@ -766,6 +871,26 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       this._eventsService.fetchEvents(row._id).subscribe((events: Events[]) => subject!.next(events || []));
     }
     return subject.asObservable();
+  }
+
+  historyFor(row: getEnquiry): Observable<DetailTimelineEntry[]> {
+    let subject = this.historyCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(row._id, subject);
+      this.auditLog.getHistory('enquiry', row._id).subscribe({
+        // Presale activity lives in the Presale Progress tab, not the enquiry's own history.
+        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => !PRESALE_AUDIT_ACTIONS.has(e.action)))),
+        error: () => this.historyCache.delete(row._id),
+      });
+    }
+    return subject.asObservable();
+  }
+
+  /** Drops the cached history so the next render re-reads it after something changed on the enquiry. */
+  private refreshHistory(row?: getEnquiry): void {
+    if (row) this.historyCache.delete(row._id);
+    else this.historyCache.clear();
   }
 
   eventItems(events: Events[]): DetailTaskItem[] {
@@ -792,20 +917,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onAddEvent(row: getEnquiry): void {
-    const contactPersons: SfOption[] = (row.client?.contactDetails || []).map((contact: ContactDetail) => ({
-      label: `${contact.firstName} ${contact.lastName}`,
-      value: contact._id,
-    }));
-
     this.modal.open<EventModalResult>(EventCreateModalComponent, {
       width: '560px',
       data: {
         context: row.enquiryId || row._id,
-        assignable: true,
-        employees: this._employeeService.getAllEmployees(),
-        contactPersonable: true,
-        contactPersons,
         requireSummary: true,
+        outlookSync: true,
       },
     }).afterClosed().subscribe((event) => {
       if (!event) return;
@@ -815,16 +932,21 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         collectionId: row._id,
         event: event.title,
         date: event.date,
-        employee: event.employeeId,
-        contactPerson: event.contactPersonId,
+        endDate: event.endDate,
         summary: event.description,
+        location: event.location,
+        syncToOutlook: event.syncToOutlook,
+        onlineMeeting: event.onlineMeeting,
+        attendees: event.attendees,
       }));
-      this._eventsService.newEvent(formData).subscribe({
+      this._eventsService.newEvent(formData, !!event.syncToOutlook).subscribe({
         next: (response) => {
+          if (response?.outlookWarning) this.toaster.warning(response.outlookWarning);
           if (response?.event) {
             this.toaster.success(response.message || 'Event created successfully');
             this.eventsCache.delete(row._id);
             this.eventsFor(row);
+            this.refreshHistory(row);
           }
         },
         error: () => this.toaster.error('Failed to create event'),
@@ -971,6 +1093,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       overdueFollowUp: this.activeViewId === 'overdue',
       todayFollowUp: this.activeViewId === 'today',
       upcomingFollowUp: this.activeViewId === 'upcoming',
+      completed: this.activeViewId === 'completed',
+      lost: this.activeViewId === 'lost',
+      presales: this.activeViewId === 'presales',
       fromDate: this.fromDate,
       toDate: this.toDate,
       followUpFromDate: this.followUpFromDate,
@@ -985,6 +1110,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       this._enquiryService.getEnquiry(filterData).subscribe({
         next: (data: EnquiryTable) => {
           this.dataSource.data = data.enquiry;
+          this.refreshHistory();
           this.total = data.total;
           this.views = this.views.map((view) => ({
             ...view,
@@ -1004,39 +1130,36 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   canUploadAttachments(element: any): boolean {
+    if (this.isLost(element)) return false;
     if (this.isAssignedToPresale(element?.status) && element?.preSale?.presalePerson) {
       return false;
     }
     return this.isDeleteOption || element?.salesPerson?._id === this.currentEmployeeId;
   }
 
-  /** Row that is currently showing the upload field instead of its file list. */
-  uploadRowId: string | null = null;
   isUploadingFiles = false;
-  pendingFiles: File[] = [];
   readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
 
-  /** Opens the row's documents tab with the upload field showing. */
+  /** Opens the upload modal over the row's documents tab. */
   startAttachmentUpload(row: getEnquiry): void {
     if (!this.canUploadAttachments(row)) return;
-    this.uploadRowId = row._id;
-    this.pendingFiles = [];
     if (this.grid) {
       this.grid.activeTab = 'documents';
       this.grid.openRow(row);
     }
+    this.modal.open<DocumentUploadModalResult>(DocumentUploadModalComponent, {
+      width: '680px',
+      data: { context: row.enquiryId || row._id, acceptedFiles: this.acceptedFiles, title: 'Upload enquiry files' },
+    }).afterClosed().subscribe((result) => {
+      if (result?.files?.length) this.uploadAttachments(row, result.files);
+    });
   }
 
-  cancelAttachmentUpload(): void {
-    this.uploadRowId = null;
-    this.pendingFiles = [];
-  }
-
-  /** Uploads the picked files and returns to the file list; existing files are re-sent because the server replaces the set. */
-  uploadAttachments(row: getEnquiry): void {
-    if (!this.pendingFiles.length || this.isUploadingFiles || !this.canUploadAttachments(row)) return;
+  /** Uploads the picked files; existing files are re-sent because the server replaces the set. */
+  uploadAttachments(row: getEnquiry, files: File[]): void {
+    if (!files.length || this.isUploadingFiles || !this.canUploadAttachments(row)) return;
     const formData = new FormData();
-    this.pendingFiles.forEach((file) => formData.append('files', file));
+    files.forEach((file) => formData.append('files', file));
     if (row.attachments?.length) formData.append('existingFiles', JSON.stringify(row.attachments));
 
     this.isUploadingFiles = true;
@@ -1044,7 +1167,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       next: (res) => {
         row.attachments = res.data?.attachments || [];
         this.isUploadingFiles = false;
-        this.cancelAttachmentUpload();
+        this.refreshHistory(row);
         this.toaster.success('Files uploaded successfully');
       },
       error: () => {
@@ -1122,12 +1245,41 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     });
     if (!confirmed) return;
 
-    this._enquiryService.sendToPresale(row._id).subscribe({
+    this.sendRowToPresale(row);
+  }
+
+  /** Estimated or rejected enquiries go back to presales with a note on what needs revising or adding. */
+  async onResendToPresale(row: getEnquiry): Promise<void> {
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Resend to Presale?',
+      message: `Enquiry ${row.enquiryId} will go back to the presale team for a revision or addition.`,
+      reason: true,
+      reasonLabel: 'What needs revising or adding?',
+      confirmLabel: 'Resend',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this.sendRowToPresale(row, reason?.trim());
+  }
+
+  canResendToPresale(row: getEnquiry): boolean {
+    return row.status === 'estimated' || row.status === 'Rejected by Presale Manager' || this.isReturnedFromPresales(row);
+  }
+
+  private sendRowToPresale(row: getEnquiry, note?: string): void {
+    this._enquiryService.sendToPresale(row._id, note).subscribe({
       next: (res) => {
         if (!res.success) return;
-        row.status = 'Sent to Presales';
+        const resent = res.status === 'revision';
+        row.status = resent ? 'revision' : 'Sent to Presales';
+        if (row.preSale) {
+          row.preSale.status = resent ? 'returned' : 'new';
+          delete (row.preSale as any).presalePerson;
+        }
+        this.refreshHistory(row);
         this.dataSource._updateChangeSubscription();
-        this.toaster.success('Enquiry sent to presale');
+        this.toaster.success(resent ? 'Enquiry resent to presale' : 'Enquiry sent to presale');
       },
     });
   }
@@ -1176,11 +1328,6 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.updateUrlParams();
   }
 
-  openReview(rejectionHistory: any) {
-    this.rejections = rejectionHistory ?? [];
-    this.rejectionsOpen = true;
-  }
-
   checkPermission() {
     this._employeeService.employeeData$.subscribe((data) => {
       this.createEnquiry = data?.category.privileges.enquiry.create;
@@ -1191,40 +1338,25 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.subject.next(event);
   }
 
+  /** Rejected by presales and sent back by the manager, so sales can fix it and resend or mark it lost. */
+  isReturnedFromPresales(row: getEnquiry): boolean {
+    return row.status === 'rejected' && row.preSale?.status === 'returned';
+  }
+
+  rejectionReason(row: getEnquiry): string {
+    const history = row.preSale?.rejectionHistory ?? [];
+    return history[history.length - 1]?.rejectionReason || '';
+  }
+
   isAssignedToPresale(status: string): boolean {
     return (
       status == 'Assigned To Presale Manager' ||
       status == 'Assigned To Presale Engineer' ||
       status == 'Sent to Presales' ||
+      status == 'in presales' ||
+      status == 'revision' ||
       status == 'Assigned To Presales' ||
       status == 'Rejected by Presale Engineer'
-    );
-  }
-
-  async deleteEnquiry(enquiryId: string, status: string): Promise<void> {
-    if (this.isAssignedToPresale(status)) {
-      this.toaster.warning('Sorry,Selected enquiry assinged to presales');
-      return;
-    }
-    const employee = this._employeeService.employeeToken();
-    const { confirmed } = await this.confirm.open({
-      tone: 'reject',
-      title: 'Delete enquiry',
-      message: 'Are you sure you want to delete this enquiry?',
-      consequence: 'This cannot be undone.',
-      confirmLabel: 'Delete',
-    });
-    if (!confirmed) return;
-    this.subscriptions.add(
-      this._enquiryService.deleteEnquiry({ dataId: enquiryId, employeeId: employee.id }).subscribe({
-        next: () => {
-          this.toaster.success('Enquiry deleted successfully');
-          this.getEnquiries();
-        },
-        error: (error) => {
-          this.toaster.error(error.error.message || 'Failed to delete enquiry');
-        },
-      }),
     );
   }
 }

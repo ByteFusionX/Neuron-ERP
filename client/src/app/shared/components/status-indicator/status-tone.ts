@@ -38,6 +38,8 @@ export const ENQUIRY_STATUS_TONES: Record<string, StatusTone> = {
   'Assigned To Presales': 'progress',
   'Rejected by Presale Engineer': 'danger',
   'Rejected by Presale Manager': 'danger',
+  'rejected': 'danger',
+  'in presales': 'progress',
   'Quoted': 'success',
   'Lost': 'danger',
 };

@@ -85,10 +85,10 @@
                     <app-sf-date formControlName="date" [readonly]="true" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Closing Date" [control]="quoteForm.controls.closingDate">
-                    <app-sf-date formControlName="closingDate" displayFormat="dd/MM/yy"></app-sf-date>
+                    <app-sf-date formControlName="closingDate" [min]="isEdit ? null : today" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Valid Until" [control]="quoteForm.controls.validityDate">
-                    <app-sf-date formControlName="validityDate" displayFormat="dd/MM/yy"></app-sf-date>
+                    <app-sf-date formControlName="validityDate" [min]="isEdit ? null : today" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Currency" [control]="quoteForm.controls.currency">
                     <app-sf-select formControlName="currency" [options]="currencyOptions"></app-sf-select>

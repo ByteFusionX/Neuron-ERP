@@ -67,6 +67,8 @@ export interface getEnquiry {
         feedback?: feedback[];
         seenbyEmployee?: boolean;
         seenbySalesPerson?: boolean;
+        status?: string;
+        rejectionHistory?: { rejectionReason?: string; rejectedRole?: string; rejectedAt?: string }[];
         estimations:Estimations
     };
     status: string;
@@ -80,10 +82,13 @@ export interface EnquiryTable {
     enquiry: getEnquiry[];
     viewCounts?: {
         all: number;
+        presales: number;
         mine: number;
         overdue: number;
         today: number;
         upcoming: number;
+        completed: number;
+        lost: number;
     };
 }
 
@@ -97,6 +102,11 @@ export interface EnquiryFollowUp {
     createdByName?: string;
     createdAt?: string;
     correctionOf?: string | null;
+    /** scheduled = the open follow-up; done = logged; cancelled = closed without action. Missing on old entries (read as done). */
+    status?: 'scheduled' | 'done' | 'cancelled';
+    dueDate?: string;
+    completedAt?: string;
+    cancelReason?: string;
 }
 
 export interface FeedbackTable {
@@ -140,6 +150,9 @@ export interface FilterEnquiry {
     overdueFollowUp?: boolean;
     todayFollowUp?: boolean;
     upcomingFollowUp?: boolean;
+    completed?: boolean;
+    lost?: boolean;
+    presales?: boolean;
     access?: string;
     userId?: string;
 }
