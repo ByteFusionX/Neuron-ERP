@@ -237,11 +237,6 @@ export const routes: Routes = [
     ]
   },
   {
-    path: 'feedback-requests',
-    canActivate: [AuthGuard],
-    loadComponent: () => import('./modules/feedback-requests/feedback-requests.component').then((c) => c.FeedbackRequestsComponent)
-  },
-  {
     path: 'bug-reports',
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/bug-reports/bug-reports.component').then((c) => c.BugReportsComponent)

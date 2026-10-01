@@ -3,6 +3,7 @@
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Presale"
+        subtitle="Track and manage jobs sent to presale engineers"
         [breadcrumbs]="breadcrumbs"
         [views]="views"
         viewUrlParam="tab"
@@ -59,8 +60,7 @@
                 <ng-container *ngSwitchCase="'feedback'">
                     <div class="space-y-3 p-1" *ngIf="row.preSale?.feedback?.length; else noFeedbackYet">
                         <div *ngFor="let fb of row.preSale.feedback"
-                            class="rounded-lg border-2 px-4 py-3 dark:border-erp-border-dark"
-                            [ngClass]="fb.seenByFeedbackRequester === false ? 'border-orange-500' : 'border-gray-200'">
+                            class="rounded-lg border-2 border-gray-200 px-4 py-3 dark:border-erp-border-dark">
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -72,7 +72,6 @@
                                         <p class="mt-1 text-sm italic text-amber-600 dark:text-amber-400">Awaiting response — sending back to Enquiry is on hold until this is answered.</p>
                                     </ng-template>
                                 </div>
-                                <span *ngIf="fb.seenByFeedbackRequester === false" class="shrink-0 rounded-xl bg-orange-200 px-2 py-1 text-xs text-orange-600">New</span>
                             </div>
                         </div>
                     </div>
@@ -81,13 +80,13 @@
                     </ng-template>
                 </ng-container>
 
-                <ng-container *ngSwitchCase="'comments'">
-                    <app-detail-comments [comments]="commentsFor(row)" emptyMessage="No comments for this job."></app-detail-comments>
-                </ng-container>
-
                 <ng-container *ngSwitchCase="'progress'">
                     <app-approval-journey [stages]="progressStages(row)" orientation="vertical" [rejectionNote]="null"></app-approval-journey>
                 </ng-container>
+
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="(historyFor(row) | async) ?? []"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
 
                 <ng-container *ngSwitchCase="'documents'">
                     <app-detail-documents
@@ -99,9 +98,14 @@
                 </ng-container>
             </ng-container>
         </ng-template>
+
+        <ng-template #detailFooterTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="tab === 'feedback' && pendingFeedbackForMe(row)" variant="primary" (click)="onGiveFeedback(row, true)">Send feedback</app-action-button>
+            <app-action-button *ngIf="tab === 'feedback' && replyTarget(row)" variant="primary" (click)="onReplyFeedback(row)">Reply to feedback</app-action-button>
+            <app-action-button *ngIf="tab === 'feedback' && canAskFeedback(row)" variant="primary" (click)="onFeedback(row)">Ask for feedback</app-action-button>
+        </ng-template>
     </app-data-grid>
 
-    <app-rejection-history-drawer [open]="rejectionsOpen" [rejections]="rejections" (closed)="rejectionsOpen = false"></app-rejection-history-drawer>
     <app-view-estimation [open]="!!estimationTarget" [estimation]="estimationTarget?.estimation ?? null" [enquiryId]="estimationTarget?.enqId ?? ''"
         [editable]="activeTab === 'assigned'" editMode="emit" (edit)="onEditEstimation($event, estimationTarget?.enqId ?? '')"
         (cleared)="onEstimationCleared()" (closed)="estimationTarget = null"></app-view-estimation>
