@@ -11,6 +11,10 @@ export class SidebarPreferencesService {
     return this.employeeService.employeeToken()?.id ?? 'anonymous';
   }
 
+  ownerKey(): string {
+    return this.currentEmployeeId();
+  }
+
   private key(suffix: string): string {
     return `sidebar_${suffix}_${this.currentEmployeeId()}`;
   }
@@ -22,6 +26,24 @@ export class SidebarPreferencesService {
 
   setShowFullBar(showFullBar: boolean): void {
     localStorage.setItem(this.key('showFullBar'), JSON.stringify(showFullBar));
+  }
+
+  getSidebarWidth(): number | null {
+    const raw = localStorage.getItem(this.key('width'));
+    const width = raw !== null ? Number(raw) : NaN;
+    return Number.isFinite(width) ? width : null;
+  }
+
+  setSidebarWidth(width: number): void {
+    localStorage.setItem(this.key('width'), String(width));
+  }
+
+  getSidebarHidden(): boolean {
+    return localStorage.getItem(this.key('hidden')) === 'true';
+  }
+
+  setSidebarHidden(hidden: boolean): void {
+    localStorage.setItem(this.key('hidden'), String(hidden));
   }
 
   getExpandedMenus(): { [key: string]: boolean } {

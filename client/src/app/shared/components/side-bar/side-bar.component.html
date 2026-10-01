@@ -2,8 +2,7 @@
   <div class="flex flex-col flex-1 min-h-0">
     <div class="flex flex-col flex-1 min-h-0">
       <div class="relative flex flex-col flex-1 min-h-0 bg-erp-surface dark:bg-erp-surface-dark border-r border-erp-border dark:border-erp-border-dark transition-[padding] duration-200"
-        [ngClass]="showFullBar ? 'px-2' : 'px-1'"
-        [@sideBarTrigger]="showFullBar? 'default':'reduce'">
+        [ngClass]="showFullBar ? 'px-2' : 'px-1'">
         <!-- Logo Section -->
         <div class="w-full h-16 overflow-hidden top-0 left-0 dark:bg-erp-surface-dark z-10"
           [@.disabled]="!logoAnimationsReady">

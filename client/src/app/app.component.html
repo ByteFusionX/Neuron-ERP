@@ -4,17 +4,50 @@
     <router-outlet></router-outlet>
 </div>
 
-<div class="w-full h-screen flex" *ngIf="!isLoginRoute()">
-    <div class="h-full shrink-0 overflow-auto overflow-x-hidden
-        [&::-webkit-scrollbar]:w-2
-        [&::-webkit-scrollbar-track]:rounded-full
-        [&::-webkit-scrollbar-track]:bg-gray-100
-        dark:[&::-webkit-scrollbar-track]:bg-gray-800
-        [&::-webkit-scrollbar-thumb]:rounded-full
-        [&::-webkit-scrollbar-thumb]:bg-gray-300
-        dark:[&::-webkit-scrollbar-thumb]:bg-gray-700">
-        <app-side-bar [showFullBar]="reduceState"></app-side-bar>
-    </div>
+<div class="w-full h-screen flex" style="--navbar-h: 4rem" *ngIf="!isLoginRoute()">
+    <!-- Reserves the sidebar's space in the page flow (0 when hidden / mobile overlay) -->
+    <div class="shrink-0 h-full transition-[width] duration-200 ease-out motion-reduce:transition-none"
+        [style.width.px]="layout.dockedWidth()"
+        [style.transition]="layout.dragging() ? 'none' : null"></div>
+
+    <div *ngIf="layout.isMobile() && layout.overlayOpen()" class="fixed inset-0 z-30 bg-black/40"
+        (click)="layout.closeOverlay()"></div>
+
+    <div *ngIf="layout.hidden() && !layout.isMobile() && !layout.overlayOpen()"
+        class="fixed inset-y-0 left-0 w-2 z-40" (mouseenter)="layout.peek(true)"></div>
+
+    <aside class="fixed inset-y-0 left-0 z-40 transition-[width,transform] duration-200 ease-out motion-reduce:transition-none"
+        [style.width.px]="layout.panelWidth()"
+        [style.transition]="layout.dragging() ? 'none' : null"
+        [class.-translate-x-full]="layout.overlay() && !layout.overlayOpen()"
+        [class.shadow-2xl]="layout.overlay() && layout.overlayOpen()"
+        [attr.inert]="layout.overlay() && !layout.overlayOpen() ? '' : null"
+        (mouseleave)="layout.peek(false)">
+        <div class="h-full overflow-auto overflow-x-hidden
+            [&::-webkit-scrollbar]:w-2
+            [&::-webkit-scrollbar-track]:rounded-full
+            [&::-webkit-scrollbar-track]:bg-gray-100
+            dark:[&::-webkit-scrollbar-track]:bg-gray-800
+            [&::-webkit-scrollbar-thumb]:rounded-full
+            [&::-webkit-scrollbar-thumb]:bg-gray-300
+            dark:[&::-webkit-scrollbar-thumb]:bg-gray-700">
+            <app-side-bar class="block" [showFullBar]="layout.showFullBar()"></app-side-bar>
+        </div>
+
+        <div *ngIf="!layout.overlay()" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
+            tabindex="0" aria-valuemin="72" aria-valuemax="360" [attr.aria-valuenow]="layout.sidebarWidth()"
+            title="Drag to resize, double-click to reset"
+            class="group absolute inset-y-0 -right-1 w-2 cursor-col-resize z-10 touch-none focus:outline-none"
+            (pointerdown)="onResizeHandlePointerDown($event)"
+            (pointermove)="onResizeHandlePointerMove($event)"
+            (pointerup)="onResizeHandlePointerUp($event)"
+            (pointercancel)="onResizeHandlePointerUp($event)"
+            (dblclick)="layout.reset()"
+            (keydown)="onResizeHandleKeydown($event)">
+            <div class="mx-auto h-full w-0.5 transition-colors group-hover:bg-violet-400/70 group-focus-visible:bg-violet-500"
+                [style.background-color]="layout.dragging() ? '#8b5cf6' : null"></div>
+        </div>
+    </aside>
 
     <div class="flex-1 min-w-0 h-screen overflow-y-auto flex flex-col dark:bg-gray-900">
         <mat-drawer-container class="example-container" [hasBackdrop]="false">
@@ -26,10 +59,9 @@
                     (closeSidenav)="closeSidenav()"></app-announcements>
             </mat-drawer>
             <mat-drawer-content>
-                <app-nav-bar (reduce)="reduceSideBar($event)"
-                    (toggleDrawer)="openPanel('notification')"
+                <app-nav-bar (toggleDrawer)="openPanel('notification')"
                     (toggleAnnouncementDrawer)="openPanel('announcement')"></app-nav-bar>
-                <div class="h-[calc(100vh-65px)] border-l border-gray-100 dark:border-erp-border-dark" (click)="closeSidenav()">
+                <div class="h-[calc(100vh-var(--navbar-h))] border-l border-gray-100 dark:border-erp-border-dark" (click)="closeSidenav()">
                     <router-outlet></router-outlet>
                 </div>
             </mat-drawer-content>
@@ -37,3 +69,4 @@
     </div>
 
 </div>
+<app-command-palette *ngIf="!isLoginRoute()"></app-command-palette>

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { celebCheckService } from './core/services/celebrationCheck/celebCheck.service';
 import { announcementGetData } from './shared/interfaces/announcement.interface';
@@ -21,19 +21,21 @@ import { ToastrService } from 'ngx-toastr';
 import { MsalService } from '@azure/msal-angular';
 import { environment } from 'src/environments/environment';
 import { ActionTrailService } from './core/diagnostics/action-trail.service';
-import { SidebarPreferencesService } from './core/services/sidebar-preferences.service';
+import { LayoutService } from './core/services/layout.service';
+import { CommandPaletteService } from './core/services/command-palette.service';
+import { CommandPaletteComponent } from './shared/components/command-palette/command-palette.component';
+import { clearSessionStorage } from './shared/utils/clear-session.util';
 
 @Component({
     selector: 'app-root',
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.css'],
-    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, AnnouncementsComponent, MatDrawerContent, NavBarComponent]
+    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, AnnouncementsComponent, MatDrawerContent, NavBarComponent, CommandPaletteComponent]
 })
 export class AppComponent implements OnDestroy, OnInit {
   showFiller = false;
   title = 'client';
   birthdaysViewed!: boolean;
-  reduceState: boolean = true;
   activePanel: 'notification' | 'announcement' = 'notification';
   loginRouter: boolean = false;
   dialogRef: MatDialogRef<CelebrationDialogComponent> | undefined;
@@ -58,12 +60,13 @@ export class AppComponent implements OnDestroy, OnInit {
     private idle: Idle,
     private pushNotificationService: PushNotificationService,
     private actionTrailService: ActionTrailService,
-    private sidebarPrefs: SidebarPreferencesService
+    public layout: LayoutService,
+    private palette: CommandPaletteService
   ) { }
 
 
   ngOnInit() {
-    this.reduceState = this.sidebarPrefs.getShowFullBar();
+    this.layout.init();
 
     this.idle.setIdle(14400); // 4 hours
     this.idle.setTimeout(5);
@@ -72,7 +75,7 @@ export class AppComponent implements OnDestroy, OnInit {
 
 
     this.idle.onTimeout.subscribe(() => {
-      localStorage.clear();
+      clearSessionStorage();
       this.router.navigate(['/login']);
     });
 
@@ -117,6 +120,8 @@ export class AppComponent implements OnDestroy, OnInit {
       if (event instanceof NavigationEnd) {
         this.loginRouter = this.isLoginRoute();
         if (!this.loginRouter) {
+          this.layout.init();
+          this.layout.closeOverlay();
           this.isUserThere();
           this._notificationService.markAsReadForRoute(event.urlAfterRedirects);
         }
@@ -138,9 +143,51 @@ export class AppComponent implements OnDestroy, OnInit {
     return `${Math.floor(seconds)} seconds ago`;
   }
 
-  reduceSideBar(event: boolean) {
-    this.reduceState = event;
-    this.sidebarPrefs.setShowFullBar(event);
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.layout.onViewportChange(window.innerWidth);
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    const key = event.key.toLowerCase();
+    if (key !== 'b' && key !== 'k') return;
+    if (this.isLoginRoute()) return;
+    if (key === 'k') {
+      event.preventDefault();
+      this.palette.toggle();
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target?.isContentEditable) return;
+    event.preventDefault();
+    this.layout.toggleHidden();
+  }
+
+  onResizeHandlePointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    this.layout.startDrag();
+  }
+
+  onResizeHandlePointerMove(event: PointerEvent): void {
+    if (this.layout.dragging()) this.layout.dragTo(event.clientX);
+  }
+
+  onResizeHandlePointerUp(event: PointerEvent): void {
+    if (!this.layout.dragging()) return;
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    this.layout.endDrag();
+  }
+
+  onResizeHandleKeydown(event: KeyboardEvent): void {
+    if (event.key === 'ArrowRight') this.layout.nudge(1);
+    else if (event.key === 'ArrowLeft') this.layout.nudge(-1);
+    else if (event.key === 'Home') this.layout.reset();
+    else return;
+    event.preventDefault();
   }
 
   isLoginRoute(): boolean {

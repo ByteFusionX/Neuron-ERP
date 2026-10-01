@@ -1,69 +1,62 @@
-<div class="w-full h-16 flex sticky top-0 z-20">
+<div class="w-full h-[var(--navbar-h,3.5rem)] flex sticky top-0 z-20">
     <div class="w-full border-b border-l border-erp-border bg-erp-surface dark:bg-erp-surface-dark dark:border-erp-border-dark">
-        <div class="relative flex justify-between items-center">
-            <div class="w-16 h-16 flex justify-center items-center shrink-0">
-                <div class="w-9 h-9 rounded-full flex justify-center items-center hover:bg-violet-50 dark:hover:bg-violet-950/40 cursor-pointer transition-colors"
-                    (click)="reduceSideBar()">
-                    <i *ngIf="showFullBar else toggleIcon">
-                        <ng-icon name="heroBars3" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
-                    </i>
-                    <ng-template #toggleIcon>
-                        <ng-icon name="heroBars3CenterLeft" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
-                    </ng-template>
-                </div>
-            </div>
-            <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md px-4">
-                <app-search-field [value]="globalSearch" (valueChange)="globalSearch = $event" size="md"
-                    placeholder="Search orders, customers, projects..."></app-search-field>
-            </div>
-            <div class="flex me-5 justify-center items-center gap-4 shrink-0">
-                <button (click)="toggleTheme()" title="Toggle dark mode"
-                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none">
-                    <ng-icon *ngIf="themeService.getTheme() === 'light'" name="heroMoon" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
-                    <ng-icon *ngIf="themeService.getTheme() === 'dark'" name="heroSun" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
+        <div class="flex h-full items-center gap-2">
+            <div class="w-16 h-full flex justify-center items-center shrink-0">
+                <button type="button" (click)="toggleSidebar()" [matTooltip]="sidebarToggleLabel"
+                    [attr.aria-label]="sidebarToggleLabel"
+                    [attr.aria-expanded]="layout.isMobile() ? layout.overlayOpen() : !layout.hidden() && layout.showFullBar()"
+                    class="w-9 h-9 rounded-full flex justify-center items-center hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
+                    <ng-icon [name]="layout.showFullBar() && !layout.hidden() ? 'heroBars3' : 'heroBars3CenterLeft'"
+                        class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
                 </button>
-                <button (click)="onReportBug()" matTooltip="Report a bug" matTooltipPosition="above"
-                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none">
+            </div>
+            <nav aria-label="Breadcrumb" class="hidden lg:block min-w-0 shrink">
+                <ol class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    <ng-container *ngFor="let crumb of breadcrumbs; let last = last">
+                        <li class="flex items-center gap-1.5 min-w-0">
+                            <a *ngIf="crumb.route && !last; else plainCrumb" [routerLink]="crumb.route"
+                                class="hover:text-violet-700 dark:hover:text-violet-300 transition-colors truncate">{{ crumb.label }}</a>
+                            <ng-template #plainCrumb>
+                                <span class="truncate" [class.font-medium]="last" [class.text-gray-800]="last"
+                                    [class.dark:text-gray-100]="last" [attr.aria-current]="last ? 'page' : null">{{ crumb.label }}</span>
+                            </ng-template>
+                            <ng-icon *ngIf="!last" name="heroChevronRight" class="text-xs text-gray-400"></ng-icon>
+                        </li>
+                    </ng-container>
+                </ol>
+            </nav>
+            <div class="flex-1 min-w-0"></div>
+            <div class="flex justify-end me-3 sm:me-5 items-center gap-2 sm:gap-4 shrink-0">
+                <button type="button" (click)="onReportBug()" matTooltip="Report a bug" matTooltipPosition="below"
+                    aria-label="Report a bug"
+                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
                     <ng-icon name="heroExclamationTriangle" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
                 </button>
-                <button (click)="onAnnouncementsClick()" matTooltip="Announcements" matTooltipPosition="above"
-                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none">
+                <button type="button" (click)="onAnnouncementsClick()" matTooltip="Announcements" matTooltipPosition="below"
+                    aria-label="Announcements"
+                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
                     <ng-icon name="heroMegaphone" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
-
-                    <ng-container *ngIf="(announcementNotificationCount$ | async) as announcementCount">
-                        <span *ngIf="announcementCount"
-                            class="absolute -top-1 -right-1 z-10 bg-orange-500 text-white text-[11px] leading-none font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center border-2 border-white shadow">
-                            {{announcementCount > 99 ? '99+' : announcementCount}}
-                        </span>
-                    </ng-container>
+                    <app-count-badge [count]="(announcementNotificationCount$ | async) ?? 0"></app-count-badge>
                 </button>
-                <button (click)="onBellClick()" matTooltip="Notifications" matTooltipPosition="above"
-                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none">
+                <button type="button" (click)="onBellClick()" matTooltip="Notifications" matTooltipPosition="below"
+                    aria-label="Notifications"
+                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
                     <ng-icon name="heroBell" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
-
-                    <ng-container *ngIf="(textNotificationBadgeCount$ | async) as badgeCount">
-
-                        <span *ngIf="badgeCount"
-                            class="absolute -top-1 -right-1 z-10 bg-orange-500 text-white text-[11px] leading-none font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center border-2 border-white shadow">
-                            {{badgeCount > 99 ? '99+' : badgeCount}}
-                        </span>
-                    </ng-container>
+                    <app-count-badge [count]="(textNotificationBadgeCount$ | async) ?? 0"></app-count-badge>
                 </button>
-                <button (click)="onFeedbacks()" matTooltip="Feedback Requests" matTooltipPosition="above"
-                    class="relative w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-50 dark:hover:bg-violet-950/40 transition duration-200 ease-in-out focus:outline-none">
-                    <ng-icon name="heroChatBubbleLeftRight" class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
-                </button>
-                <div class="flex items-center cursor-pointer" [matMenuTriggerFor]="beforeMenu"
+                <ng-container *ngIf="employeeData$ | async as employeeData; else logoutButton">
+                <button type="button" class="flex items-center cursor-pointer rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    aria-label="Account menu" aria-haspopup="menu" [attr.aria-expanded]="menuState"
+                    [matMenuTriggerFor]="beforeMenu"
                     (menuOpened)="menuOpened()" (menuClosed)="menuClosed()">
-                    <div *ngIf="employeeData$ | async as employeeData; else logoutButton"
-                        class="w-8 h-8 flex items-center justify-center rounded-full overflow-hidden bg-gradient-to-br from-violet-600 to-violet-800 text-center">
-                        <p class="text-white text-xs font-bold">
+                    <div class="w-7 h-7 flex items-center justify-center rounded-full overflow-hidden bg-gradient-to-br from-violet-600 to-violet-800 text-center">
+                        <p class="text-white text-[12px] font-bold">
                             {{ employeeData.firstName[0].toUpperCase() }}{{
                             employeeData.lastName[0].toUpperCase() }}
                         </p>
                     </div>
 
-                    <div class="flex items-center" *ngIf="employeeData$ | async as employeeData">
+                    <div class="hidden md:flex items-center">
                         <p class="mx-2 text-sm font-medium dark:text-gray-100">{{employeeData.firstName}} {{employeeData.lastName}}</p>
                         <div class="mt-1">
                             <div *ngIf="menuState; else menuElseBlock">
@@ -74,7 +67,8 @@
                             </ng-template>
                         </div>
                     </div>
-                </div>
+                </button>
+                </ng-container>
 
                 <mat-menu #beforeMenu="matMenu" class="w-96 mt-2 !bg-erp-surface dark:!bg-erp-surface-dark">
                     <div class="p-3">
@@ -96,35 +90,45 @@
                         </div>
                         <div class="">
                             <ul>
-                                <li class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 hover:scale-105 transition-all cursor-pointer"
-                                    routerLink="/profile">
-                                    <ng-icon name="heroUser" class="text-lg mx-3"></ng-icon>
+                                <li class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/profile">
+                                    <ng-icon name="heroIdentification" class="text-lg mx-3"></ng-icon>
                                     <p class="text-sm">Profile</p>
                                 </li>
-                                <li *ngIf="showPortalMangement"
-                                    class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 hover:scale-105 transition-all cursor-pointer"
-                                    routerLink="/settings">
-                                    <ng-icon name="heroCog6Tooth" class="text-lg mx-3"></ng-icon>
-                                    <p class="text-sm">Settings</p>
-                                </li>
-                                <li *ngIf="showPortalMangement"
-                                    class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 hover:scale-105 transition-all cursor-pointer"
-                                    routerLink="/recycle">
-                                    <ng-icon name="heroTrash" class="text-lg mx-3"></ng-icon>
-                                    <p class="text-sm">Recycle Bin</p>
-                                </li>
-                                <li *ngIf="isSuperAdmin"
-                                    class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 hover:scale-105 transition-all cursor-pointer"
-                                    routerLink="/bug-reports">
-                                    <ng-icon name="heroWrenchScrewdriver" class="text-lg mx-3"></ng-icon>
-                                    <p class="text-sm">Bug Reports</p>
-                                </li>
-                                <li class="mt-2 py-2 flex items-center hover:rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:text-orange-700 dark:text-gray-200 dark:hover:text-orange-400 hover:scale-105 transition-all cursor-pointer"
-                                    (click)="signOut()">
-                                    <ng-icon name="heroArrowRightOnRectangle" class="text-lg mx-3"></ng-icon>
-                                    <p class="text-sm">Sign Out</p>
-                                </li>
+                                <ng-container *ngIf="showPortalMangement || isSuperAdmin">
+                                    <li class="my-2 border-t border-erp-border dark:border-erp-border-dark" role="separator"></li>
+                                    <!-- <li class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Administration</li> -->
+                                    <li *ngIf="showPortalMangement" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/settings">
+                                        <ng-icon name="heroCog6Tooth" class="text-lg mx-3"></ng-icon>
+                                        <p class="text-sm">Settings</p>
+                                    </li>
+                                    <li *ngIf="showPortalMangement" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/recycle">
+                                        <ng-icon name="heroTrash" class="text-lg mx-3"></ng-icon>
+                                        <p class="text-sm">Recycle Bin</p>
+                                    </li>
+                                    <li *ngIf="isSuperAdmin" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/bug-reports">
+                                        <ng-icon name="heroWrenchScrewdriver" class="text-lg mx-3"></ng-icon>
+                                        <p class="text-sm">Bug Inbox</p>
+                                    </li>
+                                </ng-container>
                             </ul>
+                        </div>
+                        <div class="mt-3 pt-3 border-t border-erp-border dark:border-erp-border-dark flex items-center justify-between" (click)="$event.stopPropagation()">
+                            <div class="flex items-center gap-1">
+                                <button type="button" (click)="palette.open()" matTooltip="Search (Ctrl K)" aria-label="Search (Ctrl K)"
+                                    class="w-9 h-9 flex items-center justify-center rounded-full dark:text-gray-200 hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:hover:text-violet-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
+                                    <ng-icon name="heroMagnifyingGlass" class="text-lg"></ng-icon>
+                                </button>
+                                <button type="button" (click)="setTheme(themeService.getTheme() === 'light' ? 'dark' : 'light')"
+                                    [matTooltip]="themeService.getTheme() === 'light' ? 'Dark mode' : 'Light mode'"
+                                    [attr.aria-label]="themeService.getTheme() === 'light' ? 'Switch to dark mode' : 'Switch to light mode'"
+                                    class="w-9 h-9 flex items-center justify-center rounded-full dark:text-gray-200 hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:hover:text-violet-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
+                                    <ng-icon [name]="themeService.getTheme() === 'light' ? 'heroMoon' : 'heroSun'" class="text-lg"></ng-icon>
+                                </button>
+                            </div>
+                            <button type="button" (click)="signOut()" matTooltip="Sign out" aria-label="Sign out"
+                                class="w-9 h-9 flex items-center justify-center rounded-full dark:text-gray-200 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:text-orange-700 dark:hover:text-orange-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500">
+                                <ng-icon name="heroArrowRightOnRectangle" class="text-lg"></ng-icon>
+                            </button>
                         </div>
                     </div>
                 </mat-menu>

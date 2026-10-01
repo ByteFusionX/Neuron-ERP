@@ -267,6 +267,7 @@ export const routes: Routes = [
       { path: 'operations-dashboard', loadComponent: () => import('./modules/reports/pages/operations-dashboard/operations-dashboard.component').then((c) => c.OperationsDashboardComponent) },
       { path: 'sales-dashboard', loadComponent: () => import('./modules/reports/pages/sales-dashboard/sales-dashboard.component').then((c) => c.SalesDashboardComponent) },
       { path: 'hr-dashboard', loadComponent: () => import('./modules/reports/pages/hr-dashboard/hr-dashboard.component').then((c) => c.HrDashboardComponent) },
+      { path: 'projects-dashboard', loadComponent: () => import('./modules/reports/pages/projects-dashboard/projects-dashboard.component').then((c) => c.ProjectsDashboardComponent) },
       { path: 'finance-dashboard', loadComponent: () => import('./modules/reports/pages/finance-dashboard/finance-dashboard.component').then((c) => c.FinanceDashboardComponent) },
     ]
   },

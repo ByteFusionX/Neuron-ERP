@@ -1,0 +1,35 @@
+@if (palette.isOpen()) {
+  <div class="fixed inset-0 z-[1000] flex items-start justify-center pt-[12vh] px-4 bg-black/40" (mousedown)="palette.close()">
+    <div role="dialog" aria-modal="true" aria-label="Command palette"
+      class="w-full max-w-xl rounded-xl border border-erp-border dark:border-erp-border-dark bg-erp-surface dark:bg-erp-surface-dark shadow-2xl overflow-hidden"
+      (mousedown)="$event.stopPropagation()">
+      <div class="flex items-center gap-2 px-4 border-b border-erp-border dark:border-erp-border-dark">
+        <ng-icon name="heroMagnifyingGlass" class="text-lg text-gray-400"></ng-icon>
+        <input #queryInput type="text" role="combobox" aria-expanded="true" aria-controls="palette-listbox"
+          [attr.aria-activedescendant]="results().length ? 'palette-option-' + activeIndex() : null"
+          aria-label="Search pages and actions" autocomplete="off" spellcheck="false"
+          placeholder="Search pages and actions..." [value]="query()"
+          (input)="onQueryInput($any($event.target).value)" (keydown)="onKeydown($event)"
+          class="w-full h-12 bg-transparent text-sm text-gray-800 dark:text-gray-100 placeholder:text-gray-400 outline-none" />
+        <kbd class="text-[11px] text-gray-400 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5">Esc</kbd>
+      </div>
+      <ul id="palette-listbox" role="listbox" class="max-h-[50vh] overflow-y-auto p-2">
+        @for (item of results(); track item.id; let i = $index) {
+          <li role="option" [id]="'palette-option-' + i" [attr.aria-selected]="i === activeIndex()"
+            (mousemove)="activeIndex.set(i)" (click)="choose(item)"
+            class="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer text-sm text-gray-700 dark:text-gray-200"
+            [class]="i === activeIndex() ? 'bg-violet-50 dark:bg-violet-950/40' : ''">
+            <ng-icon [name]="item.icon" class="text-lg shrink-0 text-gray-500 dark:text-gray-400"></ng-icon>
+            <span class="flex-1 min-w-0 truncate">{{ item.label }}</span>
+            <span class="text-xs text-gray-400 shrink-0">{{ item.context }}</span>
+          </li>
+        } @empty {
+          <li class="px-3 py-6 text-center text-sm text-gray-500">No results for "{{ query() }}"</li>
+        }
+      </ul>
+      <div class="flex items-center gap-4 px-4 py-2 border-t border-erp-border dark:border-erp-border-dark text-[11px] text-gray-400">
+        <span>↑↓ navigate</span><span>Enter open</span><span>Esc close</span>
+      </div>
+    </div>
+  </div>
+}
