@@ -2,6 +2,12 @@ export interface ApprovalStep {
     role: string;
     order: number;
     escalationHours?: number;
+    escalationUnit?: 'minute' | 'hour' | 'day';
+    minAmount?: number;
+    reminderPercent?: number;
+    timeoutAction?: 'escalate' | 'notify' | 'reject';
+    reminderEnabled?: boolean;
+    escalationRole?: string | { _id?: string; categoryName: string };
 }
 
 export interface ApprovalStepUI {
@@ -12,23 +18,45 @@ export interface ApprovalStepUI {
     order: number;
 }
 
+export interface WorkflowCondition {
+    field: string;
+    operator: string;
+    value?: any;
+}
+
 export interface Workflow {
     _id?: string;
     feature: WorkflowFeature;
     steps: ApprovalStep[];
     needsManagerApproval?: boolean;
+    skipRequesterRole?: boolean;
+    repeatReminder?: boolean;
+    businessHoursOnly?: boolean;
+    workingDays?: number[];
+    conditions?: WorkflowCondition[];
+    version?: number;
 }
 
 export interface CreateWorkflowRequest {
     feature: WorkflowFeature;
     steps: ApprovalStep[];
     needsManagerApproval?: boolean;
+    skipRequesterRole?: boolean;
+    repeatReminder?: boolean;
+    businessHoursOnly?: boolean;
+    workingDays?: number[];
+    conditions?: WorkflowCondition[];
 }
 
 export interface UpdateWorkflowRequest {
     feature?: WorkflowFeature;
     steps?: ApprovalStep[];
     needsManagerApproval?: boolean;
+    skipRequesterRole?: boolean;
+    repeatReminder?: boolean;
+    businessHoursOnly?: boolean;
+    workingDays?: number[];
+    conditions?: WorkflowCondition[];
 }
 
 export interface WorkflowResponse {

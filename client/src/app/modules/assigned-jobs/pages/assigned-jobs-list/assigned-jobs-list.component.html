@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
     <app-data-grid #grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
@@ -31,8 +31,8 @@
         <app-view-toggle dgToolbarExtra label="Presale" active="list" listLink="/assigned-jobs" reportLink="/assigned-jobs/report"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
-            <span *ngIf="row.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
-                [ngClass]="statusBadgeClasses[row.status] || 'bg-gray-100 text-gray-700 ring-gray-200'">{{ row.status }}</span>
+            <span *ngIf="displayStatus(row); else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
+                [ngClass]="statusBadgeClasses[displayStatus(row)] || 'bg-gray-100 text-gray-700 ring-gray-200'">{{ statusLabel(displayStatus(row)) }}</span>
             <ng-template #asideStatusEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
         </ng-template>
 
@@ -52,6 +52,7 @@
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
+            <p *ngIf="nextStep(row)" class="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-[13px] text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">{{ nextStep(row) }}</p>
             <ng-container [ngSwitch]="tab">
                 <ng-container *ngSwitchCase="'overview'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
@@ -106,9 +107,9 @@
         </ng-template>
     </app-data-grid>
 
-    <app-view-estimation [open]="!!estimationTarget" [estimation]="estimationTarget?.estimation ?? null" [enquiryId]="estimationTarget?.enqId ?? ''"
-        [editable]="activeTab === 'assigned'" editMode="emit" (edit)="onEditEstimation($event, estimationTarget?.enqId ?? '')"
-        (cleared)="onEstimationCleared()" (closed)="estimationTarget = null"></app-view-estimation>
-    <app-estimation-form-drawer [open]="estimationFormOpen" [mode]="estimationFormMode" [estimation]="estimationFormSeed" [enqId]="estimationFormEnqId"
+    <app-view-estimation class="contents" [open]="!!estimationTarget" [estimation]="estimationTarget?.estimation ?? null" [history]="estimationTarget?.history ?? null" [enquiryId]="estimationTarget?.enqId ?? ''"
+        [editBlockedReason]="estimationTarget?.blockedReason ?? ''" [revisionReason]="estimationTarget?.revisionReason ?? ''" editMode="emit" (edit)="onEditEstimation($event, estimationTarget?.enqId ?? '')"
+        (closed)="estimationTarget = null"></app-view-estimation>
+    <app-estimation-form-drawer class="contents" [open]="estimationFormOpen" [mode]="estimationFormMode" [estimation]="estimationFormSeed" [enqId]="estimationFormEnqId"
         (saved)="onEstimationFormSaved()" (closed)="onEstimationFormClosed()"></app-estimation-form-drawer>
 </div>

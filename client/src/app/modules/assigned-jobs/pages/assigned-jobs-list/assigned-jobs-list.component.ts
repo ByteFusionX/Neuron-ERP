@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AsyncPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { EnquiryService, PresaleTabCounts } from 'src/app/core/services/enquiry/enquiry.service';
-import { Estimations, feedback, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
+import { EstimationHistoryEntry, Estimations, feedback, getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { saveAs } from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -37,6 +37,8 @@ import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-jou
 import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
 
 const DEFAULT_ESCALATION_HOURS = 48;
+const LIMIT_UNIT_MS: Record<string, number> = { minute: 60_000, hour: 3_600_000, day: 86_400_000 };
+const LIMIT_UNIT_SHORT: Record<string, string> = { minute: 'm', hour: 'h', day: 'd' };
 
 export type PresaleTab = 'all' | 'new' | 'assigned' | 'completed' | 'resolve' | 'cancelled' | 'rejected';
 
@@ -75,6 +77,10 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   activeTab: PresaleTab = 'assigned';
   tabCounts: Partial<PresaleTabCounts> = {};
   canAssign = false;
+  /** Unset on roles saved before these flags existed, which means allowed. */
+  canReject = true;
+  canEstimate = true;
+  isSuperAdmin = false;
   private access: string | undefined;
 
   viewAssignedFor: boolean = false;
@@ -82,7 +88,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   subscriptions = new Subscription();
 
   page: number = 1;
-  row: number = 10;
+  row: number = 15;
   total: number = 0;
   searchQuery: string = '';
 
@@ -126,9 +132,13 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     });
     this._employeeService.employeeData$.subscribe((data) => {
       this.viewAssignedFor = data?.category.privileges.assignedJob.viewReport == 'all';
-      this.canAssign = this.isAdminRole(data) || data?.category.privileges.assignedJob?.assign === true;
+      const superAdmin = data?.category?.role === 'superAdmin';
+      this.canAssign = superAdmin || data?.category.privileges.assignedJob?.assign === true;
+      this.canReject = superAdmin || data?.category.privileges.assignedJob?.reject !== false;
+      this.canEstimate = superAdmin || data?.category.privileges.assignedJob?.estimate !== false;
       this.access = data?.category.privileges.assignedJob.viewReport;
       this.userId = data?._id;
+      this.isSuperAdmin = data?.category?.role === 'superAdmin';
       // Assigners land on the All Jobs queue unless a ?tab= deep link says otherwise.
       if (this.canAssign && !this.hasTabParam && this.activeTab === 'assigned') {
         this.activeTab = 'all';
@@ -154,13 +164,9 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   private initialPage = 1;
   private hasTabParam = false;
 
-  private isAdminRole(employee: any): boolean {
-    const role = employee?.category?.role;
-    return role === 'admin' || role === 'superAdmin';
-  }
-
   get visibleTabs() {
-    return this.tabs;
+    // The New pool belongs to the people who assign it; employees work from their Assigned tab.
+    return this.tabs.filter((t) => t.id !== 'new' || this.canAssign);
   }
 
   countFor(key: keyof PresaleTabCounts | 'all'): number | undefined {
@@ -216,13 +222,42 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   /** The enquiry only says "in presales"; the presale job's own review/revision state is shown here instead. */
-  private displayStatus(r: any): string {
+  displayStatus(r: any): string {
     const ps: string | undefined = r?.preSale?.status;
-    return ps === 'in review' || ps === 'in revision' ? ps : r?.status;
+    return ps && ['new', 'assigned', 'in review', 'in revision', 'rejected', 'returned', 'approved', 'completed', 'cancelled'].includes(ps) ? ps : r?.status;
+  }
+
+  /** One line telling the user where the job stands and what happens next. */
+  nextStep(r: any): string {
+    switch (r?.preSale?.status) {
+      case 'new': return 'Waiting to be assigned to a presale engineer.';
+      case 'assigned': return 'With the presale engineer — upload an estimation to send it for review.';
+      case 'in review': return "Waiting for sales to review the estimation. You can't edit until they approve or request a revision.";
+      case 'in revision': return 'Sales asked for changes — update the estimation and send it again.';
+      case 'rejected': return 'Rejected by presale. It stays here until a manager reassigns or closes it.';
+      case 'returned': return 'Returned to the salesperson, who can resend it or mark the enquiry lost.';
+      case 'approved':
+      case 'completed': return 'Estimation approved — presale work is complete.';
+      case 'cancelled': return 'Enquiry lost — no further presale work is needed.';
+      default: return '';
+    }
+  }
+
+  /** Why Edit is disabled for this job, or '' when editing is allowed. */
+  editBlockedReason(r: any): string {
+    if (this.activeTab === 'assigned' && ['assigned', 'in revision'].includes(r?.preSale?.status ?? 'assigned')) return '';
+    return this.nextStep(r) || 'This estimation can only be edited while the job is assigned to you.';
+  }
+
+  /** Reason sales gave when requesting the revision (stored on the version it superseded). */
+  revisionReason(r: any): string {
+    if (r?.preSale?.status !== 'in revision') return '';
+    const history = r?.preSale?.estimationHistory ?? [];
+    return history[history.length - 1]?.reason ?? '';
   }
 
   /** Short badge text; the tab already says which stage a job is in. */
-  private statusLabel(status: string): string {
+  statusLabel(status: string): string {
     const labels: Record<string, string> = {
       'Assigned To Presale Engineer': 'Assigned',
       'Assigned To Presale Manager': 'Assigned',
@@ -236,6 +271,13 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       'lost': 'Cancelled',
       'in review': 'In Review',
       'in revision': 'In Revision',
+      'new': 'New',
+      'assigned': 'Assigned',
+      'rejected': 'Rejected',
+      'returned': 'Returned',
+      'approved': 'Completed',
+      'completed': 'Completed',
+      'cancelled': 'Cancelled',
     };
     return labels[status] ?? status;
   }
@@ -250,6 +292,13 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     'Rejected by Presale Manager': 'bg-red-50 text-red-700 ring-red-200',
     'Sent to Presales': 'bg-blue-50 text-blue-700 ring-blue-200',
     'Work In Progress': 'bg-green-50 text-green-700 ring-green-200',
+    'new': 'bg-blue-50 text-blue-700 ring-blue-200',
+    'assigned': 'bg-yellow-50 text-yellow-700 ring-yellow-200',
+    'rejected': 'bg-red-50 text-red-700 ring-red-200',
+    'returned': 'bg-purple-50 text-purple-700 ring-purple-200',
+    'approved': 'bg-green-50 text-green-700 ring-green-200',
+    'completed': 'bg-green-50 text-green-700 ring-green-200',
+    'cancelled': 'bg-gray-100 text-gray-700 ring-gray-300',
     'Lost': 'bg-gray-100 text-gray-700 ring-gray-300',
     'lost': 'bg-gray-100 text-gray-700 ring-gray-300',
   };
@@ -280,6 +329,18 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
         hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign,
       },
       {
+        id: 'restartWorkflow', label: 'Restart Workflow', icon: 'send', quick: true,
+        hidden: (r) => this.rowStage(r) !== 'new' || !this.isSuperAdmin || !this.isWorkflowExhausted(r),
+      },
+      {
+        id: 'escalateHeld', label: 'Escalate to Next Step', icon: 'send', quick: true,
+        hidden: (r) => this.rowStage(r) !== 'new' || !this.isSuperAdmin || !this.isHeldAtStep(r) || this.isWorkflowExhausted(r),
+      },
+      {
+        id: 'rejectHeld', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true,
+        hidden: (r) => this.rowStage(r) !== 'new' || !this.isSuperAdmin || !this.isHeldAtStep(r),
+      },
+      {
         id: 'reassign', label: 'Reassign', icon: 'user', quick: true,
         hidden: (r) => this.rowStage(r) !== 'rejected' || !this.canAssign,
       },
@@ -289,11 +350,11 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       },
       {
         id: 'feedbackAsk', label: 'Ask For Feedback', icon: 'chat', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.newFeedbackAccess,
+        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.newFeedbackAccess || !this.canEstimate,
       },
       {
         id: 'giveFeedback', label: 'Give Feedback', icon: 'chat', quick: true,
-        hidden: (r) => !this.pendingFeedbackForMe(r),
+        hidden: (r) => !this.pendingFeedbackForMe(r) || !this.canAssign,
       },
       {
         id: 'viewFeedback', label: 'View Feedback', icon: 'eye', quick: true,
@@ -301,16 +362,16 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       },
       {
         id: 'uploadEstimation', label: 'Upload Estimation', icon: 'upload', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'assigned' || !!r.preSale?.estimations,
+        hidden: (r) => this.rowStage(r) !== 'assigned' || !!r.preSale?.estimations || !this.canEstimate,
       },
       {
         id: 'viewEstimation', label: 'View Estimation', icon: 'files', quick: true,
         hidden: (r) => stageIn(r, 'assigned', 'completed', 'all') || !r.preSale?.estimations,
       },
-      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true, hidden: (r) => this.rowStage(r) !== 'assigned' },
+      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true, hidden: (r) => this.rowStage(r) !== 'assigned' || !this.canReject },
       {
         id: 'send', label: 'Send to Enquiry', icon: 'send', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r),
+        hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate,
       },
     ];
   }
@@ -320,12 +381,15 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     switch (action.id) {
       case 'assign': this.onAssignClicks(row._id, 'assign'); break;
       case 'reassign': this.onAssignClicks(row._id, 'reassign'); break;
+      case 'restartWorkflow': this.onRestartWorkflow(row); break;
+      case 'escalateHeld': this.onResolveHeld(row, 'escalate'); break;
+      case 'rejectHeld': this.onResolveHeld(row, 'reject'); break;
       case 'return': this.onReturnJob(row); break;
       case 'feedbackAsk': this.onFeedback(row); break;
       case 'giveFeedback': this.onGiveFeedback(row); break;
       case 'viewFeedback': this.viewFeedback(row); break;
       case 'uploadEstimation': this.onUploadClicks(row._id); break;
-      case 'viewEstimation': this.onViewEstimation(row.preSale?.estimations, row._id); break;
+      case 'viewEstimation': this.onViewEstimation(row.preSale?.estimations, row._id, row.preSale?.estimationHistory, row); break;
       case 'reject': this.onRejectJob(row); break;
       case 'send': this.onSendClicked(row); break;
     }
@@ -426,10 +490,11 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     let index = approval.stepIndex ?? 0;
     let dueAt = approval.escalationDueAt ? new Date(approval.escalationDueAt) : null;
     const now = new Date();
-    while (index < steps.length - 1 && dueAt && dueAt <= now) {
+    while (index < steps.length - 1 && dueAt && dueAt <= now && ((steps[index] as any).timeoutAction ?? 'escalate') === 'escalate') {
       index += 1;
-      const hours = (steps[index] as any).escalationHours || DEFAULT_ESCALATION_HOURS;
-      dueAt = new Date(dueAt.getTime() + hours * 60 * 60 * 1000);
+      const next = steps[index] as any;
+      const amount = next.escalationHours || DEFAULT_ESCALATION_HOURS;
+      dueAt = new Date(dueAt.getTime() + amount * (LIMIT_UNIT_MS[next.escalationUnit as string] ?? LIMIT_UNIT_MS['hour']));
     }
     return { index, dueAt };
   }
@@ -449,7 +514,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       const isDone = i < currentIndex;
       const isCurrent = i === currentIndex;
       const isLast = i === steps.length - 1;
-      const hours = step.escalationHours ?? DEFAULT_ESCALATION_HOURS;
+      const hours = `${step.escalationHours ?? DEFAULT_ESCALATION_HOURS}${LIMIT_UNIT_SHORT[step.escalationUnit ?? 'hour'] ?? 'h'}`;
 
       let subtitle: string;
       if (isDone) {
@@ -457,11 +522,11 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       } else if (isCurrent) {
         subtitle = isLast
           ? 'Final fallback — responsible now and does not escalate further.'
-          : `Responsible now — escalates to the next role after ${hours}h if not assigned${dueAt ? ` (by ${dueAt.toLocaleString()})` : ''}.`;
+          : `Responsible now — escalates to the next role after ${hours} if not assigned${dueAt ? ` (by ${dueAt.toLocaleString()})` : ''}.`;
       } else {
         subtitle = isLast
-          ? `Final fallback — takes over ${hours}h after reaching this role if still unassigned.`
-          : `Takes over ${hours}h after reaching this role if still unassigned, then escalates further.`;
+          ? `Final fallback — takes over ${hours} after reaching this role if still unassigned.`
+          : `Takes over ${hours} after reaching this role if still unassigned, then escalates further.`;
       }
 
       return {
@@ -477,6 +542,18 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
 
     // Newest first: a cancelled job's outcome sits above the escalation ladder.
     stages.reverse();
+    const rejections = row.preSale?.rejectionHistory ?? [];
+    const lastRejection = rejections[rejections.length - 1];
+    if (lastRejection) {
+      const when = lastRejection.rejectedAt ? new Date(lastRejection.rejectedAt).toLocaleString() : '';
+      stages.unshift({
+        key: 'last-rejection',
+        variant: 'rejected',
+        icon: 'close',
+        title: `Last rejected${lastRejection.rejectedRole ? ` by ${lastRejection.rejectedRole}` : ''}`,
+        subtitle: [lastRejection.rejectionReason || 'No reason given', when].filter(Boolean).join(' · '),
+      });
+    }
     const ps: string | undefined = row.preSale?.status;
     if (ps === 'in review' || ps === 'in revision') {
       const hasOpenRequest = this.hasPendingFeedbackRequest(row);
@@ -504,7 +581,14 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     return stages;
   }
 
-  // ---- History tab: the enquiry's global audit log, same as the Enquiries page ------------
+  // ---- History tab: the presale-related entries of the enquiry's global audit log ----------
+
+  private readonly presaleAuditActions = new Set([
+    'sent-to-presale', 'resent-to-presale', 'assigned', 'reassigned', 'self-assigned',
+    'presale-rejected', 'presale-returned', 'presale-cancelled',
+    'estimation-uploaded', 'estimation-deleted', 'revision-requested',
+    'feedback-requested', 'feedback-given',
+  ]);
 
   private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
@@ -514,7 +598,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
       this.historyCache.set(row._id, subject);
       this._auditLog.getHistory('enquiry', row._id).subscribe({
-        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => this.presaleAuditActions.has(e.action)))),
         error: () => this.historyCache.delete(row._id),
       });
     }
@@ -688,28 +772,10 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     this.estimationFormOpen = false;
   }
 
-  estimationTarget: { estimation: Estimations; enqId: string } | null = null;
+  estimationTarget: { estimation: Estimations; enqId: string; history: EstimationHistoryEntry[]; blockedReason: string; revisionReason: string } | null = null;
 
-  onViewEstimation(estimation: Estimations, enqId: string) {
-    this.estimationTarget = { estimation, enqId };
-  }
-
-  onEstimationCleared() {
-    const enqId = this.estimationTarget?.enqId;
-    if (!enqId) return;
-    this._enquiryService.clearEstimations(enqId).subscribe({
-      next: (res: any) => {
-        if (res.success) {
-          this.rows = this.rows.map((enquiry) => {
-            if (enquiry._id == enqId) {
-              delete (enquiry.preSale as any).estimations
-            }
-            return enquiry
-          })
-          this.estimationTarget = null;
-        }
-      }
-    })
+  onViewEstimation(estimation: Estimations, enqId: string, history: EstimationHistoryEntry[] = [], row?: any) {
+    this.estimationTarget = { estimation, enqId, history, blockedReason: this.editBlockedReason(row), revisionReason: this.revisionReason(row) };
   }
 
   // ---- Row actions: reassign / feedback / reject / send -----------------------------------
@@ -725,6 +791,63 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
         this.toast.success(res.message)
       }
     })
+  }
+
+  /** True once every workflow step has elapsed with nobody assigned: the job is waiting on a Super Admin. */
+  private isWorkflowExhausted(row: any): boolean {
+    const steps = this.presaleWorkflowSteps;
+    const { index, dueAt } = this.resolveAssignment(row, steps);
+    return !!row?.preSale?.assignApproval && !row.preSale?.presalePerson && steps.length > 0 && index >= steps.length - 1 && !!dueAt && dueAt <= new Date();
+  }
+
+  /** True once the job's current step has run out of time with nobody assigned and the workflow will not move it on by itself
+   * (a notify-only step, or the last step): the decision is the Super Admin's. */
+  private isHeldAtStep(row: any): boolean {
+    const steps = this.presaleWorkflowSteps;
+    if (!row?.preSale?.assignApproval || row.preSale?.presalePerson || !steps.length) return false;
+    const { index, dueAt } = this.resolveAssignment(row, steps);
+    if (!dueAt || dueAt > new Date()) return false;
+    return index >= steps.length - 1 || ((steps[index] as any).timeoutAction ?? 'escalate') === 'notify';
+  }
+
+  async onResolveHeld(row: any, action: 'escalate' | 'reject'): Promise<void> {
+    const rejecting = action === 'reject';
+    const { confirmed, reason } = await this.confirm.open({
+      tone: rejecting ? 'reject' : 'approve',
+      title: rejecting ? 'Reject Job' : 'Escalate to the next step?',
+      message: rejecting
+        ? 'No one was assigned in time. The job goes back to the salesperson with your reason.'
+        : 'The current role did not assign this job in time. Escalating hands it to the next role in the workflow.',
+      ...(rejecting ? { reason: true, reasonLabel: 'Reason for rejection' } : {}),
+      confirmLabel: rejecting ? 'Reject' : 'Escalate',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this._enquiryService.resolveHeldAssignment(row._id, action, reason ?? '').subscribe({
+      next: (res) => {
+        this.toast.success(res.message);
+        this.getJobsData();
+      },
+      error: (err) => this.toast.warning(err?.error?.message || 'Something went wrong. Please try again.'),
+    });
+  }
+
+  async onRestartWorkflow(row: any): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Restart the assignment workflow?',
+      message: 'Every step ran out of time with nobody assigning this job. Restarting gives the first role another chance to assign it, and the job escalates again as before. You can also assign someone directly instead.',
+      confirmLabel: 'Restart',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this._enquiryService.restartAssignmentWorkflow(row._id).subscribe({
+      next: (res) => {
+        this.toast.success(res.message);
+        this.getJobsData();
+      },
+      error: (err) => this.toast.warning(err?.error?.message || 'Could not restart the workflow. Please try again.'),
+    });
   }
 
   async onReturnJob(row: any): Promise<void> {
