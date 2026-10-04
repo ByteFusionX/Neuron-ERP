@@ -50,6 +50,9 @@ export interface Privileges {
   assignedJob: {
     viewReport: string;
     assign?: boolean;
+    // Undefined = allowed on roles saved before these existed; explicit false denies.
+    reject?: boolean;
+    estimate?: boolean;
   };
   quotation: {
     viewReport: string;
