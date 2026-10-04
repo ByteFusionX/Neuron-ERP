@@ -8,6 +8,7 @@ export * from './sf-draft.directive';
 export * from './sf-input.component';
 export * from './sf-textarea.component';
 export * from './sf-number.component';
+export * from './sf-limit.component';
 export * from './sf-currency.component';
 export * from './sf-date.component';
 export * from './sf-select.component';

@@ -237,6 +237,8 @@ export class TableComponent implements OnInit, OnChanges {
       case 'draft':
       case 'drafted':
         return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'pending':
+        return 'bg-amber-100 text-amber-700 border border-amber-200';
       case 'deducted':
         return 'bg-blue-100 text-blue-700 border border-blue-200';
       case 'reversed':

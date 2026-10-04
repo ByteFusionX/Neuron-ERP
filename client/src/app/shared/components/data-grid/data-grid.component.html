@@ -282,7 +282,7 @@
           <tr>
             <th *ngIf="selectable" class="dg-th w-12 !pl-5">
               <input type="checkbox" class="dg-checkbox" [checked]="pageAllSelected"
-                [indeterminate]="pageSomeSelected" (change)="togglePage()" aria-label="Select page" />
+                [indeterminate]="pageSomeSelected" [disabled]="!pageSelectableRows.length" (change)="togglePage()" aria-label="Select page" />
             </th>
             <th *ngFor="let c of visibleColumns" class="dg-th group/th" [style.width]="c.width"
               [ngClass]="{ 'text-right': alignOf(c) === 'right', 'text-center': alignOf(c) === 'center',
@@ -347,12 +347,12 @@
           <!-- Rows -->
           <ng-container *ngIf="!loading || data.length">
             <tr *ngFor="let row of pagedData; trackBy: trackRow" (click)="openRow(row)" [attr.data-row-key]="row[rowKey]"
-              class="dg-row group cursor-pointer" [class.dg-refreshing]="loading"
+              class="dg-row group" [class.cursor-pointer]="canOpenRow(row)" [class.cursor-default]="!canOpenRow(row)" [class.dg-refreshing]="loading"
               [class.dg-row-active]="isActive(row)"
               [class.dg-row-selected]="!isActive(row) && isSelected(row)">
               <td *ngIf="selectable" class="dg-td dg-accent-cell !pl-5" (click)="$event.stopPropagation()"
                 [class.dg-active-bar]="isActive(row)">
-                <input type="checkbox" class="dg-checkbox" [checked]="isSelected(row)" (change)="toggleRow(row)"
+                <input type="checkbox" class="dg-checkbox" [checked]="isSelected(row)" [disabled]="!canSelectRow(row)" (change)="toggleRow(row)"
                   aria-label="Select row" />
               </td>
 
@@ -394,7 +394,7 @@
                       class="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-orange-500"></span>
                   </button>
                 </span>
-                <button type="button" (click)="openActionMenu(row, $event)" aria-label="Row actions"
+                <button *ngIf="visibleRowActions(row).length" type="button" (click)="openActionMenu(row, $event)" aria-label="Row actions"
                   class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   [ngClass]="{ '!bg-gray-100 dark:!bg-gray-800 !text-gray-800 dark:!text-gray-200': isMenuOpen(row) }">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">

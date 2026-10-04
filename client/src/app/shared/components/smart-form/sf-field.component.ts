@@ -12,11 +12,11 @@ import { AbstractControl, Validators } from '@angular/forms';
       <label [attr.for]="for || null" class="text-xs font-medium text-gray-700 dark:text-gray-300">
         {{ label }}<span *ngIf="isRequired" class="ml-0.5 text-red-500 dark:text-red-400" aria-hidden="true">*</span>
       </label>
-      <span *ngIf="optional && !isRequired" class="text-[11px] text-gray-400 dark:text-gray-500">Optional</span>
+      <span *ngIf="isOptional && !isRequired" class="text-[11px] text-gray-400 dark:text-gray-500">Optional</span>
     </div>
     <ng-content></ng-content>
     <p *ngIf="error as e; else hintTpl" class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ e }}</p>
-    <ng-template #hintTpl><p *ngIf="hint" class="mt-1 text-xs text-gray-500 dark:text-gray-500">{{ hint }}</p></ng-template>
+    <ng-template #hintTpl><p *ngIf="visibleHint" class="mt-1 text-xs text-gray-500 dark:text-gray-500">{{ visibleHint }}</p></ng-template>
   `,
   styles: [`:host { display: block; min-width: 0; }`],
 })
@@ -34,6 +34,14 @@ export class SfFieldComponent {
 
   get isRequired(): boolean {
     return this.required || !!this.control?.hasValidator(Validators.required);
+  }
+
+  get isOptional(): boolean {
+    return this.optional || this.hint.trim().toLowerCase() === 'optional';
+  }
+
+  get visibleHint(): string {
+    return this.isOptional ? '' : this.hint;
   }
 
   get error(): string | null {

@@ -10,6 +10,7 @@ import { SfDrawerComponent } from './sf-drawer.component';
 import { SfFieldComponent } from './sf-field.component';
 import { SfFileComponent } from './sf-file.component';
 import { SfInputComponent } from './sf-input.component';
+import { SfLimitComponent } from './sf-limit.component';
 import { SfNumberComponent } from './sf-number.component';
 import { SfRadioGroupComponent } from './sf-radio-group.component';
 import { SfSectionComponent } from './sf-section.component';
@@ -21,7 +22,7 @@ import { SfTextareaComponent } from './sf-textarea.component';
 
 const SMART_FORM = [
   SfDrawerComponent, SfSectionComponent, SfFieldComponent, SfDraftDirective,
-  SfInputComponent, SfTextareaComponent, SfNumberComponent, SfCurrencyComponent, SfDateComponent,
+  SfInputComponent, SfTextareaComponent, SfNumberComponent, SfLimitComponent, SfCurrencyComponent, SfDateComponent,
   SfSelectComponent, SfComboboxComponent, SfCheckboxComponent, SfCheckboxGroupComponent, SfSwitchComponent,
   SfRadioGroupComponent, SfSliderComponent, SfTagsComponent, SfFileComponent,
 ];

@@ -65,6 +65,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() rowKey = 'id';
   @Input() loading = false;
   @Input() selectable = true;
+  @Input() rowSelectable: (row: T) => boolean = () => true;
+  @Input() rowOpenable: (row: T) => boolean = () => true;
   @Input() bulkActions: DataGridBulkAction[] = [];
   @Input() rowActions: DataGridRowAction<T>[] = [];
   @Input() detailTabs: DataGridDetailTab[] = [];
@@ -72,8 +74,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() detailSubtitle?: (row: T) => string;
   /** Breadcrumb label in the detail panel's top bar; defaults to the grid title. */
   @Input() detailBreadcrumb = '';
-  @Input() pageSizeOptions = [10, 25, 50];
-  @Input() pageSize = 10;
+  @Input() pageSizeOptions = [5, 15, 30, 50];
+  @Input() pageSize = 15;
   @Input() maxHeight = '600px';
   @Input() emptyMessage = 'No records found';
   /** When true, the grid stretches to fill its parent's height (parent must be sized, e.g. a flex child) and only the table body scrolls. `maxHeight` is ignored. */
@@ -196,7 +198,11 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     if (changes['data']) {
       const keys = new Set(this.data.map((r) => r[this.rowKey]));
       this.selectedKeys.forEach((k) => { if (!keys.has(k)) this.selectedKeys.delete(k); });
-      if (this.activeRow && !keys.has(this.activeRow[this.rowKey])) this.activeRow = null;
+      if (this.activeRow) {
+        // Re-point the open detail panel at the fresh row object so it reflects reloaded data.
+        const key = this.activeRow[this.rowKey];
+        this.activeRow = this.data.find((r) => r[this.rowKey] === key) ?? null;
+      }
       if (this.page > this.totalPages) this.page = this.totalPages;
     }
     if (changes['detailTabs'] && this.detailTabs.length && !this.activeTab) {
@@ -873,6 +879,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   toggleRow(row: T): void {
+    if (!this.canSelectRow(row)) return;
     const k = row[this.rowKey];
     if (this.selectedKeys.has(k)) this.selectedKeys.delete(k);
     else this.selectedKeys.add(k);
@@ -880,16 +887,17 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   get pageAllSelected(): boolean {
-    return this.pagedData.length > 0 && this.pagedData.every((r) => this.isSelected(r));
+    const selectableRows = this.pageSelectableRows;
+    return selectableRows.length > 0 && selectableRows.every((r) => this.isSelected(r));
   }
 
   get pageSomeSelected(): boolean {
-    return !this.pageAllSelected && this.pagedData.some((r) => this.isSelected(r));
+    return !this.pageAllSelected && this.pageSelectableRows.some((r) => this.isSelected(r));
   }
 
   togglePage(): void {
     const select = !this.pageAllSelected;
-    this.pagedData.forEach((r) => {
+    this.pageSelectableRows.forEach((r) => {
       if (select) this.selectedKeys.add(r[this.rowKey]);
       else this.selectedKeys.delete(r[this.rowKey]);
     });
@@ -897,7 +905,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   selectAll(): void {
-    this.filteredData.forEach((r) => this.selectedKeys.add(r[this.rowKey]));
+    this.filteredData.filter((r) => this.canSelectRow(r)).forEach((r) => this.selectedKeys.add(r[this.rowKey]));
     this.emitSelection();
   }
 
@@ -908,6 +916,18 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   get selectedRows(): T[] {
     return this.data.filter((r) => this.selectedKeys.has(r[this.rowKey]));
+  }
+
+  canSelectRow(row: T): boolean {
+    return this.selectable && this.rowSelectable(row);
+  }
+
+  canOpenRow(row: T): boolean {
+    return this.rowOpenable(row);
+  }
+
+  get pageSelectableRows(): T[] {
+    return this.pagedData.filter((r) => this.canSelectRow(r));
   }
 
   runBulkAction(action: DataGridBulkAction): void {
@@ -943,6 +963,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   // ---- detail panel ----
   openRow(row: T): void {
+    if (!this.canOpenRow(row)) return;
     this.activeRow = row;
     if (this.detailTabs.length && !this.detailTabs.some((t) => t.id === this.activeTab)) {
       this.activeTab = this.detailTabs[0].id;
