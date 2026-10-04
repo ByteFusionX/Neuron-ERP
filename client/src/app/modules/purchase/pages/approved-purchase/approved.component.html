@@ -13,7 +13,7 @@
 >
 <ng-template #sideColumn>
     <div class="flex items-center gap-3">
-        <app-btn *ngIf="sourceTypeView() === 'job'" theme="secondary" (buttonClick)="setSourceTypeView('manual')">General Purchase</app-btn>
+        <app-btn *ngIf="sourceTypeView() === 'job'" theme="secondary" (buttonClick)="setSourceTypeView('manual')">General</app-btn>
         <app-btn *ngIf="sourceTypeView() === 'manual'" theme="secondary" (buttonClick)="setSourceTypeView('job')">Approved PR</app-btn>
         <app-btn theme="primary" routerLink="/purchase/create">+ Create PR</app-btn>
     </div>

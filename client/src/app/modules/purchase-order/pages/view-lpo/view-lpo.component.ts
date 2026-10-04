@@ -9,7 +9,7 @@ import { ActionConfirmationDialogComponent } from 'src/app/shared/components/act
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
-import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
+import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-deal/approve-deal.component';
 import { PurchaseViewModalComponent } from 'src/app/shared/components/purchase-view-modal/purchase-view-modal.component';
 import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -52,7 +52,7 @@ export class ViewLpoComponent implements OnInit {
     this.lpoId = <string>this.route.snapshot.paramMap.get('id');
     if (!this.lpoId) {
       this.notificationService.error('Invalid LPO ID');
-      this.router.navigate(['/purchase-order/pending-approval']);
+      this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
       return;
     }
     this.checkPrivileges();
@@ -105,14 +105,14 @@ export class ViewLpoComponent implements OnInit {
         } else {
           this.notificationService.error('LPO not found');
           this.isLoading.set(false);
-          this.router.navigate(['/purchase-order/pending-approval']);
+          this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
         }
       },
       error: (error) => {
         this.notificationService.error('Failed to load LPO details');
         console.error('Error loading LPO:', error);
         this.isLoading.set(false);
-        this.router.navigate(['/purchase-order/pending-approval']);
+        this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
       }
     });
   }
@@ -281,7 +281,7 @@ export class ViewLpoComponent implements OnInit {
   }
 
   onBack(): void {
-    this.router.navigate(['/purchase-order/pending-approval']);
+    this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
   }
 
   onApprove(): void {
@@ -307,7 +307,7 @@ export class ViewLpoComponent implements OnInit {
         this.purchaseOrderService.approvePurchaseOrder(this.lpoId, result.comment).subscribe({
           next: () => {
             this.notificationService.success('LPO approved successfully');
-            this.router.navigate(['/purchase-order/approved']);
+            this.router.navigate(['/purchase/po'], { queryParams: { view: 'approved' } });
           },
           error: (error) => {
             this.notificationService.error(error.error?.message || 'Failed to approve LPO');
@@ -341,7 +341,7 @@ export class ViewLpoComponent implements OnInit {
         this.purchaseOrderService.rejectPurchaseOrder(this.lpoId, result.comment).subscribe({
           next: () => {
             this.notificationService.success('LPO rejected successfully');
-            this.router.navigate(['/purchase-order/pending-approval']);
+            this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
           },
           error: (error) => {
             this.notificationService.error(error.error?.message || 'Failed to reject LPO');
@@ -372,4 +372,3 @@ export class ViewLpoComponent implements OnInit {
     });
   }
 }
-

@@ -4,7 +4,7 @@
     class="min-h-0 flex-1"
     [breadcrumbs]="breadcrumbs"
     avatarText="PR"
-    [title]="(isEditing ? 'Edit' : 'New') + ' purchase requisition'"
+    [title]="formTitle()"
     [badges]="badges()"
     [subtitle]="headerSubtitle()"
     [stats]="stats()"
@@ -22,7 +22,7 @@
 </div>
 
 <!-- Drawer: create from the PR list, same shape as the quotation create drawer. -->
-<app-sf-drawer #prDrawer *ngIf="drawer" [title]="(isEditing ? 'Edit' : 'New') + ' purchase requisition'" [subtitle]="drawerSubtitle()"
+<app-sf-drawer #prDrawer *ngIf="drawer" [title]="formTitle()" [subtitle]="drawerSubtitle()"
   width="min(1200px, 96vw)" [open]="drawerShown" [dirty]="isDrawerDirty()" (closed)="closeDrawer()">
   <span sfDrawerHeader class="flex flex-wrap gap-1.5">
     <app-detail-badge *ngFor="let b of badges()" [label]="b.label" [tone]="b.tone || 'neutral'"></app-detail-badge>
@@ -45,10 +45,10 @@
   <section class="cp-card">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 class="cp-title">{{ isJobLess ? 'General purchase' : 'Job' }}</h2>
-        <p class="cp-sub">{{ isJobLess ? 'A purchase that is not tied to a job — pick the supplier directly.' : 'Items, customer and pricing come from the job\'s deal sheet.' }}</p>
+        <h2 class="cp-title">{{ sourceTitle() }}</h2>
+        <p class="cp-sub">{{ sourceSubtitle() }}</p>
       </div>
-      <app-sf-switch *ngIf="!isEditing" class="shrink-0" label="Create without a job"
+      <app-sf-switch *ngIf="!isEditing && !sourceLocked" class="shrink-0" label="Create without a job"
         [ngModel]="isJobLess" (ngModelChange)="toggleJobLess($event)" [ngModelOptions]="{ standalone: true }"></app-sf-switch>
     </div>
 
@@ -68,7 +68,7 @@
       <ng-container *ngIf="isJobLess">
         <app-detail-field label="PR No" stacked numeric>{{ f['purchaseNo'].value || '—' }}</app-detail-field>
         <app-detail-field label="Created by" stacked>{{ f['salesManager'].value || '—' }}</app-detail-field>
-        <app-sf-field label="Supplier" class="sm:col-span-2">
+        <app-sf-field label="Supplier" required class="sm:col-span-2">
           <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Search supplier"></app-sf-combobox>
         </app-sf-field>
       </ng-container>
@@ -110,7 +110,7 @@
   </section>
 
   <!-- 3. workflow -->
-  <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+  <section *ngIf="!isJobLess || purchaseId" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <button *ngIf="!isJobLess" type="button" class="cp-tile" (click)="onMrRequestClicks()">
       <span class="cp-tile-icon"><app-dp-icon name="send" size="w-4 h-4"></app-dp-icon></span>
       <span class="min-w-0 flex-1 text-left">
@@ -134,7 +134,7 @@
         <span class="cp-tile-sub">Approved vs. all supplier quotes</span>
       </span>
     </button>
-    <button type="button" class="cp-tile" (click)="onFinalDasdboardClicks()">
+    <button *ngIf="purchaseId" type="button" class="cp-tile" (click)="onFinalDasdboardClicks()">
       <span class="cp-tile-icon"><app-dp-icon name="eye" size="w-4 h-4"></app-dp-icon></span>
       <span class="min-w-0 flex-1 text-left">
         <span class="cp-tile-title">Final dashboard</span>

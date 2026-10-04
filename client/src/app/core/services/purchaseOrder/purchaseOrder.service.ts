@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpContext } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from 'src/environments/environment';
 import { PurchaseOrder } from 'src/app/shared/interfaces/purchase.interface';
@@ -40,8 +40,19 @@ export class PurchaseOrderService {
     status?: string[];
     purchaseId?: string;
     jobId?: string;
+    receiptStatus?: string;
   }): Observable<any> {
-    return this.http.get<any>(this.baseUrl, { params: params as any, context: context() });
+    let httpParams = new HttpParams();
+    if (params?.page !== undefined) httpParams = httpParams.set('page', params.page);
+    if (params?.row !== undefined) httpParams = httpParams.set('row', params.row);
+    if (params?.search) httpParams = httpParams.set('search', params.search);
+    if (params?.purchaseId) httpParams = httpParams.set('purchaseId', params.purchaseId);
+    if (params?.jobId) httpParams = httpParams.set('jobId', params.jobId);
+    if (params?.receiptStatus) httpParams = httpParams.set('receiptStatus', params.receiptStatus);
+    params?.status?.forEach((status) => {
+      httpParams = httpParams.append('status', status);
+    });
+    return this.http.get<any>(this.baseUrl, { params: httpParams, context: context() });
   }
 
   deletePurchaseOrder(id: string): Observable<any> {

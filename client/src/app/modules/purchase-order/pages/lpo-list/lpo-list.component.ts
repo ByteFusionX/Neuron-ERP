@@ -153,6 +153,7 @@ export class LpoListComponent implements OnInit {
         label: 'Status',
         type: 'status',
         headerClass: 'text-center',
+        cellRenderer: (item: any) => this.formatStatus(item.poStatus),
       },
       {
         key: 'comments',
@@ -770,6 +771,10 @@ export class LpoListComponent implements OnInit {
       total: currentState.total
     });
     this.getPurchases();
+  }
+
+  formatStatus(poStatus: string): string {
+    return poStatus === 'Pending for Approval' ? 'Pending' : poStatus;
   }
 
   onStatusChange(event: any): void {

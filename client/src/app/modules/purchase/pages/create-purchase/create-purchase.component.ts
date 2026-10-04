@@ -61,6 +61,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
   @Input() initialJobId: string | null = null;
   /** Drawer mode: start as a general purchase (replaces the `withoutJob` query param). */
   @Input() withoutJob = false;
+  /** Drawer/page launch can own the source mode, so users do not switch between PR and General mid-form. */
+  @Input() sourceLocked = false;
   /** Drawer mode: an existing PR to edit (replaces the `/purchase/edit/:id` route param). */
   @Input() editPurchaseId: string | null = null;
   /** Drawer mode: a PR was created or saved as a draft, so the list should reload. */
@@ -274,16 +276,19 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const jobIdControl = this.purchaseForm.get('jobId');
     const dealSheetIdControl = this.purchaseForm.get('dealSheetId');
     const customerIdControl = this.purchaseForm.get('customerId');
+    const supplierIdControl = this.purchaseForm.get('supplierId');
 
     if (isJobLess) {
       jobIdControl?.clearValidators();
       dealSheetIdControl?.clearValidators();
       customerIdControl?.clearValidators();
+      supplierIdControl?.setValidators([Validators.required]);
       this.loadCurrentEmployeeName();
     } else {
       jobIdControl?.setValidators([Validators.required]);
       dealSheetIdControl?.setValidators([Validators.required]);
       customerIdControl?.setValidators([Validators.required]);
+      supplierIdControl?.clearValidators();
     }
 
     if (isJobLess && this.itemsList().length === 0) {
@@ -292,6 +297,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     jobIdControl?.updateValueAndValidity();
     dealSheetIdControl?.updateValueAndValidity();
     customerIdControl?.updateValueAndValidity();
+    supplierIdControl?.updateValueAndValidity();
   }
 
   loadSuppliers(): void {
@@ -373,6 +379,21 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return pr ? `${pr} · ${subtitle}` : subtitle;
   }
 
+  formTitle(): string {
+    if (this.isJobLess) return this.isEditing ? 'Edit general purchase' : 'New general purchase';
+    return this.isEditing ? 'Edit purchase requisition' : 'New purchase requisition';
+  }
+
+  sourceTitle(): string {
+    return this.isJobLess ? 'General purchase' : 'Job purchase';
+  }
+
+  sourceSubtitle(): string {
+    return this.isJobLess
+      ? 'Create a supplier purchase that is not tied to a job.'
+      : 'Create from an approved job so deal sheet items, customer and pricing stay linked.';
+  }
+
   /** Items auto-save to a server draft, so only an unsaved pick or a half-typed row counts as dirty. */
   isDrawerDirty(): boolean {
     return this.entryItems.dirty || (!this.purchaseId && (!!this.requestedJobId() || this.itemCount() > 0));
@@ -393,7 +414,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.closeDrawer();
       return;
     }
-    this.router.navigate(['/purchase/pr'], this.isJobLess ? { queryParams: { view: 'general' } } : {});
+    this.router.navigate([this.isJobLess ? '/purchase/po/general' : '/purchase/pr']);
   }
 
   /** Header badges/stats; kept in signals so the shell's inputs only change when the form does. */
@@ -453,10 +474,16 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             if (this.isJobLess) {
               const jobIdControl = this.purchaseForm.get('jobId');
               const dealSheetIdControl = this.purchaseForm.get('dealSheetId');
+              const customerIdControl = this.purchaseForm.get('customerId');
+              const supplierIdControl = this.purchaseForm.get('supplierId');
               jobIdControl?.clearValidators();
               dealSheetIdControl?.clearValidators();
+              customerIdControl?.clearValidators();
+              supplierIdControl?.setValidators([Validators.required]);
               jobIdControl?.updateValueAndValidity();
               dealSheetIdControl?.updateValueAndValidity();
+              customerIdControl?.updateValueAndValidity();
+              supplierIdControl?.updateValueAndValidity();
             }
 
             this.purchaseForm.patchValue({
@@ -650,7 +677,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const isJobLess = this.isJobLess;
     this.purchaseForm.reset()
     this.itemsList.set([])
-    this.router.navigate(['/purchase/pr'], isJobLess ? { queryParams: { view: 'general' } } : {})
+    this.router.navigate([isJobLess ? '/purchase/po/general' : '/purchase/pr'])
   }
 
   createSupplierGroup(): FormGroup {

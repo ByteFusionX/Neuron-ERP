@@ -1,20 +1,65 @@
-<data-table
-  [data]="tableData()"
-  [columns]="tableColumns"
-  [defaultColumns]="defaultColumns"
-  [isLoading]="isLoading()"
-  [isEmpty]="isEmpty()"
-  [totalItems]="totalItems()"
-  (rowClick)="onRowClick($event)"
-  (actionClick)="onActionClick($event)"
-  (pageChange)="onPageChange($event)"
-  (rowsPerPageChange)="onRowsPerPageChange($event)"
-  (search)="onSearch($event)"
-  [title]="isPendingView() ? 'LPO Approval Requests' : 'Approved LPOs'"
-  [enableExport]="true"
-  [exportFileName]="isPendingView() ? 'lpo-approval-requests.xlsx' : 'approved-lpos.xlsx'"
-  tableId="lpo-approval-table"
->
-</data-table>
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Purchase Orders"
+    subtitle="Track pending approvals and approved supplier POs in one workspace"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="total"
+    [data]="rows"
+    [columns]="columns"
+    [loading]="isLoading"
+    [pageSize]="row"
+    searchPlaceholder="Search by PO No, supplier, customer, or job"
+    emptyMessage="No purchase orders found"
+    [rowActions]="rowActions"
+    [views]="views"
+    storageKey="purchase-order-list"
+    [detailLoading]="detailLoading"
+    [detailTabs]="detailTabs"
+    [detailTitle]="lpoTitle"
+    [detailSubtitle]="lpoSubtitle"
+    exportable
+    exportFileName="purchase-orders.xlsx"
+    (queryChange)="onQueryChange($event)"
+    (rowOpen)="onRowOpen()"
+    (rowAction)="onRowAction($event)">
 
+    <ng-template #detailMetaTemplate let-row>
+      <div class="po-meta">
+        <p class="po-meta-label">Supplier</p>
+        <p class="po-meta-value">{{ row.supplierId?.supplierName || '-' }}</p>
+      </div>
+      <div class="po-meta">
+        <p class="po-meta-label">Customer</p>
+        <p class="po-meta-value">{{ row.purchaseId?.customerId?.companyName || '-' }}</p>
+      </div>
+      <div class="po-meta">
+        <p class="po-meta-label">Amount</p>
+        <p class="po-meta-value">{{ formatAmount(row) }}</p>
+      </div>
+      <div class="po-meta">
+        <p class="po-meta-label">Date</p>
+        <p class="po-meta-value">{{ row.poDate | date: 'dd MMM yyyy' }}</p>
+      </div>
+    </ng-template>
 
+    <ng-template #detailFooterTemplate let-row>
+      <app-action-button variant="primary" (click)="openFullLpo(row, $event)">Open full PO</app-action-button>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <ng-container *ngSwitchCase="'overview'">
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        </ng-container>
+
+        <ng-container *ngSwitchCase="'items'">
+          <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals></app-detail-table>
+        </ng-container>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+</div>

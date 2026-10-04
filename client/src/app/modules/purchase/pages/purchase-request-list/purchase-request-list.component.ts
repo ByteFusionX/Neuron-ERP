@@ -26,9 +26,9 @@ import { CreatePurchaseComponent } from '../create-purchase/create-purchase.comp
 type SourceType = 'job' | 'manual';
 
 const ALL_STATUSES = ['Pending', 'Drafted', 'Rejected', 'Approved'];
-const PENDING_STATUSES = ['Pending', 'Drafted', 'Rejected'];
-const APPROVED_STATUSES = ['Approved'];
 const DRAFT_STATUSES = ['Drafted'];
+const PENDING_STATUSES = ['Pending'];
+const APPROVED_STATUSES = ['Approved'];
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
@@ -76,10 +76,12 @@ export class PurchaseRequestListComponent {
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR' }];
   views: DataGridView<any>[] = [
     { id: 'all', label: 'All' },
-    { id: 'pending', label: 'Pending' },
-    { id: 'approved', label: 'Approved' },
     { id: 'draft', label: 'Draft' },
-    { id: 'general', label: 'General' },
+    { id: 'pending', label: 'Pending' },
+    { id: 'readyToPo', label: 'Ready to PO' },
+    { id: 'inProgress', label: 'In Progress' },
+    { id: 'remainingPo', label: 'Remaining PO' },
+    { id: 'completed', label: 'Completed' },
   ];
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
@@ -87,7 +89,7 @@ export class PurchaseRequestListComponent {
   private activeViewId = 'all';
 
   page = 1;
-  row = 10;
+  row = 15;
   searchQuery = '';
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
@@ -124,6 +126,9 @@ export class PurchaseRequestListComponent {
           return r.currency ? `${formatted} ${r.currency}` : formatted;
         },
       },
+      { key: 'selectedPrQuantity', label: 'PR Qty', align: 'right', valueGetter: (r) => r.selectedPrQuantity ?? '-' },
+      { key: 'issuedPoQuantity', label: 'PO Qty', align: 'right', valueGetter: (r) => r.issuedPoQuantity ?? '-' },
+      { key: 'remainingPoQuantity', label: 'Remaining', align: 'right', valueGetter: (r) => r.remainingPoQuantity ?? '-' },
       { key: 'createdBy', label: 'Created By', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '-' },
       { key: 'supplier', label: 'Supplier', valueGetter: (r) => r.supplierId?.supplierName || '-' },
       {
@@ -146,21 +151,36 @@ export class PurchaseRequestListComponent {
         id: 'initiateLpo', label: 'Initiate LPO', icon: 'send', quick: true,
         hidden: (r) => (r.overallStatus || r.status) !== 'Approved',
       },
+      {
+        id: 'createRfq', label: 'Create RFQ', icon: 'card', quick: true,
+        hidden: (r) => (r.overallStatus || r.status) !== 'Approved',
+      },
     ];
   }
 
   private statusesForView(viewId: string): string[] {
     switch (viewId) {
-      case 'pending': return PENDING_STATUSES;
-      case 'approved': return APPROVED_STATUSES;
       case 'draft': return DRAFT_STATUSES;
+      case 'pending': return PENDING_STATUSES;
+      case 'readyToPo':
+      case 'remainingPo':
+      case 'inProgress':
+      case 'completed':
+        return APPROVED_STATUSES;
       default: return ALL_STATUSES;
     }
   }
 
-  /** Only "General" scopes to manual (job-less) PRs; All/Pending/Approved span both sources. */
+  private poProgressForView(viewId: string): 'remaining' | 'in-progress' | 'completed' | undefined {
+    if (viewId === 'remainingPo') return 'remaining';
+    if (viewId === 'inProgress') return 'in-progress';
+    if (viewId === 'completed') return 'completed';
+    return undefined;
+  }
+
+  /** PR list stays scoped to job-linked requests; General has its own page under PO. */
   private sourceTypeForView(viewId: string): SourceType | undefined {
-    return viewId === 'general' ? 'manual' : undefined;
+    return 'job';
   }
 
   onQueryChange(query: DataGridQuery): void {
@@ -184,13 +204,14 @@ export class PurchaseRequestListComponent {
       status: this.statusesForView(this.activeViewId),
       search: this.searchQuery || undefined,
       sourceType: this.sourceTypeForView(this.activeViewId),
+      poProgress: this.poProgressForView(this.activeViewId),
     };
 
     this.subscriptions.add(
       this.purchaseService.getPurchases(filterParams).subscribe({
         next: (response) => {
           this.rows = response.purchase.data;
-          this.total = response.purchase.total;
+          this.total = response.purchase.total ?? 0;
           this.isLoading = false;
         },
         error: (error) => {
@@ -212,6 +233,7 @@ export class PurchaseRequestListComponent {
         status: this.statusesForView(view.id),
         search: this.searchQuery || undefined,
         sourceType: this.sourceTypeForView(view.id),
+        poProgress: this.poProgressForView(view.id),
       });
       return acc;
     }, {} as Record<string, ReturnType<PurchaseService['getPurchases']>>);
@@ -221,7 +243,7 @@ export class PurchaseRequestListComponent {
         next: (results) => {
           this.views = this.views.map((view) => ({
             ...view,
-            count: results[view.id]?.purchase?.total ?? view.count,
+            count: results[view.id]?.purchase?.total ?? 0,
           }));
         },
         error: (error) => console.error('Error loading view counts:', error),
@@ -257,7 +279,25 @@ export class PurchaseRequestListComponent {
       case 'edit':
         this.onEditPr(row);
         break;
+      case 'createRfq':
+        this.createRfq(row);
+        break;
     }
+  }
+
+  createRfq(row: any): void {
+    this.subscriptions.add(
+      this.purchaseService.createRfqFromPurchase(row._id).subscribe({
+        next: () => {
+          this.notificationService.success('RFQ created successfully');
+          this.router.navigate(['/purchase/rfq']);
+        },
+        error: (error) => {
+          this.notificationService.error(error?.error?.message || 'Failed to create RFQ');
+          console.error('Error creating RFQ:', error);
+        },
+      })
+    );
   }
 
   onRowOpen(): void {
@@ -317,6 +357,7 @@ export class PurchaseRequestListComponent {
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.approvedDate || row.createdAt, 'dd MMM yyyy') },
           { type: 'field', label: 'Created By', value: row.createdBy ? `${row.createdBy.firstName} ${row.createdBy.lastName}` : '-' },
           { type: 'field', label: 'Procurement Person', value: row.procurementPerson?.firstName ? `${row.procurementPerson.firstName} ${row.procurementPerson.lastName}` : '-' },
+          { type: 'field', label: 'Remaining PO Qty', value: row.remainingPoQuantity ?? 0, numeric: true, noHover: true },
         ],
       },
       {
@@ -346,10 +387,8 @@ export class PurchaseRequestListComponent {
 
   /** Mounted only while open, so each opening starts the form fresh. */
   createDrawerOpen = false;
-  createDrawerWithoutJob = false;
 
   onCreatePr(): void {
-    this.createDrawerWithoutJob = this.activeViewId === 'general';
     this.createDrawerOpen = true;
   }
 

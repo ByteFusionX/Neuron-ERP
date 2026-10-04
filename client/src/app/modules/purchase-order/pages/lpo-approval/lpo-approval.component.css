@@ -1,0 +1,29 @@
+.po-meta {
+  min-width: 0;
+}
+
+.po-meta-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: rgb(107 114 128);
+}
+
+.po-meta-value {
+  margin-top: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: rgb(17 24 39);
+}
+
+:host-context(.dark) .po-meta-label {
+  color: rgb(156 163 175);
+}
+
+:host-context(.dark) .po-meta-value {
+  color: rgb(243 244 246);
+}

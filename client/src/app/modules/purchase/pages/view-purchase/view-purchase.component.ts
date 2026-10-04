@@ -10,7 +10,7 @@ import { StatusHistoryModalComponent } from 'src/app/shared/components/status-hi
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { ApproveDealComponent } from 'src/app/modules/deal-sheet/approve-deal/approve-deal.component';
+import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-deal/approve-deal.component';
 import { Quotatation } from 'src/app/shared/interfaces/quotation.interface';
 import {
   DetailViewBadge,
