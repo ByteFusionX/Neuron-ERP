@@ -20,44 +20,6 @@
                     <img class="w-46 h-8 mr-2" src="../../../../../assets/images/companyTransparent.png" alt="logo">
                 </a>
                 <div class="w-full bg-white rounded-lg shadow md:mt-0 sm:max-w-md xl:p-0">
-                    <div class="p-6 space-y-6 md:space-y-8 sm:p-8">
-                        <div class="text-center">
-                            <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-700 md:text-2xl mb-2">
-                                Welcome Back
-                            </h1>
-                            <p class="text-gray-600 text-sm">
-                                Sign in to your account using Microsoft
-                            </p>
-                        </div>
-
-                        <div class="space-y-4">
-                            <button type="button" (click)="loginWithMicrosoft()"
-                                [disabled]="isMicrosoftLoginLoading"
-                                class="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white">
-
-                                <div *ngIf="isMicrosoftLoginLoading" class="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700 mr-3"></div>
-
-                                <svg *ngIf="!isMicrosoftLoginLoading" class="w-5 h-5 mr-3" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M11 0H0V11H11V0Z" fill="#F25022"/>
-                                    <path d="M23 0H12V11H23V0Z" fill="#7FBA00"/>
-                                    <path d="M11 12H0V23H11V12Z" fill="#00A4EF"/>
-                                    <path d="M23 12H12V23H23V12Z" fill="#FFB900"/>
-                                </svg>
-
-                                <span class="text-gray-700 font-medium">
-                                    {{ isMicrosoftLoginLoading ? 'Signing in...' : 'Continue with Microsoft' }}
-                                </span>
-                            </button>
-                        </div>
-
-                        <div class="text-center">
-                            <p class="text-xs text-gray-500">
-                                By signing in, you agree to our Terms of Service and Privacy Policy
-                            </p>
-                        </div>
-                    </div>
-                    <!-- employeeId/password login disabled in favor of Azure AD login; restore this block
-                         (and onSubmit() in login-page.component.ts) to re-enable it.
                     <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
                         <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl ">
                             Sign in to your account
@@ -113,7 +75,6 @@
 
                         </form>
                     </div>
-                    -->
                 </div>
             </div>
         </section>

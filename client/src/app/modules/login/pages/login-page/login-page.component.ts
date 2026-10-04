@@ -14,10 +14,7 @@ import { ToastrService } from 'ngx-toastr';
 import { appNoLeadingSpace } from '../../../../shared/directives/trim-validator.directive';
 import { environment } from 'src/environments/environment';
 
-// employeeId/password login is disabled in favor of Azure AD login
-// (see login-page.component.html: the password form block is commented out).
-// To re-enable it: uncomment that block and onSubmit() below, and swap
-// employee.router.ts's /login gate back to no auth.
+// Active login is employeeId/password. The Microsoft handlers below are kept but not shown in the template.
 @Component({
     selector: 'app-login-page',
     templateUrl: './login-page.component.html',
@@ -73,35 +70,34 @@ export class LoginPageComponent implements OnDestroy {
     this.showIcon = this.showPassword ? 'heroEye' : 'heroEyeSlash';
   }
 
-  // employeeId/password login is disabled in favor of Azure AD login.
-  // Restore this (and the form block in login-page.component.html) to re-enable it.
-  // onSubmit() {
-  //   this.submit = true
-  //   this.employeeNotFoundError = false
-  //   this.passwordNotMatchError = false
-  //   if (this.loginForm.valid) {
-  //     this.isSaving = true;
-  //     this.employeeService.employeeLogin(this.loginForm.value).subscribe({
-  //       next: (res: login) => {
-  //         if (res.employeeData && res.token) {
-  //           localStorage.setItem('employeeToken', res.token)
-  //           this.notificationService.authSocketIo(res.token)
-  //           this.notificationService.initializeNotifications()
-  //           this.router.navigate(['/home']);
-  //         } else if (res.employeeNotFoundError) {
-  //           this.isSaving = false;
-  //           this.employeeNotFoundError = true;
-  //         } else if (res.passwordNotMatchError) {
-  //           this.isSaving = false;
-  //           this.passwordNotMatchError = true
-  //         }
-  //       },
-  //       error: () => {
-  //         this.isSaving = false;
-  //       }
-  //     })
-  //   }
-  // }
+  // employeeId/password login.
+  onSubmit() {
+    this.submit = true
+    this.employeeNotFoundError = false
+    this.passwordNotMatchError = false
+    if (this.loginForm.valid) {
+      this.isSaving = true;
+      this.employeeService.employeeLogin(this.loginForm.value).subscribe({
+        next: (res: login) => {
+          if (res.employeeData && res.token) {
+            localStorage.setItem('employeeToken', res.token)
+            this.notificationService.authSocketIo(res.token)
+            this.notificationService.initializeNotifications()
+            this.router.navigate(['/home']);
+          } else if (res.employeeNotFoundError) {
+            this.isSaving = false;
+            this.employeeNotFoundError = true;
+          } else if (res.passwordNotMatchError) {
+            this.isSaving = false;
+            this.passwordNotMatchError = true
+          }
+        },
+        error: () => {
+          this.isSaving = false;
+        }
+      })
+    }
+  }
 
   setLoginDisplay() {
     this.loginDisplay = this.msalService.instance.getAllAccounts().length > 0;

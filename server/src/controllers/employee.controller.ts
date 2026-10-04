@@ -901,53 +901,51 @@ const generateEmployeeId = async () => {
   }
 };
 
-// employeeId/password login is disabled in favor of Azure AD login.
-// Restore this function (and swap employee.router.ts's /login gate back to
-// no auth) to re-enable it.
-// export const login = async (
-//   req: Request,
-//   res: Response,
-//   next: NextFunction,
-// ) => {
-//   try {
-//     const { employeeId, password } = req.body;
-//
-//     const employee = await Employee.findOne({
-//       employeeId: employeeId,
-//       isDeleted: { $ne: true },
-//       isBlocked: { $ne: true },
-//     }).select("+password");
-//
-//     if (!employee) {
-//       return res.send({ employeeNotFoundError: true });
-//     }
-//
-//     // Supports both bcrypt-hashed passwords (set via the app) and plaintext
-//     // passwords (e.g. set by hand directly in MongoDB).
-//     const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(employee.password || "");
-//     const passwordMatch = isBcryptHash
-//       ? await bcrypt.compare(password, employee.password)
-//       : password === employee.password;
-//
-//     if (!passwordMatch) {
-//       return res.send({ passwordNotMatchError: true });
-//     }
-//
-//     const payload = { id: employee._id, employeeId: employee.employeeId };
-//     const token = jwt.sign(payload, process.env.JWT_SECRET as string);
-//
-//     const employeeData = await Employee.findById(employee._id, {
-//       password: 0,
-//     }).populate("category");
-//
-//     res.status(200).json({ token, employeeData });
-//   } catch (error) {
-//     console.log(error);
-//     return next(error);
-//   }
-// };
-
+// employeeId/password login (the active login). Azure AD login lives in loginWithMicrosoft.
 export const login = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { employeeId, password } = req.body;
+
+    const employee = await Employee.findOne({
+      employeeId: employeeId,
+      isDeleted: { $ne: true },
+      isBlocked: { $ne: true },
+    }).select("+password");
+
+    if (!employee) {
+      return res.send({ employeeNotFoundError: true });
+    }
+
+    // Supports both bcrypt-hashed passwords (set via the app) and plaintext
+    // passwords (e.g. set by hand directly in MongoDB).
+    const isBcryptHash = /^\$2[aby]\$\d{2}\$/.test(employee.password || "");
+    const passwordMatch = isBcryptHash
+      ? await bcrypt.compare(password, employee.password)
+      : password === employee.password;
+
+    if (!passwordMatch) {
+      return res.send({ passwordNotMatchError: true });
+    }
+
+    const payload = { id: employee._id, employeeId: employee.employeeId };
+    const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+
+    const employeeData = await Employee.findById(employee._id, {
+      password: 0,
+    }).populate("category");
+
+    res.status(200).json({ token, employeeData });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};
+
+export const loginWithMicrosoft = async (
   req: Request,
   res: Response,
   next: NextFunction,

@@ -2,8 +2,7 @@
 import passport from "passport";
 import jwt from "jsonwebtoken";
 
-// Azure AD login is temporarily disabled in favor of employeeId/password login.
-// To re-enable Azure, restore this block and remove the JWT block below.
+// Azure AD bearer auth is disabled; the app uses its own JWT (employeeId/password login).
 // const PassportMiddleware = (req: any, res: any, next: any) => {
 //     if (req.path.includes('/uploads')) {
 //         return next();

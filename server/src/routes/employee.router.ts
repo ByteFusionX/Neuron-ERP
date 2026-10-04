@@ -3,6 +3,7 @@ import {
   createEmployee,
   getEmployees,
   login,
+  loginWithMicrosoft,
   getEmployee,
   getFilteredEmployees,
   editEmployee,
@@ -58,10 +59,10 @@ empRouter.patch(
   requirePrivilege("employee", "edit", "employee.create"),
   setEmployeeApprovalLimit,
 );
-// /login is globally exempt from the app's own JWT middleware (there's no
-// employeeToken yet at login time) but is gated here on the caller's Azure AD
-// access token so `login` can trust req.user.
-empRouter.post("/login", passport.authenticate("oauth-bearer", { session: false }), login);
+// /login (employeeId/password) and /login-microsoft are globally exempt from the app's own JWT
+// middleware (no employeeToken yet); /login-microsoft is gated on the caller's Azure AD token.
+empRouter.post("/login", login);
+empRouter.post("/login-microsoft", passport.authenticate("oauth-bearer", { session: false }), loginWithMicrosoft);
 empRouter.get("/get", getEmployee);
 // Deprecated: Use /notification endpoint instead for privilege-aware notifications
 // empRouter.get('/notifications', getNotificationCounts)
