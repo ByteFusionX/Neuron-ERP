@@ -84,7 +84,7 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
     { label: 'Home', link: '/' },
     { label: 'PR', link: '/purchase/pr' },
     { label: this.purchaseData()?.purchaseNo || 'Purchase', link: ['/purchase/edit', this.purchaseId] },
-    { label: 'Comparison sheet' },
+    { label: 'Supplier offers' },
   ]);
 
   subtitle = computed(() => {
@@ -100,7 +100,7 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
 
   private lowestTotal = computed(() => {
     const list = this.comparisonList();
-    return list.length > 1 ? Math.min(...list.map((c) => Number(c.totalCost) || 0)) : null;
+    return list.length > 1 ? Math.min(...list.map((c) => this.offerTotal(c))) : null;
   });
 
   stats = computed<DetailViewStat[]>(() => {
@@ -108,12 +108,13 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
     const selected = list.find((c) => c.selected);
     const fmt = (n: number) => `${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${this.currency()}`.trim();
     const lowest = this.lowestTotal();
-    const over = selected && lowest !== null ? (Number(selected.totalCost) || 0) - lowest : 0;
+    const selectedTotal = selected ? this.offerTotal(selected) : 0;
+    const over = selected && lowest !== null ? selectedTotal - lowest : 0;
     return [
-      { label: 'Quotes', value: String(list.length) },
-      { label: 'Selected supplier', value: selected?.supplierName || '—' },
-      { label: 'Selected total', value: selected ? fmt(Number(selected.totalCost) || 0) : '—' },
-      { label: 'Lowest quote', value: lowest !== null ? fmt(lowest) : '—' },
+      { label: 'Offers', value: String(list.length) },
+      { label: 'Awarded supplier', value: selected?.supplierName || '—' },
+      { label: 'Awarded total', value: selected ? fmt(selectedTotal) : '—' },
+      { label: 'Lowest offer', value: lowest !== null ? fmt(lowest) : '—' },
       { label: 'Above lowest', value: fmt(over), danger: over > 0 },
     ];
   });
@@ -229,7 +230,7 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
     const selected = this.comparisonList().some(item => item.selected);
 
     if (!selected && this.comparisonList().length > 0) {
-      this.toaster.error('Please select one comparison!');
+      this.toaster.error('Please select one supplier offer');
       return;
     }
 
@@ -242,7 +243,7 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
       this.purchaseService.updatePurchaseComparisons(this.purchaseId, updatedItems).subscribe({
         next: (res) => {
           if (res.success) {
-            this.toaster.success('Comparisons updated successfully');
+            this.toaster.success('Supplier offers updated successfully');
             if (this.drawer) {
               this.saved.emit();
               this.closeDrawer();
@@ -252,8 +253,8 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
           }
         },
         error: (error) => {
-          console.error('Error updating comparisons:', error);
-          this.toaster.error('Failed to update comparisons');
+          console.error('Error updating supplier offers:', error);
+          this.toaster.error('Failed to update supplier offers');
         }
       })
     );
@@ -365,7 +366,7 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
           res.selected = true;
         }
         updated.push(res);
-        updated.sort((a, b) => a.unitPrice - b.unitPrice);
+        updated.sort((a, b) => this.offerTotal(a) - this.offerTotal(b));
         this.comparisonList.set(updated);
       }
     })
@@ -401,7 +402,7 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
         updated.sort((a, b) => {
           if (a.selected && !b.selected) return -1;
           if (!a.selected && b.selected) return 1;
-          return a.unitPrice - b.unitPrice;
+          return this.offerTotal(a) - this.offerTotal(b);
         });
         
         this.comparisonList.set(updated);
@@ -419,11 +420,21 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
 
   isLowest(comparison: any): boolean {
     const lowest = this.lowestTotal();
-    return lowest !== null && (Number(comparison.totalCost) || 0) === lowest;
+    return lowest !== null && this.offerTotal(comparison) === lowest;
   }
 
   getSelectedComparison() {
     return this.comparisonList().find(item => item.selected) || null;
+  }
+
+  offerTotal(comparison: any): number {
+    return Number(comparison?.landedCost) || Number(comparison?.netAmount) || Number(comparison?.totalCost) || ((Number(comparison?.quantity) || 0) * (Number(comparison?.unitPrice) || 0));
+  }
+
+  discountLabel(comparison: any): string {
+    const value = Number(comparison?.discountValue) || 0;
+    if (!value) return '-';
+    return comparison?.discountType === 'percent' ? `${value}%` : `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${this.currency()}`.trim();
   }
 
   onAddSupplier() {

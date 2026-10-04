@@ -1,11 +1,11 @@
-<!-- Full page: linked from the PR's edit page, comparison summary, supplier discount, etc. -->
+<!-- Full page: linked from RFQ, PR edit, supplier discount, etc. -->
 <div *ngIf="!drawer" class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-detail-view-shell
     class="min-h-0 flex-1"
     [loading]="!purchaseData()"
     [breadcrumbs]="breadcrumbs()"
     avatarText="CS"
-    title="Comparison sheet"
+    title="Supplier offers"
     [subtitle]="subtitle()"
     [stats]="stats()"
     [hasSidebar]="false"
@@ -22,7 +22,7 @@
 </div>
 
 <!-- Drawer: stacked above the create/edit PR drawer, so comparing quotes doesn't lose that form's state. -->
-<app-sf-drawer #csDrawer *ngIf="drawer" title="Comparison sheet" [subtitle]="subtitle()"
+<app-sf-drawer #csDrawer *ngIf="drawer" title="Supplier offers" [subtitle]="subtitle()"
   width="min(1000px, 94vw)" [open]="drawerShown" (closed)="closeDrawer()">
   <ng-container *ngTemplateOutlet="sheetBody"></ng-container>
 
@@ -35,25 +35,25 @@
 
 <ng-template #sheetBody>
     <div class="mx-auto max-w-5xl space-y-5">
-      <!-- the item being compared -->
+      <!-- the item being quoted -->
       <section class="rounded-lg border border-gray-200 bg-white p-4 dark:border-erp-border-dark dark:bg-erp-surface-dark">
         <p class="text-[11px] font-medium uppercase tracking-wide text-gray-400">Product description</p>
         <p class="mt-1 whitespace-pre-line text-[13px] text-gray-900 dark:text-gray-100">{{ getFormattedProducts() || '—' }}</p>
         <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Qty {{ selectedQuantity() }}</p>
       </section>
 
-      <!-- supplier quotes -->
+      <!-- supplier offers -->
       <section>
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Supplier quotes</h2>
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Supplier offers</h2>
             <app-detail-badge *ngIf="comparisonList().length" [label]="comparisonList().length + ''" tone="neutral"></app-detail-badge>
           </div>
-          <app-action-button variant="secondary" (click)="onComparisonClicks()">Add quote</app-action-button>
+          <app-action-button variant="secondary" (click)="onComparisonClicks()">Add offer</app-action-button>
         </div>
 
         <app-detail-callout *ngIf="comparisonList().length > 0 && !getSelectedComparison()" class="mb-3" tone="warn"
-          label="No supplier selected" summary="Pick the quote you want to use for this item before saving."></app-detail-callout>
+          label="No supplier awarded" summary="Pick the offer you want to use for this item before saving."></app-detail-callout>
 
         <div *ngIf="comparisonList().length; else emptyTpl" class="overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
           <div class="overflow-x-auto">
@@ -64,9 +64,13 @@
                   <th class="px-3 py-2.5">Supplier</th>
                   <th class="px-3 py-2.5 text-right">Qty</th>
                   <th class="px-3 py-2.5 text-right">Unit price</th>
-                  <th class="px-3 py-2.5 text-right">Total</th>
+                  <th class="px-3 py-2.5 text-right">Discount</th>
+                  <th class="px-3 py-2.5 text-right">Tax</th>
+                  <th class="px-3 py-2.5 text-right">Freight</th>
+                  <th class="px-3 py-2.5 text-right">Landed total</th>
                   <th class="px-3 py-2.5">Availability</th>
                   <th class="px-3 py-2.5">Payment terms</th>
+                  <th class="px-3 py-2.5">Validity</th>
                   <th class="w-20 px-3 py-2.5"></th>
                 </tr>
               </thead>
@@ -81,22 +85,27 @@
                   <td class="px-3 py-3">
                     <div class="flex items-center gap-2">
                       <span class="font-medium" [ngClass]="data.selected ? 'text-violet-700 dark:text-violet-300' : 'text-gray-900 dark:text-gray-100'">{{ data.supplierName }}</span>
-                      <app-detail-badge *ngIf="data.selected" label="Selected" tone="active"></app-detail-badge>
+                      <app-detail-badge *ngIf="data.selected" label="Awarded" tone="active"></app-detail-badge>
                       <app-detail-badge *ngIf="isLowest(data)" label="Lowest" tone="good"></app-detail-badge>
                     </div>
+                    <p *ngIf="data.remarks" class="mt-0.5 max-w-[18rem] truncate text-xs text-gray-500 dark:text-gray-400">{{ data.remarks }}</p>
                   </td>
                   <td class="px-3 py-3 text-right tabular-nums">{{ data.quantity }}</td>
                   <td class="px-3 py-3 text-right tabular-nums">{{ data.unitPrice | number: '1.2-2' }} <span class="text-xs text-gray-500">{{ currency() }}</span></td>
-                  <td class="px-3 py-3 text-right font-semibold tabular-nums">{{ data.totalCost | number: '1.2-2' }} <span class="text-xs font-normal text-gray-500">{{ currency() }}</span></td>
+                  <td class="px-3 py-3 text-right tabular-nums">{{ discountLabel(data) }}</td>
+                  <td class="px-3 py-3 text-right tabular-nums">{{ data.taxPercent || 0 }}%</td>
+                  <td class="px-3 py-3 text-right tabular-nums">{{ (data.freightCost || 0) | number: '1.2-2' }}</td>
+                  <td class="px-3 py-3 text-right font-semibold tabular-nums">{{ offerTotal(data) | number: '1.2-2' }} <span class="text-xs font-normal text-gray-500">{{ currency() }}</span></td>
                   <td class="max-w-[16rem] whitespace-pre-line px-3 py-3 text-gray-600 dark:text-gray-400">{{ data.etaTerms || '—' }}</td>
                   <td class="max-w-[16rem] whitespace-pre-line px-3 py-3 text-gray-600 dark:text-gray-400">{{ data.paymentTerms || '—' }}</td>
+                  <td class="px-3 py-3 text-gray-600 dark:text-gray-400">{{ data.validityDate ? (data.validityDate | date: 'dd MMM yyyy') : '—' }}</td>
                   <td class="px-3 py-3" (click)="$event.stopPropagation()">
                     <div class="flex justify-end gap-1 opacity-60 transition group-hover:opacity-100">
-                      <button type="button" (click)="onEditComparison(i)" title="Edit quote" aria-label="Edit quote"
+                      <button type="button" (click)="onEditComparison(i)" title="Edit offer" aria-label="Edit offer"
                         class="grid h-7 w-7 place-content-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-violet-600 dark:hover:bg-gray-800">
                         <app-dp-icon name="pencil" size="w-4 h-4"></app-dp-icon>
                       </button>
-                      <button type="button" (click)="onDeleteComparison(i)" title="Remove quote" aria-label="Remove quote"
+                      <button type="button" (click)="onDeleteComparison(i)" title="Remove offer" aria-label="Remove offer"
                         class="grid h-7 w-7 place-content-center rounded-md text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40">
                         <app-dp-icon name="trash" size="w-4 h-4"></app-dp-icon>
                       </button>
@@ -113,9 +122,9 @@
             <span class="mx-auto grid h-10 w-10 place-content-center rounded-full bg-gray-100 text-gray-400 dark:bg-white/5">
               <app-dp-icon name="building" size="w-5 h-5"></app-dp-icon>
             </span>
-            <p class="text-[13px] font-medium text-gray-900 dark:text-gray-100">No supplier quotes yet</p>
-            <p class="max-w-sm text-xs text-gray-500 dark:text-gray-400">Add quotes to compare price, availability and payment terms, then pick the best one.</p>
-            <app-action-button class="mx-auto mt-2" variant="primary" (click)="onComparisonClicks()">Add first quote</app-action-button>
+            <p class="text-[13px] font-medium text-gray-900 dark:text-gray-100">No supplier offers yet</p>
+            <p class="max-w-sm text-xs text-gray-500 dark:text-gray-400">Enter offers from suppliers, including discounts, tax, freight and terms, then award the supplier for this item.</p>
+            <app-action-button class="mx-auto mt-2" variant="primary" (click)="onComparisonClicks()">Add first offer</app-action-button>
           </div>
         </ng-template>
       </section>

@@ -120,6 +120,7 @@ export interface Quotatation {
     lostAt?: string;
     lostBy?: getEmployee | string;
     createdBy: getEmployee;
+    createdByUser?: getEmployee | string;
     status: QuoteStatus;
     lpoFiles: File[];
     lpoValue: string;
@@ -173,6 +174,7 @@ export interface getQuotatation {
     lostAt?: string;
     lostBy?: getEmployee | string;
     createdBy: getEmployee;
+    createdByUser?: getEmployee | string;
     status: QuoteStatus;
     lpoFiles: [];
     lpoSubmitted: boolean;
@@ -231,6 +233,8 @@ export interface quotatationForm {
     deliveryLocation?: string;
     validityDate?: string;
     createdBy: string | getEmployee | undefined;
+    createdByUser?: string | getEmployee | undefined;
+    accountingManager?: string | undefined;
     status: QuoteStatus;
     rfqNo: string;
     closingDate: string;
