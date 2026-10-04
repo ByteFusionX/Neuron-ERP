@@ -1,8 +1,7 @@
 import { Component, EventEmitter, booleanAttribute, Input, OnChanges, Output, SimpleChanges, inject } from '@angular/core';
-import { DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
+import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
 import { NavigationExtras, Router } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
-import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
@@ -13,28 +12,33 @@ import { DetailClause, DetailTableColumn } from 'src/app/shared/components/detai
 import { ParseBoldTextPipe } from 'src/app/shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from 'src/app/shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
-import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
+import { EstimationHistoryEntry, Estimations } from 'src/app/shared/interfaces/enquiry.interface';
 
 /**
  * Drawer showing a presale estimation. With `editable` the presale engineer can also edit it
- * (navigates to the edit page) or clear it (emits `cleared` once confirmed; the host does the delete).
+ * (navigates to the edit page). Estimations are versioned and never deleted.
  */
 @Component({
   selector: 'app-view-estimation',
   standalone: true,
   templateUrl: './view-estimation.component.html',
-  imports: [NgIf, NgFor, NgClass, DecimalPipe, SmartFormModule, ActionButtonComponent,
+  imports: [NgIf, NgFor, NgClass, DatePipe, DecimalPipe, SmartFormModule, ActionButtonComponent,
     DetailTableComponent, DetailSectionComponent, DetailFieldComponent, DetailClauseListComponent,
     ParseBoldTextPipe, ParseBracketsTextPipe, NumberFormatterPipe],
 })
 export class ViewEstimationComponent implements OnChanges {
   @Input() open = false;
   @Input() estimation: Estimations | null = null;
+  /** Archived versions, oldest first. */
+  @Input() history: EstimationHistoryEntry[] | null = null;
   @Input() enquiryId = '';
   @Input({ transform: booleanAttribute }) editable = false;
+  /** When set, Edit is shown disabled with this text as its tooltip. */
+  @Input() editBlockedReason = '';
+  /** Why sales asked for a revision; shown on the current version. */
+  @Input() revisionReason = '';
   /** 'route' navigates to the old edit page (default, unchanged for other hosts); 'emit' raises `edit` instead. */
   @Input() editMode: 'route' | 'emit' = 'route';
-  @Output() cleared = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
   @Output() edit = new EventEmitter<Estimations>();
 
@@ -42,7 +46,6 @@ export class ViewEstimationComponent implements OnChanges {
   tab: 'items' | 'summary' = 'items';
 
   private router = inject(Router);
-  private confirm = inject(ConfirmDialogService);
   private numberFormatter = new NumberFormatterPipe();
   private boldPipe = new ParseBoldTextPipe();
   private bracketsPipe = new ParseBracketsTextPipe(inject(DomSanitizer));
@@ -58,8 +61,34 @@ export class ViewEstimationComponent implements OnChanges {
     { key: 'availability', label: 'Avbl.', type: 'badge', badgeTones: { 'Ex-Stock': 'good', 'ex-stock': 'good' } },
   ];
 
+  /** null = the current estimation; otherwise an index into `history`. */
+  viewingIndex: number | null = null;
+
+  get currentVersion(): number {
+    return this.estimation?.version || (this.history?.length ?? 0) + 1;
+  }
+
+  /** Newest first for the selector. */
+  get versions(): { label: string; index: number | null; entry?: EstimationHistoryEntry }[] {
+    const past = (this.history ?? []).map((entry, index) => ({ label: `v${entry.version || index + 1}`, index, entry })).reverse();
+    return [{ label: `v${this.currentVersion}`, index: null }, ...past];
+  }
+
+  get viewingEntry(): EstimationHistoryEntry | null {
+    return this.viewingIndex === null ? null : this.history?.[this.viewingIndex] ?? null;
+  }
+
+  get shown(): Estimations | null {
+    return this.viewingEntry ?? this.estimation;
+  }
+
+  selectVersion(index: number | null): void {
+    this.viewingIndex = index;
+    this.selectedOption = 0;
+  }
+
   get options(): any[] {
-    return this.estimation?.optionalItems ?? [];
+    return this.shown?.optionalItems ?? [];
   }
 
   get option(): any {
@@ -97,7 +126,7 @@ export class ViewEstimationComponent implements OnChanges {
   }
 
   get noteClauses(): DetailClause[] {
-    const note = (this.estimation?.presaleNote || '').trim();
+    const note = (this.shown?.presaleNote || '').trim();
     return note ? [{ id: 'presale', title: 'Presale Note', body: note }] : [];
   }
 
@@ -118,7 +147,7 @@ export class ViewEstimationComponent implements OnChanges {
   }
 
   get discount(): number {
-    return this.option?.totalDiscount ?? this.estimation?.totalDiscount ?? 0;
+    return this.option?.totalDiscount ?? this.shown?.totalDiscount ?? 0;
   }
 
   get netAmount(): number {
@@ -129,6 +158,7 @@ export class ViewEstimationComponent implements OnChanges {
     if (this.open && (changes['open'] || changes['estimation'])) {
       this.selectedOption = 0;
       this.tab = 'items';
+      this.viewingIndex = null;
     }
   }
 
@@ -146,18 +176,6 @@ export class ViewEstimationComponent implements OnChanges {
     };
     this.closed.emit();
     this.router.navigate(['/assigned-jobs/edit-estimations'], navigationExtras);
-  }
-
-  async onClear(): Promise<void> {
-    const { confirmed } = await this.confirm.open({
-      tone: 'reject',
-      title: 'Clear Estimation',
-      message: 'This removes your estimation and you will have to re-estimate.',
-      consequence: 'This cannot be undone.',
-      confirmLabel: 'Clear estimation',
-      cancelLabel: 'Keep it',
-    });
-    if (confirmed) this.cleared.emit();
   }
 
   private sum(fn: (d: any) => number): number {

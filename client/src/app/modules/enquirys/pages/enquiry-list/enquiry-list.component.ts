@@ -140,6 +140,11 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   isDeleteOption: boolean = false;
   createEnquiry: boolean | undefined = false;
   currentEmployeeId: string | undefined;
+  isAdmin = false;
+  isSuperAdmin = false;
+  canSeeEstimationsPrivilege = false;
+  editDenied = false;
+  reassignDenied = false;
 
   status: { name: string; label: string }[] = [
     { name: 'New', label: 'New' },
@@ -195,7 +200,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   total: number = 0;
   page: number = 1;
-  row: number = 10;
+  row: number = 15;
   fromDate: string | null = null;
   toDate: string | null = null;
   selectedStatus: string | null = null;
@@ -253,6 +258,16 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
           this.setColumnOptions('customer', customers.map((customer) => ({ label: customer.companyName, value: customer._id })));
         }));
         this.currentEmployeeId = employee?._id;
+        this.isAdmin = ['admin', 'superAdmin'].includes(employee?.category.role as string);
+        // Only superAdmin passes blindly; admin and every other role follow their privilege flags.
+        const isSuperAdmin = employee?.category.role === 'superAdmin';
+        this.isSuperAdmin = isSuperAdmin;
+        this.editDenied = !isSuperAdmin && employee?.category.privileges?.enquiry?.edit === false;
+        this.reassignDenied = !isSuperAdmin && employee?.category.privileges?.enquiry?.reassign === false;
+        const enquiryPrivileges = employee?.category.privileges?.enquiry;
+        // Estimations are for people who work the enquiry: create, edit or send to presale.
+        this.canSeeEstimationsPrivilege = isSuperAdmin || enquiryPrivileges?.create === true || enquiryPrivileges?.edit !== false || enquiryPrivileges?.reassign !== false;
+        this.buildRowActions();
         if (employee?.category.role == 'superAdmin') {
           this.isDeleteOption = true;
         }
@@ -275,7 +290,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     // Read URL parameters and initialize filters
     this._route.queryParams.subscribe((params) => {
       this.page = params['page'] ? parseInt(params['page']) : 1;
-      this.row = params['row'] ? parseInt(params['row']) : 10;
+      this.row = params['row'] ? parseInt(params["row"]) : 15;
       this.fromDate = params['fromDate'] || null;
       this.toDate = params['toDate'] || null;
       this.selectedCustomer = params['customer'] || null;
@@ -367,19 +382,28 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private buildRowActions(): void {
     const actions: (DataGridRowAction<getEnquiry> & { hidden: (row: getEnquiry) => boolean })[] = [
-      { id: 'followUp', label: 'Follow-ups', icon: 'chat', quick: true, hidden: (row) => ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status) },
+      { id: 'followUp', label: 'Follow-ups', icon: 'chat', quick: true, hidden: (row) => ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status) || !this.isCreator(row) },
       { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, hidden: (row) => !this.canViewEstimations(row) },
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
-      { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['New', 'In Review'].includes(row.status) },
-      { id: 'resendToPresale', label: 'Resend to Presale', icon: 'refresh', quick: true, hidden: (row) => !this.canResendToPresale(row) },
-      { id: 'convertToQuote', label: 'Convert to Quote', icon: 'check', quick: true, hidden: (row) => !this.canConvertToQuote(row) },
-      { id: 'markLost', label: 'Mark Lost', icon: 'close', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted', 'lost', 'quoted'].includes(row.status) },
+      { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['New', 'In Review'].includes(row.status) || this.reassignDenied },
+      { id: 'resendToPresale', label: 'Resend to Presale', icon: 'refresh', quick: true, hidden: (row) => !this.canResendToPresale(row) || this.reassignDenied },
+      { id: 'convertToQuote', label: 'Convert to Quote', icon: 'check', quick: true, hidden: (row) => !this.canConvertToQuote(row) || !this.isCreator(row) },
+      { id: 'markLost', label: 'Mark Lost', icon: 'close', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted', 'lost', 'quoted'].includes(row.status) || !this.isCreator(row) },
     ];
-    // A lost enquiry is closed: no actions on the row, hover or menu.
-    this.rowActions = actions.map((action) => ({
-      ...action,
-      hidden: (row: getEnquiry) => this.isLost(row) || action.hidden(row),
-    }));
+    // A lost enquiry is closed: no actions on the row, hover or menu, except an admin deleting it.
+    this.rowActions = [
+      ...actions.map((action) => ({
+        ...action,
+        hidden: (row: getEnquiry) => this.isLost(row) || action.hidden(row),
+      })),
+      { id: 'delete', label: 'Delete', icon: 'delete', variant: 'danger' as const, hidden: (row: getEnquiry) => !this.isLost(row) || !this.isAdmin },
+    ];
+  }
+
+  /** Only the person who created the enquiry (or its owner) works it; admins keep an override. */
+  isCreator(row: any): boolean {
+    if (this.editDenied) return false;
+    return this.isSuperAdmin || [row?.salesPerson?._id, row?.createdByUser?._id].includes(this.currentEmployeeId);
   }
 
   isLost(row: getEnquiry): boolean {
@@ -429,6 +453,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'resendToPresale': this.onResendToPresale(row); break;
       case 'convertToQuote': this.convertToQuote(row); break;
       case 'markLost': this.markLost(row); break;
+      case 'delete': this.deleteEnquiry(row); break;
     }
   }
 
@@ -466,6 +491,24 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
+  async deleteEnquiry(row: getEnquiry): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Delete enquiry?',
+      message: `Enquiry ${row.enquiryId} will be moved to the recycle bin.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this._enquiryService.deleteEnquiry({ dataId: row._id, employeeId: this.currentEmployeeId as string }).subscribe({
+      next: () => {
+        this.dataSource.data = this.dataSource.data.filter((item) => item._id !== row._id);
+        this.toaster.success('Enquiry deleted');
+      },
+      error: () => this.toaster.error('Failed to delete enquiry'),
+    });
+  }
+
   async markLost(row: getEnquiry): Promise<void> {
     const { confirmed, reason } = await this.confirm.open({
       tone: 'reject',
@@ -497,7 +540,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   canViewEstimations(row: getEnquiry): boolean {
-    return !!row.preSale?.presalePerson
+    return this.canSeeEstimationsPrivilege
+      && !!row.preSale?.presalePerson
       && row.status !== 'Assigned To Presale Manager'
       && row.status !== 'Assigned To Presale Engineer'
       && !!row.preSale?.estimations;
@@ -527,8 +571,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     const assignmentHistory = enquiry.assignmentHistory || [];
 
     // The journey starts when the enquiry was sent to presales.
-    const sentDate = preSale?.createdDate ?? assignmentHistory[0]?.date;
-    const wasSent = !!(preSale?.presalePerson || assignmentHistory.length || preSale?.rejectionHistory?.length || preSale?.status === 'cancelled');
+    const sentDate = preSale?.createdDate ?? assignmentHistory[0]?.date ?? enquiry.updatedAt;
+    const wasSent = !!(preSale?.presalePerson || assignmentHistory.length || preSale?.rejectionHistory?.length || preSale?.status === 'cancelled'
+      || ['Sent to Presales', 'in presales', 'revision'].includes(enquiry.status));
     if (!wasSent) return [];
     {
       entries.push({
@@ -1042,7 +1087,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     const queryParams: any = {};
 
     queryParams.page = this.page !== 1 ? this.page : null;
-    queryParams.row = this.row !== 10 ? this.row : null;
+    queryParams.row = this.row !== 15 ? this.row : null;
 
     queryParams.fromDate = this.fromDate || null;
     queryParams.toDate = this.toDate || null;
@@ -1130,11 +1175,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   canUploadAttachments(element: any): boolean {
-    if (this.isLost(element)) return false;
-    if (this.isAssignedToPresale(element?.status) && element?.preSale?.presalePerson) {
-      return false;
-    }
-    return this.isDeleteOption || element?.salesPerson?._id === this.currentEmployeeId;
+    // Documents can only change while the enquiry is still with sales.
+    if (!['new', 'in progress', 'work in progress', 'lost', 'rejected'].includes(String(element?.status || '').toLowerCase())) return false;
+    return this.isCreator(element);
   }
 
   isUploadingFiles = false;

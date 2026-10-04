@@ -60,6 +60,10 @@
                 <app-sf-field label="Source" hint="Optional" [control]="enquiryForm.controls.source">
                     <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="Select source"></app-sf-select>
                 </app-sf-field>
+                <app-sf-field label="Accounting Manager" hint="Optional" [control]="enquiryForm.controls.accountingManager">
+                    <app-sf-combobox formControlName="accountingManager" [options]="accountingManagerOptions"
+                        placeholder="Create for another person"></app-sf-combobox>
+                </app-sf-field>
                 <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
                     <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>

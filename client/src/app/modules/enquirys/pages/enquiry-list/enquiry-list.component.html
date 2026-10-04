@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid #grid
     class="flex-1 min-h-0"
     [fillHeight]="true"
@@ -156,7 +156,7 @@
     </ng-template>
   </app-data-grid>
 
-  <app-enquiry-form-drawer [open]="formOpen" (saved)="onEnquiryCreated($event)" (closed)="onFormClosed()"></app-enquiry-form-drawer>
+  <app-enquiry-form-drawer class="contents" [open]="formOpen" (saved)="onEnquiryCreated($event)" (closed)="onFormClosed()"></app-enquiry-form-drawer>
 
-  <app-enquiry-estimation-view [open]="!!estimationTarget" [enquiry]="estimationTarget?.enquiry" [readOnly]="!!estimationTarget && isReturnedFromPresales(estimationTarget.enquiry)" (seen)="onEstimationSeen()" (revised)="onEstimationRevised()" (closed)="estimationTarget = null"></app-enquiry-estimation-view>
+  <app-enquiry-estimation-view class="contents" [open]="!!estimationTarget" [enquiry]="estimationTarget?.enquiry" [readOnly]="!!estimationTarget && isReturnedFromPresales(estimationTarget.enquiry)" (seen)="onEstimationSeen()" (revised)="onEstimationRevised()" (closed)="estimationTarget = null"></app-enquiry-estimation-view>
 </div>

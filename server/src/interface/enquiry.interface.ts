@@ -4,6 +4,8 @@ export interface Enquiry {
     contact: string;
     department: string;
     salesPerson: string;
+    createdByUser?: string;
+    accountingManager?: string;
     title: string;
     source?: string;
     enquiryCategory?: string;

@@ -9,6 +9,8 @@ export interface Enquiry {
     contact: string;
     department: string;
     salesPerson: string;
+    createdByUser?: string | null;
+    accountingManager?: string | null;
     title: string;
     source?: string | null;
     enquiryCategory?: string | null;
@@ -32,6 +34,14 @@ export interface Estimations {
     currency: string;
     totalDiscount: number;
     presaleNote: string;
+    version?: number;
+}
+
+/** A superseded estimation version, archived on revision or reject. */
+export interface EstimationHistoryEntry extends Estimations {
+    archivedAt?: string;
+    archivedBy?: string;
+    reason?: string;
 }
 
 
@@ -43,6 +53,7 @@ export interface getEnquiry {
     contact: ContactDetail;
     department: getDepartment;
     salesPerson: { _id: string, firstName: string, lastName: string };
+    createdByUser?: { _id: string, firstName: string, lastName: string } | string;
     title: string;
     source?: string | null;
     enquiryCategory?: string | null;

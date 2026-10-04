@@ -91,6 +91,15 @@ export class EnquiryService {
     return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/return`, { enqId })
   }
 
+  restartAssignmentWorkflow(enqId: string): Observable<{ success: boolean; message: string }> {
+    return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/restart-assignment`, { enqId })
+  }
+
+  /** Super Admin decision on a job held by the workflow: escalate it to the next step, or reject it with a reason. */
+  resolveHeldAssignment(enqId: string, action: 'escalate' | 'reject', comment?: string): Observable<{ success: boolean; message: string }> {
+    return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/resolve-assignment`, { enqId, action, comment })
+  }
+
   selfAssignJob(enqId: string): Observable<{ success: boolean; message: string }> {
     return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/self-assign`, { enqId })
   }
@@ -126,10 +135,6 @@ export class EnquiryService {
 
   clearAllPresaleFiles(enquiryId: string) {
     return this.http.delete(`${this.api}/file/clearAll?enquiryId=${enquiryId}`)
-  }
-
-  clearEstimations(enquiryId: string) {
-    return this.http.delete(`${this.api}/enquiry/presales/estimation/${enquiryId}`)
   }
 
   /** The server sends the request to whoever assigned the job. */

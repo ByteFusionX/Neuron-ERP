@@ -5,17 +5,15 @@ import Employee from '../models/employee.model';
 import Department from '../models/department.model';
 import customerModel from "../models/customer.model";
 import { Enquiry } from "../interface/enquiry.interface";
-import { Server } from "socket.io";
 import quotationModel, { quoteStatus } from "../models/quotation.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
-import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
-import { createNotificationWithPrivileges } from "./notification.controller";
+import { getReportedEmployeesWithDepartments, widenAccessForDepartmentHead, getEmployeeData } from "../common/utils/util";
+import { notifyByPrivilege } from "../services/notify.service";
 import { getNextSequence } from "../models/counter.model";
 import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
-import { buildAssignmentChain, resolveCurrentAssignmentStep } from "../services/presaleAssignment.service";
+import { buildAssignmentChain, resolveCurrentAssignmentStep, advanceAssignmentStep, rejectUnassignedPresale } from "../services/presaleAssignment.service";
 import { logEnquiryAudit } from "../services/enquiryAudit.service";
-import auditLogModel from "../models/auditLog.model";
 import { cancelOpenFollowUp } from "../services/enquiryFollowUp.service";
 const { ObjectId } = require('mongodb')
 
@@ -30,6 +28,23 @@ const buildAssignmentEntry = async (employeeId: any, action: 'assigned' | 'reass
         assignedByName: assignedBy ? `${assignedBy.firstName || ''} ${assignedBy.lastName || ''}`.trim() : '',
         date: new Date()
     };
+};
+
+const applyRequestedEnquiryOwner = async (enquiryData: any, actor: any) => {
+    const requestedOwner = enquiryData.accountingManager;
+    delete enquiryData.accountingManager;
+    delete enquiryData.createdByUser;
+    if (!requestedOwner || !ObjectId.isValid(requestedOwner)) return;
+
+    const owner = await Employee.findById(requestedOwner).select('_id');
+    if (!owner) return;
+
+    enquiryData.salesPerson = owner._id;
+    if (actor?._id?.toString() !== owner._id.toString()) {
+        enquiryData.createdByUser = actor._id;
+    } else {
+        delete enquiryData.createdByUser;
+    }
 };
 
 export const createEnquiry = async (req: any, res: Response, next: NextFunction) => {
@@ -47,6 +62,8 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
         })) : [];
 
         const enquiryData = <Enquiry>JSON.parse(req.body.enquiryData)
+        const createdByUser = await getEmployeeData(req.user);
+        await applyRequestedEnquiryOwner(enquiryData, createdByUser);
         const customerGuard = await getCustomerCommercialGuard((enquiryData as any).client);
         if (customerGuard.blocked) {
             return res.status(409).json({ success: false, message: customerGuard.message });
@@ -64,7 +81,7 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
         enquiryData.date = new Date(enquiryData.date)
         if (enquiryData.nextFollowUpDate) enquiryData.nextFollowUpDate = new Date(enquiryData.nextFollowUpDate)
         if (enquiryData.followUpOutcome || enquiryData.nextFollowUpDate) {
-            const creator = await getEmployeeData(req.user);
+            const creator = createdByUser;
             const createdBy = creator?._id?.toString();
             const createdByName = creator ? `${creator.firstName || ''} ${creator.lastName || ''}`.trim() : '';
             const history: any[] = [];
@@ -104,6 +121,12 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
             },
             {
                 $unwind: '$salesPerson'
+            },
+            {
+                $lookup: { from: 'employees', localField: 'createdByUser', foreignField: '_id', as: 'createdByUser' }
+            },
+            {
+                $unwind: { path: '$createdByUser', preserveNullAndEmptyArrays: true }
             },
             {
                 $addFields: {
@@ -281,17 +304,6 @@ const titleTokens = (title: string) =>
     new Set((title || '').toLowerCase().replace(/[^a-z0-9s]/g, ' ').split(/s+/).filter(t => t.length > 2));
 
 /** Open enquiries of the same customer whose title looks like the one being entered. */
-export const getEnquiryHistory = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { enquiryId } = req.params;
-        if (!ObjectId.isValid(enquiryId)) return res.status(400).json({ success: false, message: 'Invalid enquiry id' });
-        const entries = await auditLogModel.find({ entityType: 'enquiry', entityId: enquiryId, action: { $not: /^(follow-up|event-)/ } }).sort({ at: -1 }).limit(500).lean();
-        return res.status(200).json(entries);
-    } catch (error) {
-        next(error);
-    }
-}
-
 export const findSimilarEnquiries =async (req: Request, res: Response, next: NextFunction) => {
     try {
         const client = String(req.query.client || '');
@@ -365,8 +377,7 @@ export const sendToPresale = async (req: any, res: Response, next: NextFunction)
             isResend ? 'Resent to presales' : 'Sent to presales',
             [{ label: 'Status', from: enquiry.status, to: nextStatus }, ...(isResend ? [{ label: 'Revision note', to: note }] : [])]);
 
-        const socket = req.app.get('io') as Server;
-        await createNotificationWithPrivileges(
+        await notifyByPrivilege(
             {
                 type: 'AssignedJob',
                 referenceModel: 'Enquiry',
@@ -379,8 +390,7 @@ export const sendToPresale = async (req: any, res: Response, next: NextFunction)
             {
                 privilegeKey: 'assignedJob',
                 checkFunction: (privileges) => privileges.assignedJob?.assign === true
-            },
-            socket
+            }
         );
 
         return res.status(200).json({ success: true, status: nextStatus });
@@ -452,30 +462,49 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
         );
 
         // Fetch the enquiry to preserve rejectionHistory
-        const enquiry = await enquiryModel.findOne({ _id: enquiryId });
+        const enquiry = await enquiryModel.findOne({ _id: enquiryId, isDeleted: { $ne: true } });
         if (!enquiry) {
             return res.status(404).json({ success: false, message: 'Enquiry not found' });
         }
+        // Assigning is only for a job that has no one working on it; handing over a live job is reassign's job.
+        const blocked = await presaleStepBlock(enquiryId);
+        if (blocked) return res.status(blocked.code).json({ success: false, message: blocked.message });
+        const liveStatuses = ['assigned', 'in review', 'in revision', 'completed', 'approved'];
+        if (enquiry.preSale?.presalePerson && liveStatuses.includes(String(enquiry.preSale?.status))) {
+            return res.status(409).json({ success: false, message: `This job is already ${enquiry.preSale.status}. Use reassign instead.` });
+        }
 
         const assigner = await getEmployeeData(req.user);
+        if (presale.presalePerson && (assigner?.category as any)?.role !== 'superAdmin'
+            && String(presale.presalePerson) !== String(assigner?._id)) {
+            const team = await getReportedEmployeesWithDepartments(assigner?._id);
+            if (!team.some((id: any) => String(id) === String(presale.presalePerson))) {
+                return res.status(403).json({ success: false, message: 'You can only assign this job to someone in your team' });
+            }
+        }
         const assignmentEntry = presale.presalePerson
             ? await buildAssignmentEntry(presale.presalePerson, 'assigned', assigner)
             : null;
 
+        // Only the assignment fields come from the body; estimations, feedback, revisions and history are never overwritten.
+        const protectedKeys = ['estimations', 'feedback', 'revisionComment', 'assignApproval', 'rejectionHistory', 'status',
+            'createdDate', 'newFeedbackAccess', 'existingPresaleFiles'];
+        const presaleFields: any = {};
+        Object.keys(presale).filter((k) => !protectedKeys.includes(k)).forEach((k) => { presaleFields[`preSale.${k}`] = presale[k]; });
+
         // Update the enquiry with presale data
-        const update = await enquiryModel.updateOne(
+        const update =await enquiryModel.updateOne(
             { _id: enquiryId },
             {
                 $set: {
-                    preSale: {
-                        ...presale,
-                        rejectionHistory: enquiry.preSale?.rejectionHistory || [], // Default to an empty array
-                        newFeedbackAccess: true,
-                        createdDate: Date.now(),
-                        status: 'assigned',
-                    },
+                    ...presaleFields,
+                    'preSale.newFeedbackAccess': true,
+                    'preSale.createdDate': Date.now(),
+                    'preSale.status': 'assigned',
                     status: 'in presales',
                 },
+                // A fresh assignment starts a clean cycle: no stale reassignee, no running escalation timer.
+                $unset: { reAssigned: '', reAssignedDate: '', 'preSale.assignApproval': '' },
                 ...(assignmentEntry ? { $push: { assignmentHistory: assignmentEntry } } : {})
             }
         );
@@ -487,11 +516,10 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
 
         // Notify the presale person via notification
         if (presale.presalePerson) {
-            const socket = req.app.get('io') as Server;
             const enquiry = await enquiryModel.findById(enquiryId);
             const userData = await getEmployeeData(req.user);
             if (enquiry) {
-                await createNotificationWithPrivileges(
+                await notifyByPrivilege(
                     {
                         type: 'AssignedJob',
                         referenceModel: 'Enquiry',
@@ -504,11 +532,10 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
                     {
                         privilegeKey: 'assignedJob',
                         checkFunction: (privileges, employeeId) => {
-                            return employeeId === presale.presalePerson.toString() && 
+                            return employeeId === presale.presalePerson.toString() &&
                                    privileges.assignedJob?.viewReport !== 'none';
                         }
-                    },
-                    socket
+                    }
                 );
             }
         }
@@ -537,7 +564,7 @@ export const updateEnquiryAttachments = async (req: any, res: Response) => {
         const employee = req.employee;
         const role = employee?.category?.role;
         const isOwner = enquiry.salesPerson?.toString() === employee?._id?.toString();
-        if (role !== 'admin' && role !== 'superAdmin' && !isOwner) {
+        if (role !== 'superAdmin' && !isOwner) {
             return res.status(403).json({ success: false, message: 'Forbidden' });
         }
 
@@ -592,7 +619,7 @@ export const removeEnquiryAttachment = async (req: any, res: Response) => {
         const employee = req.employee;
         const role = employee?.category?.role;
         const isOwner = enquiry.salesPerson?.toString() === employee?._id?.toString();
-        if (role !== "admin" && role !== "superAdmin" && !isOwner) {
+        if (role !== "superAdmin" && !isOwner) {
             return res.status(403).json({ success: false, message: "Forbidden" });
         }
 
@@ -703,19 +730,25 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         }
 
         let accessFilter = {};
+        const actingUserId = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
 
-        let reportedToUserIds = await getAllReportedEmployees(userId);
+        access = await widenAccessForDepartmentHead(access, userId);
+        let reportedToUserIds = await getReportedEmployeesWithDepartments(userId);
 
         switch (access) {
             case 'created':
-                accessFilter = { salesPerson: new ObjectId(userId) };
+                accessFilter = actingUserId ? { $or: [{ salesPerson: actingUserId }, { createdByUser: actingUserId }] } : {};
                 break;
             case 'reported':
-                accessFilter = { salesPerson: { $in: reportedToUserIds } };
+                accessFilter = actingUserId
+                    ? { $or: [{ salesPerson: { $in: reportedToUserIds } }, { createdByUser: actingUserId }] }
+                    : { salesPerson: { $in: reportedToUserIds } };
                 break;
             case 'createdAndReported':
-                reportedToUserIds.push(new ObjectId(userId));
-                accessFilter = { salesPerson: { $in: reportedToUserIds } };
+                if (actingUserId) reportedToUserIds.push(actingUserId);
+                accessFilter = actingUserId
+                    ? { $or: [{ salesPerson: { $in: reportedToUserIds } }, { createdByUser: actingUserId }] }
+                    : { salesPerson: { $in: reportedToUserIds } };
                 break;
 
             default:
@@ -789,7 +822,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
                     ],
                     mine: [
                         { $match: { status: { $nin: hiddenStatuses } } },
-                        { $match: { salesPerson: new ObjectId(userId) } },
+                        { $match: actingUserId ? { $or: [{ salesPerson: actingUserId }, { createdByUser: actingUserId }] } : {} },
                         { $count: 'total' }
                     ],
                     overdue: [
@@ -864,6 +897,10 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
                 $lookup: { from: 'employees', localField: 'salesPerson', foreignField: '_id', as: 'salesPerson' }
             },
             { $unwind: '$salesPerson' },
+            {
+                $lookup: { from: 'employees', localField: 'createdByUser', foreignField: '_id', as: 'createdByUser' }
+            },
+            { $unwind: { path: '$createdByUser', preserveNullAndEmptyArrays: true } },
             {
                 $addFields: {
                     contact: {
@@ -1034,19 +1071,41 @@ const presaleTabMatch = (tab: keyof typeof PRESALE_TAB_STATUSES) => {
     return { $or: byStatus(tab) };
 };
 
-/** Jobs the user can see in a tab: their own, plus (Resolve only) ones where they've been asked for feedback. */
-const presaleOwnScope = (userId: string, tab: string) => ({
+/**
+ * Presale view scope comes from the caller's role, not the query string: superAdmin and "All presale jobs" roles see every job.
+ * Everyone else sees the jobs assigned to them plus those of their reportingTo team (and, for a department head, the department).
+ */
+const presaleViewScope = async (req: any): Promise<{ access: 'all' | 'assigned'; userId: string; scopeIds: any[] }> => {
+    const employee = req.employee;
+    const isSuperAdmin = employee?.category?.role === 'superAdmin';
+    const own = employee?.category?.privileges?.assignedJob?.viewReport;
+    const extra = employee?.extraPrivileges?.assignedJob?.viewReport;
+    const userId = String(employee?._id);
+    const access = isSuperAdmin || own === 'all' || extra === 'all' ? 'all' : 'assigned';
+    const team = access === 'assigned' ? await getReportedEmployeesWithDepartments(userId) : [];
+    return { access, userId, scopeIds: [new ObjectId(userId), ...team] };
+};
+
+const canAssignPresale = (req: any): boolean => {
+    const employee = req.employee;
+    return employee?.category?.role === 'superAdmin'
+        || employee?.category?.privileges?.assignedJob?.assign === true
+        || employee?.extraPrivileges?.assignedJob?.assign === true;
+};
+
+/** Jobs the user can see in a tab:their own, plus (Resolve only) ones where they've been asked for feedback. */
+const presaleOwnScope = (ids: any[], tab: string) => ({
     $or: [
-        { 'preSale.presalePerson': new ObjectId(userId) },
-        { reAssigned: new ObjectId(userId) },
-        ...(tab === 'resolve' ?[{ 'preSale.feedback.employeeId': new ObjectId(userId) }] : []),
+        { 'preSale.presalePerson': { $in: ids } },
+        { reAssigned: { $in: ids } },
+        ...(tab === 'resolve' ? [{ 'preSale.feedback.employeeId': { $in: ids } }] : []),
     ],
 });
 
 /** Per-tab totals for the presale page, honouring the same access scope as the list itself. */
 export const presaleTabCounts = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { access, userId } = req.query;
+        const { access, scopeIds } = await presaleViewScope(req);
         // Same base match as getPreSaleJobs so a tab's badge always equals its row total.
         const scope: any = {
             isDeleted: { $ne: true },
@@ -1055,8 +1114,8 @@ export const presaleTabCounts = async (req: Request, res: Response, next: NextFu
             $and: [{ $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }],
         };
         const entries = await Promise.all(Object.keys(PRESALE_TAB_STATUSES).map(async (key) => {
-            // Everyone who can see presale jobs sees the unassigned New pool, so they can self-assign from it.
-            const own = access === 'assigned' && key !== 'new' ? [presaleOwnScope(userId as string, key)] : [];
+            // The unassigned New pool is only for people who assign; everyone else is limited to their own jobs.
+            const own = (key === 'new' ? !canAssignPresale(req) : access === 'assigned') ? [presaleOwnScope(scopeIds, key)] : [];
             const count = await enquiryModel.countDocuments({ ...scope, $and: [...scope.$and, ...own], ...presaleTabMatch(key as keyof typeof PRESALE_TAB_STATUSES) });
             return [key, count] as const;
         }));
@@ -1069,7 +1128,8 @@ export const presaleTabCounts = async (req: Request, res: Response, next: NextFu
 /** Presale report: counts per tab, per engineer and per department, plus the jobs that have waited longest. */
 export const getPresaleReport = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { department, presale, fromDate, toDate, access, userId } = req.body;
+        const { department, presale, fromDate, toDate } = req.body;
+        const { access, scopeIds } = await presaleViewScope(req);
         const match: any = {
             isDeleted: { $ne: true },
             $and: [{ $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }],
@@ -1080,7 +1140,7 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
         if (toDate) { const end = new Date(toDate); end.setDate(end.getDate() + 1); dateFilter.$lt = end; }
         if (Object.keys(dateFilter).length) match.date = dateFilter;
         if (access === 'assigned') {
-            match.$and.push({ $or: [{ 'preSale.presalePerson': new ObjectId(userId) }, { reAssigned: new ObjectId(userId) }] });
+            match.$and.push({ $or: [{ 'preSale.presalePerson': { $in: scopeIds } }, { reAssigned: { $in: scopeIds } }] });
         } else if (presale) {
             match.$and.push({ $or: [{ 'preSale.presalePerson': new ObjectId(presale) }, { reAssigned: new ObjectId(presale) }] });
         }
@@ -1168,12 +1228,13 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
         let page = Number(req.query.page)
         let row = Number(req.query.row)
         let skipNum: number = (page - 1) * row;
-        let { filter, access, userId, search, sortKey, sortDir } = req.query;
+        let { filter, search, sortKey, sortDir } = req.query;
+        const { access, scopeIds } = await presaleViewScope(req);
         // Returned jobs are back with sales; they no longer belong on the presale worklist.
         let accessFilter: any = { ...NOT_WITH_SALES };
-        // The New tab is the shared unassigned pool, so it isn't limited to the user's own jobs.
-        if (access === 'assigned' && filter !== 'new') {
-            accessFilter['$or'] = presaleOwnScope(userId as string, filter as string).$or;
+        // The New tab is the unassigned pool and belongs to the people who assign it; everyone else only sees their own jobs.
+        if (filter === 'new' ? !canAssignPresale(req) : access === 'assigned') {
+            accessFilter['$or'] = presaleOwnScope(scopeIds, filter as string).$or;
         }
 
         let statusFilterMatch: any = null;
@@ -1350,9 +1411,50 @@ const PRESALE_ACTIVE_STATUSES = [
     'Assigned To Presale Manager', 'Assigned To Presale Engineer', 'Rejected by Presale Engineer',
 ];
 
-export const updateEnquiryStatus = async (req: Request, res: Response, next: NextFunction) => {
+// Stops a presale step from running on a lost/cancelled enquiry or on a job that isn't in a state where the step makes sense.
+// An empty `allowedPresaleStatuses` only checks that the enquiry still exists and is open.
+const presaleStepBlock = async (enquiryId: any, allowedPresaleStatuses: string[] = []): Promise<{ code: number; message: string } | null> => {
+    const current: any = await enquiryModel.findById(enquiryId).select('status preSale.status').lean();
+    if (!current) return { code: 404, message: 'Enquiry not found' };
+    if (String(current.status || '').toLowerCase() === 'lost' || current.preSale?.status === 'cancelled') {
+        return { code: 409, message: 'This enquiry is lost or its presale job is cancelled.' };
+    }
+    if (allowedPresaleStatuses.length && !allowedPresaleStatuses.includes(current.preSale?.status)) {
+        return { code: 409, message: `This step is not available while the presale job is "${current.preSale?.status || 'not started'}".` };
+    }
+    return null;
+};
+
+const hasAssignFlag = (employee: any): boolean => {
+    const expiresAt = employee?.extraPrivilegesExpiresAt;
+    const extraExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+    return employee?.category?.privileges?.assignedJob?.assign === true
+        || (!extraExpired && employee?.extraPrivileges?.assignedJob?.assign === true);
+};
+
+// Working a presale job (estimate, ask for feedback, delete the estimation) is for whoever currently holds it.
+// Assigners (managers) and the super admin can step in as well.
+const holderBlock = async (req: any, enquiryId: any): Promise<{ code: number; message: string } | null> => {
+    const employee = req.employee || await getEmployeeData(req.user);
+    if ((employee?.category as any)?.role === 'superAdmin' || hasAssignFlag(employee)) return null;
+    const current: any = await enquiryModel.findById(enquiryId).select('reAssigned preSale.presalePerson').lean();
+    const holderId = String(current?.reAssigned || current?.preSale?.presalePerson || '');
+    if (!holderId || holderId !== String(employee?._id)) {
+        return { code: 403, message: 'Only the person holding this presale job can do this.' };
+    }
+    return null;
+};
+
+export const updateEnquiryStatus =async (req: Request, res: Response, next: NextFunction) => {
     try {
         let data = req.body
+        // Only these moves are allowed here; anything else (e.g. "quoted" without a quotation) goes through its own step.
+        const ALLOWED_STATUS: Record<string, string> = { 'work in progress': 'Work In Progress', 'quoted': 'Quoted', 'lost': 'Lost', 'estimated': 'estimated' };
+        const requestedStatus = ALLOWED_STATUS[String(data.status || '').trim().toLowerCase()];
+        if (!requestedStatus) {
+            return res.status(400).json({ message: 'This status cannot be set from here' });
+        }
+        data.status = requestedStatus;
         const statusBefore = (await enquiryModel.findById(data.id).select('status').lean() as any)?.status;
         let quote = await quotationModel.findOne({ enqId: data.id })
         let status = data.status
@@ -1417,38 +1519,40 @@ export const updateEnquiryStatus = async (req: Request, res: Response, next: Nex
             if (presaleCancelled) {
                 await logEnquiryAudit(req, update._id, 'presale-cancelled', 'Presale cancelled — enquiry lost',
                     [{ label: 'Reason', to: updateFields.lostReason }]);
-                const socket = req.app.get('io') as Server;
                 const userData = await getEmployeeData(req.user);
-                await createNotificationWithPrivileges(
-                    {
-                        type: 'AssignedJob',
-                        referenceModel: 'Enquiry',
-                        title: 'Presale job cancelled',
-                        message: `Enquiry ${update.enquiryId} was marked lost, so its presale job is cancelled. Reason: ${updateFields.lostReason}`,
-                        sentBy: userData?._id?.toString() || update.salesPerson._id.toString(),
-                        referenceId: update._id,
-                        additionalData: { enquiryId: update._id.toString() }
-                    },
-                    { privilegeKey: 'assignedJob' },
-                    socket
-                );
+                // Only the person holding the presale job has to stop work, not everyone who can see presale jobs
+                const holder = String(update.reAssigned || update.preSale?.presalePerson || '');
+                if (holder) {
+                    await notifyByPrivilege(
+                        {
+                            type: 'AssignedJob',
+                            referenceModel: 'Enquiry',
+                            title: 'Presale job cancelled',
+                            message: `Enquiry ${update.enquiryId} was marked lost, so its presale job is cancelled. Reason: ${updateFields.lostReason}`,
+                            sentBy: userData?._id?.toString() || update.salesPerson._id.toString(),
+                            referenceId: update._id,
+                            additionalData: { enquiryId: update._id.toString() }
+                        },
+                        { privilegeKey: 'assignedJob', checkFunction: (_privileges, employeeId) => employeeId === holder }
+                    );
+                }
             }
         }
         if (update && !quote && isWorkInProgress) {
-            const socket = req.app.get('io') as Server;
             const userData = await getEmployeeData(req.user);
-            await createNotificationWithPrivileges(
+            // The enquiry owner is waiting on this estimation; the presale user who sent it gets nothing
+            const owner = String(update.salesPerson?._id ?? update.salesPerson ?? '');
+            await notifyByPrivilege(
                 {
-                    type: 'Enquiry',
+                    type: 'EnquiryEstimationReady',
                     referenceModel: 'Enquiry',
-                    title: 'Estimation sent back to enquiry',
-                    message: `Presale estimation has been sent back for enquiry ${update.enquiryId}`,
+                    title: 'Estimation ready for review',
+                    message: `The presale estimation for enquiry ${update.enquiryId} is ready for you to review`,
                     sentBy: userData?._id?.toString() || update.salesPerson._id.toString(),
                     referenceId: update._id,
                     additionalData: { enquiryId: update._id.toString() }
                 },
-                { privilegeKey: 'enquiry' },
-                socket
+                { privilegeKey: 'enquiry', checkFunction: (_privileges, employeeId) => employeeId === owner }
             );
             return res.status(200).json({ update })
         } else if (update) {
@@ -1467,7 +1571,8 @@ export const monthlyEnquiries = async (req: Request, res: Response, next: NextFu
         let { access, userId } = req.query;
 
         let accessFilter = {};
-        let reportedToUserIds = await getAllReportedEmployees(userId);
+        access = await widenAccessForDepartmentHead(access, userId);
+        let reportedToUserIds = await getReportedEmployeesWithDepartments(userId);
 
         switch (access) {
             case 'created':
@@ -1540,6 +1645,9 @@ export const monthlyEnquiries = async (req: Request, res: Response, next: NextFu
 export const sendFeedbackRequest = async (req: any, res: Response, next: NextFunction) => {
     try {
         const { enquiryId, comment } = req.body;
+        const blocked = await presaleStepBlock(enquiryId, ['assigned', 'in revision', 'in review'])
+            || await holderBlock(req, enquiryId);
+        if (blocked) return res.status(blocked.code).json({ message: blocked.message });
 
         // The request always goes back to whoever assigned the job, so the caller doesn't pick a recipient.
         const current: any = await enquiryModel.findById(enquiryId).select('assignmentHistory preSale.presalePerson reAssigned');
@@ -1577,9 +1685,8 @@ export const sendFeedbackRequest = async (req: any, res: Response, next: NextFun
 
         if (result) {
             await logEnquiryAudit(req, result._id, 'feedback-requested', 'Feedback requested from presale', comment ? [{ label: 'Comment', to: String(comment) }] : undefined);
-            const socket = req.app.get('io') as Server;
             const userData = await getEmployeeData(req.user);
-            await createNotificationWithPrivileges(
+            await notifyByPrivilege(
                 {
                     type: 'FeedbackRequest',
                     referenceModel: 'Enquiry',
@@ -1592,11 +1699,10 @@ export const sendFeedbackRequest = async (req: any, res: Response, next: NextFun
                 {
                     privilegeKey: 'assignedJob',
                     checkFunction: (privileges, empId) => {
-                        return empId === employeeId && 
+                        return empId === employeeId &&
                                privileges.assignedJob?.viewReport !== 'none';
                     }
-                },
-                socket
+                }
             );
             return res.status(200).json(result);
         }
@@ -1680,6 +1786,18 @@ export const getFeedbackRequestsById = async (req: Request, res: Response, next:
 export const giveFeedback = async (req: any, res: Response, next: NextFunction) => {
     try {
         let { enquiryId, feedbackId, feedback, action } = req.body;
+        const blocked = await presaleStepBlock(enquiryId, ['in review']);
+        if (blocked) return res.status(blocked.code).json({ message: blocked.message });
+        // Only the person who was asked for feedback can answer it (super admin excepted).
+        const caller = req.employee || await getEmployeeData(req.user);
+        if ((caller?.category as any)?.role !== 'superAdmin') {
+            const asked: any = await enquiryModel.findOne({ _id: enquiryId, 'preSale.feedback._id': feedbackId })
+                .select('preSale.feedback').lean();
+            const entry = asked?.preSale?.feedback?.find((f: any) => String(f._id) === String(feedbackId));
+            if (!entry || String(entry.employeeId) !== String(caller?._id)) {
+                return res.status(403).json({ message: 'This feedback request was not sent to you.' });
+            }
+        }
 
         const setFields: any = {
             "preSale.feedback.$.feedback": feedback,
@@ -1714,10 +1832,10 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
             await logEnquiryAudit(req, result._id, 'feedback-given',
                 action === 'revise' ? 'Feedback given: sent back for revision' : 'Feedback given: estimation approved',
                 feedback ? [{ label: 'Feedback', to: String(feedback) }] : undefined);
-            const socket = req.app.get('io') as Server;
-            const presalePerson = result.preSale.presalePerson.toString();
+            // After a reassign the person doing the work is `reAssigned`, not the original presale person
+            const presalePerson = String(result.reAssigned || result.preSale?.presalePerson || '');
             const userData = await getEmployeeData(req.user);
-            await createNotificationWithPrivileges(
+            await notifyByPrivilege(
                 {
                     type: 'AssignedJob',
                     referenceModel: 'Enquiry',
@@ -1730,12 +1848,27 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
                 {
                     privilegeKey: 'assignedJob',
                     checkFunction: (privileges, employeeId) => {
-                        return employeeId === presalePerson && 
+                        return employeeId === presalePerson &&
                                privileges.assignedJob?.viewReport !== 'none';
                     }
-                },
-                socket
+                }
             );
+            if (action !== 'revise') {
+                // Approved estimation goes to the enquiry owner, who now has to review it
+                const owner = String(result.salesPerson ?? '');
+                await notifyByPrivilege(
+                    {
+                        type: 'EnquiryEstimationReady',
+                        referenceModel: 'Enquiry',
+                        title: 'Estimation ready for review',
+                        message: `The presale estimation for enquiry ${result.enquiryId} is ready for you to review`,
+                        sentBy: userData?._id?.toString() || presalePerson,
+                        referenceId: result._id,
+                        additionalData: { enquiryId: result._id.toString() }
+                    },
+                    { privilegeKey: 'enquiry', checkFunction: (_privileges, employeeId) => employeeId === owner }
+                );
+            }
             return res.status(200).json({ success: true });
         }
 
@@ -1750,6 +1883,8 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
     try {
         let { revisionComment } = req.body;
         let enquiryId = req.params.enquiryId;
+        const blocked = await presaleStepBlock(enquiryId, ['in review', 'completed', 'approved']);
+        if (blocked) return res.status(blocked.code).json({ message: blocked.message });
         const result = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId },
             {
@@ -1762,14 +1897,17 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
             },
             { new: true }
         );
+        if (!result) {
+            return res.status(404).send('Enquiry not found or comment not added.');
+        }
 
         await logEnquiryAudit(req, enquiryId, 'revision-requested', 'Estimation sent back for revision',
             revisionComment ? [{ label: 'Comment', to: String(revisionComment) }] : undefined);
 
-        const socket = req.app.get('io') as Server;
-        const presalePerson = result.preSale.presalePerson.toString();
+        // After a reassign the person doing the work is `reAssigned`, not the original presale person
+        const presalePerson = String(result.reAssigned || result.preSale?.presalePerson || '');
         const userData = await getEmployeeData(req.user);
-        await createNotificationWithPrivileges(
+        await notifyByPrivilege(
             {
                 type: 'AssignedJob',
                 referenceModel: 'Enquiry',
@@ -1785,8 +1923,7 @@ export const giveRevision = async (req: any, res: Response, next: NextFunction) 
                     return employeeId === presalePerson &&
                            privileges.assignedJob?.viewReport !== 'none';
                 }
-            },
-            socket
+            }
         );
 
         if (!result) {
@@ -1804,6 +1941,8 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
     try {
         let { revisionComment } = req.body;
         let enquiryId = req.params.enquiryId;
+        const blocked = await presaleStepBlock(enquiryId, ['in review', 'completed', 'approved']);
+        if (blocked) return res.status(blocked.code).json({ message: blocked.message });
         const quote = await quotationModel.findOne({ enqId: enquiryId });
         const result = await enquiryModel.findOneAndUpdate(
             { _id: enquiryId },
@@ -1817,6 +1956,9 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
             },
             { new: true }
         );
+        if (!result) {
+            return res.status(404).send('Enquiry not found or comment not added.');
+        }
 
         if (quote) {
             await quotationModel.updateOne({ _id: quote._id }, { $set: { status: "revised" } })
@@ -1824,10 +1966,10 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
         await logEnquiryAudit(req, enquiryId, 'revision-requested', 'Quotation estimation sent back for revision',
             revisionComment ? [{ label: 'Comment', to: String(revisionComment) }] : undefined);
 
-        const socket = req.app.get('io') as Server;
-        const presalePerson = result.preSale.presalePerson.toString();
+        // After a reassign the person doing the work is `reAssigned`, not the original presale person
+        const presalePerson = String(result.reAssigned || result.preSale?.presalePerson || '');
         const userData = await getEmployeeData(req.user);
-        await createNotificationWithPrivileges(
+        await notifyByPrivilege(
             {
                 type: 'AssignedJob',
                 referenceModel: 'Enquiry',
@@ -1840,11 +1982,10 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
             {
                 privilegeKey: 'assignedJob',
                 checkFunction: (privileges, employeeId) => {
-                    return employeeId === presalePerson && 
+                    return employeeId === presalePerson &&
                            privileges.assignedJob?.viewReport !== 'none';
                 }
-            },
-            socket
+            }
         );
 
         if (!result) {
@@ -1861,8 +2002,14 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
 export const uploadEstimations = async (req: any, res: Response, next: NextFunction) => {
     try {
         let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption } = req.body;
+        const blocked = await presaleStepBlock(enquiryId, ['assigned', 'in revision', 'in review'])
+            || await holderBlock(req, enquiryId);
+        if (blocked) return res.status(blocked.code).json({ message: blocked.message });
+        if (optionalItems !== undefined && !Array.isArray(optionalItems)) {
+            return res.status(400).json({ message: 'optionalItems must be a list' });
+        }
 
-        const quote = await quotationModel.findOne({ enqId: enquiryId })
+        const quote =await quotationModel.findOne({ enqId: enquiryId })
         if (quote) {
             let quoteData = await quotationModel.updateOne(
                 { _id: quote._id },
@@ -1877,27 +2024,52 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
             );
         }
 
-        let enquiryData = await enquiryModel.updateOne(
-            { _id: new ObjectId(enquiryId) },
-            {
-                $set: {
-                    'preSale.estimations.optionalItems': optionalItems,
-                    'preSale.estimations.currency': currency,
-                    'preSale.estimations.presaleNote': preSaleNote,
-                    // The enquiry itself stays "in presales"; only the presale job moves to review.
-                    'preSale.status': 'in review',
-                },
-                $unset: {
-                    'preSale.revisionComment': ''
-                }
-            }
-        );
+        // Versioning: the first submission is v1. Edits while assigned or in review stay in the same version;
+        // re-submitting after a revision request archives the previous version and becomes the next one.
+        const current = await enquiryModel.findById(enquiryId, { 'preSale.estimations': 1, 'preSale.estimationHistory': 1, 'preSale.status': 1, 'preSale.revisionComment': 1 }).lean();
+        const existing: any = current?.preSale?.estimations;
+        const historyCount = (current?.preSale?.estimationHistory || []).length;
+        const hasExisting = !!existing?.optionalItems?.length || !!existing?.currency;
+        const isNewVersion = hasExisting && current?.preSale?.status === 'in revision';
+        const version = hasExisting
+            ? (isNewVersion ? (existing.version || historyCount + 1) + 1 : (existing.version || historyCount + 1))
+            : historyCount + 1;
 
+        const update: any = {
+            $set: {
+                'preSale.estimations.optionalItems': optionalItems,
+                'preSale.estimations.currency': currency,
+                'preSale.estimations.presaleNote': preSaleNote,
+                'preSale.estimations.version': version,
+                // The enquiry itself stays "in presales"; only the presale job moves to review.
+                'preSale.status': 'in review',
+            },
+            $unset: {
+                'preSale.revisionComment': ''
+            }
+        };
+        if (isNewVersion) {
+            const submitter = await getEmployeeData(req.user);
+            update.$push = {
+                'preSale.estimationHistory': {
+                    version: existing.version || historyCount + 1,
+                    optionalItems: existing.optionalItems,
+                    currency: existing.currency,
+                    totalDiscount: existing.totalDiscount,
+                    presaleNote: existing.presaleNote,
+                    archivedAt: new Date(),
+                    archivedBy: submitter?._id,
+                    reason: (current?.preSale?.revisionComment || []).join(' | ') || 'Revised'
+                }
+            };
+        }
+
+        let enquiryData = await enquiryModel.updateOne({ _id: new ObjectId(enquiryId) }, update);
 
         if (!enquiryData.modifiedCount) {
             return res.status(502).json();
         }
-        await logEnquiryAudit(req, enquiryId, 'estimation-uploaded', 'Estimation uploaded');
+        await logEnquiryAudit(req, enquiryId, 'estimation-uploaded', isNewVersion ? `Estimation revised (v${version})` : `Estimation uploaded (v${version})`);
 
         return res.status(200).json({ success: true });
     } catch (error) {
@@ -1953,13 +2125,13 @@ const generateEnquiryId = async (departmentId: string, employeeId: string, date:
 
 export const presalesCount = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { access, userId } = req.query;
+        const { access, scopeIds } = await presaleViewScope(req);
 
         let accessFilter: any = { $or: [{ status: { $in: ['Assigned To Presale Manager', 'Assigned To Presale Engineer'] } }, { 'preSale.status': { $in: ['assigned', 'in review'] } }] };
 
         switch (access) {
             case 'assigned':
-                accessFilter = { "preSale.presalePerson": userId };
+                accessFilter = { "preSale.presalePerson": { $in: scopeIds } };
                 break;
             default:
                 break;
@@ -2012,27 +2184,6 @@ export const presalesCount = async (req: Request, res: Response, next: NextFunct
         next(error);
     }
 };
-
-export const deleteEstimation = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const enquiryId = req.params.enqId;
-
-        const deleteEstimations = await enquiryModel.updateOne(
-            { _id: enquiryId },
-            { $unset: { 'preSale.estimations': "" } }
-        )
-
-        if (deleteEstimations.modifiedCount) {
-            await logEnquiryAudit(req, enquiryId, 'estimation-deleted', 'Estimation deleted');
-            res.status(200).json({ success: true });
-        }
-
-    } catch (error) {
-        console.log(error)
-        next(error);
-    }
-}
-
 
 export const markAsSeenEstimation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -2152,18 +2303,26 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
         if (!ObjectId.isValid(enqId)) return res.status(400).json({ success: false, message: 'Invalid enquiry id' });
         if (!comment) return res.status(400).json({ success: false, message: 'A reason is required to reject a job' });
 
-        const enquiry = await enquiryModel.findOne({ _id: new ObjectId(enqId) });
+        const enquiry = await enquiryModel.findOne({ _id: new ObjectId(enqId), isDeleted: { $ne: true } });
 
         if (!enquiry) {
-            throw new Error('Enquiry not found');
+            return res.status(404).json({ success: false, message: 'Enquiry not found' });
+        }
+        const blocked = await presaleStepBlock(enqId, ['assigned', 'in revision', 'in review', 'rejected'])
+            || await holderBlock(req, enqId);
+        if (blocked) return res.status(blocked.code).json({ success: false, message: blocked.message });
+        if (!enquiry.preSale?.presalePerson && !(enquiry as any).reAssigned) {
+            return res.status(409).json({ success: false, message: 'This job has no assignee to reject.' });
         }
 
         const hadEstimation = !!enquiry.preSale.estimations;
+        const rejecter = await getEmployeeData((req as any).user);
 
         // Add a new rejection event to the history
+        if (!Array.isArray(enquiry.preSale.rejectionHistory)) enquiry.preSale.rejectionHistory = [] as any;
         enquiry.preSale.rejectionHistory.push({
             rejectionReason: comment,
-            rejectedBy: enquiry.preSale.presalePerson,
+            rejectedBy: rejecter?._id || (enquiry as any).reAssigned || enquiry.preSale.presalePerson,
             rejectedRole: role
         });
 
@@ -2172,7 +2331,18 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
         // A kept estimation is shown to the salesperson, so it counts as unseen.
         enquiry.preSale.seenbySalesPerson = !(hadEstimation && !clearEstimation);
 
-        if (clearEstimation) delete enquiry.preSale.estimations;
+        // Clearing never deletes: the estimation moves to the history and the next submission starts a new version.
+        if (clearEstimation && hadEstimation) {
+            const est: any = (enquiry.preSale as any).estimations;
+            if (!Array.isArray((enquiry.preSale as any).estimationHistory)) (enquiry.preSale as any).estimationHistory = [];
+            (enquiry.preSale as any).estimationHistory.push({
+                version: est.version || (enquiry.preSale as any).estimationHistory.length + 1,
+                optionalItems: est.optionalItems, currency: est.currency,
+                totalDiscount: est.totalDiscount, presaleNote: est.presaleNote,
+                archivedAt: new Date(), archivedBy: rejecter?._id, reason: `Rejected: ${comment}`
+            });
+            delete enquiry.preSale.estimations;
+        }
         enquiry.preSale.newFeedbackAccess = true;
 
         // An engineer's rejection waits for the manager to review it; a manager's rejection is final, so it goes straight back to sales for resend.
@@ -2188,32 +2358,44 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
             [{ label: 'Status', to: 'rejected' }, { label: 'Reason', to: comment },
                 ...(hadEstimation ? [{ label: 'Estimation', to: clearEstimation ? 'Cleared' : 'Kept' }] : [])]);
 
-        const socket = req.app.get('io') as Server;
-        const presalePerson = result.preSale.presalePerson.toString();
-        const userData = await getEmployeeData(req.user);
+        const presalePerson = String(result.preSale.presalePerson || '');
+        const userData = rejecter;
 
-        if (role === 'Engineer') {
-            await createNotificationWithPrivileges(
+        // With a presale workflow, an engineer's rejection puts the job back in front of the assigners:
+        // the assignee is cleared and the escalation chain restarts, so someone must reassign it in time.
+        const assignApproval = role === 'Engineer' ? await buildAssignmentChain() : null;
+        if (assignApproval) {
+            await enquiryModel.updateOne(
+                { _id: result._id },
+                {
+                    $set: { status: 'in presales', 'preSale.status': 'new', 'preSale.assignApproval': assignApproval },
+                    $unset: { reAssigned: '', reAssignedDate: '', 'preSale.presalePerson': '' }
+                }
+            );
+            await logEnquiryAudit(req, result._id, 'presale-returned-to-assigner', 'Rejected by assignee; back to presale for reassignment');
+            await notifyByPrivilege(
                 {
                     type: 'AssignedJob',
                     referenceModel: 'Enquiry',
                     title: 'Presale Job Rejected by Engineer',
-                    message: `Presale job has been rejected by engineer for enquiry ${result.enquiryId}`,
+                    message: `Enquiry ${result.enquiryId} was rejected by the assigned engineer and needs to be reassigned`,
                     sentBy: userData?._id?.toString() || presalePerson,
                     referenceId: result._id,
                     additionalData: { enquiryId: result._id.toString() }
                 },
                 {
                     privilegeKey: 'assignedJob',
-                    checkFunction: (privileges, employeeId) => {
-                        return employeeId === presalePerson &&
-                               privileges.assignedJob?.viewReport !== 'none';
-                    }
-                },
-                socket
+                    checkFunction: (privileges) => privileges.assignedJob?.assign === true
+                }
             );
-        } else {
-            await createNotificationWithPrivileges(
+            return res.status(200).json({ success: true });
+        }
+
+        // An engineer's own rejection waits for the manager's review and notifies no one: the rejecting engineer
+        // has the on-screen confirmation. A manager's rejection is final, so the enquiry owner has to act on it.
+        if (role !== 'Engineer') {
+            const owner = String(result.salesPerson ?? '');
+            await notifyByPrivilege(
                 {
                     type: 'Enquiry',
                     referenceModel: 'Enquiry',
@@ -2223,8 +2405,7 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
                     referenceId: result._id,
                     additionalData: { enquiryId: result._id.toString() }
                 },
-                { privilegeKey: 'enquiry' },
-                socket
+                { privilegeKey: 'enquiry', checkFunction: (_privileges, employeeId) => employeeId === owner }
             );
         }
 
@@ -2237,11 +2418,14 @@ export const RejectPresaleJob = async (req: Request, res: Response, next: NextFu
 
 export const deleteEnquiry = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { dataId, employeeId } = req.body
+        const { dataId } = req.body
+        // The deleter is the logged-in employee, not whatever id the client sent.
+        const employeeId = String((req as any).employee?._id || '');
 
         // Check if enquiry exists and isn't already deleted
         const enquiry = await enquiryModel.findOne({
             _id: dataId,
+            isDeleted: { $ne: true },
         });
 
         if (!enquiry) {
@@ -2249,7 +2433,15 @@ export const deleteEnquiry = async (req: Request, res: Response, next: NextFunct
                 message: 'Enquiry not found or already deleted'
             });
         }
-        newTrash('Enquiry', dataId, employeeId)
+        // Only a lost enquiry can be deleted, and only by an admin or superAdmin.
+        const role = (req as any).employee?.category?.role;
+        if (role !== 'admin' && role !== 'superAdmin') {
+            return res.status(403).json({ message: 'Only an admin can delete an enquiry' });
+        }
+        if (String(enquiry.status || '').toLowerCase() !== 'lost') {
+            return res.status(400).json({ message: 'Only a lost enquiry can be deleted' });
+        }
+        await newTrash('Enquiry', dataId, employeeId)
         // Soft delete the enquiry
         await enquiryModel.findByIdAndUpdate(dataId, {
             isDeleted: true
@@ -2271,21 +2463,33 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
         if (!employeeId) {
             return res.status(404).json({ message: 'Something went wrong' });
         }
+        const blocked = await presaleStepBlock(enquiryId);
+        if (blocked) return res.status(blocked.code).json({ message: blocked.message });
         const reAssigner = await getEmployeeData(req.user);
+        // Only the super admin can hand a job to someone outside their own team; everyone else is limited to
+        // themselves and their reporting subtree / headed department (the same scope the assign picker shows).
+        if ((reAssigner?.category as any)?.role !== 'superAdmin' && String(employeeId) !== String(reAssigner?._id)) {
+            const team = await getReportedEmployeesWithDepartments(reAssigner?._id);
+            if (!team.some((id: any) => String(id) === String(employeeId))) {
+                return res.status(403).json({ message: 'You can only assign this job to someone in your team' });
+            }
+        }
         const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson preSale.assignApproval');
         // First assignment of a job sent straight to presale: no presalePerson yet, and the
         // feedback / reject / send routes all read it as the person holding the job.
         const isFirstAssignment = !existing?.preSale?.presalePerson;
 
-        // If a presale escalation workflow is configured, only the role currently holding
-        // the assignment responsibility (which moves up the configured chain once a step's
-        // time window elapses) may assign the job - everyone else is frozen out.
-        let resolvedAssignApproval = existing?.preSale?.assignApproval;
+        // While a job is still waiting for its first assignee and a presale escalation workflow is
+        // configured, only the role currently holding the assignment responsibility (which moves up
+        // the configured chain once a step's time window elapses) may assign it. Super Admins can
+        // always act. Once someone holds the job, the gate and escalation no longer apply.
+        let resolvedAssignApproval = isFirstAssignment ? existing?.preSale?.assignApproval : null;
         if (resolvedAssignApproval) {
             resolvedAssignApproval = await resolveCurrentAssignmentStep(resolvedAssignApproval);
             const reAssignerRoleId = (reAssigner?.category as any)?._id || reAssigner?.category;
             const currentRoleId = (resolvedAssignApproval.role as any)?._id || resolvedAssignApproval.role;
-            if (!reAssignerRoleId || !currentRoleId || reAssignerRoleId.toString() !== currentRoleId.toString()) {
+            const isSuperAdmin = /^superadmin$/i.test((reAssigner?.category as any)?.role || '');
+            if (!isSuperAdmin && (!reAssignerRoleId || !currentRoleId || reAssignerRoleId.toString() !== currentRoleId.toString())) {
                 return res.status(403).json({
                     success: false,
                     message: 'Assignment responsibility for this job has moved to another role in the presale workflow. You can no longer assign it.'
@@ -2308,11 +2512,10 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
         )
         await logEnquiryAudit(req, enquiryId, isFirstAssignment ? 'assigned' : 'reassigned',
             `${isFirstAssignment ? 'Assigned' : 'Reassigned'} to ${reAssignEntry.employeeName || 'presale'}`);
-        const socket = req.app.get('io') as Server;
         const enquiry = await enquiryModel.findById(enquiryId);
         const userData = await getEmployeeData(req.user);
         if (enquiry) {
-            await createNotificationWithPrivileges(
+            await notifyByPrivilege(
                 {
                     type: 'ReAssignedJob',
                     referenceModel: 'Enquiry',
@@ -2325,11 +2528,10 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
                 {
                     privilegeKey: 'assignedJob',
                     checkFunction: (privileges, empId) => {
-                        return empId === employeeId.toString() && 
+                        return empId === employeeId.toString() &&
                                privileges.assignedJob?.viewReport !== 'none';
                     }
-                },
-                socket
+                }
             );
         }
         return res.status(200).json({ message: 'Enquiry Reassigned successfully' })
@@ -2358,10 +2560,9 @@ export const returnPresaleJob = async (req: Request, res: Response, next: NextFu
         await logEnquiryAudit(req, enquiry._id, 'presale-returned', 'Rejected job returned to enquiry',
             [{ label: 'Status', from: enquiry.status, to: 'rejected' }]);
 
-        const socket = req.app.get('io') as Server;
         const userData = await getEmployeeData(req.user);
         const salesPerson = enquiry.salesPerson?.toString();
-        await createNotificationWithPrivileges(
+        await notifyByPrivilege(
             {
                 type: 'Enquiry',
                 referenceModel: 'Enquiry',
@@ -2374,11 +2575,114 @@ export const returnPresaleJob = async (req: Request, res: Response, next: NextFu
             {
                 privilegeKey: 'enquiry',
                 checkFunction: (_privileges, employeeId) => employeeId === salesPerson
-            },
-            socket
+            }
         );
 
         return res.status(200).json({ success: true, message: 'Job returned to enquiry' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Super Admin gives a stuck job (every workflow step elapsed with nobody assigning) one more cycle:
+ * the chain restarts from the first step and then escalates exactly as before.
+ */
+export const restartPresaleAssignment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { enqId } = req.body;
+        const me = await getEmployeeData(req.user);
+        if (!/^superadmin$/i.test((me?.category as any)?.role || '')) {
+            return res.status(403).json({ success: false, message: 'Only a Super Admin can restart the assignment workflow' });
+        }
+        const enquiry = await enquiryModel.findOne({ _id: enqId, isDeleted: { $ne: true } });
+        if (!enquiry) {
+            return res.status(404).json({ success: false, message: 'Enquiry not found' });
+        }
+        const current: any = enquiry.preSale?.assignApproval;
+        if (enquiry.preSale?.presalePerson || enquiry.preSale?.status !== 'new' || !current) {
+            return res.status(400).json({ success: false, message: 'Only an unassigned job waiting in the workflow can be restarted' });
+        }
+        const resolved: any = await resolveCurrentAssignmentStep(current);
+        if (!resolved?.escalationDueAt || new Date(resolved.escalationDueAt) > new Date()) {
+            return res.status(400).json({ success: false, message: 'The workflow has not run out of time yet, so there is nothing to restart' });
+        }
+        const chain: any = await buildAssignmentChain();
+        if (!chain) {
+            return res.status(400).json({ success: false, message: 'No presale workflow is configured' });
+        }
+        chain.restartCount = (current.restartCount || 0) + 1;
+        await enquiryModel.updateOne({ _id: enquiry._id }, { $set: { 'preSale.assignApproval': chain } });
+        await logEnquiryAudit(req, enquiry._id, 'presale-workflow-restarted', `Assignment workflow restarted by Super Admin (restart ${chain.restartCount})`);
+        // No notification: the Super Admin has the confirmation, and the role's own reminders and escalation take it from here
+        return res.status(200).json({ success: true, message: 'Assignment workflow restarted' });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Super Admin decides a job held by the workflow (a 'notify' step that was ignored, or a step that ran out of time with
+ * nobody assigning): escalate it to the next step, or reject it back to sales with a reason.
+ */
+export const resolveHeldPresaleAssignment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { enqId, action } = req.body;
+        const comment = typeof req.body.comment === 'string' ? req.body.comment.trim() : '';
+        const me = await getEmployeeData(req.user);
+        if (!/^superadmin$/i.test((me?.category as any)?.role || '')) {
+            return res.status(403).json({ success: false, message: 'Only a Super Admin can resolve a held assignment' });
+        }
+        if (!['escalate', 'reject'].includes(action)) return res.status(400).json({ success: false, message: 'Invalid action' });
+        if (!ObjectId.isValid(enqId)) return res.status(400).json({ success: false, message: 'Invalid enquiry id' });
+        const enquiry = await enquiryModel.findOne({ _id: enqId, isDeleted: { $ne: true } });
+        const current: any = enquiry?.preSale?.assignApproval;
+        if (!enquiry || !current || enquiry.preSale?.presalePerson || enquiry.preSale?.status !== 'new') {
+            return res.status(400).json({ success: false, message: 'Only an unassigned job waiting in the workflow can be resolved' });
+        }
+        const resolved: any = await resolveCurrentAssignmentStep(current);
+        if (!resolved?.escalationDueAt || new Date(resolved.escalationDueAt) > new Date()) {
+            return res.status(400).json({ success: false, message: 'The current step has not run out of time yet' });
+        }
+        if (action === 'reject') {
+            if (!comment) return res.status(400).json({ success: false, message: 'A reason is required to reject a job' });
+            await rejectUnassignedPresale(enquiry._id, comment, 'Super Admin');
+            await logEnquiryAudit(req, enquiry._id, 'presale-rejected', 'Unassigned presale job rejected by Super Admin',
+                [{ label: 'Status', to: 'rejected' }, { label: 'Reason', to: comment }]);
+            const salesPerson = enquiry.salesPerson?.toString();
+            await notifyByPrivilege(
+                {
+                    type: 'Enquiry',
+                    referenceModel: 'Enquiry',
+                    title: 'Presale Job Rejected',
+                    message: `Enquiry ${enquiry.enquiryId} could not be assigned in presales and was rejected: ${comment}`,
+                    sentBy: me?._id?.toString() || salesPerson,
+                    referenceId: enquiry._id,
+                    additionalData: { enquiryId: enquiry._id.toString() }
+                },
+                { privilegeKey: 'enquiry', checkFunction: (_privileges, employeeId) => employeeId === salesPerson }
+            );
+            return res.status(200).json({ success: true, message: 'Job rejected' });
+        }
+
+        const nextStep: any = await advanceAssignmentStep(resolved);
+        if (!nextStep) return res.status(400).json({ success: false, message: 'This is the last step, so there is no next step to escalate to. Assign someone, restart the workflow or reject the job' });
+        await enquiryModel.updateOne({ _id: enquiry._id }, { $set: { 'preSale.assignApproval': nextStep } });
+        await logEnquiryAudit(req, enquiry._id, 'presale-escalated', 'Held assignment escalated to the next step by Super Admin');
+        const nextRoleIds = (await Employee.find({ category: nextStep.role?._id ?? nextStep.role, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id.toString());
+        await notifyByPrivilege(
+            {
+                type: 'AssignedJob',
+                referenceModel: 'Enquiry',
+                title: 'Presale assignment escalated',
+                message: `Enquiry ${enquiry.enquiryId} was escalated by the Super Admin and is now waiting on your role`,
+                sentBy: me?._id?.toString() || enquiry.salesPerson?.toString(),
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() }
+            },
+            { privilegeKey: 'assignedJob', checkFunction: (_privileges, employeeId) => nextRoleIds.includes(String(employeeId)) }
+        );
+        return res.status(200).json({ success: true, message: 'Escalated to the next step' });
     } catch (error) {
         next(error);
     }
@@ -2469,7 +2773,8 @@ const tallyEnquiry = (map: Map<string, any>, id: string, name: string, stage: st
 
 export const getEnquiryReport = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { salesPerson, customer, fromDate, toDate, department, access, userId } = req.body;
+        const { salesPerson, customer, fromDate, toDate, department, userId } = req.body;
+        const access = await widenAccessForDepartmentHead(req.body.access, userId);
 
         const match: any = { isDeleted: { $ne: true } };
         if (salesPerson) match.salesPerson = new ObjectId(salesPerson);
@@ -2486,7 +2791,7 @@ export const getEnquiryReport = async (req: Request, res: Response, next: NextFu
 
         // Same visibility rule as the list: a viewer only reports on the people they may see.
         const reportedToUserIds = access === 'reported' || access === 'createdAndReported'
-            ? await getAllReportedEmployees(userId)
+            ? await getReportedEmployeesWithDepartments(userId)
             : [];
         if (access === 'created') match.salesPerson = new ObjectId(userId);
         else if (access === 'reported') match.salesPerson = { $in: reportedToUserIds };

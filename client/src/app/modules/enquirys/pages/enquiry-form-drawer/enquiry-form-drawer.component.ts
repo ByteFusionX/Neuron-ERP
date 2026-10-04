@@ -9,6 +9,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
+import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { SfDraftDirective, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -47,6 +48,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   customerOptions: SfOption[] = [];
   contactOptions: SfOption[] = [];
   departmentOptions: SfOption[] = [];
+  accountingManagerOptions: SfOption[] = [];
   private readonly defaultSources = ['Referral', 'Website', 'Walk-in', 'Cold Call', 'Exhibition', 'Existing Customer', 'Other'];
   private readonly defaultCategories = ['Product', 'Project', 'Both', 'Supply only', 'Installation'];
   private readonly defaultPriorities = ['Low', 'Normal', 'Urgent', 'Critical'];
@@ -74,6 +76,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     title: ['', Validators.required],
     source: [null as string | null],
     enquiryCategory: [null as string | null],
+    accountingManager: [null as string | null],
     priority: ['Normal' as string | null],
     requirement: [''],
     followUpOutcome: [''],
@@ -162,6 +165,14 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
         this.departmentOptions = departments.map((d) => ({ label: d.departmentName, value: d._id }));
       })
     );
+    this.subscriptions.add(
+      this.employeeService.getAllEmployees().subscribe((employees: getEmployee[]) => {
+        this.accountingManagerOptions = employees.map((employee) => ({
+          label: `${employee.firstName} ${employee.lastName}`.trim(),
+          value: employee._id,
+        })).filter((option): option is SfOption => !!option.value);
+      })
+    );
   }
 
   private onClientChange(clientId: string | null): void {
@@ -211,6 +222,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       title: '',
       source: null,
       enquiryCategory: null,
+      accountingManager: null,
       priority: 'Normal',
       requirement: '',
       followUpOutcome: '',
@@ -236,12 +248,14 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
 
   private buildFormData(): FormData {
     const v = this.enquiryForm.getRawValue();
+    const salesPerson = v.accountingManager || this.salesPersonId;
     const formData = new FormData();
     formData.append('enquiryData', JSON.stringify({
       client: v.client,
       contact: v.contact,
       department: v.department,
-      salesPerson: this.salesPersonId,
+      salesPerson,
+      accountingManager: v.accountingManager || undefined,
       title: v.title,
       source: v.source,
       enquiryCategory: v.enquiryCategory,

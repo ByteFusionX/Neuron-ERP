@@ -9,6 +9,7 @@ interface Enquiry extends Document {
     contact: Types.ObjectId;
     department: Types.ObjectId;
     salesPerson: Types.ObjectId;
+    createdByUser?: Types.ObjectId;
     title: String;
     source?: string;
     enquiryCategory?: string;
@@ -23,7 +24,7 @@ interface Enquiry extends Document {
     lastFollowUpDate?: string | number | Date;
     followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date, correctionOf?: Types.ObjectId | null, status?: 'scheduled' | 'done' | 'cancelled', dueDate?: Date, completedAt?: Date, cancelReason?: string }[];
     createdDate: Date;
-    preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId }, status?: string };
+    preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string, version?: number }, estimationHistory?: any[], presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId, reminderDueAt?: Date, reminderSentAt?: Date, timeoutAction?: string, repeatReminder?: boolean, timeoutHandledAt?: Date, workflowVersion?: number }, status?: string };
     // preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; }[] };
     assignedFiles: []
     status: string;
@@ -90,7 +91,23 @@ const estimationSchema = new Schema({
     presaleNote: {
         type: String
     },
+    // v1 is the first submission; it only moves to v2, v3... when an estimation is re-submitted after a revision.
+    version: {
+        type: Number
+    },
 });
+
+// A superseded estimation is kept here, never deleted.
+const estimationHistorySchema = new Schema({
+    version: { type: Number },
+    optionalItems: { type: Array, default: [] },
+    currency: { type: String },
+    totalDiscount: { type: Number },
+    presaleNote: { type: String },
+    archivedAt: { type: Date, default: Date.now },
+    archivedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    reason: { type: String },
+}, { _id: false });
 
 
 const rejectionHistorySchema = new Schema({
@@ -115,6 +132,10 @@ const assignApprovalSchema = new Schema({
         type: Number,
         default: 0
     },
+    restartCount: {
+        type: Number,
+        default: 0
+    },
     role: {
         type: Schema.Types.ObjectId,
         ref: 'Category'
@@ -129,6 +150,12 @@ const assignApprovalSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'Category'
     },
+    reminderDueAt: { type: Date },
+    reminderSentAt: { type: Date },
+    timeoutAction: { type: String, enum: ['escalate', 'notify', 'reject'], default: 'escalate' },
+    repeatReminder: { type: Boolean, default: true },
+    timeoutHandledAt: { type: Date },
+    workflowVersion: { type: Number },
 }, { _id: false });
 
 const preSaleSchema = new Schema({
@@ -138,6 +165,10 @@ const preSaleSchema = new Schema({
     },
     estimations: {
         type: estimationSchema
+    },
+    estimationHistory: {
+        type: [estimationHistorySchema],
+        default: []
     },
     presaleFiles: [],
     comment: {
@@ -288,6 +319,10 @@ const enquirySchema = new Schema<Enquiry>({
         ref: 'Employee',
         required: true
     },
+    createdByUser: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
     title: {
         type: String,
         required: true
@@ -399,5 +434,9 @@ const enquirySchema = new Schema<Enquiry>({
         type: String,
     }
 });
+
+// Keeps the 1-minute assignment-workflow tick cheap: it only looks at jobs that are waiting with a due time set
+enquirySchema.index({ 'preSale.assignApproval.escalationDueAt': 1 }, { partialFilterExpression: { 'preSale.assignApproval.escalationDueAt': { $exists: true } } });
+enquirySchema.index({ 'preSale.assignApproval.reminderDueAt': 1 }, { partialFilterExpression: { 'preSale.assignApproval.reminderDueAt': { $exists: true } } });
 
 export default model<Enquiry>("Enquiry", enquirySchema);
