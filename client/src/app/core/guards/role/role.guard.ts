@@ -51,13 +51,6 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 }
                 break;
 
-            case '/hr/roles-privileges':
-                if (!isSuperAdmin && !privileges?.roles?.view) {
-                    router.navigate(['/home']);
-                    return false;
-                }
-                break;
-
             case '/announcements':
                 if (!hasView(privileges?.announcement?.viewReport)) {
                     router.navigate(['/home']);

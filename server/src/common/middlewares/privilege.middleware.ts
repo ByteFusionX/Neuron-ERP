@@ -23,7 +23,8 @@ const resolvePrivilege = (privileges: any, moduleKey: string) => {
 
 // `legacyKey` is the pre-split flag (e.g. "portalManagement.department"). It grants the action only
 // while the new flag has never been set on the role; an explicit true/false on the new flag wins.
-export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?: string) => {
+// `strictAdmin` makes admin a read-only oversight tier: only superAdmin skips the check, an admin needs the flag like anyone else.
+export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?: string, options: { strictAdmin?: boolean } = {}) => {
   return (req: any, res: Response, next: NextFunction) => {
     const employee = req.employee;
     if (!employee) {
@@ -31,7 +32,7 @@ export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?:
     }
 
     const role = employee.category?.role;
-    if (role === "admin" || role === "superAdmin") {
+    if (role === "superAdmin" || (role === "admin" && !options.strictAdmin)) {
       return next();
     }
 
@@ -59,7 +60,9 @@ export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?:
 
     // Individual grants on top of the role: additive only, so an unset/false role privilege
     // can be topped up per-person, but this can never take away what the role already allows.
-    const extra = resolvePrivilege(employee.extraPrivileges, moduleKey);
+    const expiresAt = employee.extraPrivilegesExpiresAt;
+    const extraExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+    const extra = extraExpired ? undefined : resolvePrivilege(employee.extraPrivileges, moduleKey);
 
     if (action) {
       if (privilege?.[action] === true || extra?.[action] === true) {
@@ -84,15 +87,23 @@ export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?:
 
 // For actions that `main` left open to anyone with view access: allowed unless an admin has
 // explicitly set the flag to false on the role.
-export const requireUnlessDenied = (moduleKey: string, action: string) => {
+// With `strictAdmin`, an admin is not waved through: they must hold the flag (role or extra grant) explicitly.
+export const requireUnlessDenied = (moduleKey: string, action: string, options: { strictAdmin?: boolean } = {}) => {
   return (req: any, res: Response, next: NextFunction) => {
     const employee = req.employee;
     if (!employee) {
       return res.status(401).json({ message: "Unauthorized" });
     }
     const role = employee.category?.role;
-    if (role === "admin" || role === "superAdmin") {
+    if (role === "superAdmin" || (role === "admin" && !options.strictAdmin)) {
       return next();
+    }
+    if (role === "admin") {
+      const expiresAt = employee.extraPrivilegesExpiresAt;
+      const extraExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+      const extra = extraExpired ? undefined : resolvePrivilege(employee.extraPrivileges, moduleKey);
+      const granted = resolvePrivilege(employee.category?.privileges, moduleKey)?.[action] === true || extra?.[action] === true;
+      return granted ? next() : res.status(403).json({ message: "Forbidden" });
     }
     if (resolvePrivilege(employee.category?.privileges, moduleKey)?.[action] === false) {
       return res.status(403).json({ message: "Forbidden" });

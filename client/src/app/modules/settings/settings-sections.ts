@@ -3,11 +3,11 @@ import { Privileges } from 'src/app/shared/interfaces/employee.interface';
 export type SettingsSectionId =
   | 'general'
   | 'master-data'
+  | 'roles-privileges'
   | 'approval-rules'
   | 'numbering'
   | 'notifications'
-  | 'audit'
-  | 'employee-privileges';
+  | 'audit';
 
 export interface SettingsAccess {
   privileges?: Privileges;
@@ -51,7 +51,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Master Data',
     description: 'Business lists other screens pick from: notes and terms, role responsibilities, payment terms, tax rates, units, sources and industries.',
     icon: 'heroCircleStack',
-    group: 'Data',
+    group: 'Company',
     children: [
       { path: 'customer', label: 'Customer Data' },
       { path: 'product', label: 'Product Data' },
@@ -64,17 +64,25 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     canView: ({ privileges }) => !!privileges?.portalManagement?.masterData,
   },
   {
-    id: 'approval-rules',
-    label: 'Approvals',
-    description: 'Approval rule thresholds (discount, margin, credit) and who may approve up to what amount.',
-    icon: 'heroCheckBadge',
-    group: 'Workflow',
+    id: 'roles-privileges',
+    label: 'Roles & Privileges',
+    description: 'Roles (categories of employees) and what each role is allowed to see and do.',
+    icon: 'heroShieldCheck',
+    group: 'Access & Approvals',
     children: [
-      { path: 'workflow', label: 'Workflow' },
-      { path: 'rules', label: 'Rules' },
-      { path: 'limits', label: 'Limits' },
+      { path: 'roles', label: 'Role Based' },
+      { path: 'individual', label: 'User Specific' },
     ],
-    keywords: ['rules', 'limits', 'threshold', 'discount', 'margin', 'credit', 'approver', 'workflow'],
+    keywords: ['role', 'roles', 'privilege', 'permission', 'category', 'access', 'individual', 'grant', 'override', 'flag', 'responsibility'],
+    canView: ({ privileges }) => !!privileges?.roles?.view,
+  },
+  {
+    id: 'approval-rules',
+    label: 'Workflow',
+    description: 'Approval workflows: who approves each request, in what order.',
+    icon: 'heroCheckBadge',
+    group: 'Access & Approvals',
+    keywords: ['approval', 'workflow', 'approver', 'escalation', 'steps'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.approvalRules,
   },
   {
@@ -82,25 +90,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Notifications',
     description: 'Which events alert people, such as pending approvals and overdue follow-ups.',
     icon: 'heroBell',
-    group: 'Workflow',
+    group: 'System',
     keywords: ['alert', 'email', 'reminder', 'overdue', 'pending'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.notifications,
-  },
-  {
-    id: 'employee-privileges',
-    label: 'Individual Privileges',
-    description: 'Grant one extra privilege flag to a specific employee, on top of what their role already allows.',
-    icon: 'heroKey',
-    group: 'Access',
-    keywords: ['privilege', 'permission', 'flag', 'grant', 'override', 'access', 'individual', 'responsibility'],
-    canView: ({ privileges }) => !!privileges?.roles?.edit,
   },
   {
     id: 'audit',
     label: 'Audit & History',
     description: 'What changes are recorded and how long history is kept.',
     icon: 'heroClock',
-    group: 'Access',
+    group: 'System',
     keywords: ['audit', 'history', 'log', 'retention'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.audit,
   },

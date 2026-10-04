@@ -1253,6 +1253,35 @@ export const setEmployeeExtraPrivilege = async (
   }
 };
 
+// Sets the time period for this employee's individual grants. Body: { days: number | null }.
+// days = whole number of days from now; null clears the expiry (grants never lapse).
+export const setEmployeeExtraPrivilegeExpiry = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { employeeId } = req.params;
+    const { days } = req.body ?? {};
+    if (days !== null && (!Number.isInteger(days) || days < 1 || days > 3650)) {
+      return res.status(400).json({ message: "days must be a whole number between 1 and 3650, or null" });
+    }
+    const expiresAt = days === null ? null : new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const employee = await Employee.findByIdAndUpdate(
+      employeeId,
+      { $set: { extraPrivilegesExpiresAt: expiresAt } },
+      { new: true, projection: { extraPrivilegesExpiresAt: 1 } },
+    );
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+    return res.status(200).json({ expiresAt: employee.extraPrivilegesExpiresAt ?? null });
+  } catch (error) {
+    console.log(error);
+    next(error);
+  }
+};
+
 export const blockEmployee = async (
   req: Request,
   res: Response,

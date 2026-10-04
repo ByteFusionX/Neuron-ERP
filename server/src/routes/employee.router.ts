@@ -20,6 +20,7 @@ import {
   blockEmployee,
   setEmployeeApprovalLimit,
   setEmployeeExtraPrivilege,
+  setEmployeeExtraPrivilegeExpiry,
   setEmployeeMicrosoftId,
 } from "../controllers/employee.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
@@ -80,6 +81,11 @@ empRouter.patch(
   "/extra-privilege/:employeeId",
   requirePrivilege("employee", "edit", "employee.create"),
   setEmployeeExtraPrivilege,
+);
+empRouter.patch(
+  "/extra-privilege-expiry/:employeeId",
+  requirePrivilege("employee", "edit", "employee.create"),
+  setEmployeeExtraPrivilegeExpiry,
 );
 // Manual Microsoft account link/relink — recovers logins that /login's
 // email-based auto-link can never fix (ERP email doesn't match Azure

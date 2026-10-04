@@ -38,6 +38,8 @@ interface Employee extends Document {
   // but sparse — only the flags explicitly granted to this one person are set). Additive
   // only: requirePrivilege never lets this revoke something the role already allows.
   extraPrivileges?: Record<string, any>;
+  // When set, the individual grants stop applying after this date. Unset = no expiry.
+  extraPrivilegesExpiresAt?: Date | null;
 }
 
 interface EmploymentHistory {
@@ -231,6 +233,11 @@ const employeeSchema = new Schema<Employee>({
   extraPrivileges: {
     type: Object,
     required: false,
+  },
+  extraPrivilegesExpiresAt: {
+    type: Date,
+    required: false,
+    default: null,
   },
 });
 
