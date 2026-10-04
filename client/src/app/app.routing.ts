@@ -13,10 +13,12 @@ import { UploadEstimationComponent } from './modules/assigned-jobs/pages/upload-
 import { QuotationViewComponent } from './modules/quotations/pages/quotation-view/quotation-view.component';
 import { QuotationListComponent } from './modules/quotations/pages/quotation-list/quotation-list.component';
 import { DealSheetListComponent } from './modules/deal-sheet/pages/deal-sheet-list/deal-sheet-list.component';
-import { ViewDealsheetComponent } from './modules/deal-sheet/view-dealsheet/view-dealsheet.component';
+import { ViewDealsheetComponent } from './modules/deal-sheet/pages/view-dealsheet/view-dealsheet.component';
 import { JobListComponent } from './modules/job-sheet/pages/job-list/job-list.component';
 import { ProfileInfoComponent } from './modules/profile/pages/profile-info/profile-info.component';
 import { PurchaseRequestListComponent } from './modules/purchase/pages/purchase-request-list/purchase-request-list.component';
+import { GeneralPurchaseListComponent } from './modules/purchase/pages/general-purchase-list/general-purchase-list.component';
+import { RfqListComponent } from './modules/purchase/pages/rfq-list/rfq-list.component';
 import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
 import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
 import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sheet/comparison-sheet.component';
@@ -93,7 +95,7 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'employees' },
       { path: 'departments', canActivate: [RoleGuard], loadComponent: () => import('./modules/hr/pages/hr-departments/hr-departments.component').then((c) => c.HrDepartmentsComponent) },
       { path: 'departments/overview', redirectTo: 'departments' },
-      { path: 'roles-privileges', canActivate: [RoleGuard], loadComponent: () => import('./modules/hr/pages/hr-roles-privileges/hr-roles-privileges.component').then((c) => c.HrRolesPrivilegesComponent) },
+      { path: 'roles-privileges', redirectTo: '/settings/roles-privileges' },
       { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
       { path: 'employees/view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
       { path: 'employees/category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
@@ -171,7 +173,11 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/profile/profile.component').then((c) => c.ProfileComponent),
     children: [
-      { path: '', component: ProfileInfoComponent }
+      { path: '', component: ProfileInfoComponent },
+      {
+        path: 'notifications',
+        loadComponent: () => import('./modules/profile/pages/notification-preferences/notification-preferences.component').then((c) => c.NotificationPreferencesComponent),
+      },
     ]
   },
   {
@@ -205,13 +211,21 @@ export const routes: Routes = [
         ],
       },
       {
+        path: 'roles-privileges',
+        data: { section: 'roles-privileges' },
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'roles' },
+          { path: 'roles', loadComponent: () => import('./modules/settings/pages/roles-privileges/roles-privileges.component').then((c) => c.RolesPrivilegesComponent) },
+          { path: 'individual', loadComponent: () => import('./modules/settings/pages/employee-privileges/employee-privileges.component').then((c) => c.EmployeePrivilegesComponent) },
+        ],
+      },
+      {
         path: 'approval-rules',
         data: { section: 'approval-rules' },
+        // Rules and Limits pages are hidden for now (components kept); Approvals is the workflow page.
         children: [
-          { path: '', pathMatch: 'full', redirectTo: 'rules' },
-          { path: 'rules', loadComponent: () => import('./modules/settings/pages/approval-rules/approval-rules.component').then((c) => c.ApprovalRulesComponent) },
-          { path: 'workflow', loadComponent: () => import('./modules/settings/pages/approval-rules/approval-workflow.component').then((c) => c.ApprovalWorkflowComponent) },
-          { path: 'limits', loadComponent: () => import('./modules/settings/pages/approval-rules/approval-limits.component').then((c) => c.ApprovalLimitsComponent) },
+          { path: '', pathMatch: 'full', loadComponent: () => import('./modules/settings/pages/approval-rules/approval-workflow.component').then((c) => c.ApprovalWorkflowComponent) },
+          { path: '**', redirectTo: '' },
         ],
       },
       {
@@ -231,8 +245,7 @@ export const routes: Routes = [
       },
       {
         path: 'employee-privileges',
-        data: { section: 'employee-privileges' },
-        loadComponent: () => import('./modules/settings/pages/employee-privileges/employee-privileges.component').then((c) => c.EmployeePrivilegesComponent),
+        redirectTo: '/settings/roles-privileges/individual',
       },
     ]
   },
@@ -286,6 +299,9 @@ export const routes: Routes = [
     loadComponent: () => import('./modules/purchase/purchase.component').then((c) => c.PurchaseComponent),
     children: [
       { path: 'pr', component: PurchaseRequestListComponent },
+      { path: 'rfq', component: RfqListComponent },
+      { path: 'general', component: GeneralPurchaseListComponent },
+      { path: 'general-purchase', redirectTo: 'general', pathMatch: 'full' },
       { path: 'pendings', redirectTo: 'pr' },
       { path: 'approves', redirectTo: 'pr' },
       { path: 'create', component: CreatePurchaseComponent },
@@ -293,10 +309,13 @@ export const routes: Routes = [
       { path: 'comparison-sheet/:purchaseId', component: ComparisonSheetComponent },
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
       { path: 'comparison-summary/:purchaseId', component: ComparisonSummaryComponent },
+      { path: 'po', component: LpoApprovalComponent },
+      { path: 'po/general', redirectTo: 'general', pathMatch: 'full' },
       { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
       { path: 'issue-lpo/:id', component: IssueLpoComponent },
       { path: 'issue-lpo/:id/edit/:lpoId', component: IssueLpoComponent },
       { path: 'issue-lpo/:id/reissue/:lpoId', component: IssueLpoComponent },
+      { path: 'view-lpo/:id', component: ViewLpoComponent },
       { path: 'edit/:id', component: CreatePurchaseComponent }
     ]
   },
@@ -305,6 +324,7 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/purchase-order/purchase-order.component').then((c) => c.PurchaseOrderComponent),
     children: [
+      { path: 'po', redirectTo: '/purchase/po', pathMatch: 'full' },
       { path: 'pending-approval', component: LpoApprovalComponent },
       { path: 'approved', component: LpoApprovalComponent },
       { path: 'view-lpo/:id', component: ViewLpoComponent }

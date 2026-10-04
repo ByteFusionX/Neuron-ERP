@@ -235,17 +235,35 @@
                   <ul class="flex flex-col gap-1">
                     <ng-container *ngFor="let subItem of item.children">
                       <!-- Only show submenu items user has access to -->
-                      <li *ngIf="(!subItem.privilegeKey || hasAccess(subItem)) && (!showFullBar || subItemMatchesSearch(item, subItem))"
-                        class="ml-8 py-2 px-3 hover:bg-violet-50 hover:text-violet-800 dark:text-gray-200 dark:hover:bg-violet-950/40 dark:hover:text-violet-400 rounded-md cursor-pointer transition-colors"
-                        [routerLink]="subItem.route"
-                        [class.active]="activeLink === subItem.route">
-                        <button class="relative w-full flex items-center justify-between text-left gap-2 text-sm">
-                          <span>{{getSubMenuLabel(subItem)}}</span>
-                          <span *ngIf="getSubMenuBadgeCount(subItem) > 0"
-                            class="w-5 h-5 shrink-0 rounded-full bg-orange-500 text-white text-[10px] font-semibold flex items-center justify-center">
-                            {{getSubMenuBadgeCount(subItem) > 99 ? '99+' : getSubMenuBadgeCount(subItem)}}
-                          </span>
-                        </button>
+                      <li *ngIf="(!subItem.privilegeKey || hasAccess(subItem)) && (!showFullBar || subItemMatchesSearch(item, subItem))">
+                        <div
+                          class="ml-8 py-2 px-3 hover:bg-violet-50 hover:text-violet-800 dark:text-gray-200 dark:hover:bg-violet-950/40 dark:hover:text-violet-400 rounded-md cursor-pointer transition-colors"
+                          [routerLink]="subItem.route"
+                          [class.active]="activeLink === subItem.route">
+                          <button class="relative w-full flex items-center justify-between text-left gap-2 text-sm">
+                            <span>{{getSubMenuLabel(subItem)}}</span>
+                            <span *ngIf="getSubMenuBadgeCount(subItem) > 0"
+                              class="w-5 h-5 shrink-0 rounded-full bg-orange-500 text-white text-[10px] font-semibold flex items-center justify-center">
+                              {{getSubMenuBadgeCount(subItem) > 99 ? '99+' : getSubMenuBadgeCount(subItem)}}
+                            </span>
+                          </button>
+                        </div>
+                        <ul *ngIf="subItem.children?.length" class="mt-1 flex flex-col gap-1">
+                          <ng-container *ngFor="let nestedItem of subItem.children">
+                            <li *ngIf="(!nestedItem.privilegeKey || hasAccess(nestedItem)) && (!showFullBar || subItemMatchesSearch(item, nestedItem))"
+                              class="ml-12 py-2 px-3 hover:bg-violet-50 hover:text-violet-800 dark:text-gray-200 dark:hover:bg-violet-950/40 dark:hover:text-violet-400 rounded-md cursor-pointer transition-colors"
+                              [routerLink]="nestedItem.route"
+                              [class.active]="activeLink === nestedItem.route">
+                              <button class="relative w-full flex items-center justify-between text-left gap-2 text-sm">
+                                <span>{{getSubMenuLabel(nestedItem)}}</span>
+                                <span *ngIf="getSubMenuBadgeCount(nestedItem) > 0"
+                                  class="w-5 h-5 shrink-0 rounded-full bg-orange-500 text-white text-[10px] font-semibold flex items-center justify-center">
+                                  {{getSubMenuBadgeCount(nestedItem) > 99 ? '99+' : getSubMenuBadgeCount(nestedItem)}}
+                                </span>
+                              </button>
+                            </li>
+                          </ng-container>
+                        </ul>
                       </li>
                     </ng-container>
                   </ul>

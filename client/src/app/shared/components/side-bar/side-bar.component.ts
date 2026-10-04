@@ -227,9 +227,7 @@ export class SideBarComponent
     this.menuCategories.forEach((category) => {
       category.items.forEach((item) => {
         if (item.hasDropdown && item.children) {
-          const shouldExpand = item.children.some((child) =>
-            url.includes(child.route.replace('/', '')),
-          );
+          const shouldExpand = item.children.some((child) => this.subItemMatchesUrl(child, url));
           this.expandedMenus[item.id] = shouldExpand;
         }
       });
@@ -300,7 +298,7 @@ export class SideBarComponent
     for (const category of this.menuCategories) {
       for (const item of category.items) {
         if (item.route && this.activeLink === item.route) return item.id;
-        if (item.children?.some((child) => this.activeLink === child.route)) {
+        if (item.children?.some((child) => this.subItemIsActive(child))) {
           return item.id;
         }
       }
@@ -329,7 +327,7 @@ export class SideBarComponent
   // parent icon instead when the active route belongs to one of its children.
   isParentActive(item: MenuItem): boolean {
     if (item.route && this.activeLink === item.route) return true;
-    return !!item.children?.some((child) => this.activeLink === child.route);
+    return !!item.children?.some((child) => this.subItemIsActive(child));
   }
 
   get visibleCategories(): MenuCategory[] {
@@ -397,7 +395,7 @@ export class SideBarComponent
       c.items.some(
         (item) =>
           (item.route && path.startsWith(item.route)) ||
-          item.children?.some((child) => path.startsWith(child.route)),
+          item.children?.some((child) => this.subItemContainsPath(child, path)),
       ),
     );
     if (!category?.group) return;
@@ -423,7 +421,8 @@ export class SideBarComponent
     return (
       this.searchMatches(item.label) ||
       this.searchMatches(this.getSubMenuLabel(child)) ||
-      this.searchMatches(child.label)
+      this.searchMatches(child.label) ||
+      !!child.children?.some((nestedChild) => this.subItemMatchesSearch(item, nestedChild))
     );
   }
 
@@ -445,6 +444,9 @@ export class SideBarComponent
 
   // Sub-tab badge: always its own count, shown once its parent dropdown is expanded.
   getSubMenuBadgeCount(subItem: SubMenuItem): number {
+    if (subItem.children?.length) {
+      return subItem.children.reduce((total, child) => total + this.getSubMenuBadgeCount(child), 0);
+    }
     if (!subItem.notificationKey) return 0;
     return (
       this.notificationCounts[subItem.notificationKey as keyof NotificationCounts] ||
@@ -460,7 +462,7 @@ export class SideBarComponent
       if (this.expandedMenus[item.id]) return 0;
       const keys = new Set(
         item.children
-          .map((child) => child.notificationKey)
+          .flatMap((child) => this.getSubMenuNotificationKeys(child))
           .filter((key): key is string => !!key),
       );
       let total = 0;
@@ -487,6 +489,34 @@ export class SideBarComponent
         : subItem.label;
     }
     return subItem.label;
+  }
+
+  private subItemMatchesUrl(child: SubMenuItem, url: string): boolean {
+    return (
+      (!!child.route && url.includes(child.route.replace('/', ''))) ||
+      !!child.children?.some((nestedChild) => this.subItemMatchesUrl(nestedChild, url))
+    );
+  }
+
+  private subItemIsActive(child: SubMenuItem): boolean {
+    return (
+      (!!child.route && this.activeLink === child.route) ||
+      !!child.children?.some((nestedChild) => this.subItemIsActive(nestedChild))
+    );
+  }
+
+  private subItemContainsPath(child: SubMenuItem, path: string): boolean {
+    return (
+      (!!child.route && path.startsWith(child.route)) ||
+      !!child.children?.some((nestedChild) => this.subItemContainsPath(nestedChild, path))
+    );
+  }
+
+  private getSubMenuNotificationKeys(child: SubMenuItem): string[] {
+    return [
+      ...(child.notificationKey ? [child.notificationKey] : []),
+      ...(child.children?.flatMap((nestedChild) => this.getSubMenuNotificationKeys(nestedChild)) ?? []),
+    ];
   }
 
   ngOnDestroy(): void {

@@ -17,10 +17,11 @@ export interface MenuItem {
 export interface SubMenuItem {
   id: string;
   label: string;
-  route: string;
+  route?: string;
   privilegeKey?: keyof Privileges;
   privilegeValue?: string;
   notificationKey?: string;
+  children?: SubMenuItem[];
   alternateLabel?: string;
   alternateCondition?: (privileges: Privileges) => boolean;
 }
@@ -169,33 +170,32 @@ export const MENU_CATEGORIES: MenuCategory[] = [
             id: 'purchaseRequests',
             label: 'PR',
             route: '/purchase/pr',
+            privilegeKey: 'purchase',
+            privilegeValue: 'none',
             notificationKey: 'purchaseCount',
           },
-        ],
-      },
-      {
-        id: 'supplierLpo',
-        label: 'Supplier LPO',
-        icon: 'heroClipboardDocumentList',
-        hasDropdown: true,
-        privilegeKey: 'purchaseOrder',
-        privilegeValue: 'none',
-        children: [
           {
-            id: 'pendingLpoApproval',
-            label: 'LPO Approval Requests',
-            route: '/purchase-order/pending-approval',
+            id: 'purchaseRfqs',
+            label: 'RFQ',
+            route: '/purchase/rfq',
+            privilegeKey: 'purchase',
+            privilegeValue: 'none',
+          },
+          {
+            id: 'purchaseOrders',
+            label: 'PO',
+            route: '/purchase/po',
             privilegeKey: 'purchaseOrder',
             privilegeValue: 'none',
             notificationKey: 'lpoApprovalCount',
           },
           {
-            id: 'approvedLpos',
-            label: 'Approved LPOs',
-            route: '/purchase-order/approved',
-            privilegeKey: 'purchaseOrder',
+            id: 'generalPurchase',
+            label: 'General',
+            route: '/purchase/general',
+            privilegeKey: 'purchase',
             privilegeValue: 'none',
-            notificationKey: 'lpoApprovedCount',
+            notificationKey: 'purchaseCount',
           },
         ],
       },
@@ -476,20 +476,20 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         privilegeKey: 'departments',
         privilegeValue: 'view',
       },
-      {
-        id: 'hr-roles-privileges',
-        label: 'Roles & Privileges',
-        icon: 'heroShieldCheck',
-        route: '/hr/roles-privileges',
-        privilegeKey: 'roles',
-        privilegeValue: 'view',
-      },
     ],
   },
 ];
 
 export function hasMenuAccess(privileges: Privileges | undefined, item: MenuItem | SubMenuItem): boolean {
   if (!privileges || !item.privilegeKey) return true;
+
+  if (
+    'hasDropdown' in item &&
+    item.hasDropdown &&
+    item.children?.some((child) => hasMenuAccess(privileges, child))
+  ) {
+    return true;
+  }
 
   if (item.privilegeKey === 'departments') return departmentPrivileges(privileges).view;
 
@@ -569,14 +569,22 @@ export interface NavEntry {
 // Flat, permission-filtered list of every navigable page, for the command palette.
 export function buildNavEntries(privileges: Privileges | undefined): NavEntry[] {
   const entries: NavEntry[] = [];
+  const addChildEntries = (item: MenuItem, child: SubMenuItem, context: string, trail: string[] = []) => {
+    if (!hasMenuAccess(privileges, child)) return;
+    const labels = [...trail, child.label];
+    if (child.route) entries.push({ label: `${item.label} › ${labels.join(' › ')}`, context, route: child.route, icon: item.icon });
+    for (const nestedChild of child.children ?? []) {
+      addChildEntries(item, nestedChild, context, labels);
+    }
+  };
+
   for (const category of MENU_CATEGORIES) {
     const context = category.group ?? (category.label || 'Overview');
     for (const item of category.items) {
       if (!hasMenuAccess(privileges, item)) continue;
       if (item.route) entries.push({ label: item.label, context, route: item.route, icon: item.icon });
       for (const child of item.children ?? []) {
-        if (!hasMenuAccess(privileges, child)) continue;
-        entries.push({ label: `${item.label} › ${child.label}`, context, route: child.route, icon: item.icon });
+        addChildEntries(item, child, context);
       }
     }
   }
@@ -604,14 +612,18 @@ export function buildBreadcrumbs(url: string): Crumb[] {
 
   for (const category of MENU_CATEGORIES) {
     const lead: Crumb[] = category.group ? [{ label: category.group }] : [];
+    const considerChild = (item: MenuItem, child: SubMenuItem, parents: Crumb[]) => {
+      const childCrumbs = [...parents, { label: child.label, route: child.route }];
+      if (child.route) consider(child.route, childCrumbs);
+      for (const nestedChild of child.children ?? []) {
+        considerChild(item, nestedChild, childCrumbs);
+      }
+    };
+
     for (const item of category.items) {
       if (item.route) consider(item.route, [...lead, { label: item.label, route: item.route }]);
       for (const child of item.children ?? []) {
-        consider(child.route, [
-          ...lead,
-          { label: item.label, route: item.route },
-          { label: child.label, route: child.route },
-        ]);
+        considerChild(item, child, [...lead, { label: item.label, route: item.route }]);
       }
     }
   }
