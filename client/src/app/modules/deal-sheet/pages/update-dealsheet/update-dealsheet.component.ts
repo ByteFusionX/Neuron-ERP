@@ -1,26 +1,61 @@
-import { Component, ElementRef, Inject, OnInit, ViewChild } from '@angular/core';
-import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, ValidatorFn, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { priceDetails, Quotatation, QuoteItem, QuoteItemDetail } from 'src/app/shared/interfaces/quotation.interface';
-import { fileEnterState } from '../enquiry-animations';
+import {
+  Component,
+  ElementRef,
+  Inject,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
+import {
+  AbstractControl,
+  FormArray,
+  FormBuilder,
+  FormControl,
+  FormGroup,
+  ValidatorFn,
+  Validators,
+  FormsModule,
+  ReactiveFormsModule,
+} from '@angular/forms';
+import {
+  MAT_DIALOG_DATA,
+  MatDialog,
+  MatDialogRef,
+} from '@angular/material/dialog';
+import {
+  priceDetails,
+  Quotatation,
+  QuoteItem,
+  QuoteItemDetail,
+} from 'src/app/shared/interfaces/quotation.interface';
+import { fileEnterState } from '../../enquiry-animations';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { NgIcon } from '@ng-icons/core';
 import { NgIf, NgFor, NgClass, DecimalPipe } from '@angular/common';
 import { MatTooltip } from '@angular/material/tooltip';
-import { ParseBoldTextPipe } from '../../../shared/pipes/boldParse.pipe';
-import { ParseBracketsTextPipe } from '../../../shared/pipes/highlightParse.pipe';
-import { SupplierService } from '../../../core/services/supplier.service';
-import { Supplier } from '../../../shared/interfaces/suppliers.interface';
-
+import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
+import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
+import { SupplierService } from '../../../../core/services/supplier.service';
+import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
 
 @Component({
-    selector: 'app-updatedealsheet-component',
-    templateUrl: './updatedealsheet-component.component.html',
-    styleUrls: ['./updatedealsheet-component.component.css'],
-    animations: [fileEnterState],
-    imports: [NgIcon, FormsModule, ReactiveFormsModule, NgIf, NgFor, NgClass, MatTooltip, DecimalPipe, ParseBoldTextPipe, ParseBracketsTextPipe]
+  selector: 'app-update-dealsheet',
+  templateUrl: './update-dealsheet.component.html',
+  styleUrls: ['./update-dealsheet.component.css'],
+  animations: [fileEnterState],
+  imports: [
+    NgIcon,
+    FormsModule,
+    ReactiveFormsModule,
+    NgIf,
+    NgFor,
+    NgClass,
+    MatTooltip,
+    DecimalPipe,
+    ParseBoldTextPipe,
+    ParseBracketsTextPipe,
+  ],
 })
-export class UpdatedealsheetComponent implements OnInit {
+export class UpdateDealsheetComponent implements OnInit {
   @ViewChild('fileInput') fileInput!: ElementRef;
 
   costForm!: FormGroup;
@@ -34,28 +69,41 @@ export class UpdatedealsheetComponent implements OnInit {
   selectedOption: number = 0;
   suppliers: Supplier[] = [];
 
-
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: { approval: boolean, quoteData: Quotatation, quoteItems: (QuoteItem | undefined)[], priceDetails: priceDetails, quoteView: boolean },
-    public dialogRef: MatDialogRef<UpdatedealsheetComponent>,
+    @Inject(MAT_DIALOG_DATA)
+    public data: {
+      approval: boolean;
+      quoteData: Quotatation;
+      quoteItems: (QuoteItem | undefined)[];
+      priceDetails: priceDetails;
+      quoteView: boolean;
+    },
+    public dialogRef: MatDialogRef<UpdateDealsheetComponent>,
     public _dialog: MatDialog,
     private fb: FormBuilder,
-    private supplierService: SupplierService
-  ) { }
+    private supplierService: SupplierService,
+  ) {}
 
   ngOnInit() {
     this.loadSuppliers();
     this.costForm = this.fb.group({
-      paymentTerms: [this.data.quoteData.dealData.paymentTerms || '', Validators.required],
-      items: this.fb.array(this.data.quoteItems.map(item => this.createItemGroup(item as QuoteItem))),
-      costs: this.fb.array([], this.additionalCostsValidator())
+      paymentTerms: [
+        this.data.quoteData.dealData.paymentTerms || '',
+        Validators.required,
+      ],
+      items: this.fb.array(
+        this.data.quoteItems.map((item) =>
+          this.createItemGroup(item as QuoteItem),
+        ),
+      ),
+      costs: this.fb.array([], this.additionalCostsValidator()),
     });
     this.data.quoteData.dealData.additionalCosts.forEach((cost) => {
-      this.patchCost(cost)
-    })
+      this.patchCost(cost);
+    });
 
     this.selectedFiles = this.data.quoteData.dealData.attachments;
-    this.existingFiles = [...this.selectedFiles]
+    this.existingFiles = [...this.selectedFiles];
   }
 
   loadSuppliers() {
@@ -65,15 +113,17 @@ export class UpdatedealsheetComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error loading suppliers:', error);
-      }
+      },
     });
   }
 
   onCalculationOptionChange() {
     this.items.clear();
-    this.data.quoteData.optionalItems[this.selectedOption].items.forEach(item => {
-      this.items.push(this.createItemGroup(item));
-    });
+    this.data.quoteData.optionalItems[this.selectedOption].items.forEach(
+      (item) => {
+        this.items.push(this.createItemGroup(item));
+      },
+    );
   }
 
   setUpFormData(): FormData {
@@ -93,32 +143,36 @@ export class UpdatedealsheetComponent implements OnInit {
         return {
           type: cost.type,
           supplierId: cost.supplierId,
-          value: cost.value
+          value: cost.value,
         };
       } else if (cost.type === 'Additional Cost') {
         return {
           type: cost.type,
           name: cost.name,
-          value: cost.value
+          value: cost.value,
         };
       } else {
         return {
           type: cost.type,
-          value: cost.value
+          value: cost.value,
         };
       }
     });
 
-    formData.append('dealData', JSON.stringify({ 
-      ...data, 
-      items: updatedItems, 
-      costs: updatedCosts,
-      removedFiles: this.removedFiles, 
-      existingFiles: this.existingFiles, 
-      totalDiscount: this.data.quoteData.optionalItems[this.selectedOption].totalDiscount 
-    }));
+    formData.append(
+      'dealData',
+      JSON.stringify({
+        ...data,
+        items: updatedItems,
+        costs: updatedCosts,
+        removedFiles: this.removedFiles,
+        existingFiles: this.existingFiles,
+        totalDiscount:
+          this.data.quoteData.optionalItems[this.selectedOption].totalDiscount,
+      }),
+    );
     for (let i = 0; i < this.selectedFiles.length; i++) {
-      formData.append('attachments', (this.selectedFiles[i] as Blob))
+      formData.append('attachments', this.selectedFiles[i] as Blob);
     }
 
     return formData;
@@ -128,7 +182,7 @@ export class UpdatedealsheetComponent implements OnInit {
     this.isSubmitted = true;
     if (this.costForm.valid) {
       this.isSaving = true;
-      const formData = this.setUpFormData()
+      const formData = this.setUpFormData();
       this.dialogRef.close(formData);
     }
   }
@@ -142,56 +196,60 @@ export class UpdatedealsheetComponent implements OnInit {
   }
 
   onFileSelected(event: any) {
-    let files = event.target.files
+    let files = event.target.files;
     for (let i = 0; i < files.length; i++) {
-      const newFile = files[i]
-      const exist = (this.selectedFiles as File[]).some((file: File) => file.name === newFile.name)
+      const newFile = files[i];
+      const exist = (this.selectedFiles as File[]).some(
+        (file: File) => file.name === newFile.name,
+      );
       if (!exist) {
-        (this.selectedFiles as File[]).push(files[i])
+        (this.selectedFiles as File[]).push(files[i]);
       }
     }
   }
 
   onFileRemoved(index: number) {
-    let removedFiles = (this.selectedFiles as File[]).splice(index, 1)
-    this.existingFiles.splice(index, 1)
-    this.removedFiles.push(...removedFiles)
+    let removedFiles = (this.selectedFiles as File[]).splice(index, 1);
+    this.existingFiles.splice(index, 1);
+    this.removedFiles.push(...removedFiles);
   }
 
   fetchLatestQuote() {
-    const dialogRef = this._dialog.open(ConfirmationDialogComponent,
-      {
-        data: {
-          title: `Are you absolutely sure?`,
-          description: `This action is irreversible. This will remove all the entered data and replace it with the latest quotation.`,
-          icon: 'heroExclamationCircle',
-          IconColor: 'orange'
-        }
-      });
+    const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Are you absolutely sure?`,
+        description: `This action is irreversible. This will remove all the entered data and replace it with the latest quotation.`,
+        icon: 'heroExclamationCircle',
+        IconColor: 'orange',
+      },
+    });
 
     dialogRef.afterClosed().subscribe((approved: boolean) => {
       if (approved) {
-        this.items.clear()
+        this.items.clear();
 
         // Add new controls to the FormArray
-        this.data.quoteData.optionalItems[0].items.forEach(item => {
+        this.data.quoteData.optionalItems[0].items.forEach((item) => {
           this.items.push(this.createItemGroup(item as QuoteItem));
         });
       }
-    })
+    });
   }
-
 
   createItemGroup(item: QuoteItem): FormGroup {
     return this.fb.group({
       itemName: [item.itemName || ''],
-      itemDetails: this.fb.array(item.itemDetails.map(detail => this.createItemDetailGroup(detail)))
+      itemDetails: this.fb.array(
+        item.itemDetails.map((detail) => this.createItemDetailGroup(detail)),
+      ),
     });
-
   }
 
   createItemDetailGroup(detail: QuoteItemDetail): FormGroup {
-    const profit = (((detail.unitSellingPrice - detail.unitCost) / detail.unitSellingPrice) * 100).toFixed(2);
+    const profit = (
+      ((detail.unitSellingPrice - detail.unitCost) / detail.unitSellingPrice) *
+      100
+    ).toFixed(2);
 
     return this.fb.group({
       dealSelected: [detail.dealSelected || false],
@@ -201,7 +259,7 @@ export class UpdatedealsheetComponent implements OnInit {
       profit: [profit, Validators.required],
       unitSellingPrice: [detail.unitSellingPrice, Validators.required],
       availability: [detail.availability, Validators.required],
-      supplierId: [(detail as any).supplierId || '', Validators.required]
+      supplierId: [(detail as any).supplierId || '', Validators.required],
     });
   }
 
@@ -211,7 +269,7 @@ export class UpdatedealsheetComponent implements OnInit {
       if (formGroup) {
         const dealSelected = formGroup.get('dealSelected')?.value;
         if (dealSelected && !control.value) {
-          return { 'supplierRequired': true };
+          return { supplierRequired: true };
         }
       }
       return null;
@@ -232,13 +290,13 @@ export class UpdatedealsheetComponent implements OnInit {
       for (const cost of costs.controls) {
         const type = cost?.get('type')?.value;
         if (type === 'Additional Cost' && !cost?.get('name')?.value) {
-          return { 'additionalCostInvalid': true };
+          return { additionalCostInvalid: true };
         }
         if (type === 'Supplier Discount' && !cost?.get('supplierId')?.value) {
-          return { 'additionalCostInvalid': true };
+          return { additionalCostInvalid: true };
         }
         if (!cost?.get('value')?.value) {
-          return { 'additionalCostInvalid': true };
+          return { additionalCostInvalid: true };
         }
       }
       return null;
@@ -246,19 +304,27 @@ export class UpdatedealsheetComponent implements OnInit {
   }
 
   onItemCheckboxChange(i: number, j: number, event: any) {
-    const allSelected = this.items.controls.every(item => {
-      return this.getItemDetailsArray(item).every(detail => detail.get('dealSelected')?.value === true);
+    const allSelected = this.items.controls.every((item) => {
+      return this.getItemDetailsArray(item).every(
+        (detail) => detail.get('dealSelected')?.value === true,
+      );
     });
 
     const itemDetail = this.getItemDetailsArray(this.items.controls[i])[j];
-    
+
     if (!event.target.checked) {
-      itemDetail.get('quantity')?.setValue(this.data.quoteItems[i]?.itemDetails[j].quantity);
-      itemDetail.get('unitCost')?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitCost);
-      itemDetail.get('unitSellingPrice')?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitSellingPrice);
+      itemDetail
+        .get('quantity')
+        ?.setValue(this.data.quoteItems[i]?.itemDetails[j].quantity);
+      itemDetail
+        .get('unitCost')
+        ?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitCost);
+      itemDetail
+        .get('unitSellingPrice')
+        ?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitSellingPrice);
       itemDetail.get('supplierId')?.setValue('');
     }
-    
+
     // Trigger validation update for supplier field
     itemDetail.get('supplierId')?.updateValueAndValidity();
 
@@ -268,9 +334,9 @@ export class UpdatedealsheetComponent implements OnInit {
   toggleAllSelection(event: Event) {
     const isChecked = (event.target as HTMLInputElement).checked;
     this.isAllSelected = isChecked;
-    this.items.controls.forEach(item => {
+    this.items.controls.forEach((item) => {
       const itemDetails = this.getItemDetailsArray(item);
-      itemDetails.forEach(detail => {
+      itemDetails.forEach((detail) => {
         detail.get('dealSelected')?.setValue(isChecked);
         // Clear supplier if unchecking and trigger validation
         if (!isChecked) {
@@ -289,47 +355,52 @@ export class UpdatedealsheetComponent implements OnInit {
     let group;
     group = this.fb.group({
       type: [type, Validators.required],
-      value: ['', Validators.required]
+      value: ['', Validators.required],
     });
-    
+
     if (type === 'Additional Cost') {
       group = this.fb.group({
         type: [type, Validators.required],
         name: ['', Validators.required],
-        value: ['', Validators.required]
+        value: ['', Validators.required],
       });
     } else if (type === 'Supplier Discount') {
       group = this.fb.group({
         type: [type, Validators.required],
         supplierId: ['', Validators.required],
-        value: ['', Validators.required]
+        value: ['', Validators.required],
       });
     }
-    
+
     this.costs.push(group);
   }
 
-  patchCost(cost: { type: string, value: number, name: string, supplierId?: string }): void {
+  patchCost(cost: {
+    type: string;
+    value: number;
+    name: string;
+    supplierId?: string;
+  }): void {
     let group;
     if (!cost.type) {
-      cost.type = 'Additional Cost'
+      cost.type = 'Additional Cost';
     }
     group = this.fb.group({
       type: [cost.type, Validators.required],
-      value: [cost.value, Validators.required]
+      value: [cost.value, Validators.required],
     });
 
     if (cost.type === 'Additional Cost') {
       group = this.fb.group({
         type: [cost.type, Validators.required],
         name: [cost.name, Validators.required],
-        value: [cost.value, Validators.required]
+        value: [cost.value, Validators.required],
       });
     } else if (cost.type === 'Supplier Discount') {
       group = this.fb.group({
         type: [cost.type, Validators.required],
         supplierId: [(cost as any).supplierId || '', Validators.required],
-        value: [cost.value, Validators.required]
+        value: [cost.value, Validators.required],
       });
     }
 
@@ -347,21 +418,29 @@ export class UpdatedealsheetComponent implements OnInit {
   trackByIndex(index: number): number {
     return index;
   }
-  
 
   calculateUnitPriceForInput(i: number, j: number) {
-    const itemDetail = this.getItemDetailsControls(i).controls[j] as FormControl;
+    const itemDetail = this.getItemDetailsControls(i).controls[
+      j
+    ] as FormControl;
     const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitPrice = itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0;
-    itemDetail.get('unitPrice')?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
+    const unitPrice =
+      itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0;
+    itemDetail
+      .get('unitPrice')
+      ?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
   }
 
   calculateProfitForInput(i: number, j: number) {
-    const unitCost = this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
-    const unitSellingPrice = this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
+    const unitCost =
+      this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
+    const unitSellingPrice =
+      this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
     if (unitCost && unitSellingPrice) {
       const profit = ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
-      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue(profit.toFixed(2));
+      this.getItemDetailsControls(i)
+        .controls[j].get('profit')
+        ?.setValue(profit.toFixed(2));
     } else if (unitCost) {
       this.getItemDetailsControls(i).controls[j].get('profit')?.setValue('');
     }
@@ -372,15 +451,15 @@ export class UpdatedealsheetComponent implements OnInit {
     this.items.value.forEach((item: any, i: number) => {
       this.getItemDetailsControls(i).value.forEach((item: any, j: number) => {
         if (item.dealSelected) {
-          totalCost += this.calculateTotalPrice(i, j)
+          totalCost += this.calculateTotalPrice(i, j);
         }
-      })
-    })
+      });
+    });
     this.costs.value.forEach((cost: any, i: number) => {
       if (cost.type == 'Customer Discount') {
-        totalCost -= cost.value
+        totalCost -= cost.value;
       }
-    })
+    });
 
     return totalCost;
   }
@@ -390,40 +469,49 @@ export class UpdatedealsheetComponent implements OnInit {
     this.items.value.forEach((item: any, i: number) => {
       this.getItemDetailsControls(i).value.forEach((item: any, j: number) => {
         if (item.dealSelected) {
-          totalCost += this.calculateTotalCost(i, j)
+          totalCost += this.calculateTotalCost(i, j);
         }
-      })
-    })
+      });
+    });
 
     this.costs.value.forEach((cost: any, i: number) => {
       if (cost.type == 'Additional Cost') {
-        totalCost += cost.value
+        totalCost += cost.value;
       } else if (cost.type === 'Supplier Discount') {
-        totalCost -= cost.value
+        totalCost -= cost.value;
       }
-    })
+    });
 
     return totalCost;
   }
 
-
-
   calculateTotalCost(i: number, j: number) {
-    return this.getItemDetailsControls(i).controls[j].get('quantity')?.value * this.getItemDetailsControls(i).controls[j].get('unitCost')?.value
+    return (
+      this.getItemDetailsControls(i).controls[j].get('quantity')?.value *
+      this.getItemDetailsControls(i).controls[j].get('unitCost')?.value
+    );
   }
 
   calculateProfit(i: number, j: number) {
-    const unitCost = this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
-    const unitSellingPrice = this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
-    
+    const unitCost =
+      this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
+    const unitSellingPrice =
+      this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
+
     if (unitCost && unitSellingPrice) {
-      return (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(2);
+      return (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(
+        2,
+      );
     }
     return 0;
   }
 
   calculateTotalPrice(i: number, j: number) {
-    return this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value * this.getItemDetailsControls(i).controls[j].get('quantity')?.value
+    return (
+      this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')
+        ?.value *
+      this.getItemDetailsControls(i).controls[j].get('quantity')?.value
+    );
   }
 
   onClose() {
@@ -435,7 +523,7 @@ export class UpdatedealsheetComponent implements OnInit {
   }
 
   getSupplierById(supplierId: string): Supplier | undefined {
-    return this.suppliers.find(supplier => supplier._id === supplierId);
+    return this.suppliers.find((supplier) => supplier._id === supplierId);
   }
 
   getSupplierName(supplierId: string): string {
@@ -445,10 +533,10 @@ export class UpdatedealsheetComponent implements OnInit {
 
   getSelectedSuppliers(): Supplier[] {
     const selectedSupplierIds = new Set<string>();
-    
-    this.items.controls.forEach(item => {
+
+    this.items.controls.forEach((item) => {
       const itemDetails = this.getItemDetailsArray(item);
-      itemDetails.forEach(detail => {
+      itemDetails.forEach((detail) => {
         const dealSelected = detail.get('dealSelected')?.value;
         const supplierId = detail.get('supplierId')?.value;
         if (dealSelected && supplierId) {
@@ -457,6 +545,8 @@ export class UpdatedealsheetComponent implements OnInit {
       });
     });
 
-    return this.suppliers.filter(supplier => supplier._id && selectedSupplierIds.has(supplier._id));
+    return this.suppliers.filter(
+      (supplier) => supplier._id && selectedSupplierIds.has(supplier._id),
+    );
   }
 }
