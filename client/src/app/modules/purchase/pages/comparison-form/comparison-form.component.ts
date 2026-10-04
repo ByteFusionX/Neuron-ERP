@@ -40,9 +40,18 @@ export class ComparisonFormComponent implements OnInit {
     supplierId: ['', Validators.required],
     quantity: [null, Validators.required],
     unitPrice: [null, Validators.required],
+    discountType: ['amount'],
+    discountValue: [0],
+    taxPercent: [0],
+    freightCost: [0],
     etaTerms: ['', Validators.required],
     paymentTerms: ['', Validators.required],
+    validityDate: [''],
+    warrantyTerms: [''],
+    remarks: [''],
     totalCost: [''],
+    netAmount: [''],
+    landedCost: [''],
     selected: [false],
   });
 
@@ -81,9 +90,18 @@ export class ComparisonFormComponent implements OnInit {
       supplierName: comparison.supplierName || '',
       quantity: comparison.quantity || null,
       unitPrice: comparison.unitPrice || null,
+      discountType: comparison.discountType || 'amount',
+      discountValue: comparison.discountValue || 0,
+      taxPercent: comparison.taxPercent || 0,
+      freightCost: comparison.freightCost || 0,
       etaTerms: comparison.etaTerms || '',
       paymentTerms: comparison.paymentTerms || '',
+      validityDate: comparison.validityDate || '',
+      warrantyTerms: comparison.warrantyTerms || '',
+      remarks: comparison.remarks || '',
       totalCost: comparison.totalCost || '',
+      netAmount: comparison.netAmount || '',
+      landedCost: comparison.landedCost || '',
       selected: comparison.selected || false
     });
     this.updateTotalCost();
@@ -92,13 +110,28 @@ export class ComparisonFormComponent implements OnInit {
   setupAutoTotalCostCalculation() {
     this.comparisonForm.get('quantity')?.valueChanges.subscribe(() => this.updateTotalCost());
     this.comparisonForm.get('unitPrice')?.valueChanges.subscribe(() => this.updateTotalCost());
+    this.comparisonForm.get('discountType')?.valueChanges.subscribe(() => this.updateTotalCost());
+    this.comparisonForm.get('discountValue')?.valueChanges.subscribe(() => this.updateTotalCost());
+    this.comparisonForm.get('taxPercent')?.valueChanges.subscribe(() => this.updateTotalCost());
+    this.comparisonForm.get('freightCost')?.valueChanges.subscribe(() => this.updateTotalCost());
   }
 
   updateTotalCost() {
     const quantity = this.comparisonForm.get('quantity')?.value || 0;
     const unitPrice = this.comparisonForm.get('unitPrice')?.value || 0;
+    const discountType = this.comparisonForm.get('discountType')?.value || 'amount';
+    const discountValue = Number(this.comparisonForm.get('discountValue')?.value) || 0;
+    const taxPercent = Number(this.comparisonForm.get('taxPercent')?.value) || 0;
+    const freightCost = Number(this.comparisonForm.get('freightCost')?.value) || 0;
     const total = quantity * unitPrice;
-    this.comparisonForm.get('totalCost')?.setValue(total.toFixed(2), { emitEvent: false });
+    const discountAmount = discountType === 'percent' ? total * (discountValue / 100) : discountValue;
+    const netAmount = Math.max(total - discountAmount, 0);
+    const landedCost = netAmount + (netAmount * (taxPercent / 100)) + freightCost;
+    this.comparisonForm.patchValue({
+      totalCost: total.toFixed(2),
+      netAmount: netAmount.toFixed(2),
+      landedCost: landedCost.toFixed(2)
+    }, { emitEvent: false });
   }
 
   onSubmit() {

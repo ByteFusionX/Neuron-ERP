@@ -1,0 +1,29 @@
+.rfq-meta {
+    min-width: 0;
+}
+
+.rfq-meta-label {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgb(107 114 128);
+}
+
+.rfq-meta-value {
+    margin: 0.15rem 0 0;
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: rgb(17 24 39);
+}
+
+:host-context(.dark) .rfq-meta-label {
+    color: rgb(156 163 175);
+}
+
+:host-context(.dark) .rfq-meta-value {
+    color: rgb(243 244 246);
+}

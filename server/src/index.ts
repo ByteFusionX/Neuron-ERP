@@ -36,6 +36,7 @@ import pushSubscriptionRouter from './routes/pushSubscription.router';
 import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
+import rfqRouter from './routes/rfq.router';
 import technicalRouter from './routes/technical.router';
 import purchaseOrderRouter from "./routes/purchaseOrder.router";
 import workflowRouter from './routes/workflow.router';
@@ -136,6 +137,7 @@ app.use('/push-subscription', pushSubscriptionRouter)
 app.use('/customerType', customerTypeRouter)
 app.use('/supplier', supplierRouter)
 app.use('/purchase', purchaseRequestRouter)
+app.use('/purchase/rfq', rfqRouter)
 app.use('/technical', technicalRouter)
 app.use('/workflow', workflowRouter)
 app.use('/approval-rule', approvalRuleRouter)

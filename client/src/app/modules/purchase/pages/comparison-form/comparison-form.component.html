@@ -4,13 +4,13 @@
       <app-dp-icon name="building" size="w-5 h-5"></app-dp-icon>
     </span>
     <div class="min-w-0 flex-1">
-      <h2 class="text-base font-semibold leading-6">{{ isEditMode() ? 'Edit supplier quote' : 'Add supplier quote' }}</h2>
+      <h2 class="text-base font-semibold leading-6">{{ isEditMode() ? 'Edit supplier offer' : 'Add supplier offer' }}</h2>
       <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
         <ng-container *ngIf="itemName; else noItem">
-          Comparing prices for
+          Entering RFQ offer for
           <span class="inline-flex max-w-[18rem] items-center truncate rounded-md bg-gray-100 px-1.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ itemName }}</span>
         </ng-container>
-        <ng-template #noItem>Enter a supplier's price and terms for this item.</ng-template>
+        <ng-template #noItem>Enter a supplier's price, discount, tax, freight and terms.</ng-template>
       </p>
     </div>
     <button type="button" (click)="onCancel()" aria-label="Close"
@@ -31,23 +31,58 @@
       <app-sf-field label="Unit price" [control]="f['unitPrice']">
         <app-sf-number formControlName="unitPrice" placeholder="0.00" [stepper]="false"></app-sf-number>
       </app-sf-field>
-      <app-sf-field label="Total cost" hint="Quantity × unit price">
+      <app-sf-field label="Gross amount" hint="Quantity x unit price">
         <div class="flex h-9 items-center justify-end rounded-lg bg-gray-50 px-3 text-[13px] font-semibold tabular-nums text-gray-900 ring-1 ring-inset ring-gray-200 dark:bg-white/5 dark:text-gray-100 dark:ring-erp-border-dark">
           {{ (f['totalCost'].value || 0) | number: '1.2-2' }}
         </div>
       </app-sf-field>
 
+      <app-sf-field label="Discount type">
+        <app-sf-select formControlName="discountType" [options]="[
+          { label: 'Amount', value: 'amount' },
+          { label: 'Percent', value: 'percent' }
+        ]"></app-sf-select>
+      </app-sf-field>
+      <app-sf-field label="Discount">
+        <app-sf-number formControlName="discountValue" placeholder="0" [stepper]="false"></app-sf-number>
+      </app-sf-field>
+      <app-sf-field label="Tax / VAT %">
+        <app-sf-number formControlName="taxPercent" placeholder="0" [stepper]="false"></app-sf-number>
+      </app-sf-field>
+      <app-sf-field label="Freight / delivery">
+        <app-sf-number formControlName="freightCost" placeholder="0.00" [stepper]="false"></app-sf-number>
+      </app-sf-field>
+      <app-sf-field label="Net amount">
+        <div class="flex h-9 items-center justify-end rounded-lg bg-gray-50 px-3 text-[13px] font-semibold tabular-nums text-gray-900 ring-1 ring-inset ring-gray-200 dark:bg-white/5 dark:text-gray-100 dark:ring-erp-border-dark">
+          {{ (f['netAmount'].value || 0) | number: '1.2-2' }}
+        </div>
+      </app-sf-field>
+      <app-sf-field label="Landed total" hint="Net + tax + freight">
+        <div class="flex h-9 items-center justify-end rounded-lg bg-emerald-50 px-3 text-[13px] font-semibold tabular-nums text-emerald-800 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-200 dark:ring-emerald-900">
+          {{ (f['landedCost'].value || 0) | number: '1.2-2' }}
+        </div>
+      </app-sf-field>
+
       <app-sf-field label="ETA terms" [control]="f['etaTerms']" full>
-        <app-sf-textarea formControlName="etaTerms" placeholder="e.g. 2–3 weeks from LPO" [rows]="2" autoresize noEnter></app-sf-textarea>
+        <app-sf-textarea formControlName="etaTerms" placeholder="e.g. 2-3 weeks from LPO" [rows]="2" autoresize noEnter></app-sf-textarea>
       </app-sf-field>
       <app-sf-field label="Payment terms" [control]="f['paymentTerms']" full>
         <app-sf-textarea formControlName="paymentTerms" placeholder="e.g. 30 days credit" [rows]="2" autoresize noEnter></app-sf-textarea>
+      </app-sf-field>
+      <app-sf-field label="Validity date">
+        <app-sf-date formControlName="validityDate"></app-sf-date>
+      </app-sf-field>
+      <app-sf-field label="Warranty terms" full>
+        <app-sf-textarea formControlName="warrantyTerms" placeholder="Warranty, replacement or service coverage" [rows]="2" autoresize noEnter></app-sf-textarea>
+      </app-sf-field>
+      <app-sf-field label="Remarks" full>
+        <app-sf-textarea formControlName="remarks" placeholder="Supplier notes, exclusions or internal reason" [rows]="2" autoresize noEnter></app-sf-textarea>
       </app-sf-field>
     </div>
   </form>
 
   <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
     <app-action-button variant="secondary" (click)="onCancel()">Cancel</app-action-button>
-    <app-action-button variant="primary" type="submit" form="comparison-form">{{ isEditMode() ? 'Save changes' : 'Add quote' }}</app-action-button>
+    <app-action-button variant="primary" type="submit" form="comparison-form">{{ isEditMode() ? 'Save changes' : 'Add offer' }}</app-action-button>
   </footer>
 </div>

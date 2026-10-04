@@ -32,8 +32,23 @@ export class PurchaseService {
     toDate?: string;
     search?: string;
     sourceType?: string;
+    poProgress?: 'remaining' | 'in-progress' | 'completed';
+    rfqStatus?: 'not-started' | 'quoted' | 'awarded';
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
+  }
+
+  getRfqs(params: {
+    page?: number;
+    row?: number;
+    status?: string[] | string;
+    search?: string;
+  }): Observable<any> {
+    return this.http.post<any>(`${this.api}/purchase/rfq`, params, { context: context() });
+  }
+
+  createRfqFromPurchase(purchaseId: string): Observable<any> {
+    return this.http.post<any>(`${this.api}/purchase/rfq/from-purchase/${purchaseId}`, {}, { context: context() });
   }
 
   createPurchase(purchaseData: PurchaseData): Observable<any> {

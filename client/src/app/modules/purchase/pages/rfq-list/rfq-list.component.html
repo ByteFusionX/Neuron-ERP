@@ -1,0 +1,69 @@
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="RFQ"
+        subtitle="Enter supplier offers and award ready PR lines"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="total"
+        [data]="rows"
+        [columns]="columns"
+        [loading]="isLoading"
+        [pageSize]="row"
+        searchPlaceholder="Search by RFQ or PR No"
+        emptyMessage="No RFQ records found"
+        [rowActions]="rowActions"
+        [views]="views"
+        storageKey="purchase-rfq-list"
+        [detailLoading]="detailLoading"
+        [detailTabs]="detailTabs"
+        [detailTitle]="rfqTitle"
+        [detailSubtitle]="rfqSubtitle"
+        (queryChange)="onQueryChange($event)"
+        (rowOpen)="onRowOpen()"
+        (rowAction)="onRowAction($event)">
+
+        <ng-template #detailMetaTemplate let-row>
+            <div class="rfq-meta">
+                <p class="rfq-meta-label">Status</p>
+                <p class="rfq-meta-value">{{ rfqStatusLabel(row) }}</p>
+            </div>
+            <div class="rfq-meta">
+                <p class="rfq-meta-label">Lines</p>
+                <p class="rfq-meta-value">{{ row.requestedLineCount || row.requestedLines?.length || 0 }}</p>
+            </div>
+            <div class="rfq-meta">
+                <p class="rfq-meta-label">Offers</p>
+                <p class="rfq-meta-value">{{ row.quoteLineCount || 0 }}</p>
+            </div>
+            <div class="rfq-meta">
+                <p class="rfq-meta-label">Awarded</p>
+                <p class="rfq-meta-value">{{ row.awardedLineCount || 0 }}</p>
+            </div>
+            <div class="rfq-meta">
+                <p class="rfq-meta-label">Supplier</p>
+                <p class="rfq-meta-value">{{ awardedSuppliers(row) || '-' }}</p>
+            </div>
+        </ng-template>
+
+        <ng-template #detailFooterTemplate let-row>
+            <app-action-button variant="secondary" (click)="openPr(row, $event)">Open PR</app-action-button>
+            <app-action-button variant="secondary" (click)="openComparisonSummary(row, $event)">Award Summary</app-action-button>
+            <app-action-button variant="primary" (click)="openComparisonSheet(row, $event)">Manage Offers</app-action-button>
+        </ng-template>
+
+        <ng-template #detailTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <ng-container *ngSwitchCase="'overview'">
+                    <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'quotes'">
+                    <app-detail-table title="Supplier offers" [columns]="quoteColumns" [rows]="quoteRows(row)" showTotals [currency]="row.currency"></app-detail-table>
+                </ng-container>
+            </ng-container>
+        </ng-template>
+    </app-data-grid>
+</div>
