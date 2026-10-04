@@ -12,6 +12,8 @@ interface Notification {
     date: Date;
     referenceId: Types.ObjectId;
     additionalData: any;
+    // Idempotency key: a second notification with the same key is never created (retries, overlapping crons, several servers)
+    dedupeKey?: string;
 }
 
 
@@ -29,6 +31,8 @@ const notificationSchema = new Schema<Notification>({
             'FeedbackRequest',
             'Quotation',
             'Enquiry',
+            'EnquiryEstimationReady',
+            'EnquiryFollowUpOverdue',
             'JobAllocated',
             'ProcurementTransferred',
             'MrRequest',
@@ -94,6 +98,11 @@ const notificationSchema = new Schema<Notification>({
         type: Schema.Types.Mixed,
         default: {},
     },
+    dedupeKey: {
+        type: String,
+    },
 });
+
+notificationSchema.index({ dedupeKey: 1 }, { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } });
 
 export default model<Notification>('Notification', notificationSchema);

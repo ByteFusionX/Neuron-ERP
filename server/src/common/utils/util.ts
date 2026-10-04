@@ -5,6 +5,7 @@ import path from 'path';
 import axios from "axios";
 import employeeModel from "../../models/employee.model";
 import categoryModel from "../../models/category.model";
+import departmentModel from "../../models/department.model";
 import mongoose from "mongoose";
 
 
@@ -425,6 +426,35 @@ export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> 
     } catch (error) {
         console.error('Error fetching reported employees:', error);
         return [];
+    }
+};
+
+/** Everyone below the user in the reportingTo tree, plus everyone in a department the user heads (covers staff with no manager set). */
+export const getReportedEmployeesWithDepartments = async (userId: any): Promise<ObjectId[]> => {
+    const reported = await getAllReportedEmployees(userId);
+    try {
+        if (!ObjectId.isValid(userId)) return reported;
+        const headed = await departmentModel.find({ departmentHead: new ObjectId(userId) }, '_id').lean();
+        if (!headed.length) return reported;
+        const members = await employeeModel.find({ department: { $in: headed.map((d: any) => d._id) } }, '_id').lean();
+        const seen = new Set(reported.map((id) => id.toString()));
+        for (const m of members) {
+            if (!seen.has(m._id.toString())) { seen.add(m._id.toString()); reported.push(new ObjectId(m._id as any)); }
+        }
+    } catch (error) {
+        console.error('Error fetching department scope:', error);
+    }
+    return reported;
+};
+
+/** A department head always oversees their department, so a "created only" view is widened to include their team. */
+export const widenAccessForDepartmentHead = async (access: any, userId: any): Promise<any> => {
+    if (access !== 'created' || !ObjectId.isValid(userId)) return access;
+    try {
+        const headed = await departmentModel.exists({ departmentHead: new ObjectId(userId) });
+        return headed ? 'createdAndReported' : access;
+    } catch (error) {
+        return access;
     }
 };
 

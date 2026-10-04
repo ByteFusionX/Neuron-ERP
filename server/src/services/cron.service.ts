@@ -4,8 +4,15 @@ import Notification from "../models/notification.model";
 import { fetchExchangeRate } from "../common/utils/util";
 import Event from '../models/events.model';
 import Quotation from '../models/quotation.model';
-import { createNotification } from '../controllers/notification.controller';
-import { Server } from "socket.io";
+import PurchaseRequest, { PurchaseRequestStatus } from '../models/purchaseRequest.model';
+import Enquiry from '../models/enquiry.model';
+import Category from '../models/category.model';
+import Workflow from '../models/workflow.model';
+import { resolveCurrentAssignmentStep, rejectUnassignedPresale } from './presaleAssignment.service';
+import { notify } from './notify.service';
+import { processOutbox } from './outbox.service';
+import { runExclusive } from './cronLock.service';
+import './announcementNotify.service';
 const cron = require('node-cron');
 
 const processEmployeeEvent = async (element, eventType) => {
@@ -58,8 +65,289 @@ const processEmployeeEvent = async (element, eventType) => {
     }
 };
 
+const approverIdsOf = async (approval: any) => {
+    if (approval.managerApproval && approval.approver) return [approval.approver];
+    return (await employeeModel.find({ category: approval.role, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id);
+};
+
+const notifyPurchase = (request: any, recipientIds: any[], title: string, message: string, dedupeKey: string) =>
+    notify({
+        type: 'PurchaseApprovalRequest',
+        referenceModel: 'Purchase',
+        title,
+        message,
+        sentBy: request.createdBy?.toString(),
+        recipients: recipientIds,
+        referenceId: request._id,
+        additionalData: { purchaseId: request._id.toString() },
+        dedupeKey,
+        channels: ['inapp', 'push', 'email'],
+    });
+
+/** Nudges approvers once a pending stage has used up its reminder share of the time limit. */
+const sendApprovalReminders = async () => {
+    try {
+        const now = new Date();
+        const requests = await PurchaseRequest.find({
+            approvalStatus: { $elemMatch: { status: 'pending', reminderDueAt: { $lte: now }, reminderSentAt: null, escalatedAt: null, timeoutHandledAt: null } }
+        }).select('purchaseNo approvalStatus createdBy');
+
+        for (const request of requests) {
+            for (const approval of request.approvalStatus as any[]) {
+                if (approval.status !== 'pending' || approval.escalatedAt || approval.timeoutHandledAt || approval.reminderSentAt || !approval.reminderDueAt || approval.reminderDueAt > now) continue;
+
+                // Claim first: only the run that flips reminderSentAt sends the reminder
+                const claim = await PurchaseRequest.updateOne(
+                    { _id: request._id, approvalStatus: { $elemMatch: { _id: approval._id, reminderSentAt: null } } },
+                    { $set: { 'approvalStatus.$[a].reminderSentAt': now } },
+                    { arrayFilters: [{ 'a._id': approval._id }] }
+                );
+                if (!claim.modifiedCount) continue;
+
+                const hoursLeft = Math.max(1, Math.round((new Date(approval.escalationDueAt).getTime() - now.getTime()) / 3600000));
+                const consequence = approval.timeoutAction === 'reject'
+                    ? `will be auto-rejected in about ${hoursLeft}h`
+                    : approval.timeoutAction === 'notify'
+                        ? `is due in about ${hoursLeft}h`
+                        : `escalates in about ${hoursLeft}h`;
+                try {
+                    await notifyPurchase(request, await approverIdsOf(approval), 'Approval reminder', `Purchase ${request.purchaseNo} is waiting for your approval and ${consequence}`, `purchase:${request._id}:${approval._id}:reminder`);
+                } catch (error) {
+                    // Release the claim so the next tick retries
+                    await PurchaseRequest.updateOne({ _id: request._id }, { $set: { 'approvalStatus.$[a].reminderSentAt': null } }, { arrayFilters: [{ 'a._id': approval._id }] });
+                    throw error;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Approval reminder error:', error.message);
+    }
+};
+
+/** Handles stages configured to notify only or auto-reject when their time limit passes. */
+const processApprovalTimeouts = async () => {
+    try {
+        const now = new Date();
+        const requests = await PurchaseRequest.find({
+            status: PurchaseRequestStatus.Pending,
+            approvalStatus: { $elemMatch: { status: 'pending', timeoutAction: { $in: ['notify', 'reject'] }, escalationDueAt: { $lte: now }, timeoutHandledAt: null } }
+        });
+
+        for (const request of requests) {
+            const overdue = (request.approvalStatus as any[]).find(approval =>
+                approval.status === 'pending' && ['notify', 'reject'].includes(approval.timeoutAction) && approval.escalationDueAt && approval.escalationDueAt <= now && !approval.timeoutHandledAt
+            );
+            if (!overdue) continue;
+
+            // Claim first so overlapping runs or other server instances cannot handle the same timeout twice
+            const claim = await PurchaseRequest.updateOne(
+                { _id: request._id, approvalStatus: { $elemMatch: { _id: (overdue as any)._id, timeoutHandledAt: null } } },
+                { $set: { 'approvalStatus.$[a].timeoutHandledAt': now } },
+                { arrayFilters: [{ 'a._id': (overdue as any)._id }] }
+            );
+            if (!claim.modifiedCount) continue;
+
+            const approverIds = await approverIdsOf(overdue);
+            const requesterIds = request.createdBy ? [request.createdBy] : [];
+            const timeoutKey = `purchase:${request._id}:${(overdue as any)._id}:timeout`;
+
+            if (overdue.timeoutAction === 'reject') {
+                overdue.status = 'rejected';
+                overdue.updatedDate = now;
+                overdue.comment = 'Auto-rejected: not actioned within the time limit';
+                overdue.timeoutHandledAt = now;
+                request.approvalStatus = (request.approvalStatus as any[]).filter(approval => approval.status !== 'pending') as any;
+                request.status = PurchaseRequestStatus.Rejected;
+                await request.save();
+                await notifyPurchase(request, [...requesterIds, ...approverIds], 'Request auto-rejected', `Purchase ${request.purchaseNo} was auto-rejected because the approval time limit passed`, timeoutKey);
+            } else {
+                overdue.timeoutHandledAt = now;
+                await request.save();
+                await notifyPurchase(request, [...requesterIds, ...approverIds], 'Approval overdue', `Purchase ${request.purchaseNo} has passed its approval time limit and is still waiting`, timeoutKey);
+            }
+        }
+    } catch (error) {
+        console.error('Approval timeout error:', error.message);
+    }
+};
+
+
+const notifyPresaleRoles = (enquiry: any, recipientIds: any[], title: string, message: string, dedupeKey: string, type = 'AssignedJob') =>
+    notify({
+        type,
+        referenceModel: 'Enquiry',
+        title,
+        message,
+        sentBy: enquiry.salesPerson?.toString(),
+        recipients: recipientIds,
+        referenceId: enquiry._id,
+        additionalData: { enquiryId: enquiry._id.toString() },
+        dedupeKey,
+        channels: ['inapp', 'push', 'email'],
+    });
+
+/** One key per enquiry, step and window, so each presale notification can only ever be created once. */
+const presaleKey = (enquiry: any, approval: any, suffix: string) =>
+    `presale:${enquiry._id}:${approval.stepIndex ?? 0}:${approval.restartCount ?? 0}:${approval.assignedAt ? new Date(approval.assignedAt).getTime() : 0}:${suffix}`;
+
+const employeeIdsWithRole = async (role: any) =>
+    (await employeeModel.find({ category: role?._id ?? role, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id);
+
+/**
+ * Drives the presale assignment workflow for jobs still waiting to be assigned:
+ * reminds the responsible role once its reminder share (default 75%) of the time limit is used,
+ * then applies the step's timeout action - escalate to the next role, notify only (the Super Admins decide if it drags on), or auto-reject.
+ */
+const PRESALE_REPEAT_REMINDER_MS = 24 * 60 * 60 * 1000;
+const PRESALE_REPEAT_REMINDER_HOUR = 8;
+const PRESALE_DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4];
+
+/**
+ * Alerts the Super Admins that a job needs their decision. The first alert goes out once `since` has passed,
+ * then it repeats every working morning until someone acts (unless repeat reminders are switched off).
+ */
+const alertSuperAdmins = async (enquiry: any, approval: any, now: Date, since: number, title: string, message: string) => {
+    const previousSentAt = approval.reminderSentAt ?? null;
+    const lastSent = previousSentAt ? new Date(previousSentAt).getTime() : 0;
+    const firstAlert = lastSent < since;
+    if (!firstAlert) {
+        const morning = new Date(now);
+        morning.setHours(PRESALE_REPEAT_REMINDER_HOUR, 0, 0, 0);
+        const workflow: any = await Workflow.findOne({ feature: 'presale' }).select('workingDays').lean();
+        const workingDays: number[] = workflow?.workingDays?.length ? workflow.workingDays : PRESALE_DEFAULT_WORKING_DAYS;
+        if (approval.repeatReminder === false || now < morning || lastSent >= morning.getTime() || !workingDays.includes(now.getDay())) return;
+    }
+    // Claim first: only the run that moves reminderSentAt off the value it read sends this alert
+    const claim = await Enquiry.updateOne({ _id: enquiry._id, 'preSale.assignApproval.reminderSentAt': previousSentAt }, { $set: { 'preSale.assignApproval.reminderSentAt': now } });
+    if (!claim.modifiedCount) return;
+
+    try {
+        const superAdminRole = await Category.findOne({ role: /^superadmin$/i }).select('_id').lean();
+        const superAdmins = superAdminRole ? await employeeIdsWithRole(superAdminRole) : [];
+        const daysOverdue = Math.max(1, Math.floor((now.getTime() - since) / PRESALE_REPEAT_REMINDER_MS) + 1);
+        await notifyPresaleRoles(enquiry, superAdmins, title, `${message}${firstAlert ? '' : ` (reminder ${daysOverdue})`}`, presaleKey(enquiry, approval, `superadmin:${firstAlert ? 'first' : now.toISOString().slice(0, 10)}`));
+    } catch (error) {
+        await Enquiry.updateOne({ _id: enquiry._id, 'preSale.assignApproval.reminderSentAt': now }, { $set: { 'preSale.assignApproval.reminderSentAt': previousSentAt } });
+        throw error;
+    }
+};
+
+const processPresaleAssignments = async () => {
+    try {
+        const now = new Date();
+        const waiting = { isDeleted: { $ne: true }, status: { $in: ['in presales', 'revision'] }, 'preSale.presalePerson': { $exists: false }, 'preSale.assignApproval': { $exists: true } };
+
+        const toRemind = await Enquiry.find({ ...waiting, 'preSale.assignApproval.reminderDueAt': { $lte: now }, 'preSale.assignApproval.reminderSentAt': null, 'preSale.assignApproval.timeoutHandledAt': null }).select('enquiryId salesPerson preSale.assignApproval');
+        for (const enquiry of toRemind) {
+            const approval: any = enquiry.preSale.assignApproval;
+            // Claim first so only one run (or server instance) sends this reminder
+            const claim = await Enquiry.updateOne(
+                { _id: enquiry._id, 'preSale.assignApproval.reminderSentAt': null, 'preSale.assignApproval.timeoutHandledAt': null, 'preSale.assignApproval.escalationDueAt': approval.escalationDueAt },
+                { $set: { 'preSale.assignApproval.reminderSentAt': now } }
+            );
+            if (!claim.modifiedCount) continue;
+            const hoursLeft = Math.max(1, Math.round((new Date(approval.escalationDueAt).getTime() - now.getTime()) / 3600000));
+            const consequence = approval.timeoutAction === 'reject' ? `will be auto-rejected in about ${hoursLeft}h`
+                : approval.timeoutAction === 'notify' ? `is due in about ${hoursLeft}h`
+                    : `escalates to the next role in about ${hoursLeft}h`;
+            try {
+                await notifyPresaleRoles(enquiry, await employeeIdsWithRole(approval.role), 'Assignment reminder', `Enquiry ${enquiry.enquiryId} still needs a presale assignee and ${consequence}`, presaleKey(enquiry, approval, 'reminder'));
+            } catch (error) {
+                await Enquiry.updateOne({ _id: enquiry._id, 'preSale.assignApproval.reminderSentAt': now }, { $set: { 'preSale.assignApproval.reminderSentAt': null } });
+                throw error;
+            }
+        }
+
+        const overdue = await Enquiry.find({ ...waiting, 'preSale.assignApproval.escalationDueAt': { $lte: now } }).select('enquiryId salesPerson status preSale.assignApproval');
+        for (const enquiry of overdue) {
+            const approval: any = enquiry.preSale.assignApproval;
+            const due = new Date(approval.escalationDueAt).getTime();
+
+            // Every action below follows the step's configured timeout action; nothing is decided by the module.
+            if (approval.timeoutAction === 'reject') {
+                const claim = await Enquiry.updateOne(
+                    { _id: enquiry._id, 'preSale.assignApproval.timeoutHandledAt': null, 'preSale.assignApproval.escalationDueAt': approval.escalationDueAt },
+                    { $set: { 'preSale.assignApproval.timeoutHandledAt': now } }
+                );
+                if (!claim.modifiedCount) continue;
+                await rejectUnassignedPresale(enquiry._id, 'Auto-rejected: not assigned within the workflow time limit', 'Workflow');
+                await notifyPresaleRoles(enquiry, [enquiry.salesPerson], 'Presale job rejected', `Enquiry ${enquiry.enquiryId} was auto-rejected because no one was assigned within the workflow time limit`, presaleKey(enquiry, approval, 'reject'), 'Enquiry');
+                continue;
+            }
+
+            if (approval.timeoutAction === 'notify') {
+                if (!approval.timeoutHandledAt) {
+                    const claim = await Enquiry.updateOne(
+                        { _id: enquiry._id, 'preSale.assignApproval.timeoutHandledAt': null, 'preSale.assignApproval.escalationDueAt': approval.escalationDueAt },
+                        { $set: { 'preSale.assignApproval.timeoutHandledAt': now } }
+                    );
+                    if (!claim.modifiedCount) continue;
+                    await notifyPresaleRoles(enquiry, await employeeIdsWithRole(approval.role), 'Assignment overdue', `Enquiry ${enquiry.enquiryId} has passed its assignment time limit and is still unassigned`, presaleKey(enquiry, approval, 'overdue'));
+                    continue;
+                }
+                // The notified role gets one more time window; if the job is still unassigned the Super Admins decide:
+                // escalate it to the next step or reject it.
+                const windowMs = Math.max(due - new Date(approval.assignedAt || approval.escalationDueAt).getTime(), 0);
+                if (now.getTime() < due + windowMs) continue;
+                await alertSuperAdmins(enquiry, approval, now, due + windowMs, 'Assignment needs a decision', `Enquiry ${enquiry.enquiryId} is still unassigned after the role was notified. Escalate it to the next step or reject it`);
+                continue;
+            }
+
+            const resolved: any = await resolveCurrentAssignmentStep(approval, now);
+            if (resolved === approval) {
+                // Last step: nothing further to escalate to, so it is now the Super Admins' turn (assign, or restart the workflow).
+                await alertSuperAdmins(enquiry, approval, now, due, 'Assignment still overdue', `Enquiry ${enquiry.enquiryId} is still unassigned and is the final step with no one to escalate to`);
+                continue;
+            }
+            // Only the run that still sees the old step applies the escalation
+            const claim = await Enquiry.updateOne(
+                { _id: enquiry._id, 'preSale.assignApproval.escalationDueAt': approval.escalationDueAt, 'preSale.assignApproval.stepIndex': approval.stepIndex },
+                { $set: { 'preSale.assignApproval': resolved } }
+            );
+            if (!claim.modifiedCount) continue;
+            await notifyPresaleRoles(enquiry, await employeeIdsWithRole(resolved.role), 'Presale assignment escalated', `Enquiry ${enquiry.enquiryId} was not assigned in time and is now waiting on your role`, presaleKey(enquiry, resolved, 'escalated'));
+        }
+    } catch (error) {
+        console.error('Presale assignment workflow error:', error.message);
+    }
+};
+
+/**
+ * Tells the owner of an open enquiry follow-up that it is overdue (its due day has passed). The owner is whoever
+ * scheduled it, else the enquiry's salesperson. One notification per follow-up, however often this runs.
+ */
+const processOverdueFollowUps = async () => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const enquiries = await Enquiry.find({
+            isDeleted: { $ne: true },
+            followUpHistory: { $elemMatch: { status: 'scheduled', dueDate: { $lt: startOfToday } } }
+        }).select('enquiryId salesPerson followUpHistory');
+
+        for (const enquiry of enquiries) {
+            const followUp: any = enquiry.followUpHistory.find((f: any) => f.status === 'scheduled' && f.dueDate && f.dueDate < startOfToday);
+            if (!followUp) continue;
+            await notify({
+                type: 'EnquiryFollowUpOverdue',
+                referenceModel: 'Enquiry',
+                title: 'Follow-up overdue',
+                message: `The follow-up for enquiry ${enquiry.enquiryId} was due on ${new Date(followUp.dueDate).toLocaleDateString('en-GB')} and is still open`,
+                sentBy: enquiry.salesPerson?.toString(),
+                recipients: [followUp.createdBy ?? enquiry.salesPerson],
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() },
+                dedupeKey: `enquiry-followup-overdue:${enquiry._id}:${followUp._id}`,
+                channels: ['inapp', 'push', 'email'],
+            });
+        }
+    } catch (error) {
+        console.error('Overdue follow-up check error:', error.message);
+    }
+};
+
 const startCronJob = () => {
-    cron.schedule('0 1 * * *', async () => {
+    cron.schedule('0 1 * * *', () => runExclusive('daily', 30 * 60 * 1000, async () => {
         try {
             console.log('Working cron scheduled');
             const today = new Date();
@@ -133,9 +421,19 @@ const startCronJob = () => {
         } catch (error) {
             console.error('Cron job error:', error.message);
         }
-    }).start();
+    })).start();
     fetchExchangeRate();
 
+    // The tick only detects what is due and hands it to notify(); the outbox pass at the end delivers
+    // queued email and due scheduled jobs. Overlap and multi-instance guarded by runExclusive.
+    cron.schedule('* * * * *', () => runExclusive('tick', 5 * 60 * 1000, async () => {
+        await sendApprovalReminders();
+        await processApprovalTimeouts();
+        await processPresaleAssignments();
+        // Hourly is plenty for a day-level due date
+        if (new Date().getMinutes() === 0) await processOverdueFollowUps();
+        await processOutbox();
+    })).start();
 
     cron.schedule('0 */4 * * *', () => {
         console.log('Updating exchange rate...');
@@ -153,27 +451,19 @@ const checkTodayEventsAndSendNotifications = async () => {
 
         const events = await Event.find({ date: { $gte: startOfDay, $lt: endOfDay } });
 
-        events.forEach(async (event) => {
-            // Create and send notifications for each event
-            const saveNewNotification = await createNotification({
+        const day = startOfDay.toLocaleDateString('en-CA');
+        for (const event of events) {
+            await notify({
                 type: 'Event',
                 referenceModel: 'Event',
                 title: `You have ${event.event} Assigned Today!`,
                 message: `${event.summary}`,
-                date: new Date(),
                 sentBy: event.createdBy,
-                recipients: [{ objectId: event.employee, status: 'unread' }],
+                recipients: [event.employee],
                 referenceId: event._id,
-                additionalData: {}
+                dedupeKey: `event:${event._id}:${day}`,
             });
-
-            if (saveNewNotification) {
-                const socket = global.io as Server; // Assuming you have access to the global io instance
-                saveNewNotification.recipients.forEach((recipient) => {
-                    socket.to(recipient.objectId._id.toString()).emit("recieveNotifications", saveNewNotification);
-                });
-            }
-        });
+        }
     } catch (error) {
         console.error("Error checking today's events and sending notifications:", error);
     }

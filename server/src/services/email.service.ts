@@ -212,6 +212,49 @@ export class EmailService {
   }
 }
 
+let appTokenCache: { token: string; expiresAt: number } | null = null;
+
+/** Background mail needs an app-only token (client credentials, Mail.Send application permission) and a sender mailbox. */
+export const isAppMailConfigured = () =>
+  !!(process.env.MICROSOFT_TENANT_ID && process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET && process.env.MAIL_SENDER_ADDRESS);
+
+const getAppGraphToken = async (): Promise<string> => {
+  if (appTokenCache && appTokenCache.expiresAt > Date.now() + 60_000) return appTokenCache.token;
+  const response = await axios.post(
+    `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
+    new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: process.env.MICROSOFT_CLIENT_ID!,
+      client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
+      scope: 'https://graph.microsoft.com/.default'
+    }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  );
+  appTokenCache = { token: response.data.access_token, expiresAt: Date.now() + response.data.expires_in * 1000 };
+  return appTokenCache.token;
+};
+
+const escapeHtml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** Sends system mail from the shared notification mailbox, with no logged-in user involved (used by the outbox worker). */
+export const sendAppEmail = async (options: { to: string; subject: string; message: string }): Promise<void> => {
+  try {
+    const client = Client.init({ authProvider: (done) => { getAppGraphToken().then(token => done(null, token), error => done(error, null)); } });
+    await client.api(`/users/${process.env.MAIL_SENDER_ADDRESS}/sendMail`).post({
+      message: {
+        subject: options.subject,
+        body: { contentType: 'HTML', content: escapeHtml(options.message).replace(/\r?\n/g, '<br>') },
+        toRecipients: [{ emailAddress: { address: options.to } }],
+        categories: ['Neuron-ERP']
+      },
+      saveToSentItems: false
+    });
+  } catch (error: any) {
+    appTokenCache = null;
+    throw new Error(error?.body ? `Graph: ${String(error.body).slice(0, 300)}` : error?.message || 'Failed to send app email');
+  }
+};
+
 export const createEmailService = async (userToken: any): Promise<EmailService> => {
   try {
     const accessToken = await EmailService.getGraphAccessToken(userToken);

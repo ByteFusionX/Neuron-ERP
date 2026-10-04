@@ -8,6 +8,8 @@ import { Server } from "socket.io";
 import { connectedSockets } from "../services/socket-io.service";
 import { ObjectId } from "mongodb";
 import { sendWebPushToEmployees } from "../services/webPush.service";
+import NotificationPreference from "../models/notificationPreference.model";
+import { isAppMailConfigured } from "../services/email.service";
 
 
 interface NotificationData {
@@ -20,6 +22,7 @@ interface NotificationData {
     date: Date;
     referenceId: any;
     additionalData?: Record<string, unknown>;
+    dedupeKey?: string;
 }
 
 export const createNotification = async (notification: NotificationData) => {
@@ -128,6 +131,8 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                     case 'Quotation':
                         return privileges.quotation?.viewReport !== 'none';
                     case 'Enquiry':
+                    case 'EnquiryEstimationReady':
+                    case 'EnquiryFollowUpOverdue':
                         return privileges.enquiry?.viewReport !== 'none';
                     case 'JobAllocated':
                     case 'ProcurementTransferred':
@@ -225,13 +230,13 @@ export const markAsReadByTypes = async (req: Request, res: Response, next: NextF
     }
 };
 
-interface PrivilegeFilter {
+export interface PrivilegeFilter {
     privilegeKey: keyof Privileges;
     privilegeValue?: string | boolean;
     checkFunction?: (privileges: Privileges, employeeId?: string) => boolean;
 }
 
-const filterEmployeesByPrivilege = async (
+export const filterEmployeesByPrivilege = async (
     privilegeFilter: PrivilegeFilter,
     excludeEmployeeId?: string
 ): Promise<string[]> => {
@@ -294,6 +299,8 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
 
         case 'FeedbackRequest':
         case 'Enquiry':
+        case 'EnquiryEstimationReady':
+        case 'EnquiryFollowUpOverdue':
             const enquiryId = additionalData?.enquiryId || referenceId?._id?.toString() || referenceId?.toString();
             return { 
                 routePath: '/enquiry',
@@ -479,6 +486,44 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
         
         default:
             return { routePath: '/home' };
+    }
+};
+
+const PREFERENCE_CHANNELS = ['inapp', 'push', 'email'] as const;
+
+/** The signed-in employee's notification preferences, plus the notification types they can switch off. */
+export const getNotificationPreferences = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const user = await getEmployeeData(req.user);
+        const preference: any = await NotificationPreference.findOne({ employee: user._id }).lean();
+        res.status(200).json({
+            muted: { inapp: [], push: [], email: [], ...(preference?.muted || {}) },
+            emailDigest: preference?.emailDigest || [],
+            types: (Notification.schema.path('type') as any).options.enum,
+            emailAvailable: isAppMailConfigured(),
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateNotificationPreferences = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const user = await getEmployeeData(req.user);
+        const validTypes: string[] = (Notification.schema.path('type') as any).options.enum;
+        const clean = (list: any) => Array.isArray(list) ? [...new Set<string>(list.filter((type: any) => validTypes.includes(type)))] : [];
+
+        const muted: Record<string, string[]> = {};
+        PREFERENCE_CHANNELS.forEach(channel => { muted[channel] = clean(req.body?.muted?.[channel]); });
+
+        const preference = await NotificationPreference.findOneAndUpdate(
+            { employee: user._id },
+            { $set: { muted, emailDigest: clean(req.body?.emailDigest) } },
+            { upsert: true, new: true }
+        );
+        res.status(200).json({ success: true, muted: preference.muted, emailDigest: preference.emailDigest });
+    } catch (error) {
+        next(error);
     }
 };
 

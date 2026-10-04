@@ -4,7 +4,7 @@ import { Server } from "socket.io";
 import { connectedSockets } from "../services/socket-io.service";
 import employeeModel from "../models/employee.model";
 import { Types } from "mongoose";
-import { createNotificationWithPrivileges } from "./notification.controller";
+import { dispatchAnnouncement } from "../services/announcementNotify.service";
 
 export const createAnnouncement = async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -35,44 +35,8 @@ export const createAnnouncement = async (req: any, res: Response, next: NextFunc
     }
 
     if (saveAnnouncement) {
-      const socket = req.app.get('io') as Server;
-      
-      const userData = await employeeModel.find({ isDeleted: { $ne: true } });
-      const announcementCategory = category.length > 0 ? category : ['all'];
-      
-      const eligibleUsers = userData.filter(user => 
-        announcementCategory.includes('all') || announcementCategory.some(cat => user.category?.toString() === cat)
-      );
-
-      const eligibleUserIds = eligibleUsers
-        .map(user => user._id.toString())
-        .filter(id => id !== userId);
-
-      if (eligibleUserIds.length > 0) {
-        await createNotificationWithPrivileges(
-          {
-            type: 'Announcement',
-            referenceModel: 'Announcement',
-            title: title,
-            message: description,
-            sentBy: userId,
-            referenceId: saveAnnouncement._id,
-            additionalData: { announcementId: saveAnnouncement._id.toString() }
-          },
-          {
-            privilegeKey: 'announcement',
-            checkFunction: (privileges, employeeId) => {
-              if (!employeeId) return false;
-              const user = eligibleUsers.find(u => u._id.toString() === employeeId);
-              if (!user) return false;
-              const userCategory = announcementCategory.includes('all') || 
-                announcementCategory.some(cat => user.category?.toString() === cat);
-              return userCategory && privileges.announcement?.viewReport !== 'none';
-            }
-          },
-          socket
-        );
-      }
+      // Notifies now, or queues the notification for the announcement's date when that is in the future
+      await dispatchAnnouncement(saveAnnouncement._id.toString(), saveAnnouncement.date as any);
 
       return res.status(200).json({ success: true, message: isEdit ? 'Announcement updated' : 'Announcement created' });
     }

@@ -8,6 +8,15 @@ import { EmployeeService } from './employee/employee.service';
 import { Router, NavigationExtras } from '@angular/router';
 import { SameRouteNavigationService } from './same-route-navigation.service';
 
+export type NotificationChannel = 'inapp' | 'push' | 'email';
+
+export interface NotificationPreferences {
+    muted: Record<NotificationChannel, string[]>;
+    emailDigest: string[];
+    types: string[];
+    emailAvailable: boolean;
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -181,7 +190,10 @@ export class NotificationService {
                     routeData: { purchaseId: rejectedPurchaseId }
                 };
             case 'LpoApprovalRequest':
-                return { routePath: '/purchase-order/pending-approval' };
+                return {
+                    routePath: '/purchase/po',
+                    routeData: { view: 'pending' }
+                };
             case 'LpoApproved':
             case 'LpoRejected':
                 const lpoPurchaseId = additionalData?.purchaseId || referenceId?.purchaseId?.toString?.();
@@ -261,6 +273,14 @@ export class NotificationService {
             next: (data) => this.textNotificationsSubject.next(data),
             error: (error) => console.error('Error fetching notifications:', error)
         })
+    }
+
+    getPreferences(): Observable<NotificationPreferences> {
+        return this.http.get<NotificationPreferences>(`${this.api}/notification/preferences`);
+    }
+
+    savePreferences(preferences: Pick<NotificationPreferences, 'muted' | 'emailDigest'>): Observable<any> {
+        return this.http.put(`${this.api}/notification/preferences`, preferences);
     }
 
     authSocketIo(token: string) {
@@ -374,8 +394,11 @@ export class NotificationService {
         if (routePath === '/purchase/initiate-lpo' && routeData?.purchaseId) {
             return { commands: [routePath, routeData.purchaseId] };
         }
+        if (routePath === '/purchase/po') {
+            return { commands: [routePath], extras: routeData?.view ? { queryParams: { view: routeData.view } } : undefined };
+        }
         if (routePath === '/purchase-order/pending-approval') {
-            return { commands: [routePath] };
+            return { commands: ['/purchase/po'], extras: { queryParams: { view: 'pending' } } };
         }
         if (routePath === '/technical/mr-approval-requests/view' && routeData?.technicalId) {
             return { commands: [routePath, routeData.technicalId] };
