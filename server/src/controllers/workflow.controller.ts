@@ -4,8 +4,8 @@ import WorkflowDelegation from "../models/workflowDelegation.model";
 import { ObjectId } from "mongodb";
 import { getEmployeeData } from "../common/utils/util";
 
-const validateWorkflowSteps = (steps: any[]) => {
-    if (!Array.isArray(steps) || steps.length === 0) {
+const validateWorkflowSteps = (steps: any[], allowEmpty = false) => {
+    if (!Array.isArray(steps) || (steps.length === 0 && !allowEmpty)) {
         return { valid: false, message: "At least one approval step is required" };
     }
 
@@ -37,6 +37,22 @@ const validateWorkflowSteps = (steps: any[]) => {
             return { valid: false, message: "Escalation hours must be a positive number" };
         }
 
+        if (step?.escalationUnit && !['minute', 'hour', 'day'].includes(step.escalationUnit)) {
+            return { valid: false, message: "Time limit unit must be minute, hour or day" };
+        }
+
+        if (step?.minAmount !== undefined && step.minAmount !== null && (!Number.isFinite(Number(step.minAmount)) || Number(step.minAmount) < 0)) {
+            return { valid: false, message: "Minimum amount must be zero or more" };
+        }
+
+        if (step?.reminderPercent !== undefined && step.reminderPercent !== null && (!Number.isInteger(Number(step.reminderPercent)) || Number(step.reminderPercent) < 1 || Number(step.reminderPercent) > 99)) {
+            return { valid: false, message: "Reminder must be between 1% and 99% of the time limit" };
+        }
+
+        if (step?.timeoutAction && !['escalate', 'notify', 'reject'].includes(step.timeoutAction)) {
+            return { valid: false, message: "Timeout action must be escalate, notify or reject" };
+        }
+
         if (stepRoleKeys.has(stepKey)) {
             return { valid: false, message: "Duplicate roles are not allowed in the same workflow step" };
         }
@@ -55,8 +71,18 @@ const normalizeWorkflowSteps = (steps: any[]) => {
             role: step.role,
             order: Number(step.order),
             escalationHours: step.escalationHours === undefined ? 48 : Number(step.escalationHours),
-            escalationRole: step.escalationRole || undefined
+            escalationUnit: ['minute', 'hour', 'day'].includes(step.escalationUnit) ? step.escalationUnit : 'hour',
+            escalationRole: step.escalationRole || undefined,
+            minAmount: step.minAmount ? Number(step.minAmount) : undefined,
+            reminderPercent: step.reminderPercent ? Number(step.reminderPercent) : undefined,
+            timeoutAction: step.timeoutAction || 'escalate',
+            reminderEnabled: step.reminderEnabled !== false
         }));
+};
+
+const normalizeWorkingDays = (days: any): number[] | undefined => {
+    if (!Array.isArray(days)) return undefined;
+    return [...new Set(days.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort();
 };
 
 const validateConditions = (conditions: any[] = []) => {
@@ -91,7 +117,7 @@ const validateAutoActions = (autoActions: any[] = []) => {
 
 export const createWorkflow = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { feature, steps, needsManagerApproval, conditions = [], autoActions = [] } = req.body;
+        const { feature, steps, needsManagerApproval, skipRequesterRole, repeatReminder, businessHoursOnly, workingDays, conditions = [], autoActions = [] } = req.body;
 
         if (!feature || !steps || !Array.isArray(steps)) {
             return res.status(400).json({
@@ -100,7 +126,7 @@ export const createWorkflow = async (req: Request, res: Response, next: NextFunc
             });
         }
 
-        const stepValidation = validateWorkflowSteps(steps);
+        const stepValidation = validateWorkflowSteps(steps, needsManagerApproval === true);
         if (!stepValidation.valid) {
             return res.status(400).json({
                 success: false,
@@ -138,6 +164,10 @@ export const createWorkflow = async (req: Request, res: Response, next: NextFunc
             feature,
             steps: sortedSteps,
             needsManagerApproval: needsManagerApproval || false,
+            skipRequesterRole: skipRequesterRole !== false,
+            repeatReminder: repeatReminder !== false,
+            businessHoursOnly: businessHoursOnly === true,
+            ...(normalizeWorkingDays(workingDays)?.length ? { workingDays: normalizeWorkingDays(workingDays) } : {}),
             conditions,
             autoActions
         });
@@ -210,7 +240,7 @@ export const getWorkflows = async (req: Request, res: Response, next: NextFuncti
 export const updateWorkflow = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { feature, steps, needsManagerApproval, conditions, autoActions } = req.body;
+        const { feature, steps, needsManagerApproval, skipRequesterRole, repeatReminder, businessHoursOnly, workingDays, conditions, autoActions } = req.body;
 
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({
@@ -243,7 +273,7 @@ export const updateWorkflow = async (req: Request, res: Response, next: NextFunc
         const updateData: any = {};
         if (feature) updateData.feature = feature;
         if (steps !== undefined) {
-            const stepValidation = validateWorkflowSteps(steps);
+            const stepValidation = validateWorkflowSteps(steps, (needsManagerApproval ?? workflow.needsManagerApproval) === true);
             if (!stepValidation.valid) {
                 return res.status(400).json({
                     success: false,
@@ -255,6 +285,19 @@ export const updateWorkflow = async (req: Request, res: Response, next: NextFunc
         }
         if (needsManagerApproval !== undefined) {
             updateData.needsManagerApproval = needsManagerApproval;
+        }
+        if (skipRequesterRole !== undefined) {
+            updateData.skipRequesterRole = skipRequesterRole !== false;
+        }
+        if (repeatReminder !== undefined) {
+            updateData.repeatReminder = repeatReminder !== false;
+        }
+        if (businessHoursOnly !== undefined) {
+            updateData.businessHoursOnly = businessHoursOnly === true;
+        }
+        const days = normalizeWorkingDays(workingDays);
+        if (days?.length) {
+            updateData.workingDays = days;
         }
         if (conditions !== undefined) {
             const conditionValidation = validateConditions(conditions);
@@ -279,7 +322,7 @@ export const updateWorkflow = async (req: Request, res: Response, next: NextFunc
 
         const updatedWorkflow = await Workflow.findByIdAndUpdate(
             id,
-            updateData,
+            { ...updateData, $inc: { version: 1 } },
             { new: true, runValidators: true }
         );
 

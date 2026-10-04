@@ -5,6 +5,8 @@ import WorkflowDelegation from "../models/workflowDelegation.model";
 interface ApprovalContext {
     amount?: number | null;
     discountPercent?: number | null;
+    /** Employee who raised the request; they can never approve their own request. */
+    requesterId?: any;
     [key: string]: any;
 }
 
@@ -33,7 +35,32 @@ const enforceApprovalLimits = (employee: any, context?: ApprovalContext) => {
 
 const addHours = (date: Date, hours: number) => new Date(date.getTime() + hours * 60 * 60 * 1000);
 
-const getActiveDelegation = async (fromEmployee: any, at = new Date()) => {
+// Qatar is UTC+3 all year; working days are evaluated in that local calendar.
+const WORKDAY_OFFSET_MS = 3 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Adds hours but pauses the clock on non-working days (0 = Sunday). */
+export const addBusinessHours = (start: Date, hours: number, workingDays: number[]) => {
+    if (!workingDays?.length) return addHours(start, hours);
+
+    let remaining = hours * 60 * 60 * 1000;
+    let cursor = start.getTime();
+    for (let guard = 0; guard < 4000 && remaining > 0; guard++) {
+        const dayStart = Math.floor((cursor + WORKDAY_OFFSET_MS) / DAY_MS) * DAY_MS;
+        const weekday = new Date(dayStart).getUTCDay();
+        const dayEnd = dayStart + DAY_MS - WORKDAY_OFFSET_MS;
+        if (workingDays.includes(weekday)) {
+            const chunk = Math.min(remaining, dayEnd - cursor);
+            cursor += chunk;
+            remaining -= chunk;
+        } else {
+            cursor = dayEnd;
+        }
+    }
+    return new Date(cursor);
+};
+
+const getActiveDelegation =async (fromEmployee: any, at = new Date()) => {
     if (!fromEmployee) return null;
 
     return WorkflowDelegation.findOne({
@@ -101,7 +128,7 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
     try {
         const workflow = await Workflow.findOne({ feature: workflowFeature }).populate('steps.role');
 
-        if (!workflow || !workflow.steps.length) {
+        if (!workflow || (!workflow.steps.length && !workflow.needsManagerApproval)) {
             throw new Error(`No workflow configured for ${workflowFeature} claims`);
         }
 
@@ -125,17 +152,40 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
             approvalStatus.push(delegated.step);
         }
 
-        approvalStatus.push(...workflow.steps
-            .sort((a, b) => a.order - b.order)
-            .map(step => ({
-                status: 'pending',
-                role: step.role,
-                step: step.order,
-                managerApproval: false,
-                assignedAt: new Date(),
-                ...(step.escalationHours ? { escalationDueAt: addHours(new Date(), step.escalationHours) } : {}),
-                escalationRole: step.escalationRole,
-            })));
+        const now = new Date();
+        const amount = toFiniteNumber(context?.amount);
+        const requesterRole = employeeData.category?._id ?? employeeData.category;
+        const orderedSteps = [...workflow.steps].sort((a, b) => a.order - b.order);
+
+        // Amount threshold: a stage with minAmount is skipped for smaller requests (unknown amount keeps the stage).
+        const applicable = orderedSteps.filter(step => !(step.minAmount && amount !== null && amount < step.minAmount));
+
+        // Requester already holds the stage's role -> skip it, but never leave the route without an approver.
+        let routed = applicable;
+        if (workflow.skipRequesterRole !== false && requesterRole) {
+            const withoutSelf = applicable.filter(step => !idsMatch((step.role as any)?._id ?? step.role, requesterRole));
+            routed = withoutSelf.length || approvalStatus.length ? withoutSelf : applicable;
+        }
+
+        const dueAfter = (hours: number, unit?: string) => workflow.businessHoursOnly && unit !== 'minute'
+            ? addBusinessHours(now, hours, workflow.workingDays?.length ? workflow.workingDays : [0, 1, 2, 3, 4])
+            : addHours(now, hours);
+        const unitHours = (unit?: string) => unit === 'day' ? 24 : unit === 'minute' ? 1 / 60 : 1;
+
+        approvalStatus.push(...routed.map(step => ({
+            status: 'pending',
+            role: step.role,
+            step: step.order,
+            managerApproval: false,
+            assignedAt: now,
+            workflowVersion: workflow.version ?? 1,
+            timeoutAction: step.timeoutAction || 'escalate',
+            ...(step.escalationHours ? {
+                escalationDueAt: dueAfter(step.escalationHours * unitHours(step.escalationUnit), step.escalationUnit),
+                ...(step.reminderPercent ? { reminderDueAt: dueAfter(step.escalationHours * unitHours(step.escalationUnit) * step.reminderPercent / 100, step.escalationUnit) } : {}),
+            } : {}),
+            escalationRole: step.escalationRole,
+        })));
 
         return approvalStatus;
     } catch (error) {
@@ -153,6 +203,10 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
 
         if (pendingStatuses.length === 0) {
             throw new Error('No pending approvals found');
+        }
+
+        if (context?.requesterId && idsMatch(context.requesterId, employee._id)) {
+            throw new Error('You cannot approve or reject a request that you raised');
         }
 
         const currentStep = pendingStatuses[0].step;
@@ -196,6 +250,12 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
         approvalStatus[approvalIndex].comment = comment;
         if (status === 'rejected') {
             approvalStatus = approvalStatus.filter(approval => approval.status !== 'pending');
+        } else if (status === 'approved' && currentApprovals.length > 1) {
+            // A stage holding several roles is any-of: one approval completes it, so the other roles drop out.
+            const approvedId = approvalStatus[approvalIndex]._id;
+            approvalStatus = approvalStatus.filter(approval =>
+                !(approval.status === 'pending' && approval.step === currentStep && !idsMatch(approval._id, approvedId))
+            );
         }
 
         return approvalStatus;
@@ -207,6 +267,11 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
 export const escalateApprovalStatus = (approvalStatus: any[], now = new Date()) => {
     return approvalStatus.map(approval => {
         if (approval.status !== 'pending' || approval.escalatedAt || !approval.escalationDueAt) {
+            return approval;
+        }
+
+        // notify / reject stages are handled by the timeout cron, not by moving the step up.
+        if (approval.timeoutAction && approval.timeoutAction !== 'escalate') {
             return approval;
         }
 

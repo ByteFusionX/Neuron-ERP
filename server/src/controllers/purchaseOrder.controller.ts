@@ -100,6 +100,46 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
+    const itemKey = (entry: any) => (entry.partNo ? entry.partNo.toString() : entry.detail);
+    const existingOrders = await PurchaseOrder.find({
+      purchaseId: new mongoose.Types.ObjectId(purchaseId),
+      supplierId: new mongoose.Types.ObjectId(supplierId),
+      poStatus: { $nin: ['Draft', 'Rejected'] }
+    });
+    const reservedByItem = new Map<string, number>();
+    existingOrders.forEach((po: any) => {
+      (po.items || []).forEach((item: any) => {
+        const key = itemKey(item);
+        reservedByItem.set(key, (reservedByItem.get(key) || 0) + (Number(item.quantity) || 0));
+      });
+    });
+    const allowedByItem = new Map<string, number>();
+    (existingPurchaseRequest.items || []).forEach((item: any) => {
+      (item.itemDetails || []).forEach((detail: any) => {
+        const selected = (detail.comparisons || []).find((comparison: any) =>
+          comparison.selected === true && comparison.supplierId?.toString() === supplierId.toString()
+        );
+        if (!selected) return;
+        const key = itemKey(detail);
+        allowedByItem.set(key, (allowedByItem.get(key) || 0) + (Number(selected.quantity ?? detail.quantity) || 0));
+      });
+    });
+    const requestedByItem = new Map<string, number>();
+    items.forEach((item: any) => {
+      const key = itemKey(item);
+      requestedByItem.set(key, (requestedByItem.get(key) || 0) + (Number(item.quantity) || 0));
+    });
+    for (const [key, requestedQty] of requestedByItem.entries()) {
+      const allowedQty = allowedByItem.get(key) || 0;
+      const reservedQty = reservedByItem.get(key) || 0;
+      if (requestedQty > Math.max(0, allowedQty - reservedQty)) {
+        return res.status(400).json({
+          success: false,
+          message: "PO quantity exceeds the remaining approved PR quantity for one or more items",
+        });
+      }
+    }
+
     let currency;
     if (existingPurchaseRequest.currency) {
       currency = existingPurchaseRequest.currency;
@@ -801,7 +841,7 @@ export const getPurchaseOrderByPurchaseId = async (req: Request, res: Response) 
 
 export const getAllPurchaseOrders = async (req: Request, res: Response) => {
   try {
-    const { page = 1, row = 10, search = "", status, purchaseId, jobId } = req.query;
+    const { page = 1, row = 10, search = "", status, purchaseId, jobId, receiptStatus } = req.query;
     const pageNumber = Number(page);
     const pageSize = Number(row);
     const skip = (pageNumber - 1) * pageSize;
@@ -816,9 +856,27 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
     }
 
     const privileges = employee.category?.privileges;
-    const accessFilter = privileges?.purchase?.viewReport 
-      ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
+    const poViewReport = privileges?.purchaseOrder?.viewReport;
+    const canWorkWithPurchaseOrders = (poViewReport && poViewReport !== 'none')
+      || privileges?.purchaseOrder?.canApprovePOs === true
+      || privileges?.purchaseOrder?.canInitiateLPO === true
+      || privileges?.purchaseOrder?.canReissueAndRevoke === true;
+    const accessFilter = poViewReport && poViewReport !== 'none'
+      ? await buildPrivilegeAccessFilter(employee._id, poViewReport, 'createdBy')
       : {};
+
+    if (!canWorkWithPurchaseOrders) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: {
+          total: 0,
+          page: pageNumber,
+          pageSize: pageSize,
+          totalPages: 0
+        }
+      });
+    }
 
     const initialMatchStage: any = {};
     const finalMatchStage: any = {};
@@ -832,10 +890,21 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
     }
 
 
-    if (status && Array.isArray(status)) {
-      finalMatchStage.poStatus = { $in: status };
-    } else if (status) {
-      finalMatchStage.poStatus = status;
+    const statusFilters = Array.isArray(status)
+      ? status.flatMap((value) => String(value).split(','))
+      : status
+        ? String(status).split(',')
+        : [];
+    const normalizedStatusFilters = statusFilters.map((value) => value.trim()).filter(Boolean);
+
+    if (normalizedStatusFilters.length > 1) {
+      finalMatchStage.poStatus = { $in: normalizedStatusFilters };
+    } else if (normalizedStatusFilters.length === 1) {
+      finalMatchStage.poStatus = normalizedStatusFilters[0];
+    }
+
+    if (receiptStatus) {
+      finalMatchStage.receiptStatus = receiptStatus;
     }
 
     const pipeline: any[] = [
@@ -904,6 +973,63 @@ export const getAllPurchaseOrders = async (req: Request, res: Response) => {
         $addFields: {
           totalLpoValue: {
             $sum: "$items.totalCost"
+          },
+          orderedQuantity: {
+            $reduce: {
+              input: { $ifNull: ["$items", []] },
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.quantity", 0] }] }
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "grns",
+          localField: "_id",
+          foreignField: "purchaseOrderId",
+          as: "grns"
+        }
+      },
+      {
+        $addFields: {
+          receivedQuantity: {
+            $reduce: {
+              input: { $ifNull: ["$grns", []] },
+              initialValue: 0,
+              in: {
+                $add: [
+                  "$$value",
+                  {
+                    $reduce: {
+                      input: { $ifNull: ["$$this.items", []] },
+                      initialValue: 0,
+                      in: { $add: ["$$value", { $ifNull: ["$$this.receivedQty", 0] }] }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          receiptStatus: {
+            $switch: {
+              branches: [
+                { case: { $lte: ["$receivedQuantity", 0] }, then: "Not Received" },
+                { case: { $gte: ["$receivedQuantity", "$orderedQuantity"] }, then: "Received" }
+              ],
+              default: "Partially Received"
+            }
+          },
+          billingStatus: {
+            $cond: [
+              { $gt: [{ $size: { $ifNull: ["$supplierInvoices", []] } }, 0] },
+              "Invoice Uploaded",
+              "Not Billed"
+            ]
           }
         }
       },

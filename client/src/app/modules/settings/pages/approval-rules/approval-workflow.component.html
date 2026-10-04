@@ -35,13 +35,33 @@
                     <p class="qt-meta-value">{{ row.stepsCount }}</p>
                 </div>
                 <div class="qt-meta">
-                    <p class="qt-meta-label">Manager</p>
+                    <p class="qt-meta-label">Super Admin</p>
                     <p class="qt-meta-value">{{ row.managerApproval }}</p>
                 </div>
             </ng-template>
 
-            <ng-template #detailTemplate let-row>
-                <div class="space-y-4">
+            <ng-template #detailTemplate let-row let-tab="tab">
+                <div>
+                    <app-detail-section title="Conditions">
+                    <ul class="space-y-2">
+                        <li *ngFor="let rule of conditionRules(row); trackBy: trackRule" class="flex items-start gap-2.5 rounded-xl border border-gray-200 bg-white p-2.5 dark:border-erp-border-dark dark:bg-gray-800/60">
+                            <input *ngIf="rule.key" type="checkbox" [disabled]="!canEdit" [checked]="rule.active" (change)="toggleRule(row, rule.key!)"
+                                class="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                            <span *ngIf="!rule.key" class="material-icons mt-0.5 text-[18px] text-violet-600">{{ rule.icon }}</span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">{{ rule.title }}</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">{{ rule.text }}</span>
+                                <span *ngIf="rule.key === 'days' && rule.active" class="mt-2 flex flex-wrap gap-1.5">
+                                    <button *ngFor="let day of weekdays" type="button" [disabled]="!canEdit" (click)="toggleWorkingDay(row, day.value)"
+                                        [ngClass]="workingDaysOf(row).includes(day.value) ? 'border-violet-600 bg-violet-600 text-white' : 'border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800'"
+                                        class="rounded-full border px-2.5 py-0.5 text-xs font-medium transition disabled:opacity-60">{{ day.label }}</button>
+                                </span>
+                            </span>
+                        </li>
+                    </ul>
+                    </app-detail-section>
+
+                    <app-detail-section title="Workflow" class="mt-6 -mx-5 block border-t border-gray-300 px-5 pt-6 dark:border-zinc-700">
                     <!-- ================= VIEW MODE ================= -->
                     <div *ngIf="!isEditing(row)">
                         <app-approval-journey [stages]="journeyStages(row)" orientation="vertical"></app-approval-journey>
@@ -49,10 +69,6 @@
 
                     <!-- ================= BUILDER MODE (inline editable journey) ================= -->
                     <section *ngIf="isEditing(row)">
-                        <div *ngIf="isDirty" class="mb-3 flex justify-end">
-                            <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Unsaved changes</span>
-                        </div>
-
                         <div>
                             <!-- Submitted -->
                             <div class="flex items-stretch gap-2.5">
@@ -71,27 +87,25 @@
                             <!-- Manager toggle stage -->
                             <div class="flex items-stretch gap-2.5">
                                 <div class="flex flex-col items-center">
-                                    <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-4"
-                                        [ngClass]="draftManagerApproval ? 'bg-amber-100 text-amber-600 ring-amber-50 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/5' : 'border-2 border-dashed border-gray-300 text-gray-400 dark:border-gray-600'">
+                                    <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-4 bg-amber-100 text-amber-600 ring-amber-50 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/5">
                                         <span class="material-icons text-[16px]">supervisor_account</span>
+                                        <span class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold text-amber-700 ring-1 ring-amber-200 dark:bg-gray-900 dark:text-amber-300 dark:ring-amber-500/40">1</span>
                                     </span>
                                     <span class="my-1 w-0.5 flex-1 rounded bg-gray-200 dark:bg-gray-700"></span>
                                 </div>
                                 <div class="min-w-0 flex-1 pb-3 pt-1">
-                                    <button type="button" (click)="toggleManagerApproval()" [disabled]="!canDisableManagerApproval"
-                                        class="flex w-full items-center justify-between gap-3 rounded-xl border p-2.5 text-left transition"
-                                        [class.cursor-not-allowed]="!canDisableManagerApproval"
-                                        [ngClass]="draftManagerApproval ? 'border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10' : 'border-dashed border-gray-200 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-800/30'">
+                                    <div class="flex w-full items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
                                         <span class="min-w-0">
-                                            <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Manager first</span>
-                                            <span class="block text-xs text-gray-500 dark:text-gray-400">
-                                                {{ canDisableManagerApproval ? "Requester's direct manager reviews before any role." : "Mandatory first step — add another approver to make this optional." }}
-                                            </span>
+                                            <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">{{ managerName }}</span>
+                                            <span class="block text-xs text-gray-500 dark:text-gray-400">Default approver · Stage 1. Roles you add start at Stage 2.</span>
+                                            <label class="mt-2 flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200"
+                                                title="When the last role's time limit passes with nobody left to escalate to, Super Admins are reminded every working morning until the job is assigned.">
+                                                <input type="checkbox" [(ngModel)]="draftRepeatReminder" class="h-4 w-4 rounded border-gray-300 text-violet-600" />
+                                                <span class="font-medium">Repeat reminder every day while overdue</span>
+                                            </label>
                                         </span>
-                                        <span class="relative h-5 w-9 shrink-0 rounded-full transition" [ngClass]="draftManagerApproval ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'">
-                                            <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all" [ngClass]="draftManagerApproval ? 'left-[18px]' : 'left-0.5'"></span>
-                                        </span>
-                                    </button>
+                                        <span class="material-icons text-[18px] text-amber-600 dark:text-amber-300" title="Always included">lock</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -101,21 +115,22 @@
                                     <div class="flex flex-col items-center">
                                         <span class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-semibold text-white ring-4 ring-violet-50 dark:ring-violet-500/10">
                                             {{ initials(step.roleName) }}
-                                            <span class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold text-violet-700 ring-1 ring-violet-200 dark:bg-gray-900 dark:text-violet-300 dark:ring-violet-500/40">{{ i + 1 }}</span>
+                                            <span class="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold text-violet-700 ring-1 ring-violet-200 dark:bg-gray-900 dark:text-violet-300 dark:ring-violet-500/40">{{ stageNumber(i) }}</span>
                                         </span>
                                         <span class="my-1 w-0.5 flex-1 rounded bg-gray-200 dark:bg-gray-700"></span>
                                     </div>
-                                    <div class="group mb-3 flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm transition hover:border-violet-300 hover:shadow dark:border-erp-border-dark dark:bg-gray-800/60">
+                                    <div class="group mb-3 flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm transition hover:border-violet-300 hover:shadow dark:border-erp-border-dark dark:bg-gray-800/60">
                                         <span cdkDragHandle class="material-icons cursor-grab text-[18px] text-gray-300 group-hover:text-gray-500" title="Drag to reorder">drag_indicator</span>
                                         <span class="min-w-0 flex-1">
                                             <span class="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">{{ step.roleName }}</span>
-                                            <span class="block text-xs text-gray-500 dark:text-gray-400">Stage {{ i + 1 }}{{ first ? ' · first role reviewer' : '' }}{{ last ? ' · final sign-off' : '' }}</span>
+                                            <span class="block text-xs text-gray-500 dark:text-gray-400">Stage {{ stageNumber(i) }}{{ step.sameStage ? ' · any one of this stage can approve' : '' }}{{ last ? ' · final sign-off' : '' }}</span>
                                         </span>
-                                        <label *ngIf="!first" class="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400" [title]="last ? 'Hours allowed for this role to complete the task' : 'Hours before this step escalates to the next role'">
-                                            <input type="number" min="1" [(ngModel)]="step.escalationHours"
-                                                class="w-12 border-0 bg-transparent p-0 text-right text-xs text-gray-900 focus:outline-none focus:ring-0 dark:text-gray-100" />
-                                            <span>h</span>
-                                        </label>
+                                        <button *ngIf="!first" type="button" (click)="toggleSameStage(i)"
+                                            [class]="step.sameStage ? 'bg-violet-50 text-violet-700 border-violet-300 dark:bg-violet-500/10 dark:text-violet-300' : 'text-gray-500 border-gray-200 dark:border-gray-700'"
+                                            class="shrink-0 rounded-lg border px-2 py-1 text-xs font-medium"
+                                            title="On: this role approves in the same stage as the row above — either one is enough. Off: it is a separate stage after the row above.">
+                                            {{ step.sameStage ? 'Or (same stage)' : 'Then (next stage)' }}
+                                        </button>
                                         <span class="flex items-center gap-0.5 opacity-60 transition group-hover:opacity-100">
                                             <button type="button" (click)="moveStep(i, -1)" [disabled]="first" class="rounded-md p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-gray-700" title="Move up">
                                                 <span class="material-icons text-[18px]">keyboard_arrow_up</span>
@@ -127,6 +142,26 @@
                                                 <span class="material-icons text-[18px]">close</span>
                                             </button>
                                         </span>
+                                        <div class="grid basis-full grid-cols-1 gap-3 sm:grid-cols-2 border-t border-gray-100 pt-2 pl-7 dark:border-gray-700">
+                                            <label class="flex flex-col gap-1 text-xs text-gray-500 dark:text-gray-400"
+                                                [title]="first ? 'Time before this step escalates up to ' + managerName + ' (Stage 1)' : last ? 'Time allowed for this role to complete the task' : 'Time before this step escalates to the next role'">
+                                                <span class="font-medium">Time limit</span>
+                                                <span class="flex gap-2">
+                                                    <input type="number" min="1" step="1" inputmode="numeric" [(ngModel)]="step.escalationHours" (keydown)="blockNonDigit($event)" placeholder="e.g. 24"
+                                                        class="w-24 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-800 focus:border-violet-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
+                                                    <app-sf-select class="block flex-1" [(ngModel)]="step.escalationUnit" [options]="unitOptions"></app-sf-select>
+                                                </span>
+                                            </label>
+                                            <label class="flex flex-col gap-1 text-xs text-gray-500 dark:text-gray-400" title="What happens when the time limit passes">
+                                                <span class="font-medium">On timeout</span>
+                                                <app-sf-select class="block w-full" [(ngModel)]="step.timeoutAction" [options]="timeoutOptions" [disabled]="!step.escalationHours"></app-sf-select>
+                                            </label>
+                                            <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 sm:col-span-2"
+                                                title="Sends one reminder to this role when the set share of the time limit has passed.">
+                                                <input type="checkbox" [(ngModel)]="step.reminderEnabled" [disabled]="!step.escalationHours" class="h-4 w-4 rounded border-gray-300 text-violet-600" />
+                                                <span class="font-medium">Send reminder on timeout</span>
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -190,6 +225,7 @@
                             </div>
                         </div>
                     </section>
+                    </app-detail-section>
 
                 </div>
             </ng-template>
@@ -202,7 +238,7 @@
                 </ng-container>
                 <ng-template #editingFooter>
                     <app-action-button variant="secondary" [disabled]="isSaving" (click)="cancelEdit()">Discard</app-action-button>
-                    <app-action-button variant="primary" [disabled]="isSaving || !draftSteps.length || !isDirty" (click)="saveFlow(row)">
+                    <app-action-button variant="primary" [disabled]="isSaving || !canSave || !isDirty" (click)="saveFlow(row)">
                         {{ isSaving ? 'Saving…' : 'Save route' }}
                     </app-action-button>
                 </ng-template>
@@ -211,3 +247,4 @@
     </div>
 </div>
 <!-- /Workflow -->
+

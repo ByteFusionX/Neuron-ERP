@@ -33,6 +33,11 @@ interface ClaimStatus {
     escalationDueAt?:Date;
     escalatedAt?:Date;
     escalationRole?:Types.ObjectId;
+    reminderDueAt?:Date;
+    reminderSentAt?:Date;
+    timeoutAction?:string;
+    timeoutHandledAt?:Date;
+    workflowVersion?:number;
     originalRole?:Types.ObjectId;
     updatedBy:Types.ObjectId;
     updatedDate:Date;
@@ -82,6 +87,22 @@ const ClaimStatusSchema = new Schema<ClaimStatus>({
     },
     escalatedAt: {
         type: Date,
+    },
+    reminderDueAt: {
+        type: Date,
+    },
+    reminderSentAt: {
+        type: Date,
+    },
+    timeoutAction: {
+        type: String,
+        enum: ['escalate', 'notify', 'reject'],
+    },
+    timeoutHandledAt: {
+        type: Date,
+    },
+    workflowVersion: {
+        type: Number,
     },
     escalationRole: {
         type: Schema.Types.ObjectId,

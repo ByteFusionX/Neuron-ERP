@@ -532,7 +532,8 @@ export const updateClaimStatus = async (req: Request, res: Response, next: NextF
         const updatedApprovalStatus = await updateApprovalStatus(status, claim.approvalStatus, comment, employee, {
             amount: claim.amount,
             type: claim.type,
-            category: claim.category
+            category: claim.category,
+            requesterId: (claim.raisedBy as any)?._id ?? claim.raisedBy
         });
         claim.approvalStatus = updatedApprovalStatus;
 

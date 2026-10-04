@@ -68,6 +68,11 @@ interface PurchaseRequestApprovalStatus {
     escalationDueAt?: Date;
     escalatedAt?: Date;
     escalationRole?: Types.ObjectId;
+    reminderDueAt?: Date;
+    reminderSentAt?: Date;
+    timeoutAction?: string;
+    timeoutHandledAt?: Date;
+    workflowVersion?: number;
     originalRole?: Types.ObjectId;
     updatedBy: Types.ObjectId;
     updatedDate: Date;
@@ -117,6 +122,22 @@ const PurchaseRequestApprovalStatusSchema = new Schema<PurchaseRequestApprovalSt
     },
     escalatedAt: {
         type: Date,
+    },
+    reminderDueAt: {
+        type: Date,
+    },
+    reminderSentAt: {
+        type: Date,
+    },
+    timeoutAction: {
+        type: String,
+        enum: ['escalate', 'notify', 'reject'],
+    },
+    timeoutHandledAt: {
+        type: Date,
+    },
+    workflowVersion: {
+        type: Number,
     },
     escalationRole: {
         type: Schema.Types.ObjectId,
@@ -280,5 +301,9 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
         type: String
     }
 })
+
+// Keeps the 1-minute approval tick cheap
+purchaseRequestSchema.index({ 'approvalStatus.reminderDueAt': 1 }, { sparse: true });
+purchaseRequestSchema.index({ 'approvalStatus.escalationDueAt': 1 }, { sparse: true });
 
 export default model<PurchaseRequest>('Purchase', purchaseRequestSchema)
