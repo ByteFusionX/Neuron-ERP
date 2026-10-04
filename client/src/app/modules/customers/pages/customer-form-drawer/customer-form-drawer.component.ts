@@ -10,7 +10,7 @@ import { CustomerService } from 'src/app/core/services/customer/customer.service
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { MasterListService } from 'src/app/core/services/master-list.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
-import { CreateCustomerTypeDialog } from 'src/app/modules/hr/pages/create-customer-type/create-customer-type.component';
+import { CreateCustomerTypeDialog } from 'src/app/modules/settings/pages/master-data/create-customer-type/create-customer-type.component';
 import { CreateDepartmentDialog } from 'src/app/modules/hr/pages/create-department/create-department.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';

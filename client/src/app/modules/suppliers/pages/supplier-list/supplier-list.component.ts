@@ -86,7 +86,7 @@ export class SupplierListComponent implements OnInit, OnDestroy {
 
   private activeViewId = 'all';
   page = 1;
-  row = 10;
+  row = 15;
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
   searchQuery = '';

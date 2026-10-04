@@ -84,7 +84,7 @@ export class JobListComponent {
   totalLpoValue = 0;
   private activeViewId = 'all';
   page = 1;
-  row = 10;
+  row = 15;
   searchQuery = '';
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;

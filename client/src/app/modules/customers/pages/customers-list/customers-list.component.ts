@@ -51,7 +51,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   rows: getCustomer[] = [];
   total = 0;
   page = 1;
-  row = 10;
+  row = 15;
   searchQuery = '';
   selectedEmployee: string | null = null;
   creditStatusFilter: string | null = null;

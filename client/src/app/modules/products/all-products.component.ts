@@ -41,7 +41,7 @@ export class AllProductsComponent implements OnInit, OnDestroy {
   rows: Product[] = [];
   total = 0;
   page = 1;
-  row = 10;
+  row = 15;
   searchQuery = '';
 
   columns: DataGridColumn<Product>[] = [];

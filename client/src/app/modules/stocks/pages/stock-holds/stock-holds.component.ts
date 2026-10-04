@@ -83,7 +83,7 @@ export class StockHoldsComponent implements OnInit {
   detailSubtitle = (r: StockEntry) => r.productDescription ?? '';
 
   page = 1;
-  row = 10;
+  row = 15;
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
   searchTerm = '';
