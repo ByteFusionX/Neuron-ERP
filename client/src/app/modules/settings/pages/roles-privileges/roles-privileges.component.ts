@@ -5,18 +5,18 @@ import { ToastrService } from 'ngx-toastr';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
-import { DataGridBreadcrumb, DataGridColumn, DataGridRowAction, DataGridRowActionEvent } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DataGridBreadcrumb, DataGridColumn, DataGridView, DataGridRowAction, DataGridRowActionEvent } from 'src/app/shared/components/data-grid/data-grid.model';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
-import { RoleFormDrawerComponent } from '../role-form-drawer/role-form-drawer.component';
+import { RoleFormDrawerComponent } from './role-form-drawer/role-form-drawer.component';
 
 @Component({
-  selector: 'app-hr-roles-privileges',
+  selector: 'app-roles-privileges',
   standalone: true,
-  templateUrl: './hr-roles-privileges.component.html',
-  styleUrls: ['./hr-roles-privileges.component.css'],
+  templateUrl: './roles-privileges.component.html',
+  styleUrls: ['./roles-privileges.component.css'],
   imports: [NgIf, DataGridComponent, RoleFormDrawerComponent],
 })
-export class HrRolesPrivilegesComponent implements OnInit, OnDestroy {
+export class RolesPrivilegesComponent implements OnInit, OnDestroy {
   employeeId!: string;
   categorySection: boolean = false;
   formOpen = false;
@@ -24,7 +24,8 @@ export class HrRolesPrivilegesComponent implements OnInit, OnDestroy {
   formCategory: GetCategory | null = null;
   isCategoryLoading: boolean = true;
   roles: GetCategory[] = [];
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'HR' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Settings' }, { label: 'Roles & Privileges' }];
+  views: DataGridView<GetCategory>[] = [];
 
   columns: DataGridColumn<GetCategory>[] = [
     { key: 'categoryName', label: 'Role Name', sortable: true, locked: true },

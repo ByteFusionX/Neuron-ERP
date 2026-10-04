@@ -31,12 +31,8 @@
 
         <!-- Toolbar: search, live summary, expand all -->
         <div class="flex flex-wrap items-center gap-3">
-          <div class="relative flex-1 min-w-[220px]">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z" />
-            </svg>
-            <input type="search" [(ngModel)]="privilegeSearch" [ngModelOptions]="{standalone: true}" placeholder="Search modules or permissions"
-              class="w-full h-9 pl-9 pr-3 text-sm rounded-lg border border-gray-200 bg-white text-gray-800 placeholder-gray-400 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 dark:bg-erp-surface-dark dark:border-white/10 dark:text-gray-100">
+          <div class="flex-1 min-w-[220px]">
+            <app-sf-input type="search" clearable [(ngModel)]="privilegeSearch" [ngModelOptions]="{standalone: true}" placeholder="Search modules or permissions"></app-sf-input>
           </div>
           <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">
             {{ enabledModuleCount }} of {{ privilegeModules.length }} modules enabled
@@ -86,10 +82,10 @@
 
         <!-- Editing: master-detail (module list + settings pane) -->
         <div *ngIf="!viewing && filteredModules.length"
-          class="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-white/10 dark:bg-erp-surface-dark">
+          class="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] md:grid-rows-1 md:h-[calc(100vh-420px)] md:min-h-[360px] rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-white/10 dark:bg-erp-surface-dark">
 
           <!-- Module list -->
-          <nav class="max-h-72 md:max-h-[560px] overflow-y-auto border-b md:border-b-0 md:border-r border-gray-100 p-2 space-y-0.5 dark:border-white/10" aria-label="Modules">
+          <nav class="max-h-72 md:max-h-none min-h-0 overflow-y-auto border-b md:border-b-0 md:border-r border-gray-100 p-2 space-y-0.5 dark:border-white/10" aria-label="Modules">
             <button *ngFor="let m of filteredModules" type="button" (click)="selectModule(m)"
               [attr.aria-current]="selectedModule?.key === m.key ? 'true' : null"
               class="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors"
@@ -106,7 +102,7 @@
           </nav>
 
           <!-- Settings pane -->
-          <section *ngIf="selectedModule as m" class="max-h-[560px] overflow-y-auto">
+          <section *ngIf="selectedModule as m" class="min-h-0 overflow-y-auto">
             <header class="sticky top-0 z-10 flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-erp-surface-dark/95">
               <span class="flex items-center justify-center w-9 h-9 shrink-0 rounded-lg text-xs font-bold"
                 [ngClass]="hasAccess(m) ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' : 'bg-gray-100 text-gray-400 dark:bg-white/5'">{{ m.abbr }}</span>

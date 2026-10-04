@@ -143,21 +143,21 @@ export class RoleFormDrawerComponent implements OnChanges {
       scopes: [scope('enquiry.viewReport')],
       flags: [
         { path: 'enquiry.create', label: 'Create enquiries' },
-        { path: 'enquiry.edit', label: 'Edit enquiries / attachments / follow-up' },
-        { path: 'enquiry.reassign', label: 'Send to presale / assign / reassign' },
-        { path: 'enquiry.feedback', label: 'Request and give feedback' },
-        { path: 'enquiry.revision', label: 'Give revision / revise quote estimation' },
-        { path: 'enquiry.delete', label: 'Delete enquiries / estimations' },
+        { path: 'enquiry.edit', label: 'Edit enquiries / attachments / close or move follow-up' },
+        { path: 'enquiry.reassign', label: 'Send enquiry to presales / request estimation revision' },
+        { path: 'enquiry.delete', label: 'Delete enquiries' },
       ],
     },
     {
-      key: 'assignedJob', label: 'Assigned Jobs', abbr: 'AJ', description: 'Presale jobs', master: 'assignedJobsChecked', group: 'assignedJob',
+      key: 'assignedJob', label: 'Presales', abbr: 'PS', description: 'Presale jobs', master: 'assignedJobsChecked', group: 'assignedJob',
       scopes: [{
         path: 'assignedJob.viewReport', label: 'Data visibility',
         options: [{ value: 'all', label: 'All presale jobs' }, { value: 'assigned', label: 'Assigned to user' }],
       }],
       flags: [
-        { path: 'assignedJob.assign', label: 'Assign presale jobs to employees' },
+        { path: 'assignedJob.assign', label: 'Assign presale jobs' },
+        { path: 'assignedJob.reject', label: 'Reject presale jobs' },
+        { path: 'assignedJob.estimate', label: 'Upload and edit estimations' },
       ],
     },
     {
@@ -342,6 +342,9 @@ export class RoleFormDrawerComponent implements OnChanges {
       assignedJob: this._fb.group({
         viewReport: 'none',
         assign: [false],
+        // Default true, like the enquiry gates: existing roles (undefined) and new ones both mean "allowed".
+        reject: [true],
+        estimate: [true],
       }),
       quotation: this._fb.group({
         viewReport: 'none',

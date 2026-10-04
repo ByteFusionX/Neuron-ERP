@@ -10,7 +10,7 @@ import { SettingsSectionHeaderComponent } from '../settings-section-header.compo
 import { MasterListEditorComponent } from './master-list-editor.component';
 import { NotesTermsSettingsComponent } from '../notes-terms-settings/notes-terms-settings.component';
 import { CreateDepartmentDialog } from 'src/app/modules/hr/pages/create-department/create-department.component';
-import { CreateCustomerTypeDialog } from 'src/app/modules/hr/pages/create-customer-type/create-customer-type.component';
+import { CreateCustomerTypeDialog } from 'src/app/modules/settings/pages/master-data/create-customer-type/create-customer-type.component';
 
 const MASTER_DIALOG_SIZE = { width: '560px', maxWidth: '95vw' };
 

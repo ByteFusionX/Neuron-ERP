@@ -1,15 +1,16 @@
-<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt" *ngIf="categorySection">
-    <app-data-grid
+<div class="h-full flex flex-col bg-gray-50 dark:bg-erp-surface-dark-alt" *ngIf="categorySection">
+    <app-data-grid #grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
-        [showToolbarTools]="false"
-        [showDetailPanel]="false"
-        title="Roles &amp; Privileges"
+        title="Role-Based"
         subtitle="Categories of employees and what each one is allowed to see and do."
         [breadcrumbs]="breadcrumbs"
         rowKey="_id"
         storageKey="hr-roles"
-        [selectable]="false"
+        exportable
+        exportFileName="roles.xlsx"
+        [views]="views"
+        [showDetailPanel]="false"
         [data]="roles"
         [columns]="columns"
         [loading]="isCategoryLoading"

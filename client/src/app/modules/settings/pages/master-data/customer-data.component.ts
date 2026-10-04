@@ -6,7 +6,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { CreateDepartmentDialog } from 'src/app/modules/hr/pages/create-department/create-department.component';
-import { CreateCustomerTypeDialog } from 'src/app/modules/hr/pages/create-customer-type/create-customer-type.component';
+import { CreateCustomerTypeDialog } from 'src/app/modules/settings/pages/master-data/create-customer-type/create-customer-type.component';
 import { MasterCustomRow, MasterDataGridComponent, MasterTab } from './master-data-grid.component';
 
 const MASTER_DIALOG_SIZE = { width: '560px', maxWidth: '95vw' };
