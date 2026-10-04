@@ -115,6 +115,7 @@
             <app-detail-field label="Subject" stacked>{{ q.subject || 'N/A' }}</app-detail-field>
             <app-detail-field label="Closing Date" stacked>{{ q.closingDate ? (q.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}</app-detail-field>
             <app-detail-field label="Sales Person" stacked>{{ fullName(q.createdBy) }}</app-detail-field>
+            <app-detail-field *ngIf="q.createdByUser" label="Created By User" stacked>{{ fullName(q.createdByUser) }}</app-detail-field>
             <app-detail-field *ngIf="q.enqId?.enquiryId" label="Enq Ref Id" stacked>{{ q.enqId.enquiryId }}</app-detail-field>
             <app-detail-field label="Quoting Company" stacked>{{ q.quoteCompany || 'N/A' }}</app-detail-field>
             <app-detail-field label="Status" stacked>{{ q.status || 'N/A' }}</app-detail-field>

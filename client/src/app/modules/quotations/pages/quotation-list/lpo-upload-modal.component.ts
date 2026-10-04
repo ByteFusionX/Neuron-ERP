@@ -2,13 +2,14 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
-import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
 
 export interface LpoUploadModalData {
   /** Quote number shown as a chip in the header. */
   context?: string;
   acceptedFiles: string;
+  contactOptions?: SfOption[];
 }
 
 export interface LpoUploadModalResult {
@@ -50,16 +51,17 @@ export interface LpoUploadModalResult {
       </header>
 
       <div class="flex-1 overflow-y-auto px-6 py-6 min-h-[280px]">
-        <p class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Files</p>
-        <app-sf-file [(ngModel)]="files" [accept]="data?.acceptedFiles || ''" [maxSizeMb]="5" [disabled]="uploading"></app-sf-file>
-        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <div class="mb-5 grid gap-4 sm:grid-cols-2">
           <app-sf-field label="Customer PO / LPO No.">
             <app-sf-input [(ngModel)]="customerPoNumber" [ngModelOptions]="{ standalone: true }" placeholder="e.g. PO-1245"></app-sf-input>
           </app-sf-field>
           <app-sf-field label="Accepted By">
-            <app-sf-input [(ngModel)]="acceptedByName" [ngModelOptions]="{ standalone: true }" placeholder="Customer contact name"></app-sf-input>
+            <app-sf-select [(ngModel)]="acceptedByContactId" [ngModelOptions]="{ standalone: true }"
+              [options]="contactOptions" placeholder="Select contact"></app-sf-select>
           </app-sf-field>
         </div>
+        <p class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Files</p>
+        <app-sf-file [(ngModel)]="files" [accept]="data?.acceptedFiles || ''" [maxSizeMb]="5" [disabled]="uploading"></app-sf-file>
       </div>
 
       <footer class="flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
@@ -82,8 +84,12 @@ export class LpoUploadModalComponent {
 
   files: File[] = [];
   customerPoNumber = '';
-  acceptedByName = '';
+  acceptedByContactId: string | null = null;
   uploading = false;
+
+  get contactOptions(): SfOption[] {
+    return this.data?.contactOptions || [];
+  }
 
   close(): void {
     this.dialogRef.close();
@@ -94,7 +100,7 @@ export class LpoUploadModalComponent {
     this.dialogRef.close({
       files: this.files,
       customerPoNumber: this.customerPoNumber.trim(),
-      acceptedByName: this.acceptedByName.trim(),
+      acceptedByName: this.contactOptions.find((option) => option.value === this.acceptedByContactId)?.label || '',
     });
   }
 }

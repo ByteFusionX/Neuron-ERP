@@ -134,6 +134,8 @@ export class QuotationListComponent implements AfterViewInit {
   quoteTitle = (r: Quotatation) => r.quoteId ?? '';
   quoteSubtitle = (r: Quotatation) => r.client?.companyName ?? '';
   readonly eventsListComponent = EventsListComponent;
+  canSelectQuotationRow = (row: Quotatation): boolean => !this.isCreatorOnlyView(row);
+  canOpenQuotationRow = (row: Quotatation): boolean => !this.isCreatorOnlyView(row);
 
   /** Ring-badge palette matching home-landing's `STATUS_CLASSES` pattern (bg-50/text-700/ring-200,
    *  plus dark variants and a `border-*` fallback for contexts that render a border instead of a ring). */
@@ -151,7 +153,7 @@ export class QuotationListComponent implements AfterViewInit {
   total: number = 0;
   private activeViewId = "all";
   page: number = 1;
-  row: number = 10;
+  row: number = 15;
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
   fromDate: string | null = null
@@ -204,7 +206,7 @@ export class QuotationListComponent implements AfterViewInit {
     // Read URL parameters and initialize filters
     this._route.queryParams.subscribe(params => {
       this.page = params['page'] ? parseInt(params['page']) : 1;
-      this.row = params['row'] ? parseInt(params['row']) : 10;
+      this.row = params['row'] ? parseInt(params["row"]) : 15;
       if (this.grid) this.grid.page = this.page;
       this.searchQuery = params['search'] || '';
       this.fromDate = params['fromDate'] || null;
@@ -269,6 +271,7 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   openEditDrawer(row: Quotatation): void {
+    if (this.isCreatorOnlyView(row)) return;
     this.formMode = 'edit';
     this.formQuote = row;
     this.sourceEnquiry = null;
@@ -338,34 +341,35 @@ export class QuotationListComponent implements AfterViewInit {
     this.rowActions = [
       {
         id: 'addEvent', label: 'Add Event', icon: 'calendar', quick: true,
+        hidden: (r) => this.isCreatorOnlyView(r),
       },
       {
-        id: 'addDocument', label: 'Add Document', icon: 'upload', quick: true,
-        hidden: (r) => !(r.status === 'Won' && !r.lpoFiles?.length),
+        id: 'addDocument', label: 'Upload LPO', icon: 'upload', quick: true,
+        hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && !r.lpoFiles?.length),
       },
       {
         id: 'viewLpo', label: 'View Lpo', icon: 'eye', quick: true,
-        hidden: (r) => !(r.status === 'Won' && !!r.lpoFiles?.length),
+        hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && !!r.lpoFiles?.length),
       },
       {
         id: 'convertToDealSheet', label: 'Convert To Deal Sheet', icon: 'refresh', quick: true,
-        hidden: (r) => !(r.status === 'Won' && r.lpoFiles?.length && (!r.dealData || !(r.dealData as any)._id)),
+        hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && r.lpoFiles?.length && (!r.dealData || !(r.dealData as any)._id)),
       },
       {
         id: 'viewDeal', label: 'View Deal Sheet', icon: 'eye',
-        hidden: (r) => !this.hasDeal(r),
+        hidden: (r) => this.isCreatorOnlyView(r) || !this.hasDeal(r),
       },
       {
         id: 'updateStatus', label: 'Update Status', icon: 'refresh',
-        hidden: (r) => r.status === 'Expired' || this.isStatusLocked(r),
+        hidden: (r) => this.isCreatorOnlyView(r) || r.status === 'Expired' || this.isStatusLocked(r),
       },
       {
         id: 'editQuote', label: 'Edit Quote', icon: 'pencil',
-        hidden: (r) => this.isEditLocked(r),
+        hidden: (r) => this.isCreatorOnlyView(r) || this.isEditLocked(r),
       },
       {
         id: 'viewRevisions', label: 'Revision History', icon: 'eye',
-        hidden: (r) => !r.revision,
+        hidden: (r) => this.isCreatorOnlyView(r) || !r.revision,
       },
     ];
   }
@@ -395,12 +399,14 @@ export class QuotationListComponent implements AfterViewInit {
 
   onRowAction(event: DataGridRowActionEvent<Quotatation>): void {
     const { action, row } = event;
+    if (this.isCreatorOnlyView(row)) return;
     switch (action.id) {
       case 'addEvent':
         this.openDetailTab(row, 'events');
         break;
       case 'addDocument':
         this.openDetailTab(row, 'lpo');
+        this.startLpoUpload(row);
         break;
       case 'viewLpo':
         this.openDetailTab(row, 'lpo');
@@ -424,6 +430,7 @@ export class QuotationListComponent implements AfterViewInit {
   }
 
   private openDetailTab(row: Quotatation, tab: 'events' | 'lpo'): void {
+    if (this.isCreatorOnlyView(row)) return;
     this.grid.activeTab = tab;
     this.grid.openRow(row);
   }
@@ -470,6 +477,7 @@ export class QuotationListComponent implements AfterViewInit {
 
   openFullQuotation(row: Quotatation, event?: Event): void {
     event?.stopPropagation();
+    if (this.isCreatorOnlyView(row)) return;
     this._router.navigate(['/quotations/view', row._id]);
   }
 
@@ -520,7 +528,7 @@ export class QuotationListComponent implements AfterViewInit {
     
     // Add pagination params
     queryParams.page = this.page !== 1 ? this.page : null;
-    queryParams.row = this.row !== 10 ? this.row : null;
+    queryParams.row = this.row !== 15 ? this.row : null;
     
     // Add filter params (only if they have values)
     queryParams.search = this.searchQuery ? this.searchQuery : null;
@@ -869,10 +877,23 @@ export class QuotationListComponent implements AfterViewInit {
     if (!this.canUploadLpo(row)) return;
     this.modal.open<LpoUploadModalResult>(LpoUploadModalComponent, {
       width: '680px',
-      data: { context: row.quoteId || (row._id as string), acceptedFiles: this.acceptedFiles },
+      data: {
+        context: row.quoteId || (row._id as string),
+        acceptedFiles: this.acceptedFiles,
+        contactOptions: this.customerContactOptions(row),
+      },
     }).afterClosed().subscribe((result) => {
       if (result?.files?.length) { this.uploadLpoFiles(row, result); }
     });
+  }
+
+  private customerContactOptions(row: Quotatation): SfOption[] {
+    return (row.client?.contactDetails || [])
+      .map((contact: ContactDetail) => ({
+        label: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
+        value: contact._id,
+      }))
+      .filter((option): option is SfOption => !!option.label && !!option.value);
   }
 
   uploadLpoFiles(row: Quotatation, result: LpoUploadModalResult): void {
@@ -1122,6 +1143,7 @@ export class QuotationListComponent implements AfterViewInit {
           { type: 'dg', key: 'status' },
           { type: 'field', label: 'Customer', value: row.client?.companyName },
           { type: 'dg', key: 'salesPerson' },
+          ...(row.createdByUser ? [{ type: 'field' as const, label: 'Created By User', value: this.fullName(row.createdByUser), noHover: true }] : []),
           { type: 'field', label: 'Department', value: this.departmentNames(row) },
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.date, 'dd MMM yyyy') },
           { type: 'dg', key: 'closingDate' },
@@ -1156,5 +1178,19 @@ export class QuotationListComponent implements AfterViewInit {
         ],
       },
     ];
+  }
+
+  private fullName(person?: { firstName?: string; lastName?: string } | string): string {
+    if (!person || typeof person === 'string') return '—';
+    return `${person.firstName || ''} ${person.lastName || ''}`.trim() || '—';
+  }
+
+  private personId(person?: { _id?: string } | string): string {
+    return typeof person === 'string' ? person : person?._id ?? '';
+  }
+
+  private isCreatorOnlyView(row: Quotatation): boolean {
+    if (!this.userId) return false;
+    return this.personId(row.createdByUser) === this.userId && this.personId(row.createdBy) !== this.userId;
   }
 }

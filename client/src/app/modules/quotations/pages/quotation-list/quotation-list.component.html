@@ -16,6 +16,8 @@
             emptyMessage="No quotations found"
             [createLabel]="createQuotation ? 'Create Quote' : ''"
             [rowActions]="rowActions"
+            [rowSelectable]="canSelectQuotationRow"
+            [rowOpenable]="canOpenQuotationRow"
             [views]="views"
             (viewChange)="onViewChange($event)"
             [bulkActions]="bulkActions"
@@ -64,7 +66,7 @@
 
         <ng-template #detailFooterTemplate let-row let-tab="tab">
             <app-action-button *ngIf="tab === 'events'" variant="secondary" (click)="onAddEvent(row)">Add event</app-action-button>
-            <app-action-button *ngIf="tab === 'lpo' && canUploadLpo(row)" variant="secondary" (click)="startLpoUpload(row)">Upload</app-action-button>
+            <app-action-button *ngIf="tab === 'lpo' && canUploadLpo(row)" variant="secondary" (click)="startLpoUpload(row)">Upload LPO</app-action-button>
             <app-action-button variant="primary" (click)="openFullQuotation(row, $event)">Open full quotation</app-action-button>
         </ng-template>
 

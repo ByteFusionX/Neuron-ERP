@@ -879,7 +879,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     );
   }
 
-  fullName(person?: { firstName?: string; lastName?: string }): string {
+  fullName(person?: { firstName?: string; lastName?: string } | string): string {
+    if (!person || typeof person === 'string') return 'N/A';
     return ((person?.firstName || '') + ' ' + (person?.lastName || '')).trim() || 'N/A';
   }
 

@@ -96,6 +96,11 @@
                 <app-sf-field label="Quoting Company" [control]="quoteForm.controls.quoteCompany">
                     <app-sf-select formControlName="quoteCompany" [options]="quoteCompanyOptions" placeholder="Select company"></app-sf-select>
                 </app-sf-field>
+                <app-sf-field label="Accounting Manager" [control]="quoteForm.controls.accountingManager"
+                    hint="Optional. Selected person becomes the quotation owner.">
+                    <app-sf-combobox formControlName="accountingManager" [options]="accountingManagerOptions"
+                        placeholder="Keep under my name"></app-sf-combobox>
+                </app-sf-field>
             </app-sf-section>
         </ng-container>
 

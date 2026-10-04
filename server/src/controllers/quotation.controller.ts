@@ -91,6 +91,25 @@ const quoteCustomerDiscount = (quote: any): number =>
     (Array.isArray(quote?.optionalItems) ? quote.optionalItems : [])
         .reduce((sum: number, option: any) => sum + (Number(option?.totalDiscount) || 0), 0);
 
+const applyRequestedQuoteOwner = async (quoteData: any, actor: any) => {
+    const requestedOwner = quoteData.accountingManager;
+    delete quoteData.accountingManager;
+    if (!requestedOwner) {
+        return;
+    }
+    if (!ObjectId.isValid(requestedOwner)) {
+        throw Object.assign(new Error('Selected accounting manager is invalid.'), { status: 400 });
+    }
+    const owner = await Employee.findById(requestedOwner, '_id').lean();
+    if (!owner) {
+        throw Object.assign(new Error('Selected accounting manager was not found.'), { status: 404 });
+    }
+    quoteData.createdBy = owner._id;
+    if (actor?._id && String(actor._id) !== String(owner._id)) {
+        quoteData.createdByUser = actor._id;
+    }
+};
+
 const quoteApprovalBreaches = async (quote: any, actor: any): Promise<any[]> => {
     const enabledRules = await ApprovalRule.find({ enabled: true }).populate('approverRole', 'categoryName').lean();
     if (!enabledRules.length) return [];
@@ -208,6 +227,7 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         
         const createdBy = await getEmployeeData(userToken)
         quoteData.createdBy = createdBy._id
+        await applyRequestedQuoteOwner(quoteData, createdBy);
         normalizeQuoteDepartments(quoteData)
         normalizeQuoteValidity(quoteData)
 
@@ -303,6 +323,21 @@ const quotationLookupStages = [
     },
     {
         $unwind: '$createdBy',
+    },
+    {
+        $lookup: {
+            from: 'employees',
+            localField: 'createdByUser',
+            foreignField: '_id',
+            pipeline: [{ $project: { firstName: 1, lastName: 1 } }],
+            as: 'createdByUser'
+        }
+    },
+    {
+        $unwind: {
+            path: '$createdByUser',
+            preserveNullAndEmptyArrays: true
+        }
     },
     {
         $lookup: {
@@ -438,14 +473,18 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 
         let accessFilter = {};
 
+        const actingUserId = ObjectId.isValid(userId) ? new ObjectId(userId) : null;
+
         if (access === 'reported' || access === 'createdAndReported') {
             let reportedToUserIds = await getAllReportedEmployees(userId);
             if (access === 'createdAndReported') {
-                reportedToUserIds.push(new ObjectId(userId));
+                reportedToUserIds.push(actingUserId);
             }
-            accessFilter = { createdBy: { $in: reportedToUserIds } };
-        } else if (access === 'created') {
-            accessFilter = { createdBy: new ObjectId(userId) };
+            accessFilter = actingUserId
+                ? { $or: [{ createdBy: { $in: reportedToUserIds.filter(Boolean) } }, { createdByUser: actingUserId }] }
+                : { createdBy: { $in: reportedToUserIds.filter(Boolean) } };
+        } else if (access === 'created' && actingUserId) {
+            accessFilter = { $or: [{ createdBy: actingUserId }, { createdByUser: actingUserId }] };
         }
 
         const filters = { $and: [matchFilters, accessFilter] }
@@ -1499,6 +1538,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         delete quoteData.editHistory;
         delete quoteData.revision;
         delete quoteData.revisions;
+        delete quoteData.createdBy;
+        delete quoteData.createdByUser;
         normalizeQuoteDepartments(quoteData)
         normalizeQuoteValidity(quoteData)
 
@@ -1521,6 +1562,9 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
                 }
             }
         }
+        const editorData = await getEmployeeData(req.user);
+        await applyRequestedQuoteOwner(quoteData, editorData);
+
         const changes = await resolveHistoryNames(buildFieldChanges(existingQuote, quoteData));
 
         // A quote that already went to the customer keeps its old content as a revision snapshot when the commercial content changes.
@@ -1529,7 +1573,6 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
             && changes.some((c) => REVISION_FIELDS.includes(c.field));
         const nextRevision = (existingQuote?.revision ?? 0) + 1;
 
-        const editorData = await getEmployeeData(req.user);
         const historyEntry: any = {
             editedBy: editorData?._id,
             editedAt: new Date(),

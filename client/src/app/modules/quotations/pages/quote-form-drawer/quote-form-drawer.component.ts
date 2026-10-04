@@ -16,6 +16,7 @@ import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { Notes } from 'src/app/shared/interfaces/notes.interface';
 import { PreviousJobItems } from 'src/app/shared/interfaces/job.interface';
 import { QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
+import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { SfDraftDirective, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
@@ -83,6 +84,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   ];
   customerNoteOptions: SfOption[] = [];
   termsOptions: SfOption[] = [];
+  accountingManagerOptions: SfOption[] = [];
 
   private fb = inject(FormBuilder);
   private dialog = inject(MatDialog);
@@ -106,6 +108,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     subject: ['', Validators.required],
     currency: ['QAR', Validators.required],
     quoteCompany: [null as string | null, Validators.required],
+    accountingManager: [null as string | null],
     closingDate: ['', Validators.required],
     validityDate: ['', Validators.required],
     optionalItems: this.fb.array([] as any[]),
@@ -211,6 +214,14 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       this.profileService.getNotes().subscribe((res: Notes) => {
         this.customerNoteOptions = res.customerNotes.map((n) => ({ label: n.note, value: n.note }));
         this.termsOptions = res.termsAndConditions.map((n) => ({ label: n.note, value: n.note }));
+      })
+    );
+    this.subscriptions.add(
+      this.employeeService.getAllEmployees().subscribe((employees: getEmployee[]) => {
+        this.accountingManagerOptions = employees.map((employee) => ({
+          label: `${employee.firstName} ${employee.lastName}`.trim(),
+          value: employee._id,
+        })).filter((option): option is SfOption => !!option.value);
       })
     );
   }
@@ -322,7 +333,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.quoteForm.reset({
       client: null, attention: null, date: this.todayIso(), department: null, departments: [], subject: '',
       currency: 'QAR', quoteCompany: null, closingDate: '', validityDate: '', customerNote: '', termsAndCondition: '',
-      paymentTerms: '', deliveryTerms: '', warranty: '', deliveryLocation: '', enqId: null,
+      paymentTerms: '', deliveryTerms: '', warranty: '', deliveryLocation: '', enqId: null, accountingManager: null,
     });
     this.step = 1;
   }
@@ -453,6 +464,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       subject: v.subject,
       currency: v.currency,
       quoteCompany: v.quoteCompany,
+      accountingManager: v.accountingManager || undefined,
       closingDate: v.closingDate,
       validityDate: v.validityDate || v.closingDate,
       customerNote: v.customerNote,

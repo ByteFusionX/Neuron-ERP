@@ -169,6 +169,7 @@ interface Quotation extends Document {
     lostBy: Types.ObjectId;
     status: string;
     createdBy: Types.ObjectId;
+    createdByUser?: Types.ObjectId;
     lpoFiles: [];
     dealData: Deal;
     enqId: Types.ObjectId;
@@ -553,6 +554,11 @@ const quotationSchema = new Schema<Quotation>({
         type: Schema.Types.ObjectId,
         ref: 'Employee',
         required: true,
+    },
+    createdByUser: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+        required: false,
     },
     lpoFiles: [],
     dealData: {
