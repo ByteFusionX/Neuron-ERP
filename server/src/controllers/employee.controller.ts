@@ -67,8 +67,11 @@ export const getPresaleManagers = async (
 
       { $sort: { createdDate: -1 } },
     ]);
-    if (employees.length) {
-      return res.status(200).json(employees);
+    // An admin only counts as a presale manager when they head a department; other roles are unaffected.
+    const headIds = new Set((await departmentModel.find({ departmentHead: { $ne: null } }, "departmentHead").lean()).map((d: any) => String(d.departmentHead)));
+    const managers = employees.filter((e: any) => e.category?.role !== "admin" || headIds.has(String(e._id)));
+    if (managers.length) {
+      return res.status(200).json(managers);
     }
     return res.status(204).json(); // No content
   } catch (error) {

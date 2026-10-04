@@ -6,7 +6,7 @@ import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { getCompanyDetails } from 'src/app/shared/interfaces/company.interface';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { EditCompanyDetailsComponent } from '../edit-company-details/edit-company-details.component';
 import { SetTargetComponent } from 'src/app/shared/components/set-target/set-target.component';
 import { NgIf, AsyncPipe, TitleCasePipe, DatePipe } from '@angular/common';
@@ -16,7 +16,7 @@ import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-l
     selector: 'app-profile-info',
     templateUrl: './profile-info.component.html',
     styleUrls: ['./profile-info.component.css'],
-    imports: [NgIf, SkeltonLoadingComponent, AsyncPipe, TitleCasePipe, DatePipe]
+    imports: [NgIf, RouterLink, SkeltonLoadingComponent, AsyncPipe, TitleCasePipe, DatePipe]
 })
 export class ProfileInfoComponent {
 

@@ -51,6 +51,18 @@
         </div>
     </div>
 
+    <!-- Notification preferences -->
+    <div class="bg-white rounded-xl shadow-sm p-6 flex items-center justify-between gap-4">
+        <div>
+            <p class="text-black font-semibold text-base">Notifications</p>
+            <p class="text-gray-500 text-sm">Choose which notifications reach you in the app, by push and by email.</p>
+        </div>
+        <a routerLink="/profile/notifications"
+            class="shrink-0 bg-violet-700 hover:bg-violet-600 text-white font-medium py-1.5 px-4 rounded text-sm">
+            Manage
+        </a>
+    </div>
+
     <!-- Address -->
     <div class="bg-white rounded-xl shadow-sm p-6" *ngIf="companyDetails; else noCompanyDetails">
         <div class="border-b pb-3 mb-5">

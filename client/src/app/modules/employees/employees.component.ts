@@ -28,7 +28,7 @@ export class EmployeesComponent implements OnInit, OnDestroy {
   rows: EmployeeRow[] = [];
   total = 0;
   page = 1;
-  row = 10;
+  row = 15;
   searchQuery = '';
   isLoading = true;
   createEmployee: boolean | undefined = false;

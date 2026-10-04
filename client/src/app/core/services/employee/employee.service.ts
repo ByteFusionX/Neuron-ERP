@@ -103,16 +103,14 @@ export class EmployeeService {
     return this.http.delete(`${this.api}/responsibility/${id}`)
   }
 
-  // employeeId/password login is disabled in favor of Azure AD login (see
-  // login-page.component). Restore its call site to re-enable it.
-  // employeeLogin(employeeData: Object): Observable<login> {
-  //   return this.http.post(`${this.api}/employee/login`, employeeData)
-  // }
+  employeeLogin(employeeData: Object): Observable<login> {
+    return this.http.post(`${this.api}/employee/login`, employeeData)
+  }
 
   // There's no employeeToken yet at login time, so the Azure access token is
   // attached explicitly here rather than relying on JwtInterceptor.
   employeeLoginWithMicrosoft(azureAccessToken: string): Observable<login> {
-    return this.http.post(`${this.api}/employee/login`, {}, {
+    return this.http.post(`${this.api}/employee/login-microsoft`, {}, {
       headers: new HttpHeaders({ Authorization: `Bearer ${azureAccessToken}` })
     })
   }
@@ -136,7 +134,12 @@ export class EmployeeService {
 
   /** All active employees with their individually-granted privilege flags; category is the role id, not populated. */
   getEmployeeExtraPrivileges() {
-    return this.http.get<{ _id: string; employeeId: string; firstName: string; lastName: string; category: string; extraPrivileges?: Record<string, any> }[] | null>(`${this.api}/employee`)
+    return this.http.get<{ _id: string; employeeId: string; firstName: string; lastName: string; category: string; extraPrivileges?: Record<string, any>; extraPrivilegesExpiresAt?: string | null }[] | null>(`${this.api}/employee`)
+  }
+
+  /** Sets how many days from now this employee's individual grants last; null removes the expiry. */
+  setEmployeeExtraPrivilegeExpiry(employeeId: string, days: number | null) {
+    return this.http.patch<{ expiresAt: string | null }>(`${this.api}/employee/extra-privilege-expiry/${employeeId}`, { days })
   }
 
   setEmployeeApprovalLimit(employeeId: string, limit: ApprovalLimit) {

@@ -208,6 +208,8 @@ export interface Privileges {
   assignedJob: {
     viewReport: string;
     assign?: boolean;
+    reject?: boolean;
+    estimate?: boolean;
   };
   quotation: {
     viewReport: string;
