@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
-import { FormArray, FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 
@@ -9,14 +9,17 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { Supplier } from 'src/app/shared/interfaces/suppliers.interface';
+import { ibanValidator, integerValidator, notBlankValidator, swiftValidator, phoneValidator, strictEmailValidator } from 'src/app/shared/validators/form-field.validators';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { canAccessBanking } from '../../supplier-banking-access';
 import { SupplierFormStepperComponent } from '../../components/form-stepper/form-stepper.component';
 
 /**
  * The supplier create/edit form in a slide-over, modeled on `customer-form-drawer.component.ts`'s
- * 3-step stepper pattern: Details (supplier/address/contact), Products, Bank Details & Documents.
+ * 3-step stepper pattern: Details (supplier/address/contact), Documents and — for the finance team only — Banking.
+ * Products are not entered here; they are added in the product catalogue.
  * The host binds `open`, `mode` and (for edit) `supplier`, and reacts to `saved` / `closed`.
  */
 @Component({
@@ -30,18 +33,22 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() mode: 'create' | 'edit' = 'create';
   /** The supplier being edited, as the list API returns it. */
   @Input() supplier: Supplier | null = null;
-  @Output() saved = new EventEmitter<void>();
+  /** Emits the saved supplier on create (the server's record), nothing on edit. */
+  @Output() saved = new EventEmitter<any>();
   @Output() closed = new EventEmitter<void>();
 
   step: 1 | 2 | 3 = 1;
-  readonly steps = [
-    { n: 1 as const, label: 'Details' },
-    { n: 2 as const, label: 'Products' },
-    { n: 3 as const, label: 'Bank & Documents' },
-  ];
+  canBanking = false;
+
+  get steps(): { n: 1 | 2 | 3; label: string }[] {
+    const steps: { n: 1 | 2 | 3; label: string }[] = [{ n: 1, label: 'Details' }, { n: 2, label: 'Documents' }];
+    if (this.canBanking) steps.push({ n: 3, label: 'Banking' });
+    return steps;
+  }
+
+  get lastStep(): number { return this.steps.length; }
 
   saving = false;
-  showBankDetails = false;
   /** Documents already stored on the supplier (edit mode). Removing one only drops it locally —
    *  see memory note "Supplier doc delete not cloud-synced": the backend update is all-or-nothing,
    *  so the file is actually removed only once the form is saved again. */
@@ -73,35 +80,34 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
 
   supplierForm = this.fb.group({
     supplierId: [{ value: 'NT-SP-', disabled: true }],
-    supplierName: ['', Validators.required],
+    supplierName: ['', [Validators.required, notBlankValidator(), Validators.maxLength(150)]],
     address: this.fb.group({
       streetNo: [''],
       zoneNo: [''],
       buildingNo: [''],
       poBox: [''],
       city: [''],
-      location: ['', Validators.required],
+      location: ['', [Validators.required, notBlankValidator()]],
     }),
     supplierType: [null as string | null, Validators.required],
     category: [null as string | null, Validators.required],
     contactDetails: this.fb.group({
-      name: ['', Validators.required],
-      email: ['', [Validators.required, Validators.email]],
-      phoneNumber: ['', Validators.required],
+      name: ['', [Validators.required, notBlankValidator()]],
+      email: ['', [Validators.required, strictEmailValidator()]],
+      phoneNumber: ['', [Validators.required, phoneValidator()]],
     }),
     bankDetails: this.fb.group({
       bankName: [''],
       branch: [''],
       accountName: [''],
       accountNumber: [''],
-      iban: [''],
-      swiftCode: [''],
+      iban: ['', [ibanValidator()]],
+      swiftCode: ['', [swiftValidator()]],
       currency: [''],
       bankCountry: [''],
       bankAddress: [''],
     }),
-    products: this.fb.array([] as any[]),
-    creditDays: [30, [Validators.required, Validators.min(0)]],
+    creditDays: [30, [Validators.required, Validators.min(0), Validators.max(999), integerValidator()]],
     creditValue: [0, [Validators.required, Validators.min(0)]],
   });
 
@@ -113,11 +119,9 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     return this.isEdit && this.supplier ? `${this.supplier.supplierId}` : 'Add a new supplier record';
   }
 
-  get products(): FormArray { return this.supplierForm.get('products') as FormArray; }
-
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
     1: ['supplierName', 'category', 'supplierType', 'creditDays', 'creditValue', 'address', 'contactDetails'],
-    2: ['products'],
+    2: [],
     3: [],
   };
 
@@ -158,6 +162,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   }
 
   constructor() {
+    this.subscriptions.add(this.employeeService.employeeData$.subscribe((e) => (this.canBanking = canAccessBanking(e))));
     this.subscriptions.add(
       this.supplierForm.controls.category.valueChanges.subscribe((categoryId) => this.onCategoryChange(categoryId))
     );
@@ -209,7 +214,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   private applyDepartmentToExistingCode(departmentCode: string): string {
     const current = this.supplierForm.controls.supplierId.value as string;
     const parts = current?.split('-');
-    if (parts?.length === 5) { parts[2] = departmentCode; return parts.join('-'); }
+    if (parts?.length === 4) { parts[2] = departmentCode; return parts.join('-'); }
     return current;
   }
 
@@ -248,10 +253,6 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
         bankAddress: s.bankDetails?.bankAddress || '',
       },
     });
-    this.showBankDetails = !!s.bankDetails?.bankName;
-
-    this.products.clear();
-    (s.products || []).forEach((p) => this.products.push(this.createProductGroup(p)));
 
     this.existingDocuments = (s.documents || []).map((d) => ({ fileName: d.fileName, originalname: d.fileName }));
     this.newDocuments = [];
@@ -263,11 +264,9 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
 
   private resetForm(): void {
     this.step = 1;
-    this.products.clear();
     this.existingDocuments = [];
     this.newDocuments = [];
     this.newBankDocuments = [];
-    this.showBankDetails = false;
     this.supplierForm.reset({
       supplierId: 'NT-SP-', supplierName: '', supplierType: null, category: null,
       address: { streetNo: '', zoneNo: '', buildingNo: '', poBox: '', city: '', location: '' },
@@ -275,28 +274,6 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
       bankDetails: { bankName: '', branch: '', accountName: '', accountNumber: '', iban: '', swiftCode: '', currency: '', bankCountry: '', bankAddress: '' },
       creditDays: 30, creditValue: 0,
     });
-  }
-
-  private createProductGroup(product?: any) {
-    return this.fb.group({
-      productName: [product?.productName || '', Validators.required],
-      paymentTerm: [product?.paymentTerm || '', Validators.required],
-      contactName: [product?.contactName || ''],
-      contactEmail: [product?.contactEmail || '', Validators.email],
-      contactNo: [product?.contactNo || ''],
-    });
-  }
-
-  addProduct(): void {
-    this.products.push(this.createProductGroup());
-  }
-
-  removeProduct(index: number): void {
-    this.products.removeAt(index);
-  }
-
-  toggleBankDetails(): void {
-    this.showBankDetails = !this.showBankDetails;
   }
 
   removeExistingDocument(index: number): void {
@@ -312,17 +289,29 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     this.onDrawerClosed(false);
   }
 
+  /** True when every bank field is blank, i.e. the user opened the section but never filled it. */
+  private get bankDetailsEmpty(): boolean {
+    const bank = this.supplierForm.getRawValue().bankDetails as Record<string, string | null>;
+    return Object.values(bank).every((v) => !(v ?? '').toString().trim());
+  }
+
+  private trimValues<T>(group: T): T {
+    return Object.fromEntries(
+      Object.entries(group as Record<string, any>).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v])
+    ) as T;
+  }
+
   private buildPayload(): any {
     const v = this.supplierForm.getRawValue();
     const employeeId = this.employeeService.employeeToken()?.id;
     return {
-      supplierName: v.supplierName,
-      address: v.address,
+      supplierName: v.supplierName?.trim(),
+      address: this.trimValues(v.address),
       supplierType: v.supplierType,
       category: v.category,
-      contactDetails: v.contactDetails,
-      bankDetails: this.showBankDetails ? v.bankDetails : undefined,
-      products: v.products,
+      contactDetails: this.trimValues(v.contactDetails),
+      // Non-finance editors never see the banking step: omit the field so the server keeps what is stored.
+      bankDetails: !this.canBanking ? undefined : this.bankDetailsEmpty ? (this.isEdit ? null : undefined) : this.trimValues(v.bankDetails),
       creditDays: v.creditDays,
       creditValue: v.creditValue,
       ...(this.isEdit ? {} : { createdBy: employeeId }),
@@ -332,7 +321,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   async submit(): Promise<void> {
     if (this.supplierForm.invalid) {
       this.supplierForm.markAllAsTouched();
-      this.step = !this.isStepValid(1) ? 1 : !this.isStepValid(2) ? 2 : 3;
+      this.step = 1;
       this.toaster.error('Please fill all required fields correctly');
       return;
     }
@@ -340,16 +329,21 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     const { confirmed } = await this.confirm.open({
       tone: 'note',
       title: this.isEdit ? 'Save changes' : 'Create supplier',
+      confirmLabel: this.isEdit ? 'Save' : 'Create',
       message: this.isEdit
-        ? `Save changes to "${this.supplierForm.value.supplierName}"?`
-        : `Create supplier "${this.supplierForm.value.supplierName}"? It will need approval before it can be used.`,
+        ? `Save changes to "${this.supplierForm.value.supplierName?.trim()}"?${this.supplier?.status === 'Rejected' ? ' It will be sent back for approval.' : ''}`
+        : `Create supplier "${this.supplierForm.value.supplierName?.trim()}"? It will need approval before it can be used.`,
     });
     if (!confirmed) return;
 
     this.saving = true;
     // Bank documents have no dedicated backend field, so they ride along in the same
     // `documents` array as the general attachments (see the class-level note above).
-    const files = [...this.newDocuments, ...this.newBankDocuments];
+    const seen = new Set<string>();
+    const files = [...this.newDocuments, ...this.newBankDocuments].filter((f) => {
+      const key = `${f.name}:${f.size}:${f.lastModified}`;
+      return seen.has(key) ? false : (seen.add(key), true);
+    });
 
     if (this.isEdit && this.supplier?._id) {
       this.supplierService.updateSupplierWithFiles(this.supplier._id, this.buildPayload(), files).subscribe({
@@ -358,7 +352,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
       });
     } else {
       this.supplierService.createSupplierWithFiles(this.buildPayload(), files).subscribe({
-        next: () => { this.saving = false; this.finish(); this.toaster.success('Supplier created successfully'); },
+        next: (res) => { this.saving = false; this.finish(res?.data); this.toaster.success('Supplier created successfully'); },
         error: (error) => {
           this.saving = false;
           this.toaster.error(error?.error?.message === 'Supplier already exists' ? 'Supplier already exists' : 'Failed to create supplier');
@@ -367,9 +361,9 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     }
   }
 
-  private finish(): void {
+  private finish(saved?: any): void {
     this.resetForm();
     this.closed.emit();
-    this.saved.emit();
+    this.saved.emit(saved);
   }
 }

@@ -2,13 +2,80 @@ import { NextFunction, Request, Response } from 'express';
 import Supplier, { supplierStatus } from '../models/supplier.model';
 import Department from '../models/department.model';
 import { Types } from 'mongoose';
+import Product from '../models/products.model';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
-import { getEmployeeData, buildPrivilegeAccessFilter } from '../common/utils/util';
+import { getEmployeeData, buildPrivilegeAccessFilter, escapeRegex } from '../common/utils/util';
 import { Server } from 'socket.io';
 import { createNotificationWithPrivileges } from './notification.controller';
 import { getNextSequence } from '../models/counter.model';
 
+
+const MAX_PAGE_SIZE = 5000;
+
+/** Grid sort keys the suppliers list may sort by, mapped to the aggregated document field. */
+const SUPPLIER_SORT_FIELDS: Record<string, string> = {
+   supplierId: 'supplierId',
+   supplierName: 'supplierName',
+   supplierType: 'supplierType',
+   status: 'status',
+   creditDays: 'creditDays',
+   creditValue: 'creditValue',
+   createdDate: 'createdDate',
+   category: 'categoryInfo.departmentName',
+   location: 'address.location',
+};
+
+/** Grid filter keys -> document path, and whether the path only exists after the category lookup. */
+const SUPPLIER_FILTER_FIELDS: Record<string, { path: string; type: 'text' | 'number'; post?: boolean }> = {
+   supplierId: { path: 'supplierId', type: 'text' },
+   supplierName: { path: 'supplierName', type: 'text' },
+   supplierType: { path: 'supplierType', type: 'text' },
+   status: { path: 'status', type: 'text' },
+   location: { path: 'address.location', type: 'text' },
+   categoryName: { path: 'categoryInfo.departmentName', type: 'text', post: true },
+   creditDays: { path: 'creditDays', type: 'number' },
+   creditValue: { path: 'creditValue', type: 'number' },
+};
+
+/** Turns the data-grid's filter chips into Mongo conditions. Unknown keys/operators are ignored. */
+const buildSupplierColumnFilters = (columnFilters: any): { preMatch: Record<string, any>; postMatch: Record<string, any> } => {
+   const pre: Record<string, any>[] = [];
+   const post: Record<string, any>[] = [];
+   if (Array.isArray(columnFilters)) {
+      for (const f of columnFilters) {
+         const def = SUPPLIER_FILTER_FIELDS[f?.key];
+         if (!def) continue;
+         const target = def.post ? post : pre;
+         const value = f.value;
+         if (f.op === 'empty') {
+            target.push({ $or: [{ [def.path]: null }, { [def.path]: '' }, { [def.path]: { $exists: false } }] });
+            continue;
+         }
+         if (value === undefined || value === null || String(value).trim() === '') continue;
+         if (def.type === 'number') {
+            const n = Number(value);
+            if (isNaN(n)) continue;
+            if (f.op === 'gt') target.push({ [def.path]: { $gt: n } });
+            else if (f.op === 'lt') target.push({ [def.path]: { $lt: n } });
+            else if (f.op === 'isNot') target.push({ [def.path]: { $ne: n } });
+            else target.push({ [def.path]: n });
+            continue;
+         }
+         const text = escapeRegex(String(value).trim());
+         switch (f.op) {
+            case 'is': case 'eq': target.push({ [def.path]: { $regex: `^${text}$`, $options: 'i' } }); break;
+            case 'isNot': target.push({ [def.path]: { $not: { $regex: `^${text}$`, $options: 'i' } } }); break;
+            case 'notContains': target.push({ [def.path]: { $not: { $regex: text, $options: 'i' } } }); break;
+            default: target.push({ [def.path]: { $regex: text, $options: 'i' } });
+         }
+      }
+   }
+   return {
+      preMatch: pre.length ? { $and: pre } : {},
+      postMatch: post.length ? { $and: post } : {},
+   };
+};
 
 export const getSuppliers = async (req: Request, res: Response) => {
    try {
@@ -28,9 +95,14 @@ export const getSuppliers = async (req: Request, res: Response) => {
          ? await buildPrivilegeAccessFilter(employee._id, privileges.supplier.viewReport, 'createdBy')
          : {};
 
-      // Convert string page and row to numbers
-      page = parseInt(page.toString());
-      row = parseInt(row.toString());
+      // Convert string page and row to numbers, falling back to safe values for junk input
+      page = parseInt(String(page), 10);
+      row = parseInt(String(row), 10);
+      if (!Number.isFinite(page) || page < 1) page = 1;
+      if (!Number.isFinite(row) || row < 1) row = 10;
+      row = Math.min(row, MAX_PAGE_SIZE);
+
+      const { filters: columnFilters, sortKey, sortDir } = req.body;
 
       // Calculate skip value for pagination
       const skip = (page - 1) * row;
@@ -44,14 +116,18 @@ export const getSuppliers = async (req: Request, res: Response) => {
       // Add date range filter if provided
       if (fromDate || toDate) {
          filter.createdDate = {};
-         if (fromDate) {
-            filter.createdDate.$gte = new Date(fromDate);
+         const start = fromDate ? new Date(fromDate) : null;
+         const end = toDate ? new Date(toDate) : null;
+         if ((start && isNaN(start.getTime())) || (end && isNaN(end.getTime()))) {
+            return res.status(400).json({ success: false, message: 'Invalid date range' });
          }
-         if (toDate) {
+         if (start) {
+            filter.createdDate.$gte = start;
+         }
+         if (end) {
             // Set time to end of day for toDate
-            const endDate = new Date(toDate);
-            endDate.setHours(23, 59, 59, 999);
-            filter.createdDate.$lte = endDate;
+            end.setHours(23, 59, 59, 999);
+            filter.createdDate.$lte = end;
          }
       }
 
@@ -63,7 +139,10 @@ export const getSuppliers = async (req: Request, res: Response) => {
 
       // Add category filter if provided (now it's an ObjectId)
       if (category) {
-         filter.category = category; // Assuming category is already an ObjectId string
+         if (!Types.ObjectId.isValid(category)) {
+            return res.status(400).json({ success: false, message: 'Invalid category' });
+         }
+         filter.category = new Types.ObjectId(category);
       }
 
       // Add supplierType filter if provided
@@ -71,26 +150,32 @@ export const getSuppliers = async (req: Request, res: Response) => {
          filter.supplierType = supplierType;
       }
 
+      const andClauses: Record<string, any>[] = [];
+
       // Add supplierName filter if provided (search parameter maps to supplierName)
-      const searchTerm = search || supplierName;
+      const searchTerm = String(search || supplierName || '').trim();
       if (searchTerm) {
-         filter.supplierName = { $regex: searchTerm, $options: 'i' };
+         const pattern = { $regex: escapeRegex(searchTerm), $options: 'i' };
+         andClauses.push({ $or: [{ supplierName: pattern }, { supplierId: pattern }] });
       }
+
+      // Grid column filters (whitelisted keys only)
+      const { preMatch, postMatch } = buildSupplierColumnFilters(columnFilters);
+      if (Object.keys(preMatch).length) andClauses.push(preMatch);
+      if (andClauses.length) filter.$and = andClauses;
 
       // Add location filter if provided
       if (location) {
-         filter['address.location'] = { $regex: location, $options: 'i' };
+         filter['address.location'] = { $regex: escapeRegex(String(location)), $options: 'i' };
       }
 
       // Add productName filter if provided
       if (productName) {
-         filter['products.productName'] = { $regex: productName, $options: 'i' };
+         filter['products.productName'] = { $regex: escapeRegex(String(productName)), $options: 'i' };
       }
 
-      // Use aggregation pipeline for advanced querying with lookups
-      const aggregationPipeline: PipelineStage[] = [
-         { $match: filter },
-         // Lookup for category (references 'Department')
+      // Cheap stages first (match, category lookup, sort, page), heavy lookups only on the page.
+      const categoryStages: PipelineStage[] = [
          {
             $lookup: {
                from: 'departments',
@@ -99,6 +184,25 @@ export const getSuppliers = async (req: Request, res: Response) => {
                as: 'categoryDetails'
             }
          },
+         { $addFields: { categoryInfo: { $arrayElemAt: ["$categoryDetails", 0] } } },
+      ];
+      const postMatchStages: PipelineStage[] = Object.keys(postMatch).length ? [{ $match: postMatch }] : [];
+
+      const sortField = SUPPLIER_SORT_FIELDS[String(sortKey)];
+      const sortSpec: Record<string, 1 | -1> = {};
+      if (sortField) sortSpec[sortField] = sortDir === 'desc' ? -1 : 1;
+      if (!(sortField in sortSpec)) sortSpec.createdDate = -1;
+      else if (sortField !== 'createdDate') sortSpec.createdDate = -1;
+      sortSpec._id = 1;
+      const sortStage: PipelineStage = { $sort: sortSpec };
+
+      const aggregationPipeline: PipelineStage[] = [
+         { $match: filter },
+         ...categoryStages,
+         ...postMatchStages,
+         sortStage,
+         { $skip: skip },
+         { $limit: row },
          {
             $lookup: {
                from: 'employees', // createdBy references 'Employee'
@@ -133,7 +237,6 @@ export const getSuppliers = async (req: Request, res: Response) => {
          },
          {
             $addFields: {
-               categoryInfo: { $arrayElemAt: ["$categoryDetails", 0] },
                createdByInfo: { $arrayElemAt: ["$createdByDepartment", 0] },
                hasOrders: { $gt: [{ $size: "$purchaseOrders" }, 0] },
                approvedHistory: {
@@ -188,6 +291,20 @@ export const getSuppliers = async (req: Request, res: Response) => {
                }
             }
          },
+         // Products are managed in the product catalogue; a supplier's list is the catalogue items
+         // that name it as their default vendor.
+         {
+            $lookup: {
+               from: Product.collection.name,
+               let: { supplierId: "$_id" },
+               pipeline: [
+                  { $match: { $expr: { $eq: ["$defaultVendor", "$$supplierId"] }, isDeleted: { $ne: true } } },
+                  { $project: { _id: 1, itemCode: 1, productDescription: 1, unitOfMeasure: 1, price: "$estimatedCost" } },
+                  { $sort: { itemCode: 1 } },
+               ],
+               as: "catalogueProducts",
+            }
+         },
          {
             $project: {
                supplierId: 1,
@@ -201,7 +318,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
                status: 1,
                isBlocked: 1,
                hasOrders: 1,
-               products: 1,
+               products: "$catalogueProducts",
                creditDays: 1,
                creditValue: 1,
                createdDate: 1,
@@ -211,16 +328,19 @@ export const getSuppliers = async (req: Request, res: Response) => {
                rejectHistory: 1
             }
          },
-         { $sort: { createdDate: -1 } }, // Sort by createdDate in descending order
-         { $skip: skip },
-         { $limit: row }
       ];
 
-      // Count total documents for pagination
-      const totalDocs = await Supplier.countDocuments(filter);
+      // Count with the same filters (the category-name filter needs the lookup)
+      const countPipeline: PipelineStage[] = [
+         { $match: filter },
+         ...(postMatchStages.length ? [...categoryStages, ...postMatchStages] : []),
+         { $count: 'total' },
+      ];
+      const [countResult] = await Supplier.aggregate(countPipeline).collation({ locale: 'en' }).exec();
+      const totalDocs: number = countResult?.total ?? 0;
 
-      // Execute aggregation pipeline with proper typing
-      const suppliersData = await Supplier.aggregate(aggregationPipeline).exec();
+      // Execute aggregation pipeline (case-insensitive, natural ordering for text sorts)
+      const suppliersData = await Supplier.aggregate(aggregationPipeline).collation({ locale: 'en' }).exec();
 
       // Calculate pagination metadata
       const totalPages = Math.ceil(totalDocs / row);
@@ -248,6 +368,88 @@ export const getSuppliers = async (req: Request, res: Response) => {
    }
 }
 
+/** Report aggregate: status counts and approved credit limit, overall and grouped by category / supplier type. */
+export const getSupplierReportSummary = async (req: Request, res: Response) => {
+   try {
+      const { toDate, fromDate, category, supplierType } = req.body;
+
+      const employee = await getEmployeeData(req.user);
+      if (!employee) {
+         return res.status(401).json({ success: false, message: "Employee not found" });
+      }
+
+      const privileges = employee.category?.privileges;
+      const accessFilter = privileges?.supplier?.viewReport
+         ? await buildPrivilegeAccessFilter(employee._id, privileges.supplier.viewReport, 'createdBy')
+         : {};
+
+      const filter: Record<string, any> = { isDeleted: false, ...accessFilter };
+
+      if (fromDate || toDate) {
+         const start = fromDate ? new Date(fromDate) : null;
+         const end = toDate ? new Date(toDate) : null;
+         if ((start && isNaN(start.getTime())) || (end && isNaN(end.getTime()))) {
+            return res.status(400).json({ success: false, message: 'Invalid date range' });
+         }
+         filter.createdDate = {};
+         if (start) filter.createdDate.$gte = start;
+         if (end) {
+            end.setHours(23, 59, 59, 999);
+            filter.createdDate.$lte = end;
+         }
+      }
+      if (category) {
+         if (!Types.ObjectId.isValid(category)) {
+            return res.status(400).json({ success: false, message: 'Invalid category' });
+         }
+         filter.category = new Types.ObjectId(category);
+      }
+      if (supplierType) filter.supplierType = String(supplierType);
+
+      const counters = {
+         total: { $sum: 1 },
+         pending: { $sum: { $cond: [{ $eq: ['$status', supplierStatus.pending] }, 1, 0] } },
+         approved: { $sum: { $cond: [{ $eq: ['$status', supplierStatus.approved] }, 1, 0] } },
+         rejected: { $sum: { $cond: [{ $eq: ['$status', supplierStatus.rejected] }, 1, 0] } },
+         creditValue: { $sum: { $cond: [{ $eq: ['$status', supplierStatus.approved] }, { $ifNull: ['$creditValue', 0] }, 0] } },
+      };
+
+      const [result] = await Supplier.aggregate([
+         { $match: filter },
+         {
+            $facet: {
+               totals: [{ $group: { _id: null, ...counters } }],
+               byCategory: [
+                  { $group: { _id: '$category', ...counters } },
+                  { $lookup: { from: 'departments', localField: '_id', foreignField: '_id', as: 'dept' } },
+                  { $addFields: { name: { $arrayElemAt: ['$dept.departmentName', 0] } } },
+                  { $project: { dept: 0 } },
+               ],
+               byType: [{ $group: { _id: '$supplierType', ...counters } }],
+            },
+         },
+      ]);
+
+      const empty = { total: 0, pending: 0, approved: 0, rejected: 0, creditValue: 0 };
+      const toRow = (r: any) => ({
+         id: r._id ? String(r._id) : 'unassigned',
+         name: r.name || (r._id && typeof r._id === 'string' ? r._id : 'Unassigned'),
+         total: r.total, pending: r.pending, approved: r.approved, rejected: r.rejected, creditValue: r.creditValue,
+      });
+
+      return res.status(200).json({
+         success: true,
+         data: {
+            totals: result?.totals?.[0] ? { ...empty, ...result.totals[0], _id: undefined } : empty,
+            byCategory: (result?.byCategory || []).map(toRow),
+            bySupplierType: (result?.byType || []).map(toRow),
+         },
+      });
+   } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message });
+   }
+};
+
 export const createSupplier = async (req: Request, res: Response) => {
    try {
       const tokenData = req.user;
@@ -262,21 +464,37 @@ export const createSupplier = async (req: Request, res: Response) => {
          products,
          creditDays,
          creditValue,
-         createdBy,
       } = JSON.parse(req.body.supplier);
 
       // Validate required fields
-      if (!supplierName || !supplierType || !category || !contactDetails || !products) {
+      if (!supplierName || !supplierType || !category || !contactDetails) {
          return res.status(400).json({
             success: false,
             message: 'Please provide all required fields',
          });
       }
 
-      if (!createdBy || !Types.ObjectId.isValid(createdBy)) {
-         return res.status(400).json({
+      // The creator is always the authenticated employee, never a client-supplied id.
+      const creatorId = employee?._id;
+      if (!creatorId || !Types.ObjectId.isValid(creatorId)) {
+         return res.status(401).json({
             success: false,
-            message: 'createdBy (employee id) is required',
+            message: 'Employee not found',
+         });
+      }
+
+      if (typeof supplierName !== 'string' || !supplierName.trim()) {
+         return res.status(400).json({ success: false, message: 'Supplier name is required' });
+      }
+
+      const duplicate = await Supplier.findOne({
+         isDeleted: false,
+         supplierName: { $regex: `^${escapeRegex(supplierName.trim())}$`, $options: 'i' },
+      }).select('_id');
+      if (duplicate) {
+         return res.status(409).json({
+            success: false,
+            message: 'Supplier already exists',
          });
       }
 
@@ -304,17 +522,17 @@ export const createSupplier = async (req: Request, res: Response) => {
 
       // Create new supplier object
       const newSupplier = new Supplier({
-         supplierName,
+         supplierName: supplierName.trim(),
          address: address,
          supplierType,
          category,
          contactDetails: contactDetails,
          bankDetails: bankDetails,
          documents: documents,
-         products: products,
+         products: products ?? [],
          creditDays,
          creditValue,
-         createdBy: new Types.ObjectId(createdBy),
+         createdBy: new Types.ObjectId(creatorId),
          createdDate: new Date(),
          updatedDate: new Date(),
          status: 'Pending', // Default status
@@ -404,6 +622,27 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
          });
       }
 
+      // Only a pending supplier can be approved or rejected. Rejected suppliers go back to
+      // pending when they are edited (see updateSupplier); approved ones are blocked, not rejected.
+      if (statusToUpdate === supplierStatus.pending) {
+         return res.status(400).json({
+            success: false,
+            message: 'Status cannot be set back to Pending directly; edit the supplier to resubmit it',
+         });
+      }
+      if (supplier.status !== supplierStatus.pending) {
+         return res.status(400).json({
+            success: false,
+            message: `Supplier is already ${supplier.status.toLowerCase()}`,
+         });
+      }
+      if (statusToUpdate === supplierStatus.rejected && !String(comment ?? '').trim()) {
+         return res.status(400).json({
+            success: false,
+            message: 'A reason is required to reject a supplier',
+         });
+      }
+
       // Handle different status updates
       if (statusToUpdate === supplierStatus.approved) {
          // Approval logic
@@ -419,13 +658,6 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
             return res.status(403).json({
                success: false,
                message: "You do not have permission to approve suppliers",
-            });
-         }
-
-         if (supplier.status === supplierStatus.approved) {
-            return res.status(400).json({
-               success: false,
-               message: 'Supplier is already approved',
             });
          }
 
@@ -527,7 +759,7 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
          })
          .populate({
             path: 'category',
-            select: 'firstName lastName',
+            select: 'departmentName',
          });
 
       // Determine success message based on status
@@ -625,12 +857,11 @@ export const updateSupplier = async (req: Request, res: Response) => {
          products,
          creditDays,
          creditValue,
-         updatedBy,
       } = JSON.parse(req.body.supplier);
 
       // Validate required fields
       console.log(req.body);
-      if (!id || !supplierName || !supplierType || !category || !contactDetails || !products) {
+      if (!id || !supplierName || !supplierType || !category || !contactDetails) {
          return res.status(400).json({
             success: false,
             message: 'Please provide all required fields',
@@ -644,6 +875,19 @@ export const updateSupplier = async (req: Request, res: Response) => {
             success: false,
             message: 'Supplier not found',
          });
+      }
+
+      if (typeof supplierName !== 'string' || !supplierName.trim()) {
+         return res.status(400).json({ success: false, message: 'Supplier name is required' });
+      }
+
+      const duplicate = await Supplier.findOne({
+         _id: { $ne: existingSupplier._id },
+         isDeleted: false,
+         supplierName: { $regex: `^${escapeRegex(supplierName.trim())}$`, $options: 'i' },
+      }).select('_id');
+      if (duplicate) {
+         return res.status(409).json({ success: false, message: 'Supplier already exists' });
       }
 
       // Determine the new status: if existing is 'rejected', change to 'pending'
@@ -698,17 +942,19 @@ export const updateSupplier = async (req: Request, res: Response) => {
       const updatedSupplier = await Supplier.findByIdAndUpdate(
          id,
          {
-            supplierName,
+            supplierName: supplierName.trim(),
             address: address,
             supplierType,
             category,
             contactDetails: contactDetails,
-            bankDetails: bankDetails,
+            // null clears banking details the user removed; omitted (undefined) leaves them untouched,
+            // which is what a non-finance editor sends since they never see the banking step.
+            ...(bankDetails === undefined ? {} : { bankDetails: bankDetails || null }),
             documents, // Always update documents (either new ones or existing ones)
-            products: products,
+            // Products live in the product catalogue now; the legacy embedded list is left untouched.
+            ...(products === undefined ? {} : { products }),
             creditDays,
             creditValue,
-            updatedBy: new Types.ObjectId(updatedBy),
             updatedDate: new Date(),
             status: newStatus, // Update status accordingly
             supplierId,
@@ -881,8 +1127,14 @@ export const previewSupplierId = async (req: Request, res: Response) => {
 export const blockSupplier = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const { id: supplierId } = req.params;
+      if (!Types.ObjectId.isValid(supplierId)) {
+         return res.status(400).json({ message: 'Invalid supplier id' });
+      }
       const supplier = await Supplier.findOne({ _id: supplierId });
       if (supplier) {
+         if (supplier.status !== supplierStatus.approved) {
+            return res.status(400).json({ message: 'Only approved suppliers can be blocked or unblocked' });
+         }
          const isBlocked = supplier.isBlocked ? false : true;
          await Supplier.findByIdAndUpdate(
             supplierId,

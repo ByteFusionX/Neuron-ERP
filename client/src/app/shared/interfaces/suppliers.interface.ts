@@ -32,11 +32,11 @@ export interface BankDetails {
 
 // Product interface
 export interface Product {
-    productName: string;
-    contactName: string;
-    contactEmail: string;
-    contactNo: string;
-    paymentTerm: string;
+    _id?: string;
+    itemCode: string;
+    productDescription?: string;
+    unitOfMeasure?: string;
+    price?: number;
 }
 
 // Document interface

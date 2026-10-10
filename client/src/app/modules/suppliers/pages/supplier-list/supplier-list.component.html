@@ -1,4 +1,11 @@
 <div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <div *ngIf="selectedCategory || selectedSupplierType" class="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-300" role="status">
+        <span>Filtered from report:</span>
+        <span *ngIf="selectedCategory" class="rounded-full border border-violet-300 bg-violet-50 px-2.5 py-0.5 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">Category</span>
+        <span *ngIf="selectedSupplierType" class="rounded-full border border-violet-300 bg-violet-50 px-2.5 py-0.5 text-violet-700 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300">Type: {{ selectedSupplierType }}</span>
+        <button type="button" class="font-medium text-violet-700 hover:underline dark:text-violet-400" (click)="clearReportFilters()">Clear</button>
+    </div>
+
     <app-data-grid #grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
@@ -49,7 +56,7 @@
             </div>
             <div class="sp-meta">
                 <p class="sp-meta-label">Credit Limit</p>
-                <p class="sp-meta-value">{{ row.creditValue | number }}</p>
+                <p class="sp-meta-value">{{ row.creditValue | number: '1.2-2' }}</p>
             </div>
             <div class="sp-meta">
                 <p class="sp-meta-label">Created</p>
@@ -57,15 +64,26 @@
             </div>
         </ng-template>
 
-        <ng-template #detailFooterTemplate let-row let-tab="tab">
-            <app-action-button *ngIf="tab === 'detail' && row.status === 'Pending'" variant="secondary" (click)="openEditDrawer(row)">Edit</app-action-button>
+        <!-- left: optional, per-tab (outline) -->
+        <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="row.status === 'Pending' && canApproveSupplier" variant="primary" (click)="approveSupplier(row)">Approve</app-action-button>
+            <app-action-button *ngIf="row.status === 'Pending' && canApproveSupplier" variant="outline" (click)="rejectSupplier(row)">Reject</app-action-button>
+            <app-action-button *ngIf="tab === 'detail' && canEdit(row)" variant="outline" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
             <ng-container [ngSwitch]="tab">
                 <ng-container *ngSwitchCase="'detail'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
-                    <app-detail-table class="mt-5" title="Products" [columns]="productColumns" [rows]="productRows(row)" emptyMessage="No products listed."></app-detail-table>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'products'">
+                    <app-detail-table [columns]="productColumns" [rows]="productRows(row)" emptyMessage="No products listed."></app-detail-table>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'documents'">
+                    <app-detail-documents [documents]="documentRows(row)" emptyMessage="No documents uploaded for this supplier."
+                        (open)="openDocument($event)" (download)="downloadDocument($event)"></app-detail-documents>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'banking'">

@@ -7,6 +7,25 @@ import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/er
 
 // Every method below is called from components that already show their own
 // error toast on failure, so requests opt out of the interceptor's global toast.
+export interface SupplierReportRow {
+    id: string;
+    name: string;
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    creditValue: number;
+}
+
+export interface SupplierReportSummaryResponse {
+    success: boolean;
+    data: {
+        totals: Omit<SupplierReportRow, 'id' | 'name'>;
+        byCategory: SupplierReportRow[];
+        bySupplierType: SupplierReportRow[];
+    };
+}
+
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
 @Injectable({
@@ -33,6 +52,10 @@ export class SupplierService {
         productName?: string;
     }): Observable<SupplierListResponse> {
         return this.http.post<SupplierListResponse>(`${this.api}/supplier`, params, { context: context() });
+    }
+
+    getReportSummary(params: { category?: string; supplierType?: string; fromDate?: string; toDate?: string }): Observable<SupplierReportSummaryResponse> {
+        return this.http.post<SupplierReportSummaryResponse>(`${this.api}/supplier/report-summary`, params, { context: context() });
     }
 
     getSupplierById(id: string): Observable<SupplierResponse> {

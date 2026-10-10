@@ -1,14 +1,17 @@
 import { Router } from "express";
-import { blockSupplier, createSupplier, deleteSupplier, getSupplierById, getSupplierList, getSuppliers, previewSupplierId, updateSupplier, updateSupplierStatus } from "../controllers/supplier.controller";
-import { requirePrivilege } from "../common/middlewares/privilege.middleware";
+import { blockSupplier, createSupplier, deleteSupplier, getSupplierById, getSupplierList, getSupplierReportSummary, getSuppliers, previewSupplierId, updateSupplier, updateSupplierStatus } from "../controllers/supplier.controller";
+import { requireAnyPrivilege, requirePrivilege } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage")
 
 const supplierRouter = Router()
 
+// Supplier picker used by item entry (presale estimation, quotation, deal sheet).
+supplierRouter.get('/suppliers-list', requireAnyPrivilege("supplier", "assignedJob", "quotation", "dealSheet", "purchase"), getSupplierList)
+
 supplierRouter.use(requirePrivilege("supplier"));
 
-supplierRouter.get('/suppliers-list', getSupplierList)
 supplierRouter.post('/', getSuppliers)
+supplierRouter.post('/report-summary', getSupplierReportSummary)
 supplierRouter.get('/preview-code', previewSupplierId)
 supplierRouter.get('/:id', getSupplierById)
 supplierRouter.post('/create', upload.fields([{ name: 'documents' }]), createSupplier)

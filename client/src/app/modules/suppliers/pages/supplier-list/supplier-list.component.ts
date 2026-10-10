@@ -1,10 +1,15 @@
+import { canAccessBanking } from '../../supplier-banking-access';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { DatePipe, DecimalPipe, NgClass, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { HttpEventType } from '@angular/common/http';
 import { Subscription } from 'rxjs';
+import { saveAs } from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
 
+import { buildBreadcrumbs } from 'src/app/shared/constants/nav-menu';
+import { FileService } from 'src/app/core/services/file.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Supplier, SupplierListResponse, SupplierStatus } from 'src/app/shared/interfaces/suppliers.interface';
@@ -18,16 +23,17 @@ import {
   DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView,
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
-import { DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailDocument, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 import { SupplierFormDrawerComponent } from '../supplier-form-drawer/supplier-form-drawer.component';
 
 /**
  * Suppliers module main page, rebuilt on the same data-grid + detail-panel pattern as
  * `quotation-list.component.ts`: one grid for the list, tabs-as-views, quick row actions, an
- * in-page detail panel (Detail / Banking Info / History) and a shared create+edit drawer.
+ * in-page detail panel (Detail / Products / Banking Info / Documents / History) and a shared create+edit drawer.
  */
 @Component({
   selector: 'app-supplier-list',
@@ -36,11 +42,15 @@ import { SupplierFormDrawerComponent } from '../supplier-form-drawer/supplier-fo
   providers: [DatePipe, NumberFormatterPipe],
   imports: [
     NgIf, NgClass, NgSwitch, NgSwitchCase, DatePipe, DecimalPipe, FormsModule,
-    DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent,
+    DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, DetailDocumentsComponent,
     ActionButtonComponent, ViewToggleComponent, SupplierFormDrawerComponent,
   ],
 })
 export class SupplierListComponent implements OnInit, OnDestroy {
+  /** Must be one of the grid's page-size options, otherwise the Rows dropdown renders blank. */
+  private static readonly DEFAULT_PAGE_SIZE = 15;
+  private static readonly PAGE_SIZES = [5, 15, 30, 50];
+
   @ViewChild('grid') grid!: DataGridComponent<Supplier>;
 
   isLoading = true;
@@ -59,20 +69,23 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     { id: 'approved', label: 'Approved', filters: [{ id: 1, key: 'status', op: 'eq', value: SupplierStatus.APPROVED }] },
     { id: 'rejected', label: 'Rejected', filters: [{ id: 1, key: 'status', op: 'eq', value: SupplierStatus.REJECTED }] },
   ];
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'Suppliers' }];
+  breadcrumbs: DataGridBreadcrumb[] = buildBreadcrumbs('/suppliers').map((c, i, all) => ({ label: c.label, link: i === all.length - 1 ? undefined : c.route }));
 
-  detailTabs: DataGridDetailTab[] = [
+  private readonly allDetailTabs: DataGridDetailTab[] = [
     { id: 'detail', label: 'Detail', icon: 'info' },
+    { id: 'products', label: 'Products', icon: 'card' },
     { id: 'banking', label: 'Banking Info', icon: 'wallet' },
+    { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'history', label: 'History', icon: 'activity' },
   ];
+  /** Banking Info is shown to the finance team only. */
+  detailTabs: DataGridDetailTab[] = this.allDetailTabs.filter((t) => t.id !== 'banking');
 
   readonly productColumns: DetailTableColumn[] = [
-    { key: 'productName', label: 'Product' },
-    { key: 'contactName', label: 'Contact' },
-    { key: 'contactEmail', label: 'Email' },
-    { key: 'contactNo', label: 'Phone' },
-    { key: 'paymentTerm', label: 'Payment Term' },
+    { key: 'productDescription', label: 'Description' },
+    { key: 'itemCode', label: 'Item Code' },
+    { key: 'unitOfMeasure', label: 'UOM' },
+    { key: 'price', label: 'Price', type: 'currency', align: 'right' },
   ];
 
   readonly statusBadgeClasses: Record<string, string> = {
@@ -81,22 +94,29 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     [SupplierStatus.REJECTED]: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
   };
 
+  readonly blockedBadgeClasses: Record<string, string> = {
+    Blocked: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
+  };
+
   supplierTitle = (r: Supplier) => r.supplierId ?? '';
   supplierSubtitle = (r: Supplier) => r.supplierName ?? '';
 
   private activeViewId = 'all';
   page = 1;
-  row = 15;
+  row = SupplierListComponent.DEFAULT_PAGE_SIZE;
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
   searchQuery = '';
   selectedStatus: string | null = null;
   selectedCategory: string | null = null;
   selectedSupplierType: string | null = null;
+  /** Grid column filters beyond status/category/type/date; the server whitelists the keys it understands. */
+  columnFilters: { key: string; op: string; value: any }[] = [];
   fromDate: string | null = null;
   toDate: string | null = null;
 
   private confirm = inject(ConfirmDialogService);
+  private fileService = inject(FileService);
   private subscriptions = new Subscription();
 
   // --- create/edit drawer -----------------------------------------------------------------
@@ -120,8 +140,10 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     this.buildRowActions();
 
     this._route.queryParams.subscribe((params) => {
-      this.page = params['page'] ? parseInt(params['page'], 10) : 1;
-      this.row = params['row'] ? parseInt(params['row'], 10) : 10;
+      const page = parseInt(params['page'], 10);
+      const row = parseInt(params['row'], 10);
+      this.page = page > 0 ? page : 1;
+      this.row = SupplierListComponent.PAGE_SIZES.includes(row) ? row : SupplierListComponent.DEFAULT_PAGE_SIZE;
       if (this.grid) this.grid.page = this.page;
       this.searchQuery = params['search'] || '';
       this.fromDate = params['fromDate'] || null;
@@ -143,6 +165,7 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       this.canCreate = true;
       this.canApproveSupplier = !!employee?.category?.privileges?.supplier?.canApproveSupplier;
       this.isSuperAdmin = employee?.category?.role === 'superAdmin';
+      this.detailTabs = this.allDetailTabs.filter((t) => t.id !== 'banking' || canAccessBanking(employee));
     });
   }
 
@@ -154,8 +177,9 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       { key: 'supplierType', label: 'Type' },
       { key: 'location', label: 'Location', valueGetter: (r) => r.address?.location },
       { key: 'creditDays', label: 'Credit Days', type: 'number', align: 'right' },
-      { key: 'creditValue', label: 'Credit Limit', type: 'number', align: 'right', valueGetter: (r) => Math.round(r.creditValue) },
+      { key: 'creditValue', label: 'Credit Limit', type: 'number', align: 'right', valueGetter: (r) => this.numberFormat.transform(r.creditValue) },
       { key: 'status', label: 'Status', type: 'badge', badgeClasses: this.statusBadgeClasses },
+      { key: 'blocked', label: 'Blocked', type: 'badge', badgeClasses: this.blockedBadgeClasses, valueGetter: (r) => (r.isBlocked ? 'Blocked' : '') },
       { key: 'createdDate', label: 'Created Date', type: 'date', sortable: true },
     ];
   }
@@ -163,16 +187,16 @@ export class SupplierListComponent implements OnInit, OnDestroy {
   private buildRowActions(): void {
     this.rowActions = [
       {
-        id: 'approve', label: 'Approve', icon: 'check', quick: true, panel: true,
+        id: 'approve', label: 'Approve', icon: 'check', quick: true,
         hidden: (r) => r.status !== SupplierStatus.PENDING || !this.canApproveSupplier,
       },
       {
-        id: 'reject', label: 'Reject', icon: 'close', quick: true, panel: true,
+        id: 'reject', label: 'Reject', icon: 'close', quick: true,
         hidden: (r) => r.status !== SupplierStatus.PENDING || !this.canApproveSupplier,
       },
       {
         id: 'edit', label: 'Edit', icon: 'pencil', quick: true,
-        hidden: (r) => r.status !== SupplierStatus.PENDING,
+        hidden: (r) => !this.canEdit(r),
       },
       {
         id: 'block', label: 'Block Supplier', icon: 'close',
@@ -183,6 +207,11 @@ export class SupplierListComponent implements OnInit, OnDestroy {
         hidden: (r) => r.status !== SupplierStatus.APPROVED || !r.isBlocked,
       },
     ];
+  }
+
+  /** Pending suppliers can be corrected before review; editing a rejected one sends it back for approval. */
+  canEdit(r: Supplier): boolean {
+    return r.status === SupplierStatus.PENDING || r.status === SupplierStatus.REJECTED;
   }
 
   onRowAction(event: DataGridRowActionEvent<Supplier>): void {
@@ -205,8 +234,8 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
     this._supplierService.updateSupplierStatus(row._id, SupplierStatus.APPROVED, reason).subscribe({
-      next: (res) => { row.status = res.data.status; this.grid.notify('Supplier approved'); },
-      error: () => this.toaster.error('Failed to approve supplier'),
+      next: (res) => { this.applyStatusResponse(row, res.data); this.grid.notify('Supplier approved'); },
+      error: (error) => this.toaster.error(error?.error?.message || 'Failed to approve supplier'),
     });
   }
 
@@ -220,9 +249,16 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     });
     if (!confirmed) return;
     this._supplierService.updateSupplierStatus(row._id, SupplierStatus.REJECTED, reason).subscribe({
-      next: (res) => { row.status = res.data.status; this.grid.notify('Supplier rejected'); },
-      error: () => this.toaster.error('Failed to reject supplier'),
+      next: (res) => { this.applyStatusResponse(row, res.data); this.grid.notify('Supplier rejected'); },
+      error: (error) => this.toaster.error(error?.error?.message || 'Failed to reject supplier'),
     });
+  }
+
+  /** Copy the server's new status and history onto the row so the History tab updates without a reload. */
+  private applyStatusResponse(row: Supplier, updated: Supplier): void {
+    row.status = updated.status;
+    row.approvedHistory = updated.approvedHistory;
+    row.rejectHistory = updated.rejectHistory;
   }
 
   async toggleBlock(row: Supplier): Promise<void> {
@@ -281,33 +317,40 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
 
+    // selectedCategory / selectedSupplierType / dates come from the URL (report drill-down), not the grid, so they stay.
     this.selectedStatus = null;
-    this.selectedCategory = null;
-    this.selectedSupplierType = null;
-    this.fromDate = null;
     this.toDate = null;
+    this.columnFilters = [];
 
+    let dateReset = false;
     for (const f of query.filters) {
       switch (f.key) {
         case 'status': this.selectedStatus = f.value; break;
-        case 'category': this.selectedCategory = f.value; break;
-        case 'supplierType': this.selectedSupplierType = f.value; break;
+        case 'category': this.columnFilters.push({ key: 'categoryName', op: f.op, value: f.value }); break;
+        case 'supplierType': this.columnFilters.push({ key: 'supplierType', op: f.op, value: f.value }); break;
         case 'createdDate':
+          if (!dateReset) { this.fromDate = null; this.toDate = null; dateReset = true; }
           if (f.op === 'after' || f.op === 'on') this.fromDate = f.value;
           if (f.op === 'before' || f.op === 'on') this.toDate = f.value;
           break;
+        default:
+          this.columnFilters.push({ key: f.key, op: f.op, value: f.value });
       }
     }
 
-    this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.selectedCategory || this.selectedSupplierType);
+    this.isFiltered = !!(this.searchQuery || this.fromDate || this.toDate || this.selectedCategory || this.selectedSupplierType || this.columnFilters.length);
     this.getSuppliers();
     this.updateUrlParams();
+  }
+
+  clearReportFilters(): void {
+    this._router.navigate([], { relativeTo: this._route, queryParams: { category: null, supplierType: null, fromDate: null, toDate: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
   private updateUrlParams(): void {
     const queryParams: any = {
       page: this.page !== 1 ? this.page : null,
-      row: this.row !== 10 ? this.row : null,
+      row: this.row !== SupplierListComponent.DEFAULT_PAGE_SIZE ? this.row : null,
       search: this.searchQuery || null,
       category: this.selectedCategory,
       supplierType: this.selectedSupplierType,
@@ -328,6 +371,9 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       fromDate: this.fromDate || undefined,
       toDate: this.toDate || undefined,
       search: this.searchQuery || undefined,
+      filters: this.columnFilters.length ? this.columnFilters : undefined,
+      sortKey: this.sortKey && this.sortDir ? this.sortKey : undefined,
+      sortDir: this.sortKey && this.sortDir ? this.sortDir : undefined,
     };
     this.subscriptions.add(
       this._supplierService.getSuppliers(params).subscribe({
@@ -337,7 +383,12 @@ export class SupplierListComponent implements OnInit, OnDestroy {
           this.refreshViewCounts();
           this.isLoading = false;
         },
-        error: () => { this.isLoading = false; },
+        error: (error) => {
+          this.isLoading = false;
+          this.rows = [];
+          this.total = 0;
+          this.toaster.error(error?.error?.message || 'Failed to load suppliers');
+        },
       })
     );
   }
@@ -394,7 +445,8 @@ export class SupplierListComponent implements OnInit, OnDestroy {
   }
 
   bankingSections(row: Supplier): DetailOverviewSection[] {
-    const bank = row.bankDetails;
+    const raw = row.bankDetails;
+    const bank = raw && Object.values(raw).some((v) => !!`${v ?? ''}`.trim()) ? raw : undefined;
     return [
       {
         title: 'Bank Details',
@@ -414,6 +466,31 @@ export class SupplierListComponent implements OnInit, OnDestroy {
         ],
       },
     ];
+  }
+
+  documentRows(row: Supplier): DetailDocument[] {
+    return (row.documents || []).map((d, i) => ({ id: d.fileName || `${i}`, name: d.fileName }));
+  }
+
+  openDocument(doc: DetailDocument): void {
+    this.fetchDocument(doc, (blob) => {
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    });
+  }
+
+  downloadDocument(doc: DetailDocument): void {
+    this.fetchDocument(doc, (blob) => saveAs(blob, doc.name));
+  }
+
+  private fetchDocument(doc: DetailDocument, done: (blob: Blob) => void): void {
+    this.fileService.downloadFile(doc.id).subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.Response) done(new Blob([event.body], { type: event.body?.type || 'application/octet-stream' }));
+      },
+      error: (error) => this.toaster.error(error?.status === 404 ? 'The file was not found on the server.' : 'Could not open the file.'),
+    });
   }
 
   productRows(row: Supplier): Record<string, any>[] {

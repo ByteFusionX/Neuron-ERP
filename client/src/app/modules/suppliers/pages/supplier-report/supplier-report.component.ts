@@ -4,10 +4,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { ExcelExportService, ExcelSheet } from 'src/app/core/services/export/excel-export.service';
-import { SupplierService } from 'src/app/core/services/supplier.service';
+import { SupplierReportRow, SupplierReportSummaryResponse, SupplierService } from 'src/app/core/services/supplier.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
+import { buildBreadcrumbs } from 'src/app/shared/constants/nav-menu';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
-import { Supplier, SupplierListResponse, SupplierStatus } from 'src/app/shared/interfaces/suppliers.interface';
+import { SupplierListResponse } from 'src/app/shared/interfaces/suppliers.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
@@ -17,21 +18,13 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import { DataGridBreadcrumb, DataGridColumn } from 'src/app/shared/components/data-grid/data-grid.model';
 
-interface BreakdownRow {
-  id: string;
-  name: string;
-  total: number;
-  pending: number;
-  approved: number;
-  rejected: number;
-  creditValue: number;
-}
+type BreakdownRow = SupplierReportRow;
 
 /**
  * Suppliers report: KPI strip plus a breakdown table by category or supplier type, with an Excel
  * export. Kept intentionally simpler than the quotations report (no charts) per the module's scope —
- * everything here is computed client-side from `getSuppliers`, since there is no dedicated
- * aggregate/report endpoint on the server for suppliers.
+ * KPIs and the breakdown come from the server's `report-summary` aggregate; the per-supplier
+ * sheet of the Excel export is fetched only when the user exports.
  */
 @Component({
   selector: 'app-supplier-report',
@@ -46,11 +39,12 @@ interface BreakdownRow {
 export class SupplierReportComponent implements OnInit, OnDestroy {
   @ViewChild('breakdownGrid') breakdownGrid?: DataGridComponent<BreakdownRow>;
 
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'Suppliers' }];
+  breadcrumbs: DataGridBreadcrumb[] = buildBreadcrumbs('/suppliers').map((c) => ({ label: c.label, link: c.route ?? '/suppliers' }));
 
   loading = true;
   failed = false;
-  suppliers: Supplier[] = [];
+  totals: Omit<SupplierReportRow, 'id' | 'name'> = { total: 0, pending: 0, approved: 0, rejected: 0, creditValue: 0 };
+  private summary: { byCategory: SupplierReportRow[]; bySupplierType: SupplierReportRow[] } = { byCategory: [], bySupplierType: [] };
 
   filters: ReportFilterValues = { category: null, supplierType: null, fromDate: null, toDate: null };
   filterFields: ReportFilterField[] = [
@@ -69,6 +63,8 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
     { key: 'supplierType', label: 'Supplier Type' },
   ];
   breakdownColumns: DataGridColumn<BreakdownRow>[] = [];
+  /** Rebuilt only when the data or the grouping changes; a getter would hand the grid a new array on every change detection. */
+  breakdownRows: BreakdownRow[] = [];
 
   private subscriptions = new Subscription();
 
@@ -106,26 +102,33 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
     );
   }
 
-  private fetch(): void {
-    this.loading = true;
-    this.failed = false;
-    // Same trick as quotation-list's generateExcelReport: fetch the whole filtered slice in one
-    // page (no dedicated report/aggregate endpoint exists for suppliers) and derive KPIs client-side.
-    const params = {
-      page: 1,
-      row: Number.MAX_SAFE_INTEGER,
+  private get filterParams() {
+    return {
       category: this.filters['category'] || undefined,
       supplierType: this.filters['supplierType'] || undefined,
       fromDate: this.filters['fromDate'] || undefined,
       toDate: this.filters['toDate'] || undefined,
     };
+  }
+
+  private fetch(): void {
+    this.loading = true;
+    this.failed = false;
     this.subscriptions.add(
-      this._supplierService.getSuppliers(params).subscribe({
-        next: (res: SupplierListResponse) => {
-          this.suppliers = res?.data?.suppliers || [];
+      this._supplierService.getReportSummary(this.filterParams).subscribe({
+        next: (res: SupplierReportSummaryResponse) => {
+          this.totals = res.data.totals;
+          this.summary = { byCategory: res.data.byCategory, bySupplierType: res.data.bySupplierType };
+          this.rebuildBreakdown();
           this.loading = false;
         },
-        error: () => { this.suppliers = []; this.loading = false; this.failed = true; },
+        error: () => {
+          this.totals = { total: 0, pending: 0, approved: 0, rejected: 0, creditValue: 0 };
+          this.summary = { byCategory: [], bySupplierType: [] };
+          this.rebuildBreakdown();
+          this.loading = false;
+          this.failed = true;
+        },
       })
     );
   }
@@ -140,13 +143,11 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
 
   // --- KPIs ------------------------------------------------------------------------------
 
-  get totalSuppliers(): number { return this.suppliers.length; }
-  get pendingCount(): number { return this.suppliers.filter((s) => s.status === SupplierStatus.PENDING).length; }
-  get approvedCount(): number { return this.suppliers.filter((s) => s.status === SupplierStatus.APPROVED).length; }
-  get rejectedCount(): number { return this.suppliers.filter((s) => s.status === SupplierStatus.REJECTED).length; }
-  get totalCreditExposure(): number {
-    return this.suppliers.filter((s) => s.status === SupplierStatus.APPROVED).reduce((sum, s) => sum + (Number(s.creditValue) || 0), 0);
-  }
+  get totalSuppliers(): number { return this.totals.total; }
+  get pendingCount(): number { return this.totals.pending; }
+  get approvedCount(): number { return this.totals.approved; }
+  get rejectedCount(): number { return this.totals.rejected; }
+  get totalCreditExposure(): number { return this.totals.creditValue; }
 
   // --- Breakdown ---------------------------------------------------------------------------
 
@@ -157,37 +158,39 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
       { key: 'pending', label: 'Pending', type: 'number', sortable: true, align: 'right', width: '100px', aggregate: 'sum' },
       { key: 'approved', label: 'Approved', type: 'number', sortable: true, align: 'right', width: '100px', aggregate: 'sum' },
       { key: 'rejected', label: 'Rejected', type: 'number', sortable: true, align: 'right', width: '100px', aggregate: 'sum' },
-      { key: 'creditValue', label: 'Credit Exposure', type: 'number', sortable: true, align: 'right', aggregate: 'sum' },
+      { key: 'creditValue', label: 'Credit Limit', type: 'number', sortable: true, align: 'right', aggregate: 'sum' },
     ];
   }
 
   setBreakdown(key: 'category' | 'supplierType'): void {
     this.breakdownKey = key;
+    this.rebuildBreakdown();
   }
 
-  get breakdownRows(): BreakdownRow[] {
-    const groups = new Map<string, BreakdownRow>();
-    for (const s of this.suppliers) {
-      const key = this.breakdownKey === 'category' ? (s.category?.departmentName || 'Unassigned') : (s.supplierType || 'Unassigned');
-      const row = groups.get(key) || { id: key, name: key, total: 0, pending: 0, approved: 0, rejected: 0, creditValue: 0 };
-      row.total += 1;
-      if (s.status === SupplierStatus.PENDING) row.pending += 1;
-      if (s.status === SupplierStatus.APPROVED) { row.approved += 1; row.creditValue += Number(s.creditValue) || 0; }
-      if (s.status === SupplierStatus.REJECTED) row.rejected += 1;
-      groups.set(key, row);
-    }
-    return Array.from(groups.values());
+  private rebuildBreakdown(): void {
+    const rows = this.breakdownKey === 'category' ? this.summary.byCategory : this.summary.bySupplierType;
+    this.breakdownRows = [...rows].sort((x, y) => y.total - x.total);
   }
 
   onBreakdownRowOpen(row: BreakdownRow): void {
     this.breakdownGrid?.closeDetail();
+    if (row.id === 'unassigned') return;
     this._router.navigate(['/suppliers'], { queryParams: { ...this.listQueryParams, [this.breakdownKey]: row.id } });
   }
 
   // --- Export -------------------------------------------------------------------------------
 
   exportExcel(): void {
-    if (!this.suppliers.length) return;
+    if (!this.totals.total) return;
+    this.subscriptions.add(
+      this._supplierService.getSuppliers({ page: 1, row: 5000, ...this.filterParams }).subscribe({
+        next: (res: SupplierListResponse) => this.downloadWorkbook(res?.data?.suppliers || []),
+        error: () => this.downloadWorkbook([]),
+      })
+    );
+  }
+
+  private downloadWorkbook(suppliers: SupplierListResponse['data']['suppliers']): void {
     const sheets: ExcelSheet[] = [
       {
         name: 'Summary',
@@ -197,7 +200,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
           { metric: 'Pending', value: this.pendingCount },
           { metric: 'Approved', value: this.approvedCount },
           { metric: 'Rejected', value: this.rejectedCount },
-          { metric: 'Total credit exposure', value: Math.round(this.totalCreditExposure) },
+          { metric: 'Total approved credit limit', value: Math.round(this.totalCreditExposure) },
         ],
       },
       {
@@ -208,7 +211,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
           { header: 'Pending', key: 'pending', width: 12 },
           { header: 'Approved', key: 'approved', width: 12 },
           { header: 'Rejected', key: 'rejected', width: 12 },
-          { header: 'Credit Exposure', key: 'creditValue', width: 18 },
+          { header: 'Credit Limit', key: 'creditValue', width: 18 },
         ],
         rows: this.breakdownRows.map((r) => ({ ...r, creditValue: Math.round(r.creditValue) })),
       },
@@ -223,7 +226,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
           { header: 'Credit Days', key: 'creditDays', width: 12 },
           { header: 'Credit Limit', key: 'creditValue', width: 16 },
         ],
-        rows: this.suppliers.map((s) => ({
+        rows: suppliers.map((s) => ({
           supplierId: s.supplierId, supplierName: s.supplierName, category: s.category?.departmentName,
           supplierType: s.supplierType, status: s.status, creditDays: s.creditDays, creditValue: Math.round(s.creditValue),
         })),
