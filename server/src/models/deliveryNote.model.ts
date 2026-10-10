@@ -7,6 +7,20 @@ export interface IDeliveryNote extends Document {
     clientName: string;
     customerLpoNumber: string;
     subject: string;
+    deliveryType?: string;
+    shipToName?: string;
+    shipToAddress?: string;
+    contactPerson?: string;
+    contactNo?: string;
+    promisedDate?: Date;
+    deliveryInstructions?: string;
+    pod?: {
+        receivedBy?: string;
+        receivedContactNo?: string;
+        receivedDate?: Date;
+        remarks?: string;
+        signatureName?: string;
+    };
     items: {
         slNo: number;
         partNo: string;
@@ -40,6 +54,20 @@ const DeliveryNoteSchema: Schema = new Schema({
     clientName: { type: String },
     customerLpoNumber: { type: String },
     subject: { type: String },
+    deliveryType: { type: String, enum: ['Customer Delivery', 'Project Site', 'Customer Pickup', 'Drop Ship', 'Replacement'], default: 'Customer Delivery' },
+    shipToName: { type: String },
+    shipToAddress: { type: String },
+    contactPerson: { type: String },
+    contactNo: { type: String },
+    promisedDate: { type: Date },
+    deliveryInstructions: { type: String },
+    pod: {
+        receivedBy: String,
+        receivedContactNo: String,
+        receivedDate: Date,
+        remarks: String,
+        signatureName: String
+    },
     items: [{
         slNo: Number,
         partNo: String,
@@ -57,7 +85,7 @@ const DeliveryNoteSchema: Schema = new Schema({
     }],
     status: {
         type: String,
-        enum: ['Draft', 'Delivered', 'Cancelled', 'Rejected', 'Partially Rejected'],
+        enum: ['Draft', 'Ready for Dispatch', 'Dispatched', 'Delivered', 'Cancelled', 'Rejected', 'Partially Rejected'],
         default: 'Draft'
     },
     rejectedHistory: [{

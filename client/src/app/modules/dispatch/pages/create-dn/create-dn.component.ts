@@ -1,9 +1,10 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, inject, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule, AbstractControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { NgIcon } from '@ng-icons/core';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
@@ -15,6 +16,8 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ScanCellComponent } from 'src/app/shared/components/scan-cell/scan-cell.component';
+import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 
 @Component({
   selector: 'app-create-dn',
@@ -28,12 +31,21 @@ import { ScanCellComponent } from 'src/app/shared/components/scan-cell/scan-cell
     ButtonComponent,
     IconsModule,
     MatDialogModule,
-    ScanCellComponent
+    ScanCellComponent,
+    SmartFormModule,
+    ActionButtonComponent,
+    NgIcon
   ],
   templateUrl: './create-dn.component.html',
   styleUrl: './create-dn.component.css'
 })
-export class CreateDnComponent implements OnInit {
+export class CreateDnComponent implements OnInit, OnChanges {
+  @Input() open = true;
+  @Input() drawerMode = false;
+  @Input() editId: string | null = null;
+  @Output() saved = new EventEmitter<void>();
+  @Output() closed = new EventEmitter<void>();
+
   private fb = inject(FormBuilder);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -53,6 +65,17 @@ export class CreateDnComponent implements OnInit {
   previousDns: any[] = [];
   isEditMode: boolean = false;
   draftDnId: string | null = null;
+  deliveryTypeOptions: SfOption[] = [
+    { label: 'Customer Delivery', value: 'Customer Delivery' },
+    { label: 'Project Site', value: 'Project Site' },
+    { label: 'Customer Pickup', value: 'Customer Pickup' },
+    { label: 'Drop Ship', value: 'Drop Ship' },
+    { label: 'Replacement', value: 'Replacement' }
+  ];
+
+  get jobOptions(): SfOption[] {
+    return this.jobIds.map((job: any) => ({ label: job.jobId, value: job._id }));
+  }
 
   dnForm: FormGroup = this.fb.group({
     jobId: ['', [Validators.required]],
@@ -61,6 +84,13 @@ export class CreateDnComponent implements OnInit {
     dnNo: ['', [Validators.required]],
     dnDate: [new Date().toISOString().split('T')[0], [Validators.required]],
     subject: [''],
+    deliveryType: ['Customer Delivery', [Validators.required]],
+    shipToName: [''],
+    shipToAddress: [''],
+    contactPerson: [''],
+    contactNo: [''],
+    promisedDate: [''],
+    deliveryInstructions: [''],
     items: this.fb.array([])
   });
 
@@ -81,7 +111,7 @@ export class CreateDnComponent implements OnInit {
 
     this.loadJobIds();
 
-    const editId = this.route.snapshot.queryParams['id'];
+    const editId = this.editId || this.route.snapshot.queryParams['id'];
     if (editId) {
       this.loadDraftForEdit(editId);
     } else {
@@ -100,6 +130,43 @@ export class CreateDnComponent implements OnInit {
       if (status === 'VALID' && this.isSubmitting()) {
         this.isSubmitting.set(false);
       }
+    });
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.drawerMode || !changes['open'] || !this.open) return;
+    this.resetFormState();
+    if (this.editId) {
+      this.loadDraftForEdit(this.editId);
+    } else {
+      this.generateDnNumber();
+    }
+  }
+
+  private resetFormState(): void {
+    this.isEditMode = false;
+    this.draftDnId = null;
+    this.selectedJob = null;
+    this.previousDns = [];
+    this.selectedItems.clear();
+    this.itemSerialNos.clear();
+    this.serialNoInputs.clear();
+    this.clearDraftLoaded();
+    this.items.clear();
+    this.dnForm.reset({
+      jobId: '',
+      clientName: '',
+      customerLpoNumber: '',
+      dnNo: '',
+      dnDate: new Date().toISOString().split('T')[0],
+      subject: '',
+      deliveryType: 'Customer Delivery',
+      shipToName: '',
+      shipToAddress: '',
+      contactPerson: '',
+      contactNo: '',
+      promisedDate: '',
+      deliveryInstructions: ''
     });
   }
 
@@ -149,7 +216,14 @@ export class CreateDnComponent implements OnInit {
       customerLpoNumber: dn.customerLpoNumber,
       dnNo: dn.dnNo,
       dnDate: dn.dnDate ? new Date(dn.dnDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      subject: dn.subject || ''
+      subject: dn.subject || '',
+      deliveryType: dn.deliveryType || 'Customer Delivery',
+      shipToName: dn.shipToName || dn.clientName || '',
+      shipToAddress: dn.shipToAddress || '',
+      contactPerson: dn.contactPerson || '',
+      contactNo: dn.contactNo || '',
+      promisedDate: dn.promisedDate ? new Date(dn.promisedDate).toISOString().split('T')[0] : '',
+      deliveryInstructions: dn.deliveryInstructions || ''
     });
 
     if (dn.jobId) {
@@ -334,7 +408,10 @@ export class CreateDnComponent implements OnInit {
         this.dnForm.patchValue({
           clientName: job.clientDetails?.companyName || job.client?.companyName || '',
           customerLpoNumber: job.purchaseNo || job.lpoNumber || '',
-          subject: job.quotation?.subject || ''
+          subject: job.quotation?.subject || '',
+          shipToName: job.clientDetails?.companyName || job.client?.companyName || '',
+          shipToAddress: job.projectName || job.quotation?.deliveryLocation || '',
+          promisedDate: ''
         });
 
         if (!this.dnForm.get('dnNo')?.value) {
@@ -646,7 +723,7 @@ export class CreateDnComponent implements OnInit {
         next: () => {
           this.toastr.success('Draft saved successfully');
           this.isSavingDraft.set(false);
-          this.router.navigate(['/dispatch/delivery-note-register']);
+          this.afterSaved();
         },
         error: (err) => {
           this.toastr.error(err.error?.message || 'Failed to save draft');
@@ -658,7 +735,7 @@ export class CreateDnComponent implements OnInit {
         next: () => {
           this.toastr.success('Draft saved successfully');
           this.isSavingDraft.set(false);
-          this.router.navigate(['/dispatch/delivery-note-register']);
+          this.afterSaved();
         },
         error: (err) => {
           this.toastr.error(err.error?.message || 'Failed to save draft');
@@ -748,7 +825,7 @@ export class CreateDnComponent implements OnInit {
       this.deliveryNoteService.updateDn(this.draftDnId, payload).subscribe({
         next: () => {
           this.toastr.success('DN Posted Successfully');
-          this.router.navigate(['/dispatch/delivery-note-register']);
+          this.afterSaved();
         },
         error: (err) => {
           this.toastr.error(err.error?.message || 'Failed to post DN');
@@ -759,7 +836,7 @@ export class CreateDnComponent implements OnInit {
       this.deliveryNoteService.createDn(payload).subscribe({
         next: () => {
           this.toastr.success('DN Posted Successfully');
-          this.router.navigate(['/dispatch/delivery-note-register']);
+          this.afterSaved();
         },
         error: (err) => {
           this.toastr.error(err.error?.message || 'Failed to post DN');
@@ -770,6 +847,23 @@ export class CreateDnComponent implements OnInit {
   }
 
   onCancel(): void {
+    if (this.drawerMode) {
+      this.closed.emit();
+      return;
+    }
+    this.router.navigate(['/dispatch/delivery-note-register']);
+  }
+
+  onDrawerClosed(): void {
+    this.closed.emit();
+  }
+
+  private afterSaved(): void {
+    this.saved.emit();
+    if (this.drawerMode) {
+      this.closed.emit();
+      return;
+    }
     this.router.navigate(['/dispatch/delivery-note-register']);
   }
 

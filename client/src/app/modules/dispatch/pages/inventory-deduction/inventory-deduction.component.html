@@ -1,46 +1,29 @@
-<data-table
-  [data]="tableData()"
-  [columns]="tableColumns"
-  [defaultColumns]="defaultColumns"
-  [isLoading]="isLoading()"
-  [isEmpty]="isEmpty()"
-  [totalItems]="totalItems()"
-  [tableId]="'inventory-deduction-table'"
-  [enableExport]="true"
-  [exportFileName]="'inventory-deduction-report.xlsx'"
-  (filterChange)="onFilterChange($event)"
-  (paginationChange)="onPaginationChange($event)"
-  (rowClick)="onRowClick($event)"
-  (exportRequest)="onExportRequest()"
-  [title]="'Inventory Deduction Report'"
->
-  <ng-template #sideColumn>
-    <div class="flex items-center gap-3">
-      <ng-container *ngIf="canSwitchDispatchView()">
-        <button
-          type="button"
-          [matMenuTriggerFor]="dispatchViewMenu"
-          class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
-        >
-          <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
-          Switch Table
-          <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
-        </button>
-        <mat-menu #dispatchViewMenu="matMenu">
-          <button mat-menu-item routerLink="/dispatch/delivery-note-register">
-            <ng-icon name="heroTableCells" class="mr-2 text-slate-500"></ng-icon>
-            Delivery Note Register
-          </button>
-          <button mat-menu-item *ngIf="canViewPendingDelivery()" routerLink="/dispatch/pending-delivery-reports">
-            <ng-icon name="heroClock" class="mr-2 text-slate-500"></ng-icon>
-            Pending Delivery
-          </button>
-          <button mat-menu-item *ngIf="canViewInvoiceLinking()" routerLink="/dispatch/invoice-linking-report">
-            <ng-icon name="heroPaperClip" class="mr-2 text-slate-500"></ng-icon>
-            Invoice Linking
-          </button>
-        </mat-menu>
-      </ng-container>
-    </div>
-  </ng-template>
-</data-table>
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Inventory Deduction"
+    subtitle="Trace stock movement posted from delivery notes"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="id"
+    [serverSide]="true"
+    [totalCount]="totalItems()"
+    [data]="tableData()"
+    [columns]="tableColumns"
+    [loading]="isLoading()"
+    [pageSize]="paginationService.paginationState().row"
+    searchPlaceholder="Search DN number"
+    emptyMessage="No inventory deduction records found"
+    storageKey="dispatch-inventory-deduction"
+    exportable
+    exportFileName="inventory-deduction-report.xlsx"
+    (queryChange)="onQueryChange($event)"
+    (rowOpen)="onRowClick($event)">
+  </app-data-grid>
+
+  <div *ngIf="canSwitchDispatchView()" class="flex flex-wrap items-center gap-2">
+    <app-action-button variant="secondary" routerLink="/dispatch/delivery-note-register">Delivery note register</app-action-button>
+    <app-action-button *ngIf="canViewPendingDelivery()" variant="secondary" routerLink="/dispatch/pending-delivery-reports">Pending delivery</app-action-button>
+    <app-action-button *ngIf="canViewInvoiceLinking()" variant="secondary" routerLink="/dispatch/invoice-linking-report">Invoice linking</app-action-button>
+  </div>
+</div>

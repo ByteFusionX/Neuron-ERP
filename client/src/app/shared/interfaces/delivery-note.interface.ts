@@ -8,6 +8,20 @@ export interface DeliveryNote {
     clientName: string;
     customerLpoNumber: string;
     subject: string;
+    deliveryType?: string;
+    shipToName?: string;
+    shipToAddress?: string;
+    contactPerson?: string;
+    contactNo?: string;
+    promisedDate?: string;
+    deliveryInstructions?: string;
+    pod?: {
+        receivedBy?: string;
+        receivedContactNo?: string;
+        receivedDate?: string;
+        remarks?: string;
+        signatureName?: string;
+    };
     items: {
         slNo: number;
         partNo: string;
@@ -46,6 +60,8 @@ export interface GetDeliveryNoteResponse {
 
 export const DnStatus = {
     DRAFT: 'Draft',
+    READY_FOR_DISPATCH: 'Ready for Dispatch',
+    DISPATCHED: 'Dispatched',
     DELIVERED: 'Delivered',
     CANCELLED: 'Cancelled',
     REJECTED: 'Rejected',

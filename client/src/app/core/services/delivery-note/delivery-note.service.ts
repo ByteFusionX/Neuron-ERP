@@ -70,6 +70,10 @@ export class DeliveryNoteService {
     return this.http.patch<any>(`${this.apiUrl}/${id}/reject`, data);
   }
 
+  completePod(id: string, data: any): Observable<any> {
+    return this.http.patch<any>(`${this.apiUrl}/${id}/pod`, data);
+  }
+
   getInventoryDeductionReport(params: any): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/inventory-deduction-report`, params, { context: context() });
   }
@@ -113,8 +117,10 @@ export class DeliveryNoteService {
     items.forEach((item: any, index: number) => {
       tableBody.push([
         { text: String(index + 1).padStart(2, '0'), style: 'tableText', alignment: 'center' },
+        { text: item.partNo || '-', style: 'tableText' },
         { text: item.description || '-', style: 'tableText' },
-        { text: String(item.currentDeliveryQty || 0), style: 'tableText', alignment: 'center' }
+        { text: String(item.currentDeliveryQty || 0), style: 'tableText', alignment: 'center' },
+        { text: Array.isArray(item.serialNos) && item.serialNos.length ? item.serialNos.join(', ') : '-', style: 'tableText' }
       ]);
     });
 
@@ -176,19 +182,24 @@ export class DeliveryNoteService {
               [{ style: 'tableHead', text: 'Client:', alignment: 'left' }, { style: 'tableHead', text: dnData.clientName || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'DN Date:', alignment: 'left' }, { style: 'tableHead', text: new Date(dnData.dnDate).toLocaleDateString('en-GB'), alignment: 'left' }],
               [{ style: 'tableHead', text: 'DN No:', alignment: 'left' }, { style: 'tableHead', text: dnData.dnNo || '-', alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Payment Terms:', alignment: 'left' }, { style: 'tableHead', text: dnData.paymentTerms || '-', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Subject:', alignment: 'left' }, { style: 'tableHead', text: dnData.subject || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'LPO Ref:', alignment: 'left' }, { style: 'quoteId', text: dnData.customerLpoNumber, alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Job No:', alignment: 'left' }, { style: 'tableHead', text: dnData.jobId?.jobId || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: '', alignment: 'left' }, { style: 'tableHead', text: ``, alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Job No:', alignment: 'left' }, { style: 'tableHead', text: dnData.jobId?.jobId || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Type:', alignment: 'left' }, { style: 'tableHead', text: dnData.deliveryType || '-', alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Ship To:', alignment: 'left' }, { style: 'tableHead', text: dnData.shipToName || dnData.clientName || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Promised:', alignment: 'left' }, { style: 'tableHead', text: dnData.promisedDate ? new Date(dnData.promisedDate).toLocaleDateString('en-GB') : '-', alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Address:', alignment: 'left' }, { style: 'tableHead', text: dnData.shipToAddress || '-', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
+              [{ style: 'tableHead', text: 'Contact:', alignment: 'left' }, { style: 'tableHead', text: [dnData.contactPerson, dnData.contactNo].filter(Boolean).join(' / ') || '-', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
             ]
           }
         },
         {
           table: {
             headerRows: 1,
-            widths: [40, '*', 60],
+            widths: [35, 70, '*', 50, 105],
             body: [
               [
                 { text: 'SL.\nNo.', style: 'tableHeader', alignment: 'center' },
+                { text: 'PART NO', style: 'tableHeader' },
                 { text: 'DESCRIPTION', style: 'tableHeader' },
-                { text: 'QTY', style: 'tableHeader', alignment: 'center' }
+                { text: 'QTY', style: 'tableHeader', alignment: 'center' },
+                { text: 'SERIAL NO(S)', style: 'tableHeader' }
               ],
               ...tableBody
             ]
@@ -210,10 +221,10 @@ export class DeliveryNoteService {
         {
           width: '*',
           stack: [
-            { text: 'Received by : __________________________________', style: 'label', margin: [0, 0, 0, 5] },
+            { text: `Received by : ${dnData.pod?.receivedBy || '__________________________________'}`, style: 'label', margin: [0, 0, 0, 5] },
             { text: 'Signature : __________________________________', style: 'label', margin: [0, 15, 0, 5] },
-            { text: 'Contact No : __________________________________', style: 'label', margin: [0, 5, 0, 5] },
-            { text: 'Date : __________________________________', style: 'label', margin: [0, 5, 0, 5] }
+            { text: `Contact No : ${dnData.pod?.receivedContactNo || '__________________________________'}`, style: 'label', margin: [0, 5, 0, 5] },
+            { text: `Date : ${dnData.pod?.receivedDate ? new Date(dnData.pod.receivedDate).toLocaleDateString('en-GB') : '__________________________________'}`, style: 'label', margin: [0, 5, 0, 5] }
           ],
           alignment: 'right'
         }

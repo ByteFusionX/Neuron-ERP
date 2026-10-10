@@ -1,239 +1,175 @@
-<div class="bg-white m-6 rounded-lg">
-    <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">Create Delivery Note (DN)</h3>
-    </div>
-    <form [formGroup]="dnForm">
-        <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
-            
-            <div *ngIf="draftLoaded()" class="mb-4 px-4 py-3 border rounded bg-yellow-50 text-sm">
-                <div>
-                    Draft DN loaded<span *ngIf="loadedDraftNo()"> - {{ loadedDraftNo() }}</span>
-                </div>
-            </div>
-            
-            <!-- Job Details Section -->
-            <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                <app-select-dropdown
-                    label="Job Id"
-                    [options]="jobIds"
-                    optionLabel="jobId"
-                    optionValue="_id"
-                    formControlName="jobId"
-                    placeholder="Choose from the list"
-                    [isSubmitted]="isSubmitting()"
-                    class="w-full">
-                </app-select-dropdown>
+<app-sf-drawer *ngIf="drawerMode; else pageMode" [open]="open" width="1180px"
+  [title]="isEditMode ? 'Edit Draft DN' : 'Create Delivery Note'"
+  [subtitle]="dnForm.get('dnNo')?.value || 'New DN'" (closed)="onDrawerClosed()">
+  <ng-container *ngTemplateOutlet="dnBody"></ng-container>
+  <ng-container sfDrawerFooter>
+    <app-action-button variant="secondary" (click)="onCancel()">Cancel</app-action-button>
+    <app-action-button variant="tool" [disabled]="isSavingDraft()" (click)="onSaveDraft()">{{ isSavingDraft() ? 'Saving...' : 'Save as Draft' }}</app-action-button>
+    <app-action-button variant="secondary" [disabled]="isAllDelivered()" (click)="onPreview()">Preview DN</app-action-button>
+    <app-action-button variant="primary" [disabled]="isAllDelivered() || isSubmitting()" (click)="onPostDn()">{{ isSubmitting() ? 'Posting...' : 'Post DN' }}</app-action-button>
+  </ng-container>
+</app-sf-drawer>
 
-                <app-form-field 
-                    label="Client Name" 
-                    [control]="dnForm.get('clientName')" 
-                    [isSubmitted]="isSubmitting()" 
-                    class="w-full" 
-                    [readonly]="true">
-                </app-form-field>
-
-                <app-form-field 
-                    label="Customer LPO Number" 
-                    [control]="dnForm.get('customerLpoNumber')" 
-                    [isSubmitted]="isSubmitting()" 
-                    class="w-full">
-                </app-form-field>
-            </div>
-
-            <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                <app-form-field 
-                    label="DN No" 
-                    [control]="dnForm.get('dnNo')" 
-                    [isSubmitted]="isSubmitting()" 
-                    class="w-full" 
-                    [readonly]="true">
-                </app-form-field>
-
-                <app-form-field 
-                    label="DN Date" 
-                    [control]="dnForm.get('dnDate')" 
-                    [isSubmitted]="isSubmitting()" 
-                    type="date"
-                    class="w-full">
-                </app-form-field>
-
-                <app-form-field 
-                    label="Subject" 
-                    [control]="dnForm.get('subject')" 
-                    [isSubmitted]="isSubmitting()" 
-                    class="w-full">
-                </app-form-field>
-            </div>
-
-            <hr class="my-6 border-gray-200">
-
-            <!-- Materials Section -->
-            <div class="mb-5">
-                <div class="flex justify-between items-center mb-4">
-                    <h4 class="text-sm font-bold uppercase text-gray-700">Materials</h4>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left border">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-2 border text-center w-12"></th>
-                                <th class="px-4 py-2 border text-center w-16">Sl No</th>
-                                <th class="px-4 py-2 border text-center">Part No</th>
-                                <th class="px-4 py-2 border text-center">Description</th>
-                                <th class="px-4 py-2 border text-center w-24">Total QTY</th>
-                                <th class="px-4 py-2 border text-center w-24">Ord QTY</th>
-                                <th class="px-4 py-2 border text-center w-24">Delivered</th>
-                                <th class="px-4 py-2 border text-center w-24">Balance</th>
-                                <th class="px-4 py-2 border text-center w-32">Current Delivery</th>
-                                <th class="px-4 py-2 border text-center min-w-[180px]">Serial No(s)</th>
-                                <th class="px-4 py-2 border text-center min-w-8">Status</th>
-                                <th class="px-4 py-2 border text-center">Scan</th>
-                            </tr>
-                        </thead>
-                        <tbody formArrayName="items">
-                            <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
-                                <tr class="border-b hover:bg-gray-50/50" [ngClass]="{'bg-gray-100 text-gray-400': item.get('status')?.value === 'Delivered' || item.get('status')?.value === 'No PO / Not in Inventory' || !isItemSelected(i)}">
-                                    <td class="px-4 py-2 border text-center">
-                                        <input 
-                                            type="checkbox"
-                                            [checked]="isItemSelected(i)"
-                                            (change)="toggleItemSelection(i)"
-                                            [disabled]="item.get('status')?.value === 'Delivered' || item.get('status')?.value === 'No PO / Not in Inventory'"
-                                            class="cursor-pointer">
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('slNo')?.value }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('partNo')?.value || '-' }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        {{ item.get('description')?.value || '-' }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center font-medium">
-                                        {{ item.get('totalQuantity')?.value }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center font-medium">
-                                        {{ item.get('orderedQty')?.value }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center text-gray-600">
-                                        {{ item.get('deliveredQty')?.value }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center text-gray-600">
-                                        {{ getBalanceQty(item) }}
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <div *ngIf="item.get('status')?.value !== 'Delivered'" class="flex flex-col">
-                                            <input 
-                                                type="number" 
-                                                [formControl]="$any(item.get('currentDeliveryQty'))"
-                                                class="w-full border rounded px-3 py-2 text-center focus:outline-none focus:ring-1"
-                                                [class.border-gray-300]="!item.get('currentDeliveryQty')?.errors"
-                                                [class.focus:ring-violet-500]="!item.get('currentDeliveryQty')?.errors"
-                                                [class.border-orange-500]="item.get('currentDeliveryQty')?.errors"
-                                                [class.focus:ring-red-500]="item.get('currentDeliveryQty')?.errors"
-                                                [class.bg-gray-100]="!isItemSelected(i) || item.get('currentDeliveryQty')?.disabled"
-                                                [class.cursor-not-allowed]="!isItemSelected(i) || item.get('currentDeliveryQty')?.disabled"
-                                                min="0"
-                                                [max]="getBalanceQty(item)"
-                                                placeholder="0">
-                                            <span *ngIf="item.get('currentDeliveryQty')?.errors?.['max']" class="text-xs text-red-600 mt-1">
-                                                Max: {{ getBalanceQty(item) }}
-                                            </span>
-                                            <span *ngIf="item.get('currentDeliveryQty')?.errors?.['required'] && isItemSelected(i)" class="text-xs text-red-600 mt-1">
-                                                Required
-                                            </span>
-                                        </div>
-                                        <div *ngIf="item.get('status')?.value === 'Delivered'" class="text-gray-400">
-                                            -
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-2 border min-w-[200px]">
-                                         <div *ngIf="item.get('status')?.value !== 'Delivered'" class="flex flex-col gap-2">
-                                            <div class="flex items-center gap-1">
-                                                <input 
-                                                    type="text"
-                                                    [value]="getSerialNoInput(i)"
-                                                    (input)="setSerialNoInput(i, $any($event.target).value)"
-                                                    (keydown)="onSerialNoKeydown($event, i)"
-                                                    [disabled]="!isItemSelected(i)"
-                                                    class="flex-1 min-w-0 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
-                                                    [class.bg-gray-100]="!isItemSelected(i)"
-                                                    [class.cursor-not-allowed]="!isItemSelected(i)"
-                                                    placeholder="Enter S/N">
-                                                <button 
-                                                    type="button"
-                                                    (click)="addSerialNo(i)"
-                                                    [disabled]="!isItemSelected(i)"
-                                                    class="px-2 py-1.5 bg-violet-600 text-white rounded text-xs font-medium hover:bg-violet-700 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
-                                                    Add
-                                                </button>
-                                            </div>
-                                            <div *ngIf="getSerialNos(i).length > 0" class="flex flex-wrap gap-1">
-                                                <span *ngFor="let sn of getSerialNos(i)" 
-                                                    class="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 border border-gray-300 rounded-full text-xs">
-                                                    {{ sn }}
-                                                    <button 
-                                                        type="button" 
-                                                        (click)="removeSerialNo(i, sn)"
-                                                        [disabled]="!isItemSelected(i)"
-                                                        class="text-gray-400 hover:text-red-500 text-sm leading-none disabled:opacity-50">
-                                                        ×
-                                                    </button>
-                                                </span>
-                                            </div>
-                                        </div>
-                                         <div *ngIf="item.get('status')?.value === 'Delivered'" class="text-gray-400 text-center">
-                                            -
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <span class="px-2 py-1 rounded text-xs font-semibold"
-                                            [ngClass]="{
-                                                'bg-green-100 text-green-800': item.get('status')?.value === 'Delivered',
-                                                'bg-yellow-100 text-yellow-800': item.get('status')?.value === 'Pending' || item.get('status')?.value === 'Partially Delivered',
-                                                'bg-red-100 text-red-800': item.get('status')?.value === 'No PO / Not in Inventory'
-                                            }">
-                                            {{ item.get('status')?.value }}
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-2 border text-center">
-                                        <app-scan-cell
-                                            [rowKey]="scanRowKey(i)"
-                                            [supplier]="dnForm.get('clientName')?.value"
-                                            [product]="item.get('description')?.value"
-                                            [reference]="item.get('partNo')?.value"
-                                            [disabled]="!isItemSelected(i)"
-                                            (scanReceived)="onScanReceived(i, $event)">
-                                        </app-scan-cell>
-                                    </td>
-                                </tr>
-                            </ng-container>
-                            <tr *ngIf="items.length === 0">
-                                <td colspan="12" class="text-center py-8 text-gray-500">
-                                    No materials found. Select a Job ID.
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
+<ng-template #pageMode>
+<div class="flex h-full flex-col bg-gray-50 p-6 dark:bg-erp-surface-dark-alt">
+  <div class="min-h-0 flex-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
+    <form [formGroup]="dnForm" class="flex h-full flex-col">
+      <header class="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Delivery Note</p>
+          <h1 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ isEditMode ? 'Edit Draft DN' : 'Create Delivery Note' }}</h1>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ dnForm.get('dnNo')?.value || 'New DN' }}</p>
         </div>
-
-        <!-- Footer Actions -->
-        <div class="w-full flex justify-between mb-3 px-8 py-3 border-t bg-gray-50 rounded-b-lg">
-            <div class="flex gap-3">
-                 <!-- Left side buttons like Back -->
-                 <app-btn theme="secondary-outline" (click)="onCancel()">Back to Summary</app-btn>
-            </div>
-            <div class="flex gap-3">
-                <app-btn theme="cancel" type="button" (click)="onCancel()">Cancel DN</app-btn>
-                <app-btn theme="secondary-outline" type="button" [loading]="isSavingDraft()" (buttonClick)="onSaveDraft()">Save as Draft</app-btn>
-                <app-btn theme="secondary" type="button" (click)="onPreview()" [disabled]="isAllDelivered()">Preview DN</app-btn>
-                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isAllDelivered()" (buttonClick)="onPostDn()">POST DN</app-btn>
-            </div>
+        <div *ngIf="draftLoaded()" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+          Draft loaded<span *ngIf="loadedDraftNo()"> - {{ loadedDraftNo() }}</span>
         </div>
+      </header>
+
+      <main class="min-h-0 flex-1 overflow-auto px-6 py-5">
+        <ng-container *ngTemplateOutlet="dnBody"></ng-container>
+      </main>
+
+      <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4 dark:border-erp-border-dark dark:bg-white/[0.02]">
+        <app-action-button variant="secondary" (click)="onCancel()">
+          <ng-icon name="heroArrowLeft" class="h-4 w-4"></ng-icon> Back
+        </app-action-button>
+        <div class="flex flex-wrap items-center gap-2">
+          <app-action-button variant="secondary" (click)="onCancel()">Cancel</app-action-button>
+          <app-action-button variant="tool" [disabled]="isSavingDraft()" (click)="onSaveDraft()">{{ isSavingDraft() ? 'Saving...' : 'Save as Draft' }}</app-action-button>
+          <app-action-button variant="secondary" [disabled]="isAllDelivered()" (click)="onPreview()">Preview DN</app-action-button>
+          <app-action-button variant="primary" [disabled]="isAllDelivered() || isSubmitting()" (click)="onPostDn()">{{ isSubmitting() ? 'Posting...' : 'Post DN' }}</app-action-button>
+        </div>
+      </footer>
     </form>
+  </div>
 </div>
+</ng-template>
+
+<ng-template #dnBody>
+  <form *ngIf="drawerMode; else pageBody" [formGroup]="dnForm" class="space-y-5">
+    <ng-container *ngTemplateOutlet="bodyContent"></ng-container>
+  </form>
+  <ng-template #pageBody>
+    <ng-container *ngTemplateOutlet="bodyContent"></ng-container>
+  </ng-template>
+</ng-template>
+
+<ng-template #bodyContent>
+        <app-sf-section title="Source" columns="3">
+          <app-sf-field label="Job ID" [control]="dnForm.get('jobId')">
+            <app-sf-select formControlName="jobId" [options]="jobOptions" placeholder="Choose from the list"></app-sf-select>
+          </app-sf-field>
+          <app-sf-field label="Client Name" [control]="dnForm.get('clientName')">
+            <app-sf-input formControlName="clientName" readonly></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="Customer LPO Number" [control]="dnForm.get('customerLpoNumber')">
+            <app-sf-input formControlName="customerLpoNumber" placeholder="Customer PO / LPO"></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="DN No" [control]="dnForm.get('dnNo')">
+            <app-sf-input formControlName="dnNo" readonly></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="DN Date" [control]="dnForm.get('dnDate')">
+            <app-sf-date formControlName="dnDate" displayFormat="dd/MM/yy"></app-sf-date>
+          </app-sf-field>
+          <app-sf-field label="Subject" [control]="dnForm.get('subject')">
+            <app-sf-input formControlName="subject" placeholder="Delivery subject"></app-sf-input>
+          </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Delivery Details" columns="3">
+          <app-sf-field label="Delivery Type" [control]="dnForm.get('deliveryType')">
+            <app-sf-select formControlName="deliveryType" [options]="deliveryTypeOptions"></app-sf-select>
+          </app-sf-field>
+          <app-sf-field label="Promised Date" [control]="dnForm.get('promisedDate')">
+            <app-sf-date formControlName="promisedDate" displayFormat="dd/MM/yy"></app-sf-date>
+          </app-sf-field>
+          <app-sf-field label="Contact No" [control]="dnForm.get('contactNo')">
+            <app-sf-input formControlName="contactNo" placeholder="Receiver contact"></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="Ship To" [control]="dnForm.get('shipToName')">
+            <app-sf-input formControlName="shipToName" placeholder="Site / pickup / customer"></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="Contact Person" [control]="dnForm.get('contactPerson')">
+            <app-sf-input formControlName="contactPerson" placeholder="Receiver name"></app-sf-input>
+          </app-sf-field>
+          <app-sf-field full label="Ship-to Address" [control]="dnForm.get('shipToAddress')">
+            <app-sf-textarea formControlName="shipToAddress" [rows]="2" placeholder="Delivery site address"></app-sf-textarea>
+          </app-sf-field>
+          <app-sf-field full label="Delivery Instructions" optional [control]="dnForm.get('deliveryInstructions')">
+            <app-sf-textarea formControlName="deliveryInstructions" [rows]="2" placeholder="Gate pass, timing, pickup release note, drop-ship remarks"></app-sf-textarea>
+          </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Materials" description="Select only the quantities going in this delivery. Balance stays available for a later DN.">
+          <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-erp-border-dark">
+            <table class="w-full min-w-[1180px] text-left text-sm">
+              <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">
+                <tr>
+                  <th class="w-12 px-3 py-2 text-center"></th>
+                  <th class="w-14 px-3 py-2 text-center">Sl</th>
+                  <th class="px-3 py-2">Part No</th>
+                  <th class="px-3 py-2">Description</th>
+                  <th class="w-20 px-3 py-2 text-center">Ord</th>
+                  <th class="w-24 px-3 py-2 text-center">Delivered</th>
+                  <th class="w-24 px-3 py-2 text-center">Balance</th>
+                  <th class="w-32 px-3 py-2 text-center">This DN</th>
+                  <th class="min-w-[220px] px-3 py-2">Serial No(s)</th>
+                  <th class="w-40 px-3 py-2 text-center">Status</th>
+                  <th class="w-24 px-3 py-2 text-center">Scan</th>
+                </tr>
+              </thead>
+              <tbody formArrayName="items" class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+                <ng-container *ngFor="let item of items.controls; let i = index" [formGroupName]="i">
+                  <tr [ngClass]="{'bg-gray-50 text-gray-400 dark:bg-white/[0.02]': item.get('status')?.value === 'Delivered' || item.get('status')?.value === 'No PO / Not in Inventory' || !isItemSelected(i)}">
+                    <td class="px-3 py-2 text-center">
+                      <app-sf-checkbox [ngModelOptions]="{ standalone: true }" [ngModel]="isItemSelected(i)" (ngModelChange)="toggleItemSelection(i)"
+                        [disabled]="item.get('status')?.value === 'Delivered' || item.get('status')?.value === 'No PO / Not in Inventory'"></app-sf-checkbox>
+                    </td>
+                    <td class="px-3 py-2 text-center tabular-nums">{{ item.get('slNo')?.value }}</td>
+                    <td class="px-3 py-2 font-medium text-gray-700 dark:text-gray-200">{{ item.get('partNo')?.value || '-' }}</td>
+                    <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ item.get('description')?.value || '-' }}</td>
+                    <td class="px-3 py-2 text-center tabular-nums">{{ item.get('orderedQty')?.value }}</td>
+                    <td class="px-3 py-2 text-center tabular-nums">{{ item.get('deliveredQty')?.value }}</td>
+                    <td class="px-3 py-2 text-center tabular-nums">{{ getBalanceQty(item) }}</td>
+                    <td class="px-3 py-2">
+                      <app-sf-number [formControl]="$any(item.get('currentDeliveryQty'))" [min]="0" [max]="getBalanceQty(item)" [stepper]="false"></app-sf-number>
+                    </td>
+                    <td class="px-3 py-2">
+                      <div class="flex flex-col gap-2">
+                        <div class="flex items-center gap-2">
+                          <app-sf-input class="min-w-0 flex-1" [ngModelOptions]="{ standalone: true }" [ngModel]="getSerialNoInput(i)"
+                            (ngModelChange)="setSerialNoInput(i, $event)" (keydown)="onSerialNoKeydown($event, i)" [disabled]="!isItemSelected(i)"
+                            placeholder="Enter S/N"></app-sf-input>
+                          <app-action-button variant="secondary" [disabled]="!isItemSelected(i)" (click)="addSerialNo(i)">Add</app-action-button>
+                        </div>
+                        <div *ngIf="getSerialNos(i).length > 0" class="flex flex-wrap gap-1">
+                          <span *ngFor="let sn of getSerialNos(i)" class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs dark:border-erp-border-dark dark:bg-white/[0.04]">
+                            {{ sn }}
+                            <button type="button" class="text-gray-400 hover:text-red-500" [disabled]="!isItemSelected(i)" (click)="removeSerialNo(i, sn)">x</button>
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="rounded-full px-2 py-1 text-xs font-semibold"
+                        [ngClass]="{
+                          'bg-emerald-100 text-emerald-800': item.get('status')?.value === 'Delivered',
+                          'bg-amber-100 text-amber-800': item.get('status')?.value === 'Pending' || item.get('status')?.value === 'Partially Delivered',
+                          'bg-red-100 text-red-800': item.get('status')?.value === 'No PO / Not in Inventory'
+                        }">{{ item.get('status')?.value }}</span>
+                    </td>
+                    <td class="px-3 py-2 text-center">
+                      <app-scan-cell [rowKey]="scanRowKey(i)" [supplier]="dnForm.get('clientName')?.value"
+                        [product]="item.get('description')?.value" [reference]="item.get('partNo')?.value"
+                        [disabled]="!isItemSelected(i)" (scanReceived)="onScanReceived(i, $event)"></app-scan-cell>
+                    </td>
+                  </tr>
+                </ng-container>
+                <tr *ngIf="items.length === 0">
+                  <td colspan="11" class="px-4 py-10 text-center text-sm text-gray-500">No materials found. Select a Job ID.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </app-sf-section>
+</ng-template>

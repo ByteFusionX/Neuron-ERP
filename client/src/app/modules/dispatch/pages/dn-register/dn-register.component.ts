@@ -6,15 +6,16 @@ import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 
-import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { DeliveryNote, DnStatus } from 'src/app/shared/interfaces/delivery-note.interface';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatMenuModule } from '@angular/material/menu';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import { DataGridBreadcrumb, DataGridColumn, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { CreateDnComponent } from '../create-dn/create-dn.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -24,7 +25,7 @@ interface FilterParams {
   customer?: string;
   fromDate?: string;
   toDate?: string;
-  status?: string;
+  status?: string | string[];
   jobId?: string;
 }
 
@@ -36,8 +37,9 @@ interface FilterParams {
     FormsModule,
     ReactiveFormsModule,
     RouterModule,
-    TableComponent,
-    ButtonComponent,
+    DataGridComponent,
+    ActionButtonComponent,
+    CreateDnComponent,
     IconsModule,
     MatMenuModule
   ],
@@ -46,14 +48,14 @@ interface FilterParams {
   providers: [PaginationService]
 })
 export class DnRegisterComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent) tableComponent!: TableComponent;
+  @ViewChild('grid') grid!: DataGridComponent<DeliveryNote>;
 
   private _dnService = inject(DeliveryNoteService);
   private _router = inject(Router);
   private _route = inject(ActivatedRoute);
   private _dialog = inject(MatDialog);
   private toaster = inject(ToastrService);
-  private paginationService = inject(PaginationService);
+  paginationService = inject(PaginationService);
   private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
 
@@ -64,8 +66,23 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   canSwitchDispatchView = signal<boolean>(false);
 
   tableData = signal<DeliveryNote[]>([]);
-  tableColumns: TableColumn[] = [];
-  defaultColumns: string[] = [];
+  tableColumns: DataGridColumn<DeliveryNote>[] = [];
+  rowActions: DataGridRowAction<DeliveryNote>[] = [];
+  views: DataGridView<DeliveryNote>[] = [
+    { id: 'all', label: 'All' },
+    { id: 'draft', label: 'Draft', filters: [{ id: 1, key: 'status', op: 'is', value: DnStatus.DRAFT }] },
+    { id: 'ready', label: 'Ready', filters: [{ id: 1, key: 'status', op: 'is', value: DnStatus.READY_FOR_DISPATCH }] },
+    { id: 'delivered', label: 'Delivered', filters: [{ id: 1, key: 'status', op: 'is', value: DnStatus.DELIVERED }] },
+    {
+      id: 'rejected',
+      label: 'Rejected',
+      filters: [
+        { id: 1, key: 'status', op: 'is', value: DnStatus.REJECTED },
+        { id: 2, key: 'status', op: 'is', value: DnStatus.PARTIALLY_REJECTED, or: true }
+      ]
+    },
+  ];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Dispatch' }, { label: 'Delivery Notes' }];
 
   isLoading = signal<boolean>(true);
   isEmpty = signal<boolean>(false);
@@ -73,6 +90,9 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   dnStatuses = Object.values(DnStatus);
   searchQuery = signal<string>('');
+  private activeFilters: Partial<FilterParams> = {};
+  formOpen = false;
+  formEditId: string | null = null;
 
   ngOnInit(): void {
     this.subscriptions.add(
@@ -90,6 +110,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       })
     );
     this.setupTableColumns();
+    this.setupRowActions();
     this.initializeFromUrlParams();
   }
 
@@ -121,76 +142,51 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   }
 
   setupTableColumns(): void {
-    const baseColumns: TableColumn[] = [
+    const baseColumns: DataGridColumn<DeliveryNote>[] = [
       {
         key: 'dnDate',
         label: 'DN Date',
         type: 'date',
-        pipeParams: 'dd/MM/yyyy',
         sortable: true,
-        filterable: true,
-        filterType: 'date'
+        width: '120px'
       },
       {
         key: 'dnNo',
         label: 'DN No',
-        type: 'text',
-        sortable: true,
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search DN No...',
-        cellClass: 'text-purple-600 font-medium'
+        sortable: true
       },
       {
         key: 'job.jobId',
         label: 'Job ID',
-        type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search Job ID...',
-        cellRenderer: (item: DeliveryNote) => item.job?.jobId || 'N/A'
+        valueGetter: (item) => item.job?.jobId || 'N/A'
       },
       {
         key: 'clientName',
         label: 'Customer',
-        type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search customer...'
       },
+      { key: 'deliveryType', label: 'Type', type: 'badge' },
+      { key: 'promisedDate', label: 'Promised', type: 'date', width: '120px' },
       {
         key: 'customerLpoNumber',
         label: 'LPO Number',
-        type: 'text',
-        cellRenderer: (item: DeliveryNote) => item.customerLpoNumber || 'N/A'
+        valueGetter: (item) => item.customerLpoNumber || 'N/A'
       },
       {
         key: 'status',
         label: 'Status',
-        type: 'status',
-        headerClass: 'text-center',
-        filterable: true,
-        filterType: 'select',
-        filterOptions: this.dnStatuses.map(status => ({ label: status, value: status }))
-      },
-      {
-        key: 'actions',
-        label: 'Action',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: [
-          {
-            icon: 'heroEye',
-            tooltip: 'View Details',
-            action: 'viewDn',
-            buttonClass: 'cursor-pointer w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center'
-          }
-        ]
+        type: 'badge',
+        editorOptions: this.dnStatuses.map(status => ({ label: status, value: status }))
       }
     ];
 
     this.tableColumns = baseColumns;
-    this.defaultColumns = ['dnDate', 'dnNo', 'job.jobId', 'clientName', 'customerLpoNumber', 'status', 'actions'];
+  }
+
+  setupRowActions(): void {
+    this.rowActions = [
+      { id: 'viewDn', label: 'Open full DN', icon: 'eye', quick: true, panel: true },
+      { id: 'editDraft', label: 'Edit draft', icon: 'pencil', quick: true, hidden: row => row.status !== DnStatus.DRAFT }
+    ];
   }
 
   loadData(filters?: Partial<FilterParams>): void {
@@ -203,6 +199,7 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       search: this.searchQuery() || undefined,
       ...filters
     };
+    this.activeFilters = { ...filters };
 
     this.subscriptions.add(
       this._dnService.getAllDeliveryNotes(filterParams).subscribe({
@@ -239,40 +236,31 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     this.loadData();
   }
 
-  onFilterChange(filters: TableFilter[]): void {
+  onQueryChange(query: DataGridQuery): void {
     this.isLoading.set(true);
-    const currentState = this.paginationService.paginationState();
     this.paginationService.updatePaginationState({
-      page: 1,
-      row: currentState.row,
-      total: currentState.total
+      page: query.page,
+      row: query.pageSize,
+      total: this.totalItems()
     });
 
-    const filterParams: Partial<FilterParams> = filters.reduce((acc, filter) => {
-      switch (filter.type) {
-        case 'text':
-          if (filter.column === 'dnNo') {
-            acc.search = filter.value;
-          } else if (filter.column === 'job.jobId') {
-            acc.jobId = filter.value;
-          } else {
-            acc[filter.column] = filter.value;
-          }
-          break;
-        case 'select':
-          if (filter.column === 'status') {
-            acc.status = filter.value;
-          }
-          break;
-        case 'date':
-          if (filter.column === 'dnDate') {
-            acc.fromDate = filter.value[0];
-            acc.toDate = filter.value[1];
-          }
-          break;
+    const filterParams: Partial<FilterParams> = {};
+    if (query.search) filterParams.search = query.search;
+    const statusValues: string[] = [];
+    query.filters.forEach(filter => {
+      if (filter.key === 'dnNo') filterParams.search = filter.value;
+      else if (filter.key === 'job.jobId') filterParams.jobId = filter.value;
+      else if (filter.key === 'clientName') filterParams.customer = filter.value;
+      else if (filter.key === 'status') statusValues.push(filter.value);
+      else if (filter.key === 'dnDate') {
+        if (filter.op === 'on') {
+          filterParams.fromDate = filter.value;
+          filterParams.toDate = filter.value;
+        }
       }
-      return acc;
-    }, {} as Partial<FilterParams>);
+    });
+    if (statusValues.length === 1) filterParams.status = statusValues[0];
+    else if (statusValues.length > 1) filterParams.status = statusValues;
 
     this.loadData(filterParams);
   }
@@ -293,12 +281,15 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     });
   }
 
-  onActionClick(event: { action: string; item: DeliveryNote }): void {
-    const { action, item } = event;
+  onRowAction(event: DataGridRowActionEvent<DeliveryNote>): void {
+    const { action, row } = event;
 
-    switch (action) {
+    switch (action.id) {
       case 'viewDn':
-        this.viewDnDetails(item);
+        this.viewDnDetails(row);
+        break;
+      case 'editDraft':
+        this.openCreateDrawer(row._id || null);
         break;
     }
   }
@@ -309,6 +300,23 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   onRowClick(row: DeliveryNote): void {
     this.viewDnDetails(row);
+  }
+
+  dnTitle = (row: DeliveryNote): string => row.dnNo || 'Delivery Note';
+  dnSubtitle = (row: DeliveryNote): string => row.clientName || '';
+
+  openCreateDrawer(editId: string | null = null): void {
+    this.formEditId = editId;
+    this.formOpen = true;
+  }
+
+  closeCreateDrawer(): void {
+    this.formOpen = false;
+    this.formEditId = null;
+  }
+
+  onCreateSaved(): void {
+    this.loadData();
   }
 
   onSearchSubmit(searchTerm: string): void {
@@ -344,13 +352,14 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
     const filterParams: FilterParams = {
       page: 1,
       row: total,
-      search: this.searchQuery() || undefined
+      search: this.searchQuery() || undefined,
+      ...this.activeFilters
     };
 
     this._dnService.getAllDeliveryNotes(filterParams).subscribe({
       next: (response) => {
-        if (this.tableComponent && response.dns.length > 0) {
-          this.tableComponent.exportAllData(response.dns);
+        if (response.dns.length > 0) {
+          void this.grid.exportToExcel(response.dns);
         }
       },
       error: (error) => {

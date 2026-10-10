@@ -195,7 +195,7 @@ const calculateDnStatus = async (jobId: string, currentDnItems: any[], excludeDn
     }
 
     if (anyItemDelivered) {
-        return 'Delivered';
+        return 'Ready for Dispatch';
     }
 
     return 'Draft';
@@ -338,11 +338,12 @@ export const getAllDeliveryNotes = async (req: Request, res: Response) => {
         let isJob = jobId == null ? true : false;
         let isCustomer = customer == null ? true : false;
         let isDate = fromDate == null || toDate == null ? true : false;
+        const statusFilter = Array.isArray(status) ? { $in: status } : status;
         let isStatus = status == null ? true : false;
 
         let matchFilters = {
             $and: [
-                ...(status ? [{ status: status }] : []),
+                ...(status ? [{ status: statusFilter }] : []),
                 ...(jobId ? [{ jobId: new mongoose.Types.ObjectId(jobId) }] : []),
                 ...(customer ? [{ clientName: { $regex: customer, $options: 'i' } }] : []),
                 { dnNo: { $regex: search || '', $options: 'i' } },
@@ -572,6 +573,42 @@ export const cancelDn = async (req: Request, res: Response) => {
     }
 };
 
+export const completeDnPod = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { receivedBy, receivedContactNo, receivedDate, remarks, signatureName } = req.body;
+
+        if (!receivedBy) {
+            return res.status(400).json({ success: false, message: 'Received by is required' });
+        }
+
+        const dn = await DeliveryNote.findById(id);
+        if (!dn) {
+            return res.status(404).json({ success: false, message: 'Delivery Note not found' });
+        }
+
+        if (dn.status === 'Draft' || dn.status === 'Cancelled') {
+            return res.status(400).json({ success: false, message: 'Only posted delivery notes can receive POD' });
+        }
+
+        (dn as any).pod = {
+            receivedBy,
+            receivedContactNo,
+            receivedDate: receivedDate ? new Date(receivedDate) : new Date(),
+            remarks,
+            signatureName
+        };
+        dn.status = 'Delivered';
+        dn.updatedDate = new Date();
+        const updatedDn = await dn.save();
+
+        return res.status(200).json({ success: true, data: updatedDn });
+    } catch (error) {
+        console.error("Complete DN POD Error:", error);
+        res.status(500).json({ success: false, message: 'Error completing Delivery Note POD', error });
+    }
+};
+
 /**
  * Restore a rejected quantity into a quarantined StockEntry (pending QC release),
  * rather than straight back into available/sellable stock. Reuses the cost/warehouse
@@ -686,7 +723,7 @@ export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[],
         }
 
         const alreadyRejected = dnItem.rejectedQty || 0;
-        const deliveredQty = dnItem.deliveredQty || 0;
+        const deliveredQty = dnItem.currentDeliveryQty || dnItem.deliveredQty || 0;
 
         if (alreadyRejected + qty > deliveredQty) {
             throw new Error(`Item "${dnItem.description || dnItem.partNo}": rejected qty (${alreadyRejected + qty}) cannot exceed delivered qty (${deliveredQty})`);
@@ -706,7 +743,7 @@ export const applyDnItemRejections = async (dn: any, items: RejectDnItemInput[],
         }
     }
 
-    const totalDelivered = (dn.items as any[]).reduce((sum: number, it: any) => sum + (it.deliveredQty || 0), 0);
+    const totalDelivered = (dn.items as any[]).reduce((sum: number, it: any) => sum + (it.currentDeliveryQty || it.deliveredQty || 0), 0);
     const totalRejected = (dn.items as any[]).reduce((sum: number, it: any) => sum + (it.rejectedQty || 0), 0);
 
     dn.status = totalRejected > 0 && totalRejected >= totalDelivered ? 'Rejected' : 'Partially Rejected';
