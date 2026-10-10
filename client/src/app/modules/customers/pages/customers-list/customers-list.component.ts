@@ -7,7 +7,7 @@ import { saveAs } from 'file-saver';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { CustomerAttachment, CustomerStatus, getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
+import { CUSTOMER_STATUSES, CustomerAttachment, CustomerStatus, getCustomer, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
@@ -16,15 +16,19 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
-import { DetailOverviewSection, DetailDocument } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailMetaComponent } from 'src/app/shared/components/detail-panel/detail-meta.component';
+import { DetailOverviewSection, DetailDocument, DetailMetaItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { FormatStringPipe } from 'src/app/shared/pipes/formatString.pipe';
 import { NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { FormControl, FormsModule } from '@angular/forms';
 import { ModalService } from 'src/app/shared/components/modal';
+import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailAvatarComponent } from 'src/app/shared/components/detail-panel/detail-avatar.component';
 import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { StatusPillComponent } from 'src/app/shared/components/status-indicator/status-pill.component';
+import { StatusTone } from 'src/app/shared/components/status-indicator/status-tone';
 import { CustomerFormDrawerComponent } from '../customer-form-drawer/customer-form-drawer.component';
 import { CustomerPickerPanelComponent } from '../../components/picker-panel/picker-panel.component';
 import { ChangeCustomerStatusComponent, ChangeCustomerStatusModalData, ChangeCustomerStatusModalResult } from '../change-customer-status/change-customer-status.component';
@@ -33,7 +37,7 @@ import { ChangeCustomerStatusComponent, ChangeCustomerStatusModalData, ChangeCus
   selector: 'app-customers-list',
   templateUrl: './customers-list.component.html',
   styleUrls: ['./customers-list.component.css'],
-  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, FormsModule, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailAvatarComponent, ActionButtonComponent, SmartFormModule, CustomerFormDrawerComponent, CustomerPickerPanelComponent],
+  imports: [NgSwitch, NgSwitchCase, NgFor, NgIf, FormsModule, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailMetaComponent, DetailAvatarComponent, StatusPillComponent, ActionButtonComponent, SmartFormModule, CustomerFormDrawerComponent, CustomerPickerPanelComponent],
 })
 export class CustomersListComponent implements OnInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<getCustomer>;
@@ -55,6 +59,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   searchQuery = '';
   selectedEmployee: string | null = null;
   creditStatusFilter: string | null = null;
+  statusFilter: string | null = null;
 
   columns: DataGridColumn<getCustomer>[] = [];
   rowActions: DataGridRowAction<getCustomer>[] = [];
@@ -65,6 +70,10 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   detailLoading = false;
   detailTabs: DataGridDetailTab[] = this.buildDetailTabs();
+
+  readonly statusToneMap: Record<string, StatusTone> = {
+    Active: 'success', Inactive: 'neutral', Blacklisted: 'danger', 'On Hold': 'warning', Prospect: 'info',
+  };
 
   customerTitle = (r: getCustomer) => r.companyName ?? '';
   customerSubtitle = (r: getCustomer) => r.clientRef ?? '';
@@ -156,6 +165,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       {
         key: 'status', label: 'Status', type: 'badge', width: '110px',
         valueGetter: (r) => r.status,
+        editorOptions: CUSTOMER_STATUSES.map((s) => ({ label: s, value: s })),
         badgeClasses: {
           Active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
           Inactive: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -187,7 +197,6 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.rowActions = [
       { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: () => !this.canEditCustomer },
       { id: 'changeStatus', label: 'Change Status', icon: 'flag', hidden: () => !this.canEditCustomer },
-      { id: 'viewShared', label: 'Shared With', icon: 'eye', hidden: (r) => !this.shareAccess || !r.sharedWith?.length },
       { id: 'share', label: 'Share', icon: 'send', hidden: () => !this.shareAccess },
       { id: 'transfer', label: 'Transfer', icon: 'transfer', hidden: (r) => !this.canTransfer(r) },
       { id: 'delete', label: 'Delete', icon: 'trash', variant: 'danger', divider: true, hidden: () => !this.canDeleteCustomer },
@@ -225,6 +234,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       userId: this.userId,
       search: this.searchQuery,
       creditStatus: this.creditStatusFilter,
+      status: this.statusFilter,
     };
 
     this.subscriptions.add(
@@ -250,9 +260,11 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.row = query.pageSize;
     this.selectedEmployee = null;
     this.creditStatusFilter = null;
+    this.statusFilter = null;
     for (const f of query.filters) {
       if (f.key === 'createdBy') this.selectedEmployee = f.value;
       if (f.key === 'creditStatus') this.creditStatusFilter = f.value;
+      if (f.key === 'status') this.statusFilter = f.value;
     }
     this.getAllCustomers();
     this.updateUrlParams();
@@ -307,6 +319,16 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         this.detailLoading = false;
       },
     });
+  }
+
+  metaFor(row: getCustomer): DetailMetaItem[] {
+    const c = this.detail(row);
+    return [
+      { label: 'Client Ref.', value: c.clientRef },
+      { label: 'Customer Type', value: this.formatString.transform(c.customerType?.customerTypeName) },
+      { label: 'Payment Terms', value: c.paymentTerms || '—' },
+      { label: 'Credit Status', value: c.creditStatus || '—' },
+    ];
   }
 
   overviewSections(row: getCustomer): DetailOverviewSection[] {
@@ -366,7 +388,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
   contactRows(row: getCustomer): Record<string, any>[] {
     return (this.detail(row).contactDetails ?? []).map((c) => ({
       name: `${c.courtesyTitle ? c.courtesyTitle + '. ' : ''}${c.firstName} ${c.lastName}`.trim() + (c.isPrimary ? ' (Primary)' : ''),
-      designation: (c.designation || '—') + (c.role ? ' · ' + c.role : ''),
+      designation: (c.designation || '—'),
       email: c.email,
       phoneNo: c.phoneNo,
       department: c.department?.departmentName ?? '',
@@ -389,7 +411,10 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   onFormSaved(): void {
     this.details.clear();
-    this.getAllCustomers();
+    this.getAllCustomers(() => {
+      const open = this.grid?.activeRow;
+      if (open) this.onRowOpen(open);
+    });
   }
 
   onRowAction({ action, row }: DataGridRowActionEvent<getCustomer>): void {
@@ -401,10 +426,6 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         break;
       case 'changeStatus':
         this.onChangeStatus(row);
-        break;
-      case 'viewShared':
-        this.grid.activeTab = 'share';
-        this.grid.openRow(row);
         break;
       case 'share':
         this.grid.activeTab = 'share';
@@ -536,8 +557,18 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.modal
       .open<ChangeCustomerStatusModalResult>(ChangeCustomerStatusComponent, { width: '480px', data })
       .afterClosed()
-      .subscribe((res) => {
+      .subscribe(async (res) => {
         if (!res) return;
+        if (res.status === 'Blacklisted') {
+          const { confirmed } = await this.confirm.open({
+            tone: 'reject',
+            title: 'Blacklist customer?',
+            message: `Mark "${row.companyName}" as Blacklisted?`,
+            consequence: 'This flags the customer as high-risk across the system.',
+            confirmLabel: 'Blacklist',
+          });
+          if (!confirmed) return;
+        }
         this._customerService.updateCustomerStatus({ id: row._id, status: res.status, reason: res.reason }).subscribe({
           next: () => {
             this.toaster.success('Customer status updated');
@@ -570,9 +601,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   // --- Documents (detail-panel tab) ------------------------------------------------
 
-  uploadRowId: string | null = null;
   isUploadingFiles = false;
-  pendingFiles: File[] = [];
   readonly acceptedFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
 
   customerDocuments(row: getCustomer): DetailDocument[] {
@@ -589,22 +618,27 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     ];
   }
 
+  /** Opens the shared upload modal over the row's documents tab; files go up when the modal submits. */
   startAttachmentUpload(row: getCustomer): void {
-    this.uploadRowId = row._id;
-    this.pendingFiles = [];
-  }
-
-  cancelAttachmentUpload(): void {
-    this.uploadRowId = null;
-    this.pendingFiles = [];
+    if (!this.canEditCustomer) return;
+    if (this.grid) {
+      this.grid.activeTab = 'documents';
+      this.grid.openRow(row);
+    }
+    this.modal.open<DocumentUploadModalResult>(DocumentUploadModalComponent, {
+      width: '680px',
+      data: { context: row.clientRef || row._id, acceptedFiles: this.acceptedFiles, title: 'Upload customer files' },
+    }).afterClosed().subscribe((result) => {
+      if (result?.files?.length) this.uploadAttachments(row, result.files);
+    });
   }
 
   /** Existing files are re-sent because the server replaces the whole set. */
-  uploadAttachments(row: getCustomer): void {
-    if (!this.pendingFiles.length || this.isUploadingFiles) return;
+  uploadAttachments(row: getCustomer, files: File[]): void {
+    if (!files.length || this.isUploadingFiles) return;
     const current = this.detail(row);
     const formData = new FormData();
-    this.pendingFiles.forEach((file) => formData.append('files', file));
+    files.forEach((file) => formData.append('files', file));
     if (current.attachments?.length) formData.append('existingFiles', JSON.stringify(current.attachments));
 
     this.isUploadingFiles = true;
@@ -612,7 +646,6 @@ export class CustomersListComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.details.set(row._id, { ...current, attachments: res.data?.attachments || [] });
         this.isUploadingFiles = false;
-        this.cancelAttachmentUpload();
         this.toaster.success('Files uploaded successfully');
       },
       error: () => {
@@ -620,6 +653,13 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         this.toaster.error('Failed to upload files');
       },
     });
+  }
+
+  /** Footer "Edit" — same drawer as the row action. */
+  editFromPanel(row: getCustomer): void {
+    this.formMode = 'edit';
+    this.formCustomer = this.detail(row);
+    this.formOpen = true;
   }
 
   onDocumentOpen(row: getCustomer, document: DetailDocument): void {

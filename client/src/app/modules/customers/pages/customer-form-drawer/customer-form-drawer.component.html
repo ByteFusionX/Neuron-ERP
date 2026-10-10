@@ -1,4 +1,4 @@
-<app-sf-drawer [title]="title" [subtitle]="subtitle" width="860px"
+<app-sf-drawer #drawer [title]="title" [subtitle]="subtitle" width="860px"
     [open]="open" [dirty]="customerForm.dirty" (closed)="onDrawerClosed($event)">
 
     <!-- Stepper -->
@@ -65,7 +65,7 @@
                 <app-sf-input formControlName="customerEmailId" type="email" placeholder="name@company.com"></app-sf-input>
                 <p *ngIf="duplicateField === 'email'" class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">Email already in use by another customer</p>
             </app-sf-field>
-            <app-sf-field label="Contact No" [control]="customerForm.controls.contactNo">
+            <app-sf-field label="Contact No" [control]="customerForm.controls.contactNo" [messages]="{ pattern: 'Enter a valid phone number' }">
                 <app-sf-input formControlName="contactNo" type="tel" placeholder="Contact number"></app-sf-input>
                 <p *ngIf="duplicateField === 'phone'" class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">Contact number already in use by another customer</p>
             </app-sf-field>
@@ -99,30 +99,26 @@
             <app-sf-field label="Source" [control]="customerForm.controls.source">
                 <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="How did they find us?"></app-sf-select>
             </app-sf-field>
-            <app-sf-field full label="Tax" [control]="customerForm.controls.taxExempt">
-                <app-sf-checkbox formControlName="taxExempt" label="Tax exempt (VAT is not applied)"></app-sf-checkbox>
-            </app-sf-field>
         </app-sf-section>
 
         <app-sf-section *ngIf="step === 3" title="Attachments" columns="1">
-            <ng-container *ngIf="isEdit; else createAttachments">
-                <app-detail-documents
-                    title="Customer files"
-                    [documents]="attachmentDocuments()"
-                    [uploadable]="false"
-                    [removable]="true"
-                    [viewable]="false"
-                    [downloadable]="true"
-                    [removeDetails]="attachmentRemoveDetails"
-                    (download)="onAttachmentDownload($event)"
-                    (remove)="onAttachmentRemove($event)"></app-detail-documents>
-                <app-sf-file class="mt-3 block" [(ngModel)]="pendingFiles" [ngModelOptions]="{standalone: true}"
-                    [accept]="acceptedFiles" [maxSizeMb]="5" [disabled]="uploadingAttachments"></app-sf-file>
-            </ng-container>
-            <ng-template #createAttachments>
-                <app-sf-file [(ngModel)]="pendingFiles" [ngModelOptions]="{standalone: true}" [accept]="acceptedFiles" [maxSizeMb]="5"></app-sf-file>
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Files are uploaded once the customer is created.</p>
-            </ng-template>
+            <app-detail-documents *ngIf="isEdit && attachmentDocuments().length"
+                title="Customer files"
+                [documents]="attachmentDocuments()"
+                [uploadable]="false"
+                [removable]="true"
+                [viewable]="false"
+                [downloadable]="true"
+                [removeDetails]="attachmentRemoveDetails"
+                (download)="onAttachmentDownload($event)"
+                (remove)="onAttachmentRemove($event)"></app-detail-documents>
+
+            <div [class.mt-4]="isEdit && attachmentDocuments().length">
+                <app-sf-file [formControl]="pendingFilesCtrl" [accept]="acceptedFiles" listAbove></app-sf-file>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Files are uploaded only when you {{ isEdit ? 'save the changes' : 'create the customer' }}; cancelling discards them.
+                </p>
+            </div>
         </app-sf-section>
     </form>
 
@@ -131,13 +127,14 @@
             <app-action-button *ngIf="step === 1 && canCreateCustomerType" variant="tool" (click)="createCustomerType()">+ Create Customer Type</app-action-button>
             <app-action-button *ngIf="step === 2 && canCreateDepartment" variant="tool" (click)="createCustomerDepartment()">+ Create Department</app-action-button>
             <app-action-button *ngIf="step === 2" variant="tool" (click)="addContact()">+ Add Contact</app-action-button>
-            <app-action-button *ngIf="step === 3 && isEdit" variant="tool" [disabled]="uploadingAttachments || !pendingFiles.length" (click)="uploadPendingAttachments()">
-                {{ uploadingAttachments ? 'Uploading…' : 'Upload' + (pendingFiles.length ? ' (' + pendingFiles.length + ')' : '') }}
-            </app-action-button>
+            <app-action-button *ngIf="step === 3" variant="tool" (click)="createMasterListItem('paymentTerms', 'paymentTermsOptions')">+ Payment Term</app-action-button>
+            <app-action-button *ngIf="step === 3" variant="tool" (click)="createMasterListItem('creditStatus', 'creditStatusOptions')">+ Credit Status</app-action-button>
+            <app-action-button *ngIf="step === 3" variant="tool" (click)="createMasterListItem('currency', 'currencyOptions')">+ Currency</app-action-button>
+            <app-action-button *ngIf="step === 3" variant="tool" (click)="createMasterListItem('source', 'sourceOptions')">+ Source</app-action-button>
             <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
         </div>
 
-        <app-action-button *ngIf="step === 1" variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="drawer.requestClose()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2 || step === 3" variant="secondary" (click)="previousStep()">Back</app-action-button>
 
         <!-- Editing already has the data, so saving is offered on every step too. -->

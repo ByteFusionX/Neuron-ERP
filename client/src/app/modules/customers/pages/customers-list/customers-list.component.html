@@ -31,6 +31,31 @@
         (bulkAction)="onBulkAction($event, grid)"
         (create)="onCreateCustomer()">
 
+        <ng-template #detailAsideTemplate let-row>
+            <app-status-pill [status]="row.status" [toneMap]="statusToneMap"></app-status-pill>
+        </ng-template>
+
+        <ng-template #detailMetaTemplate let-row>
+            <app-detail-meta [items]="metaFor(row)"></app-detail-meta>
+        </ng-template>
+
+        <!-- left: optional, per-tab (outline) -->
+        <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <ng-container [ngSwitch]="tab">
+                <app-action-button *ngSwitchCase="'documents'" variant="outline" icon="plus" [disabled]="isUploadingFiles"
+                    (click)="startAttachmentUpload(row)">Add Document</app-action-button>
+                <app-action-button *ngSwitchCase="'share'" variant="outline" icon="plus" [disabled]="pickerType === 'Share'"
+                    (click)="openPicker(row, 'Share')">Share</app-action-button>
+                <app-action-button *ngSwitchCase="'transfer'" variant="outline" [disabled]="pickerType === 'Transfer' || !canTransferRow(row)"
+                    (click)="openPicker(row, 'Transfer')">Transfer customer</app-action-button>
+            </ng-container>
+        </ng-template>
+
+        <!-- right: permanent, every tab (filled) -->
+        <ng-template #detailFooterTemplate let-row>
+            <app-action-button *ngIf="canEditCustomer" variant="primary" (click)="editFromPanel(row)" icon="edit">Edit Customer</app-action-button>
+        </ng-template>
+
         <ng-template #detailTemplate let-row let-tab="tab">
             <ng-container [ngSwitch]="tab">
                 <ng-container *ngSwitchCase="'overview'">
@@ -55,35 +80,18 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'documents'">
-                    <app-detail-documents *ngIf="uploadRowId !== row._id; else uploadZone"
+                    <app-detail-documents
                         title="Customer files"
                         [documents]="customerDocuments(row)"
-                        [uploadable]="true"
-                        [removable]="true"
+                        [removable]="canEditCustomer"
                         [removeDetails]="documentRemoveDetails(row)"
-                        (upload)="startAttachmentUpload(row)"
                         (open)="onDocumentOpen(row, $event)"
                         (download)="onDocumentDownload(row, $event)"
                         (remove)="onDocumentRemove(row, $event)"></app-detail-documents>
-                    <ng-template #uploadZone>
-                        <div class="mb-3 flex items-center justify-between gap-3">
-                            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Upload files</p>
-                            <button type="button" (click)="cancelAttachmentUpload()" [disabled]="isUploadingFiles"
-                                class="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200 dark:hover:bg-gray-800">Cancel</button>
-                        </div>
-                        <app-sf-file [(ngModel)]="pendingFiles" [accept]="acceptedFiles" [maxSizeMb]="5" [disabled]="isUploadingFiles"></app-sf-file>
-                        <div class="mt-3 flex justify-end">
-                            <button type="button" (click)="uploadAttachments(row)" [disabled]="isUploadingFiles || !pendingFiles.length"
-                                class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">{{ isUploadingFiles ? 'Uploading…' : 'Upload' + (pendingFiles.length ? ' (' + pendingFiles.length + ')' : '') }}</button>
-                        </div>
-                    </ng-template>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'share'">
-                    <div class="mb-3 flex items-center justify-between gap-3">
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Employees who can access this customer.</p>
-                        <app-action-button *ngIf="pickerType !== 'Share'" variant="tool" (click)="openPicker(row, 'Share')">+ Share</app-action-button>
-                    </div>
+                    <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">Employees who can access this customer.</p>
 
                     <app-customer-picker-panel *ngIf="pickerType === 'Share'" class="mb-4 block" label="Employees"
                         [control]="shareControl" [multiple]="true" [options]="employeeOptions" [loading]="pickerLoading"
@@ -115,9 +123,6 @@
                         <p *ngIf="pickerType !== 'Transfer'" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
                             Transferring hands ownership to another employee. If they are already in the shared list, remove them from it first.
                         </p>
-                        <div *ngIf="pickerType !== 'Transfer'" class="mt-3">
-                            <app-action-button variant="primary" (click)="openPicker(row, 'Transfer')">Transfer customer</app-action-button>
-                        </div>
 
                         <app-customer-picker-panel *ngIf="pickerType === 'Transfer'" class="mt-3 block" label="New owner"
                             [control]="transferControl" [options]="employeeOptions" [loading]="pickerLoading" [saving]="pickerSaving"

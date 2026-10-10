@@ -99,4 +99,5 @@ export interface FilterCustomer {
     row: number;
     createdBy: string | null;
     creditStatus?: string | null;
+    status?: string | null;
 }

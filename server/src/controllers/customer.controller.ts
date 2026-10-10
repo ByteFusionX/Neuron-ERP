@@ -165,7 +165,7 @@ export const getAllCustomers = async (req: Request, res: Response, next: NextFun
 
 export const getFilteredCustomers = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, createdBy, access, userId, search, creditStatus } = req.body;
+        let { page, row, createdBy, access, userId, search, creditStatus, status } = req.body;
         let skipNum: number = (page - 1) * row;
         let isCreatedBy = createdBy == null ? true : false;
 
@@ -174,6 +174,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
         let matchFilters = {
             isDeleted: { $ne: true },
             ...(creditStatus ? { creditStatus } : {}),
+            ...(status ? { status } : {}),
             $or: [
                 { companyName: { $regex: search, $options: 'i' } },
                 { clientRef: { $regex: search, $options: 'i' } },]
@@ -386,11 +387,19 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                     sharedWith: { $first: "$sharedWith" },
                     createdDate: { $first: "$createdDate" },
                     status: { $first: "$status" },
+                    attachments: { $first: "$attachments" },
+                    shippingSites: { $first: "$shippingSites" },
+                    paymentTerms: { $first: "$paymentTerms" },
+                    creditLimit: { $first: "$creditLimit" },
+                    creditStatus: { $first: "$creditStatus" },
+                    taxExempt: { $first: "$taxExempt" },
+                    currency: { $first: "$currency" },
+                    source: { $first: "$source" },
                     contactDetails: { $push: "$contactDetails" },
                 },
             },
             {
-                $sort: { createdDate: 1 },
+                $sort: { createdDate: -1 },
             },
         ]);
 
@@ -512,6 +521,14 @@ export const getCustomerByCustomerId = async (req: Request, res: Response, next:
                         statusHistory: { $first: "$statusHistory" },
                         updatedBy: { $first: "$updatedBy" },
                         updatedDate: { $first: "$updatedDate" },
+                        attachments: { $first: "$attachments" },
+                        shippingSites: { $first: "$shippingSites" },
+                        paymentTerms: { $first: "$paymentTerms" },
+                        creditLimit: { $first: "$creditLimit" },
+                        creditStatus: { $first: "$creditStatus" },
+                        taxExempt: { $first: "$taxExempt" },
+                        currency: { $first: "$currency" },
+                        source: { $first: "$source" },
                         contactDetails: { $push: "$contactDetails" },
                     },
                 },
