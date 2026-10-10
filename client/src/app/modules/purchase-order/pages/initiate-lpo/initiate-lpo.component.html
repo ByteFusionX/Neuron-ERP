@@ -31,60 +31,75 @@
             </div>
         </div>
 
+        <!-- items grouped by the supplier sales confirmed: one group is one LPO -->
         <div class="w-full mb-8">
-            <div class="relative overflow-x-auto">
-                <table class="w-full text-md text-left border">
-                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                        <tr>
-                            <th class="px-4 py-2 border">SL.NO</th>
-                            <th class="px-4 py-2 border">Description</th>
-                            <th class="px-4 py-2 border">Part No.</th>
-                            <th class="px-4 py-2 border">Quantity</th>
-                            <th class="px-4 py-2 border">Unit Price</th>
-                            <th class="px-4 py-2 border">Total Price</th>
-                            <th class="px-4 py-2 border">Approved Vendor</th>
-                            <th class="px-4 py-2 border">ETA Terms</th>
-                            <th class="px-4 py-2 border">Payment Terms</th>
-                            <th class="px-4 py-2 border text-center">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <ng-container *ngFor="let item of comparisonItems; let i = index;">
-                            <tr class="border-b">
-                                <td class="px-4 py-2 border">{{i+1}}</td>
-                                <td class="px-4 py-2 border">{{item.detail}}</td>
-                                <td class="px-4 py-2 border">{{item.partNo}}</td>
-                                <td class="px-4 py-2 border">{{item.quantity}}</td>
-                                <td class="px-4 py-2 border">{{item.unitPrice | number:'1.2-2'}} {{currency()}}</td>
-                                <td class="px-4 py-2 border">{{item.totalPrice | number:'1.2-2'}} {{currency()}}</td>
-                                <td class="px-4 py-2 border">{{item.supplierName}}</td>
-                                <td class="px-4 py-2 border">{{item.etaTerms}}</td>
-                                <td class="px-4 py-2 border">{{item.paymentTerms}}</td>
-                                <td class="px-4 py-2 border text-center">
-                                    <div class="flex items-center justify-center gap-2">
-                                        <button type="button"
-                                            class="w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                            [disabled]="loadingIssueHistoryFor === (item.detail + '-' + item.partNo)"
-                                            matTooltip="View Issue History"
-                                            matTooltipPosition="above"
-                                            (click)="viewItemIssueHistory(item)">
-                                            <ng-icon name="heroEye" color="currentColor"></ng-icon>
-                                        </button>
-                                        <button type="button"
-                                            *ngIf="canIssueForSupplier(item.supplierId)"
-                                            class="w-8 h-8 rounded-full border border-green-500 hover:border-green-700 text-green-500 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                            matTooltip="Issue LPO"
-                                            matTooltipPosition="above"
-                                            (click)="onIssueLpoClickForItem(item)">
-                                            <ng-icon name="heroPaperAirplane" color="currentColor"></ng-icon>
-                                        </button>
-                                    </div>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p class="text-sm text-gray-600">
+                    {{ comparisonItems.length }} item(s) from {{ supplierGroups.length }} supplier(s), as confirmed by sales. Export a supplier's list, then issue its LPO.
+                </p>
+                <button type="button" *ngIf="supplierGroups.length > 1" (click)="exportAllSuppliers()"
+                    class="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">Export all suppliers</button>
+            </div>
+
+            <div *ngFor="let group of supplierGroups" class="mb-5 rounded-lg border">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b bg-gray-50 px-4 py-2.5">
+                    <div>
+                        <p class="font-medium text-gray-900">{{ group.supplierName }}</p>
+                        <p class="text-xs text-gray-500">
+                            {{ group.items.length }} item(s) · {{ group.total | number:'1.2-2' }} {{ currency() }}
+                            <ng-container *ngIf="group.paymentTerms"> · Payment {{ group.paymentTerms }}</ng-container>
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" (click)="exportSupplier(group)"
+                            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50">Export</button>
+                        <button type="button" *ngIf="canIssueForSupplier(group.supplierId)" (click)="onIssueLpoClickForItem(group)"
+                            class="inline-flex items-center gap-1.5 rounded-md border border-green-600 bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700">
+                            <ng-icon name="heroPaperAirplane" color="currentColor"></ng-icon> Issue LPO
+                        </button>
+                    </div>
+                </div>
+                <div class="relative overflow-x-auto">
+                    <table class="w-full text-md text-left">
+                        <thead class="text-xs text-gray-700 uppercase bg-white">
+                            <tr>
+                                <th class="px-4 py-2 border-b">SL.NO</th>
+                                <th class="px-4 py-2 border-b">Description</th>
+                                <th class="px-4 py-2 border-b">Part No.</th>
+                                <th class="px-4 py-2 border-b">Quantity</th>
+                                <th class="px-4 py-2 border-b">Unit Price</th>
+                                <th class="px-4 py-2 border-b">Total Price</th>
+                                <th class="px-4 py-2 border-b">ETA Terms</th>
+                                <th class="px-4 py-2 border-b">Payment Terms</th>
+                                <th class="px-4 py-2 border-b text-center">History</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngFor="let item of group.items; let i = index;" class="border-b last:border-b-0">
+                                <td class="px-4 py-2">{{i+1}}</td>
+                                <td class="px-4 py-2">{{item.detail}}</td>
+                                <td class="px-4 py-2">{{item.partNo}}</td>
+                                <td class="px-4 py-2">{{item.quantity}}</td>
+                                <td class="px-4 py-2">{{item.unitPrice | number:'1.2-2'}} {{currency()}}</td>
+                                <td class="px-4 py-2">{{item.totalPrice | number:'1.2-2'}} {{currency()}}</td>
+                                <td class="px-4 py-2">{{item.etaTerms}}</td>
+                                <td class="px-4 py-2">{{item.paymentTerms}}</td>
+                                <td class="px-4 py-2 text-center">
+                                    <button type="button"
+                                        class="mx-auto w-8 h-8 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                        [disabled]="loadingIssueHistoryFor === (item.detail + '-' + item.partNo)"
+                                        matTooltip="View Issue History"
+                                        matTooltipPosition="above"
+                                        (click)="viewItemIssueHistory(item)">
+                                        <ng-icon name="heroEye" color="currentColor"></ng-icon>
+                                    </button>
                                 </td>
                             </tr>
-                        </ng-container>
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             </div>
+            <p *ngIf="!supplierGroups.length" class="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">No confirmed supplier on any item yet.</p>
         </div>
 
         <div class="w-full mb-8">

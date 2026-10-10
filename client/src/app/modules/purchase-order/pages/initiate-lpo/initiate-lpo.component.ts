@@ -6,6 +6,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
+import * as ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
@@ -16,6 +18,19 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { PurchaseData, QuoteItem } from 'src/app/shared/interfaces/purchase.interface';
 import { LpoListComponent } from '../lpo-list/lpo-list.component';
 import { ItemIssueHistoryModalComponent, ItemIssueEntry, LpoStatusEntry } from 'src/app/shared/components/item-issue-history-modal/item-issue-history-modal.component';
+
+type ComparisonItem = ReturnType<InitiateLpoComponent['selectedComparison']>[number];
+
+/** The confirmed items for one supplier: what goes on one LPO. */
+interface SupplierGroup {
+  key: string;
+  supplierId?: string;
+  supplierName: string;
+  items: ComparisonItem[];
+  total: number;
+  paymentTerms: string;
+  etaTerms: string;
+}
 
 @Component({
   selector: 'app-initiate-lpo',
@@ -52,6 +67,11 @@ export class InitiateLpoComponent implements OnInit {
   // the template's *ngFor (which reran on every change-detection tick, tearing
   // down and recreating the whole row - including its click listeners - constantly).
   comparisonItems: ReturnType<InitiateLpoComponent['selectedComparison']> = [];
+  /**
+   * The same items grouped by the supplier sales confirmed, so each group can be checked, exported and
+   * sent as one LPO. Rebuilt together with comparisonItems.
+   */
+  supplierGroups: SupplierGroup[] = [];
   isLoading = true;
   suppliersList = signal<any[]>([])
   supplierSelectableMap = signal<Map<string, boolean>>(new Map());
@@ -68,7 +88,7 @@ export class InitiateLpoComponent implements OnInit {
         // Supplier names are looked up by ID inside selectedComparison(), so
         // recompute in case the purchase already loaded before suppliers did.
         if (this.purchase) {
-          this.comparisonItems = this.selectedComparison(this.purchase.items);
+          this.setComparisonItems(this.selectedComparison(this.purchase.items));
         }
       }, error: (error) => {
         console.log(error);
@@ -101,7 +121,7 @@ export class InitiateLpoComponent implements OnInit {
     this.purchaseService.getPurchaseById(this.purchaseId).subscribe({
       next: (response) => {
         this.purchase = response.data;
-        this.comparisonItems = this.purchase ? this.selectedComparison(this.purchase.items) : [];
+        this.setComparisonItems(this.purchase ? this.selectedComparison(this.purchase.items) : []);
         if (this.purchase?.currency) {
           this.currency.set(this.purchase.currency);
         } else if (this.purchase?.jobId?.quoteId?.currency) {
@@ -147,7 +167,7 @@ export class InitiateLpoComponent implements OnInit {
             partNo: partNo,
             quantity: selected.quantity,
             supplierId: selected.supplierId,
-            supplierName: supplier?.supplierName || 'Unknown Supplier',
+            supplierName: supplier?.supplierName || (selected as any).supplierName || 'Unknown Supplier',
             unitPrice: selected.unitPrice,
             totalPrice: selected.unitPrice * detail.quantity,
             etaTerms: selected.etaTerms,
@@ -160,6 +180,93 @@ export class InitiateLpoComponent implements OnInit {
     });
 
     return result;
+  }
+
+  private setComparisonItems(items: ComparisonItem[]): void {
+    this.comparisonItems = items;
+    const groups = new Map<string, SupplierGroup>();
+    items.forEach((item) => {
+      const key = item.supplierId || `name:${item.supplierName}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = { key, supplierId: item.supplierId, supplierName: item.supplierName, items: [], total: 0, paymentTerms: '', etaTerms: '' };
+        groups.set(key, group);
+      }
+      group.items.push(item);
+      group.total += Number(item.totalPrice) || 0;
+      group.paymentTerms = group.paymentTerms || item.paymentTerms || '';
+      group.etaTerms = group.etaTerms || item.etaTerms || '';
+    });
+    this.supplierGroups = Array.from(groups.values()).sort((a, b) => a.supplierName.localeCompare(b.supplierName));
+  }
+
+  /** One sheet per supplier: the items, quantities and agreed prices to put on its LPO. */
+  private addSupplierSheet(wb: ExcelJS.Workbook, group: SupplierGroup): void {
+    const name = group.supplierName.replace(/[\\/*?:\[\]]/g, '').slice(0, 31) || 'Supplier';
+    let sheetName = name;
+    for (let i = 2; wb.getWorksheet(sheetName); i++) sheetName = `${name.slice(0, 28)} ${i}`;
+    const ws = wb.addWorksheet(sheetName);
+    ws.columns = [
+      { key: 'no', width: 6 },
+      { key: 'partNo', width: 18 },
+      { key: 'detail', width: 50 },
+      { key: 'qty', width: 10 },
+      { key: 'price', width: 14 },
+      { key: 'total', width: 16 },
+      { key: 'eta', width: 18 },
+    ];
+    const currency = this.currency() || '';
+    ws.addRow(['Purchase items for LPO']).font = { bold: true, size: 14 };
+    ([
+      ['Supplier', group.supplierName],
+      ['Purchase ID', String(this.purchase?.purchaseNo ?? '')],
+      ['Job ID', String((this.purchase as any)?.jobId?.jobId ?? '')],
+      ['Payment terms', group.paymentTerms],
+      ['Currency', currency],
+    ] as [string, string][]).forEach(([label, value]) => {
+      const row = ws.addRow([label, value]);
+      row.getCell(1).font = { bold: true };
+    });
+    ws.addRow([]);
+    const header = ws.addRow(['#', 'Part No.', 'Description', 'Qty', 'Unit price', 'Total', 'ETA']);
+    header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    header.eachCell((cell) => (cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }));
+    group.items.forEach((item, i) => {
+      const row = ws.addRow([i + 1, item.partNo === '-' ? '' : item.partNo, item.detail, item.quantity, item.unitPrice, item.totalPrice, item.etaTerms || '']);
+      row.getCell(3).alignment = { wrapText: true, vertical: 'top' };
+      row.getCell(5).numFmt = '#,##0.00';
+      row.getCell(6).numFmt = '#,##0.00';
+    });
+    const totalRow = ws.addRow(['', '', 'Total', '', '', group.total, '']);
+    totalRow.font = { bold: true };
+    totalRow.getCell(6).numFmt = '#,##0.00';
+  }
+
+  private async saveWorkbook(wb: ExcelJS.Workbook, fileName: string): Promise<void> {
+    const buffer = await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fileName.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_'));
+  }
+
+  async exportSupplier(group: SupplierGroup): Promise<void> {
+    try {
+      const wb = new ExcelJS.Workbook();
+      this.addSupplierSheet(wb, group);
+      await this.saveWorkbook(wb, `${this.purchase?.purchaseNo || 'purchase'}-${group.supplierName}.xlsx`);
+    } catch {
+      this.notificationService.error('Could not build the Excel sheet.');
+    }
+  }
+
+  /** Every supplier in one workbook, a sheet each. */
+  async exportAllSuppliers(): Promise<void> {
+    if (!this.supplierGroups.length) return;
+    try {
+      const wb = new ExcelJS.Workbook();
+      this.supplierGroups.forEach((group) => this.addSupplierSheet(wb, group));
+      await this.saveWorkbook(wb, `${this.purchase?.purchaseNo || 'purchase'}-by-supplier.xlsx`);
+    } catch {
+      this.notificationService.error('Could not build the Excel sheet.');
+    }
   }
 
   private getPartNumber(detailPartNo: any): string {
