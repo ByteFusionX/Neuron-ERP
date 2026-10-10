@@ -1,6 +1,7 @@
 import Workflow from "../models/workflow.model";
 import Employee from "../models/employee.model";
 import WorkflowDelegation from "../models/workflowDelegation.model";
+import Category from "../models/category.model";
 
 interface ApprovalContext {
     amount?: number | null;
@@ -33,32 +34,57 @@ const enforceApprovalLimits = (employee: any, context?: ApprovalContext) => {
     }
 };
 
-const addHours = (date: Date, hours: number) => new Date(date.getTime() + hours * 60 * 60 * 1000);
-
-// Qatar is UTC+3 all year; working days are evaluated in that local calendar.
+// Qatar is UTC+3 all year; working days and hours are evaluated in that local clock.
 const WORKDAY_OFFSET_MS = 3 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+export const DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4];
+export const DEFAULT_CONDITION_FLAGS = { time: true, amount: false, discount: false };
 
-/** Adds hours but pauses the clock on non-working days (0 = Sunday). */
-export const addBusinessHours = (start: Date, hours: number, workingDays: number[]) => {
-    if (!workingDays?.length) return addHours(start, hours);
+/** "HH:mm" -> minutes since midnight; falls back when blank or malformed. */
+const clockMinutes = (value: any, fallback: number) => {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? ''));
+    if (!match) return fallback;
+    const minutes = Number(match[1]) * 60 + Number(match[2]);
+    return minutes >= 0 && minutes <= 24 * 60 ? minutes : fallback;
+};
 
-    let remaining = hours * 60 * 60 * 1000;
+/** The working window of a workflow: weekdays (0 = Sunday) plus start/end minutes of the day. */
+export const workingWindow = (workflow: any) => {
+    const startMin = clockMinutes(workflow?.workDayStart, 8 * 60);
+    const endMin = clockMinutes(workflow?.workDayEnd, 17 * 60);
+    return {
+        workingDays: workflow?.workingDays?.length ? workflow.workingDays : DEFAULT_WORKING_DAYS,
+        startMin,
+        endMin: endMin > startMin ? endMin : 17 * 60,
+    };
+};
+
+export const conditionFlagsOf = (workflow: any) => ({ ...DEFAULT_CONDITION_FLAGS, ...(workflow?.conditionFlags?.toObject?.() ?? workflow?.conditionFlags ?? {}) });
+
+/** Adds `minutes` of working time: the clock only runs on working days, between the day's start and end time. */
+export const addWorkingMinutes = (start: Date, minutes: number, window: { workingDays: number[]; startMin: number; endMin: number }) => {
+    let remaining = minutes * 60 * 1000;
     let cursor = start.getTime();
     for (let guard = 0; guard < 4000 && remaining > 0; guard++) {
         const dayStart = Math.floor((cursor + WORKDAY_OFFSET_MS) / DAY_MS) * DAY_MS;
         const weekday = new Date(dayStart).getUTCDay();
-        const dayEnd = dayStart + DAY_MS - WORKDAY_OFFSET_MS;
-        if (workingDays.includes(weekday)) {
-            const chunk = Math.min(remaining, dayEnd - cursor);
-            cursor += chunk;
-            remaining -= chunk;
-        } else {
-            cursor = dayEnd;
-        }
+        const nextDay = dayStart + DAY_MS - WORKDAY_OFFSET_MS;
+        if (!window.workingDays.includes(weekday)) { cursor = nextDay; continue; }
+
+        const opens = dayStart - WORKDAY_OFFSET_MS + window.startMin * 60 * 1000;
+        const closes = dayStart - WORKDAY_OFFSET_MS + window.endMin * 60 * 1000;
+        if (cursor < opens) cursor = opens;
+        if (cursor >= closes) { cursor = nextDay; continue; }
+
+        const chunk = Math.min(remaining, closes - cursor);
+        cursor += chunk;
+        remaining -= chunk;
     }
     return new Date(cursor);
 };
+
+/** When a time limit of `minutes` that starts at `start` runs out, counting working time only. */
+export const dueAfterWorkingTime = (workflow: any, start: Date, minutes: number) => addWorkingMinutes(start, minutes, workingWindow(workflow));
 
 const getActiveDelegation =async (fromEmployee: any, at = new Date()) => {
     if (!fromEmployee) return null;
@@ -128,7 +154,8 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
     try {
         const workflow = await Workflow.findOne({ feature: workflowFeature }).populate('steps.role');
 
-        if (!workflow || (!workflow.steps.length && !workflow.needsManagerApproval)) {
+        // Admin is pinned on top of every workflow, so a workflow without other steps still routes to Admin.
+        if (!workflow) {
             throw new Error(`No workflow configured for ${workflowFeature} claims`);
         }
 
@@ -154,38 +181,83 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
 
         const now = new Date();
         const amount = toFiniteNumber(context?.amount);
+        const discount = toFiniteNumber(context?.discountPercent);
         const requesterRole = employeeData.category?._id ?? employeeData.category;
-        const orderedSteps = [...workflow.steps].sort((a, b) => a.order - b.order);
+        const adminRole = await Category.findOne({ role: /^superadmin$/i }).select('_id').lean();
 
-        // Amount threshold: a stage with minAmount is skipped for smaller requests (unknown amount keeps the stage).
-        const applicable = orderedSteps.filter(step => !(step.minAmount && amount !== null && amount < step.minAmount));
+        // Bottom step first: the highest order number approves first and the route climbs towards order 1 (Admin).
+        const ordered = workflow.steps.filter(step => step.enabled !== false).sort((a, b) => b.order - a.order);
 
-        // Requester already holds the stage's role -> skip it, but never leave the route without an approver.
-        let routed = applicable;
-        if (workflow.skipRequesterRole !== false && requesterRole) {
-            const withoutSelf = applicable.filter(step => !idsMatch((step.role as any)?._id ?? step.role, requesterRole));
-            routed = withoutSelf.length || approvalStatus.length ? withoutSelf : applicable;
+        // A step cannot approve above its amount / discount limit, so bigger requests skip it. Unknown values keep the step.
+        const withinLimits = ordered.filter(step =>
+            !(amount !== null && step.maxAmount && amount > step.maxAmount) &&
+            !(discount !== null && step.maxDiscount && discount > step.maxDiscount)
+        );
+
+        // Requester already holds the stage's role -> skip it (always on), but never leave the route without an approver.
+        // Requester is Admin: nobody above them, so nothing to approve.
+        if (requesterRole && adminRole && idsMatch(adminRole._id, requesterRole) && !approvalStatus.length) {
+            return [];
         }
 
-        const dueAfter = (hours: number, unit?: string) => workflow.businessHoursOnly && unit !== 'minute'
-            ? addBusinessHours(now, hours, workflow.workingDays?.length ? workflow.workingDays : [0, 1, 2, 3, 4])
-            : addHours(now, hours);
-        const unitHours = (unit?: string) => unit === 'day' ? 24 : unit === 'minute' ? 1 / 60 : 1;
+        // Requester sits in the route: their stage and every stage below it (acting earlier) are skipped,
+        // so the request starts at the first stage above them. An "Or" stage is skipped as a whole.
+        let routed = withinLimits;
+        if (requesterRole) {
+            const own = ordered.filter(step => idsMatch((step.role as any)?._id ?? step.role, requesterRole));
+            if (own.length) {
+                const ownTop = Math.min(...own.map(step => step.order));
+                routed = withinLimits.filter(step => step.order < ownTop);
+            }
+        }
 
-        approvalStatus.push(...routed.map(step => ({
-            status: 'pending',
-            role: step.role,
-            step: step.order,
-            managerApproval: false,
-            assignedAt: now,
-            workflowVersion: workflow.version ?? 1,
-            timeoutAction: step.timeoutAction || 'escalate',
-            ...(step.escalationHours ? {
-                escalationDueAt: dueAfter(step.escalationHours * unitHours(step.escalationUnit), step.escalationUnit),
-                ...(step.reminderPercent ? { reminderDueAt: dueAfter(step.escalationHours * unitHours(step.escalationUnit) * step.reminderPercent / 100, step.escalationUnit) } : {}),
-            } : {}),
-            escalationRole: step.escalationRole,
-        })));
+        // Roles sharing an order form one any-of stage; stages are numbered in the order they act.
+        const stages: any[][] = [];
+        routed.forEach(step => {
+            const last = stages[stages.length - 1];
+            if (last && last[0].order === step.order) last.push(step);
+            else stages.push([step]);
+        });
+
+        if (!stages.length && adminRole) {
+            // Nobody below Admin can approve this request (or none is configured): Admin decides alone, no limits.
+            approvalStatus.push({
+                status: 'pending',
+                role: adminRole._id,
+                step: 1,
+                managerApproval: false,
+                assignedAt: now,
+                workflowVersion: workflow.version ?? 1,
+            });
+            return approvalStatus;
+        }
+
+        const window = workingWindow(workflow);
+        const unitMinutes = (unit?: string) => unit === 'day' ? 24 * 60 : unit === 'minute' ? 1 : 60;
+        const managerSteps = approvalStatus.length;
+
+        stages.forEach((group, index) => {
+            const above = stages[index + 1]?.[0]?.role ?? adminRole?._id;
+            group.forEach(step => {
+                const timed = step.escalationHours;
+                const windowMinutes = timed ? step.escalationHours * unitMinutes(step.escalationUnit) : 0;
+                const action = step.timeoutAction || 'escalate';
+                approvalStatus.push({
+                    status: 'pending',
+                    role: step.role,
+                    step: managerSteps + index + 1,
+                    managerApproval: false,
+                    assignedAt: now,
+                    workflowVersion: workflow.version ?? 1,
+                    timeoutAction: timed ? action : undefined,
+                    ...(timed ? {
+                        escalationDueAt: addWorkingMinutes(now, windowMinutes, window),
+                        ...(step.reminderPercent && step.reminderEnabled !== false ? { reminderDueAt: addWorkingMinutes(now, windowMinutes * step.reminderPercent / 100, window) } : {}),
+                    } : {}),
+                    ...(timed && action === 'escalate' && above ? { escalationRole: above } : {}),
+                });
+            });
+        });
 
         return approvalStatus;
     } catch (error) {
@@ -212,27 +284,30 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
         const currentStep = pendingStatuses[0].step;
         const currentApprovals = pendingStatuses.filter(approval => approval.step === currentStep);
 
+        // Admin sits on top of every workflow with no limits: they can act on whatever step is current.
+        const isAdmin = /^superadmin$/i.test(employee?.category?.role ?? '');
+
         const nextApproval = currentApprovals.find(approval => {
             if (approval.managerApproval) {
                 return idsMatch(approval.approver, employee._id);
             }
 
             return approval.role && idsMatch(approval.role._id || approval.role, employee.category._id);
-        });
+        }) ?? (isAdmin ? currentApprovals[0] : undefined);
 
         if (!nextApproval) {
             throw new Error('You are not authorized to approve this step');
         }
 
-        if (nextApproval.managerApproval && !idsMatch(nextApproval.approver, employee._id)) {
+        if (!isAdmin && nextApproval.managerApproval && !idsMatch(nextApproval.approver, employee._id)) {
             throw new Error('Only the reporting manager can approve this step');
         }
 
-        if (nextApproval.role && !idsMatch(nextApproval.role._id || nextApproval.role, employee.category._id)) {
+        if (!isAdmin && nextApproval.role && !idsMatch(nextApproval.role._id || nextApproval.role, employee.category._id)) {
             throw new Error('You are not authorized to approve this step');
         }
 
-        if (status === 'approved') {
+        if (status === 'approved' && !isAdmin) {
             enforceApprovalLimits(employee, context);
         }
 
@@ -255,6 +330,16 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
             const approvedId = approvalStatus[approvalIndex]._id;
             approvalStatus = approvalStatus.filter(approval =>
                 !(approval.status === 'pending' && approval.step === currentStep && !idsMatch(approval._id, approvedId))
+            );
+        }
+
+        if (status === 'approved' && (nextApproval.escalatedAt || isAdmin)) {
+            // Admin's approval is final and closes every remaining stage. An escalated approver has also signed off
+            // for their own role, so their later stages are done too.
+            const approverRole = employee.category._id;
+            const approvedId = approvalStatus[approvalIndex]._id;
+            approvalStatus = approvalStatus.filter(approval =>
+                !(approval.status === 'pending' && !idsMatch(approval._id, approvedId) && (isAdmin || (approval.role && idsMatch(approval.role._id || approval.role, approverRole))))
             );
         }
 

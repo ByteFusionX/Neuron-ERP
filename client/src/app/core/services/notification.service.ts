@@ -108,6 +108,12 @@ export class NotificationService {
                     routeData: { enquiryId }
                 };
             
+            case 'RfqFollowUpOverdue':
+                return {
+                    routePath: '/enquiry',
+                    routeData: { enquiryId: additionalData?.enquiryId }
+                };
+
             case 'DealSheet':
                 return { routePath: '/deal-sheet/pendings' };
             case 'DealSheetResponse':

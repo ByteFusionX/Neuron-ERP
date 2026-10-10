@@ -3,10 +3,15 @@ export interface ApprovalStep {
     order: number;
     escalationHours?: number;
     escalationUnit?: 'minute' | 'hour' | 'day';
-    minAmount?: number;
+    /** Most this step can approve; larger requests skip it. */
+    maxAmount?: number;
+    /** Highest discount % this step can approve. */
+    maxDiscount?: number;
     reminderPercent?: number;
     timeoutAction?: 'escalate' | 'notify' | 'reject';
     reminderEnabled?: boolean;
+    /** Switched-off steps are skipped for new requests. */
+    enabled?: boolean;
     escalationRole?: string | { _id?: string; categoryName: string };
 }
 
@@ -24,7 +29,33 @@ export interface WorkflowCondition {
     value?: any;
 }
 
-export interface Workflow {
+export interface ConditionFlags {
+    time: boolean;
+    amount: boolean;
+    discount: boolean;
+}
+
+/** Values pre-filled into a new step when its condition is on. */
+export interface ConditionDefaults {
+    timeLimit?: number;
+    timeUnit?: 'minute' | 'hour' | 'day';
+    timeoutAction?: 'escalate' | 'notify' | 'reject';
+    reminderPercent?: number;
+    maxAmount?: number;
+    maxDiscount?: number;
+}
+
+export interface WorkflowSettings {
+    repeatReminder?: boolean;
+    workingDays?: number[];
+    /** "HH:mm" */
+    workDayStart?: string;
+    workDayEnd?: string;
+    conditionFlags?: ConditionFlags;
+    conditionDefaults?: ConditionDefaults;
+}
+
+export interface Workflow extends WorkflowSettings {
     _id?: string;
     feature: WorkflowFeature;
     steps: ApprovalStep[];
@@ -37,7 +68,7 @@ export interface Workflow {
     version?: number;
 }
 
-export interface CreateWorkflowRequest {
+export interface CreateWorkflowRequest extends WorkflowSettings {
     feature: WorkflowFeature;
     steps: ApprovalStep[];
     needsManagerApproval?: boolean;
@@ -48,7 +79,7 @@ export interface CreateWorkflowRequest {
     conditions?: WorkflowCondition[];
 }
 
-export interface UpdateWorkflowRequest {
+export interface UpdateWorkflowRequest extends WorkflowSettings {
     feature?: WorkflowFeature;
     steps?: ApprovalStep[];
     needsManagerApproval?: boolean;

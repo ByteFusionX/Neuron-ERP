@@ -8,11 +8,13 @@ import PurchaseRequest, { PurchaseRequestStatus } from '../models/purchaseReques
 import Enquiry from '../models/enquiry.model';
 import Category from '../models/category.model';
 import Workflow from '../models/workflow.model';
-import { resolveCurrentAssignmentStep, rejectUnassignedPresale } from './presaleAssignment.service';
+import { resolveCurrentAssignmentStep, rejectUnassignedPresale, stageRoleIds } from './presaleAssignment.service';
 import { notify } from './notify.service';
 import { processOutbox } from './outbox.service';
 import { runExclusive } from './cronLock.service';
 import './announcementNotify.service';
+import Rfq, { RfqStatus, RfqType } from '../models/rfq.model';
+import { expireLapsedReservations } from '../controllers/quoteStockHold.controller';
 const cron = require('node-cron');
 
 const processEmployeeEvent = async (element, eventType) => {
@@ -193,6 +195,10 @@ const presaleKey = (enquiry: any, approval: any, suffix: string) =>
 const employeeIdsWithRole = async (role: any) =>
     (await employeeModel.find({ category: role?._id ?? role, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id);
 
+/** Everyone in the roles holding a presale assignment stage (several roles when it is an "Or" stage). */
+const employeeIdsOfStage = async (assignment: any) =>
+    (await employeeModel.find({ category: { $in: stageRoleIds(assignment) }, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id);
+
 /**
  * Drives the presale assignment workflow for jobs still waiting to be assigned:
  * reminds the responsible role once its reminder share (default 75%) of the time limit is used,
@@ -251,7 +257,7 @@ const processPresaleAssignments = async () => {
                 : approval.timeoutAction === 'notify' ? `is due in about ${hoursLeft}h`
                     : `escalates to the next role in about ${hoursLeft}h`;
             try {
-                await notifyPresaleRoles(enquiry, await employeeIdsWithRole(approval.role), 'Assignment reminder', `Enquiry ${enquiry.enquiryId} still needs a presale assignee and ${consequence}`, presaleKey(enquiry, approval, 'reminder'));
+                await notifyPresaleRoles(enquiry, await employeeIdsOfStage(approval), 'Assignment reminder', `Enquiry ${enquiry.enquiryId} still needs a presale assignee and ${consequence}`, presaleKey(enquiry, approval, 'reminder'));
             } catch (error) {
                 await Enquiry.updateOne({ _id: enquiry._id, 'preSale.assignApproval.reminderSentAt': now }, { $set: { 'preSale.assignApproval.reminderSentAt': null } });
                 throw error;
@@ -282,7 +288,7 @@ const processPresaleAssignments = async () => {
                         { $set: { 'preSale.assignApproval.timeoutHandledAt': now } }
                     );
                     if (!claim.modifiedCount) continue;
-                    await notifyPresaleRoles(enquiry, await employeeIdsWithRole(approval.role), 'Assignment overdue', `Enquiry ${enquiry.enquiryId} has passed its assignment time limit and is still unassigned`, presaleKey(enquiry, approval, 'overdue'));
+                    await notifyPresaleRoles(enquiry, await employeeIdsOfStage(approval), 'Assignment overdue', `Enquiry ${enquiry.enquiryId} has passed its assignment time limit and is still unassigned`, presaleKey(enquiry, approval, 'overdue'));
                     continue;
                 }
                 // The notified role gets one more time window; if the job is still unassigned the Super Admins decide:
@@ -305,7 +311,7 @@ const processPresaleAssignments = async () => {
                 { $set: { 'preSale.assignApproval': resolved } }
             );
             if (!claim.modifiedCount) continue;
-            await notifyPresaleRoles(enquiry, await employeeIdsWithRole(resolved.role), 'Presale assignment escalated', `Enquiry ${enquiry.enquiryId} was not assigned in time and is now waiting on your role`, presaleKey(enquiry, resolved, 'escalated'));
+            await notifyPresaleRoles(enquiry, await employeeIdsOfStage(resolved), 'Presale assignment escalated', `Enquiry ${enquiry.enquiryId} was not assigned in time and is now waiting on your role`, presaleKey(enquiry, resolved, 'escalated'));
         }
     } catch (error) {
         console.error('Presale assignment workflow error:', error.message);
@@ -343,6 +349,44 @@ const processOverdueFollowUps = async () => {
         }
     } catch (error) {
         console.error('Overdue follow-up check error:', error.message);
+    }
+};
+
+/**
+ * Tells whoever booked an open supplier RFQ chase that it is overdue. One notification per follow-up.
+ * Chases created automatically (on "Mark sent") go to the person who raised the RFQ.
+ */
+const processOverdueRfqFollowUps = async () => {
+    try {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const rfqs = await Rfq.find({
+            rfqType: RfqType.Sales,
+            isDeleted: false,
+            status: { $nin: [RfqStatus.Closed, RfqStatus.Cancelled] },
+            followUps: { $elemMatch: { status: 'scheduled', dueDate: { $lt: startOfToday } } }
+        }).select('rfqNo enquiryId createdBy followUps');
+
+        for (const rfq of rfqs) {
+            const overdue = (rfq.followUps || []).filter((f: any) => f.status === 'scheduled' && f.dueDate && f.dueDate < startOfToday);
+            for (const followUp of overdue as any[]) {
+                const about = followUp.supplierName ? ` with ${followUp.supplierName}` : '';
+                await notify({
+                    type: 'RfqFollowUpOverdue',
+                    referenceModel: 'Rfq',
+                    title: 'RFQ follow-up overdue',
+                    message: `The follow-up${about} on ${rfq.rfqNo} was due on ${new Date(followUp.dueDate).toLocaleDateString('en-GB')} and is still open`,
+                    sentBy: rfq.createdBy?.toString(),
+                    recipients: [followUp.createdBy ?? rfq.createdBy],
+                    referenceId: rfq._id,
+                    additionalData: { rfqId: rfq._id.toString(), enquiryId: rfq.enquiryId?.toString() },
+                    dedupeKey: `rfq-followup-overdue:${rfq._id}:${followUp._id}`,
+                    channels: ['inapp', 'push', 'email'],
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Overdue RFQ follow-up check error:', error.message);
     }
 };
 
@@ -431,7 +475,11 @@ const startCronJob = () => {
         await processApprovalTimeouts();
         await processPresaleAssignments();
         // Hourly is plenty for a day-level due date
-        if (new Date().getMinutes() === 0) await processOverdueFollowUps();
+        if (new Date().getMinutes() === 0) {
+            await processOverdueFollowUps();
+            await processOverdueRfqFollowUps();
+            await expireLapsedReservations();
+        }
         await processOutbox();
     })).start();
 

@@ -33,6 +33,7 @@ const notificationSchema = new Schema<Notification>({
             'Enquiry',
             'EnquiryEstimationReady',
             'EnquiryFollowUpOverdue',
+            'RfqFollowUpOverdue',
             'JobAllocated',
             'ProcurementTransferred',
             'MrRequest',
@@ -65,7 +66,7 @@ const notificationSchema = new Schema<Notification>({
     referenceModel: {
         type: String,
         required: true,
-        enum: ['Event', 'Announcement', 'Enquiry', 'Quotation', 'Job', 'Purchase', 'Technical', 'PurchaseOrder', 'Supplier', 'Claim', 'BugReport', 'GRN', 'DeliveryNote', 'Invoice', 'SupplierReturn', 'StockHold'],
+        enum: ['Event', 'Announcement', 'Enquiry', 'Quotation', 'Job', 'Purchase', 'Technical', 'PurchaseOrder', 'Supplier', 'Claim', 'BugReport', 'GRN', 'DeliveryNote', 'Invoice', 'SupplierReturn', 'StockHold', 'Rfq'],
     },
     title: {
         type: String,

@@ -12,7 +12,7 @@ const CHANNELS: { id: NotificationChannel; label: string }[] = [
 
 const GROUPS: { label: string; types: string[] }[] = [
   { label: 'General', types: ['Announcement', 'Event'] },
-  { label: 'Sales', types: ['Enquiry', 'EnquiryEstimationReady', 'EnquiryFollowUpOverdue', 'FeedbackRequest', 'Quotation', 'DealSheet', 'DealSheetResponse'] },
+  { label: 'Sales', types: ['Enquiry', 'EnquiryEstimationReady', 'EnquiryFollowUpOverdue', 'RfqFollowUpOverdue', 'FeedbackRequest', 'Quotation', 'DealSheet', 'DealSheetResponse'] },
   { label: 'Jobs & Technical', types: ['AssignedJob', 'ReAssignedJob', 'TechnicalAssigned', 'JobAllocated', 'ProcurementTransferred'] },
   { label: 'Material requests', types: ['MrRequest', 'MrApprovalRequest', 'MrApproved', 'MrRejected'] },
   { label: 'Purchase', types: ['PurchaseApprovalRequest', 'PurchaseProcurementNotice', 'PurchaseApproved', 'PurchaseRejected', 'LpoApprovalRequest', 'LpoApproved', 'LpoRejected'] },
@@ -25,6 +25,7 @@ const GROUPS: { label: string; types: string[] }[] = [
 const LABEL_OVERRIDES: Record<string, string> = {
   EnquiryEstimationReady: 'Estimation ready for review',
   EnquiryFollowUpOverdue: 'Enquiry follow-up overdue',
+  RfqFollowUpOverdue: 'Supplier RFQ follow-up overdue',
   MrRequest: 'Material request',
   MrApprovalRequest: 'Material request approval needed',
   MrApproved: 'Material request approved',

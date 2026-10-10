@@ -133,6 +133,7 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                     case 'Enquiry':
                     case 'EnquiryEstimationReady':
                     case 'EnquiryFollowUpOverdue':
+                    case 'RfqFollowUpOverdue':
                         return privileges.enquiry?.viewReport !== 'none';
                     case 'JobAllocated':
                     case 'ProcurementTransferred':
@@ -307,6 +308,12 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
                 routeData: { enquiryId }
             };
         
+        case 'RfqFollowUpOverdue':
+            return {
+                routePath: '/enquiry',
+                routeData: { enquiryId: additionalData?.enquiryId }
+            };
+
         case 'DealSheet':
             return { routePath: '/deal-sheet/pendings' };
         case 'DealSheetResponse':

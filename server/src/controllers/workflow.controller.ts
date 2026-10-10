@@ -3,10 +3,13 @@ import Workflow from '../models/workflow.model';
 import WorkflowDelegation from "../models/workflowDelegation.model";
 import { ObjectId } from "mongodb";
 import { getEmployeeData } from "../common/utils/util";
+import Category from "../models/category.model";
+import { DEFAULT_CONDITION_FLAGS, DEFAULT_WORKING_DAYS } from "../services/workflow.service";
 
 const validateWorkflowSteps = (steps: any[], allowEmpty = false) => {
+    // Admin is pinned on top of every workflow automatically, so a workflow may have no other steps.
     if (!Array.isArray(steps) || (steps.length === 0 && !allowEmpty)) {
-        return { valid: false, message: "At least one approval step is required" };
+        return { valid: false, message: "Steps must be a list" };
     }
 
     const roleIds = new Set<string>();
@@ -41,8 +44,12 @@ const validateWorkflowSteps = (steps: any[], allowEmpty = false) => {
             return { valid: false, message: "Time limit unit must be minute, hour or day" };
         }
 
-        if (step?.minAmount !== undefined && step.minAmount !== null && (!Number.isFinite(Number(step.minAmount)) || Number(step.minAmount) < 0)) {
-            return { valid: false, message: "Minimum amount must be zero or more" };
+        if (step?.maxAmount !== undefined && step.maxAmount !== null && (!Number.isFinite(Number(step.maxAmount)) || Number(step.maxAmount) < 0)) {
+            return { valid: false, message: "Maximum amount must be zero or more" };
+        }
+
+        if (step?.maxDiscount !== undefined && step.maxDiscount !== null && (!Number.isFinite(Number(step.maxDiscount)) || Number(step.maxDiscount) < 0 || Number(step.maxDiscount) > 100)) {
+            return { valid: false, message: "Maximum discount must be between 0% and 100%" };
         }
 
         if (step?.reminderPercent !== undefined && step.reminderPercent !== null && (!Number.isInteger(Number(step.reminderPercent)) || Number(step.reminderPercent) < 1 || Number(step.reminderPercent) > 99)) {
@@ -64,21 +71,84 @@ const validateWorkflowSteps = (steps: any[], allowEmpty = false) => {
     return { valid: true };
 };
 
-const normalizeWorkflowSteps = (steps: any[]) => {
+/** Conditions a module may use. Presale only has a time limit; amounts and discounts belong to purchases and deals. */
+const ALLOWED_CONDITIONS: Record<string, string[]> = {
+    presale: ['time'],
+    purchaseApproval: ['time', 'amount'],
+    claim: ['time', 'amount'],
+    projectClaim: ['time', 'amount'],
+};
+
+const normalizeConditionFlags = (feature: string, flags: any) => {
+    const allowed = ALLOWED_CONDITIONS[feature] ?? ['time', 'amount', 'discount'];
+    const base = { ...DEFAULT_CONDITION_FLAGS, ...(flags && typeof flags === 'object' ? flags : {}) };
+    return {
+        time: allowed.includes('time') && base.time === true,
+        amount: allowed.includes('amount') && base.amount === true,
+        discount: allowed.includes('discount') && base.discount === true,
+    };
+};
+
+const normalizeConditionDefaults = (defaults: any) => {
+    const num = (value: any, min: number, max = Infinity) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
+    };
+    return {
+        timeLimit: num(defaults?.timeLimit, 1),
+        timeUnit: ['minute', 'hour', 'day'].includes(defaults?.timeUnit) ? defaults.timeUnit : undefined,
+        timeoutAction: ['escalate', 'notify', 'reject'].includes(defaults?.timeoutAction) ? defaults.timeoutAction : undefined,
+        reminderPercent: num(defaults?.reminderPercent, 1, 99),
+        maxAmount: num(defaults?.maxAmount, 0),
+        maxDiscount: num(defaults?.maxDiscount, 0, 100),
+    };
+};
+
+/** Steps in stored order. Each step keeps only the conditions it was created with (a field it holds is a field it uses). */
+const normalizeWorkflowSteps = (steps: any[], feature: string) => {
+    const allowed = ALLOWED_CONDITIONS[feature] ?? ['time', 'amount', 'discount'];
     return [...steps]
         .sort((a, b) => Number(a.order) - Number(b.order))
-        .map((step) => ({
-            role: step.role,
-            order: Number(step.order),
-            escalationHours: step.escalationHours === undefined ? 48 : Number(step.escalationHours),
-            escalationUnit: ['minute', 'hour', 'day'].includes(step.escalationUnit) ? step.escalationUnit : 'hour',
-            escalationRole: step.escalationRole || undefined,
-            minAmount: step.minAmount ? Number(step.minAmount) : undefined,
-            reminderPercent: step.reminderPercent ? Number(step.reminderPercent) : undefined,
-            timeoutAction: step.timeoutAction || 'escalate',
-            reminderEnabled: step.reminderEnabled !== false
-        }));
+        .map((step) => {
+            const timed = allowed.includes('time') && step.escalationHours !== undefined && step.escalationHours !== null;
+            return {
+                role: step.role,
+                order: Number(step.order),
+                enabled: step.enabled !== false,
+                ...(timed ? {
+                    escalationHours: Number(step.escalationHours),
+                    escalationUnit: ['minute', 'hour', 'day'].includes(step.escalationUnit) ? step.escalationUnit : 'hour',
+                    reminderPercent: step.reminderPercent ? Number(step.reminderPercent) : undefined,
+                    timeoutAction: step.timeoutAction || 'escalate',
+                    reminderEnabled: step.reminderEnabled !== false,
+                } : {}),
+                maxAmount: allowed.includes('amount') && step.maxAmount ? Number(step.maxAmount) : undefined,
+                maxDiscount: allowed.includes('discount') && step.maxDiscount ? Number(step.maxDiscount) : undefined,
+            };
+        });
 };
+
+/** Admin is added automatically on top of every workflow, so Super Admin roles are never stored as steps. */
+const withoutAdminRoles = async (steps: any[]) => {
+    const admins = await Category.find({ role: /^superadmin$/i }).select('_id').lean();
+    const adminIds = new Set(admins.map((c: any) => c._id.toString()));
+    return steps.filter(step => !adminIds.has(step?.role?.toString()));
+};
+
+/** Presale steps assign jobs, so every newly added role must hold the assign privilege (roles already in the workflow that lose it are switched off at run time). */
+const presaleRolesMissingPrivilege = async (steps: any[], keep: string[] = []) => {
+    const roles = await Category.find({ _id: { $in: steps.map(step => step.role).filter(id => !keep.includes(String(id))) } }).select('categoryName privileges.assignedJob.assign').lean();
+    return roles.filter((role: any) => role.privileges?.assignedJob?.assign !== true).map((role: any) => role.categoryName);
+};
+
+const normalizeClock = (value: any, fallback: string) => {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? ''));
+    if (!match) return fallback;
+    const [h, m] = [Number(match[1]), Number(match[2])];
+    return h < 24 && m < 60 ? `${String(h).padStart(2, '0')}:${match[2]}` : fallback;
+};
+
+const toMinutes = (clock: string) => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3));
 
 const normalizeWorkingDays = (days: any): number[] | undefined => {
     if (!Array.isArray(days)) return undefined;
@@ -117,16 +187,21 @@ const validateAutoActions = (autoActions: any[] = []) => {
 
 export const createWorkflow = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { feature, steps, needsManagerApproval, skipRequesterRole, repeatReminder, businessHoursOnly, workingDays, conditions = [], autoActions = [] } = req.body;
+        const { feature, steps: rawSteps, needsManagerApproval, repeatReminder, workingDays, workDayStart, workDayEnd, conditionFlags, conditionDefaults, conditions = [], autoActions = [] } = req.body;
 
-        if (!feature || !steps || !Array.isArray(steps)) {
+        if (!feature || !rawSteps || !Array.isArray(rawSteps)) {
             return res.status(400).json({
                 success: false,
                 message: "Feature and steps are required"
             });
         }
 
-        const stepValidation = validateWorkflowSteps(steps, needsManagerApproval === true);
+        const steps = await withoutAdminRoles(rawSteps);
+        if (feature === 'presale') {
+            const missing = await presaleRolesMissingPrivilege(steps);
+            if (missing.length) return res.status(400).json({ success: false, message: `These roles cannot assign presale jobs: ${missing.join(', ')}` });
+        }
+        const stepValidation = validateWorkflowSteps(steps, true);
         if (!stepValidation.valid) {
             return res.status(400).json({
                 success: false,
@@ -158,16 +233,26 @@ export const createWorkflow = async (req: Request, res: Response, next: NextFunc
             });
         }
 
-        const sortedSteps = normalizeWorkflowSteps(steps);
+        const flags = normalizeConditionFlags(feature, conditionFlags);
+        const start = normalizeClock(workDayStart, '08:00');
+        const end = normalizeClock(workDayEnd, '17:00');
+        if (toMinutes(end) <= toMinutes(start)) {
+            return res.status(400).json({ success: false, message: "Work day must end after it starts" });
+        }
 
         const workflow = await Workflow.create({
             feature,
-            steps: sortedSteps,
+            steps: normalizeWorkflowSteps(steps, feature),
             needsManagerApproval: needsManagerApproval || false,
-            skipRequesterRole: skipRequesterRole !== false,
+            skipRequesterRole: true,
             repeatReminder: repeatReminder !== false,
-            businessHoursOnly: businessHoursOnly === true,
-            ...(normalizeWorkingDays(workingDays)?.length ? { workingDays: normalizeWorkingDays(workingDays) } : {}),
+            businessHoursOnly: true,
+            workingDays: normalizeWorkingDays(workingDays)?.length ? normalizeWorkingDays(workingDays) : DEFAULT_WORKING_DAYS,
+            workDayStart: start,
+            workDayEnd: end,
+            conditionFlags: flags,
+            conditionDefaults: normalizeConditionDefaults(conditionDefaults),
+            layoutVersion: 2,
             conditions,
             autoActions
         });
@@ -240,7 +325,7 @@ export const getWorkflows = async (req: Request, res: Response, next: NextFuncti
 export const updateWorkflow = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { feature, steps, needsManagerApproval, skipRequesterRole, repeatReminder, businessHoursOnly, workingDays, conditions, autoActions } = req.body;
+        const { feature, steps: rawSteps, needsManagerApproval, repeatReminder, workingDays, workDayStart, workDayEnd, conditionFlags, conditionDefaults, conditions, autoActions } = req.body;
 
         if (!ObjectId.isValid(id)) {
             return res.status(400).json({
@@ -272,8 +357,25 @@ export const updateWorkflow = async (req: Request, res: Response, next: NextFunc
 
         const updateData: any = {};
         if (feature) updateData.feature = feature;
-        if (steps !== undefined) {
-            const stepValidation = validateWorkflowSteps(steps, (needsManagerApproval ?? workflow.needsManagerApproval) === true);
+        const targetFeature = feature || workflow.feature;
+
+        const currentFlags = (workflow as any).conditionFlags?.toObject?.() ?? (workflow as any).conditionFlags;
+        const flags = normalizeConditionFlags(targetFeature, conditionFlags !== undefined ? conditionFlags : currentFlags);
+        if (conditionFlags !== undefined) updateData.conditionFlags = flags;
+        if (conditionDefaults !== undefined) updateData.conditionDefaults = normalizeConditionDefaults(conditionDefaults);
+
+        // Condition switches only shape new steps; stored steps keep what they were created with.
+        if (rawSteps !== undefined) {
+            const source = rawSteps !== undefined
+                ? await withoutAdminRoles(rawSteps)
+                : (workflow.steps as any[]).map(step => step.toObject());
+            if (targetFeature === 'presale' && rawSteps !== undefined) {
+                const missing = await presaleRolesMissingPrivilege(source, (workflow.steps as any[]).map(step => String(step.role)));
+                if (missing.length) {
+                    return res.status(400).json({ success: false, message: `These roles cannot assign presale jobs: ${missing.join(', ')}` });
+                }
+            }
+            const stepValidation = validateWorkflowSteps(source, true);
             if (!stepValidation.valid) {
                 return res.status(400).json({
                     success: false,
@@ -281,24 +383,30 @@ export const updateWorkflow = async (req: Request, res: Response, next: NextFunc
                 });
             }
 
-            updateData.steps = normalizeWorkflowSteps(steps);
+            updateData.steps = normalizeWorkflowSteps(source, targetFeature);
         }
         if (needsManagerApproval !== undefined) {
             updateData.needsManagerApproval = needsManagerApproval;
         }
-        if (skipRequesterRole !== undefined) {
-            updateData.skipRequesterRole = skipRequesterRole !== false;
-        }
         if (repeatReminder !== undefined) {
             updateData.repeatReminder = repeatReminder !== false;
-        }
-        if (businessHoursOnly !== undefined) {
-            updateData.businessHoursOnly = businessHoursOnly === true;
         }
         const days = normalizeWorkingDays(workingDays);
         if (days?.length) {
             updateData.workingDays = days;
         }
+        if (workDayStart !== undefined || workDayEnd !== undefined) {
+            const start = normalizeClock(workDayStart, (workflow as any).workDayStart || '08:00');
+            const end = normalizeClock(workDayEnd, (workflow as any).workDayEnd || '17:00');
+            if (toMinutes(end) <= toMinutes(start)) {
+                return res.status(400).json({ success: false, message: "Work day must end after it starts" });
+            }
+            updateData.workDayStart = start;
+            updateData.workDayEnd = end;
+        }
+        updateData.skipRequesterRole = true;
+        updateData.businessHoursOnly = true;
+        updateData.layoutVersion = 2;
         if (conditions !== undefined) {
             const conditionValidation = validateConditions(conditions);
             if (!conditionValidation.valid) {
