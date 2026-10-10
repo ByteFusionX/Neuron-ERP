@@ -40,7 +40,7 @@
                     <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Point of Contact" hint="Select client first" [control]="enquiryForm.controls.contact">
-                    <app-sf-combobox formControlName="contact" [options]="contactOptions" placeholder="Select contact"></app-sf-combobox>
+                    <app-sf-combobox formControlName="contact" [options]="contactOptions" emptyText="Select a client first" placeholder="Select contact"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Department" [control]="enquiryForm.controls.department">
                     <app-sf-combobox formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
@@ -60,12 +60,12 @@
                 <app-sf-field label="Source" hint="Optional" [control]="enquiryForm.controls.source">
                     <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="Select source"></app-sf-select>
                 </app-sf-field>
-                <app-sf-field label="Accounting Manager" hint="Optional" [control]="enquiryForm.controls.accountingManager">
-                    <app-sf-combobox formControlName="accountingManager" [options]="accountingManagerOptions"
-                        placeholder="Create for another person"></app-sf-combobox>
+                <app-sf-field label="Create on behalf of" hint="Optional — the enquiry is owned by this person instead of you" [control]="enquiryForm.controls.accountingManager">
+                    <app-sf-combobox formControlName="accountingManager" clearable [options]="accountingManagerOptions"
+                        placeholder="Myself"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
-                    <app-sf-date formControlName="date" displayFormat="dd/MM/yy"></app-sf-date>
+                    <app-sf-date formControlName="date" [min]="earliestEnquiryDate" [max]="today" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
                     <app-sf-date formControlName="nextFollowUpDate" [min]="today" displayFormat="dd/MM/yy"></app-sf-date>

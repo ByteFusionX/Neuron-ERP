@@ -1,3 +1,4 @@
+import Workflow from "../models/workflow.model";
 import type { PipelineStage } from 'mongoose';
 import { NextFunction, Request, Response } from "express"
 import enquiryModel from "../models/enquiry.model";
@@ -12,7 +13,7 @@ import { getReportedEmployeesWithDepartments, widenAccessForDepartmentHead, getE
 import { notifyByPrivilege } from "../services/notify.service";
 import { getNextSequence } from "../models/counter.model";
 import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
-import { buildAssignmentChain, resolveCurrentAssignmentStep, advanceAssignmentStep, rejectUnassignedPresale } from "../services/presaleAssignment.service";
+import { buildAssignmentChain, resolveCurrentAssignmentStep, advanceAssignmentStep, rejectUnassignedPresale, stageRoleIds } from "../services/presaleAssignment.service";
 import { logEnquiryAudit } from "../services/enquiryAudit.service";
 import { cancelOpenFollowUp } from "../services/enquiryFollowUp.service";
 const { ObjectId } = require('mongodb')
@@ -51,6 +52,28 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
     try {
         if (!req.files) return res.status(204).json({ err: 'No data' })
 
+        // Validate before anything is uploaded, so a rejected request leaves no orphan files behind.
+        let incoming: any;
+        try {
+            incoming = JSON.parse(req.body.enquiryData);
+        } catch {
+            return res.status(400).json({ success: false, message: 'Enquiry details are missing or unreadable.' });
+        }
+        const missingFields = [['client', 'customer'], ['department', 'department'], ['title', 'title']]
+            .filter(([key]) => !String(incoming?.[key] ?? '').trim())
+            .map(([, label]) => label);
+        if (missingFields.length) {
+            return res.status(400).json({ success: false, message: `Enter the ${missingFields.join(', ')} before saving.` });
+        }
+        if (isNaN(new Date(incoming.date).getTime())) {
+            return res.status(400).json({ success: false, message: 'Enter a valid enquiry date.' });
+        }
+        // The enquiry number follows its date, so keep it within a sane window (a day of slack covers time zones).
+        const enquiryDateMs = new Date(incoming.date).getTime();
+        if (enquiryDateMs > Date.now() + 86400000 || enquiryDateMs < Date.now() - 91 * 86400000) {
+            return res.status(400).json({ success: false, message: 'The enquiry date cannot be in the future or more than 90 days back.' });
+        }
+
         const enquiryFiles = req.files?.attachments ? await Promise.all(req.files.attachments.map(async (file: any) => {
             await uploadFileToAws(file.filename, file.path);
             return { fileName: file.filename, originalname: file.originalname };
@@ -61,7 +84,8 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
             return { fileName: file.filename, originalname: file.originalname };
         })) : [];
 
-        const enquiryData = <Enquiry>JSON.parse(req.body.enquiryData)
+        const enquiryData = <Enquiry>incoming
+        enquiryData.title = String(enquiryData.title).trim()
         const createdByUser = await getEmployeeData(req.user);
         await applyRequestedEnquiryOwner(enquiryData, createdByUser);
         const customerGuard = await getCustomerCommercialGuard((enquiryData as any).client);
@@ -418,13 +442,13 @@ export const convertToQuote = async (req: any, res: Response, next: NextFunction
             return res.status(400).json({ success: false, message: 'Customer, contact and requirement summary are required before quotation' });
         }
 
-        const statusBefore = enquiry.status;
-        await enquiryModel.updateOne({ _id: enquiryId }, { $set: { status: 'quoted' } });
-        await cancelOpenFollowUp(enquiry._id, 'Enquiry converted to quote');
-        await logEnquiryAudit(req, enquiry._id, 'quoted', 'Converted to quote',
-            [{ label: 'Status', from: statusBefore, to: 'quoted' }]);
-
-        return res.status(200).json({ success: true, status: 'quoted' });
+        // Deliberately does NOT flip the enquiry to 'quoted' here. That used to happen immediately,
+        // before any quotation existed — so cancelling the quote-creation flow left the enquiry
+        // permanently stuck on 'quoted' with no quote behind it (orphaned, invisible to every list
+        // that filters by one or the other). The enquiry is only moved to 'Quoted' once a real,
+        // non-draft quotation is actually saved against it (see quotation.controller.ts, which
+        // already does this on create/update). This endpoint only validates and hands off.
+        return res.status(200).json({ success: true, status: enquiry.status });
     } catch (error) {
         console.error('Error in convertToQuote:', error);
         next(error);
@@ -475,6 +499,10 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
         }
 
         const assigner = await getEmployeeData(req.user);
+        if (!enquiry.preSale?.presalePerson) {
+            const stageBlock = await assignmentStageBlock(enquiry.preSale?.assignApproval, assigner);
+            if (stageBlock) return res.status(stageBlock.code).json({ success: false, message: stageBlock.message });
+        }
         if (presale.presalePerson && (assigner?.category as any)?.role !== 'superAdmin'
             && String(presale.presalePerson) !== String(assigner?._id)) {
             const team = await getReportedEmployeesWithDepartments(assigner?._id);
@@ -1414,13 +1442,34 @@ const PRESALE_ACTIVE_STATUSES = [
 // Stops a presale step from running on a lost/cancelled enquiry or on a job that isn't in a state where the step makes sense.
 // An empty `allowedPresaleStatuses` only checks that the enquiry still exists and is open.
 const presaleStepBlock = async (enquiryId: any, allowedPresaleStatuses: string[] = []): Promise<{ code: number; message: string } | null> => {
-    const current: any = await enquiryModel.findById(enquiryId).select('status preSale.status').lean();
+    const current: any = await enquiryModel.findById(enquiryId).select('status preSale.status preSale.presalePerson').lean();
     if (!current) return { code: 404, message: 'Enquiry not found' };
     if (String(current.status || '').toLowerCase() === 'lost' || current.preSale?.status === 'cancelled') {
         return { code: 409, message: 'This enquiry is lost or its presale job is cancelled.' };
     }
-    if (allowedPresaleStatuses.length && !allowedPresaleStatuses.includes(current.preSale?.status)) {
-        return { code: 409, message: `This step is not available while the presale job is "${current.preSale?.status || 'not started'}".` };
+    // Legacy jobs created before preSale.status existed have the field missing entirely, not set to
+    // some real value — that's a data-shape gap, not the job genuinely being unstarted. Treat it as
+    // "assigned" for the purposes of this check (the job clearly exists and has a presale person) so
+    // these old rows aren't blocked from every action with a confusing "not started" message.
+    const effectiveStatus = current.preSale?.status ?? (current.preSale?.presalePerson ? 'assigned' : undefined);
+    if (allowedPresaleStatuses.length && !allowedPresaleStatuses.includes(effectiveStatus)) {
+        const label = current.preSale?.status
+            ? `"${current.preSale.status}"`
+            : 'missing its presale status (likely an older job created before this field existed)';
+        return { code: 409, message: `This step is not available while the presale job is ${label}.` };
+    }
+    return null;
+};
+
+// While a job waits for its first assignee, only the stage the presale workflow has reached may assign it
+// (the job climbs the ladder as each step's window runs out). Super Admins can always act.
+const assignmentStageBlock = async (assignApproval: any, employee: any): Promise<{ code: number; message: string } | null> => {
+    if (!assignApproval) return null;
+    if (/^superadmin$/i.test(employee?.category?.role || '')) return null;
+    const resolved = await resolveCurrentAssignmentStep(assignApproval);
+    const roleId = employee?.category?._id || employee?.category;
+    if (!roleId || !stageRoleIds(resolved).includes(String(roleId))) {
+        return { code: 403, message: 'Assignment responsibility for this job has moved to another role in the presale workflow. You can no longer assign it.' };
     }
     return null;
 };
@@ -1449,13 +1498,41 @@ export const updateEnquiryStatus =async (req: Request, res: Response, next: Next
     try {
         let data = req.body
         // Only these moves are allowed here; anything else (e.g. "quoted" without a quotation) goes through its own step.
-        const ALLOWED_STATUS: Record<string, string> = { 'work in progress': 'Work In Progress', 'quoted': 'Quoted', 'lost': 'Lost', 'estimated': 'estimated' };
+        const ALLOWED_STATUS: Record<string, string> = { 'work in progress': 'Work In Progress', 'quoted': 'Quoted', 'lost': 'Lost', 'estimated': 'estimated', 'reopen': 'New' };
         const requestedStatus = ALLOWED_STATUS[String(data.status || '').trim().toLowerCase()];
         if (!requestedStatus) {
             return res.status(400).json({ message: 'This status cannot be set from here' });
         }
+        const isReopen = String(data.status || '').trim().toLowerCase() === 'reopen';
         data.status = requestedStatus;
-        const statusBefore = (await enquiryModel.findById(data.id).select('status').lean() as any)?.status;
+        const statusBeforeDoc: any = await enquiryModel.findById(data.id).select('status preSale.status').lean();
+        const statusBefore = statusBeforeDoc?.status;
+        if (isReopen) {
+            if (String(statusBefore || '').toLowerCase() !== 'lost') {
+                return res.status(400).json({ message: 'Only a lost enquiry can be reopened' });
+            }
+            const wasPresaleCancelled = statusBeforeDoc?.preSale?.status === 'cancelled';
+            const reopenFields: any = {
+                status: 'New',
+                lostReason: '',
+                competitorName: '',
+                competitorPriceGap: null,
+            };
+            // The job was cancelled only because the enquiry was marked lost — hand it back to whoever
+            // held it so they can pick the work back up, rather than guessing at its exact prior step.
+            if (wasPresaleCancelled) {
+                reopenFields['preSale.status'] = 'assigned';
+                reopenFields['preSale.cancelReason'] = '';
+                reopenFields['preSale.cancelledAt'] = null;
+            }
+            const reopened = await enquiryModel.findOneAndUpdate({ _id: data.id }, { $set: reopenFields }, { new: true })
+                .populate(['client', 'department', 'salesPerson']);
+            if (reopened) {
+                await logEnquiryAudit(req, reopened._id, 'status-changed', 'Enquiry reopened',
+                    [{ label: 'Status', from: 'Lost', to: 'New' }]);
+            }
+            return res.status(200).json({ update: reopened });
+        }
         let quote = await quotationModel.findOne({ enqId: data.id })
         let status = data.status
         if (quote && data.status === 'Quoted') {
@@ -2102,7 +2179,7 @@ const generateEnquiryId = async (departmentId: string, employeeId: string, date:
 
         if (employee && department) {
             // Initials of first/last name; a single-name employee uses the first two letters so the ID never has gaps.
-            const nameParts = `${employee.firstName || ''} ${employee.lastName || ''}`.replace(/[^A-Za-z ]/g, '').trim().split(/s+/).filter(Boolean);
+            const nameParts = `${employee.firstName || ''} ${employee.lastName || ''}`.replace(/[^A-Za-z ]/g, '').trim().split(/\s+/).filter(Boolean);
             const salesId = (nameParts.length > 1
                 ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`
                 : (nameParts[0] || 'XX').slice(0, 2)).toUpperCase();
@@ -2474,10 +2551,13 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
                 return res.status(403).json({ message: 'You can only assign this job to someone in your team' });
             }
         }
-        const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson preSale.assignApproval');
+        const existing = await enquiryModel.findById(enquiryId).select('preSale.presalePerson preSale.assignApproval preSale.status');
         // First assignment of a job sent straight to presale: no presalePerson yet, and the
         // feedback / reject / send routes all read it as the person holding the job.
         const isFirstAssignment = !existing?.preSale?.presalePerson;
+        // A job handed to someone else while it's mid-revision stays "in revision" for the new holder —
+        // otherwise the revision signal (and the comment/history tied to it) is silently lost.
+        const wasInRevision = existing?.preSale?.status === 'in revision';
 
         // While a job is still waiting for its first assignee and a presale escalation workflow is
         // configured, only the role currently holding the assignment responsibility (which moves up
@@ -2487,9 +2567,12 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
         if (resolvedAssignApproval) {
             resolvedAssignApproval = await resolveCurrentAssignmentStep(resolvedAssignApproval);
             const reAssignerRoleId = (reAssigner?.category as any)?._id || reAssigner?.category;
-            const currentRoleId = (resolvedAssignApproval.role as any)?._id || resolvedAssignApproval.role;
+            const currentRoleIds = stageRoleIds(resolvedAssignApproval);
             const isSuperAdmin = /^superadmin$/i.test((reAssigner?.category as any)?.role || '');
-            if (!isSuperAdmin && (!reAssignerRoleId || !currentRoleId || reAssignerRoleId.toString() !== currentRoleId.toString())) {
+            if (!isSuperAdmin && (reAssigner?.category as any)?.privileges?.assignedJob?.assign !== true) {
+                return res.status(403).json({ success: false, message: 'Your role does not have the privilege to assign presale jobs.' });
+            }
+            if (!isSuperAdmin && (!reAssignerRoleId || !currentRoleIds.includes(reAssignerRoleId.toString()))) {
                 return res.status(403).json({
                     success: false,
                     message: 'Assignment responsibility for this job has moved to another role in the presale workflow. You can no longer assign it.'
@@ -2502,7 +2585,7 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
             { _id: enquiryId },
             {
                 $set: {
-                    reAssigned: employeeId, reAssignedDate: reAssignEntry.date, status: 'in presales', 'preSale.status': 'assigned', reAssignedSeen: false,
+                    reAssigned: employeeId, reAssignedDate: reAssignEntry.date, status: 'in presales', 'preSale.status': wasInRevision ? 'in revision' : 'assigned', reAssignedSeen: false,
                     ...(isFirstAssignment ? { 'preSale.presalePerson': employeeId } : {}),
                     ...(typeof comment === 'string' && comment.trim() ? { 'preSale.comment': comment.trim() } : {}),
                     ...(resolvedAssignApproval ? { 'preSale.assignApproval': resolvedAssignApproval } : {}),
@@ -2591,6 +2674,7 @@ export const returnPresaleJob = async (req: Request, res: Response, next: NextFu
 export const restartPresaleAssignment = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { enqId } = req.body;
+        const chosen: string[] | null = Array.isArray(req.body.stepRoleIds) ? req.body.stepRoleIds.map(String) : null;
         const me = await getEmployeeData(req.user);
         if (!/^superadmin$/i.test((me?.category as any)?.role || '')) {
             return res.status(403).json({ success: false, message: 'Only a Super Admin can restart the assignment workflow' });
@@ -2600,20 +2684,23 @@ export const restartPresaleAssignment = async (req: Request, res: Response, next
             return res.status(404).json({ success: false, message: 'Enquiry not found' });
         }
         const current: any = enquiry.preSale?.assignApproval;
-        if (enquiry.preSale?.presalePerson || enquiry.preSale?.status !== 'new' || !current) {
+        if ((enquiry.preSale?.presalePerson as any)?.length || enquiry.preSale?.status !== 'new' || !current) {
             return res.status(400).json({ success: false, message: 'Only an unassigned job waiting in the workflow can be restarted' });
         }
-        const resolved: any = await resolveCurrentAssignmentStep(current);
-        if (!resolved?.escalationDueAt || new Date(resolved.escalationDueAt) > new Date()) {
-            return res.status(400).json({ success: false, message: 'The workflow has not run out of time yet, so there is nothing to restart' });
-        }
-        const chain: any = await buildAssignmentChain();
-        if (!chain) {
+        // Allowed at any time while unassigned, e.g. after the workflow steps were edited, so this job picks up the latest workflow.
+        // Stages the Super Admin did not tick are switched off for this job only; Admin always stays.
+        const full: any = await buildAssignmentChain();
+        if (!full) {
             return res.status(400).json({ success: false, message: 'No presale workflow is configured' });
         }
+        const ladder = await Workflow.findOne({ feature: 'presale' }).select('steps.role').lean();
+        const disabledRoles = chosen
+            ? (ladder?.steps ?? []).map((step: any) => String(step.role)).filter(id => !chosen.includes(id))
+            : [];
+        const chain: any = disabledRoles.length ? await buildAssignmentChain(disabledRoles) : full;
         chain.restartCount = (current.restartCount || 0) + 1;
         await enquiryModel.updateOne({ _id: enquiry._id }, { $set: { 'preSale.assignApproval': chain } });
-        await logEnquiryAudit(req, enquiry._id, 'presale-workflow-restarted', `Assignment workflow restarted by Super Admin (restart ${chain.restartCount})`);
+        await logEnquiryAudit(req, enquiry._id, 'presale-workflow-restarted', `Assignment workflow restarted by Super Admin (restart ${chain.restartCount})${disabledRoles.length ? `, ${disabledRoles.length} stage(s) switched off for this job` : ''}`);
         // No notification: the Super Admin has the confirmation, and the role's own reminders and escalation take it from here
         return res.status(200).json({ success: true, message: 'Assignment workflow restarted' });
     } catch (error) {
@@ -2669,7 +2756,7 @@ export const resolveHeldPresaleAssignment = async (req: Request, res: Response, 
         if (!nextStep) return res.status(400).json({ success: false, message: 'This is the last step, so there is no next step to escalate to. Assign someone, restart the workflow or reject the job' });
         await enquiryModel.updateOne({ _id: enquiry._id }, { $set: { 'preSale.assignApproval': nextStep } });
         await logEnquiryAudit(req, enquiry._id, 'presale-escalated', 'Held assignment escalated to the next step by Super Admin');
-        const nextRoleIds = (await Employee.find({ category: nextStep.role?._id ?? nextStep.role, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id.toString());
+        const nextRoleIds = (await Employee.find({ category: { $in: stageRoleIds(nextStep) }, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id.toString());
         await notifyByPrivilege(
             {
                 type: 'AssignedJob',
@@ -2688,6 +2775,40 @@ export const resolveHeldPresaleAssignment = async (req: Request, res: Response, 
     }
 };
 
+/** An assigner rejects a job still waiting in the New pool, so it goes back to the salesperson without being assigned first. */
+export const rejectNewPresaleJob = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { enqId } = req.body;
+        const comment = typeof req.body.comment === 'string' ? req.body.comment.trim() : '';
+        if (!ObjectId.isValid(enqId)) return res.status(400).json({ success: false, message: 'Invalid enquiry id' });
+        if (!comment) return res.status(400).json({ success: false, message: 'A reason is required to reject a job' });
+        const enquiry = await enquiryModel.findOne({ _id: enqId, isDeleted: { $ne: true } });
+        if (!enquiry || enquiry.preSale?.presalePerson || (enquiry as any).reAssigned || enquiry.preSale?.status !== 'new') {
+            return res.status(400).json({ success: false, message: 'Only a new, unassigned job can be rejected here' });
+        }
+        const me = await getEmployeeData(req.user);
+        await rejectUnassignedPresale(enquiry._id, comment, 'Manager');
+        await logEnquiryAudit(req, enquiry._id, 'presale-rejected', 'New presale job rejected by manager',
+            [{ label: 'Status', to: 'rejected' }, { label: 'Reason', to: comment }]);
+        const salesPerson = enquiry.salesPerson?.toString();
+        await notifyByPrivilege(
+            {
+                type: 'Enquiry',
+                referenceModel: 'Enquiry',
+                title: 'Presale Job Rejected',
+                message: `Enquiry ${enquiry.enquiryId} was rejected by presales: ${comment}`,
+                sentBy: me?._id?.toString() || salesPerson,
+                referenceId: enquiry._id,
+                additionalData: { enquiryId: enquiry._id.toString() }
+            },
+            { privilegeKey: 'enquiry', checkFunction: (_privileges, employeeId) => employeeId === salesPerson }
+        );
+        return res.status(200).json({ success: true, message: 'Job rejected' });
+    } catch (error) {
+        next(error);
+    }
+};
+
 /** A presale user takes an unassigned job from the New pool. The conditional update makes the first claim win. */
 export const selfAssignPresaleJob = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -2695,6 +2816,11 @@ export const selfAssignPresaleJob = async (req: Request, res: Response, next: Ne
         const me = await getEmployeeData(req.user);
         if (!me?._id) {
             return res.status(401).json({ success: false, message: 'Employee not found' });
+        }
+        const current: any = await enquiryModel.findById(enqId).select('preSale.presalePerson preSale.assignApproval').lean();
+        if (current && !current.preSale?.presalePerson) {
+            const stageBlock = await assignmentStageBlock(current.preSale?.assignApproval, me);
+            if (stageBlock) return res.status(stageBlock.code).json({ success: false, message: stageBlock.message });
         }
         const entry = await buildAssignmentEntry(me._id, 'self-assigned', me);
         const claimed = await enquiryModel.findOneAndUpdate(

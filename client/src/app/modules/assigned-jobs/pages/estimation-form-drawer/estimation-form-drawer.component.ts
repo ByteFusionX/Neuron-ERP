@@ -7,7 +7,8 @@ import { Estimations } from 'src/app/shared/interfaces/enquiry.interface';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
-import { ItemEntryComponent, ItemEntryOptionValue, ItemEntryTotals } from 'src/app/shared/components/item-entry';
+import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
+import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryOptionValue, ItemEntryTotals } from 'src/app/shared/components/item-entry';
 
 /**
  * Two-step drawer for uploading/editing a job's presale estimation, mirroring the quotation
@@ -17,7 +18,8 @@ import { ItemEntryComponent, ItemEntryOptionValue, ItemEntryTotals } from 'src/a
   selector: 'app-estimation-form-drawer',
   standalone: true,
   templateUrl: './estimation-form-drawer.component.html',
-  imports: [NgIf, NgFor, NgClass, NgIcon, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
+  imports: [ProductFormDrawerComponent, NgIf, NgFor, NgClass, NgIcon, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
+  providers: [CatalogueSuggestionSource, { provide: ITEM_SUGGESTION_SOURCE, useExisting: CatalogueSuggestionSource }],
 })
 export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -28,6 +30,14 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   @Output() closed = new EventEmitter<void>();
 
   @ViewChild(ItemEntryComponent) itemEntry?: ItemEntryComponent;
+
+  createProductOpen = false;
+  createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
+
+  openCreateProduct({ itemName, detail, scopeIds }: CreateProductRequest): void {
+    this.createProductPrefill = { productSegment: scopeIds[0] || '', productCategoryName: itemName, productDescription: detail };
+    this.createProductOpen = true;
+  }
 
   saving = false;
   step: 1 | 2 = 1;
@@ -153,6 +163,12 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
       this.form.markAllAsTouched();
       const firstIncomplete = ([1, 2] as const).find((s) => !this.isStepValid(s));
       if (firstIncomplete) this.step = firstIncomplete;
+      return;
+    }
+
+    if (this.form.pristine) {
+      // Nothing was actually changed — close without a misleading "Updated" toast or a no-op server call.
+      this.finish();
       return;
     }
 

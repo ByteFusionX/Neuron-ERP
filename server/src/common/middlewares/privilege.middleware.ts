@@ -85,6 +85,25 @@ export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?:
   };
 };
 
+// Read-only lookups shared by several modules (e.g. the item-entry supplier/product pickers):
+// allowed when the user can view at least one of the listed modules.
+export const requireAnyPrivilege = (...moduleKeys: string[]) => {
+  const checks = moduleKeys.map((key) => requirePrivilege(key));
+  return (req: any, res: Response, next: NextFunction) => {
+    const attempt = (index: number): void => {
+      if (index >= checks.length) {
+        return void res.status(req.employee ? 403 : 401).json({ message: req.employee ? "Forbidden" : "Unauthorized" });
+      }
+      let allowed = false;
+      const probe: any = { status: () => probe, json: () => probe };
+      checks[index](req, probe, () => { allowed = true; });
+      if (allowed) return next();
+      attempt(index + 1);
+    };
+    attempt(0);
+  };
+};
+
 // For actions that `main` left open to anyone with view access: allowed unless an admin has
 // explicitly set the flag to false on the role.
 // With `strictAdmin`, an admin is not waved through: they must hold the flag (role or extra grant) explicitly.

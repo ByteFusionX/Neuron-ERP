@@ -136,10 +136,20 @@ const assignApprovalSchema = new Schema({
         type: Number,
         default: 0
     },
+    /** Roles a Super Admin switched off for this job when resetting the workflow; they are skipped on its ladder. */
+    disabledRoles: [{
+        type: Schema.Types.ObjectId,
+        ref: 'Category'
+    }],
     role: {
         type: Schema.Types.ObjectId,
         ref: 'Category'
     },
+    /** Every role that may assign at this stage; more than one when the workflow has an "Or" stage. */
+    roles: [{
+        type: Schema.Types.ObjectId,
+        ref: 'Category'
+    }],
     assignedAt: {
         type: Date
     },

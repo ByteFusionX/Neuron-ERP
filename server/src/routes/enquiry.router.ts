@@ -28,6 +28,7 @@ import {
     returnPresaleJob,
     restartPresaleAssignment,
     resolveHeldPresaleAssignment,
+    rejectNewPresaleJob,
     selfAssignPresaleJob,
     markAsSeenReAssingedJob,
     updateEnquiryAttachments,
@@ -98,6 +99,7 @@ equiRouter.put('/presales/reject', requireUnlessDenied("assignedJob", "reject", 
 equiRouter.put('/presales/return', requirePrivilege("assignedJob", "assign", undefined, STRICT), returnPresaleJob)
 equiRouter.put('/presales/self-assign', requirePrivilege("assignedJob", "assign", undefined, STRICT), selfAssignPresaleJob)
 equiRouter.put('/reassignjob', requirePrivilege("assignedJob", "assign", undefined, STRICT), reAssignJob)
+equiRouter.put('/presales/reject-new', requirePrivilege("assignedJob", "assign", undefined, STRICT), rejectNewPresaleJob)
 equiRouter.put('/presales/resolve-assignment', requirePrivilege("assignedJob", "assign", undefined, STRICT), resolveHeldPresaleAssignment)
 equiRouter.put('/presales/restart-assignment', requirePrivilege("assignedJob", "assign", undefined, STRICT), restartPresaleAssignment)
 

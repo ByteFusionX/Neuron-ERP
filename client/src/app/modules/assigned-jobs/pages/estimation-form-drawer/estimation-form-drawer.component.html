@@ -29,9 +29,9 @@
 
         <!-- Step 1 — items -->
         <div [hidden]="step !== 1">
-            <app-item-entry [optionalItems]="optionalItems"
+            <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Estimation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
                 [seedOptionalItems]="seedOptionalItems" [currency]="form.controls.currency.value || 'QAR'"
-                (totals)="onItemTotals($event)"></app-item-entry>
+                (totals)="onItemTotals($event)" (createProductRequested)="openCreateProduct($event)"></app-item-entry>
         </div>
 
         <!-- Step 2 — currency, discount & note -->
@@ -41,7 +41,7 @@
                     <app-sf-select formControlName="currency" [options]="currencyOptions"></app-sf-select>
                 </app-sf-field>
                 <app-sf-field label="Total Discount" [control]="form.controls.totalDiscount">
-                    <app-sf-number formControlName="totalDiscount" [min]="0"></app-sf-number>
+                    <app-sf-number formControlName="totalDiscount" [min]="0" [max]="itemTotals.sellingPrice"></app-sf-number>
                 </app-sf-field>
             </app-sf-section>
 
@@ -68,7 +68,16 @@
     </form>
 
     <ng-container sfDrawerFooter>
-        <span *ngIf="!isStepValid(step) && form.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+
+        <div *ngIf="step === 1" class="mr-auto flex flex-wrap items-center gap-2">
+            <app-action-button variant="secondary" (click)="itemEntry.addItemAndJump()">
+                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
+            </app-action-button>
+            <app-action-button *ngIf="itemEntry.optionalItemsEnabled" variant="secondary" (click)="itemEntry.addItemAndJump(true)">
+                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
+            </app-action-button>
+        </div>
+        <span *ngIf="!isStepValid(step) && form.touched" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>
@@ -79,3 +88,5 @@
         </app-action-button>
     </ng-container>
 </app-sf-drawer>
+
+<app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (closed)="createProductOpen = false"></app-product-form-drawer>

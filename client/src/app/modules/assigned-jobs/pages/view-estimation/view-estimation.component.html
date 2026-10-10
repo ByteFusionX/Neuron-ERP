@@ -72,7 +72,7 @@
     <ng-container sfDrawerFooter>
         <app-action-button variant="secondary" (click)="closed.emit()">Close</app-action-button>
         <span *ngIf="viewingIndex === null && (editable || editBlockedReason)" [attr.title]="editBlockedReason || null">
-            <app-action-button variant="primary" [disabled]="!!editBlockedReason" (click)="onEdit()">Edit</app-action-button>
+            <app-action-button variant="primary" [disabled]="!!editBlockedReason" (click)="onEdit()" icon="edit">Edit</app-action-button>
         </span>
     </ng-container>
 </app-sf-drawer>

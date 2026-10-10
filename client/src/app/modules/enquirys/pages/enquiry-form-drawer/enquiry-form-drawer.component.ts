@@ -10,9 +10,10 @@ import { CustomerService } from 'src/app/core/services/customer/customer.service
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { SfDraftDirective, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
+import { SfDraftDirective, SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { dateRangeValidator, isoDateFromToday, notBlankValidator, notPastDateValidator } from 'src/app/shared/utils/form-validation.util';
 
 /**
  * Create-enquiry slide-over. The host binds `open` and reacts to `saved` / `closed`.
@@ -31,6 +32,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   @Output() closed = new EventEmitter<void>();
 
   @ViewChild(SfDraftDirective) draft?: SfDraftDirective;
+  @ViewChild(SfDrawerComponent) drawer?: SfDrawerComponent;
 
   saving = false;
   salesPersonName = '';
@@ -69,19 +71,22 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   private optionsLoaded = false;
   private subscriptions = new Subscription();
 
+  /** The enquiry number follows its date, so how far back it can be set is limited. */
+  readonly maxBackdateDays = 90;
+
   enquiryForm = this.fb.group({
     client: [null as string | null, Validators.required],
     contact: [null as string | null, Validators.required],
     department: [null as string | null, Validators.required],
-    title: ['', Validators.required],
+    title: ['', [Validators.required, notBlankValidator]],
     source: [null as string | null],
     enquiryCategory: [null as string | null],
     accountingManager: [null as string | null],
     priority: ['Normal' as string | null],
     requirement: [''],
     followUpOutcome: [''],
-    date: [this.todayIso(), Validators.required],
-    nextFollowUpDate: [this.todayIso(), Validators.required],
+    date: [this.todayIso(), [Validators.required, dateRangeValidator(isoDateFromToday(-this.maxBackdateDays), isoDateFromToday(0))]],
+    nextFollowUpDate: [this.todayIso(), [Validators.required, notPastDateValidator]],
     attachments: [[] as File[]],
   });
 
@@ -154,7 +159,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     );
     this.subscriptions.add(
       this.customers$.subscribe((customers) => {
-        this.customerOptions = customers.map((c) => ({ label: c.companyName, value: c._id }));
+        this.customerOptions = customers.map((c) => ({ label: c.companyName, value: c._id }))
+          .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
         // A restored draft may already name a client whose contacts are not listed yet.
         const clientId = this.enquiryForm.controls.client.value;
         if (clientId) this.loadContacts(clientId);
@@ -201,8 +207,9 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     this.closed.emit();
   }
 
+  /** Goes through the drawer so unsaved changes get the same discard prompt as X and Esc. */
   cancel(): void {
-    this.onDrawerClosed(false);
+    this.drawer?.requestClose();
   }
 
   /** Leaves for the customer form. The draft is saved first so this form comes back filled in. */
@@ -231,6 +238,10 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       attachments: []
     });
     this.step = 1;
+  }
+
+  get earliestEnquiryDate(): string {
+    return isoDateFromToday(-this.maxBackdateDays);
   }
 
   get today(): string {

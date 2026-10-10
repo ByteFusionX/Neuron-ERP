@@ -125,6 +125,12 @@ export interface Privileges {
     canIssueCreditNote: boolean;
     canCreateReplacementLPO: boolean;
   };
+  // Home / Dashboard sidebar switches. Undefined = enabled.
+  main?: { home?: boolean; dashboard?: boolean };
+  // Sidebar group switches. Undefined = enabled on roles saved before these existed.
+  groups?: {
+    [group in 'sales' | 'operations' | 'projects' | 'finance' | 'administration']?: { enabled?: boolean; dashboard?: boolean };
+  };
   sensitiveData?: {
     viewCost: boolean;
     viewMargin: boolean;
@@ -158,6 +164,8 @@ export interface Privileges {
     approvalRulesEdit?: boolean;
     notificationsEdit?: boolean;
     auditEdit?: boolean;
+    recycle?: boolean;
+    bugReports?: boolean;
   };
 }
 

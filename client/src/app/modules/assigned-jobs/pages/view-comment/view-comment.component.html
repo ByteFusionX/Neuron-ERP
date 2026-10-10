@@ -1,21 +1,10 @@
-<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
-    <!-- Header -->
-    <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
-        <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100 dark:bg-sky-950/40 dark:text-sky-400 dark:ring-sky-900">
-            <ng-icon name="heroDocumentText" class="text-lg"></ng-icon>
-        </span>
-        <div class="min-w-0 flex-1">
-            <h2 class="text-base font-semibold leading-6">Comment</h2>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Comment history for this job.</p>
-        </div>
-        <button type="button" (click)="onClose()" aria-label="Close"
-            class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
-            <ng-icon name="heroXMark" class="text-base"></ng-icon>
-        </button>
-    </header>
-
-    <!-- Body -->
-    <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+<app-modal-layout
+    title="Comment"
+    subtitle="Comment history for this job."
+    [onClose]="onClose.bind(this)"
+    [footerButtons]="footerButtons"
+    contentMaxHeight="70vh">
+    <div class="px-6 py-5 space-y-4">
         <div *ngIf="data.revisionComment?.length">
             <h3 class="text-md font-semibold text-gray-900 dark:text-gray-100">Revision Comment</h3>
             <div class="mt-2 rounded-lg bg-gray-100 p-4 dark:bg-white/5" *ngFor="let comment of data.revisionComment;let i=index">
@@ -27,4 +16,4 @@
             <p class="text-gray-700 dark:text-gray-300">{{data.feedbackComment}}</p>
         </div>
     </div>
-</div>
+</app-modal-layout>

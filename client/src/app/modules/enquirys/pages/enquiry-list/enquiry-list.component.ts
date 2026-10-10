@@ -1,4 +1,5 @@
-import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, effect, inject } from '@angular/core';
+import { PaletteHandoffService, RfqPreset } from 'src/app/core/services/palette-handoff.service';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EnquiryFormDrawerComponent } from '../enquiry-form-drawer/enquiry-form-drawer.component';
 import {
@@ -11,6 +12,10 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
+import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
+import { SALES_RFQ_BADGE_CLASSES, SalesRfq, SalesRfqSummary, salesRfqStatusLabel } from 'src/app/shared/interfaces/sales-rfq.interface';
+import { SalesRfqCreateDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-create-drawer/sales-rfq-create-drawer.component';
+import { SalesRfqCompareDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-compare-drawer/sales-rfq-compare-drawer.component';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import {
@@ -121,6 +126,8 @@ const PRESALE_AUDIT_ACTIONS = new Set([
     ActionButtonComponent,
     EnquiryFormDrawerComponent,
     EnquiryEstimationViewComponent,
+    SalesRfqCreateDrawerComponent,
+    SalesRfqCompareDrawerComponent,
     RouterLink,
     NgIcon,
   ],
@@ -155,6 +162,16 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     { name: 'Ready for Quotation', label: 'Ready for Quotation' },
     { name: 'Quoted', label: 'Quoted' },
     { name: 'Lost', label: 'Lost' },
+    // Legacy status values — kept so the inline editor shows a pre-migration
+    // row's real current value instead of silently offering to overwrite it.
+    { name: 'Assigned To Presale Manager', label: 'In Presales' },
+    { name: 'Assigned To Presale Engineer', label: 'In Presales' },
+    { name: 'Assigned To Presales', label: 'In Presales' },
+    { name: 'Rejected by Presale Engineer', label: 'Rejected' },
+    { name: 'Rejected by Presale Manager', label: 'Rejected' },
+    { name: 'in presales', label: 'In Presales' },
+    { name: 'revision', label: 'Revision' },
+    { name: 'rejected', label: 'Rejected' },
   ];
   readonly sourceOptions: SfOption[] = ['Referral', 'Website', 'Walk-in', 'Cold Call', 'Exhibition', 'Existing Customer', 'Other']
     .map((label) => ({ label, value: label }));
@@ -179,6 +196,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     { id: 'documents', label: 'Documents', icon: 'files' },
     { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
+    { id: 'supplierRfqs', label: 'RFQs', icon: 'scale' },
     { id: 'progress', label: 'Progress', icon: 'activity' },
     { id: 'history', label: 'History', icon: 'clock' },
   ];
@@ -193,7 +211,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     if (status === 'Sent to Presales' || status === 'in presales') return 'In Presales';
     if (status === 'rejected') return 'Rejected';
     if (status === 'revision') return 'Revision';
-    return status;
+    // Newer rows store lowercase ('lost', 'quoted', 'estimated'); show them with a capital like every other status.
+    return status && status === status.toLowerCase() ? status.charAt(0).toUpperCase() + status.slice(1) : status;
   };
   enquiryTitle = (row: getEnquiry) => row.enquiryId ?? '';
   enquirySubtitle = (row: getEnquiry) => row.client?.companyName ?? '';
@@ -218,6 +237,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   activeViewId: string = 'all';
   private eventsCache = new Map<string, BehaviorSubject<Events[]>>();
   private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
+  /** All supplier RFQs raised against the enquiry (there can be several: re-quotes, split by item, etc.). */
+  private rfqListCache = new Map<string, BehaviorSubject<SalesRfq[]>>();
   followUpSavingRowId: string | null = null;
 
   private subscriptions = new Subscription();
@@ -228,6 +249,25 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private confirm = inject(ConfirmDialogService);
   private auditLog = inject(AuditLogService);
+  private salesRfqService = inject(SalesRfqService);
+  private handoff = inject(PaletteHandoffService);
+  /** "Create RFQ" from the command palette opens the drawer here, with its products and supplier. */
+  private takeRfqHandoff = effect(() => {
+    const openId = this.handoff.openRfqId();
+    if (openId) {
+      this.handoff.openRfqId.set(null);
+      this.rfqPreset = null;
+      this.rfqDrawer = { enquiryId: null, rfqId: openId };
+      return;
+    }
+    if (!this.handoff.rfq()) return;
+    const preset = this.handoff.takeRfq();
+    if (!preset) return;
+    this.rfqPreset = preset;
+    this.rfqDrawer = { enquiryId: preset.enquiryId, rfqId: null };
+  });
+  /** Latest live supplier RFQ per enquiry id on the current page, for the badge and row actions. */
+  private rfqByEnquiry = new Map<string, SalesRfqSummary>();
 
   constructor(
     private fb: FormBuilder,
@@ -374,7 +414,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (row) => this.salesPersonName(row) },
       { key: 'department', label: 'Department', sortable: true, valueGetter: (row) => row.department?.departmentName },
       {
-        key: 'status', label: 'Status', sortable: true, type: 'badge', badgeClasses: this.statusBadgeClasses, badgeLabel: this.statusLabel,
+        key: 'status', label: 'Status', width: '11rem', sortable: true, type: 'badge', badgeClasses: this.statusBadgeClasses, badgeLabel: this.statusLabel,
         editorOptions: this.status.map((status) => ({ label: status.label, value: status.name })),
       },
     ];
@@ -382,20 +422,22 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private buildRowActions(): void {
     const actions: (DataGridRowAction<getEnquiry> & { hidden: (row: getEnquiry) => boolean })[] = [
-      { id: 'followUp', label: 'Follow-ups', icon: 'chat', quick: true, hidden: (row) => ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status) || !this.isCreator(row) },
+      { id: 'followUp', label: 'Follow-ups', icon: 'chat', hidden: (row) => ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status) || !this.isCreator(row) },
       { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, hidden: (row) => !this.canViewEstimations(row) },
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
       { id: 'sendToPresale', label: 'Send to Presale', icon: 'send', quick: true, hidden: (row) => !['New', 'In Review'].includes(row.status) || this.reassignDenied },
       { id: 'resendToPresale', label: 'Resend to Presale', icon: 'refresh', quick: true, hidden: (row) => !this.canResendToPresale(row) || this.reassignDenied },
+      { id: 'supplierRfq', label: 'Supplier RFQs', icon: 'scale', quick: true, hidden: (row) => row.status === 'Ready for Quotation' || (!this.rfqFor(row) && !this.canRequestPrices(row)) },
       { id: 'convertToQuote', label: 'Convert to Quote', icon: 'check', quick: true, hidden: (row) => !this.canConvertToQuote(row) || !this.isCreator(row) },
       { id: 'markLost', label: 'Mark Lost', icon: 'close', quick: true, variant: 'danger', hidden: (row) => ['Lost', 'Quoted', 'lost', 'quoted'].includes(row.status) || !this.isCreator(row) },
     ];
-    // A lost enquiry is closed: no actions on the row, hover or menu, except an admin deleting it.
+    // A lost enquiry is closed: no actions on the row, hover or menu, except reopening it or an admin deleting it.
     this.rowActions = [
       ...actions.map((action) => ({
         ...action,
         hidden: (row: getEnquiry) => this.isLost(row) || action.hidden(row),
       })),
+      { id: 'reopen', label: 'Reopen', icon: 'refresh', variant: 'default' as const, hidden: (row: getEnquiry) => !this.isLost(row) || !this.isCreator(row) },
       { id: 'delete', label: 'Delete', icon: 'delete', variant: 'danger' as const, hidden: (row: getEnquiry) => !this.isLost(row) || !this.isAdmin },
     ];
   }
@@ -417,7 +459,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   onQueryChange(query: DataGridQuery): void {
     this.page = query.page;
     this.row = query.pageSize;
-    this.searchQuery = query.search;
+    // Double spaces would match nothing ("First  Company"), so collapse them before searching.
+    this.searchQuery = (query.search ?? '').trim().replace(/\s+/g, ' ');
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
     // Saved (custom) views are built on a base view; the server only understands the base view ids.
@@ -451,10 +494,116 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'presaleHistory': this.openPresaleProgress(row); break;
       case 'sendToPresale': this.onSendToPresale(row); break;
       case 'resendToPresale': this.onResendToPresale(row); break;
+      case 'supplierRfq':
+        if (!this.grid) break;
+        this.grid.activeTab = 'supplierRfqs';
+        this.grid.openRow(row);
+        break;
       case 'convertToQuote': this.convertToQuote(row); break;
       case 'markLost': this.markLost(row); break;
+      case 'reopen': this.reopenEnquiry(row); break;
       case 'delete': this.deleteEnquiry(row); break;
     }
+  }
+
+  // --- supplier RFQ ----------------------------------------------------------------
+
+  /** The RFQ drawer: create for an enquiry, or edit one RFQ (its card in the RFQs tab). */
+  rfqDrawer: { enquiryId: string | null; rfqId: string | null } | null = null;
+  rfqPreset: RfqPreset | null = null;
+
+  openCreateRfq(row: getEnquiry): void {
+    this.rfqDrawer = { enquiryId: row._id ?? null, rfqId: null };
+  }
+
+  openRfq(rfq: SalesRfq, row?: getEnquiry): void {
+    if (row && this.isPresaleLocked(row)) {
+      this.toaster.warning('This RFQ is locked while presale is working on this enquiry.');
+      return;
+    }
+    this.rfqDrawer = { enquiryId: null, rfqId: rfq._id };
+  }
+
+  onRfqSaved(): void {
+    this.refreshRfqList();
+    this.loadRfqSummaries(this.dataSource.data);
+  }
+
+  /** The enquiry's supplier RFQs side by side, to award each product. */
+  compareEnquiry: getEnquiry | null = null;
+
+  openCompare(row: getEnquiry): void {
+    this.compareEnquiry = row;
+  }
+
+  /** Opening one RFQ from the comparison swaps the drawers; closing it does not bring the comparison back. */
+  onCompareOpenRfq(rfqId: string): void {
+    this.compareEnquiry = null;
+    this.rfqDrawer = { enquiryId: null, rfqId };
+  }
+
+  /** Same path as Convert to Quote, with the awarded supplier costs seeded into the quotation. */
+  async onCompareQuotationPrepared(seed: any): Promise<void> {
+    const row = this.compareEnquiry;
+    if (!row) return;
+    if (!this.canConvertToQuote(row)) {
+      this.toaster.warning('Customer, contact and requirement summary are required before quotation.');
+      return;
+    }
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Prepare quotation?',
+      message: `Enquiry ${row.enquiryId} will be marked Quoted and a quotation will open with the awarded supplier costs from ${seed?.rfqNo || 'its RFQs'}.`,
+      consequence: 'Once the quotation is saved, every supplier RFQ of this enquiry is closed and the awards are final.',
+      confirmLabel: 'Prepare',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this._enquiryService.convertToQuote(row._id).subscribe({
+      next: (res) => {
+        if (!res.success) return;
+        row.status = res.status;
+        this.compareEnquiry = null;
+        this._enquiryService.emitToQuote({ ...row, rfqSeed: seed } as any);
+        this.router.navigate(['/quotations']);
+      },
+      error: () => this.toaster.error('Failed to convert enquiry to quote'),
+    });
+  }
+
+  rfqFor(row: getEnquiry): SalesRfqSummary | undefined {
+    return row?._id ? this.rfqByEnquiry.get(row._id) : undefined;
+  }
+
+  /** While an enquiry is with presales, the RFQ belongs to the presale person working it; sales must not create or edit it
+   * to avoid both sides touching the same RFQ at once. Viewing stays available. */
+  isPresaleLocked(row: getEnquiry): boolean {
+    return this.isAssignedToPresale(row.status);
+  }
+
+  /** Any open enquiry can ask suppliers for prices; it may hold several RFQs, one per supplier.
+   * Once it is Ready for Quotation the prices are settled, so no more RFQs are needed. */
+  canRequestPrices(row: getEnquiry): boolean {
+    return !['Quoted', 'Lost', 'quoted', 'lost', 'Ready for Quotation'].includes(row.status) && !this.isPresaleLocked(row);
+  }
+
+  private loadRfqSummaries(enquiries: getEnquiry[]): void {
+    const ids = (enquiries || []).map((e) => e._id).filter((id): id is string => !!id);
+    if (!ids.length) return;
+    this.subscriptions.add(
+      this.salesRfqService.summaries(ids).subscribe({
+        next: (res) => {
+          this.rfqByEnquiry.clear();
+          // Newest first from the server, so the first per enquiry wins.
+          (res.data || []).forEach((rfq) => {
+            const key = String(rfq.enquiryId);
+            if (!this.rfqByEnquiry.has(key)) this.rfqByEnquiry.set(key, rfq);
+          });
+          this.dataSource.data = [...this.dataSource.data];
+        },
+        error: () => this.rfqByEnquiry.clear(),
+      })
+    );
   }
 
   /** Only in progress or estimated enquiries (plus legacy equivalents) can be handed to quotations. */
@@ -502,7 +651,8 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!confirmed) return;
     this._enquiryService.deleteEnquiry({ dataId: row._id, employeeId: this.currentEmployeeId as string }).subscribe({
       next: () => {
-        this.dataSource.data = this.dataSource.data.filter((item) => item._id !== row._id);
+        // Reload instead of a local splice so tab counts reflect the delete immediately, without a manual page refresh.
+        this.getEnquiries();
         this.toaster.success('Enquiry deleted');
       },
       error: () => this.toaster.error('Failed to delete enquiry'),
@@ -528,14 +678,34 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     });
     if (!confirmed) return;
     this._enquiryService.updateEnquiryStatus({ id: row._id, status: 'Lost', lostReason: reason?.trim() || '' }).subscribe({
-      next: (res) => {
-        row.status = res.update?.status ?? 'Lost';
-        row.lostReason = res.update?.lostReason ?? reason ?? '';
-        if (res.update?.preSale) row.preSale = res.update.preSale;
-        this.dataSource._updateChangeSubscription();
+      next: () => {
+        // Reload rather than patch in place: the row may now belong to a different tab/view, and tab counts need to reflect the change too.
+        this.getEnquiries();
         this.toaster.success('Enquiry marked Lost');
       },
       error: () => this.toaster.error('Failed to update enquiry status'),
+    });
+  }
+
+  async reopenEnquiry(row: getEnquiry): Promise<void> {
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: 'Reopen enquiry?',
+      message: `Enquiry ${row.enquiryId} will be moved back to New and its lost reason cleared.`,
+      consequence: this.isAssignedToPresale(row.status) || row.preSale?.status === 'cancelled'
+        ? 'Its presale job (cancelled when this enquiry was marked lost) will be handed back to whoever held it.'
+        : undefined,
+      confirmLabel: 'Reopen',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    this._enquiryService.updateEnquiryStatus({ id: row._id, status: 'reopen' }).subscribe({
+      next: () => {
+        // Reload rather than patch in place: the row may now belong to a different tab/view, and tab counts need to reflect the change too.
+        this.getEnquiries();
+        this.toaster.success('Enquiry reopened');
+      },
+      error: () => this.toaster.error('Failed to reopen enquiry'),
     });
   }
 
@@ -938,6 +1108,68 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     else this.historyCache.clear();
   }
 
+  /** Every supplier RFQ raised against this enquiry, newest first — an enquiry can have more than one. */
+  rfqListFor(row: getEnquiry): Observable<SalesRfq[]> {
+    let subject = this.rfqListCache.get(row._id);
+    if (!subject) {
+      subject = new BehaviorSubject<SalesRfq[]>([]);
+      this.rfqListCache.set(row._id, subject);
+      this.fetchRfqList(row._id, subject);
+    }
+    return subject.asObservable();
+  }
+
+  private fetchRfqList(enquiryId: string, subject: BehaviorSubject<SalesRfq[]>): void {
+    this.salesRfqService.list({ enquiryId, row: 50 }).subscribe({
+      next: (res) => subject.next(res?.rfqs?.data || []),
+      error: () => this.rfqListCache.delete(enquiryId),
+    });
+  }
+
+  rfqStatusLabel(status: string, hasQuotation = true): string {
+    return salesRfqStatusLabel(status, hasQuotation);
+  }
+
+  rfqStatusClasses(status: string, hasQuotation = true): string {
+    return SALES_RFQ_BADGE_CLASSES[this.rfqStatusLabel(status, hasQuotation)] || SALES_RFQ_BADGE_CLASSES['Draft'];
+  }
+
+  /** Products this supplier won, against the ones it was asked for. */
+  rfqWonCount(rfq: SalesRfq): number {
+    return (rfq?.requestedLines || []).filter((l) => l.lineStatus === 'Confirmed').length;
+  }
+
+  rfqLostCount(rfq: SalesRfq): number {
+    return (rfq?.requestedLines || []).filter((l) => l.lineStatus === 'Lost').length;
+  }
+
+  /** Each RFQ is raised for one supplier; older ones may list several. */
+  rfqSupplierName(rfq: SalesRfq): string {
+    const names = (rfq?.suppliers || []).map((s) => s.supplierName);
+    if (!names.length) return 'No supplier';
+    return names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`;
+  }
+
+  /** Prices were needed by a date that has passed and the supplier has not replied. */
+  rfqOverdue(rfq: SalesRfq): boolean {
+    if (!rfq?.deadline || ['Closed', 'Cancelled'].includes(rfq.status)) return false;
+    if ((rfq.suppliers || []).every((s) => s.status === 'Replied' || s.status === 'Declined')) return false;
+    const end = new Date(rfq.deadline);
+    end.setHours(23, 59, 59, 999);
+    return end.getTime() < Date.now();
+  }
+
+  /** Re-reads the cached RFQ lists after one is created or changed. The old list stays on screen until the new one
+   * arrives, so the tab never flashes "No supplier RFQs raised" while it reloads. */
+  private refreshRfqList(row?: getEnquiry): void {
+    if (row) {
+      const subject = this.rfqListCache.get(row._id);
+      if (subject) this.fetchRfqList(row._id, subject);
+      return;
+    }
+    this.rfqListCache.forEach((subject, enquiryId) => this.fetchRfqList(enquiryId, subject));
+  }
+
   eventItems(events: Events[]): DetailTaskItem[] {
     return (events || []).map((event) => ({
       id: event._id,
@@ -1114,6 +1346,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     this.subscriptions.unsubscribe();
   }
 
+  /** Set when the last list request failed; the page shows it with a Retry button instead of a blank grid. */
+  loadError = '';
+
   getEnquiries() {
     this.isLoading = true;
     let access;
@@ -1155,6 +1390,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       this._enquiryService.getEnquiry(filterData).subscribe({
         next: (data: EnquiryTable) => {
           this.dataSource.data = data.enquiry;
+          this.loadRfqSummaries(data.enquiry);
           this.refreshHistory();
           this.total = data.total;
           this.views = this.views.map((view) => ({
@@ -1162,6 +1398,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
             count: data.viewCounts?.[view.id as keyof typeof data.viewCounts] ?? (view.id === this.activeViewId ? data.total : view.count),
           }));
           this.isLoading = false;
+          this.loadError = '';
           this.isEmpty = false;
           this.enqId = this.total.toString().padStart(3, '0');
         },
@@ -1169,6 +1406,10 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
           if (error.status == 504) this.enqId = '000';
           this.dataSource.data = [];
           this.isEmpty = true;
+          this.isLoading = false;
+          this.loadError = error.status === 0 || error.status >= 500
+            ? 'Could not reach the server, so the list is empty. Check your connection and try again.'
+            : (error?.error?.message || 'Could not load enquiries.');
         },
       }),
     );
