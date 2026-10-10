@@ -107,7 +107,18 @@ const createQuarantineStockEntry = async (grn: any, grnItem: any, qty: number, u
 
 export const createStockHold = async (req: Request, res: Response) => {
   try {
-    const { grnId, itemIndex, qty, logisticsType, trackingRef, courierName, dispatchDate } = req.body;
+    const {
+      grnId,
+      itemIndex,
+      qty,
+      logisticsType,
+      trackingRef,
+      courierName,
+      dispatchDate,
+      vendorAuthorizationNo,
+      returnReason,
+      returnNotes
+    } = req.body;
 
     if (!grnId || !mongoose.Types.ObjectId.isValid(grnId)) {
       return res.status(400).json({ success: false, message: 'Valid grnId is required' });
@@ -175,6 +186,7 @@ export const createStockHold = async (req: Request, res: Response) => {
     const prefix = `SH-${currentYear}`;
     const sequence = await getNextSequence(`stockHoldNo-${currentYear}`, seedHoldSequence(prefix));
     const holdNo = `${prefix}-${sequence.toString().padStart(4, '0')}`;
+    const returnNo = `PR-${currentYear}-${sequence.toString().padStart(4, '0')}`;
 
     let stockEntryId: any = undefined;
     let unitCost = 0;
@@ -197,6 +209,10 @@ export const createStockHold = async (req: Request, res: Response) => {
 
     const stockHold = await StockHold.create({
       holdNo,
+      returnNo,
+      vendorAuthorizationNo: vendorAuthorizationNo || undefined,
+      returnReason: returnReason || grnItem.rejectionReason || undefined,
+      returnNotes: returnNotes || undefined,
       stockEntryId,
       grnId,
       itemId: String(itemIndex),

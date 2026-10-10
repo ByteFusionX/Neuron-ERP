@@ -1,35 +1,103 @@
-<data-table
-[data]="tableData()"
-[columns]="tableColumns"
-[defaultColumns]="defaultColumns"
-[isLoading]="isLoading()"
-[isEmpty]="isEmpty()"
-[totalItems]="totalItems()"
-(rowClick)="onRowClick($event)"
-(pageChange)="onPageChange($event)"
-(rowsPerPageChange)="onRowsPerPageChange($event)"
-(search)="onSearch($event)"
-[title]="'GRN List'"
->
-  <ng-template #sideColumn>
-    <app-btn theme="primary" routerLink="/grn/create-grn">
-      <ng-icon name="heroPlus" class="mr-1"></ng-icon>
-      Create GRN
-    </app-btn>
-    <button
-      type="button"
-      [matMenuTriggerFor]="grnViewMenu"
-      class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
-    >
-      <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
-      Switch Table
-      <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
-    </button>
-    <mat-menu #grnViewMenu="matMenu">
-      <button mat-menu-item routerLink="/grn/stock-holds">
-        <ng-icon name="heroArrowUturnLeft" class="mr-2 text-slate-500"></ng-icon>
-        Stock Holds
-      </button>
-    </mat-menu>
-  </ng-template>
-</data-table>
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid
+    #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Goods Receipt Notes"
+    subtitle="Track received LPO items, warehouse receipts, and supplier documents"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="total"
+    [data]="rows"
+    [columns]="columns"
+    [loading]="isLoading"
+    [pageSize]="row"
+    searchPlaceholder="Search by GRN, LPO, supplier, or job"
+    emptyMessage="No GRNs found"
+    createLabel="Create GRN"
+    [rowActions]="rowActions"
+    [views]="views"
+    (viewChange)="onViewChange($event)"
+    storageKey="grn-list"
+    [density]="density"
+    exportable
+    exportFileName="grn-list.xlsx"
+    [detailTabs]="detailTabs"
+    [detailTitle]="title"
+    [detailSubtitle]="subtitle"
+    (queryChange)="onQueryChange($event)"
+    (rowAction)="onRowAction($event)"
+    (create)="onCreateGRN()">
+
+    <ng-template #detailAsideTemplate let-row>
+      <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900">
+        Received
+      </span>
+    </ng-template>
+
+    <ng-template #detailMetaTemplate let-row>
+      <div class="grn-meta">
+        <p class="grn-meta-label">Supplier</p>
+        <p class="grn-meta-value">{{ row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
+      </div>
+      <div class="grn-meta">
+        <p class="grn-meta-label">LPO</p>
+        <p class="grn-meta-value">{{ row.purchaseOrderId?.poNo || 'N/A' }}</p>
+      </div>
+      <div class="grn-meta">
+        <p class="grn-meta-label">Warehouse</p>
+        <p class="grn-meta-value">{{ row.warehouse?.wareHouseName || 'N/A' }}</p>
+      </div>
+      <div class="grn-meta">
+        <p class="grn-meta-label">Accepted Qty</p>
+        <p class="grn-meta-value">{{ totalAcceptedQty(row) }}</p>
+      </div>
+    </ng-template>
+
+    <!-- left: optional, per-tab (outline) -->
+    <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+      <app-action-button *ngIf="tab === 'overview' && row.purchaseOrderId?.purchaseId" variant="outline" (click)="viewPurchaseRequestDetails(row)" icon="view">
+        View PR
+      </app-action-button>
+      <app-action-button *ngIf="tab === 'overview' && row.purchaseOrderId" variant="outline" (click)="viewLpoDetails(row)" icon="view">
+        View LPO
+      </app-action-button>
+    </ng-template>
+
+    <!-- right: permanent, every tab (filled) -->
+    <ng-template #detailFooterTemplate let-row let-tab="tab">
+      <app-action-button variant="primary" (click)="viewDetails(row)" icon="view">Open full GRN</app-action-button>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <ng-container *ngSwitchCase="'overview'">
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        </ng-container>
+
+        <ng-container *ngSwitchCase="'items'">
+          <app-detail-table
+            title="Received items"
+            [columns]="itemColumns"
+            [rows]="itemRows(row)"
+            showTotals>
+          </app-detail-table>
+        </ng-container>
+
+        <ng-container *ngSwitchCase="'documents'">
+          <app-detail-table
+            title="Linked documents"
+            [columns]="documentColumns"
+            [rows]="documentRows(row)">
+          </app-detail-table>
+          <div class="grn-document-actions">
+            <button type="button" (click)="viewPurchaseRequestDetails(row)" [disabled]="!row.purchaseOrderId?.purchaseId">View purchase request</button>
+            <button type="button" (click)="viewLpoDetails(row)" [disabled]="!row.purchaseOrderId">View LPO</button>
+            <button type="button" (click)="viewDetails(row)">Open supplier files</button>
+          </div>
+        </ng-container>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+</div>

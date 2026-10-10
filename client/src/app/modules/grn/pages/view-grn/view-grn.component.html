@@ -1,7 +1,10 @@
-<div class="bg-white m-6">
-  <div class="border-b p-3 px-9 flex justify-between items-center">
+<div class="grn-view-page">
+<div class="grn-view-shell">
+  <div class="grn-view-header">
     <div>
-      <h3 class="text-md font-medium">Goods Receipt Note <span class="uppercase text-purple-600">{{ grn?.grnNo }}</span></h3>
+      <p class="grn-view-kicker">Goods Receipt Note</p>
+      <h3 class="grn-view-title">GRN <span>{{ grn?.grnNo }}</span></h3>
+      <p class="grn-view-subtitle">{{ headerSubtitle || 'Receipt details' }}</p>
     </div>
     <div class="flex gap-3">
       <app-btn theme="secondary" (buttonClick)="onBack()">
@@ -17,11 +20,17 @@
     </svg>
   </div>
 
-  <div *ngIf="!isLoading() && grn" class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+  <div *ngIf="!isLoading() && grn" class="grn-view-body">
+    <div class="grn-view-stats">
+      <div><span>Ordered</span><strong>{{ getTotalOrderedQty() }}</strong></div>
+      <div><span>Received</span><strong>{{ getTotalReceivedQty() }}</strong></div>
+      <div><span>Accepted</span><strong>{{ getTotalAcceptedQty() }}</strong></div>
+      <div><span>Rejected</span><strong [class.text-red-600]="getTotalRejectedQty() > 0">{{ getTotalRejectedQty() }}</strong></div>
+    </div>
 
     <!-- GRN details -->
-    <section class="rounded-md border border-gray-200 bg-white mb-8">
-      <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+    <section class="grn-view-card">
+      <div class="grn-view-card-header">
         <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">GRN Details</h4>
         <div class="flex items-center gap-2">
           <button type="button" (click)="viewInvoices()"
@@ -38,7 +47,7 @@
           </button>
         </div>
       </div>
-      <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
+      <dl class="grn-view-fields">
         @for (field of detailFields; track field.label) {
           <div class="min-w-0">
             <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">{{ field.label }}</dt>
@@ -56,8 +65,8 @@
         </label>
         <span class="text-xs text-gray-500">{{ selectedItems.size }} selected for receipt</span>
       </div>
-      <div class="relative overflow-x-auto">
-        <table class="w-full text-md text-left border">
+      <div class="grn-view-table-wrap">
+        <table class="grn-view-table">
           <thead class="text-xs text-gray-700 uppercase bg-gray-50">
             <tr>
               <th class="px-4 py-2 border text-center">
@@ -127,4 +136,5 @@
       </div>
     </div>
   </div>
+</div>
 </div>

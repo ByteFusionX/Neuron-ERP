@@ -21,7 +21,7 @@ import PurchaseOrder from "../models/purchaseOrder.model";
 import DeliveryNote from "../models/deliveryNote.model";
 import Quotation from "../models/quotation.model";
 
-const getActiveReservationFilter = (now = new Date()) => ({
+export const getActiveReservationFilter = (now = new Date()) => ({
     isDeleted: { $ne: true },
     status: 'Active',
     expiresAt: { $gte: now },

@@ -1,16 +1,18 @@
-import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
-import { RouterModule } from '@angular/router';
-import { ToastrService } from 'ngx-toastr';
+import { CommonModule, DatePipe } from '@angular/common';
+import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { MatMenuModule } from '@angular/material/menu';
+import { ActivatedRoute } from '@angular/router';
+import { ToastrService } from 'ngx-toastr';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { PaginationService } from 'src/app/core/services/pagination.service';
-import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { TableColumn } from 'src/app/shared/components/table/table.model';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailDocument, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CreateStockHoldComponent } from './modals/create-stock-hold/create-stock-hold.component';
 import { ResolveStockHoldComponent } from './modals/resolve-stock-hold/resolve-stock-hold.component';
@@ -19,203 +21,224 @@ import { ResolveDisputeComponent } from './modals/resolve-dispute/resolve-disput
 import { ViewGrnDetailsModalComponent } from 'src/app/modules/stocks/modals/view-grn-details-modal/view-grn-details-modal.component';
 import { ViewPoDetailsModalComponent } from 'src/app/modules/stocks/modals/view-po-details-modal/view-po-details-modal.component';
 
-type StockHoldTab = 'pending' | 'holds';
+type ReturnRecord = any;
 
 @Component({
   selector: 'app-grn-stock-holds',
   standalone: true,
-  imports: [TableComponent, CommonModule, RouterModule, ButtonComponent, IconsModule, MatMenuModule],
+  imports: [
+    CommonModule,
+    IconsModule,
+    DataGridComponent,
+    DetailOverviewComponent,
+    DetailTableComponent,
+    DetailDocumentsComponent,
+    ActionButtonComponent,
+  ],
   templateUrl: './stock-holds.component.html',
   styleUrl: './stock-holds.component.css',
-  providers: [PaginationService]
+  providers: [DatePipe],
 })
 export class GrnStockHoldsComponent implements OnInit {
+  @ViewChild('returnsGrid') returnsGrid!: DataGridComponent<ReturnRecord>;
+  @ViewChild('pendingGrid') pendingGrid!: DataGridComponent<ReturnRecord>;
+
   private grnService = inject(GrnService);
   private stockHoldService = inject(StockHoldService);
   private notificationService = inject(ToastrService);
   private employeeService = inject(EmployeeService);
   private dialog = inject(MatDialog);
-
-  activeTab = signal<StockHoldTab>('pending');
+  private datePipe = inject(DatePipe);
+  private route = inject(ActivatedRoute);
 
   canInitiateHold = signal<boolean>(false);
+  pendingRows: ReturnRecord[] = [];
+  returnRows: ReturnRecord[] = [];
+  pendingLoading = false;
+  returnsLoading = false;
+  activeRegister: 'pending' | 'resolved' = 'pending';
+  density: 'comfortable' | 'compact' = 'comfortable';
 
-  // Pending Rejections tab state
-  pendingTableData = signal<any[]>([]);
-  pendingTableColumns: TableColumn[] = [];
-  pendingDefaultColumns: string[] = [];
-  pendingIsLoading = signal<boolean>(false);
-  pendingIsEmpty = signal<boolean>(false);
-  pendingTotalItems = signal<number>(0);
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'GRN' }, { label: 'Returns' }];
+  pendingColumns: DataGridColumn<ReturnRecord>[] = [];
+  returnColumns: DataGridColumn<ReturnRecord>[] = [];
+  rowActions: DataGridRowAction<ReturnRecord>[] = [];
+  pendingActions: DataGridRowAction<ReturnRecord>[] = [];
+  views: DataGridView<ReturnRecord>[] = [
+    { id: 'all', label: 'All' },
+    { id: 'awaiting', label: 'Awaiting', predicate: (r) => ['AwaitingReturn', 'AwaitingReplacement'].includes(r.status) },
+    { id: 'disputed', label: 'Disputed', predicate: (r) => r.disputeStatus === 'SupplierDisputed' },
+    { id: 'resolved', label: 'Resolved', predicate: (r) => ['Resolved', 'Disposed'].includes(r.status) },
+  ];
+  pendingViews: DataGridView<ReturnRecord>[] = [{ id: 'pending', label: 'Pending Rejections' }];
+  detailTabs: DataGridDetailTab[] = [
+    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'items', label: 'Items', icon: 'card' },
+    { id: 'logistics', label: 'Logistics', icon: 'transfer' },
+    { id: 'resolution', label: 'Resolution', icon: 'wallet' },
+    { id: 'documents', label: 'Documents', icon: 'eye' },
+    { id: 'events', label: 'Events', icon: 'calendar' },
+  ];
 
-  // Stock Holds tab state
-  holdsTableData = signal<any[]>([]);
-  holdsTableColumns: TableColumn[] = [];
-  holdsDefaultColumns: string[] = [];
-  holdsIsLoading = signal<boolean>(false);
-  holdsIsEmpty = signal<boolean>(false);
-  holdsTotalItems = signal<number>(0);
+  readonly itemColumns: DetailTableColumn[] = [
+    { key: 'partNo', label: 'Part No.' },
+    { key: 'description', label: 'Description', wrap: true },
+    { key: 'returnQty', label: 'Return Qty', type: 'number', total: true },
+    { key: 'resolvedQty', label: 'Resolved', type: 'number', total: true },
+    { key: 'unresolvedQty', label: 'Open', type: 'number', total: true },
+    { key: 'reason', label: 'Reason', wrap: true },
+  ];
+
+  readonly resolutionColumns: DetailTableColumn[] = [
+    { key: 'date', label: 'Date', type: 'date' },
+    { key: 'type', label: 'Resolution' },
+    { key: 'qty', label: 'Qty', type: 'number' },
+    { key: 'note', label: 'Note', wrap: true },
+  ];
+
+  readonly statusBadgeClasses: Record<string, string> = {
+    AwaitingReturn: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200',
+    AwaitingReplacement: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200',
+    PartiallyResolved: 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200',
+    Resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200',
+    Disposed: 'bg-slate-100 text-slate-700 ring-slate-200 border-slate-200',
+  };
 
   ngOnInit(): void {
+    this.route.data.subscribe((data) => {
+      this.activeRegister = data['register'] === 'resolved' ? 'resolved' : 'pending';
+    });
     this.checkPrivileges();
-    this.setupPendingColumns();
-    this.setupHoldsColumns();
+    this.buildPendingColumns();
+    this.buildReturnColumns();
+    this.buildActions();
     this.getRejections();
     this.loadStockHolds();
   }
 
-  setTab(tab: StockHoldTab): void {
-    this.activeTab.set(tab);
-  }
-
-  checkPrivileges(): void {
+  private checkPrivileges(): void {
     this.employeeService.employeeData$.subscribe((data) => {
-      if (data?.category?.privileges) {
-        const privileges = data.category.privileges as any;
-        const hasGrnView = privileges.grn?.viewReport && privileges.grn.viewReport !== 'none';
-        this.canInitiateHold.set(privileges.stockHold?.canInitiateHold || hasGrnView || false);
-      }
+      const privileges = data?.category?.privileges as any;
+      const hasGrnView = privileges?.grn?.viewReport && privileges.grn.viewReport !== 'none';
+      this.canInitiateHold.set(!!(privileges?.stockHold?.canInitiateHold || hasGrnView));
     });
   }
 
-  // ---------- Pending Rejections tab ----------
-
-  setupPendingColumns(): void {
-    this.pendingTableColumns = [
-      {
-        key: 'grnDate',
-        label: 'GRN Date',
-        type: 'date',
-        pipeParams: 'dd/MM/yyyy',
-        sortable: true,
-      },
-      {
-        key: 'grnNo',
-        label: 'GRN Number',
-        type: 'text',
-        cellClass: 'text-violet-600 font-medium',
-        clickable: true,
-        clickableValue: (item: any) => !!item?.grnId,
-        clickFunction: (item: any) => this.openGrnDetails(item)
-      },
-      {
-        key: 'purchaseOrderId.poNo',
-        label: 'LPO Number',
-        type: 'text',
-        cellClass: 'text-violet-600 font-medium',
-        clickable: true,
-        clickableValue: (item: any) => !!item?.purchaseOrderId?.poNo,
-        clickFunction: (item: any) => this.openLpoDetails(item)
-      },
-      {
-        key: 'purchaseOrderId.supplierId.supplierName',
-        label: 'Supplier Name',
-        type: 'text',
-      },
-      {
-        key: 'itemDescription',
-        label: 'Item Description',
-        type: 'text',
-      },
-      {
-        key: 'partNo',
-        label: 'Part No',
-        type: 'text',
-        cellRenderer: (item: any) => (typeof item.partNo === 'string' ? item.partNo : item.partNo?.partNo) || '-',
-      },
-      {
-        key: 'rejectedQty',
-        label: 'Rejected Qty',
-        type: 'text',
-      },
-      {
-        key: 'rejectionReason',
-        label: 'Rejection Reason',
-        type: 'text',
-      },
-      {
-        key: 'warehouse.wareHouseName',
-        label: 'Warehouse',
-        type: 'text',
-      },
-      {
-        key: 'actions',
-        label: 'Actions',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: [
-          {
-            icon: 'heroArrowUturnLeft',
-            tooltip: 'Resolve — Initiate Stock Hold',
-            action: 'initiateHold',
-            buttonClass: 'cursor-pointer text-center flex justify-center items-center gap-2 px-2 py-2 border border-orange-300 hover:border-orange-500 text-orange-600 text-sm rounded-full font-medium',
-            condition: () => this.canInitiateHold()
-          }
-        ]
-      }
+  private buildPendingColumns(): void {
+    this.pendingColumns = [
+      { key: 'grnDate', label: 'GRN Date', type: 'date', sortable: true, width: '130px' },
+      { key: 'grnNo', label: 'GRN No', sortable: true },
+      { key: 'poNo', label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
+      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
+      { key: 'itemDescription', label: 'Item' },
+      { key: 'partNo', label: 'Part No', valueGetter: (r) => this.formatPartNumber(r.partNo) },
+      { key: 'rejectedQty', label: 'Rejected Qty', type: 'number', align: 'right' },
+      { key: 'rejectionReason', label: 'Reason' },
+      { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
     ];
+    this.pendingActions = [
+      { id: 'createReturn', label: 'Create Purchase Return', icon: 'refresh', quick: true, panel: true, hidden: () => !this.canInitiateHold() },
+      { id: 'viewGrn', label: 'View GRN', icon: 'eye', panel: true },
+      { id: 'viewLpo', label: 'View LPO', icon: 'wallet', panel: true, hidden: (r) => !r?.purchaseOrderId?.poNo },
+    ];
+  }
 
-    this.pendingDefaultColumns = [
-      'grnDate', 'grnNo', 'purchaseOrderId.poNo', 'purchaseOrderId.supplierId.supplierName',
-      'itemDescription', 'partNo', 'rejectedQty', 'rejectionReason', 'warehouse.wareHouseName', 'actions'
+  private buildReturnColumns(): void {
+    this.returnColumns = [
+      { key: 'returnNo', label: 'Return No', sortable: true, valueGetter: (r) => r.returnNo || this.displayReturnNo(r) },
+      { key: 'grn', label: 'GRN', valueGetter: (r) => r?.grnId?.grnNo || 'N/A' },
+      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.supplierId?.supplierName || 'N/A' },
+      { key: 'itemDescription', label: 'Item' },
+      { key: 'rejectedQty', label: 'Return Qty', type: 'number', align: 'right' },
+      { key: 'unresolvedQty', label: 'Open Qty', type: 'number', align: 'right' },
+      { key: 'logisticsType', label: 'Return Method', valueGetter: (r) => this.logisticsLabel(r.logisticsType) },
+      { key: 'resolutionType', label: 'Vendor Resolution', valueGetter: (r) => this.resolutionLabel(r.resolutionType) },
+      { key: 'disputeStatus', label: 'Dispute', valueGetter: (r) => this.disputeLabel(r.disputeStatus) },
+      { key: 'status', label: 'Return Status', type: 'badge', badgeClasses: this.statusBadgeClasses, badgeLabel: (v) => this.statusLabel(v) },
+    ];
+  }
+
+  private buildActions(): void {
+    this.rowActions = [
+      { id: 'resolve', label: 'Resolve Return', icon: 'check', quick: true, panel: true, hidden: (r) => !this.canInitiateHold() || r?.unresolvedQty <= 0 || r?.disputeStatus === 'SupplierDisputed' },
+      { id: 'dispute', label: 'Mark Supplier Dispute', icon: 'flag', quick: true, panel: true, hidden: (r) => !this.canInitiateHold() || r?.disputeStatus !== 'None' },
+      { id: 'resolveDispute', label: 'Resolve Dispute', icon: 'check', quick: true, panel: true, hidden: (r) => !this.canInitiateHold() || r?.disputeStatus !== 'SupplierDisputed' },
+      { id: 'viewGrn', label: 'View GRN', icon: 'eye', panel: true },
+      { id: 'viewLpo', label: 'View LPO', icon: 'wallet', hidden: (r) => !this.poNo(r) },
     ];
   }
 
   getRejections(): void {
-    this.pendingIsLoading.set(true);
-
+    this.pendingLoading = true;
     this.grnService.getGRNRejections().subscribe({
       next: (response) => {
-        if (response.success) {
-          const rows = (response.data || []).flatMap((grn: any) =>
-            (grn.items || []).map((item: any) => ({
-              grnId: grn.grnId,
-              grnNo: grn.grnNo,
-              grnDate: grn.grnDate,
-              purchaseOrderId: grn.purchaseOrderId,
-              warehouse: grn.warehouse,
-              partNo: item.partNo,
-              itemDescription: item.itemDescription,
-              rejectedQty: item.rejectedQty,
-              rejectionReason: item.rejectionReason || '-',
-              itemIndex: item.itemIndex,
-            }))
-          );
-          this.pendingTableData.set(rows);
-          this.pendingTotalItems.set(rows.length);
-          this.pendingIsEmpty.set(rows.length === 0);
-        }
-        this.pendingIsLoading.set(false);
+        const rows = response.success ? (response.data || []).flatMap((grn: any) =>
+          (grn.items || []).map((item: any) => ({
+            grnId: grn.grnId,
+            pendingKey: `${grn.grnId}-${item.itemIndex}`,
+            grnNo: grn.grnNo,
+            grnDate: grn.grnDate,
+            purchaseOrderId: grn.purchaseOrderId,
+            warehouse: grn.warehouse,
+            partNo: item.partNo,
+            itemDescription: item.itemDescription,
+            rejectedQty: item.rejectedQty,
+            rejectionReason: item.rejectionReason || '-',
+            itemIndex: item.itemIndex,
+          }))
+        ) : [];
+        this.pendingRows = rows;
+        this.pendingLoading = false;
       },
-      error: (error) => {
-        console.error('Error fetching GRN rejections:', error);
+      error: () => {
         this.notificationService.error('Failed to load GRN rejections');
-        this.pendingIsLoading.set(false);
+        this.pendingLoading = false;
       }
     });
   }
 
-  onPendingActionClick(event: { action: string, item: any, event: Event }): void {
-    event.event?.stopPropagation?.();
-    if (event.action === 'initiateHold') {
-      this.openInitiateHoldModal(event.item);
-    }
+  loadStockHolds(): void {
+    this.returnsLoading = true;
+    this.stockHoldService.getStockHolds().subscribe({
+      next: (response) => {
+        this.returnRows = response.success ? response.data || [] : [];
+        this.refreshViewCounts();
+        this.returnsLoading = false;
+      },
+      error: () => {
+        this.notificationService.error('Failed to load purchase returns');
+        this.returnsLoading = false;
+      }
+    });
+  }
+
+  onPendingAction(event: DataGridRowActionEvent<ReturnRecord>): void {
+    if (event.action.id === 'createReturn') this.openInitiateHoldModal(event.row);
+    if (event.action.id === 'viewGrn') this.openGrnDetails(event.row);
+    if (event.action.id === 'viewLpo') this.openLpoDetails(event.row);
+  }
+
+  onReturnAction(event: DataGridRowActionEvent<ReturnRecord>): void {
+    if (event.action.id === 'resolve') this.openResolveModal(event.row);
+    if (event.action.id === 'dispute') this.openDisputeModal(event.row);
+    if (event.action.id === 'resolveDispute') this.openResolveDisputeModal(event.row);
+    if (event.action.id === 'viewGrn') this.openGrnDetails(event.row);
+    if (event.action.id === 'viewLpo') this.openLpoDetails(event.row);
   }
 
   openInitiateHoldModal(row: any): void {
-    const dialogRef = this.dialog.open(CreateStockHoldComponent, {
-      width: '600px',
-      maxWidth: '90vw',
+    this.dialog.open(CreateStockHoldComponent, {
+      width: '680px',
+      maxWidth: '95vw',
       disableClose: true,
       data: {
         grnId: row.grnId,
         itemIndex: row.itemIndex,
         itemDescription: row.itemDescription,
-        rejectedQty: row.rejectedQty
+        rejectedQty: row.rejectedQty,
+        rejectionReason: row.rejectionReason,
       }
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
+    }).afterClosed().subscribe((result) => {
       if (result) {
         this.getRejections();
         this.loadStockHolds();
@@ -223,206 +246,228 @@ export class GrnStockHoldsComponent implements OnInit {
     });
   }
 
-  // ---------- Stock Holds tab ----------
-
-  private static readonly LOGISTICS_LABELS: Record<string, string> = {
-    PhysicalReturn: 'Physical Return',
-    SupplierPickup: 'Supplier Pickup',
-    Courier: 'Courier',
-    NoPhysicalReturn: 'No Physical Return'
-  };
-
-  private static readonly RESOLUTION_LABELS: Record<string, string> = {
-    Replacement: 'Replacement',
-    AlternateSupplierSourcing: 'Alternate Supplier Sourcing',
-    CreditOnly: 'Credit Only',
-    Disposed: 'Disposed'
-  };
-
-  private static readonly DISPUTE_LABELS: Record<string, string> = {
-    None: 'No Dispute',
-    SupplierDisputed: 'Supplier Disputed',
-    DisputeResolved: 'Dispute Resolved'
-  };
-
-  private static readonly STATUS_LABELS: Record<string, string> = {
-    AwaitingReturn: 'Awaiting Return',
-    AwaitingReplacement: 'Awaiting Replacement',
-    PartiallyResolved: 'Partially Resolved',
-    Resolved: 'Resolved',
-    Disposed: 'Disposed'
-  };
-
-  logisticsLabel(value: string): string {
-    return GrnStockHoldsComponent.LOGISTICS_LABELS[value] || value || '-';
-  }
-
-  resolutionLabel(value: string): string {
-    return GrnStockHoldsComponent.RESOLUTION_LABELS[value] || (value ? value : 'Not decided yet');
-  }
-
-  disputeLabel(value: string): string {
-    return GrnStockHoldsComponent.DISPUTE_LABELS[value] || value || '-';
-  }
-
-  statusLabel(value: string): string {
-    return GrnStockHoldsComponent.STATUS_LABELS[value] || value || '-';
-  }
-
-  setupHoldsColumns(): void {
-    this.holdsTableColumns = [
-      { key: 'holdNo', label: 'Hold No', type: 'text' },
-      {
-        key: 'grnId.grnNo',
-        label: 'GRN ID',
-        type: 'text',
-        cellRenderer: (item: any) => item?.grnId?.grnNo || '-',
-        cellClass: 'text-violet-600 font-medium',
-        clickable: true,
-        clickableValue: (item: any) => !!item?.grnId,
-        clickFunction: (item: any) => this.openGrnDetails(item)
-      },
-      { key: 'supplierId.supplierName', label: 'Supplier', type: 'text' },
-      { key: 'itemDescription', label: 'Item', type: 'text' },
-      { key: 'rejectedQty', label: 'Rejected Qty', type: 'text' },
-      { key: 'resolvedQty', label: 'Resolved Qty', type: 'text' },
-      { key: 'unresolvedQty', label: 'Unresolved Qty', type: 'text' },
-      { key: 'logisticsType', label: 'Logistics', type: 'text', cellRenderer: (item: any) => this.logisticsLabel(item?.logisticsType) },
-      { key: 'resolutionType', label: 'Resolution', type: 'text', cellRenderer: (item: any) => this.resolutionLabel(item?.resolutionType) },
-      { key: 'disputeStatus', label: 'Dispute', type: 'text', cellRenderer: (item: any) => this.disputeLabel(item?.disputeStatus) },
-      { key: 'status', label: 'Status', type: 'text', cellRenderer: (item: any) => this.statusLabel(item?.status) },
-      {
-        key: 'actions',
-        label: 'Actions',
-        type: 'action',
-        headerClass: '!text-center',
-        actions: [
-          {
-            icon: 'heroCheckCircle',
-            tooltip: 'Resolve',
-            action: 'resolve',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-green-200 hover:bg-green-50 flex justify-center items-center text-green-600',
-            condition: (item: any) => this.canInitiateHold() && item?.unresolvedQty > 0 && item?.disputeStatus !== 'SupplierDisputed'
-          },
-          {
-            icon: 'heroFlag',
-            tooltip: 'Mark Supplier Disputed',
-            action: 'dispute',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-red-200 hover:bg-red-50 flex justify-center items-center text-red-600',
-            condition: (item: any) => this.canInitiateHold() && item?.disputeStatus === 'None'
-          },
-          {
-            icon: 'heroShieldCheck',
-            tooltip: 'Resolve Dispute',
-            action: 'resolveDispute',
-            buttonClass: 'cursor-pointer w-9 h-9 rounded-full border border-blue-200 hover:bg-blue-50 flex justify-center items-center text-blue-600',
-            condition: (item: any) => this.canInitiateHold() && item?.disputeStatus === 'SupplierDisputed'
-          }
-        ]
-      }
-    ];
-
-    this.holdsDefaultColumns = [
-      'holdNo', 'grnId.grnNo', 'supplierId.supplierName', 'itemDescription', 'rejectedQty',
-      'resolvedQty', 'unresolvedQty', 'logisticsType', 'resolutionType', 'disputeStatus', 'status', 'actions'
-    ];
-  }
-
-  loadStockHolds(): void {
-    this.holdsIsLoading.set(true);
-    this.stockHoldService.getStockHolds().subscribe({
-      next: (response) => {
-        if (response.success) {
-          this.holdsTableData.set(response.data || []);
-          this.holdsTotalItems.set((response.data || []).length);
-          this.holdsIsEmpty.set((response.data || []).length === 0);
-        }
-        this.holdsIsLoading.set(false);
-      },
-      error: () => {
-        this.notificationService.error('Failed to load stock holds');
-        this.holdsIsLoading.set(false);
-      }
-    });
-  }
-
-  onHoldsActionClick(event: { action: string, item: any, event: Event }): void {
-    event.event?.stopPropagation?.();
-    if (event.action === 'resolve') {
-      this.openResolveModal(event.item);
-    } else if (event.action === 'dispute') {
-      this.openDisputeModal(event.item);
-    } else if (event.action === 'resolveDispute') {
-      this.openResolveDisputeModal(event.item);
-    }
-  }
-
   openResolveModal(item: any): void {
-    const dialogRef = this.dialog.open(ResolveStockHoldComponent, {
+    this.dialog.open(ResolveStockHoldComponent, {
       width: '600px',
       maxWidth: '90vw',
       disableClose: true,
       data: { stockHold: item }
-    });
+    }).afterClosed().subscribe((result) => result && this.loadStockHolds());
+  }
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadStockHolds();
-      }
-    });
+  openDisputeModal(item: any): void {
+    this.dialog.open(DisputeStockHoldComponent, {
+      width: '520px',
+      maxWidth: '90vw',
+      disableClose: true,
+      data: { stockHold: item }
+    }).afterClosed().subscribe((result) => result && this.loadStockHolds());
+  }
+
+  openResolveDisputeModal(item: any): void {
+    this.dialog.open(ResolveDisputeComponent, {
+      width: '520px',
+      maxWidth: '90vw',
+      disableClose: true,
+      data: { stockHold: item }
+    }).afterClosed().subscribe((result) => result && this.loadStockHolds());
   }
 
   openGrnDetails(item: any): void {
     if (!item?.grnId) return;
     const grnId = typeof item.grnId === 'string' ? item.grnId : item.grnId._id;
-    this.dialog.open(ViewGrnDetailsModalComponent, {
-      data: { grnId },
-      width: '1200px',
-      maxWidth: '95vw',
-      maxHeight: '90vh'
-    });
+    this.dialog.open(ViewGrnDetailsModalComponent, { data: { grnId }, width: '1200px', maxWidth: '95vw', maxHeight: '90vh' });
   }
 
   openLpoDetails(row: any): void {
-    const poNo = row?.purchaseOrderId?.poNo;
+    const poNo = this.poNo(row);
     if (!poNo) return;
-    this.dialog.open(ViewPoDetailsModalComponent, {
-      data: { poNo },
-      width: '1200px',
-      maxWidth: '95vw',
-      maxHeight: '90vh'
-    });
+    this.dialog.open(ViewPoDetailsModalComponent, { data: { poNo }, width: '1200px', maxWidth: '95vw', maxHeight: '90vh' });
   }
 
-  openDisputeModal(item: any): void {
-    const dialogRef = this.dialog.open(DisputeStockHoldComponent, {
-      width: '520px',
-      maxWidth: '90vw',
-      disableClose: true,
-      data: { stockHold: item }
-    });
+  title = (row: ReturnRecord): string => this.displayReturnNo(row);
+  subtitle = (row: ReturnRecord): string => [row?.supplierId?.supplierName, row?.grnId?.grnNo ? `GRN ${row.grnId.grnNo}` : ''].filter(Boolean).join('  •  ');
+  pendingTitle = (row: ReturnRecord): string => row?.grnNo || 'Pending Rejection';
+  pendingSubtitle = (row: ReturnRecord): string => [row?.purchaseOrderId?.supplierId?.supplierName, row?.purchaseOrderId?.poNo ? `LPO ${row.purchaseOrderId.poNo}` : ''].filter(Boolean).join('  •  ');
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadStockHolds();
-      }
-    });
+  overviewSections(row: ReturnRecord): DetailOverviewSection[] {
+    return [
+      {
+        title: 'Return',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Return No', value: this.displayReturnNo(row), numeric: true },
+          { type: 'field', label: 'Status', value: this.statusLabel(row.status), pill: true, tone: this.statusTone(row.status) },
+          { type: 'field', label: 'GRN', value: row?.grnId?.grnNo || 'N/A' },
+          { type: 'field', label: 'Supplier', value: row?.supplierId?.supplierName || 'N/A' },
+          { type: 'field', label: 'Vendor Authorization', value: row?.vendorAuthorizationNo || 'N/A' },
+          { type: 'field', label: 'Created', value: this.formatDate(row?.createdAt) },
+        ],
+      },
+      {
+        title: 'Reason',
+        fields: [
+          { type: 'field', label: 'Return Reason', value: row?.returnReason || row?.disputeNote || 'N/A', noHover: true },
+          { type: 'field', label: 'Notes', value: row?.returnNotes || 'N/A', noHover: true },
+        ],
+      },
+    ];
   }
 
-  openResolveDisputeModal(item: any): void {
-    const dialogRef = this.dialog.open(ResolveDisputeComponent, {
-      width: '520px',
-      maxWidth: '90vw',
-      disableClose: true,
-      data: { stockHold: item }
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result) {
-        this.loadStockHolds();
-      }
-    });
+  logisticsSections(row: ReturnRecord): DetailOverviewSection[] {
+    return [{
+      title: 'Logistics',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'Return Method', value: this.logisticsLabel(row.logisticsType), pill: true, tone: 'info' },
+        { type: 'field', label: 'Dispatch Date', value: this.formatDate(row.dispatchDate) },
+        { type: 'field', label: 'Courier', value: row.courierName || 'N/A' },
+        { type: 'field', label: 'Tracking Ref', value: row.trackingRef || 'N/A', numeric: true },
+        { type: 'field', label: 'Quarantine Stock', value: row.stockEntryId ? 'Created' : 'Not required', pill: true, tone: row.stockEntryId ? 'warn' : 'neutral' },
+      ],
+    }];
   }
 
-  onRowClick(_row: any): void {}
+  resolutionSections(row: ReturnRecord): DetailOverviewSection[] {
+    const financial = row?.financialResolution;
+    return [{
+      title: 'Resolution',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'Vendor Resolution', value: this.resolutionLabel(row.resolutionType), pill: !!row.resolutionType, tone: row.resolutionType ? 'good' : 'neutral' },
+        { type: 'field', label: 'Dispute', value: this.disputeLabel(row.disputeStatus), pill: true, tone: row.disputeStatus === 'SupplierDisputed' ? 'bad' : 'neutral' },
+        { type: 'field', label: 'Resolved Qty', value: row.resolvedQty || 0, numeric: true },
+        { type: 'field', label: 'Open Qty', value: row.unresolvedQty || 0, numeric: true },
+        { type: 'field', label: 'Financial Resolution', value: financial?.type || 'N/A' },
+        { type: 'field', label: 'Adjusted Amount', value: financial?.adjustedAmount ?? 'N/A', numeric: true },
+      ],
+    }];
+  }
+
+  itemRows(row: ReturnRecord): Record<string, any>[] {
+    return [{
+      partNo: row.partNo || '-',
+      description: row.itemDescription || '-',
+      returnQty: row.rejectedQty || 0,
+      resolvedQty: row.resolvedQty || 0,
+      unresolvedQty: row.unresolvedQty || 0,
+      reason: row.returnReason || '-',
+    }];
+  }
+
+  resolutionRows(row: ReturnRecord): Record<string, any>[] {
+    return (row.resolutionHistory || []).map((h: any) => ({
+      date: h.date,
+      type: this.resolutionLabel(h.resolutionType),
+      qty: h.qty,
+      note: h.note || '-',
+    }));
+  }
+
+  documents(row: ReturnRecord): DetailDocument[] {
+    return [
+      ...(row.attachments || []).map((file: any) => ({
+        id: file.fileName || file.originalname,
+        name: file.originalname || file.fileName || 'Attachment',
+        kind: this.fileKind(file.originalname || file.fileName),
+        date: file.uploadedAt,
+      })),
+      { id: 'grn', name: row?.grnId?.grnNo ? `GRN ${row.grnId.grnNo}` : 'Linked GRN', kind: 'GRN' },
+      ...(this.poNo(row) ? [{ id: 'lpo', name: `LPO ${this.poNo(row)}`, kind: 'LPO' }] : []),
+    ];
+  }
+
+  onOpenDocument(row: ReturnRecord, doc: DetailDocument): void {
+    if (doc.id === 'grn') this.openGrnDetails(row);
+    if (doc.id === 'lpo') this.openLpoDetails(row);
+  }
+
+  eventsRows(row: ReturnRecord): Record<string, any>[] {
+    const rows: Record<string, any>[] = [
+      { date: row.createdAt, event: 'Purchase return created', by: this.formatEmployeeName(row.initiatedBy), note: row.returnReason || row.itemDescription },
+    ];
+    if (row.disputedAt) rows.push({ date: row.disputedAt, event: 'Supplier dispute raised', by: this.formatEmployeeName(row.disputedBy), note: row.disputeNote || '-' });
+    (row.resolutionHistory || []).forEach((h: any) => rows.push({ date: h.date, event: this.resolutionLabel(h.resolutionType), by: this.formatEmployeeName(h.actionBy), note: h.note || `${h.qty} qty resolved` }));
+    if (row.disputeResolvedAt) rows.push({ date: row.disputeResolvedAt, event: 'Supplier dispute resolved', by: this.formatEmployeeName(row.disputeResolvedBy), note: row.disputeResolutionNote || '-' });
+    return rows;
+  }
+
+  readonly eventsColumns: DetailTableColumn[] = [
+    { key: 'date', label: 'Date', type: 'date' },
+    { key: 'event', label: 'Event' },
+    { key: 'by', label: 'By' },
+    { key: 'note', label: 'Note', wrap: true },
+  ];
+
+  pendingOverviewSections(row: ReturnRecord): DetailOverviewSection[] {
+    return [{
+      title: 'Rejected GRN Item',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'GRN No', value: row.grnNo, numeric: true },
+        { type: 'field', label: 'LPO No', value: row?.purchaseOrderId?.poNo || 'N/A' },
+        { type: 'field', label: 'Supplier', value: row?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
+        { type: 'field', label: 'Warehouse', value: row?.warehouse?.wareHouseName || 'N/A' },
+        { type: 'field', label: 'Item', value: row.itemDescription || 'N/A' },
+        { type: 'field', label: 'Rejected Qty', value: row.rejectedQty || 0, numeric: true, pill: true, tone: 'warn' },
+        { type: 'field', label: 'Reason', value: row.rejectionReason || 'N/A' },
+      ],
+    }];
+  }
+
+  logisticsLabel(value: string): string {
+    return { PhysicalReturn: 'Physical Return', SupplierPickup: 'Supplier Pickup', Courier: 'Courier', NoPhysicalReturn: 'No Physical Return' }[value] || value || '-';
+  }
+
+  resolutionLabel(value: string): string {
+    return { Replacement: 'Replacement', AlternateSupplierSourcing: 'Alternate Supplier Sourcing', CreditOnly: 'Credit Only', Disposed: 'Disposed' }[value] || (value ? value : 'Not decided yet');
+  }
+
+  disputeLabel(value: string): string {
+    return { None: 'No Dispute', SupplierDisputed: 'Supplier Disputed', DisputeResolved: 'Dispute Resolved' }[value] || value || '-';
+  }
+
+  statusLabel(value: string): string {
+    return { AwaitingReturn: 'Awaiting Return', AwaitingReplacement: 'Awaiting Replacement', PartiallyResolved: 'Partially Resolved', Resolved: 'Resolved', Disposed: 'Disposed' }[value] || value || '-';
+  }
+
+  statusTone(value: string): 'neutral' | 'info' | 'warn' | 'good' | 'bad' {
+    if (value === 'Resolved') return 'good';
+    if (value === 'Disposed') return 'neutral';
+    if (value === 'PartiallyResolved') return 'info';
+    return 'warn';
+  }
+
+  displayReturnNo(row: ReturnRecord): string {
+    return row?.returnNo || String(row?.holdNo || '').replace(/^SH-/, 'PR-') || 'Purchase Return';
+  }
+
+  poNo(row: any): string {
+    return row?.grnId?.purchaseOrderId?.poNo || row?.purchaseOrderId?.poNo || '';
+  }
+
+  formatPartNumber(partNo: any): string {
+    if (!partNo) return '-';
+    if (typeof partNo === 'string') return partNo;
+    return partNo.partNo || '-';
+  }
+
+  formatDate(date: any): string {
+    return date ? this.datePipe.transform(date, 'dd MMM yyyy') || 'N/A' : 'N/A';
+  }
+
+  formatEmployeeName(employee: any): string {
+    if (!employee) return 'N/A';
+    if (typeof employee === 'string') return employee;
+    return [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim() || employee.userName || 'N/A';
+  }
+
+  fileKind(name?: string): string {
+    const ext = (name || '').split('.').pop();
+    return ext ? ext.toUpperCase().slice(0, 4) : 'FILE';
+  }
+
+  private refreshViewCounts(): void {
+    this.views = this.views.map((v) => ({ ...v, count: v.id === 'all' ? this.returnRows.length : undefined, hideCount: v.id !== 'all' }));
+  }
 }

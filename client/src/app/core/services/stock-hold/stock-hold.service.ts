@@ -14,6 +14,9 @@ export interface CreateStockHoldPayload {
   trackingRef?: string;
   courierName?: string;
   dispatchDate?: string;
+  vendorAuthorizationNo?: string;
+  returnReason?: string;
+  returnNotes?: string;
 }
 
 export interface ResolveStockHoldPayload {

@@ -1,14 +1,15 @@
-import { CommonModule } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { CommonModule, DatePipe } from '@angular/common';
+import { Component, OnInit, ViewChild, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { MatMenuModule } from '@angular/material/menu';
 import { Router, RouterModule } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { PaginationService } from 'src/app/core/services/pagination.service';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
-import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { TableColumn } from 'src/app/shared/components/table/table.model';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import { DataGridBreadcrumb, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ViewPurchaseRequestDetailsModalComponent, ViewPurchaseRequestDetailsModalData } from '../view-purchase-request-details-modal/view-purchase-request-details-modal.component';
 import { ViewLpoDetailsModalComponent, ViewLpoDetailsModalData } from '../view-lpo-details-modal/view-lpo-details-modal.component';
@@ -16,148 +17,231 @@ import { ViewLpoDetailsModalComponent, ViewLpoDetailsModalData } from '../view-l
 @Component({
   selector: 'app-grn-list',
   standalone: true,
-  imports: [TableComponent, CommonModule, RouterModule, ButtonComponent, IconsModule, MatMenuModule],
+  imports: [
+    CommonModule,
+    RouterModule,
+    IconsModule,
+    DataGridComponent,
+    DetailOverviewComponent,
+    DetailTableComponent,
+    ActionButtonComponent,
+  ],
   templateUrl: './grn-list.component.html',
   styleUrl: './grn-list.component.css',
-  providers: [PaginationService]
+  providers: [DatePipe],
 })
 export class GrnListComponent implements OnInit {
-  private paginationService = inject(PaginationService);
+  @ViewChild('grid') grid!: DataGridComponent<any>;
+
   private grnService = inject(GrnService);
   private notificationService = inject(ToastrService);
   private router = inject(Router);
+  private datePipe = inject(DatePipe);
 
-  tableData = signal<any[]>([]);
-  tableColumns: TableColumn[] = [];
-  defaultColumns: string[] = [];
+  rows: any[] = [];
+  total = 0;
+  isLoading = false;
+  page = 1;
+  row = 15;
+  searchQuery = '';
+  density: 'comfortable' | 'compact' = 'comfortable';
 
-  isLoading = signal<boolean>(false);
-  isEmpty = signal<boolean>(false);
-  totalItems = signal<number>(0);
+  columns: DataGridColumn<any>[] = [];
+  rowActions: DataGridRowAction<any>[] = [];
+  views: DataGridView<any>[] = [{ id: 'all', label: 'All' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'GRN' }];
+  detailTabs: DataGridDetailTab[] = [
+    { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'items', label: 'Items', icon: 'card' },
+    { id: 'documents', label: 'Documents', icon: 'eye' },
+  ];
+
+  readonly itemColumns: DetailTableColumn[] = [
+    { key: 'partNo', label: 'Part No.' },
+    { key: 'itemDescription', label: 'Description' },
+    { key: 'orderedQty', label: 'Ordered', type: 'number', total: true },
+    { key: 'receivedQty', label: 'Received', type: 'number', total: true },
+    { key: 'acceptedQty', label: 'Accepted', type: 'number', total: true },
+    { key: 'rejectedQty', label: 'Rejected', type: 'number', total: true },
+  ];
 
   constructor(private _dialog: MatDialog) {}
 
   ngOnInit(): void {
-    this.setupTableColumns();
+    this.buildColumns();
+    this.buildRowActions();
     this.getGRNs();
   }
 
-  setupTableColumns(): void {
-    this.tableColumns = [
-      {
-        key: 'grnDate',
-        label: 'GRN Date',
-        type: 'date',
-        pipeParams: 'dd/MM/yyyy',
-        sortable: true,
-      },
-      {
-        key: 'jobId.jobId',
-        label: 'Job No',
-        type: 'text',
-        cellRenderer: (item: any) => item?.jobId?.jobId || 'N/A',
-      },
-      {
-        key: 'grnNo',
-        label: 'GRN No',
-        type: 'text',
-      },
-      {
-        key: 'purchaseOrderId.purchaseId.purchaseNo',
-        label: 'PR No',
-        type: 'text',
-        clickable: true,
-        clickFunction: (item: any) => this.viewPurchaseRequestDetails(item),
-        clickableValue: (item: any) => !!item?.purchaseOrderId?.purchaseId,
-      },
-      {
-        key: 'purchaseOrderId.poNo',
-        label: 'LPO No',
-        type: 'text',
-        clickable: true,
-        clickFunction: (item: any) => this.viewLpoDetails(item),
-        clickableValue: (item: any) => !!item?.purchaseOrderId,
-      },
-      {
-        key: 'purchaseOrderId.supplierId.supplierName',
-        label: 'Supplier Name',
-        type: 'text',
-      },
-      {
-        key: 'warehouse.wareHouseName',
-        label: 'Warehouse',
-        type: 'text',
-      },
-      {
-        key: 'acceptedQty',
-        label: 'Accepted Qty',
-        type: 'text',
-        cellRenderer: (item: any) => {
-          if (!item.items || !Array.isArray(item.items)) return '0';
-          const totalQty = item.items.reduce((sum: number, i: any) => sum + (i.acceptedQty || 0), 0);
-          return totalQty.toString();
-        }
-      },
-      {
-        key: 'rejectedQty',
-        label: 'Rejected Qty',
-        type: 'text',
-        cellRenderer: (item: any) => {
-          if (!item.items || !Array.isArray(item.items)) return '0';
-          const totalQty = item.items.reduce((sum: number, i: any) => sum + (i.rejectedQty || 0), 0);
-          return totalQty.toString();
-        }
-      },
-      {
-        key: 'createdBy.firstName',
-        label: 'Created By',
-        type: 'text',
-        cellRenderer: (item: any) => this.formatEmployeeName(item?.createdBy),
-      },
-    ];
-
-    this.defaultColumns = [
-      'grnDate', 'jobId.jobId', 'grnNo', 'purchaseOrderId.purchaseId.purchaseNo', 'purchaseOrderId.poNo',
-      'purchaseOrderId.supplierId.supplierName', 'warehouse.wareHouseName', 'acceptedQty', 'rejectedQty', 'createdBy.firstName'
+  private buildColumns(): void {
+    this.columns = [
+      { key: 'grnDate', label: 'GRN Date', type: 'date', sortable: true, width: '130px' },
+      { key: 'grnNo', label: 'GRN No', sortable: true },
+      { key: 'jobId', label: 'Job No', valueGetter: (r) => r?.jobId?.jobId || r?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
+      { key: 'purchaseNo', label: 'PR No', valueGetter: (r) => r?.purchaseOrderId?.purchaseId?.purchaseNo || 'N/A' },
+      { key: 'poNo', label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
+      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
+      { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
+      { key: 'acceptedQty', label: 'Accepted Qty', type: 'number', align: 'right', valueGetter: (r) => this.totalAcceptedQty(r) },
+      { key: 'rejectedQty', label: 'Rejected Qty', type: 'number', align: 'right', valueGetter: (r) => this.totalRejectedQty(r) },
+      { key: 'createdBy', label: 'Created By', valueGetter: (r) => this.formatEmployeeName(r?.createdBy) },
     ];
   }
 
-  getGRNs(): void {
-    this.isLoading.set(true);
-    const currentState = this.paginationService.paginationState();
+  private buildRowActions(): void {
+    this.rowActions = [
+      { id: 'view', label: 'Open GRN', icon: 'eye', quick: true, panel: true },
+      {
+        id: 'purchaseRequest',
+        label: 'View PR',
+        icon: 'card',
+        quick: true,
+        panel: true,
+        hidden: (r) => !r?.purchaseOrderId?.purchaseId,
+      },
+      {
+        id: 'lpo',
+        label: 'View LPO',
+        icon: 'wallet',
+        quick: true,
+        panel: true,
+        hidden: (r) => !r?.purchaseOrderId,
+      },
+    ];
+  }
 
+  getGRNs(query?: Partial<DataGridQuery>): void {
+    this.isLoading = true;
     const params: any = {
-      page: currentState.page,
-      row: currentState.row,
+      page: query?.page ?? this.page,
+      row: query?.pageSize ?? this.row,
+      search: query?.search ?? this.searchQuery,
     };
+
+    this.page = params.page;
+    this.row = params.row;
+    this.searchQuery = params.search || '';
 
     this.grnService.getAllGRNs(params).subscribe({
       next: (response) => {
         if (response.success) {
-          this.tableData.set(response.data);
-          this.totalItems.set(response.pagination.total);
-          this.isEmpty.set(response.data.length === 0);
+          this.rows = response.data || [];
+          this.total = response.pagination?.total || 0;
+          this.refreshViewCounts();
         }
-        this.isLoading.set(false);
+        this.isLoading = false;
       },
       error: (error) => {
         console.error('Error fetching GRNs:', error);
         this.notificationService.error('Failed to load GRNs');
-        this.isLoading.set(false);
-      }
+        this.isLoading = false;
+      },
     });
   }
 
-  formatEmployeeName(employee: any): string {
-    if (!employee) return 'N/A';
-    if (typeof employee === 'string') return employee;
-    const name = [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim();
-    return name || employee.userName || employee.email || 'N/A';
+  onQueryChange(query: DataGridQuery): void {
+    this.getGRNs(query);
   }
 
-  onRowClick(row: any): void {
-    this.viewDetails(row);
+  onViewChange(view: DataGridView<any>): void {
+    this.views = this.views.map((v) => ({ ...v, count: v.id === view.id ? this.total : undefined }));
   }
+
+  onCreateGRN(): void {
+    this.router.navigate(['/grn/create-grn']);
+  }
+
+  onRowAction(event: DataGridRowActionEvent<any>): void {
+    switch (event.action.id) {
+      case 'view':
+        this.viewDetails(event.row);
+        break;
+      case 'purchaseRequest':
+        this.viewPurchaseRequestDetails(event.row);
+        break;
+      case 'lpo':
+        this.viewLpoDetails(event.row);
+        break;
+    }
+  }
+
+  openDetailTab(row: any, tab: string): void {
+    if (!this.grid) return;
+    this.grid.activeTab = tab;
+    this.grid.openRow(row);
+  }
+
+  title = (row: any): string => row?.grnNo || 'GRN';
+  subtitle = (row: any): string => [row?.purchaseOrderId?.supplierId?.supplierName, row?.purchaseOrderId?.poNo ? `LPO ${row.purchaseOrderId.poNo}` : '']
+    .filter(Boolean)
+    .join('  •  ');
+
+  overviewSections(row: any): DetailOverviewSection[] {
+    return [
+      {
+        title: 'Receipt',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'GRN No', value: row?.grnNo, numeric: true },
+          { type: 'field', label: 'GRN Date', value: this.formatDate(row?.grnDate) },
+          { type: 'field', label: 'Supplier', value: row?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
+          { type: 'field', label: 'Warehouse', value: row?.warehouse?.wareHouseName || 'N/A' },
+          { type: 'field', label: 'Received By', value: this.formatEmployeeName(row?.receivedBy) || 'N/A' },
+          { type: 'field', label: 'Created By', value: this.formatEmployeeName(row?.createdBy) || 'N/A' },
+        ],
+      },
+      {
+        title: 'Linked Documents',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Purchase Request', value: row?.purchaseOrderId?.purchaseId?.purchaseNo || 'N/A', pill: !!row?.purchaseOrderId?.purchaseId, tone: 'info' },
+          { type: 'field', label: 'LPO No', value: row?.purchaseOrderId?.poNo || 'N/A', pill: !!row?.purchaseOrderId, tone: 'neutral' },
+          { type: 'field', label: 'Job No', value: row?.jobId?.jobId || row?.purchaseOrderId?.purchaseId?.jobId?.jobId || 'N/A' },
+          { type: 'field', label: 'Supplier Invoice', value: row?.supplierInvoiceNo || 'N/A' },
+          { type: 'field', label: 'Invoice Date', value: this.formatDate(row?.supplierInvoiceDate) },
+          { type: 'field', label: 'Delivery Note', value: row?.supplierDeliveryNoteNo || 'N/A' },
+        ],
+      },
+      {
+        title: 'Quantity Summary',
+        columns: '2',
+        fields: [
+          { type: 'field', label: 'Ordered Qty', value: this.totalOrderedQty(row), numeric: true },
+          { type: 'field', label: 'Received Qty', value: this.totalReceivedQty(row), numeric: true },
+          { type: 'field', label: 'Accepted Qty', value: this.totalAcceptedQty(row), numeric: true, pill: true, tone: 'good' },
+          { type: 'field', label: 'Rejected Qty', value: this.totalRejectedQty(row), numeric: true, pill: this.totalRejectedQty(row) > 0, tone: this.totalRejectedQty(row) > 0 ? 'warn' : 'neutral' },
+        ],
+      },
+    ];
+  }
+
+  itemRows(row: any): Record<string, any>[] {
+    return (row?.items || []).map((item: any) => ({
+      partNo: this.formatPartNumber(item?.partNo),
+      itemDescription: item?.itemDescription || '-',
+      orderedQty: item?.orderedQty || 0,
+      receivedQty: item?.receivedQty || 0,
+      acceptedQty: item?.acceptedQty || 0,
+      rejectedQty: this.getRejectedQty(item),
+      remarks: item?.remarks || '-',
+    }));
+  }
+
+  documentRows(row: any): Record<string, any>[] {
+    return [
+      { type: 'Supplier Invoice', number: row?.supplierInvoiceNo || 'N/A', date: this.formatDate(row?.supplierInvoiceDate), files: row?.supplierInvoices?.length || 0 },
+      { type: 'Delivery Note', number: row?.supplierDeliveryNoteNo || 'N/A', date: this.formatDate(row?.grnDate), files: row?.supplierDeliveryNotes?.length || 0 },
+      { type: 'Purchase Request', number: row?.purchaseOrderId?.purchaseId?.purchaseNo || 'N/A', date: this.formatDate(row?.purchaseOrderId?.purchaseId?.date), files: '-' },
+      { type: 'LPO', number: row?.purchaseOrderId?.poNo || 'N/A', date: this.formatDate(row?.purchaseOrderId?.poDate), files: '-' },
+    ];
+  }
+
+  readonly documentColumns: DetailTableColumn[] = [
+    { key: 'type', label: 'Document' },
+    { key: 'number', label: 'Number' },
+    { key: 'date', label: 'Date' },
+    { key: 'files', label: 'Files' },
+  ];
 
   viewPurchaseRequestDetails(grn: any): void {
     const purchaseRequest = grn?.purchaseOrderId?.purchaseId;
@@ -170,12 +254,12 @@ export class GrnListComponent implements OnInit {
 
     const modalData: ViewPurchaseRequestDetailsModalData = {
       purchaseId,
-      purchaseOrderId: grn?.purchaseOrderId?._id || grn?.purchaseOrderId
+      purchaseOrderId: grn?.purchaseOrderId?._id || grn?.purchaseOrderId,
     };
     this._dialog.open(ViewPurchaseRequestDetailsModalComponent, {
       data: modalData,
       width: '1000px',
-      maxHeight: '90vh'
+      maxHeight: '90vh',
     });
   }
 
@@ -191,7 +275,7 @@ export class GrnListComponent implements OnInit {
     this._dialog.open(ViewLpoDetailsModalComponent, {
       data: modalData,
       width: '1000px',
-      maxHeight: '90vh'
+      maxHeight: '90vh',
     });
   }
 
@@ -203,63 +287,55 @@ export class GrnListComponent implements OnInit {
     }
 
     this.router.navigate(['/grn/view-grn', grnId], {
-      queryParams: { returnUrl: this.router.url }
+      queryParams: { returnUrl: this.router.url },
     });
   }
 
-  onSearch(searchInput: any): void {
-    const searchTerm = typeof searchInput === 'string' ? searchInput : searchInput?.target?.value || '';
-    this.isLoading.set(true);
-    const currentState = this.paginationService.paginationState();
-
-    this.paginationService.updatePaginationState({
-      page: 1,
-      row: currentState.row,
-      total: currentState.total
-    });
-
-    const params: any = {
-      page: 1,
-      row: currentState.row,
-      search: searchTerm
-    };
-
-    this.grnService.getAllGRNs(params).subscribe({
-      next: (response) => {
-        if (response.success) {
-          this.tableData.set(response.data);
-          this.totalItems.set(response.pagination.total);
-          this.isEmpty.set(this.tableData().length === 0);
-        }
-        this.isLoading.set(false);
-      },
-      error: (error) => {
-        this.notificationService.error('Failed to search GRNs');
-        console.error('Error searching GRNs:', error);
-        this.isLoading.set(false);
-      }
-    });
+  formatEmployeeName(employee: any): string {
+    if (!employee) return 'N/A';
+    if (typeof employee === 'string') return employee;
+    const name = [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim();
+    return name || employee.userName || employee.email || 'N/A';
   }
 
-  onPageChange(page: any): void {
-    const pageNumber = typeof page === 'number' ? page : parseInt(page);
-    const currentState = this.paginationService.paginationState();
-    this.paginationService.updatePaginationState({
-      page: pageNumber,
-      row: currentState.row,
-      total: currentState.total
-    });
-    this.getGRNs();
+  formatPartNumber(partNo: any): string {
+    if (!partNo) return '-';
+    if (typeof partNo === 'string') return partNo;
+    return partNo.partNo || '-';
   }
 
-  onRowsPerPageChange(rows: any): void {
-    const rowCount = typeof rows === 'number' ? rows : parseInt(rows);
-    const currentState = this.paginationService.paginationState();
-    this.paginationService.updatePaginationState({
-      page: 1,
-      row: rowCount,
-      total: currentState.total
-    });
-    this.getGRNs();
+  formatDate(date: any): string {
+    if (!date) return 'N/A';
+    return this.datePipe.transform(date, 'dd MMM yyyy') || 'N/A';
+  }
+
+  getRejectedQty(item: any): number {
+    if (item?.rejectedQty !== undefined && item?.rejectedQty !== null) return item.rejectedQty;
+    return Math.max(0, (item?.receivedQty || 0) - (item?.acceptedQty || 0));
+  }
+
+  private sumItems(row: any, selector: (item: any) => number): number {
+    if (!Array.isArray(row?.items)) return 0;
+    return row.items.reduce((sum: number, item: any) => sum + (selector(item) || 0), 0);
+  }
+
+  totalOrderedQty(row: any): number {
+    return this.sumItems(row, (item) => item.orderedQty);
+  }
+
+  totalReceivedQty(row: any): number {
+    return this.sumItems(row, (item) => item.receivedQty);
+  }
+
+  totalAcceptedQty(row: any): number {
+    return this.sumItems(row, (item) => item.acceptedQty);
+  }
+
+  totalRejectedQty(row: any): number {
+    return this.sumItems(row, (item) => this.getRejectedQty(item));
+  }
+
+  private refreshViewCounts(): void {
+    this.views = this.views.map((v) => ({ ...v, count: v.id === 'all' ? this.total : undefined }));
   }
 }

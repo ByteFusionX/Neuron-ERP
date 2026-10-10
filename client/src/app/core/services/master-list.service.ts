@@ -3,14 +3,17 @@ import { Injectable } from '@angular/core';
 import { Observable, catchError, map, of } from 'rxjs';
 import { environment } from 'src/environments/environment';
 
-export type MasterListName = 'paymentTerms' | 'tax' | 'unit' | 'source' | 'industry';
+export type MasterListName = 'unit' | 'availability' | 'customerNote' | 'termsAndConditions' | 'placeOfDelivery' | 'shippingTerms' | 'paymentTerms' | 'source' | 'creditStatus' | 'currency' | 'brand';
 
 export interface MasterListItem {
   _id: string;
+  module?: string;
   list: MasterListName;
   label: string;
   value: number | null;
   isActive: boolean;
+  createdBy?: { firstName?: string; lastName?: string } | null;
+  createdAt?: string;
 }
 
 export interface NumberingSeries {
@@ -54,7 +57,7 @@ export class MasterListService {
     );
   }
 
-  createItem(list: MasterListName, body: { label: string; value: number | null }): Observable<{ success: boolean; data: MasterListItem }> {
+  createItem(list: MasterListName, body: { label: string; value: number | null; isActive?: boolean }): Observable<{ success: boolean; data: MasterListItem }> {
     return this.http.post<{ success: boolean; data: MasterListItem }>(`${this.api}/master-list/${list}`, body);
   }
 

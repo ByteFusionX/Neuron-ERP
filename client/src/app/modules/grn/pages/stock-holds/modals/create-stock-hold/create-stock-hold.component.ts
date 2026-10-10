@@ -37,6 +37,9 @@ export class CreateStockHoldComponent implements OnInit {
   ];
 
   holdForm: FormGroup = this.fb.group({
+    vendorAuthorizationNo: [''],
+    returnReason: [''],
+    returnNotes: [''],
     logisticsType: ['', [Validators.required]],
     trackingRef: [''],
     courierName: [''],
@@ -45,7 +48,10 @@ export class CreateStockHoldComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.holdForm.patchValue({ qty: this.data?.rejectedQty || 1 });
+    this.holdForm.patchValue({
+      qty: this.data?.rejectedQty || 1,
+      returnReason: this.data?.rejectionReason || ''
+    });
 
     this.holdForm.get('logisticsType')?.valueChanges.subscribe((value) => {
       const trackingRef = this.holdForm.get('trackingRef');
@@ -86,11 +92,14 @@ export class CreateStockHoldComponent implements OnInit {
       logisticsType: this.holdForm.value.logisticsType,
       trackingRef: this.holdForm.value.trackingRef || undefined,
       courierName: this.holdForm.value.courierName || undefined,
-      dispatchDate: this.holdForm.value.dispatchDate || undefined
+      dispatchDate: this.holdForm.value.dispatchDate || undefined,
+      vendorAuthorizationNo: this.holdForm.value.vendorAuthorizationNo || undefined,
+      returnReason: this.holdForm.value.returnReason || undefined,
+      returnNotes: this.holdForm.value.returnNotes || undefined
     }).subscribe({
       next: (response) => {
         if (response.success) {
-          this.toastr.success('Stock hold initiated');
+          this.toastr.success('Purchase return created');
           this.dialogRef.close(true);
         }
         this.isSubmitting = false;

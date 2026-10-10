@@ -6,7 +6,8 @@ const manageMasterData = requirePrivilege("portalManagement", "masterDataEdit");
 const masterListRouter = Router()
 
 masterListRouter.get('/:list', getMasterListItems)
-masterListRouter.post('/:list', manageMasterData, createMasterListItem)
+// Anyone can add an option from an item dropdown; editing, hiding and deleting need the settings privilege.
+masterListRouter.post('/:list', createMasterListItem)
 masterListRouter.put('/:list/:id', manageMasterData, updateMasterListItem)
 masterListRouter.delete('/:list/:id', manageMasterData, deleteMasterListItem)
 

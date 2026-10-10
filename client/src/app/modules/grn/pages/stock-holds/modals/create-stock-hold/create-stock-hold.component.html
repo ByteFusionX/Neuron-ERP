@@ -1,9 +1,9 @@
 <app-modal-layout
-  title="Resolve Rejected Item — Initiate Stock Hold"
+  title="Create Purchase Return"
   [onClose]="onCancel.bind(this)"
   [footerButtons]="[
     { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
-    { label: 'Initiate Hold', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
+    { label: 'Create Return', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
   ]"
   contentClass="p-6">
   <form [formGroup]="holdForm" (ngSubmit)="onSubmit()">
@@ -12,8 +12,24 @@
         {{ data?.itemDescription }} — rejected qty available to resolve: {{ data?.rejectedQty }}
       </p>
 
+      <div class="grid grid-cols-2 gap-4">
+        <app-form-field
+          label="Vendor Authorization No."
+          [control]="holdForm.get('vendorAuthorizationNo')"
+          [isSubmitted]="isSubmitting"
+          placeholder="RMA / vendor reference">
+        </app-form-field>
+
+        <app-form-field
+          label="Return Reason"
+          [control]="holdForm.get('returnReason')"
+          [isSubmitted]="isSubmitting"
+          placeholder="Defective, wrong item, damaged...">
+        </app-form-field>
+      </div>
+
       <app-form-field
-        label="Quantity to hold"
+        label="Return Quantity"
         [control]="holdForm.get('qty')"
         [isSubmitted]="isSubmitting"
         type="number"
@@ -52,6 +68,13 @@
         [isSubmitted]="isSubmitting"
         type="date"
         placeholder="Select dispatch date">
+      </app-form-field>
+
+      <app-form-field
+        label="Return Notes"
+        [control]="holdForm.get('returnNotes')"
+        [isSubmitted]="isSubmitting"
+        placeholder="Short note for supplier or internal team">
       </app-form-field>
     </div>
   </form>

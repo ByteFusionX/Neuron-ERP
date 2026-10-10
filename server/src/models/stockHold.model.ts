@@ -14,6 +14,20 @@ const resolutionHistoryEntrySchema = new Schema({
 
 const stockHoldSchema = new Schema({
     holdNo: { type: String, required: true, unique: true },
+    returnNo: { type: String, unique: true, sparse: true },
+    vendorAuthorizationNo: String,
+    returnReason: String,
+    returnNotes: String,
+    attachments: {
+        type: [{
+            fileName: String,
+            originalname: String,
+            mimetype: String,
+            size: Number,
+            uploadedAt: { type: Date, default: Date.now }
+        }],
+        default: []
+    },
     // Only set for holds with a physical quarantine (logisticsType !== 'NoPhysicalReturn')
     stockEntryId: { type: Schema.Types.ObjectId, ref: 'StockEntry' },
     grnId: { type: Schema.Types.ObjectId, ref: 'GRN' },

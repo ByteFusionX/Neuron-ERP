@@ -1,85 +1,144 @@
-<div class="mb-4 flex items-center gap-2 border-b border-slate-200">
-  <button
-    type="button"
-    class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-    [class.border-violet-600]="activeTab() === 'pending'"
-    [class.text-violet-600]="activeTab() === 'pending'"
-    [class.border-transparent]="activeTab() !== 'pending'"
-    [class.text-slate-500]="activeTab() !== 'pending'"
-    (click)="setTab('pending')"
-  >
-    Pending Rejections
-  </button>
-  <button
-    type="button"
-    class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-    [class.border-violet-600]="activeTab() === 'holds'"
-    [class.text-violet-600]="activeTab() === 'holds'"
-    [class.border-transparent]="activeTab() !== 'holds'"
-    [class.text-slate-500]="activeTab() !== 'holds'"
-    (click)="setTab('holds')"
-  >
-    Stock Holds
-  </button>
+<div class="h-full flex flex-col gap-5 bg-gray-50 p-6 dark:bg-erp-surface-dark-alt">
+  <app-data-grid
+    *ngIf="activeRegister === 'resolved'"
+    #returnsGrid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Resolved"
+    subtitle="Purchase returns created from rejected GRN items, with supplier resolution and recovery tracking"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [data]="returnRows"
+    [columns]="returnColumns"
+    [loading]="returnsLoading"
+    [pageSize]="15"
+    searchPlaceholder="Search return no, GRN, supplier, item, or status"
+    emptyMessage="No purchase returns created yet"
+    [rowActions]="rowActions"
+    [views]="views"
+    storageKey="purchase-returns"
+    [density]="density"
+    exportable
+    exportFileName="purchase-returns.xlsx"
+    [detailTabs]="detailTabs"
+    [detailTitle]="title"
+    [detailSubtitle]="subtitle"
+    (rowAction)="onReturnAction($event)">
+
+    <ng-template #detailAsideTemplate let-row>
+      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
+        [ngClass]="statusBadgeClasses[row.status] || 'bg-gray-100 text-gray-700 ring-gray-200'">
+        {{ statusLabel(row.status) }}
+      </span>
+    </ng-template>
+
+    <ng-template #detailMetaTemplate let-row>
+      <div class="return-meta">
+        <p class="return-meta-label">Supplier</p>
+        <p class="return-meta-value">{{ row.supplierId?.supplierName || 'N/A' }}</p>
+      </div>
+      <div class="return-meta">
+        <p class="return-meta-label">Return Qty</p>
+        <p class="return-meta-value">{{ row.rejectedQty || 0 }}</p>
+      </div>
+      <div class="return-meta">
+        <p class="return-meta-label">Open Qty</p>
+        <p class="return-meta-value">{{ row.unresolvedQty || 0 }}</p>
+      </div>
+      <div class="return-meta">
+        <p class="return-meta-label">Method</p>
+        <p class="return-meta-value">{{ logisticsLabel(row.logisticsType) }}</p>
+      </div>
+    </ng-template>
+
+    <!-- left: optional, per-tab (outline) -->
+    <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+      <app-action-button *ngIf="tab === 'overview'" variant="outline" (click)="openGrnDetails(row)" icon="view">View GRN</app-action-button>
+      <app-action-button *ngIf="tab === 'logistics' && poNo(row)" variant="outline" (click)="openLpoDetails(row)" icon="view">View LPO</app-action-button>
+    </ng-template>
+
+    <!-- right: permanent, every tab (filled) -->
+    <ng-template #detailFooterTemplate let-row let-tab="tab">
+      <app-action-button *ngIf="row.unresolvedQty > 0 && row.disputeStatus !== 'SupplierDisputed'" variant="primary" (click)="openResolveModal(row)">Resolve Return</app-action-button>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <app-detail-overview *ngSwitchCase="'overview'" [grid]="returnsGrid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+
+        <app-detail-table
+          *ngSwitchCase="'items'"
+          title="Return item"
+          [columns]="itemColumns"
+          [rows]="itemRows(row)"
+          showTotals>
+        </app-detail-table>
+
+        <app-detail-overview *ngSwitchCase="'logistics'" [grid]="returnsGrid" [row]="row" [sections]="logisticsSections(row)"></app-detail-overview>
+
+        <ng-container *ngSwitchCase="'resolution'">
+          <app-detail-overview [grid]="returnsGrid" [row]="row" [sections]="resolutionSections(row)"></app-detail-overview>
+          <app-detail-table
+            class="mt-5 block"
+            title="Resolution history"
+            [columns]="resolutionColumns"
+            [rows]="resolutionRows(row)"
+            emptyMessage="No resolution activity yet.">
+          </app-detail-table>
+        </ng-container>
+
+        <app-detail-documents
+          *ngSwitchCase="'documents'"
+          title="Return documents"
+          [documents]="documents(row)"
+          emptyMessage="No return attachments yet."
+          [downloadable]="false"
+          (open)="onOpenDocument(row, $event)">
+        </app-detail-documents>
+
+        <app-detail-table
+          *ngSwitchCase="'events'"
+          title="Return events"
+          [columns]="eventsColumns"
+          [rows]="eventsRows(row)"
+          emptyMessage="No return events yet.">
+        </app-detail-table>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
+
+  <app-data-grid
+    *ngIf="activeRegister === 'pending'"
+    #pendingGrid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Pending"
+    subtitle="Rejected receipt lines waiting to become a purchase return"
+    rowKey="pendingKey"
+    [data]="pendingRows"
+    [columns]="pendingColumns"
+    [loading]="pendingLoading"
+    [pageSize]="15"
+    searchPlaceholder="Search GRN, LPO, supplier, item, or reason"
+    emptyMessage="No rejected GRN items waiting for return"
+    [rowActions]="pendingActions"
+    [views]="pendingViews"
+    storageKey="purchase-returns-pending"
+    [density]="density"
+    [detailTabs]="[{ id: 'overview', label: 'Overview', icon: 'info' }]"
+    [detailTitle]="pendingTitle"
+    [detailSubtitle]="pendingSubtitle"
+    (rowAction)="onPendingAction($event)">
+
+    <!-- right: permanent, every tab (filled) -->
+    <ng-template #detailFooterTemplate let-row>
+      <app-action-button variant="primary" (click)="openGrnDetails(row)" icon="view">View GRN</app-action-button>
+      <app-action-button *ngIf="row.purchaseOrderId?.poNo" variant="primary" (click)="openLpoDetails(row)" icon="view">View LPO</app-action-button>
+      <app-action-button *ngIf="canInitiateHold()" variant="primary" (click)="openInitiateHoldModal(row)">Create Purchase Return</app-action-button>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row>
+      <app-detail-overview [grid]="pendingGrid" [row]="row" [sections]="pendingOverviewSections(row)"></app-detail-overview>
+    </ng-template>
+  </app-data-grid>
 </div>
-
-<data-table
-  *ngIf="activeTab() === 'pending'"
-  [data]="pendingTableData()"
-  [columns]="pendingTableColumns"
-  [defaultColumns]="pendingDefaultColumns"
-  [isLoading]="pendingIsLoading()"
-  [isEmpty]="pendingIsEmpty()"
-  [totalItems]="pendingTotalItems()"
-  (actionClick)="onPendingActionClick($event)"
-  [title]="'Pending Rejections'"
->
-  <ng-template #sideColumn>
-    <button
-      type="button"
-      [matMenuTriggerFor]="grnViewMenu"
-      class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
-    >
-      <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
-      Switch Table
-      <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
-    </button>
-    <mat-menu #grnViewMenu="matMenu">
-      <button mat-menu-item routerLink="/grn/grn-list">
-        <ng-icon name="heroInboxArrowDown" class="mr-2 text-slate-500"></ng-icon>
-        GRN List
-      </button>
-    </mat-menu>
-  </ng-template>
-</data-table>
-
-<data-table
-  *ngIf="activeTab() === 'holds'"
-  [data]="holdsTableData()"
-  [columns]="holdsTableColumns"
-  [defaultColumns]="holdsDefaultColumns"
-  [isLoading]="holdsIsLoading()"
-  [isEmpty]="holdsIsEmpty()"
-  [totalItems]="holdsTotalItems()"
-  (rowClick)="onRowClick($event)"
-  (actionClick)="onHoldsActionClick($event)"
-  [title]="'Stock Holds'"
->
-  <ng-template #sideColumn>
-    <button
-      type="button"
-      [matMenuTriggerFor]="grnViewMenu2"
-      class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors"
-    >
-      <ng-icon name="heroTableCells" class="text-slate-500"></ng-icon>
-      Switch Table
-      <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
-    </button>
-    <mat-menu #grnViewMenu2="matMenu">
-      <button mat-menu-item routerLink="/grn/grn-list">
-        <ng-icon name="heroInboxArrowDown" class="mr-2 text-slate-500"></ng-icon>
-        GRN List
-      </button>
-    </mat-menu>
-  </ng-template>
-</data-table>
