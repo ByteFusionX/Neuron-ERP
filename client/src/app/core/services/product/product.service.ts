@@ -33,6 +33,19 @@ export interface Product {
   isDeleted?: boolean;
 }
 
+export interface ProductSupplier {
+  _id: string;
+  supplierId?: string;
+  supplierName: string;
+  status?: string;
+  supplierType?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactNo?: string;
+  paymentTerm?: string;
+  isDefault?: boolean;
+}
+
 export interface ProductPagination {
   total: number;
   page: number;
@@ -61,6 +74,15 @@ export interface ProductQueryParams {
   warehouse?: string;
   brand?: string;
   createdBy?: string;
+  productName?: string;
+  type?: string;
+  unitOfMeasure?: string;
+  isActive?: string;
+  approvalStatus?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  /** JSON list of {key, op, value} for operators the flat params can't express. */
+  advFilters?: string;
 }
 
 export interface PartNumberOption {
@@ -101,6 +123,10 @@ export class ProductService {
 
   getProductById(id: string): Observable<Product> {
     return this.http.get<Product>(`${this.api}/product/${id}`);
+  }
+
+  getProductSuppliers(id: string): Observable<ProductSupplier[]> {
+    return this.http.get<ProductSupplier[]>(`${this.api}/product/${id}/suppliers`);
   }
 
   createProduct(product: Partial<Product>): Observable<Product> {

@@ -1,6 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
-import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { ProductService, Product } from 'src/app/core/services/product/product.service';
@@ -11,8 +10,8 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { PRODUCT_TYPES } from 'src/app/shared/interfaces/product.interface';
-import { AddCategoryComponent } from '../../modals/add-category/add-category.component';
-import { AddWarehouseComponent } from '../../modals/add-warehouse/add-warehouse.component';
+import { ModalService } from 'src/app/shared/components/modal';
+import { QuickAddDialogComponent, QuickAddDialogData } from '../../modals/quick-add-dialog/quick-add-dialog.component';
 
 /**
  * Slide-over used to create and edit catalogue items (stock, non-stock or service).
@@ -34,7 +33,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   @Output() closed = new EventEmitter<void>();
 
   private fb = inject(FormBuilder);
-  private dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private toastr = inject(ToastrService);
   private productService = inject(ProductService);
   private productCategoryService = inject(ProductCategoryService);
@@ -50,12 +49,12 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   segmentOptions: SfOption[] = [];
   warehouseOptions: SfOption[] = [];
   unitOptions: SfOption[] = [];
-  taxOptions: SfOption[] = [];
+  brandOptions: SfOption[] = [];
   private optionsLoaded = false;
 
   productForm = this.fb.group({
     partNo: ['', Validators.required],
-    itemCode: [{ value: '', disabled: true }, Validators.required],
+    itemCode: [{ value: '', disabled: true }],
     productName: [''],
     productDescription: ['', Validators.required],
     type: ['' as string, Validators.required],
@@ -64,9 +63,8 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     warehouse: ['', Validators.required],
     brand: ['', Validators.required],
     unitOfMeasure: [''],
-    defaultTaxRate: [null as number | null],
-    defaultSellingPrice: [null as number | null],
-    estimatedCost: [null as number | null],
+    defaultSellingPrice: [null as number | null, [Validators.min(0), Validators.max(1e12)]],
+    estimatedCost: [null as number | null, [Validators.min(0), Validators.max(1e12)]],
     isActive: [true],
   });
 
@@ -85,24 +83,23 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     } else if (!this.isEdit) {
       this.resetForm();
       this.applyPrefill();
-      this.generateItemCode(this.prefill?.productSegment || undefined);
+      if (this.prefill?.productSegment) this.generateItemCode(this.prefill.productSegment);
     }
   }
 
   ngOnDestroy(): void {
+    this.itemCodeRequest?.unsubscribe();
     this.subscriptions.unsubscribe();
   }
 
-  /** Unit and tax come from Settings → Master Data; a saved value stays selectable even if retired. */
+  /** Unit and brand come from Settings → Master Data → Product Data. */
   private loadMasterOptions(): void {
     const p = this.isEdit ? this.product : null;
     this.subscriptions.add(
       this.masterList.getOptions('unit', { current: p?.unitOfMeasure }).subscribe((o) => (this.unitOptions = o))
     );
     this.subscriptions.add(
-      this.masterList.getOptions('tax', { current: p?.defaultTaxRate, useValue: true }).subscribe((o) => {
-        this.taxOptions = o.map((x) => (typeof x.value === 'number' && x.label !== String(x.value) ? { ...x, label: `${x.label} (${x.value}%)` } : x));
-      })
+      this.masterList.getOptions('brand', { current: p?.brand }).subscribe((o) => (this.brandOptions = o))
     );
   }
 
@@ -124,7 +121,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
 
     this.subscriptions.add(
       this.productForm.controls.productSegment.valueChanges.subscribe((departmentId) => {
-        if (!this.isEdit) this.generateItemCode(departmentId || undefined);
+        if (!this.isEdit) departmentId ? this.generateItemCode(departmentId) : this.productForm.controls.itemCode.setValue('');
       })
     );
   }
@@ -150,8 +147,12 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     });
   }
 
+  private itemCodeRequest?: Subscription;
+
+  /** Only the latest request may write the code, otherwise a slow earlier response overwrites the chosen segment's prefix. */
   private generateItemCode(departmentId?: string): void {
-    this.productService.generateItemCode(departmentId).subscribe({
+    this.itemCodeRequest?.unsubscribe();
+    this.itemCodeRequest = this.productService.generateItemCode(departmentId).subscribe({
       next: (response) => this.productForm.controls.itemCode.setValue(response.itemCode),
       error: () => this.toastr.error('Failed to generate item code'),
     });
@@ -170,7 +171,6 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       warehouse: id(product.warehouse),
       brand: product.brand || '',
       unitOfMeasure: product.unitOfMeasure || '',
-      defaultTaxRate: product.defaultTaxRate ?? null,
       defaultSellingPrice: product.defaultSellingPrice ?? null,
       estimatedCost: product.estimatedCost ?? null,
       isActive: product.isActive ?? true,
@@ -199,24 +199,32 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     this.productForm.reset({
       partNo: '', itemCode: '', productName: '', productDescription: '', type: '',
       productSegment: '', productCategory: '', warehouse: '', brand: '', unitOfMeasure: '',
-      defaultTaxRate: null, defaultSellingPrice: null, estimatedCost: null, isActive: true,
+      defaultSellingPrice: null, estimatedCost: null, isActive: true,
     });
   }
 
   createCategory(): void {
-    this.dialog.open(AddCategoryComponent).afterClosed().subscribe((category) => {
-      if (!category) return;
-      this.categoryOptions = [...this.categoryOptions, { label: category.categoryName, value: category._id }];
-      this.productForm.patchValue({ productCategory: category._id });
-    });
+    this.openQuickAdd('Category', (name) => this.productCategoryService.createProductCategory({ categoryName: name, createdDate: new Date() } as any))
+      .subscribe((category) => {
+        if (!category) return;
+        this.toastr.success('Category created successfully');
+        this.categoryOptions = [...this.categoryOptions, { label: category.categoryName, value: category._id }];
+        this.productForm.patchValue({ productCategory: category._id });
+      });
   }
 
   createWarehouse(): void {
-    this.dialog.open(AddWarehouseComponent).afterClosed().subscribe((warehouse) => {
-      if (!warehouse) return;
-      this.warehouseOptions = [...this.warehouseOptions, { label: warehouse.wareHouseName, value: warehouse._id }];
-      this.productForm.patchValue({ warehouse: warehouse._id });
-    });
+    this.openQuickAdd('Warehouse', (name) => this.warehouseService.createWarehouse({ wareHouseName: name, createdDate: new Date() } as any))
+      .subscribe((warehouse) => {
+        if (!warehouse) return;
+        this.toastr.success('Warehouse created successfully');
+        this.warehouseOptions = [...this.warehouseOptions, { label: warehouse.wareHouseName, value: warehouse._id }];
+        this.productForm.patchValue({ warehouse: warehouse._id });
+      });
+  }
+
+  private openQuickAdd(title: string, create: QuickAddDialogData['create']) {
+    return this.modal.open<any, QuickAddDialogData>(QuickAddDialogComponent, { width: '480px', data: { title, create } }).afterClosed();
   }
 
   onDrawerClosed(): void {
@@ -246,7 +254,6 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       warehouse: raw.warehouse ?? '',
       brand: raw.brand ?? '',
       unitOfMeasure: raw.unitOfMeasure ?? '',
-      defaultTaxRate: raw.defaultTaxRate,
       defaultSellingPrice: raw.defaultSellingPrice,
       estimatedCost: raw.estimatedCost,
       isActive: raw.isActive ?? true,

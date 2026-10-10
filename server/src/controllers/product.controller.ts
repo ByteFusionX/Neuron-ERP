@@ -1,15 +1,111 @@
 import { Request, Response, NextFunction } from "express";
 import Product from "../models/products.model";
+import Supplier from "../models/supplier.model";
 import Department from "../models/department.model";
 import ProductCategory from "../models/productCategory.model";
 import Warehouse from "../models/warehouse.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { ObjectId } from "mongodb";
 import Employee from "../models/employee.model";
+import Quotation from "../models/quotation.model";
+import Rfq from "../models/rfq.model";
+import PurchaseOrder from "../models/purchaseOrder.model";
+import StockEntry from "../models/stockEntry.model";
+import Item from "../models/item.model";
+import { logAudit } from "../services/audit.service";
+
+const auditProduct = (req: Request, product: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+    logAudit(req, { entityType: "product", entityId: product._id, entityLabel: product.itemCode, action, summary, changes });
+
+const AUDITED_FIELDS: { label: string; get: (p: any) => unknown }[] = [
+    { label: "Item code", get: (p) => p.itemCode },
+    { label: "Part no", get: (p) => p.partNo },
+    { label: "Product name", get: (p) => p.productName },
+    { label: "Description", get: (p) => p.productDescription },
+    { label: "Category", get: (p) => p.productCategory?.categoryName },
+    { label: "Segment", get: (p) => p.productSegment?.departmentName },
+    { label: "Warehouse", get: (p) => p.warehouse?.wareHouseName },
+    { label: "Brand", get: (p) => p.brand },
+    { label: "Type", get: (p) => p.type },
+    { label: "Unit of measure", get: (p) => p.unitOfMeasure },
+    { label: "Tax rate", get: (p) => p.defaultTaxRate },
+    { label: "Selling price", get: (p) => p.defaultSellingPrice },
+    { label: "Estimated cost", get: (p) => p.estimatedCost },
+    { label: "Status", get: (p) => (p.isActive === false ? "Inactive" : "Active") },
+];
+
+const diffProduct = (before: any, after: any) => {
+    const text = (v: unknown) => (v === undefined || v === null || v === "" ? "—" : String(v));
+    return AUDITED_FIELDS
+        .map(({ label, get }) => ({ label, from: text(get(before)), to: text(get(after)) }))
+        .filter((c) => c.from !== c.to);
+};
 /** Legacy records have no approvalStatus; treat anything not Draft/Pending as usable. */
 export const APPROVED_PRODUCT_FILTER = { approvalStatus: { $nin: ['Draft', 'Pending'] } };
 
-const isAdminRole = (employee: any): boolean => ['admin', 'superAdmin'].includes(employee?.category?.role);
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Prices and cost must be real non-negative amounts; tax is a percentage. Unset values are allowed. */
+const unset = (v: unknown) => v === undefined || v === null || v === '';
+const validateMoney = (data: any): string | null => {
+    const checks: [string, unknown, number][] = [
+        ['Default selling price', data.defaultSellingPrice, 1e12],
+        ['Estimated cost', data.estimatedCost, 1e12],
+        ['Tax rate', data.defaultTaxRate, 100],
+    ];
+    for (const [label, value, max] of checks) {
+        if (unset(value)) continue;
+        const n = typeof value === 'number' ? value : Number(value);
+        if (!Number.isFinite(n) || n < 0 || n > max) {
+            return `${label} must be a number between 0 and ${max === 100 ? '100' : '1,000,000,000,000'}`;
+        }
+    }
+    return null;
+};
+
+const TEXT_FILTER_FIELDS = ['partNo', 'itemCode', 'productName', 'productDescription', 'brand', 'unitOfMeasure'];
+const REF_FILTER_FIELDS = ['productCategory', 'productSegment', 'warehouse'];
+
+/** Operators beyond contains/is: "is not", "does not contain", "is empty" and number comparisons. */
+const buildAdvancedFilters = (raw: unknown): any[] => {
+    if (typeof raw !== 'string' || !raw) return [];
+    let list: any;
+    try { list = JSON.parse(raw); } catch { return []; }
+    if (!Array.isArray(list)) return [];
+
+    const conds: any[] = [];
+    for (const f of list.slice(0, 20)) {
+        const { key, op } = f ?? {};
+        const value = typeof f?.value === 'string' ? f.value.trim() : f?.value;
+        if (typeof key !== 'string' || typeof op !== 'string') continue;
+
+        if (TEXT_FILTER_FIELDS.includes(key)) {
+            if (op === 'empty') conds.push({ $or: [{ [key]: { $exists: false } }, { [key]: null }, { [key]: '' }] });
+            else if (op === 'notContains' && value) conds.push({ [key]: { $not: new RegExp(escapeRegex(String(value)), 'i') } });
+            else if (op === 'isNot' && value) conds.push({ [key]: { $not: new RegExp(`^${escapeRegex(String(value))}$`, 'i') } });
+        } else if (REF_FILTER_FIELDS.includes(key) && op === 'isNot' && ObjectId.isValid(String(value))) {
+            conds.push({ [key]: { $ne: new ObjectId(String(value)) } });
+        } else if (key === 'type' && op === 'isNot' && value) {
+            conds.push({ type: { $ne: String(value) } });
+        } else if (key === 'isActive' && op === 'isNot') {
+            conds.push({ isActive: value === 'Active' ? false : true });
+        } else if (key === 'approvalStatus' && op === 'isNot') {
+            if (value === 'Approved') conds.push({ approvalStatus: { $in: ['Draft', 'Pending'] } });
+            else if (value === 'Pending' || value === 'Draft') conds.push({ approvalStatus: { $ne: value } });
+        } else if (key === 'defaultSellingPrice') {
+            const n = Number(value);
+            if (op === 'empty') conds.push({ $or: [{ defaultSellingPrice: { $exists: false } }, { defaultSellingPrice: null }] });
+            else if (!unset(value) && Number.isFinite(n)) {
+                if (op === 'eq') conds.push({ defaultSellingPrice: n });
+                else if (op === 'gt') conds.push({ defaultSellingPrice: { $gt: n } });
+                else if (op === 'lt') conds.push({ defaultSellingPrice: { $lt: n } });
+            }
+        }
+    }
+    return conds;
+};
+
+const isAdminRole =(employee: any): boolean => ['admin', 'superAdmin'].includes(employee?.category?.role);
 
 const getDepartmentCode = (departmentName?: string): string => {
     const words = (departmentName || '').trim().split(/\s+/).filter(Boolean);
@@ -72,9 +168,13 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         const data: any = req.body;
         const token = (req as any).user;
 
-        if (!data.partNo || !data.itemCode || !data.productDescription || !data.productCategory || !data.productSegment || !data.warehouse || !data.brand || !data.createdDate) {
+        const blank = (v: unknown) => typeof v !== 'string' || !v.trim();
+        if (blank(data.partNo) || blank(data.itemCode) || blank(data.productDescription) || blank(data.brand) || !data.productCategory || !data.productSegment || !data.warehouse) {
             return res.status(400).json({ message: "Missing required fields" });
         }
+
+        const moneyError = validateMoney(data);
+        if (moneyError) return res.status(400).json({ message: moneyError });
 
         // Ensure refs are valid ObjectIds
         const refIds = [data.productCategory, data.productSegment, data.warehouse];
@@ -83,13 +183,13 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         }
 
         // Uniqueness check on partNo (case-insensitive)
-        const existing = await Product.findOne({ partNo: new RegExp(`^${data.partNo}$`, 'i'), isDeleted: { $ne: true } });
+        const existing = await Product.findOne({ partNo: new RegExp(`^${escapeRegex(data.partNo.trim())}$`, 'i'), isDeleted: { $ne: true } });
         if (existing) {
             return res.status(409).json({ message: "Product with this part number already exists" });
         }
 
         // Uniqueness check on itemCode (case-insensitive)
-        const existingItemCode = await Product.findOne({ itemCode: new RegExp(`^${data.itemCode}$`, 'i'), isDeleted: { $ne: true } });
+        const existingItemCode = await Product.findOne({ itemCode: new RegExp(`^${escapeRegex(data.itemCode.trim())}$`, 'i'), isDeleted: { $ne: true } });
         if (existingItemCode) {
             return res.status(409).json({ message: "Product with this item code already exists" });
         }
@@ -128,7 +228,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
             approvalStatus: isAdminRole(employee) ? 'Approved' : 'Pending',
             ...(isAdminRole(employee) ? { approvedBy: employee._id, approvedDate: new Date() } : {}),
             createdBy: employee._id,
-            createdDate: data.createdDate,
+            createdDate: data.createdDate ?? new Date(),
             updatedDate: new Date(),
             isDeleted: false
         });
@@ -139,6 +239,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
             .populate('warehouse')
             .populate('createdBy', 'firstName lastName');
 
+        await auditProduct(req, product, "created", `Product ${product.itemCode} created${isAdminRole(employee) ? "" : " and sent for approval"}`);
         return res.status(201).json(populated);
     } catch (error) {
         console.error(error);
@@ -165,7 +266,10 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             defaultSellingPrice,
             isActive,
             approvalStatus,
-            createdBy
+            createdBy,
+            sortBy,
+            sortDir,
+            advFilters
         } = req.query;
 
         const tokenData = (req as any).user;
@@ -183,7 +287,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             : {};
 
         const pageNum = Math.max(parseInt(page as string, 10) || 1, 1);
-        const rowNum = Math.max(parseInt(row as string, 10) || 10, 1);
+        const rowNum = Math.min(Math.max(parseInt(row as string, 10) || 10, 1), 10000);
         const skip = (pageNum - 1) * rowNum;
 
         const filter: any = {
@@ -250,14 +354,18 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
 
         const searchTerm = typeof search === 'string' ? search.trim() : '';
         if (searchTerm) {
-            const regex = new RegExp(searchTerm, 'i');
+            const regex = new RegExp(escapeRegex(searchTerm), 'i');
             filter.$or = [
                 { partNo: regex },
                 { itemCode: regex },
+                { productName: regex },
                 { productDescription: regex },
                 { brand: regex }
             ];
         }
+
+        const advanced = buildAdvancedFilters(advFilters);
+        if (advanced.length) filter.$and = advanced;
 
         if (createdBy && typeof createdBy === 'string') {
             if (ObjectId.isValid(createdBy)) {
@@ -290,13 +398,20 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             }
         }
 
+        // Whitelisted columns only; ties fall back to newest-first so paging stays stable.
+        const sortableFields = ['itemCode', 'partNo', 'productName', 'type'];
+        const sortSpec: Record<string, 1 | -1> = typeof sortBy === 'string' && sortableFields.includes(sortBy)
+            ? { [sortBy]: sortDir === 'desc' ? -1 : 1, createdDate: -1 }
+            : { createdDate: -1 };
+
         const [products, total] = await Promise.all([
             Product.find(filter)
                 .populate('productCategory')
                 .populate('productSegment')
                 .populate('warehouse')
                 .populate('createdBy', 'firstName lastName')
-                .sort({ createdDate: -1 })
+                .sort(sortSpec)
+                .collation({ locale: 'en', strength: 2 })
                 .skip(skip)
                 .limit(rowNum),
             Product.countDocuments(filter)
@@ -339,6 +454,48 @@ export const getProductById = async (req: Request, res: Response, next: NextFunc
     }
 };
 
+/** Suppliers that list this product (matched by name, as supplier products are free text) plus its default vendor. */
+export const getProductSuppliers = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
+
+        const product = await Product.findOne({ _id: id, isDeleted: { $ne: true } }).select('productName defaultVendor');
+        if (!product) return res.status(404).json({ message: "Product not found" });
+
+        const escaped = String(product.productName ?? '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const or: any[] = [];
+        if (escaped) or.push({ products: { $elemMatch: { productName: new RegExp(`^${escaped}$`, 'i') } } });
+        if (product.defaultVendor) or.push({ _id: product.defaultVendor });
+        if (!or.length) return res.status(200).json([]);
+
+        const suppliers = await Supplier.find({ isDeleted: { $ne: true }, $or: or })
+            .select('supplierId supplierName status supplierType contactDetails creditDays products')
+            .sort({ supplierName: 1 })
+            .lean();
+
+        const defaultId = product.defaultVendor ? String(product.defaultVendor) : '';
+        return res.status(200).json(suppliers.map((s: any) => {
+            const match = (s.products ?? []).find((p: any) => String(p.productName ?? '').trim().toLowerCase() === String(product.productName ?? '').trim().toLowerCase());
+            return {
+                _id: s._id,
+                supplierId: s.supplierId,
+                supplierName: s.supplierName,
+                status: s.status,
+                supplierType: s.supplierType,
+                contactName: match?.contactName || s.contactDetails?.name,
+                contactEmail: match?.contactEmail || s.contactDetails?.email,
+                contactNo: match?.contactNo || s.contactDetails?.phoneNumber,
+                paymentTerm: match?.paymentTerm,
+                isDefault: String(s._id) === defaultId,
+            };
+        }));
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+};
+
 export const updateProduct = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
@@ -347,14 +504,17 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
 
         if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
 
+        const moneyError = validateMoney(data);
+        if (moneyError) return res.status(400).json({ message: moneyError });
+
         // Optional uniqueness check if partNo changes
         if (data.partNo) {
-            const exist = await Product.findOne({ _id: { $ne: id }, partNo: new RegExp(`^${data.partNo}$`, 'i'), isDeleted: { $ne: true } });
+            const exist = await Product.findOne({ _id: { $ne: id }, partNo: new RegExp(`^${escapeRegex(data.partNo.trim())}$`, 'i'), isDeleted: { $ne: true } });
             if (exist) return res.status(409).json({ message: "Product with this part number already exists" });
         }
 
         if (data.itemCode) {
-            const existItemCode = await Product.findOne({ _id: { $ne: id }, itemCode: new RegExp(`^${data.itemCode}$`, 'i'), isDeleted: { $ne: true } });
+            const existItemCode = await Product.findOne({ _id: { $ne: id }, itemCode: new RegExp(`^${escapeRegex(data.itemCode.trim())}$`, 'i'), isDeleted: { $ne: true } });
             if (existItemCode) return res.status(409).json({ message: "Product with this item code already exists" });
         }
 
@@ -373,6 +533,11 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
 
         // A non-admin edit (re)submits the item for approval; a rejected item is resubmitted this way.
         const needsReapproval = !isAdminRole(employee);
+        // An admin has no one to approve for them, so editing a rejected item approves it again.
+        const rejected = isAdminRole(employee) && !!(await Product.exists({ _id: id, isDeleted: { $ne: true }, approvalStatus: 'Draft' }));
+
+        const before = await Product.findOne({ _id: id, isDeleted: { $ne: true } })
+            .populate("productCategory").populate("productSegment").populate("warehouse").lean();
 
         const updated = await Product.findOneAndUpdate(
             { _id: id, isDeleted: { $ne: true } },
@@ -393,10 +558,12 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
                     ...(data.estimatedCost !== undefined ? { estimatedCost: data.estimatedCost } : {}),
                     ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
                     ...(needsReapproval ? { approvalStatus: 'Pending' } : {}),
+                    ...(rejected ? { approvalStatus: 'Approved', approvedBy: employee._id, approvedDate: new Date() } : {}),
                     updatedBy: employee._id,
                     updatedDate: new Date()
                 },
-                ...(needsReapproval ? { $unset: { approvedBy: '', approvedDate: '', rejectionReason: '' } } : {})
+                ...(needsReapproval ? { $unset: { approvedBy: '', approvedDate: '', rejectionReason: '' } } : {}),
+                ...(rejected ? { $unset: { rejectionReason: '' } } : {})
             },
             { new: true }
         )
@@ -406,6 +573,10 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
             .populate('createdBy', 'firstName lastName');
 
         if (!updated) return res.status(404).json({ message: "Product not found" });
+        const changes = before ? diffProduct(before, updated) : [];
+        if (changes.length) await auditProduct(req, updated, "updated", `Updated ${changes.map((c) => c.label.toLowerCase()).join(", ")}`, changes);
+        if (needsReapproval && before?.approvalStatus !== "Pending") await auditProduct(req, updated, "resubmitted", "Sent back for approval after an edit");
+        if (rejected) await auditProduct(req, updated, "approved", "Approved on edit (was rejected)");
         return res.status(200).json(updated);
     } catch (error) {
         console.error(error);
@@ -427,6 +598,7 @@ export const approveProduct = async (req: Request, res: Response, next: NextFunc
             { new: true }
         );
         if (!product) return res.status(409).json({ message: "Only a pending product can be approved" });
+        await auditProduct(req, product, "approved", "Product approved");
         return res.status(200).json(product);
     } catch (error) {
         console.error(error);
@@ -450,6 +622,7 @@ export const rejectProduct = async (req: Request, res: Response, next: NextFunct
             { new: true }
         );
         if (!product) return res.status(409).json({ message: "Only a pending product can be rejected" });
+        await auditProduct(req, product, "rejected", `Product rejected: ${reason}`);
         return res.status(200).json(product);
     } catch (error) {
         console.error(error);
@@ -462,8 +635,24 @@ export const deleteProduct = async (req: Request, res: Response, next: NextFunct
         const { id } = req.params;
         if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
 
+        const live = { isDeleted: { $ne: true } };
+        const [quotes, rfqs, orders, stock, items] = await Promise.all([
+            Quotation.countDocuments({ ...live, 'itemDetails.productId': id }),
+            Rfq.countDocuments({ ...live, 'requestedLines.partNo': id }),
+            PurchaseOrder.countDocuments({ ...live, 'items.partNo': id }),
+            StockEntry.countDocuments({ ...live, partNo: id }),
+            Item.countDocuments({ partNo: id }),
+        ]);
+        const used = ([[quotes, 'quotation'], [rfqs, 'RFQ'], [orders, 'purchase order'], [stock, 'stock entry'], [items, 'inventory item']] as [number, string][])
+            .filter(([n]) => n > 0)
+            .map(([n, label]) => `${n} ${label}${n === 1 ? '' : 's'}`);
+        if (used.length) {
+            return res.status(409).json({ message: `This product is used in ${used.join(', ')} and can't be deleted. Mark it Inactive instead.` });
+        }
+
         const deleted = await Product.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, { $set: { isDeleted: true } }, { new: true });
         if (!deleted) return res.status(404).json({ message: "Product not found or already deleted" });
+        await auditProduct(req, deleted, "deleted", "Product deleted");
         return res.status(200).json({ success: true, message: "Product deleted" });
     } catch (error) {
         console.error(error);
@@ -477,10 +666,11 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
         const filter: any = { isDeleted: { $ne: true }, ...APPROVED_PRODUCT_FILTER };
 
         if (typeof search === 'string' && search.trim()) {
-            const regex = new RegExp(search.trim(), 'i');
+            const regex = new RegExp(escapeRegex(search.trim()), 'i');
             filter.$or = [
                 { partNo: regex },
                 { itemCode: regex },
+                { productName: regex },
                 { productDescription: regex },
                 { brand: regex }
             ];

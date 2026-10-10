@@ -25,9 +25,14 @@
         [detailTitle]="productTitle"
         [detailSubtitle]="productSubtitle"
         (queryChange)="onQueryChange($event)"
+        (exportRequest)="onExportAll()"
         (rowAction)="onRowAction($event)"
         (bulkAction)="onBulkAction($event, grid)"
         (create)="onCreateProduct()">
+
+        <ng-template #detailAsideTemplate let-row>
+            <app-status-pill [status]="row.approvalStatus ?? 'Approved'" [toneMap]="approvalTones"></app-status-pill>
+        </ng-template>
 
         <ng-template #detailMetaTemplate let-row>
             <div class="pd-meta">
@@ -57,6 +62,14 @@
                 <ng-container *ngSwitchCase="'pricing'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="pricingSections(row)"></app-detail-overview>
                 </ng-container>
+
+                <app-detail-related-list *ngSwitchCase="'suppliers'"
+                    [items]="(suppliersFor(row) | async) ?? []"
+                    emptyMessage="No suppliers linked to this product."></app-detail-related-list>
+
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="(historyFor(row) | async) ?? []"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
             </ng-container>
         </ng-template>
     </app-data-grid>

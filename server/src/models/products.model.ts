@@ -1,6 +1,6 @@
 import { Schema, model, Types } from "mongoose";
 
-export const PRODUCT_TYPES = ['Stock Product', 'Non-Stock Product', 'Service'] as const;
+export const PRODUCT_TYPES = ['Stock', 'Non-Stock'] as const;
 export type ProductType = typeof PRODUCT_TYPES[number];
 
 export const PRODUCT_APPROVAL_STATUSES = ['Draft', 'Pending', 'Approved'] as const;
