@@ -96,11 +96,15 @@ const STAGE_COLORS: Record<string, string> = {
   Completed: '#10b981',
 };
 
+/** Pipeline order: the way a job moves, which is also the order of the KPI strip. */
+const STAGE_ORDER: allocateStatus[] = [allocateStatus.Pending, allocateStatus.OpenToWork, allocateStatus.WorkInProgress, allocateStatus.Completed];
+
 const STAGE_LABELS: Record<allocateStatus, string> = {
   [allocateStatus.Pending]: 'Pending',
   [allocateStatus.OpenToWork]: 'Open To Work',
   [allocateStatus.WorkInProgress]: 'In Progress',
   [allocateStatus.Completed]: 'Completed',
+  [allocateStatus.Lost]: 'Lost',
 };
 
 /**
@@ -161,6 +165,8 @@ export class JobReportComponent implements OnInit, OnDestroy {
   trendMetric: 'value' | 'count' = 'count';
 
   private subscriptions = new Subscription();
+  private fetchSub?: Subscription;
+  private loaded = false;
   private themeObserver?: MutationObserver;
   private access?: string;
   private userId?: string;
@@ -183,7 +189,9 @@ export class JobReportComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._route.queryParams.subscribe((params) => {
         this.filters = Object.fromEntries(this.filterFields.map((f) => [f.key, params[f.key] || null]));
-        this.fetch();
+        // Filters are applied in the browser, so the jobs are fetched once and only re-sliced on later filter changes.
+        if (this.loaded) this.applyFilters();
+        else this.fetch();
       })
     );
 
@@ -195,6 +203,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe();
+    this.fetchSub?.unsubscribe();
     this.themeObserver?.disconnect();
   }
 
@@ -205,7 +214,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
   private loadFilterOptions(): void {
     this.subscriptions.add(
       this._jobService.getJobSalesPerson().subscribe((people: getCreators[]) => {
-        this.setOptions('salesPerson', people.map((p) => ({ label: p.fullName, value: p._id })));
+        this.setOptions('salesPerson', (people ?? []).map((p) => ({ label: p.fullName, value: p._id })));
       })
     );
     this.subscriptions.add(
@@ -235,24 +244,26 @@ export class JobReportComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.failed = false;
     this.previousJobs = null;
-    this.subscriptions.add(
-      this._employeeService.employeeData$.subscribe((employee) => {
+    this.fetchSub?.unsubscribe();
+    this.fetchSub = this._employeeService.employeeData$.pipe(take(1), switchMap((employee) => {
         this.access = employee?.category?.privileges?.jobSheet?.viewReport;
         this.userId = employee?._id;
 
         const filterData: filterJob = {
           search: '',
           page: 1,
-          row: Number.MAX_SAFE_INTEGER,
+          row: 10000,
           status: null,
           access: this.access,
           userId: this.userId,
           allocateStatus: null,
         };
 
-        this._jobService.getJobs(filterData).subscribe({
+        return this._jobService.getJobs(filterData);
+      })).subscribe({
           next: (data: JobTable) => {
             this.allJobs = data ? data.job : [];
+            this.loaded = true;
             this.applyFilters();
             this.loading = false;
           },
@@ -263,8 +274,6 @@ export class JobReportComponent implements OnInit, OnDestroy {
             this.failed = true;
           },
         });
-      })
-    );
   }
 
   private applyFilters(): void {
@@ -283,6 +292,11 @@ export class JobReportComponent implements OnInit, OnDestroy {
 
     this.buildCharts();
     this.buildBreakdowns();
+    // The Attention badge counts both lists, so never land on an empty one while the other has jobs.
+    if (!this.attentionCount(this.attentionKey)) {
+      const other: AttentionKey = this.attentionKey === 'onHold' ? 'idle' : 'onHold';
+      if (this.attentionCount(other)) this.attentionKey = other;
+    }
     this.fetchPrevious(from, to);
   }
 
@@ -371,7 +385,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
   }
 
   get stages(): { key: string; label: string; count: number; value: number }[] {
-    return (Object.values(allocateStatus) as allocateStatus[]).map((s) => {
+    return STAGE_ORDER.map((s) => {
       const rows = this.jobs.filter((j) => j.allocateStatus === s);
       return { key: s, label: STAGE_LABELS[s], count: rows.length, value: rows.reduce((t, j) => t + (j.lpoValue ?? 0), 0) };
     });
@@ -584,7 +598,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
   get attentionItems(): AttentionItem[] {
     const source = this.attentionKey === 'onHold'
       ? this.jobs.filter((j) => j.status === 'On Hold')
-      : this.jobs.filter((j) => j.allocateStatus !== allocateStatus.Completed && this.ageDays(j.updatedDate || j.createdDate) >= 14);
+      : this.jobs.filter((j) => j.allocateStatus !== allocateStatus.Completed && j.allocateStatus !== allocateStatus.Lost && this.ageDays(j.updatedDate || j.createdDate) >= 14);
 
     return source
       .map((j) => ({
@@ -605,7 +619,7 @@ export class JobReportComponent implements OnInit, OnDestroy {
 
   attentionCount(key: AttentionKey): number {
     if (key === 'onHold') return this.jobs.filter((j) => j.status === 'On Hold').length;
-    return this.jobs.filter((j) => j.allocateStatus !== allocateStatus.Completed && this.ageDays(j.updatedDate || j.createdDate) >= 14).length;
+    return this.jobs.filter((j) => j.allocateStatus !== allocateStatus.Completed && j.allocateStatus !== allocateStatus.Lost && this.ageDays(j.updatedDate || j.createdDate) >= 14).length;
   }
 
   attentionDaysLabel(item: AttentionItem): string {
@@ -613,7 +627,8 @@ export class JobReportComponent implements OnInit, OnDestroy {
   }
 
   openJob(item: AttentionItem): void {
-    this._router.navigate(['/job-sheet/view', item._id]);
+    // There is no standalone job page; the list opens straight to the job.
+    this._router.navigate(['/job-sheet'], { queryParams: { search: item.jobId } });
   }
 
   trackById = (_: number, r: { _id?: string; id?: string }) => r._id ?? r.id ?? '';

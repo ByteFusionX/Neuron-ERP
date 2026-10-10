@@ -5,12 +5,14 @@
         <div class="relative flex flex-wrap items-center justify-between gap-3 px-5 py-3 min-h-16 border-b border-gray-100 dark:border-erp-border-dark">
             <div class="flex items-center gap-2.5 min-w-0">
                 <nav aria-label="Breadcrumb" class="hidden sm:flex items-center gap-1.5 text-[13px] text-gray-500 dark:text-gray-500 min-w-0">
-                    <a *ngFor="let b of breadcrumbs" [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
-                    <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
-                    </svg>
+                    <ng-container *ngFor="let b of breadcrumbs">
+                        <a [routerLink]="b.link" class="truncate max-w-40 hover:text-gray-900 dark:hover:text-gray-100 hover:underline">{{ b.label }}</a>
+                        <svg class="w-3.5 h-3.5 shrink-0 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+                        </svg>
+                    </ng-container>
                 </nav>
-                <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Job Sheet</h2>
+                <h2 class="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate" aria-current="page">Report</h2>
             </div>
 
             <!-- List | Report, centered in the header to match the list tab's toolbar. -->
@@ -48,12 +50,12 @@
 
         <!-- KPI strip -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <app-kpi-card label="Total Jobs" [value]="totalJobs" [foot]="totalJobs + ' job' + (totalJobs === 1 ? '' : 's')" [delta]="delta('totalJobs')"></app-kpi-card>
+            <app-kpi-card label="Total Jobs" [value]="totalJobs" [foot]="(totalLpoValue | numberFormatter) + ' QAR total LPO'" [delta]="delta('totalJobs')"></app-kpi-card>
             <app-kpi-card label="Pending" [value]="pendingCount" valueClass="text-amber-600 dark:text-amber-400"></app-kpi-card>
             <app-kpi-card label="Open To Work" [value]="openToWorkCount" valueClass="text-sky-600 dark:text-sky-400"></app-kpi-card>
             <app-kpi-card label="In Progress" [value]="inProgressCount" valueClass="text-violet-600 dark:text-violet-400"></app-kpi-card>
             <app-kpi-card label="Completed" [value]="completedCount" valueClass="text-emerald-600 dark:text-emerald-400"
-                [foot]="(totalLpoValue | numberFormatter) + ' QAR total LPO'" [delta]="delta('completedCount')"></app-kpi-card>
+                [foot]="(stages[3].value | numberFormatter) + ' QAR LPO'" [delta]="delta('completedCount')"></app-kpi-card>
         </div>
 
         <!-- Sections: one at a time on screen, all of them when printed. -->

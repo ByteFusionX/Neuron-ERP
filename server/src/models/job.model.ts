@@ -11,6 +11,9 @@ interface Job extends Document {
     allocateStatus: string;
     allocateType : string;
     procurementPerson?: Types.ObjectId;
+    lostReason?: string;
+    lostAt?: Date;
+    lostBy?: Types.ObjectId;
 }
 
 export enum jobStatus {
@@ -27,7 +30,8 @@ export enum allocateStatus {
     Pending = 'Pending',
     WorkInProgress = 'Work In Progress',
     OpenToWork = 'OpenToWork',
-    Completed = 'Completed'
+    Completed = 'Completed',
+    Lost = 'Lost'
 }
 
 export enum allocateType {
@@ -80,7 +84,10 @@ const jobSchema = new Schema<Job>({
     procurementPerson: {
         type: Schema.Types.ObjectId,
         ref: 'Employee'
-    }
+    },
+    lostReason: { type: String },
+    lostAt: { type: Date },
+    lostBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
 });
 
 export default model<Job>("Job", jobSchema);

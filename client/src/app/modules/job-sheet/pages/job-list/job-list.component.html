@@ -1,4 +1,8 @@
 <div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <div *ngIf="hasScope" class="flex items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-[13px] text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
+        <span>Showing only jobs for: <strong>{{ scopeSummary }}</strong>. The report filters you came from are still applied.</span>
+        <button type="button" class="font-medium underline underline-offset-2 hover:no-underline" (click)="clearScope()">Show all jobs</button>
+    </div>
     <app-data-grid #grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
@@ -16,8 +20,9 @@
         emptyMessage="No jobs found"
         [rowActions]="rowActions"
         [views]="views"
+        [initialViewId]="activeViewId"
+        [syncViewWithUrl]="false"
         (viewChange)="onViewChange($event)"
-        [bulkActions]="bulkActions"
         storageKey="job-sheet-list"
         exportable
         exportFileName="jobs.xlsx"
@@ -28,13 +33,13 @@
         (queryChange)="onQueryChange($event)"
         (rowOpen)="onRowOpen()"
         (rowAction)="onRowAction($event)"
-        (bulkAction)="onBulkAction($event, grid)">
+        >
 
         <app-view-toggle dgToolbarExtra label="Job Sheet" active="list" listLink="/job-sheet" reportLink="/job-sheet/report"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
             <span *ngIf="row.allocateStatus; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
-                [ngClass]="allocateStatusBadgeClasses[row.allocateStatus] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ row.allocateStatus }}</span>
+                [ngClass]="allocateStatusBadgeClasses[row.allocateStatus] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ statusLabel(row.allocateStatus) }}</span>
             <ng-template #asideStatusEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
         </ng-template>
 
@@ -49,19 +54,20 @@
             </div>
             <div class="js-meta">
                 <p class="js-meta-label">LPO Value</p>
-                <p class="js-meta-value">{{ row.lpoValue || 0 }} QAR</p>
+                <p class="js-meta-value">{{ row.lpoValue || 0 | number: '1.2-2' }} QAR</p>
             </div>
             <div class="js-meta">
-                <p class="js-meta-label">Date</p>
+                <p class="js-meta-label">Last Updated</p>
                 <p class="js-meta-value">{{ row.updatedDate | date: 'dd MMM yyyy' }}</p>
             </div>
         </ng-template>
 
+        <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
-            <app-action-button *ngIf="canAllocateJobs && row.allocateStatus !== 'Completed'" variant="secondary" (click)="openAllocateTypeSelecter(row)">Allocate</app-action-button>
-            <app-action-button *ngIf="canTransfer(row)" variant="secondary" (click)="onTransferProcurementPerson(row)">Transfer Procurement</app-action-button>
-            <app-action-button *ngIf="canConvert(row)" variant="secondary" (click)="onConvertToPurchase(row)">Convert To Purchase</app-action-button>
-            <app-action-button *ngIf="isDeleteOption" variant="secondary" (click)="onDeleteJob(row)">Delete</app-action-button>
+            <app-action-button *ngIf="canAllocate(row)" variant="primary" (click)="openAllocateTypeSelecter(row)">Allocate</app-action-button>
+            <app-action-button *ngIf="canTransfer(row)" variant="primary" (click)="onTransferProcurementPerson(row)">Transfer Procurement</app-action-button>
+            <app-action-button *ngIf="canConvert(row)" variant="primary" (click)="onConvertToPurchase(row)">Convert To Purchase</app-action-button>
+            <app-action-button *ngIf="canMarkLost(row)" variant="outline" (click)="onMarkLost(row)">Mark as lost</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
@@ -84,9 +90,11 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'workflow'">
-                    <ng-container *ngIf="workflowFor(row) | async as timeline; else workflowLoading">
-                        <div *ngIf="timeline?.timeline?.length; else workflowEmpty" class="space-y-3">
-                            <div *ngFor="let event of timeline.timeline; trackBy: trackByEventId"
+                    <ng-container *ngIf="workflowFor(row) | async as wf">
+                        <p *ngIf="wf.status === 'loading'" class="text-[13px] text-gray-500 dark:text-gray-400 px-1 py-6 text-center">Loading workflow…</p>
+                        <p *ngIf="wf.status === 'error'" class="text-[13px] text-red-600 dark:text-red-400 px-1 py-6 text-center">Could not load the workflow. Close and reopen this job to retry.</p>
+                        <div *ngIf="wf.status === 'ready' && wf.timeline?.timeline?.length" class="space-y-3">
+                            <div *ngFor="let event of wf.timeline!.timeline; trackBy: trackByEventId"
                                 class="rounded-lg border px-3 py-2.5" [ngClass]="eventTone(event)">
                                 <div class="flex items-center justify-between gap-2">
                                     <p class="text-[13px] font-medium">{{ event.title }}</p>
@@ -96,14 +104,13 @@
                                 <p *ngIf="eventPerformedBy(event)" class="text-[11px] mt-1 opacity-75">By {{ eventPerformedBy(event) }}</p>
                             </div>
                         </div>
-                        <ng-template #workflowEmpty>
-                            <p class="text-[13px] text-gray-500 dark:text-gray-400 px-1 py-6 text-center">No workflow history for this job yet.</p>
-                        </ng-template>
+                        <p *ngIf="wf.status === 'ready' && !wf.timeline?.timeline?.length" class="text-[13px] text-gray-500 dark:text-gray-400 px-1 py-6 text-center">No workflow history for this job yet.</p>
                     </ng-container>
-                    <ng-template #workflowLoading>
-                        <p class="text-[13px] text-gray-500 dark:text-gray-400 px-1 py-6 text-center">Loading workflow…</p>
-                    </ng-template>
                 </ng-container>
+
+                <app-detail-timeline *ngSwitchCase="'history'"
+                    [entries]="(historyFor(row) | async) ?? []"
+                    emptyMessage="No history recorded yet."></app-detail-timeline>
             </ng-container>
         </ng-template>
     </app-data-grid>

@@ -72,6 +72,10 @@ export class JobService {
     return this.http.post<any>(`${this.apiUrl}/job/updateAllocateType`, data)
   }
 
+  markJobLost(data: { id: string, reason: string }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/job/markLost`, data)
+  }
+
   getTechnicalDropdownList(): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/job/technical`)
   }

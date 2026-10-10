@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getJobSalesPerson, jobList, totalJob, updateJobStatus, deleteJob, jobSheets, oneJobSheet, updateAllocateType, getDropdownListForTechnical, getUnassignedProjectAndAMCJobs, transferProcurementPerson, getJobHistory, jobSheetsWithCompletedPO, jobSheetsWithApprovedPR, jobSheetsWithApprovedPOAndNoGRN, getPreviousJobItemsByClient } from "../controllers/job.controller";
+import { getJobSalesPerson, jobList, totalJob, updateJobStatus, deleteJob, jobSheets, oneJobSheet, updateAllocateType, markJobLost, getDropdownListForTechnical, getUnassignedProjectAndAMCJobs, transferProcurementPerson, getJobHistory, jobSheetsWithCompletedPO, jobSheetsWithApprovedPR, jobSheetsWithApprovedPOAndNoGRN, getPreviousJobItemsByClient } from "../controllers/job.controller";
 import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const jobRouter = Router()
 
@@ -21,6 +21,7 @@ jobRouter.get('/sales', getJobSalesPerson)
 jobRouter.post('/delete', requireUnlessDenied("jobSheet", "delete"), deleteJob)
 jobRouter.get('/jobIdDatas/:id', oneJobSheet)
 jobRouter.post('/updateAllocateType', requirePrivilege("jobSheet", "allocateJobs"), updateAllocateType)
+jobRouter.post('/markLost', requirePrivilege("jobSheet", "allocateJobs"), markJobLost)
 jobRouter.get('/technical', getDropdownListForTechnical)
 jobRouter.post('/unassignedToTechnical', getUnassignedProjectAndAMCJobs)
 jobRouter.post('/transferProcurementPerson', requirePrivilege("jobSheet", "transferProcurementPerson"), transferProcurementPerson)

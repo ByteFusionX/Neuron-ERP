@@ -1,68 +1,197 @@
 import { NextFunction, Request, Response } from "express"
-import jobModel, { allocateStatus, allocateType } from "../models/job.model"
+import jobModel, { allocateStatus, allocateType, jobStatus } from "../models/job.model"
 import Employee from '../models/employee.model';
 import { newTrash } from '../controllers/trash.controller';
-import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated, getEmployeeData } from "../common/utils/util";
+import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated, getEmployeeData, escapeRegex } from "../common/utils/util";
 import technicalModel from '../models/technical.model';
-import PurchaseRequest from '../models/purchaseRequest.model';
+import PurchaseRequest, { PurchaseRequestStatus } from '../models/purchaseRequest.model';
+import quotationModel, { quoteStatus } from '../models/quotation.model';
+import enquiryModel from '../models/enquiry.model';
+import { Invoice } from '../models/invoice.model';
+import { releaseQuoteStockHolds } from './quoteStockHold.controller';
+import { cancelOpenFollowUp } from '../services/enquiryFollowUp.service';
+import { logEnquiryAudit } from '../services/enquiryAudit.service';
 import PurchaseOrder from '../models/purchaseOrder.model';
 import DeliveryNote from '../models/deliveryNote.model';
 import GRN from '../models/grn.model';
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
+import { logAudit } from "../services/audit.service";
+
+const employeeLabel = async (id: unknown): Promise<string> => {
+    if (!id) return '—';
+    const e: any = await Employee.findById(id).select('firstName lastName').lean();
+    return e ? `${e.firstName || ''} ${e.lastName || ''}`.trim() || '—' : '—';
+};
 
 
 const { ObjectId } = require('mongodb')
 
+/** Grid column key -> field on the joined job document (after the lookups in `jobBasePipeline`). */
+const JOB_GRID_FIELDS: Record<string, string> = {
+    updatedDate: 'updatedDate',
+    jobId: 'jobId',
+    customerName: 'clientDetails.companyName',
+    description: 'quotation.subject',
+    salesPerson: 'salesPersonName',
+    department: 'departmentName',
+    quoteId: 'quotation.quoteId',
+    dealId: 'quotation.dealData.dealId',
+    procurementPerson: 'procurementName',
+    lpoValue: 'lpoValue',
+    allocateStatus: 'allocateStatus',
+};
+
+const JOB_ALLOCATE_STATUSES = Object.values(allocateStatus) as string[];
+
+/** Search box + grid column filters + sort for the job list. Everything runs after the lookups. */
+const buildJobGridQuery = (search: unknown, filters: unknown, sortKey: unknown, sortDir: unknown) => {
+    const clauses: Record<string, any>[] = [];
+    const text = String(search ?? '').trim();
+    if (text) {
+        const re = { $regex: escapeRegex(text), $options: 'i' };
+        clauses.push({
+            $or: [
+                { jobId: re },
+                { 'clientDetails.companyName': re },
+                { 'quotation.subject': re },
+                { 'quotation.quoteId': re },
+                { 'quotation.dealData.dealId': re },
+                { salesPersonName: re },
+                { procurementName: re },
+            ],
+        });
+    }
+
+    for (const f of Array.isArray(filters) ? filters : []) {
+        const key = String(f?.key ?? '');
+        const op = String(f?.op ?? 'contains');
+        const raw = f?.value;
+        const field = JOB_GRID_FIELDS[key];
+        if (!field) continue;
+        if (op === 'empty') {
+            clauses.push({ [field]: { $in: [null, ''] } });
+            continue;
+        }
+        if (raw === undefined || raw === null || raw === '') continue;
+        if (key === 'updatedDate') {
+            const day = new Date(String(raw));
+            if (isNaN(day.getTime())) continue;
+            const next = new Date(day.getTime() + 24 * 60 * 60 * 1000);
+            if (op === 'on') clauses.push({ [field]: { $gte: day, $lt: next } });
+            else if (op === 'before') clauses.push({ [field]: { $lt: day } });
+            else if (op === 'after') clauses.push({ [field]: { $gte: next } });
+            continue;
+        }
+        if (key === 'lpoValue') {
+            const n = Number(raw);
+            if (isNaN(n)) continue;
+            if (op === 'gt') clauses.push({ [field]: { $gt: n } });
+            else if (op === 'lt') clauses.push({ [field]: { $lt: n } });
+            else clauses.push({ [field]: n });
+            continue;
+        }
+        const value = escapeRegex(String(raw).trim());
+        const exact = op === 'is' || op === 'eq' || op === 'isNot';
+        const negate = op === 'isNot' || op === 'notContains';
+        const re = { $regex: exact ? `^${value}$` : value, $options: 'i' };
+        clauses.push(negate ? { [field]: { $not: re } } : { [field]: re });
+    }
+
+    const sortField = JOB_GRID_FIELDS[String(sortKey ?? '')];
+    // Default: newest activity first, which is the date the grid shows in its first column.
+    const sort: Record<string, 1 | -1> = sortField
+        ? { [sortField]: sortDir === 'desc' ? -1 : 1, _id: -1 }
+        : { updatedDate: -1, _id: -1 };
+    return { filter: clauses.length ? { $and: clauses } : {}, sort };
+};
+
+/** Lookups + LPO value shared by the page query and the totals query, so "of N" always matches the rows. */
+const jobBasePipeline = (salesPerson: unknown, qatarUsdRate: number): any[] => [
+    { $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' } },
+    { $unwind: '$quotation' },
+    ...(salesPerson && ObjectId.isValid(String(salesPerson)) ? [{ $match: { 'quotation.createdBy': new ObjectId(String(salesPerson)) } }] : []),
+    { $lookup: { from: 'customers', localField: 'quotation.client', foreignField: '_id', as: 'clientDetails' } },
+    { $unwind: '$clientDetails' },
+    { $lookup: { from: 'departments', localField: 'quotation.department', foreignField: '_id', as: 'departmentDetails' } },
+    { $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' } },
+    { $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' } },
+    { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
+    {
+        $addFields: {
+            departmentName: { $ifNull: [{ $arrayElemAt: ['$departmentDetails.departmentName', 0] }, ''] },
+            salesPersonName: {
+                $trim: { input: { $concat: [{ $ifNull: [{ $arrayElemAt: ['$salesPersonDetails.firstName', 0] }, ''] }, ' ', { $ifNull: [{ $arrayElemAt: ['$salesPersonDetails.lastName', 0] }, ''] }] } },
+            },
+            procurementName: {
+                $trim: { input: { $concat: [{ $ifNull: ['$procurementPerson.firstName', ''] }, ' ', { $ifNull: ['$procurementPerson.lastName', ''] }] } },
+            },
+            lpoValue: {
+                $let: {
+                    vars: {
+                        baseLpoValue: {
+                            $sum: {
+                                $cond: [
+                                    { $eq: ['$quotation.currency', 'USD'] },
+                                    { $multiply: [calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'), qatarUsdRate] },
+                                    calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
+                                ],
+                            },
+                        },
+                    },
+                    in: {
+                        $reduce: {
+                            input: { $ifNull: ['$quotation.dealData.additionalCosts', []] },
+                            initialValue: '$$baseLpoValue',
+                            in: { $cond: [{ $eq: ['$$this.type', 'Customer Discount'] }, { $subtract: ['$$value', '$$this.value'] }, '$$value'] },
+                        },
+                    },
+                },
+            },
+        },
+    },
+];
+
 export const jobList = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId, allocateStatus } = req.body;
-        let isStatus = status == null ? true : false;
-        let isSalesPerson = salesPerson == null ? true : false;
-        let skipNum: number = (page - 1) * row;
+        let { page, search, row, status, salesPerson, selectedMonth, selectedYear, access, userId, allocateStatus: allocateStatusFilter, filters: gridFilters, sortKey, sortDir, customer, department, fromDate, toDate } = req.body;
 
-        let matchFilters: any = {
+        page = Math.max(1, parseInt(page) || 1);
+        row = Math.min(10000, Math.max(1, parseInt(row) || 15));
+        const skipNum: number = (page - 1) * row;
+
+        if (allocateStatusFilter && !JOB_ALLOCATE_STATUSES.includes(String(allocateStatusFilter))) {
+            return res.status(400).json({ message: 'Invalid allocate status' });
+        }
+
+        const matchFilters: any = {
             isDeleted: { $ne: true },
             $and: [
-                {
-                    $or: [
-                        { jobId: { $regex: search, $options: 'i' } },
-                        { 'clientDetails.companyName': { $regex: search, $options: 'i' } }
-                    ]
-                },
-                { $or: [{ status: status }, { status: { $exists: isStatus } }] },
-                { $or: [{ 'quotation.dealData.dealId': { $exists: true } }, { 'quotation.dealData': { $exists: true } }] }
-            ]
+                { $or: [{ 'quotation.dealData.dealId': { $exists: true } }, { 'quotation.dealData': { $exists: true } }] },
+            ],
         };
-
-        if (allocateStatus) {
-            matchFilters.allocateStatus = allocateStatus;
-        }
-
-        let sortAggregate = {}
-
-
-        if (allocateStatus == "OpenToWork") {
-            sortAggregate = { updatedDate : -1 }
-        }else {
-            sortAggregate = { createdDate : -1 }
-        }
-
-        console.log(sortAggregate)
+        if (status != null) matchFilters.$and.push({ status });
+        if (allocateStatusFilter) matchFilters.allocateStatus = allocateStatusFilter;
+        if (customer && ObjectId.isValid(String(customer))) matchFilters['quotation.client'] = new ObjectId(String(customer));
+        if (department && ObjectId.isValid(String(department))) matchFilters['quotation.department'] = new ObjectId(String(department));
+        // Created-date window (the report's From / To); both ends inclusive.
+        const from = fromDate ? new Date(String(fromDate)) : null;
+        const to = toDate ? new Date(String(toDate)) : null;
+        if (from && !isNaN(from.getTime())) matchFilters.$and.push({ createdDate: { $gte: from } });
+        if (to && !isNaN(to.getTime())) matchFilters.$and.push({ createdDate: { $lt: new Date(to.getTime() + 24 * 60 * 60 * 1000) } });
 
         if (selectedMonth && selectedYear) {
-            let startDate = new Date(selectedYear, selectedMonth - 1, 1);
-            let endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
+            const startDate = new Date(selectedYear, selectedMonth - 1, 1);
+            const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
             matchFilters.$and.push({ createdDate: { $gte: startDate, $lte: endDate } });
         } else if (selectedYear) {
-            let startDate = new Date(selectedYear, 0, 1);
-            let endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
+            const startDate = new Date(selectedYear, 0, 1);
+            const endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
             matchFilters.$and.push({ createdDate: { $gte: startDate, $lte: endDate } });
         }
 
-        let accessFilter = {};
-
-        let reportedToUserIds = await getAllReportedEmployees(userId);
+        let accessFilter: any = {};
+        const reportedToUserIds = await getAllReportedEmployees(userId);
 
         switch (access) {
             case 'created':
@@ -75,7 +204,6 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = { 'salesPersonDetails._id': { $in: reportedToUserIds } };
                 break;
-
             default:
                 break;
         }
@@ -87,240 +215,56 @@ export const jobList = async (req: Request, res: Response, next: NextFunction) =
         }
 
         const qatarUsdRate = await getUSDRated();
+        const gridQuery = buildJobGridQuery(search, gridFilters, sortKey, sortDir);
+        const baseStages = [
+            ...jobBasePipeline(salesPerson, qatarUsdRate),
+            { $match: { ...accessFilter, ...matchFilters } },
+            { $match: gridQuery.filter },
+        ];
 
-        const jobData = await jobModel.aggregate([
-            {
-                $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
-            },
-            {
-                $unwind: "$quotation"
-            },
-            {
-                $match: { $or: [{ 'quotation.createdBy': new ObjectId(salesPerson) }, { 'quotation.createdBy': { $exists: isSalesPerson } }] }
-            },
-            {
-                $lookup: { from: 'customers', localField: 'quotation.client', foreignField: '_id', as: 'clientDetails' }
-            },
-            {
-                $unwind: "$clientDetails"
-            },
-            {
-                $sort: sortAggregate
-            },
-            {
-                $lookup: { from: 'departments', localField: 'quotation.department', foreignField: '_id', as: 'departmentDetails' }
-            },
-            {
-                $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
-            },
-            {
-                $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' }
-            },
-            { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'suppliers',
-                    localField: 'quotation.dealData.additionalCosts.supplierId',
-                    foreignField: '_id',
-                    as: 'costSupplierDetails'
-                }
-            },
-            {
-                $addFields: {
-                    'quotation.dealData.additionalCosts': {
-                        $map: {
-                            input: '$quotation.dealData.additionalCosts',
-                            as: 'cost',
-                            in: {
-                                $mergeObjects: [
-                                    '$$cost',
-                                    {
-                                        supplierDetails: {
-                                            $arrayElemAt: [
-                                                {
-                                                    $filter: {
-                                                        input: '$costSupplierDetails',
-                                                        as: 'supplier',
-                                                        cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] }
-                                                    }
-                                                },
-                                                0
-                                            ]
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                $addFields: {
-                    attention: {
-                        $arrayElemAt: [
-                            {
-                                $filter: {
-                                    input: '$clientDetails.contactDetails',
-                                    as: 'contact',
-                                    cond: { $eq: ['$$contact._id', '$quotation.attention'] }
-                                }
+        const [jobData, jobTotal] = await Promise.all([
+            jobModel.aggregate([
+                ...baseStages,
+                { $sort: gridQuery.sort },
+                { $skip: skipNum },
+                { $limit: row },
+                { $lookup: { from: 'suppliers', localField: 'quotation.dealData.additionalCosts.supplierId', foreignField: '_id', as: 'costSupplierDetails' } },
+                {
+                    $addFields: {
+                        'quotation.dealData.additionalCosts': {
+                            $map: {
+                                input: { $ifNull: ['$quotation.dealData.additionalCosts', []] },
+                                as: 'cost',
+                                in: {
+                                    $mergeObjects: [
+                                        '$$cost',
+                                        { supplierDetails: { $arrayElemAt: [{ $filter: { input: '$costSupplierDetails', as: 'supplier', cond: { $eq: ['$$supplier._id', '$$cost.supplierId'] } } }, 0] } },
+                                    ],
+                                },
                             },
-                            0
-                        ]
+                        },
+                        attention: {
+                            $arrayElemAt: [{ $filter: { input: '$clientDetails.contactDetails', as: 'contact', cond: { $eq: ['$$contact._id', '$quotation.attention'] } } }, 0],
+                        },
                     },
-                    lpoValue: {
-                        $let: {
-                            vars: {
-                                baseLpoValue: {
-                                    $sum: {
-                                        $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
-                                            {
-                                                $multiply: [
-                                                    calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
-                                                    qatarUsdRate
-                                                ]
-                                            },
-                                            calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')
-                                        ]
-                                    }
-                                }
-                            },
-                            in: {
-                                $reduce: {
-                                    input: '$quotation.dealData.additionalCosts',
-                                    initialValue: '$$baseLpoValue',
-                                    in: {
-                                        $cond: [
-                                            { $eq: ['$$this.type', 'Customer Discount'] },
-                                            { $subtract: ['$$value', '$$this.value'] },
-                                            '$$value'
-                                        ]
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-            },
-            {
-                $lookup: {
-                    from: 'purchases',
-                    localField: '_id',
-                    foreignField: 'jobId',
-                    as: 'purchaseRequests'
-                }
-            },
-            {
-                $addFields: {
-                    hasPurchaseRequest: {
-                        $gt: [
-                            {
-                                $size: {
-                                    $filter: {
-                                        input: '$purchaseRequests',
-                                        as: 'pr',
-                                        cond: { $eq: ['$$pr.isDeleted', false] }
-                                    }
-                                }
-                            },
-                            0
-                        ]
-                    }
-                }
-            },
-            {
-                $project: {
-                    purchaseRequests: 0
-                }
-            },
-            {
-                $match: { ...accessFilter, ...matchFilters }
-            },
-            {
-                $skip: skipNum
-            },
-            {
-                $limit: row
-            },
+                },
+                { $lookup: { from: 'purchases', localField: '_id', foreignField: 'jobId', as: 'purchaseRequests' } },
+                {
+                    $addFields: {
+                        hasPurchaseRequest: {
+                            $gt: [{ $size: { $filter: { input: '$purchaseRequests', as: 'pr', cond: { $eq: ['$$pr.isDeleted', false] } } } }, 0],
+                        },
+                    },
+                },
+                { $project: { purchaseRequests: 0, costSupplierDetails: 0, salesPersonName: 0, departmentName: 0, procurementName: 0 } },
+            ]),
+            jobModel.aggregate([
+                ...baseStages,
+                { $group: { _id: null, total: { $sum: 1 }, totalLpo: { $sum: { $ifNull: ['$lpoValue', 0] } } } },
+            ]),
         ]);
 
-
-        const jobTotal = await jobModel.aggregate([
-
-            {
-                $lookup: { from: 'quotations', localField: 'quoteId', foreignField: '_id', as: 'quotation' }
-            },
-            {
-                $unwind: "$quotation"
-            },
-            {
-                $lookup: { from: 'employees', localField: 'quotation.createdBy', foreignField: '_id', as: 'salesPersonDetails' }
-            },
-            {
-                $lookup: { from: 'employees', localField: 'procurementPerson', foreignField: '_id', as: 'procurementPerson' }
-            },
-            { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
-            {
-                $match: { $or: [{ 'quotation.createdBy': new ObjectId(salesPerson) }, { 'quotation.createdBy': { $exists: isSalesPerson } }] }
-            },
-            {
-                $lookup: { from: 'customers', localField: 'quotation.client', foreignField: '_id', as: 'clientDetails' }
-            },
-            {
-                $unwind: "$clientDetails"
-            },
-            {
-                $match: { ...accessFilter, ...matchFilters }
-            },
-            {
-                $addFields: {
-                    lpoValue: {
-                        $let: {
-                            vars: {
-                                baseLpoValue: {
-                                    $sum: {
-                                        $cond: [
-                                            { $eq: ['$quotation.currency', 'USD'] },
-                                            {
-                                                $multiply: [
-                                                    calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount'),
-                                                    qatarUsdRate
-                                                ]
-                                            },
-                                            calculateDiscountPricePipe('$quotation.dealData.updatedItems', '$quotation.dealData.totalDiscount')
-                                        ]
-                                    }
-                                }
-                            },
-                            in: {
-                                $reduce: {
-                                    input: '$quotation.dealData.additionalCosts',
-                                    initialValue: '$$baseLpoValue',
-                                    in: {
-                                        $cond: [
-                                            { $eq: ['$$this.type', 'Customer Discount'] },
-                                            { $subtract: ['$$value', '$$this.value'] },
-                                            '$$value'
-                                        ]
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-            },
-        ]).exec();
-
-        const totalValues = jobTotal.reduce((acc, job) => {
-            acc += job?.lpoValue;
-            return acc;
-        }, 0);
-
-
-        return res.status(200).json({ total: jobTotal.length, totalLpo: totalValues, job: jobData });
+        return res.status(200).json({ total: jobTotal[0]?.total ?? 0, totalLpo: jobTotal[0]?.totalLpo ?? 0, job: jobData });
     } catch (error) {
         console.log(error)
         next(error);
@@ -405,6 +349,9 @@ export const updateJobStatus = async (req: Request, res: Response, next: NextFun
         const jobUpdated = await jobModel.findByIdAndUpdate(jobId, { status: status, updatedDate: Date.now() })
 
         if (jobUpdated) {
+            if (jobUpdated.status !== status) {
+                await logAudit(req, { entityType: 'job', entityId: jobUpdated._id, entityLabel: jobUpdated.jobId, action: 'status-changed', summary: `Status changed to ${status}`, changes: [{ label: 'Status', from: jobUpdated.status, to: String(status) }] });
+            }
             return res.status(200).json(status)
         }
         return res.status(502).json()
@@ -468,13 +415,26 @@ export const deleteJob = async (req: Request, res: Response, next: NextFunction)
         const { dataId, employeeId } = req.body
 
         // Check if job exists and isn't already deleted
+        if (!dataId || !ObjectId.isValid(String(dataId))) {
+            return res.status(400).json({ message: 'A valid job id is required' });
+        }
+
         const job = await jobModel.findOne({
             _id: dataId,
+            isDeleted: { $ne: true },
         });
 
         if (!job) {
             return res.status(404).json({
                 message: 'Job not found or already deleted'
+            });
+        }
+
+        // Purchase work hangs off the job; deleting it would orphan those records.
+        const linkedPurchase = await PurchaseRequest.findOne({ jobId: job._id, isDeleted: false }).select('_id').lean();
+        if (linkedPurchase) {
+            return res.status(409).json({
+                message: 'This job has purchase requests. Delete or cancel them first, then delete the job.'
             });
         }
 
@@ -484,6 +444,7 @@ export const deleteJob = async (req: Request, res: Response, next: NextFunction)
         });
 
         newTrash('Job', dataId, employeeId)
+        await logAudit(req, { entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'deleted', summary: `Job ${job.jobId} deleted` });
 
         return res.status(200).json({
             success: true,
@@ -849,14 +810,45 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             });
         }
 
+        if (!ObjectId.isValid(String(id))) {
+            return res.status(400).json({ success: false, message: 'Invalid job id' });
+        }
+
+        const currentJob = await jobModel.findOne({ _id: id, isDeleted: { $ne: true } });
+        if (!currentJob) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        // Allocation moves a job forward (Pending -> Open To Work); it must never pull a started or finished job back.
+        if (currentJob.allocateStatus !== allocateStatus.Pending && currentJob.allocateStatus !== allocateStatus.OpenToWork) {
+            return res.status(409).json({
+                success: false,
+                message: `Job is already ${currentJob.allocateStatus}; it can no longer be allocated`
+            });
+        }
+
+        const needsProcurement = allocationType === allocateType.SupplyOnly || allocationType === allocateType.ProjectWithSupply;
+        if (needsProcurement) {
+            if (!procurementPerson || !ObjectId.isValid(String(procurementPerson))) {
+                return res.status(400).json({ success: false, message: 'A procurement person is required for this allocation type' });
+            }
+            const person = await Employee.findById(procurementPerson).select('_id').lean();
+            if (!person) {
+                return res.status(400).json({ success: false, message: 'Selected procurement person was not found' });
+            }
+        }
+
         const updateData: any = {
             allocateType: allocationType,
             allocateStatus: allocateStatus.OpenToWork,
             updatedDate: new Date()
         };
 
-        if (procurementPerson) {
+        if (needsProcurement) {
             updateData.procurementPerson = procurementPerson;
+        } else {
+            // Types without supply have no procurement owner; drop a stale one from an earlier allocation.
+            updateData.$unset = { procurementPerson: 1 };
         }
 
         // Update the job with new allocationType and set allocateStatus to OpenToWork
@@ -875,10 +867,17 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             });
         }
 
-        if (procurementPerson) {
+        const allocChanges = [
+            { label: 'Allocation type', from: currentJob.allocateType || '—', to: String(allocationType) },
+            { label: 'Allocation status', from: String(currentJob.allocateStatus), to: allocateStatus.OpenToWork },
+        ];
+        if (needsProcurement) allocChanges.push({ label: 'Procurement person', from: await employeeLabel(currentJob.procurementPerson), to: await employeeLabel(procurementPerson) });
+        await logAudit(req, { entityType: 'job', entityId: updateJob._id, entityLabel: updateJob.jobId, action: 'allocated', summary: `Allocated as ${allocationType}`, changes: allocChanges });
+
+        if (needsProcurement) {
             const socket = req.app.get('io') as Server;
             const userData = await getEmployeeData(req.user);
-            await createNotificationWithPrivileges(
+            void createNotificationWithPrivileges(
                 {
                     type: 'JobAllocated',
                     referenceModel: 'Job',
@@ -896,7 +895,7 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
                     }
                 },
                 socket
-            );
+            ).catch((err) => console.error("Job allocation notification failed:", err));
         }
 
         res.status(200).json({
@@ -905,6 +904,84 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             data: updateJob
         });
 
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Marks a job Lost and carries that through the chain: up to its quotation and enquiry, down to the open
+ * purchase requests, purchase orders, delivery notes and invoices raised for it. Finished documents
+ * (closed POs, delivered notes, submitted invoices) are left as they are.
+ */
+export const markJobLost = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.body;
+        const reason = String(req.body.reason ?? '').trim();
+        if (!id || !ObjectId.isValid(String(id))) {
+            return res.status(400).json({ success: false, message: 'Invalid job id' });
+        }
+        if (!reason) {
+            return res.status(400).json({ success: false, message: 'A reason is required to mark a job lost' });
+        }
+        const job = await jobModel.findOne({ _id: id, isDeleted: { $ne: true } });
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+        if (job.allocateStatus === allocateStatus.Lost) {
+            return res.status(409).json({ success: false, message: 'Job is already marked lost' });
+        }
+        if (job.allocateStatus === allocateStatus.Completed) {
+            return res.status(409).json({ success: false, message: 'A completed job cannot be marked lost' });
+        }
+
+        const actor = await getEmployeeData(req.user);
+        const now = new Date();
+        const previous = String(job.allocateStatus);
+        const updated = await jobModel.findByIdAndUpdate(id, {
+            $set: { allocateStatus: allocateStatus.Lost, status: jobStatus.Cancelled, lostReason: reason, lostAt: now, lostBy: actor?._id, updatedDate: now },
+        }, { new: true });
+        if (!updated) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        // Up the chain: quotation, then the enquiry it came from.
+        const quote = await quotationModel.findById(job.quoteId);
+        let enquiryLabel = '';
+        if (quote) {
+            await quotationModel.updateOne({ _id: quote._id }, {
+                $set: {
+                    status: quoteStatus.Lost, lostReason: reason, lostAt: now, lostBy: actor?._id,
+                    customerDecision: { decision: 'rejected', decidedAt: now, decidedBy: actor?._id, reason },
+                },
+                $push: { editHistory: { editedBy: actor?._id, editedAt: now, action: 'StatusChanged', fromStatus: quote.status, toStatus: quoteStatus.Lost, reason: `Job ${job.jobId} marked lost — ${reason}` } },
+            });
+            await releaseQuoteStockHolds(quote._id, `Job ${job.jobId} marked lost`, actor?._id);
+            if (quote.enqId) {
+                const enquiry = await enquiryModel.findByIdAndUpdate(quote.enqId, { $set: { status: 'lost', lostReason: reason } }, { new: true });
+                if (enquiry) {
+                    enquiryLabel = String(enquiry.enquiryId);
+                    await cancelOpenFollowUp(enquiry._id, 'Job lost');
+                    await logEnquiryAudit(req, enquiry._id, 'status-changed', `Marked lost — job ${job.jobId} was lost`, [{ label: 'Status', from: String(enquiry.status), to: 'lost' }, { label: 'Lost reason', to: reason }]);
+                }
+            }
+        }
+
+        // Down the chain: only documents that are still open.
+        const [prs, pos, dns, invoices] = await Promise.all([
+            PurchaseRequest.updateMany({ jobId: job._id, status: { $in: [PurchaseRequestStatus.Drafted, PurchaseRequestStatus.Pending, PurchaseRequestStatus.ReadyToProcessLPO, PurchaseRequestStatus.Approved] } }, { $set: { status: PurchaseRequestStatus.OnHoldCancelled } }),
+            PurchaseOrder.updateMany({ jobId: job._id, poStatus: { $in: ['Draft', 'Pending for Approval', 'Approved'] } }, { $set: { poStatus: 'Rejected' } }),
+            DeliveryNote.updateMany({ jobId: job._id, status: { $in: ['Draft', 'Ready for Dispatch'] } }, { $set: { status: 'Cancelled' } }),
+            Invoice.updateMany({ jobId: job._id, status: { $in: ['Pending to submit', 'PI Submitted', 'Partial invoicing', 'Hold'] } }, { $set: { status: 'Cancelled' } }),
+        ]);
+        const cascade = [
+            { label: 'Purchase requests cancelled', count: prs.modifiedCount },
+            { label: 'Purchase orders rejected', count: pos.modifiedCount },
+            { label: 'Delivery notes cancelled', count: dns.modifiedCount },
+            { label: 'Invoices cancelled', count: invoices.modifiedCount },
+        ].filter((c) => c.count > 0).map((c) => ({ label: c.label, to: String(c.count) }));
+
+        await logAudit(req, {
+            entityType: 'job', entityId: updated._id, entityLabel: updated.jobId, action: 'lost', summary: 'Job marked lost',
+            changes: [{ label: 'Allocation status', from: previous, to: allocateStatus.Lost }, { label: 'Lost reason', to: reason }, ...cascade],
+        });
+        res.status(200).json({ success: true, message: `Job marked lost${enquiryLabel ? ` — enquiry ${enquiryLabel} updated` : ''}`, data: updated });
     } catch (error) {
         next(error);
     }
@@ -947,6 +1024,23 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
             });
         }
 
+        if (!ObjectId.isValid(String(procurementPersonId))) {
+            return res.status(400).json({ success: false, message: 'Invalid employee id' });
+        }
+        if (existingJob.isDeleted) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+        if (existingJob.allocateStatus !== allocateStatus.OpenToWork && existingJob.allocateStatus !== allocateStatus.WorkInProgress) {
+            return res.status(409).json({ success: false, message: 'Procurement can only be transferred once the job is allocated and before it is completed' });
+        }
+        if (existingJob.procurementPerson?.toString() === String(procurementPersonId)) {
+            return res.status(400).json({ success: false, message: 'That employee is already the procurement person for this job' });
+        }
+        const newPerson = await Employee.findById(procurementPersonId).select('_id').lean();
+        if (!newPerson) {
+            return res.status(400).json({ success: false, message: 'Selected employee was not found' });
+        }
+
         const existingPurchaseRequest = await PurchaseRequest.findOne({
             jobId: existingJob._id,
             isDeleted: false
@@ -978,9 +1072,10 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
 
         const newProcurementId = procurementPersonId.toString();
         const previousProcurementId = existingJob.procurementPerson?.toString();
+        await logAudit(req, { entityType: 'job', entityId: updateJob._id, entityLabel: updateJob.jobId, action: 'procurement-transferred', summary: 'Procurement person transferred', changes: [{ label: 'Procurement person', from: await employeeLabel(previousProcurementId), to: await employeeLabel(newProcurementId) }] });
         if (newProcurementId !== previousProcurementId) {
             const socket = req.app.get('io') as Server;
-            await createNotificationWithPrivileges(
+            void createNotificationWithPrivileges(
                 {
                     type: 'ProcurementTransferred',
                     referenceModel: 'Job',
@@ -1000,7 +1095,7 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
                     },
                 },
                 socket
-            );
+            ).catch((err) => console.error("Procurement transfer notification failed:", err));
         }
 
         res.status(200).json({
@@ -1265,12 +1360,17 @@ export const checkAndUpdateJobCompletionStatus = async (jobId: string) => {
             return;
         }
 
+        if (job.allocateStatus === allocateStatus.Completed || job.allocateStatus === allocateStatus.Lost) {
+            return;
+        }
+
         await jobModel.findByIdAndUpdate(jobId, {
             $set: {
                 allocateStatus: allocateStatus.Completed,
                 updatedDate: new Date()
             }
         });
+        await logAudit(undefined, { entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'completed', summary: 'Job completed automatically — all purchase orders closed, invoiced and delivered', changes: [{ label: 'Allocation status', from: String(job.allocateStatus), to: allocateStatus.Completed }] });
     } catch (error) {
         console.error('Error checking job completion status:', error);
     }

@@ -13,6 +13,11 @@ export interface filterJob {
     allocateStatus?: allocateStatus | null;
     sortKey?: string | null;
     sortDir?: 'asc' | 'desc' | null;
+    filters?: { key: string; op: string; value?: unknown }[];
+    customer?: string | null;
+    department?: string | null;
+    fromDate?: string | null;
+    toDate?: string | null;
 }
 
 export interface getJob {
@@ -81,5 +86,6 @@ export enum allocateStatus {
     Pending = 'Pending',
     WorkInProgress = 'Work In Progress',
     OpenToWork = 'OpenToWork',
-    Completed = 'Completed'
+    Completed = 'Completed',
+    Lost = 'Lost'
 }
