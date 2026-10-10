@@ -1,51 +1,93 @@
-import { Component, Inject } from '@angular/core';
-import { NgIf } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { Component, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormBuilder, Validators } from '@angular/forms';
+import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { SfCheckboxComponent } from 'src/app/shared/components/smart-form/sf-checkbox.component';
 
 export interface MasterListItemDialogData {
   title: string;
   valueLabel?: string;
+  /** Hide/Unhide wording (Visible) instead of Active. */
+  hideStyle?: boolean;
+  /** Editing an existing item; set when `label` holds an unsaved draft rather than a saved name. */
+  edit?: boolean;
   label?: string;
   value?: number | null;
+  isActive?: boolean;
+  createdBy?: string;
+  createdAt?: string;
 }
 
+export interface MasterListItemResult {
+  label: string;
+  value: number | null;
+  isActive: boolean;
+}
+
+/** Add/edit modal for a master-list item, built on the shared form-modal shell and smart-form controls. */
 @Component({
   selector: 'app-master-list-item-dialog',
   standalone: true,
-  imports: [NgIf, FormsModule],
+  imports: [CommonModule, SmartFormModule, SfCheckboxComponent, FormModalShellComponent],
   template: `
-    <form class="p-6" (ngSubmit)="save()">
-      <h3 class="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">{{ data.label ? 'Edit' : 'Add' }} {{ data.title }}</h3>
-      <label class="block">
-        <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Name</span>
-        <input name="label" [(ngModel)]="label" required maxlength="60" autofocus
-          class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-      </label>
-      <label class="mt-4 block" *ngIf="data.valueLabel">
-        <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">{{ data.valueLabel }}</span>
-        <input type="number" min="0" name="value" [(ngModel)]="value"
-          class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-      </label>
-      <div class="mt-6 flex justify-end gap-3">
-        <button type="button" class="rounded-md px-3 py-2 text-sm text-gray-600 hover:underline" (click)="ref.close()">Cancel</button>
-        <button type="submit" [disabled]="!label.trim()"
-          class="rounded-md bg-violet-700 px-3 py-2 text-sm text-white hover:bg-violet-600 disabled:opacity-50">Save</button>
-      </div>
-    </form>
+    <app-form-modal-shell
+      icon="plus" tone="violet" [title]="(isEdit ? 'Edit ' : 'Add ') + data.title"
+      contextEmptyText="Shown in dropdowns across the app."
+      formId="master-list-item-form" [invalid]="form.invalid && submitted"
+      [submitLabel]="isEdit ? 'Save changes' : 'Add'" [submitIcon]="isEdit ? undefined : 'plus'"
+      [submitShortcutVerb]="isEdit ? 'save' : 'add'"
+      (closed)="close()">
+      <form id="master-list-item-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <app-sf-section title="Details" columns="1">
+          <app-sf-field label="Name" [control]="form.controls.label">
+            <app-sf-input formControlName="label" placeholder="Enter a name" [maxlength]="60" clearable></app-sf-input>
+          </app-sf-field>
+          <app-sf-field *ngIf="data.valueLabel" [label]="data.valueLabel" optional [control]="form.controls.value">
+            <app-sf-number formControlName="value" [min]="0" [stepper]="false"></app-sf-number>
+          </app-sf-field>
+          <app-sf-checkbox formControlName="isActive" [label]="data.hideStyle ? 'Visible in dropdowns (uncheck to hide)' : 'Active'"></app-sf-checkbox>
+        </app-sf-section>
+        <app-sf-section title="Record" columns="2" *ngIf="isEdit">
+          <app-sf-field label="Created by">
+            <app-sf-input formControlName="createdBy"></app-sf-input>
+          </app-sf-field>
+          <app-sf-field label="Created at">
+            <app-sf-input formControlName="createdAt"></app-sf-input>
+          </app-sf-field>
+        </app-sf-section>
+      </form>
+    </app-form-modal-shell>
   `,
+  styles: [':host{display:block}'],
 })
 export class MasterListItemDialog {
-  label: string;
-  value: number | null;
+  private fb = inject(FormBuilder);
+  private ref = inject<ModalRef<MasterListItemResult>>(ModalRef);
+  data = inject<MasterListItemDialogData>(MODAL_DATA);
 
-  constructor(public ref: MatDialogRef<MasterListItemDialog>, @Inject(MAT_DIALOG_DATA) public data: MasterListItemDialogData) {
-    this.label = data.label ?? '';
-    this.value = data.value ?? null;
+  submitted = false;
+  readonly isEdit = this.data.edit ?? !!this.data.label;
+
+  form = this.fb.group({
+    label: [this.data.label ?? '', [Validators.required, Validators.maxLength(60), (c: { value: string | null }) => (c.value ?? '').trim() ? null : { required: true }]],
+    value: [this.data.value ?? null as number | null, Validators.min(0)],
+    isActive: [this.data.isActive ?? true],
+    createdBy: [{ value: this.data.createdBy || '—', disabled: true }],
+    createdAt: [{ value: this.data.createdAt ? new Date(this.data.createdAt).toLocaleString() : '—', disabled: true }],
+  });
+
+  close(): void {
+    this.ref.close();
   }
 
-  save(): void {
-    if (!this.label.trim()) return;
-    this.ref.close({ label: this.label.trim(), value: this.data.valueLabel ? this.value : null });
+  submit(): void {
+    this.submitted = true;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+    const v = this.form.getRawValue();
+    this.ref.close({ label: (v.label ?? '').trim(), value: this.data.valueLabel ? (v.value ?? null) : null, isActive: !!v.isActive });
   }
 }

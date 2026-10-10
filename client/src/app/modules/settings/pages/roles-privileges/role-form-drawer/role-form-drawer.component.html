@@ -39,9 +39,38 @@
           </span>
         </div>
 
+        <!-- Category tabs -->
+        <div *ngIf="groupedModules.length" class="flex gap-1 border-b border-gray-200 dark:border-white/10" role="tablist" aria-label="Module categories">
+          <button *ngFor="let g of groupedModules; trackBy: trackByName" type="button" role="tab" (click)="selectCategory(g.name)"
+            [attr.aria-selected]="activeGroup?.name === g.name"
+            class="-mb-px inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+            [ngClass]="activeGroup?.name === g.name
+              ? 'border-violet-600 text-violet-700 dark:border-violet-400 dark:text-violet-300'
+              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'">
+            {{ g.name }}
+            <span class="text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300">{{ enabledIn(g) }}/{{ g.modules.length }}</span>
+          </button>
+        </div>
+
+        <!-- Group switches: hide the whole group in the sidebar, or just its dashboard -->
+        <div *ngFor="let g of (activeGroup && hasGroupSwitch(activeGroup.name) ? [activeGroup] : []); trackBy: trackByName" class="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 dark:border-white/10 dark:bg-white/[0.02]">
+          <label class="inline-flex items-center gap-3 cursor-pointer has-[:disabled]:cursor-not-allowed">
+            <input type="checkbox" class="sr-only peer" [formControl]="ctrl(groupPath(g.name) + '.enabled')"
+              (change)="toggleGroup(g.name, $any($event.target).checked)" [attr.aria-label]="'Enable ' + g.name">
+            <span class="relative shrink-0 w-10 h-6 rounded-full bg-gray-200 transition-colors dark:bg-white/15 peer-checked:bg-violet-600 peer-disabled:opacity-60 peer-focus-visible:ring-2 peer-focus-visible:ring-violet-500/40
+              after:content-[''] after:absolute after:top-1 after:left-1 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-4"></span>
+            <span>
+              <span class="block text-sm font-semibold text-gray-900 dark:text-gray-100">{{ g.name }} group {{ groupEnabled(g.name) ? 'enabled' : 'disabled' }}</span>
+              <span class="block text-xs text-gray-500 dark:text-gray-400">{{ groupEnabled(g.name) ? 'Shown in the sidebar for modules this role can access.' : 'The whole group is hidden from the sidebar.' }}</span>
+            </span>
+          </label>
+        </div>
+
         <!-- Read-only: summary cards with chips -->
-        <div *ngIf="viewing" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div *ngFor="let m of filteredModules" class="rounded-xl border p-4 transition-colors"
+        <ng-container *ngIf="viewing">
+        <div *ngIf="activeGroup as g" [class.opacity-50]="!groupEnabled(g.name)">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div *ngFor="let m of g.modules" class="rounded-xl border p-4 transition-colors"
             [ngClass]="hasAccess(m)
               ? 'border-gray-200 bg-white dark:border-white/10 dark:bg-erp-surface-dark'
               : 'border-dashed border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/[0.02]'">
@@ -67,6 +96,8 @@
             </div>
           </div>
         </div>
+        </div>
+        </ng-container>
 
         <!-- Editing: quick presets -->
         <div *ngIf="!viewing" class="flex flex-wrap items-center gap-2">
@@ -80,13 +111,18 @@
           <span class="text-[11px] text-gray-400">Then fine-tune each module below.</span>
         </div>
 
+        <p *ngIf="!viewing && activeGroup && !groupEnabled(activeGroup.name)" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+          {{ activeGroup.name }} is disabled for this role. Switch it on above to set its modules.
+        </p>
+
         <!-- Editing: master-detail (module list + settings pane) -->
-        <div *ngIf="!viewing && filteredModules.length"
+        <div *ngIf="!viewing && filteredModules.length && activeGroup && groupEnabled(activeGroup.name)"
           class="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)] md:grid-rows-1 md:h-[calc(100vh-420px)] md:min-h-[360px] rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-white/10 dark:bg-erp-surface-dark">
 
           <!-- Module list -->
           <nav class="max-h-72 md:max-h-none min-h-0 overflow-y-auto border-b md:border-b-0 md:border-r border-gray-100 p-2 space-y-0.5 dark:border-white/10" aria-label="Modules">
-            <button *ngFor="let m of filteredModules" type="button" (click)="selectModule(m)"
+            <ng-container *ngIf="activeGroup as g">
+            <button *ngFor="let m of g.modules" type="button" (click)="selectModule(m)"
               [attr.aria-current]="selectedModule?.key === m.key ? 'true' : null"
               class="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left transition-colors"
               [ngClass]="selectedModule?.key === m.key ? 'bg-violet-50 dark:bg-violet-500/15' : 'hover:bg-gray-50 dark:hover:bg-white/5'">
@@ -99,10 +135,11 @@
               </span>
               <span *ngIf="hasAccess(m) && !m.flags.length" class="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-label="Enabled"></span>
             </button>
+            </ng-container>
           </nav>
 
           <!-- Settings pane -->
-          <section *ngIf="selectedModule as m" class="min-h-0 overflow-y-auto">
+          <section *ngFor="let m of (selectedModule ? [selectedModule] : []); trackBy: trackByKey" class="min-h-0 overflow-y-auto">
             <header class="sticky top-0 z-10 flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-erp-surface-dark/95">
               <span class="flex items-center justify-center w-9 h-9 shrink-0 rounded-lg text-xs font-bold"
                 [ngClass]="hasAccess(m) ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' : 'bg-gray-100 text-gray-400 dark:bg-white/5'">{{ m.abbr }}</span>
@@ -167,12 +204,12 @@
         <p *ngIf="!filteredModules.length" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">No modules match "{{ privilegeSearch }}".</p>
       </div>
     </app-sf-section>
-
-    <p class="text-red-600 text-sm mt-4 text-center" *ngIf="error" role="alert">{{ error }}</p>
   </form>
 
   <ng-container sfDrawerFooter>
-    <span *ngIf="categoryForm.invalid && categoryForm.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+    <!-- Rendered in the footer itself (not the scrollable form body) so it can never sit behind/over the action buttons. -->
+    <p *ngIf="error" class="mr-auto text-sm text-red-600 dark:text-red-400" role="alert">{{ error }}</p>
+    <span *ngIf="!error && categoryForm.invalid && categoryForm.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
     <app-action-button variant="secondary" (click)="onClose(false)">{{ viewing ? 'Close' : 'Cancel' }}</app-action-button>
     <app-action-button *ngIf="viewing && canEdit" variant="primary" (click)="startEditing()">Edit</app-action-button>
     <app-action-button *ngIf="!viewing" variant="primary" type="submit" form="role-form" [disabled]="isSaving">

@@ -1,17 +1,15 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { Observable, firstValueFrom, forkJoin, map, of, catchError } from 'rxjs';
+import { Observable, firstValueFrom, map } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
-import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
-import { CreateDepartmentDialog } from 'src/app/modules/hr/pages/create-department/create-department.component';
-import { CreateCustomerTypeDialog } from 'src/app/modules/settings/pages/master-data/create-customer-type/create-customer-type.component';
+import { getCustomerType } from 'src/app/shared/interfaces/customerType.interface';
+import { CreateCustomerTypeDialog } from './create-customer-type/create-customer-type.component';
 import { MasterCustomRow, MasterDataGridComponent, MasterTab } from './master-data-grid.component';
 
-const MASTER_DIALOG_SIZE = { width: '560px', maxWidth: '95vw' };
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const DIALOG_SIZE = { width: '480px', maxWidth: '95vw' };
 
 @Component({
   selector: 'app-customer-data',
@@ -19,42 +17,33 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
   imports: [MasterDataGridComponent],
   template: `
     <app-master-data-grid label="Customer Data" storageKey="customer" [tabs]="tabs"
-      description="Customer-facing lists and shared classifications used by Customer and downstream sales documents."></app-master-data-grid>
+      description="Commercial terms and classification lists used by customer records."></app-master-data-grid>
   `,
 })
 export class CustomerDataComponent implements OnInit {
-  private employeeService = inject(EmployeeService);
-  private profileService = inject(ProfileService);
   private dialog = inject(MatDialog);
   private toast = inject(ToastrService);
   private confirm = inject(ConfirmDialogService);
+  private employeeService = inject(EmployeeService);
+  private profileService = inject(ProfileService);
 
-  employeeId = '';
+  private employeeId = '';
+  private customerTypesById: Record<string, getCustomerType> = {};
 
   tabs: MasterTab[] = [
-    { id: 'paymentTerms', label: 'Payment Terms', title: 'Payment term', list: 'paymentTerms', valueLabel: 'Days', hint: 'Used on Customer now; also reused by Quotation and Deal approval checks.' },
-    { id: 'source', label: 'Sources', title: 'Customer source', list: 'source', hint: 'Same source list used by Customer and Enquiry until separate customer-source settings are added.' },
-    { id: 'industry', label: 'Industries', title: 'Industry', list: 'industry', hint: 'Shared with Enquiry to keep customer and lead classification consistent.' },
     {
-      id: 'customerTypes', label: 'Customer Types', title: 'Customer type',
-      hint: 'Used by Customer records for customer classification and default discount context.',
+      id: 'customerType', label: 'Customer Type', title: 'Customer type', hint: 'Used by the Customer Type field on customer records, with an optional default discount.',
       custom: {
         load: () => this.loadCustomerTypes(),
-        create: () => this.closedWithData(this.dialog.open(CreateCustomerTypeDialog, { ...MASTER_DIALOG_SIZE, data: {} })),
-        edit: (row) => this.closedWithData(this.dialog.open(CreateCustomerTypeDialog, { ...MASTER_DIALOG_SIZE, data: { customerType: row.source } })),
+        create: () => this.createCustomerType(),
+        edit: (row) => this.editCustomerType(row),
         remove: (row) => this.removeCustomerType(row),
       },
     },
-    {
-      id: 'customerDepartments', label: 'Customer Departments', title: 'Customer department',
-      hint: 'Used for customer contact departments, such as Procurement, Accounts or Engineering.',
-      custom: {
-        load: () => this.loadCustomerDepartments(),
-        create: () => this.closedWithData(this.dialog.open(CreateDepartmentDialog, { ...MASTER_DIALOG_SIZE, data: { forCustomer: true } })),
-        edit: (row) => this.closedWithData(this.dialog.open(CreateDepartmentDialog, { ...MASTER_DIALOG_SIZE, data: { forCustomer: true, department: row.source } })),
-        remove: (row) => this.removeCustomerDepartment(row),
-      },
-    },
+    { id: 'paymentTerms', label: 'Payment Terms', title: 'Payment term', list: 'paymentTerms', valueLabel: 'Days', hint: 'Used by the Payment Terms field on customer records.' },
+    { id: 'source', label: 'Source', title: 'Source', list: 'source', hint: 'Options for how a customer found the company, used on customer records.' },
+    { id: 'creditStatus', label: 'Credit Status', title: 'Credit status', list: 'creditStatus', hint: 'Used by the Credit Status field on customer records.' },
+    { id: 'currency', label: 'Currency', title: 'Currency', list: 'currency', hint: 'Used by the Currency field on customer records.' },
   ];
 
   ngOnInit(): void {
@@ -63,32 +52,43 @@ export class CustomerDataComponent implements OnInit {
     });
   }
 
-  private async closedWithData(ref: { afterClosed: () => Observable<any> }): Promise<boolean> {
-    return !!(await firstValueFrom(ref.afterClosed()));
-  }
-
   private loadCustomerTypes(): Observable<MasterCustomRow[]> {
-    return forkJoin({
-      list: this.profileService.getCustomerTypes(),
-      usage: this.profileService.getCustomerTypeUsage().pipe(catchError(() => of({} as Record<string, number>))),
-    }).pipe(map(({ list, usage }) => (list ?? []).map((item: any) => {
-      const parts: string[] = [];
-      if (item.defaultDiscount) parts.push(`${item.defaultDiscount}% discount`);
-      parts.push(plural(usage?.[item._id] ?? 0, 'customer'));
-      return { _id: item._id, name: item.customerTypeName, detail: parts.join(' · '), status: item.isActive === false ? 'Inactive' : 'Active', source: item };
-    })));
+    return this.profileService.getCustomerTypes().pipe(
+      map((list) => {
+        this.customerTypesById = {};
+        return (list ?? []).map((item) => {
+          this.customerTypesById[item._id!] = item;
+          return this.toRow(item);
+        });
+      }),
+    );
   }
 
-  private loadCustomerDepartments(): Observable<MasterCustomRow[]> {
-    return forkJoin({
-      list: this.profileService.getCustomerDepartments(),
-      usage: this.profileService.getDepartmentUsage().pipe(catchError(() => of(null as any))),
-    }).pipe(map(({ list, usage }) => (list ?? []).map((item: any) => {
-      const parts: string[] = [];
-      if (item.code) parts.push(`Code ${item.code}`);
-      parts.push(plural(usage?.contacts?.[item._id] ?? 0, 'contact'));
-      return { _id: item._id, name: item.departmentName, detail: parts.join(' · '), status: item.isActive === false ? 'Inactive' : 'Active', source: item };
-    })));
+  private toRow(item: getCustomerType): MasterCustomRow {
+    const parts: string[] = [];
+    if (item.defaultDiscount) parts.push(`${item.defaultDiscount}% discount`);
+    return {
+      _id: item._id!,
+      name: item.customerTypeName,
+      createdBy: '',
+      createdAt: item.createdDate ? new Date(item.createdDate).toISOString() : '',
+      status: item.isActive !== false ? 'Active' : 'Inactive',
+      source: item,
+    };
+  }
+
+  private async createCustomerType(): Promise<boolean> {
+    const ref = this.dialog.open(CreateCustomerTypeDialog, { ...DIALOG_SIZE, data: {} });
+    const data = await firstValueFrom(ref.afterClosed());
+    return !!data;
+  }
+
+  private async editCustomerType(row: MasterCustomRow): Promise<boolean> {
+    const customerType = this.customerTypesById[row._id];
+    if (!customerType) return false;
+    const ref = this.dialog.open(CreateCustomerTypeDialog, { ...DIALOG_SIZE, data: { customerType } });
+    const data = await firstValueFrom(ref.afterClosed());
+    return !!data;
   }
 
   private async removeCustomerType(row: MasterCustomRow): Promise<boolean> {
@@ -100,25 +100,13 @@ export class CustomerDataComponent implements OnInit {
       confirmLabel: 'Delete',
     });
     if (!confirmed) return false;
-    return this.deleteCall(this.profileService.deleteCustomerType({ dataId: row._id, employee: this.employeeId }), 'Customer Type deleted successfully', 'Failed to delete customer type');
-  }
-
-  private async removeCustomerDepartment(row: MasterCustomRow): Promise<boolean> {
-    const { confirmed } = await this.confirm.open({
-      tone: 'reject',
-      title: 'Delete Customer Department?',
-      message: `Delete "${row.name}"?`,
-      consequence: 'This cannot be undone. Customer contacts using this department may block the delete.',
-      confirmLabel: 'Delete',
-    });
-    if (!confirmed) return false;
-    return this.deleteCall(this.profileService.deleteCustomerDepartment({ dataId: row._id, employee: this.employeeId }), 'Customer department deleted successfully', 'Failed to delete customer department');
-  }
-
-  private deleteCall(call: Observable<any>, okMessage: string, failMessage: string): Promise<boolean> {
-    return new Promise((resolve) => call.subscribe({
-      next: () => { this.toast.success(okMessage); resolve(true); },
-      error: (e) => { this.toast.error(e.error?.message || failMessage); resolve(false); },
-    }));
+    try {
+      await firstValueFrom(this.profileService.deleteCustomerType({ dataId: row._id, employee: this.employeeId }));
+      this.toast.success('Customer Type deleted successfully');
+      return true;
+    } catch (e: any) {
+      this.toast.error(e?.error?.message || 'Failed to delete customer type');
+      return false;
+    }
   }
 }

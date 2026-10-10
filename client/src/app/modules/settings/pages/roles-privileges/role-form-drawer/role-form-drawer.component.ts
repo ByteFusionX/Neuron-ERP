@@ -6,6 +6,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { GetCategory, Privileges } from 'src/app/shared/interfaces/employee.interface';
+import { GROUP_KEYS } from 'src/app/shared/constants/nav-menu';
 import { customerPrivileges, departmentPrivileges, employeePrivileges } from 'src/app/shared/utils/privilege-fallback';
 
 type CheckKey = 'dashboardChecked' | 'employeeChecked' | 'announcementChecked' | 'customerChecked' | 'enquiryChecked' | 'assignedJobsChecked'
@@ -38,12 +39,31 @@ const SCOPE: PrivilegeChoice[] = [
 ];
 const scope = (path: string, label = 'Data visibility'): PrivilegeScope => ({ path, label, options: SCOPE });
 
+// Same groups as the sidebar.
+const MODULE_CATEGORIES = [
+  { name: 'Main' }, { name: 'Sales' }, { name: 'Operations' }, { name: 'Projects' }, { name: 'Finance' }, { name: 'Administration' }, { name: 'Settings' },
+];
+const MODULE_CATEGORY_OF: Record<string, string> = {
+  salesDashboard: 'Sales', operationsDashboard: 'Operations', projectsDashboard: 'Projects',
+  financeDashboard: 'Finance', administrationDashboard: 'Administration',
+  customer: 'Sales', enquiry: 'Sales', assignedJob: 'Sales', quotation: 'Sales',
+  dealSheet: 'Sales', jobSheet: 'Sales',
+  supplier: 'Operations', purchase: 'Operations', purchaseOrder: 'Operations', grn: 'Operations',
+  inventory: 'Operations', dispatch: 'Operations', invoice: 'Operations',
+  technical: 'Projects',
+  claims: 'Finance', sensitiveData: 'Finance',
+  home: 'Main', dashboard: 'Main', employee: 'Administration', departments: 'Administration',
+  announcement: 'Administration',
+  companyProfile: 'Settings', numbering: 'Settings', masterData: 'Settings', roles: 'Settings',
+  workflow: 'Settings', notifications: 'Settings', audit: 'Settings', recycle: 'Settings', bugReports: 'Settings',
+};
+
 /**
  * Create and edit a role (category) in a slide-over.
  * The host binds `open`, `mode` and (for edit) `category`, and reacts to `saved` / `closed`.
  */
 // Modules being reworked come first, in this order; the rest keep their existing order.
-const PRIORITY_MODULES = ['portal', 'departments', 'employee', 'customer'];
+const PRIORITY_MODULES = ['home', 'dashboard', 'salesDashboard', 'operationsDashboard', 'projectsDashboard', 'financeDashboard', 'administrationDashboard', 'companyProfile', 'numbering', 'masterData', 'roles', 'workflow', 'notifications', 'audit', 'recycle', 'bugReports', 'departments', 'employee', 'customer'];
 const orderModules = (modules: PrivilegeModule[]): PrivilegeModule[] => {
   const rank = (m: PrivilegeModule) => {
     const i = PRIORITY_MODULES.indexOf(m.key);
@@ -104,10 +124,21 @@ export class RoleFormDrawerComponent implements OnChanges {
 
   privilegeSearch = '';
   selectedKey: string | null = null;
+  activeCategory: string | null = null;
 
   readonly privilegeModules: PrivilegeModule[] = orderModules([
+    ...([
+      ['sales', 'Sales', 'Sales'], ['operations', 'Operations', 'Operations'], ['projects', 'Projects', 'Projects'],
+      ['finance', 'Finance', 'Finance'], ['administration', 'Administration', 'HR'],
+    ] as const).map(([g, , label]): PrivilegeModule => ({
+      key: g + 'Dashboard', label: label + ' Dashboard', abbr: 'DB', description: label + ' dashboard in the sidebar',
+      scopes: [], flags: [{ path: 'groups.' + g + '.dashboard', label: 'View ' + label + ' dashboard' }],
+    })),
     {
-      key: 'dashboard', label: 'Dashboard', abbr: 'DB', description: 'Revenue and gross profit comparison', alwaysOn: true, flags: [],
+      key: 'home', label: 'Home', abbr: 'HM', description: 'Landing page in the sidebar', flags: [{ path: 'main.home', label: 'View Home' }], scopes: [],
+    },
+    {
+      key: 'dashboard', label: 'Dashboard', abbr: 'DB', description: 'Revenue and gross profit comparison', flags: [{ path: 'main.dashboard', label: 'View Dashboard' }],
       scopes: [{
         path: 'dashboard.compareAgainst', label: 'Compare against',
         hint: 'Turn on "Salesperson with assigned target" to change this.',
@@ -259,6 +290,33 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'departments.delete', label: 'Departments (delete)' },
       ],
     },
+    // Settings sidebar sections, in sidebar order.
+    {
+      key: 'companyProfile', label: 'Company Profile', abbr: 'CP', description: 'Company profile and company-wide targets',
+      scopes: [],
+      flags: [
+        { path: 'portalManagement.companyProfileEdit', label: 'Company profile (edit)' },
+        { path: 'portalManagement.companyTarget', label: 'Company target (create / edit)' },
+      ],
+    },
+    {
+      key: 'numbering', label: 'Numbering', abbr: 'NU', description: 'Document number sequences',
+      scopes: [],
+      flags: [
+        { path: 'portalManagement.numbering', label: 'Numbering (view)' },
+        { path: 'portalManagement.numberingEdit', label: 'Numbering (edit)' },
+      ],
+    },
+    {
+      key: 'masterData', label: 'Master Data', abbr: 'MD', description: 'Business lists other screens pick from',
+      scopes: [],
+      flags: [
+        { path: 'portalManagement.masterData', label: 'Master data (view)' },
+        { path: 'portalManagement.masterDataEdit', label: 'Master data (edit)' },
+        { path: 'portalManagement.notesAndTerms', label: 'Customer notes and T&C (create / edit / delete)' },
+        { path: 'portalManagement.customerType', label: 'Customer type (create / edit)' },
+      ],
+    },
     {
       key: 'roles', label: 'Roles & Privileges', abbr: 'RP', description: 'Manage roles and what they can access',
       scopes: [],
@@ -270,24 +328,38 @@ export class RoleFormDrawerComponent implements OnChanges {
       ],
     },
     {
-      key: 'portal', label: 'Settings', abbr: 'ST', description: 'Master data management', master: 'portalChecked', group: 'portal',
+      key: 'workflow', label: 'Workflow', abbr: 'WF', description: 'Approval workflows',
       scopes: [],
       flags: [
-        { path: 'portalManagement.notesAndTerms', label: 'Customer notes and T&C (create / edit / delete)' },
-        { path: 'portalManagement.companyTarget', label: 'Company target (create / edit)' },
-        { path: 'portalManagement.customerType', label: 'Customer type (create / edit)' },
-        { path: 'portalManagement.companyProfileEdit', label: 'Company profile (edit)' },
-        { path: 'portalManagement.numbering', label: 'Numbering (view)' },
-        { path: 'portalManagement.numberingEdit', label: 'Numbering (edit)' },
-        { path: 'portalManagement.masterData', label: 'Master data (view)' },
-        { path: 'portalManagement.masterDataEdit', label: 'Master data (edit)' },
         { path: 'portalManagement.approvalRules', label: 'Approvals (view)' },
         { path: 'portalManagement.approvalRulesEdit', label: 'Approvals (edit)' },
+      ],
+    },
+    {
+      key: 'notifications', label: 'Notifications', abbr: 'NT', description: 'Which events alert people',
+      scopes: [],
+      flags: [
         { path: 'portalManagement.notifications', label: 'Notifications (view)' },
         { path: 'portalManagement.notificationsEdit', label: 'Notifications (edit)' },
+      ],
+    },
+    {
+      key: 'audit', label: 'Audit & History', abbr: 'AU', description: 'Recorded changes and history retention',
+      scopes: [],
+      flags: [
         { path: 'portalManagement.audit', label: 'Audit & History (view)' },
         { path: 'portalManagement.auditEdit', label: 'Audit & History (edit)' },
       ],
+    },
+    {
+      key: 'recycle', label: 'Recycle Bin', abbr: 'RB', description: 'Restore deleted records',
+      scopes: [],
+      flags: [{ path: 'portalManagement.recycle', label: 'Recycle bin (view / restore)' }],
+    },
+    {
+      key: 'bugReports', label: 'Bug Reports', abbr: 'BR', description: 'Reported issues and their status',
+      scopes: [],
+      flags: [{ path: 'portalManagement.bugReports', label: 'Bug reports (view / update status)' }],
     },
   ]);
 
@@ -303,6 +375,14 @@ export class RoleFormDrawerComponent implements OnChanges {
     isSalespersonWithTarget: [false],
     responsibilities: new FormControl<string[]>([], { nonNullable: true }),
     privileges: this._fb.group({
+      groups: this._fb.group({
+        sales: this._fb.group({ enabled: [true], dashboard: [true] }),
+        operations: this._fb.group({ enabled: [true], dashboard: [true] }),
+        projects: this._fb.group({ enabled: [true], dashboard: [true] }),
+        finance: this._fb.group({ enabled: [true], dashboard: [true] }),
+        administration: this._fb.group({ enabled: [true], dashboard: [true] }),
+      }),
+      main: this._fb.group({ home: [true], dashboard: [true] }),
       dashboard: this._fb.group({
         viewReport: 'all',
         compareAgainst: 'company',
@@ -442,7 +522,9 @@ export class RoleFormDrawerComponent implements OnChanges {
         masterDataEdit: [false],
         approvalRulesEdit: [false],
         notificationsEdit: [false],
-        auditEdit: [false]
+        auditEdit: [false],
+        recycle: [false],
+        bugReports: [false]
       })
     })
   })
@@ -507,6 +589,7 @@ export class RoleFormDrawerComponent implements OnChanges {
     this.error = '';
     this.privilegeSearch = '';
     this.selectedKey = null;
+    this.activeCategory = null;
     this.isSaving = false;
     this.categoryForm.enable({ emitEvent: false });
     this.categoryForm.reset(this.defaults);
@@ -602,14 +685,68 @@ export class RoleFormDrawerComponent implements OnChanges {
       m.label.toLowerCase().includes(q) || m.description.toLowerCase().includes(q) || m.flags.some((f) => f.label.toLowerCase().includes(q)));
   }
 
+  /** Filtered modules bucketed by sidebar category, empty buckets dropped. */
+  get groupedModules(): { name: string; modules: PrivilegeModule[] }[] {
+    const list = this.filteredModules;
+    return MODULE_CATEGORIES
+      .map((c) => ({ name: c.name, modules: list.filter((m) => (MODULE_CATEGORY_OF[m.key] ?? 'Administration') === c.name) }))
+      .filter((g) => g.modules.length);
+  }
+
   get enabledModuleCount(): number {
     return this.privilegeModules.filter((m) => this.hasAccess(m)).length;
   }
 
-  /** Module shown in the detail pane; falls back to the first visible module. */
+  /** Category tab being shown; falls back to the first one that has modules. */
+  get activeGroup(): { name: string; modules: PrivilegeModule[] } | undefined {
+    const groups = this.groupedModules;
+    return groups.find((g) => g.name === this.activeCategory) ?? groups[0];
+  }
+
+  /** Module shown in the detail pane; falls back to the first module of the active category. */
   get selectedModule(): PrivilegeModule | undefined {
-    const list = this.filteredModules;
+    const list = this.activeGroup?.modules ?? [];
     return list.find((m) => m.key === this.selectedKey) ?? list[0];
+  }
+
+  /** Form path of a group's switches, e.g. `groups.sales`. */
+  groupPath(name: string): string {
+    return 'groups.' + GROUP_KEYS[name];
+  }
+
+  /** "Settings" has no sidebar group switch. */
+  hasGroupSwitch(name: string): boolean {
+    return !!GROUP_KEYS[name];
+  }
+
+  groupEnabled(name: string): boolean {
+    if (!this.hasGroupSwitch(name)) return true;
+    return this.ctrl(this.groupPath(name) + '.enabled')?.value !== false;
+  }
+
+  /** Turning a group off also hides its dashboard; turning it on restores it. */
+  toggleGroup(name: string, enabled: boolean): void {
+    this.ctrl(this.groupPath(name) + '.enabled').setValue(enabled);
+    this.ctrl(this.groupPath(name) + '.dashboard').setValue(enabled);
+    this.categoryForm.markAsDirty();
+  }
+
+  trackByKey(_: number, m: { key: string }): string {
+    return m.key;
+  }
+
+  trackByName(_: number, g: { name: string }): string {
+    return g.name;
+  }
+
+  selectCategory(name: string): void {
+    this.activeCategory = name;
+    this.selectedKey = null;
+  }
+
+  /** Number of enabled modules in a category, for the tab badge. */
+  enabledIn(g: { modules: PrivilegeModule[] }): number {
+    return g.modules.filter((m) => this.hasAccess(m)).length;
   }
 
   ctrl(path: string): FormControl {

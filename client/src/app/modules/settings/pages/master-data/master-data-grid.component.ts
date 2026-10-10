@@ -1,6 +1,6 @@
 import { Component, Input, OnInit, inject } from '@angular/core';
-import { NgIf } from '@angular/common';
-import { MatDialog } from '@angular/material/dialog';
+import { DatePipe, NgIf } from '@angular/common';
+import { ModalService } from 'src/app/shared/components/modal/modal.service';
 import { Observable, firstValueFrom } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
@@ -8,13 +8,14 @@ import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid
 import { DataGridBreadcrumb, DataGridColumn, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { MasterListItem, MasterListName, MasterListService } from 'src/app/core/services/master-list.service';
 import { settingsEditAccess } from '../../settings-edit-access';
-import { MasterListItemDialog } from './master-list-item-dialog.component';
+import { MasterListItemDialog, MasterListItemDialogData, MasterListItemResult } from './master-list-item-dialog.component';
 
 export interface MasterRow {
   _id: string;
   tab: string;
   name: string;
-  detail: string;
+  createdBy: string;
+  createdAt: string;
   status: string;
   source: any;
 }
@@ -32,6 +33,8 @@ export interface MasterTab {
   list?: MasterListName;
   /** Column label for the numeric value of a list item (e.g. "Days", "Rate %"). */
   valueLabel?: string;
+  /** Show Hide/Unhide (Visible/Hidden) instead of Activate/Deactivate (Active/Inactive). */
+  hideStyle?: boolean;
   /** Backed by another API: the host supplies rows and the add/edit/delete flows (resolve true when data changed). */
   custom?: {
     load: () => Observable<MasterCustomRow[]>;
@@ -45,7 +48,7 @@ export interface MasterTab {
 @Component({
   selector: 'app-master-data-grid',
   standalone: true,
-  imports: [NgIf, DataGridComponent],
+  imports: [NgIf, DatePipe, DataGridComponent],
   template: `
     <div class="h-full">
       <div class="h-full min-h-0">
@@ -60,6 +63,7 @@ export interface MasterTab {
           [loading]="loading"
           [selectable]="false"
           [showToolbarTools]="false"
+          [showViewPill]="false"
           [createLabel]="canEdit() ? createLabel : ''"
           [title]="label"
           [subtitle]="currentTab?.hint ?? description"
@@ -85,9 +89,13 @@ export interface MasterTab {
                   <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</dt>
                   <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.status }}</dd>
                 </div>
-                <div *ngIf="row.detail" class="sm:col-span-2">
-                  <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Details</dt>
-                  <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.detail }}</dd>
+                <div>
+                  <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Created by</dt>
+                  <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.createdBy || '—' }}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Created at</dt>
+                  <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ row.createdAt ? (row.createdAt | date: 'dd MMM yyyy, HH:mm') : '—' }}</dd>
                 </div>
               </dl>
             </section>
@@ -104,7 +112,7 @@ export class MasterDataGridComponent implements OnInit {
   @Input() storageKey = '';
 
   private svc = inject(MasterListService);
-  private dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private toast = inject(ToastrService);
   private confirm = inject(ConfirmDialogService);
   readonly canEdit = settingsEditAccess('masterDataEdit');
@@ -112,14 +120,26 @@ export class MasterDataGridComponent implements OnInit {
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Settings', link: '/settings' }, { label: 'Master Data' }];
   columns: DataGridColumn<MasterRow>[] = [
     { key: 'name', label: 'Name', sortable: true, locked: true, valueGetter: (r) => r.name },
-    { key: 'detail', label: 'Details', sortable: false, valueGetter: (r) => r.detail || '—' },
-    { key: 'status', label: 'Status', sortable: true, width: '120px', valueGetter: (r) => r.status },
+    { key: 'createdBy', label: 'Created By', sortable: true, valueGetter: (r) => r.createdBy || '—' },
+    { key: 'createdAt', label: 'Created At', sortable: true, type: 'date', valueGetter: (r) => r.createdAt },
+    {
+      key: 'status', label: 'Status', type: 'badge', sortable: true, width: '120px',
+      valueGetter: (r) => r.status,
+      badgeClasses: {
+        Active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+        Visible: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+        Inactive: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+        Hidden: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+      },
+    },
   ];
   views: DataGridView<MasterRow>[] = [];
   rowActions: DataGridRowAction<MasterRow>[] = [
-    { id: 'edit', label: 'Edit', icon: 'edit', quick: true, panel: true },
-    { id: 'activate', label: 'Activate', hidden: (r) => !this.isList(r) || r.status === 'Active' },
-    { id: 'deactivate', label: 'Deactivate', hidden: (r) => !this.isList(r) || r.status !== 'Active' },
+    { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, panel: true },
+    { id: 'activate', label: 'Activate', hidden: (r) => !this.isList(r) || this.isHideStyle(r) || r.status === 'Active' },
+    { id: 'deactivate', label: 'Deactivate', hidden: (r) => !this.isList(r) || this.isHideStyle(r) || r.status !== 'Active' },
+    { id: 'unhide', label: 'Unhide', icon: 'eye', quick: true, hidden: (r) => !this.isHideStyle(r) || r.status === 'Visible' },
+    { id: 'hide', label: 'Hide', icon: 'eyeOff', quick: true, hidden: (r) => !this.isHideStyle(r) || r.status !== 'Visible' },
     { id: 'delete', label: 'Delete', icon: 'trash', variant: 'danger' },
   ];
 
@@ -158,6 +178,10 @@ export class MasterDataGridComponent implements OnInit {
     return !!this.tabs.find((t) => t.id === row.tab)?.list;
   }
 
+  private isHideStyle(row: MasterRow): boolean {
+    return !!this.tabs.find((t) => t.id === row.tab)?.hideStyle;
+  }
+
   private tabOf(id: string): MasterTab {
     return this.tabs.find((t) => t.id === id)!;
   }
@@ -190,8 +214,9 @@ export class MasterDataGridComponent implements OnInit {
       _id: i._id,
       tab: tab.id,
       name: i.label,
-      detail: tab.valueLabel ? `${tab.valueLabel}: ${i.value ?? '—'}` : '',
-      status: i.isActive ? 'Active' : 'Inactive',
+      createdBy: i.createdBy ? `${i.createdBy.firstName ?? ''} ${i.createdBy.lastName ?? ''}`.trim() : '',
+      createdAt: i.createdAt ?? '',
+      status: tab.hideStyle ? (i.isActive ? 'Visible' : 'Hidden') : (i.isActive ? 'Active' : 'Inactive'),
       source: i,
     };
   }
@@ -203,12 +228,24 @@ export class MasterDataGridComponent implements OnInit {
       if (await tab.custom.create()) this.loadTab(tab);
       return;
     }
-    const result = await this.askItem(tab);
-    if (!result) return;
-    this.svc.createItem(tab.list!, result).subscribe({
-      next: () => this.loadTab(tab),
-      error: (e) => this.toast.error(e?.error?.message || 'Could not add item'),
-    });
+    await this.saveItem(tab, undefined, (r) => this.svc.createItem(tab.list!, r), 'Could not add item');
+  }
+
+  /** Asks for the item and saves it. A failed save (e.g. a duplicate name) reopens the dialog with what was typed instead of discarding it. */
+  private async saveItem(tab: MasterTab, item: MasterListItem | undefined, save: (r: MasterListItemResult) => Observable<unknown>, failMessage: string): Promise<void> {
+    let draft: MasterListItemResult | undefined;
+    for (;;) {
+      const result = await this.askItem(tab, item, draft);
+      if (!result) return;
+      try {
+        await firstValueFrom(save(result));
+        this.loadTab(tab);
+        return;
+      } catch (e: any) {
+        this.toast.error(e?.error?.message || failMessage);
+        draft = result;
+      }
+    }
   }
 
   async onRowAction(event: DataGridRowActionEvent<MasterRow>): Promise<void> {
@@ -217,7 +254,9 @@ export class MasterDataGridComponent implements OnInit {
     switch (event.action.id) {
       case 'edit': return this.edit(tab, row);
       case 'activate':
-      case 'deactivate': return this.setActive(tab, row, event.action.id === 'activate');
+      case 'unhide': return this.setActive(tab, row, true);
+      case 'deactivate':
+      case 'hide': return this.setActive(tab, row, false);
       case 'delete': return this.remove(tab, row);
     }
   }
@@ -227,12 +266,7 @@ export class MasterDataGridComponent implements OnInit {
       if (await tab.custom.edit(row)) this.loadTab(tab);
       return;
     }
-    const result = await this.askItem(tab, row.source);
-    if (!result) return;
-    this.svc.updateItem(tab.list!, row._id, result).subscribe({
-      next: () => this.loadTab(tab),
-      error: (e) => this.toast.error(e?.error?.message || 'Could not save changes'),
-    });
+    await this.saveItem(tab, row.source, (r) => this.svc.updateItem(tab.list!, row._id, r), 'Could not save changes');
   }
 
   private setActive(tab: MasterTab, row: MasterRow, isActive: boolean): void {
@@ -251,7 +285,7 @@ export class MasterDataGridComponent implements OnInit {
       tone: 'reject',
       title: 'Delete item?',
       message: `Delete "${row.name}"?`,
-      consequence: 'Deactivate it instead if you only want to hide it from new records.',
+      consequence: 'It is removed from the table and from dropdowns. The record is kept in the database.',
       confirmLabel: 'Delete',
     });
     if (!confirmed) return;
@@ -261,11 +295,16 @@ export class MasterDataGridComponent implements OnInit {
     });
   }
 
-  private askItem(tab: MasterTab, item?: MasterListItem): Promise<{ label: string; value: number | null } | undefined> {
-    const ref = this.dialog.open(MasterListItemDialog, {
-      width: '440px',
-      maxWidth: '95vw',
-      data: { title: tab.title, valueLabel: tab.valueLabel, label: item?.label, value: item?.value },
+  private askItem(tab: MasterTab, item?: MasterListItem, draft?: MasterListItemResult): Promise<MasterListItemResult | undefined> {
+    const by = item?.createdBy ? `${item.createdBy.firstName ?? ''} ${item.createdBy.lastName ?? ''}`.trim() : '';
+    const ref = this.modal.open<MasterListItemResult, MasterListItemDialogData>(MasterListItemDialog, {
+      width: '480px',
+      data: {
+        title: tab.title, valueLabel: tab.valueLabel, hideStyle: tab.hideStyle,
+        edit: !!item,
+        label: draft?.label ?? item?.label, value: draft ? draft.value : item?.value, isActive: draft?.isActive ?? item?.isActive,
+        createdBy: by, createdAt: item?.createdAt,
+      },
     });
     return firstValueFrom(ref.afterClosed());
   }

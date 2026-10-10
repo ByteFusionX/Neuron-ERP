@@ -1,7 +1,7 @@
 import { Privileges } from 'src/app/shared/interfaces/employee.interface';
 
 export type SettingsSectionId =
-  | 'general'
+  | 'company-profile'
   | 'master-data'
   | 'roles-privileges'
   | 'approval-rules'
@@ -11,6 +11,7 @@ export type SettingsSectionId =
 
 export interface SettingsAccess {
   privileges?: Privileges;
+  isSuperAdmin?: boolean;
 }
 
 export interface SettingsSection {
@@ -29,7 +30,7 @@ export interface SettingsSection {
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
-    id: 'general',
+    id: 'company-profile',
     label: 'Company Profile',
     description: 'Company profile details and company-wide targets for sales revenue and gross profit.',
     icon: 'heroBuildingOffice',
@@ -49,18 +50,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'master-data',
     label: 'Master Data',
-    description: 'Business lists other screens pick from: notes and terms, role responsibilities, payment terms, tax rates, units, sources and industries.',
+    description: 'Managed lists other screens pick from: product units and availability, notes and terms.',
     icon: 'heroCircleStack',
     group: 'Company',
     children: [
-      { path: 'customer', label: 'Customer Data' },
       { path: 'product', label: 'Product Data' },
-      { path: 'purchase', label: 'Purchase Data' },
-      { path: 'sales-documents', label: 'Sales Documents' },
+      { path: 'customer', label: 'Customer Data' },
       { path: 'notes-terms', label: 'Notes & Terms' },
-      { path: 'responsibilities', label: 'Responsibilities' },
     ],
-    keywords: ['responsibility', 'responsibilities', 'lists', 'lookup', 'payment terms', 'tax', 'vat', 'unit', 'uom', 'note', 'terms', 'conditions', 'quotation'],
+    keywords: ['lists', 'lookup', 'unit', 'uom', 'availability', 'note', 'terms', 'conditions', 'quotation'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.masterData,
   },
   {
@@ -68,7 +66,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Roles & Privileges',
     description: 'Roles (categories of employees) and what each role is allowed to see and do.',
     icon: 'heroShieldCheck',
-    group: 'Access & Approvals',
+    group: 'Privilege and workflow',
     children: [
       { path: 'roles', label: 'Role Based' },
       { path: 'individual', label: 'User Specific' },
@@ -81,7 +79,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Workflow',
     description: 'Approval workflows: who approves each request, in what order.',
     icon: 'heroCheckBadge',
-    group: 'Access & Approvals',
+    group: 'Privilege and workflow',
     keywords: ['approval', 'workflow', 'approver', 'escalation', 'steps'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.approvalRules,
   },

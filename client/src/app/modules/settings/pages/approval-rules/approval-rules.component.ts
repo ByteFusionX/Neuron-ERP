@@ -42,19 +42,16 @@ const RULE_DEFS: { type: ApprovalRuleType; label: string; description: string; u
   {
     type: 'discount',
     label: 'Discount',
-    description: 'Quotation discount above this needs approval.',
+    description: 'Deal sheet discount above this needs approval.',
     unit: '% discount',
-    places: [
-      { id: 'quotation-form', module: 'Quotation', where: 'Creation & edit' },
-      { id: 'quotation-approval', module: 'Quotation', where: 'Approval flow' },
-    ],
+    places: [{ id: 'deal-sheet-approval', module: 'Deal Sheet', where: 'Approval flow' }],
   },
   {
     type: 'margin',
     label: 'Margin',
-    description: 'Margin below this needs approval.',
+    description: 'Deal sheet margin below this needs approval.',
     unit: '% margin',
-    places: [{ id: 'quotation-form', module: 'Quotation', where: 'Creation & edit' }],
+    places: [{ id: 'deal-sheet-approval', module: 'Deal Sheet', where: 'Approval flow' }],
   },
   {
     type: 'creditException',

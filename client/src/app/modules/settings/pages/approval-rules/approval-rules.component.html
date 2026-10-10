@@ -56,8 +56,9 @@
             </ng-container>
         </ng-template>
 
+        <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row>
-            <app-action-button [variant]="row.enabled ? 'secondary' : 'primary'" [disabled]="!canEdit() || row.saving" (click)="toggleEnabled(row)">
+            <app-action-button variant="primary" [disabled]="!canEdit() || row.saving" (click)="toggleEnabled(row)">
                 {{ row.saving ? 'Saving…' : (row.enabled ? 'Disable rule' : 'Enable rule') }}
             </app-action-button>
         </ng-template>
