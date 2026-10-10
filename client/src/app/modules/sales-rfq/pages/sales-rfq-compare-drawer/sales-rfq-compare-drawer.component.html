@@ -1,0 +1,30 @@
+<app-sf-drawer [title]="'Compare supplier prices' + (data()?.enquiry?.enquiryId ? ' · ' + data()?.enquiry?.enquiryId : '')"
+    subtitle="Award each product to one supplier; the others are marked not selected for this enquiry only"
+    width="min(1320px, 97vw)" [open]="open" (closed)="closed.emit()">
+
+  @if (loading()) { <p class="text-sm text-gray-500">Loading…</p> }
+  @if (loadError(); as error) {
+    <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{{ error }}</div>
+  }
+  @if (data(); as d) {
+    @if (d.quotationId) {
+      <p class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+        A quotation was already made from these RFQs, so the awards are final.
+      </p>
+    }
+    <app-rfq-compare-matrix [data]="d" [locked]="locked" [busy]="busy()"
+      (award)="onAward($event)" (awardGroup)="onAwardGroup($event)" (openRfq)="openRfq.emit($event)"></app-rfq-compare-matrix>
+  }
+
+  <ng-container sfDrawerFooter>
+    @if (data(); as d) {
+      <p class="mr-auto text-xs text-gray-500">
+        @if (d.quotationId) { Quotation made }
+        @else if (!canPrepare) { Award or settle every product to prepare the quotation }
+        @else { All products settled }
+      </p>
+    }
+    <app-action-button variant="secondary" (click)="closed.emit()">Close</app-action-button>
+    <app-action-button variant="primary" [disabled]="!canPrepare || busy()" (click)="prepare()">Prepare quotation</app-action-button>
+  </ng-container>
+</app-sf-drawer>
