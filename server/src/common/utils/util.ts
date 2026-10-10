@@ -371,7 +371,7 @@ export async function fetchExchangeRate() {
     try {
         const response = await axios.get(API_URL);
         const rate = response.data.usd.qar;
-        cacheExchangeRate(rate);
+        cacheExchangeRate(rate, response.data.usd);
         return rate;
     } catch (error) {
         console.error('Error fetching exchange rate:', error);
@@ -379,17 +379,47 @@ export async function fetchExchangeRate() {
     }
 }
 
-function cacheExchangeRate(rate) {
-    const data = { rate, timestamp: Date.now() };
+/** `rates` is the whole USD table (units of each currency per 1 USD), kept for cross-currency conversion. */
+function cacheExchangeRate(rate, rates?: Record<string, number>) {
+    const data = { rate, rates, timestamp: Date.now() };
     fs.writeFileSync(CACHE_FILE, JSON.stringify(data));
 }
 
-function getCachedRate() {
-    if (fs.existsSync(CACHE_FILE)) {
-        const data = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
-        return data.rate;
+function readRateCache(): { rate?: number; rates?: Record<string, number>; timestamp?: number } | null {
+    if (!fs.existsSync(CACHE_FILE)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    } catch {
+        return null;
     }
-    return null;
+}
+
+function getCachedRate() {
+    return readRateCache()?.rate ?? null;
+}
+
+/**
+ * QAR per one unit of each currency (QAR itself is 1), from the cached USD table. Fetches once when the
+ * cache predates the full table. A currency missing from the table is left out, so callers can tell
+ * "no rate" from a real one.
+ */
+export async function getQarRates(): Promise<{ rates: Record<string, number>; asOf: Date | null }> {
+    let cache = readRateCache();
+    if (!cache?.rates) {
+        await fetchExchangeRate();
+        cache = readRateCache();
+    }
+    const usd = cache?.rates || {};
+    const qarPerUsd = Number(usd.qar) || Number(cache?.rate) || 0;
+    const rates: Record<string, number> = { QAR: 1 };
+    if (qarPerUsd > 0) {
+        Object.entries(usd).forEach(([code, perUsd]) => {
+            const n = Number(perUsd);
+            if (n > 0) rates[code.toUpperCase()] = qarPerUsd / n;
+        });
+        rates.QAR = 1;
+    }
+    return { rates, asOf: cache?.timestamp ? new Date(cache.timestamp) : null };
 }
 
 export const getAllReportedEmployees = async (userId: any): Promise<ObjectId[]> => {
@@ -606,3 +636,6 @@ export const buildPrivilegeAccessFilter = async (
     
     return accessFilter;
 }
+
+/** Escapes user text so it can be used literally inside a Mongo `$regex`. */
+export const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

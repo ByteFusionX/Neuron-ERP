@@ -50,9 +50,10 @@
             </div>
         </ng-template>
 
+        <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row>
-            <app-action-button *ngIf="canEdit" variant="secondary" (click)="openEditDrawer(row)">Edit</app-action-button>
-            <app-action-button variant="primary" (click)="openProfile(row)">Open full profile</app-action-button>
+            <app-action-button *ngIf="canEdit" variant="primary" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
+            <app-action-button variant="primary" (click)="openProfile(row)" icon="view">Open full profile</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">

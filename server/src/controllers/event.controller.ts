@@ -38,6 +38,7 @@ const DEEP_LINK_PATHS: Record<string, string> = {
     Enquiry: 'enquiry',
     Quotation: 'quotations',
     Customer: 'customers',
+    Rfq: 'sales-rfq',
 };
 
 const buildOutlookOptions = (event: any) => {

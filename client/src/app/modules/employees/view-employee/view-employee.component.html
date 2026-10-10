@@ -18,12 +18,14 @@
     (activeTabChange)="onTabChange($event)"
     [hasSidebar]="true"
   >
-    <ng-container headerActions>
-      <app-action-button variant="primary" *ngIf="!isOwnProfile" (click)="onEmployeeEdit()">Edit</app-action-button>
-      <app-action-button variant="secondary" *ngIf="canBlock && employeeData" (click)="toggleBlockStatus()">
+    <ng-container footerLeft>
+      <app-action-button variant="outline" *ngIf="canBlock && employeeData" (click)="toggleBlockStatus()">
         {{ employeeData.isBlocked ? 'Unblock' : 'Block' }}
       </app-action-button>
-      <app-action-button variant="secondary" *ngIf="canDelete" (click)="deleteEmployee()">Delete</app-action-button>
+      <app-action-button variant="outline" *ngIf="canDelete" (click)="deleteEmployee()">Delete</app-action-button>
+    </ng-container>
+    <ng-container footerRight>
+      <app-action-button variant="primary" *ngIf="!isOwnProfile" (click)="onEmployeeEdit()" icon="edit">Edit</app-action-button>
     </ng-container>
 
     <ng-container sidebar *ngIf="employeeData as e">

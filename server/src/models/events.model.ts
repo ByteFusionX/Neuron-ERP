@@ -23,7 +23,7 @@ const eventSchema = new Schema<events>({
     from: {
         type: String,
         required: true,
-        enum: ['Employee', 'Customer', 'Quotation', 'Enquiry', 'Department', 'InternalDepartment', 'Category', 'Job'],
+        enum: ['Employee', 'Customer', 'Quotation', 'Enquiry', 'Department', 'InternalDepartment', 'Category', 'Job', 'Rfq'],
     },
     collectionId: {
         type: Schema.Types.ObjectId,

@@ -21,12 +21,14 @@
     [toast]="toast"
     *ngIf="project as p; else emptyShell">
 
-    <ng-container headerActions>
-      <app-action-button variant="secondary" (click)="placeholder('Edit')">Edit</app-action-button>
-      <app-action-button variant="secondary" *ngIf="p.status === 'On Hold'" (click)="resume()">Resume</app-action-button>
-      <app-action-button variant="secondary" *ngIf="!closed && p.status !== 'On Hold'" (click)="putOnHold()">Put on Hold</app-action-button>
-      <app-action-button variant="secondary" [disabled]="closed" (click)="placeholder('Create PO')">Create PO</app-action-button>
-      <app-action-button variant="secondary" [disabled]="closed" (click)="placeholder('Add to BOM')">Add to BOM</app-action-button>
+    <ng-container footerLeft>
+      <app-action-button variant="outline" *ngIf="p.status === 'On Hold'" (click)="resume()">Resume</app-action-button>
+      <app-action-button variant="outline" *ngIf="!closed && p.status !== 'On Hold'" (click)="putOnHold()">Put on Hold</app-action-button>
+      <app-action-button variant="outline" icon="plus" [disabled]="closed" (click)="placeholder('Create PO')">Create PO</app-action-button>
+      <app-action-button variant="outline" icon="plus" [disabled]="closed" (click)="placeholder('Add to BOM')">Add to BOM</app-action-button>
+    </ng-container>
+    <ng-container footerRight>
+      <app-action-button variant="primary" (click)="placeholder('Edit')" icon="edit">Edit</app-action-button>
       <app-action-button variant="primary" *ngIf="!closed" (click)="markCompleted()">Mark completed</app-action-button>
     </ng-container>
 

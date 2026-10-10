@@ -276,6 +276,12 @@ export interface Privileges {
     viewReport: string;
     canApprove: boolean;
   };
+  /** Home / Dashboard sidebar switches. Missing = enabled. */
+  main?: { home?: boolean; dashboard?: boolean };
+  /** Sidebar group switches. Missing = enabled (roles saved before these existed). */
+  groups?: {
+    [group in 'sales' | 'operations' | 'projects' | 'finance' | 'administration']?: { enabled?: boolean; dashboard?: boolean };
+  };
   sensitiveData?: {
     viewCost: boolean;
     viewMargin: boolean;
@@ -309,5 +315,7 @@ export interface Privileges {
     approvalRulesEdit?: boolean;
     notificationsEdit?: boolean;
     auditEdit?: boolean;
+    recycle?: boolean;
+    bugReports?: boolean;
   };
 }
