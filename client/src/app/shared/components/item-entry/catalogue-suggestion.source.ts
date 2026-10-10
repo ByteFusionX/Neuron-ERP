@@ -3,6 +3,29 @@ import { Observable, map } from 'rxjs';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ItemSuggestion, ItemSuggestionQuery, ItemSuggestionSource } from './item-entry.model';
 
+/** Maps a catalogue product (as the product endpoints return it) to an item-editor suggestion. */
+export const toCatalogueSuggestion = (p: any): ItemSuggestion => ({
+  _id: p._id,
+  categoryName: p.productCategory?.categoryName || '',
+  description: p.productDescription || '',
+  source: 'catalogue',
+  itemCode: p.itemCode || '',
+  partNo: p.partNo || '',
+  uom: p.unitOfMeasure || '',
+  unitCost: p.estimatedCost ?? undefined,
+  unitSellingPrice: p.defaultSellingPrice ?? undefined,
+  supplierId: p.defaultVendor?._id || p.defaultVendor || undefined,
+  stockOnHand: p.onHandQuantity ?? undefined,
+  stockAvailable: p.availableQuantity ?? undefined,
+  stockReserved: p.reservedQuantity ?? undefined,
+  stockQuarantined: p.quarantinedQuantity ?? undefined,
+  stockStatus: p.stockStatus || '',
+  warehouseAvailability: p.warehouseAvailability || [],
+  lastStockEntry: p.lastStockEntry || null,
+  salesHistory: p.salesHistory || undefined,
+  productType: p.type || '',
+});
+
 /**
  * Backs `app-item-entry`'s suggestions with the product catalogue.
  *
@@ -13,27 +36,14 @@ import { ItemSuggestion, ItemSuggestionQuery, ItemSuggestionSource } from './ite
  */
 @Injectable()
 export class CatalogueSuggestionSource implements ItemSuggestionSource {
+  /** Also offer products still awaiting approval (supplier RFQs skip product approval for now). */
+  includePending = false;
+
   constructor(private _quotationService: QuotationService) {}
 
   search({ search, category, scopeIds }: ItemSuggestionQuery): Observable<ItemSuggestion[]> {
     return this._quotationService
-      .getProductSuggestions({ search, departments: scopeIds, ...(category ? { category } : {}) })
-      .pipe(map((res: any) => (res?.data || []).map((p: any): ItemSuggestion => ({
-        _id: p._id,
-        categoryName: p.productCategory?.categoryName || '',
-        description: p.productDescription || '',
-        source: 'catalogue',
-        itemCode: p.itemCode || '',
-        partNo: p.partNo || '',
-        uom: p.unitOfMeasure || '',
-        unitCost: p.estimatedCost ?? undefined,
-        unitSellingPrice: p.defaultSellingPrice ?? undefined,
-        supplierId: p.defaultVendor?._id || p.defaultVendor || undefined,
-        stockOnHand: p.onHandQuantity ?? undefined,
-        stockAvailable: p.availableQuantity ?? undefined,
-        stockReserved: p.reservedQuantity ?? undefined,
-        stockQuarantined: p.quarantinedQuantity ?? undefined,
-        productType: p.type || '',
-      }))));
+      .getProductSuggestions({ search, departments: scopeIds, includePending: this.includePending, ...(category ? { category } : {}) })
+      .pipe(map((res: any) => (res?.data || []).map(toCatalogueSuggestion)));
   }
 }

@@ -1,4 +1,4 @@
-<div class="dg-root flex" [class.dg-detail-open]="!!activeRow">
+<div class="dg-root flex" [class.dg-detail-open]="!!activeRow && showDetailPanel">
   <!-- ============ TABLE CARD ============ -->
   <div class="dg-card flex-1 min-w-0 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl overflow-hidden flex flex-col">
 
@@ -45,7 +45,7 @@
       </ng-template>
 
       <!-- Extra toolbar actions projected by the host page, centered in the header -->
-      <div *ngIf="selectedKeys.size === 0" class="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+      <div *ngIf="selectedKeys.size === 0" class="hidden md:flex shrink-0 items-center justify-center">
         <ng-content select="[dgToolbarExtra]"></ng-content>
       </div>
 
@@ -97,7 +97,7 @@
             </ng-container>
             <div class="flex justify-end gap-2 pt-1">
               <button type="button" class="dg-tool-btn" (click)="filterMenuOpen = false">Cancel</button>
-              <button type="button" class="dg-primary-btn" [disabled]="!canApplyDraft" (click)="applyDraftFilter()">{{ editingFilterId != null ? 'Update' : 'Apply' }}</button>
+              <button type="button" class="dg-primary-btn" [disabled]="!canApplyDraft" [attr.title]="canApplyDraft ? null : 'Enter a value first'" (click)="applyDraftFilter()">{{ editingFilterId != null ? 'Update' : 'Apply' }}</button>
             </div>
           </div>
         </ng-container>
@@ -132,7 +132,7 @@
       </div>
 
       <!-- Excel export -->
-      <button *ngIf="exportable" type="button" class="dg-tool-btn" (click)="exportToExcel()" [disabled]="loading">
+      <button *ngIf="exportable" type="button" class="dg-tool-btn" (click)="onExportClick()" [disabled]="loading">
         <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14" />
         </svg>
@@ -332,7 +332,7 @@
                   <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h10" />
                 </svg>
               </div>
-              <ng-container *ngIf="data.length; else noData">
+              <ng-container *ngIf="data.length || (serverSide && isFiltered); else noData">
                 <p class="text-sm font-medium text-gray-900 dark:text-gray-100">No matching results</p>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Try a different search term or remove some filters.</p>
                 <button type="button" class="dg-tool-btn mt-4" (click)="clearFilters()">Clear search &amp; filters</button>
@@ -515,6 +515,9 @@
     </ng-container>
     <ng-container panelMeta *ngIf="detailMetaTemplate">
       <ng-container *ngTemplateOutlet="detailMetaTemplate; context: { $implicit: activeRow }"></ng-container>
+    </ng-container>
+    <ng-container panelFooterLeft *ngIf="detailFooterLeftTemplate">
+      <ng-container *ngTemplateOutlet="detailFooterLeftTemplate; context: { $implicit: activeRow, tab: activeTab }"></ng-container>
     </ng-container>
     <ng-container panelFooter *ngIf="detailFooterTemplate">
       <ng-container *ngTemplateOutlet="detailFooterTemplate; context: { $implicit: activeRow, tab: activeTab }"></ng-container>

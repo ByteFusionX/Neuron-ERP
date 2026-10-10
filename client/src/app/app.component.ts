@@ -23,14 +23,17 @@ import { environment } from 'src/environments/environment';
 import { ActionTrailService } from './core/diagnostics/action-trail.service';
 import { LayoutService } from './core/services/layout.service';
 import { CommandPaletteService } from './core/services/command-palette.service';
+import { ActiveItemEntryService } from './core/services/active-item-entry.service';
 import { CommandPaletteComponent } from './shared/components/command-palette/command-palette.component';
 import { clearSessionStorage } from './shared/utils/clear-session.util';
+
+import { AlertHostComponent } from './shared/components/alert-host/alert-host.component';
 
 @Component({
     selector: 'app-root',
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.css'],
-    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, AnnouncementsComponent, MatDrawerContent, NavBarComponent, CommandPaletteComponent]
+    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, AnnouncementsComponent, MatDrawerContent, NavBarComponent, CommandPaletteComponent, AlertHostComponent]
 })
 export class AppComponent implements OnDestroy, OnInit {
   showFiller = false;
@@ -61,7 +64,8 @@ export class AppComponent implements OnDestroy, OnInit {
     private pushNotificationService: PushNotificationService,
     private actionTrailService: ActionTrailService,
     public layout: LayoutService,
-    private palette: CommandPaletteService
+    private palette: CommandPaletteService,
+    private activeItemEntry: ActiveItemEntryService
   ) { }
 
 
@@ -150,15 +154,18 @@ export class AppComponent implements OnDestroy, OnInit {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(event: KeyboardEvent): void {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key !== 'b' && key !== 'k') return;
     if (this.isLoginRoute()) return;
     if (key === 'k') {
+      // An open item list (quote, RFQ, purchase) keeps Ctrl+K for its own product search; Ctrl+Shift+K always opens this one.
+      if (!event.shiftKey && this.activeItemEntry.current()) return;
       event.preventDefault();
       this.palette.toggle();
       return;
     }
+    if (event.shiftKey) return;
     const target = event.target as HTMLElement | null;
     if (target?.isContentEditable) return;
     event.preventDefault();

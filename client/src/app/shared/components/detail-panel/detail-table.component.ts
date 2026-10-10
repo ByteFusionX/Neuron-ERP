@@ -1,6 +1,6 @@
 import { Component, Inject, Input, LOCALE_ID, booleanAttribute } from '@angular/core';
 import { CommonModule, formatNumber } from '@angular/common';
-import { DetailSummaryRow, DetailTableColumn } from './detail-panel.model';
+import { DetailFootRow, DetailSummaryRow, DetailTableColumn } from './detail-panel.model';
 import { DetailBadgeComponent } from './detail-badge.component';
 import { DetailTone } from './detail-tone';
 
@@ -121,7 +121,18 @@ interface DetailTableLine {
             </td>
           </tr>
         </tbody>
-        <tfoot *ngIf="showTotals && count && !summary.length" class="bg-gray-100 font-semibold dark:bg-white/[0.06]">
+        <!-- footer lines whose figures line up under their own columns -->
+        <tfoot *ngIf="footRows.length && count" class="bg-gray-100 dark:bg-white/[0.06]">
+          <tr *ngFor="let f of footRows; let first = first" [class.font-bold]="f.emphasis" [class.font-medium]="!f.emphasis">
+            <td *ngIf="numbered" [class.border-t-2]="first" class="border-gray-300 dark:border-erp-border-dark"></td>
+            <td *ngFor="let c of columns; let i = index" [class.text-right]="isRight(c)" [class.border-t-2]="first"
+              class="whitespace-nowrap border-gray-300 px-3 py-2 tabular-nums text-gray-900 dark:border-erp-border-dark dark:text-gray-100">
+              <ng-container *ngIf="i === 0">{{ f.label }}</ng-container>
+              <ng-container *ngIf="f.cells[c.key] as cell">{{ footValue(cell) }}</ng-container>
+            </td>
+          </tr>
+        </tfoot>
+        <tfoot *ngIf="showTotals && count && !summary.length && !footRows.length" class="bg-gray-100 font-semibold dark:bg-white/[0.06]">
           <tr>
             <td *ngIf="numbered" class="border-t-2 border-gray-300 dark:border-erp-border-dark"></td>
             <td *ngFor="let c of columns; let first = first" [class.text-right]="isRight(c)"
@@ -218,6 +229,8 @@ export class DetailTableComponent {
     return this._summary;
   }
   private _summary: DetailSummaryRow[] = [];
+  /** Totals / profit lines rendered in the table footer, each figure under its own column. */
+  @Input() footRows: DetailFootRow[] = [];
 
   /** Rendered lines: group headings, data rows and any subtotals, in display order. */
   lines: DetailTableLine[] = [];
@@ -306,6 +319,10 @@ export class DetailTableComponent {
     if (s.format === 'percent') return formatNumber(n, this.locale, '1.0-2') + '%';
     if (s.format === 'currency') return formatNumber(n, this.locale, '1.0-0') + ' ' + this.currency;
     return formatNumber(n, this.locale, '1.0-2');
+  }
+
+  footValue(cell: DetailFootRow['cells'][string]): string {
+    return this.summaryValue({ label: '', value: cell.value, format: cell.format });
   }
 
   sum(c: DetailTableColumn): number {

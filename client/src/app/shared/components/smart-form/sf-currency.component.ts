@@ -14,7 +14,7 @@ import { SF_STYLES } from './sf.model';
       <input class="sf-bare text-right tabular-nums" inputmode="decimal" [id]="inputId" [value]="display"
         [placeholder]="placeholder || '0.00'" [disabled]="disabled" [readOnly]="readonly"
         (focus)="focused = true; display = value === null ? '' : String(value)"
-        (input)="onInput($any($event.target).value)" (blur)="focused = false; format(); touch()" />
+        (input)="onInput($any($event.target))" (blur)="focused = false; format(); touch()" />
     </div>
   `,
   styles: [SF_STYLES],
@@ -30,9 +30,11 @@ export class SfCurrencyComponent extends SfControl<number> {
     if (!this.focused) this.format();
   }
 
-  onInput(raw: string): void {
-    this.display = raw;
-    const n = parseFloat(raw.replace(/[^0-9.-]/g, ''));
+  onInput(el: HTMLInputElement): void {
+    const clean = el.value.replace(/[^0-9.-]/g, '').replace(/(?!^)-/g, '').replace(/\.(?=.*\.)/g, '');
+    if (clean !== el.value) el.value = clean;
+    this.display = clean;
+    const n = parseFloat(clean);
     this.update(Number.isNaN(n) ? null : +n.toFixed(this.decimals));
   }
 

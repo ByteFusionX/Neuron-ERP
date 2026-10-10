@@ -100,19 +100,24 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 }
                 break;
 
+            case '/recycle':
+                if (!isSuperAdmin && !privileges?.portalManagement?.recycle) {
+                    router.navigate(['/home']);
+                    return false;
+                }
+                break;
+
+            case '/bug-reports':
+                if (!isSuperAdmin && !privileges?.portalManagement?.bugReports) {
+                    router.navigate(['/home']);
+                    return false;
+                }
+                break;
+
             case '/settings':
                 if (!canViewSettings()) {
                     router.navigate(['/home']);
                     return false;
-                }
-
-                break;
-
-            case '/recycle':
-                if (!isSuperAdmin) {
-                    router.navigate(['/home']);
-                    return false;
-
                 }
 
                 break;
@@ -166,6 +171,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                     }
                 } else if (url.startsWith('/products')) {
                     if (!hasView(privileges?.inventory?.products?.viewReport)) {
+                        toast.warning("You don't have access to Products. Ask an administrator if you need it.");
                         router.navigate(['/home']);
                         return false;
                     }
@@ -271,7 +277,9 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
 
     function canViewSettings(): boolean {
         if (isSuperAdmin) return true;
-        return !!privileges?.portalManagement && Object.values(privileges.portalManagement).some(value => value === true);
+        if (privileges?.roles?.view) return true;
+        const { recycle, bugReports, ...settingsFlags } = privileges?.portalManagement ?? {};
+        return Object.values(settingsFlags).some(value => value === true);
     }
 
 };

@@ -8,7 +8,14 @@ import { RouterLink } from '@angular/router';
   imports: [CommonModule, RouterLink],
   template: `
     <!-- a single <ng-content> can only project into one place, so both variants render it via this template -->
-    <ng-template #label><ng-content></ng-content></ng-template>
+    <ng-template #label>
+      <svg *ngIf="icon" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" [ngSwitch]="icon">
+        <path *ngSwitchCase="'plus'" d="M8 3v10M3 8h10" />
+        <path *ngSwitchCase="'edit'" d="M11 2.5l2.5 2.5L5.5 13H3v-2.5L11 2.5z" />
+        <g *ngSwitchCase="'view'"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></g>
+      </svg>
+      <ng-content></ng-content>
+    </ng-template>
     <a *ngIf="link; else btn" [routerLink]="link" class="btn" [ngClass]="'btn-' + variant"><ng-container *ngTemplateOutlet="label"></ng-container></a>
     <ng-template #btn>
       <button [type]="type" [attr.form]="form || null" class="btn" [ngClass]="'btn-' + variant" [disabled]="disabled">
@@ -37,6 +44,14 @@ import { RouterLink } from '@angular/router';
     .btn-primary { color: #fff; background: #7c3aed; border-color: #7c3aed; }
     .btn-primary:hover:not(:disabled) { background: #6d28d9; }
 
+    .btn-icon { width: 0.875rem; height: 0.875rem; flex-shrink: 0; }
+
+    /* Optional, tab-specific footer actions: outlined, never filled. */
+    .btn-outline { color: #374151; background: transparent; border-color: #d1d5db; }
+    .btn-outline:hover:not(:disabled) { background: #f9fafb; }
+    :host-context(html.dark) .btn-outline { color: #d4d4d4; border-color: #3f3f46; }
+    :host-context(html.dark) .btn-outline:hover:not(:disabled) { background: #1a1a1a; }
+
     .btn-secondary { color: #374151; background: #fff; border-color: #e5e7eb; }
     .btn-secondary:hover:not(:disabled) { background: #f9fafb; }
     :host-context(html.dark) .btn-secondary { color: #d4d4d4; background: #1a1a1a; border-color: #262626; }
@@ -44,7 +59,9 @@ import { RouterLink } from '@angular/router';
   `],
 })
 export class ActionButtonComponent {
-  @Input() variant: 'primary' | 'secondary' | 'tool' | 'ghost' = 'secondary';
+  @Input() variant: 'primary' | 'secondary' | 'tool' | 'ghost' | 'outline' = 'secondary';
+  /** Optional leading icon. */
+  @Input() icon: 'plus' | 'edit' | 'view' | null = null;
   @Input() type: 'button' | 'submit' = 'button';
   @Input() form = '';
   @Input() disabled = false;

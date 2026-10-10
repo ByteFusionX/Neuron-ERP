@@ -26,7 +26,24 @@ export interface ItemSuggestion {
   stockAvailable?: number;
   stockReserved?: number;
   stockQuarantined?: number;
-  /** 'Service'/'Non-Stock Product' rows have no stock position to show. */
+  stockStatus?: string;
+  warehouseAvailability?: { warehouseId?: string; warehouseName: string; quantity: number }[];
+  lastStockEntry?: { dateOfPurchase?: string | Date; supplierLpoNo?: string } | null;
+  salesHistory?: {
+    quotedCount: number;
+    soldCount: number;
+    recent: {
+      quoteId?: string;
+      quotationId?: string;
+      date?: string | Date;
+      status?: string;
+      dealStatus?: string;
+      customerName?: string;
+      quantity?: number;
+      unitSellingPrice?: number;
+    }[];
+  };
+  /** 'Non-Stock' rows have no stock position to show. */
   productType?: string;
 }
 
@@ -80,6 +97,8 @@ export interface ItemEntryLineValue {
   uom?: string;
   /** Purchase mode only: the host's handle for mapping an edited line back to its saved record. */
   lineKey?: string | null;
+  /** Deal mode only: seeds the line already ticked into the deal (editing an existing deal sheet). */
+  dealSelected?: boolean;
 }
 
 export interface ItemEntryItemValue {

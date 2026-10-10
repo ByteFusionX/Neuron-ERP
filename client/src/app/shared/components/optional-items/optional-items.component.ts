@@ -11,7 +11,7 @@ import {
   ReactiveFormsModule,
 } from '@angular/forms';
 import { FormBuilder } from '@angular/forms';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { AlertService } from 'src/app/core/services/alert.service';
 import { MatDialog } from '@angular/material/dialog';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
@@ -104,7 +104,7 @@ export class OptionalItemsComponent implements OnInit {
 
   constructor(
     private _fb: FormBuilder,
-    private snackBar: MatSnackBar,
+    private alerts: AlertService,
     private _supplierService: SupplierService,
     private _quotationService: QuotationService,
     private _dialog: MatDialog,
@@ -745,11 +745,7 @@ export class OptionalItemsComponent implements OnInit {
   }
 
   showUndoOption(type: string): void {
-    const snackBarRef = this.snackBar.open(`Item removed. Undo?`, 'Undo', {
-      duration: 3000,
-    });
-
-    snackBarRef.onAction().subscribe(() => {
+    this.alerts.action({ title: 'Item removed', onAction: () => {
       if (type === 'item') {
         this.undoRemoveItem();
       } else if (type === 'item detail') {
@@ -757,7 +753,7 @@ export class OptionalItemsComponent implements OnInit {
       } else if (type === 'option') {
         this.undoRemoveOptions();
       }
-    });
+    } });
   }
 
   // @params

@@ -53,9 +53,11 @@ import { CONFIRM_TONES, ConfirmConfig, ConfirmResult } from './confirm-dialog.mo
         </fieldset>
 
         <label *ngIf="config.reason" class="block">
-          <span class="text-[13px] font-medium text-gray-700 dark:text-gray-300">{{ config.reasonLabel || 'Reason' }}
+          <span class="text-[13px] font-medium text-gray-700 dark:text-gray-300">{{ config.reasonLabel || 'Reason' }}<span *ngIf="config.reason === true" class="ml-0.5 text-red-500" aria-hidden="true">*</span>
             <span *ngIf="config.reason === 'optional'" class="font-normal text-gray-400 dark:text-gray-500">(optional)</span></span>
-          <textarea [(ngModel)]="reason" rows="3" class="cd-field mt-1 resize-none" placeholder="This is recorded in the activity log"></textarea>
+          <textarea [(ngModel)]="reason" (blur)="reasonTouched = true" rows="3" class="cd-field mt-1 resize-none" [placeholder]="config.reason === true ? 'Required: say why, it is saved to the history' : 'Add a short note for the activity log'"></textarea>
+          <span *ngIf="config.reason === true && reasonTouched && !reason.trim()" class="mt-1 block text-xs text-amber-600 dark:text-amber-400">A reason is required before you can continue.</span>
+          <span *ngIf="config.reason === true && !reasonTouched && !reason.trim()" class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ config.confirmLabel || 'Confirm' }} stays disabled until you enter a reason.</span>
         </label>
 
         <label *ngIf="typeToConfirm" class="block">
@@ -93,6 +95,7 @@ export class ConfirmDialogComponent {
   private modalRef = inject(ModalRef<ConfirmResult>);
 
   reason = '';
+  reasonTouched = false;
   typed = '';
   choice = this.config.defaultChoice ?? this.config.choices?.[0]?.value ?? '';
 
@@ -107,7 +110,7 @@ export class ConfirmDialogComponent {
 
   get canConfirm(): boolean {
     if (this.config.reason === true && !this.reason.trim()) return false;
-    if (this.typeToConfirm && this.typed.trim() !== this.typeToConfirm) return false;
+    if (this.typeToConfirm && this.typed.trim().toLowerCase() !== this.typeToConfirm.trim().toLowerCase()) return false;
     return true;
   }
 

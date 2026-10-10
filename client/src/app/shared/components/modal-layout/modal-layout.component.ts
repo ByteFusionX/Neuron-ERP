@@ -8,7 +8,7 @@ import { ButtonComponent } from '../button/button.component';
 export interface ModalFooterButton {
   label: string;
   onClick: () => void;
-  theme?: 'primary' | 'secondary' | 'cancel' | 'danger';
+  theme?: 'primary' | 'secondary' | 'cancel' | 'danger' | 'success';
   loading?: boolean;
   disabled?: boolean;
   icon?: string;

@@ -1,10 +1,11 @@
-import { Component, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
+import { AlertService } from 'src/app/core/services/alert.service';
 import { Subject, Subscription, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { NgIcon } from '@ng-icons/core';
+import { MasterListService } from 'src/app/core/services/master-list.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { ParseBoldTextPipe } from 'src/app/shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from 'src/app/shared/pipes/highlightParse.pipe';
@@ -21,6 +22,9 @@ import {
   ItemSuggestion,
   ItemSuggestionSource,
 } from './item-entry.model';
+import { ActiveItemEntryService } from 'src/app/core/services/active-item-entry.service';
+
+type LineFilter = 'missingPrice' |'notInCatalogue' | 'errors';
 
 /**
  * Reusable "enter items" editor: options → items → detail lines, with cost/margin/price derivation,
@@ -46,16 +50,20 @@ import {
     .ie-strip { display: grid; gap: 0.375rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     @media (min-width: 640px) { .ie-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     @media (min-width: 1400px) {
-      .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 11.5fr) minmax(0, 10.5fr) minmax(0, 6.5fr) minmax(0, 7fr); }
+      .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 10fr) minmax(0, 9fr) minmax(0, 8.5fr) minmax(0, 9fr); }
       /* Purchase drops the margin column (no customer-facing margin for supplier lines), so it's one column short of the default strip. */
-      .ie-strip.ie-strip-purchase { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 11.5fr) minmax(0, 10.5fr) minmax(0, 6.5fr) minmax(0, 7fr); }
+      .ie-strip.ie-strip-purchase { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 10fr) minmax(0, 9fr) minmax(0, 8.5fr) minmax(0, 9fr); }
+      /* RFQ asks suppliers for prices: identifiers, quantity and unit; the supplier's price only once it replies. */
+      .ie-strip.ie-strip-rfq { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .ie-strip.ie-strip-rfq.ie-strip-rfq-priced { grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr); }
     }
     .ie-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     .ie-labels > span:nth-child(n+3):nth-child(-n+7), .ie-labels > span:nth-child(n+10) { text-align: right; }
     .ie-labels.ie-strip-purchase > span:nth-child(n+3):nth-child(-n+6), .ie-labels.ie-strip-purchase > span:nth-child(n+9) { text-align: right; }
+    .ie-labels.ie-strip-rfq > span:nth-child(4), .ie-labels.ie-strip-rfq > span:nth-child(6) { text-align: left; }
     .ie-cell { display: flex; align-items: center; min-height: 2.25rem; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; background: #f9fafb; color: #111827; }
     :host-context(html.dark) .ie-cell { background: rgba(31, 41, 55, 0.5); color: #f3f4f6; }
-    .ie-total { display: flex; align-items: center; justify-content: flex-end; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; font-variant-numeric: tabular-nums; font-weight: 500; background: #f9fafb; color: #111827; }
+    .ie-total { display: flex; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; align-items: center; justify-content: flex-end; border-radius: 0.5rem; padding: 0 0.5rem; font-size: 0.75rem; font-variant-numeric: tabular-nums; font-weight: 500; background: #f9fafb; color: #111827; }
     :host-context(html.dark) .ie-total { background: rgba(31, 41, 55, 0.5); color: #f3f4f6; }
     :host-context(html.dark) .ie-labels { color: #6b7280; }
   `],
@@ -73,8 +81,16 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
    * (`seedOptionalItems`) supplies the quoted numbers; unticking a line restores them.
    * 'purchase' is a single flat list: no options or optional items, cost and price are independent,
    * each line carries a host-owned `lineKey`.
+   * 'rfq' lists what suppliers are asked to price: a flat list of identifiers, quantity and unit, each
+   * line with a `lineKey`. With `rfqPriced` the supplier's unit price and availability are entered too.
    */
-  @Input() mode: 'quote' | 'deal' | 'purchase' = 'quote';
+  @Input() mode: 'quote' | 'deal' | 'purchase' | 'rfq' = 'quote';
+  /** RFQ mode: show the supplier's unit price (stored in `unitCost`) and availability on each line. */
+  @Input() rfqPriced = false;
+  /** Rendered under each line; context `{ $implicit: lineGroup, i, j, k }`. For host-specific status (stock, suppliers asked). */
+  @Input() lineExtraTemplate: TemplateRef<any> | null = null;
+  /** Rendered in the bulk bar while lines are selected; context `{ $implicit: selectedLineGroups }`. */
+  @Input() bulkExtraTemplate: TemplateRef<any> | null = null;
   /** The sticky totals bar. A host that shows its own summary (deal adjustments, say) turns it off. */
   @Input() showTotalsBar = true;
   /** Keeps the totals bar but drops the option tabs and item cards, for a host step that only needs the summary. */
@@ -90,12 +106,19 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Input() allowOptionalItems = true;
   /** The "+ Create product" row under the suggestion dropdown; emits `createProductRequested`. */
   @Input() allowCreateProduct = true;
+  /** The host renders Add item / Add optional item itself (e.g. in a drawer footer), so the toolbar omits them. */
+  @Input() externalAddButtons = false;
 
   /** Shown as the "add from previous jobs" affordance; the host owns the fetch. */
   @Input() previousJobItemsCount = 0;
   @Input() previousJobsLabel = 'Previous jobs';
 
-  @Input() availabilityOptions: SfOption[] = DEFAULT_AVAILABILITY_OPTIONS;
+  /** Leave null to use the Availability master-data list; pass a list to override it. */
+  @Input() availabilityOptions: SfOption[] | null = null;
+  /** What the template binds: the master list, plus any saved value no longer on it. */
+  resolvedAvailabilityOptions: SfOption[] = DEFAULT_AVAILABILITY_OPTIONS;
+  /** Units of measure from the master list, plus any saved or suggested value not on it. */
+  resolvedUomOptions: SfOption[] = [];
   /** Leave null to load the supplier list here; pass a list to supply it from the host instead. */
   @Input() supplierOptions: SfOption[] | null = null;
   /** Overrides the `ITEM_SUGGESTION_SOURCE` provider for this usage. Null in both: no suggestions. */
@@ -112,6 +135,15 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Input() lineLocked: ((i: number, j: number, k: number) => boolean) | null = null;
   /** Purchase mode: a short badge shown beside a line's description. */
   @Input() lineBadge: ((i: number, j: number, k: number) => string | null) | null = null;
+
+  /** Lines and items below this margin % are flagged amber (below zero is always red). Unset until the limit is decided. */
+  /** Items loaded with more lines than this start collapsed. Unset until the limit is decided. */
+  @Input() autoCollapseLines: number | null = null;
+  /**
+   * Names this list for the command palette ("Quotation", "Supplier RFQ"); while set, the palette can
+   * add products to it. Hosts inside a drawer bind it only while the drawer is open.
+   */
+  @Input() paletteTargetLabel: string | null = null;
 
   @Output() totals = new EventEmitter<ItemEntryTotals>();
   @Output() compareClicked = new EventEmitter<{ i: number; j: number; k: number }>();
@@ -155,8 +187,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   constructor(
     private _fb: FormBuilder,
-    private snackBar: MatSnackBar,
+    private alerts: AlertService,
     private _supplierService: SupplierService,
+    private _masterList: MasterListService,
+    private _activeItemEntry: ActiveItemEntryService,
     @Optional() @Inject(ITEM_SUGGESTION_SOURCE) private _providedSource: ItemSuggestionSource | null,
   ) {}
 
@@ -165,6 +199,21 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     else if (!this.optionalItems.length) this.addOption();
 
     this.subs.add(this.optionalItems.valueChanges.subscribe(() => this.emitTotals()));
+
+    if (!this.isDeal) {
+      const self = this;
+      this.unregisterTarget = this._activeItemEntry.register({
+        get label() { return self.paletteTargetLabel || ''; },
+        canAdd: () => !!this.paletteTargetLabel && !this.itemsHidden,
+        addProducts: (products) => this.addCatalogueProducts(products),
+      });
+    }
+
+    if (this.availabilityOptions) this.resolvedAvailabilityOptions = this.availabilityOptions;
+    else this.subs.add(this._masterList.getOptions('availability', { fallback: DEFAULT_AVAILABILITY_OPTIONS.map((o) => o.label) })
+      .subscribe((opts) => (this.resolvedAvailabilityOptions = this.withSavedAvailability(opts))));
+
+    this.loadUnits();
 
     if (this.supplierOptions) this.resolvedSupplierOptions = this.supplierOptions;
     else this.subs.add(this._supplierService.supplierList().subscribe({
@@ -176,7 +225,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         .pipe(
           debounceTime(300),
           distinctUntilChanged((a, b) => a.key === b.key && a.term === b.term),
-          switchMap(({ key, term, category }) => this.fetchSuggestions(key, term, category)),
+          // An empty term is the "close" signal: it cancels any in-flight lookup so a late response can't reopen the popup.
+          switchMap(({ key, term, category }) => term ? this.fetchSuggestions(key, term, category) : of({ key, rows: [] as ItemSuggestion[] })),
         )
         .subscribe(({ key, rows }) => {
           this.suggestions[key] = rows;
@@ -205,6 +255,56 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.emitTotals();
   }
 
+  private savedUnits = new Set<string>();
+  private masterUnits: SfOption[] = [];
+
+  private loadUnits(): void {
+    this.subs.add(this._masterList.getOptions('unit').subscribe((opts) => {
+      this.masterUnits = opts;
+      this.resolveUnits();
+    }));
+  }
+
+  private resolveUnits(): void {
+    const missing = [...this.savedUnits].filter((v) => !this.masterUnits.some((o) => o.value === v));
+    this.resolvedUomOptions = [...missing.map((v) => ({ label: v, value: v })), ...this.masterUnits];
+  }
+
+  private keepUnit(value?: string | null): void {
+    const v = (value ?? '').toString().trim();
+    if (!v || this.savedUnits.has(v)) return;
+    this.savedUnits.add(v);
+    this.resolveUnits();
+  }
+
+  /** Anyone can add a list option from the dropdown; hiding and deleting stay in Settings. */
+  addMasterOption(list: 'unit' | 'availability', label: string, control: AbstractControl | null): void {
+    this.subs.add(this._masterList.createItem(list, { label, value: null }).subscribe({
+      next: (res) => {
+        const name = res.data?.label ?? label;
+        if (list === 'unit') { this.masterUnits = [...this.masterUnits, { label: name, value: name }]; this.resolveUnits(); }
+        else this.resolvedAvailabilityOptions = this.withSavedAvailability([...this.resolvedAvailabilityOptions, { label: name, value: name }]);
+        control?.setValue(name);
+        control?.markAsDirty();
+      },
+      error: (e) => this.alerts.error(e?.error?.message || 'Could not add option'),
+    }));
+  }
+
+  /** Saved lines may carry a value since removed from the master list; keep it selectable. */
+  private savedAvailability = new Set<string>();
+
+  private keepAvailability(value?: string | null): void {
+    if (!value) return;
+    this.savedAvailability.add(value);
+    this.resolvedAvailabilityOptions = this.withSavedAvailability(this.resolvedAvailabilityOptions);
+  }
+
+  private withSavedAvailability(options: SfOption[]): SfOption[] {
+    const missing = [...this.savedAvailability].filter((v) => !options.some((o) => o.value === v));
+    return [...missing.map((v) => ({ label: v, value: v })), ...options];
+  }
+
   /**
    * A host that keeps this component mounted across wizard steps delivers a late seed (an enquiry
    * picked after mount) through an input change rather than through ngOnInit.
@@ -220,12 +320,18 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
+    this.unregisterTarget?.();
   }
+
+  private unregisterTarget?: () => void;
 
   get isDeal(): boolean { return this.mode === 'deal'; }
   get isPurchase(): boolean { return this.mode === 'purchase'; }
-  get optionsEnabled(): boolean { return this.allowOptions && !this.isPurchase; }
-  get optionalItemsEnabled(): boolean { return this.allowOptionalItems && !this.isPurchase; }
+  get isRfq(): boolean { return this.mode === 'rfq'; }
+  /** Flat single-list modes: no options and no optional items. */
+  get isFlat(): boolean { return this.isPurchase || this.isRfq; }
+  get optionsEnabled(): boolean { return this.allowOptions && !this.isFlat; }
+  get optionalItemsEnabled(): boolean { return this.allowOptionalItems && !this.isFlat; }
 
   isLineLocked(i: number, j: number, k: number): boolean {
     return this.isPurchase && !!this.lineLocked?.(i, j, k);
@@ -288,6 +394,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   selectOption(i: number): void {
     this.selectedOption = i;
     this.optionChanged.emit(i);
+    this.clearSelection();
+    this.recompute();
   }
 
   private get source(): ItemSuggestionSource | null {
@@ -324,6 +432,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private createDetail(): FormGroup {
+    if (this.isRfq) return this.createRfqDetail();
     const deal = this.isDeal;
     const purchase = this.isPurchase;
     const group = this._fb.group({
@@ -335,7 +444,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       quantity: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
       unitCost: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
       // A deal may sell below cost, so no negative-margin rule there.
-      profit: [null as number | null, deal ? [this.whenTicked(Validators.required)] : purchase ? [] : [Validators.required, Validators.min(0), this.nonNegativeProfitValidator()]],
+      profit: [null as number | null, deal ? [this.whenTicked(Validators.required)] : purchase ? [] : [Validators.required, Validators.min(0), Validators.max(99.99), this.nonNegativeProfitValidator()]],
       unitSellingPrice: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : purchase ? [Validators.min(0)] : [Validators.required, Validators.min(0)]],
       availability: ['', deal || purchase ? [] : Validators.required],
       // null, not '': the server casts this to an ObjectId and an empty string fails the cast.
@@ -353,7 +462,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       this.subs.add(group.get('dealSelected')!.valueChanges.subscribe((on) => {
         if (!on) {
           const quoted = this.originals.get(group);
-          if (quoted) this.writeDetail(group, { ...quoted, supplierId: null });
+          if (quoted) this.writeDetail(group, { ...quoted, supplierId: null, dealSelected: false });
         }
         lock(!!on);
         editable.forEach((name) => group.get(name)!.updateValueAndValidity({ emitEvent: false }));
@@ -393,6 +502,28 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return group;
   }
 
+  /** An RFQ line: what is asked for, and (once the supplier replies) its unit price in `unitCost`. */
+  private createRfqDetail(): FormGroup {
+    return this._fb.group({
+      productId: [null as string | null],
+      itemCode: [''],
+      partNo: [''],
+      detail: ['', Validators.required],
+      quantity: [null as number | null, [Validators.required, Validators.min(0.0001)]],
+      unitCost: [null as number | null, [Validators.min(0)]],
+      profit: [null as number | null],
+      unitSellingPrice: [null as number | null],
+      availability: [''],
+      supplierId: [null as string | null],
+      uom: [''],
+      lineKey: [ItemEntryComponent.newLineKey()],
+    });
+  }
+
+  static newLineKey(): string {
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  }
+
   private createItem(isOptional = false): FormGroup {
     return this._fb.group({
       itemName: ['', Validators.required],
@@ -410,12 +541,28 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.emitTotals();
   }
 
+  /** A discount larger than what is being sold would make the final total negative. */
+  private discountWithinTotal: ValidatorFn = (group: AbstractControl): ValidationErrors | null => {
+    const discount = Number(group.get('totalDiscount')?.value) || 0;
+    if (!discount) return null;
+    let selling = 0;
+    ((group.get('items') as FormArray | null)?.getRawValue() || []).forEach((item: any) => {
+      if (!this.countsTowardsTotal(item)) return;
+      (item.itemDetails || []).forEach((d: any) => {
+        if (this.isDeal && !d.dealSelected) return;
+        selling += (Number(d.quantity) || 0) * (Number(d.unitSellingPrice) || 0);
+      });
+    });
+    return discount > selling + 0.005 ? { discountExceedsTotal: true } : null;
+  };
+
   addOption(): void {
     this.optionalItems.push(this._fb.group({
       items: this._fb.array([this.createItem()]),
       totalDiscount: [null as number | null, [Validators.min(0)]],
-    }));
+    }, { validators: [this.discountWithinTotal] }));
     this.selectedOption = this.optionalItems.length - 1;
+    this.seedMargin(this.selectedOption, 0, 0);
   }
 
   removeOption(i: number): void {
@@ -428,6 +575,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   addItem(i: number, isOptional = false): void {
     this.itemsAt(i).push(this.createItem(isOptional));
+    this.seedMargin(i, this.itemsAt(i).length - 1, 0);
   }
 
   removeItem(i: number, j: number): void {
@@ -438,7 +586,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   addDetail(i: number, j: number): void {
-    this.detailsAt(i, j)?.push(this.createDetail());
+    const details = this.detailsAt(i, j);
+    if (!details) return;
+    details.push(this.createDetail());
+    this.seedMargin(i, j, details.length - 1);
+    const id = `${this.itemDomId(i, j)}-l${details.length - 1}`;
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
   }
 
   removeDetail(i: number, j: number, k: number): void {
@@ -447,6 +600,25 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.removedItemDetails.push({ item: details.at(k).value, i, j, k });
     details.removeAt(k);
     this.offerUndo('line');
+  }
+
+  /** Wipes every field of the line but keeps its row. */
+  clearDetail(i: number, j: number, k: number): void {
+    const details = this.detailsAt(i, j);
+    if (!details || !details.at(k)) return;
+    details.setControl(k, this.createDetail());
+    this.seedMargin(i, j, k);
+    details.markAsDirty();
+    this.recompute();
+    this.emitTotals();
+  }
+
+  dropItem(event: CdkDragDrop<AbstractControl[]>, i: number): void {
+    if (event.previousIndex === event.currentIndex) return;
+    const items = this.itemsAt(i);
+    moveItemInArray(items.controls, event.previousIndex, event.currentIndex);
+    items.updateValueAndValidity();
+    items.markAsDirty();
   }
 
   dropDetail(event: CdkDragDrop<AbstractControl[] | undefined>, i: number, j: number): void {
@@ -471,12 +643,13 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         const itemGroup = this.createItem(!!item.isOptional);
         itemGroup.setControl('itemDetails', this._fb.array(details.length ? details : [this.createDetail()]));
         itemGroup.patchValue({ itemName: item.itemName ?? '', includeInTotal: !!item.includeInTotal });
+        if (this.autoCollapseLines != null && details.length > this.autoCollapseLines) this.collapsed.add(itemGroup);
         return itemGroup;
       });
       this.optionalItems.push(this._fb.group({
         items: this._fb.array(items.length ? items : [this.createItem()]),
         totalDiscount: [option.totalDiscount ?? null, [Validators.min(0)]],
-      }));
+      }, { validators: [this.discountWithinTotal] }));
     });
     if (!this.optionalItems.length) this.addOption();
     this.selectedOption = 0;
@@ -500,6 +673,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       : cost && price ? Number((((price - cost) / price) * 100).toFixed(2)) : null;
 
     if (this.isDeal && !this.originals.has(group)) this.originals.set(group, { ...d });
+    this.keepAvailability(d.availability);
+    this.keepUnit(d.uom);
     this.deriving = true;
     group.patchValue({
       productId: (typeof d.productId === 'object' ? d.productId?._id : d.productId) || null,
@@ -514,8 +689,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       supplierId: (typeof d.supplierId === 'object' ? d.supplierId?._id : d.supplierId) || null,
       uom: d.uom ?? '',
       ...(this.isPurchase ? { lineKey: d.lineKey ?? null } : {}),
+      // An RFQ line keeps the key it was created with unless the record already has one.
+      ...(this.isRfq && d.lineKey ? { lineKey: d.lineKey } : {}),
     }, { emitEvent: false });
     this.deriving = false;
+    if (this.isDeal && d.dealSelected) group.get('dealSelected')?.setValue(true);
     group.updateValueAndValidity();
   }
 
@@ -547,6 +725,41 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.emitTotals();
   }
 
+  /**
+   * Adds catalogue products as lines (from the command palette): each goes under the item named after
+   * its category, reusing that item or a blank one, at one unit. Returns how many lines were added.
+   */
+  addCatalogueProducts(products: ItemSuggestion[]): number {
+    const i = this.selectedOption ?? 0;
+    let added = 0;
+    products.forEach((s) => {
+      const itemsArray = this.itemsAt(i);
+      if (!itemsArray) return;
+      const norm = (v: unknown) => (v ?? '').toString().trim().replace(/\s+/g, ' ').toLowerCase();
+      const name = norm(s.categoryName || 'Items');
+      let j = itemsArray.controls.findIndex((g) => norm(g.get('itemName')?.value) === name);
+      if (j < 0) j = itemsArray.controls.findIndex((g) => this.isItemEmpty(g as FormGroup));
+      if (j < 0) {
+        this.addItem(i);
+        j = itemsArray.length - 1;
+      }
+      const details = this.detailsAt(i, j);
+      if (!details) return;
+      const last = details.at(details.length - 1) as FormGroup | undefined;
+      const blank = last && !(last.get('detail')?.value || '').toString().trim() && !last.get('productId')?.value;
+      if (!blank) details.push(this.createDetail());
+      const k = details.length - 1;
+      this.applySuggestion(i, j, k, s);
+      const itemName = this.itemsAt(i).at(j).get('itemName');
+      if (!(itemName?.value || '').toString().trim()) itemName?.setValue(s.categoryName || 'Items', { emitEvent: false });
+      const line = details.at(k);
+      if (line.get('quantity')?.value == null) line.get('quantity')?.setValue(1);
+      added++;
+    });
+    this.emitTotals();
+    return added;
+  }
+
   private isItemEmpty(group: FormGroup): boolean {
     if ((group.get('itemName')?.value || '').toString().trim()) return false;
     const details = group.get('itemDetails') as FormArray;
@@ -562,8 +775,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   private offerUndo(kind: 'option' | 'item' | 'line'): void {
     const label = kind === 'line' ? 'Line' : kind === 'item' ? 'Item' : 'Option';
-    this.snackBar.open(`${label} removed.`, 'Undo', { duration: 4000 })
-      .onAction().subscribe(() => this.undo(kind));
+    this.alerts.action({ title: `${label} removed`, onAction: () => this.undo(kind) });
   }
 
   private rebuildItem(item: ItemEntryItemValue): FormGroup {
@@ -584,7 +796,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       this.optionalItems.insert(i, this._fb.group({
         items: this._fb.array((option.items || []).map((item: any) => this.rebuildItem(item))),
         totalDiscount: [option.totalDiscount ?? null, [Validators.min(0)]],
-      }));
+      }, { validators: [this.discountWithinTotal] }));
       this.selectedOption = i;
     } else if (kind === 'item' && this.removedItems.length) {
       const { item, i, j } = this.removedItems.pop();
@@ -673,11 +885,16 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     const detail = this.detailsAt(i, j)?.at(k ?? 0) as FormGroup | undefined;
     detail?.get('detail')?.setValue(s.description, { emitEvent: false });
     if (detail) {
+      // Margin first, so a catalogue cost derives a price from it; a catalogue price, set after, wins.
+      if (k !== null) this.seedMargin(i, j, k);
       // The product link plus its snapshot identifiers always come from the picked row.
       detail.get('productId')?.setValue(s._id, { emitEvent: false });
       this.fillIfEmpty(detail, 'itemCode', s.itemCode);
       this.fillIfEmpty(detail, 'partNo', s.partNo);
+      this.keepUnit(s.uom);
       this.fillIfEmpty(detail, 'uom', s.uom);
+      // An RFQ line is priced by the supplier, so catalogue costs and vendors are not copied onto it.
+      if (this.isRfq) { this.closeSuggestions(); return; }
       this.fillIfEmpty(detail, 'supplierId', s.supplierId);
       // Pricing stays event-emitting so the margin/selling-price derivation reruns.
       if (s.unitCost != null && detail.get('unitCost')?.value == null) detail.get('unitCost')?.setValue(s.unitCost);
@@ -698,12 +915,34 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Stock line shown under a suggestion. Null for rows with no stock position to report. */
   stockSummary(s: ItemSuggestion): string | null {
-    if (s.productType && s.productType !== 'Stock Product') return null;
+    if (s.productType && s.productType !== 'Stock') return null;
     if (s.stockOnHand == null) return null;
-    const parts = [`${s.stockAvailable ?? s.stockOnHand} available`, `${s.stockOnHand} on hand`];
+    const parts = [`${s.stockStatus || ((s.stockAvailable ?? 0) > 0 ? 'In stock' : 'Not in stock')}`, `${s.stockAvailable ?? s.stockOnHand} available`, `${s.stockOnHand} on hand`];
     if (s.stockReserved) parts.push(`${s.stockReserved} reserved`);
     if (s.stockQuarantined) parts.push(`${s.stockQuarantined} quarantined`);
     return parts.join(' · ');
+  }
+
+  warehouseSummary(s: ItemSuggestion): string | null {
+    const warehouses = (s.warehouseAvailability || []).filter((w) => Number(w.quantity) > 0);
+    if (!warehouses.length) return null;
+    return warehouses.slice(0, 3).map((w) => `${w.warehouseName}: ${w.quantity}`).join(' · ');
+  }
+
+  salesHistorySummary(s: ItemSuggestion): string | null {
+    const history = s.salesHistory;
+    if (!history || (!history.quotedCount && !history.soldCount)) return null;
+    const parts = [`${history.quotedCount} quoted`];
+    if (history.soldCount) parts.push(`${history.soldCount} sold`);
+    const recent = history.recent?.[0];
+    if (recent?.quoteId) {
+      parts.push(`last ${recent.quoteId}${recent.customerName ? ' · ' + recent.customerName : ''}`);
+    }
+    return parts.join(' · ');
+  }
+
+  recentUsageRows(s: ItemSuggestion) {
+    return (s.salesHistory?.recent || []).slice(0, 2);
   }
 
   /** Green when there is free stock, amber when it is all committed, grey when there is none. */
@@ -717,6 +956,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   closeSuggestions(): void {
     this.activeSuggestionKey = null;
     this.highlightedIndex = -1;
+    this.search$.next({ key: '', term: '', category: '' });
   }
 
   // --- catalogue palette -------------------------------------------------------
@@ -729,6 +969,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @HostListener('document:keydown', ['$event'])
   onDocumentKeydown(event: KeyboardEvent): void {
     if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return;
+    // Ctrl+Shift+K always opens the global command palette; so does Ctrl+K while this list is not
+    // the palette target (its drawer is closed — drawers stay mounted).
+    if (event.shiftKey || !this.paletteTargetLabel) return;
     if (this.isDeal || this.itemsHidden || !this.source || this.palette) return;
     const target = this.lastItem && this.itemsAt(this.lastItem.i)?.at(this.lastItem.j)
       ? this.lastItem : { i: this.selectedOption, j: this.itemsAt(this.selectedOption).length - 1 };
@@ -834,7 +1077,24 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.requestCreateProduct(p.i, p.j, k);
   }
 
+  /** The line a create-product request came from, so the new product can be put on it. */
+  private createTarget: { i: number; j: number; k: number } | null = null;
+
+  /** Puts a product the host just created on the line that asked for it. */
+  applyCreatedProduct(s: ItemSuggestion): void {
+    const t = this.createTarget;
+    this.createTarget = null;
+    const line = t ? (this.detailsAt(t.i, t.j)?.at(t.k) as FormGroup | undefined) : undefined;
+    if (!t || !line) return;
+    // The typed description gives way to the catalogue's own wording.
+    line.get('detail')?.setValue(s.description, { emitEvent: false });
+    this.applySuggestion(t.i, t.j, t.k, s);
+    if (line.get('quantity')?.value == null) line.get('quantity')?.setValue(1);
+    this.emitTotals();
+  }
+
   requestCreateProduct(i: number, j: number, k: number): void {
+    this.createTarget = { i, j, k };
     const itemName = ((this.itemsAt(i).at(j) as FormGroup).get('itemName')?.value || '').toString().trim();
     const detail = (this.detailsAt(i, j)?.at(k)?.get('detail')?.value || '').toString().trim();
     this.closeSuggestions();
@@ -901,6 +1161,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private emitTotals(): void {
+    this.recompute();
     this.totals.emit({
       totalCost: this.totalCost(),
       sellingPrice: this.sellingPrice(),
@@ -914,6 +1175,371 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return this.optionalItems.controls.some((option) =>
       ((option.get('items') as FormArray)?.controls || []).some((item) =>
         ((item.get('itemDetails') as FormArray)?.controls || []).some((d) => !!(d.get('detail')?.value || '').toString().trim())));
+  }
+
+  // --- margin defaults ---------------------------------------------------------
+  // Item margin → line. Nothing is preset: an item has a margin only once the user sets one. Only the
+  // line's `profit` is saved; the item level lives on the component, and a "custom" line is simply one
+  // whose margin differs from its item's.
+
+  get marginEnabled(): boolean { return this.mode === 'quote'; }
+
+  private itemMargins = new WeakMap<AbstractControl, number>();
+
+  /** The margin a line in this item should have unless the user set its own. */
+  effectiveMargin(i: number, j: number): number | null {
+    return this.itemMargins.get(this.itemsAt(i).at(j)) ?? null;
+  }
+
+  /** Gives a line with no margin yet its item's margin, if the item has one. Emits, so a known cost derives the price. */
+  private seedMargin(i: number, j: number, k: number): void {
+    if (!this.marginEnabled) return;
+    const profit = this.detailsAt(i, j)?.at(k)?.get('profit');
+    const margin = this.effectiveMargin(i, j);
+    if (profit && margin != null && (profit.value == null || profit.value === '')) profit.setValue(margin);
+  }
+
+  private differs(value: any, margin: number | null): boolean {
+    return value != null && value !== '' && margin != null && Math.abs(Number(value) - margin) > 0.005;
+  }
+
+  isCustomMargin(i: number, j: number, k: number): boolean {
+    return this.marginEnabled && this.differs(this.detailsAt(i, j)?.at(k)?.get('profit')?.value, this.effectiveMargin(i, j));
+  }
+
+  customMarginCount(i: number, j: number): number {
+    const margin = this.effectiveMargin(i, j);
+    return (this.detailsAt(i, j)?.controls || []).filter((l) => this.differs(l.get('profit')?.value, margin)).length;
+  }
+
+  resetMargin(i: number, j: number, k: number): void {
+    const margin = this.effectiveMargin(i, j);
+    const profit = this.detailsAt(i, j)?.at(k)?.get('profit');
+    if (!profit || margin == null) return;
+    profit.setValue(margin);
+    profit.markAsDirty();
+  }
+
+  /** Text colour for a margin %: red below zero, amber below the threshold. */
+  marginTone(value: number | null | undefined): string {
+    if (value == null || (value as any) === '' || !Number.isFinite(Number(value))) return 'text-gray-500 dark:text-gray-400';
+    if (Number(value) < 0) return 'text-red-600 dark:text-red-400';
+    return 'text-emerald-600 dark:text-emerald-400';
+  }
+
+  lineMarginRing(i: number, j: number, k: number): string {
+    if (!this.marginEnabled) return '';
+    const value = this.detailsAt(i, j)?.at(k)?.get('profit')?.value;
+    if (value == null || value === '') return '';
+    if (Number(value) < 0) return 'ring-1 ring-red-400 rounded-lg';
+    return '';
+  }
+
+  // --- item summary --------------------------------------------------------------
+
+  itemCost(i: number, j: number): number {
+    let sum = 0;
+    this.detailsAt(i, j)?.controls.forEach((_, k) => (sum += this.lineCost(i, j, k)));
+    return sum;
+  }
+
+  itemMarginPercent(i: number, j: number): number | null {
+    const total = this.itemTotal(i, j);
+    return total > 0 ? ((total - this.itemCost(i, j)) / total) * 100 : null;
+  }
+
+  itemIssues(i: number, j: number): number {
+    return (this.detailsAt(i, j)?.controls || []).filter((l) => this.lineFlags(l).errors).length;
+  }
+
+  // --- collapse & density ------------------------------------------------------
+
+  private collapsed = new WeakSet<AbstractControl>();
+  compact = this.readDensity();
+
+  isCollapsed(i: number, j: number): boolean {
+    return !this.filterActive && this.collapsed.has(this.itemsAt(i).at(j));
+  }
+
+  toggleCollapse(i: number, j: number): void {
+    const item = this.itemsAt(i).at(j);
+    if (this.collapsed.has(item)) this.collapsed.delete(item);
+    else this.collapsed.add(item);
+  }
+
+  setAllCollapsed(on: boolean): void {
+    this.itemsAt(this.selectedOption).controls.forEach((item) => (on ? this.collapsed.add(item) : this.collapsed.delete(item)));
+  }
+
+  toggleDensity(): void {
+    this.compact = !this.compact;
+    try { localStorage.setItem('ie-density', this.compact ? 'compact' : 'comfortable'); } catch { /* storage unavailable */ }
+  }
+
+  private readDensity(): boolean {
+    try { return localStorage.getItem('ie-density') === 'compact'; } catch { return false; }
+  }
+
+  // --- search, filters & jump --------------------------------------------------
+
+  private static seq = 0;
+  readonly uid = ++ItemEntryComponent.seq;
+
+  lineSearch = '';
+  lineFilter: LineFilter | null = null;
+  counts: Record<LineFilter, number> = { missingPrice: 0, notInCatalogue: 0, errors: 0 };
+  readonly filterChips: { key: LineFilter; label: string }[] = [
+    { key: 'missingPrice', label: 'Missing price' },
+    { key: 'notInCatalogue', label: 'Not in products' },
+    { key: 'errors', label: 'Errors' },
+  ];
+  /** The item "Jump to" just scrolled to, highlighted briefly. */
+  flashItem: AbstractControl | null = null;
+
+  get filterActive(): boolean {
+    return !!this.lineSearch.trim() || !!this.lineFilter;
+  }
+
+  visibleChips(): { key: LineFilter; label: string }[] {
+    return this.isRfq && !this.rfqPriced ? this.filterChips.filter((c) => c.key !== 'missingPrice') : this.filterChips;
+  }
+
+  toggleFilter(key: LineFilter): void {
+    this.lineFilter = this.lineFilter === key ? null : key;
+  }
+
+  clearFilters(): void {
+    this.lineSearch = '';
+    this.lineFilter = null;
+  }
+
+  /** Blank lines (nothing typed yet) never count as problems. */
+  private lineFlags(line: AbstractControl): Record<LineFilter, boolean> {
+    const v = (line as FormGroup).getRawValue();
+    const detail = (v.detail || '').toString().trim();
+    const filled = !!detail || v.quantity != null || v.unitCost != null;
+    if (!filled) return { missingPrice: false, notInCatalogue: false, errors: false };
+    return {
+      missingPrice: this.isRfq ? this.rfqPriced && v.unitCost == null : !(Number(v.unitSellingPrice) > 0),
+      notInCatalogue: !v.productId && !!detail,
+      errors: line.invalid,
+    };
+  }
+
+  lineVisible(i: number, j: number, k: number): boolean {
+    if (!this.filterActive) return true;
+    const line = this.detailsAt(i, j)?.at(k);
+    if (!line) return false;
+    if (this.lineFilter && !this.lineFlags(line)[this.lineFilter]) return false;
+    const term = this.lineSearch.trim().toLowerCase();
+    if (!term) return true;
+    const v = (line as FormGroup).getRawValue();
+    const name = (this.itemsAt(i).at(j).get('itemName')?.value || '').toString();
+    return [v.detail, v.itemCode, v.partNo, name].some((s) => (s || '').toString().toLowerCase().includes(term));
+  }
+
+  itemVisible(i: number, j: number): boolean {
+    if (!this.filterActive) return true;
+    return (this.detailsAt(i, j)?.controls || []).some((_, k) => this.lineVisible(i, j, k));
+  }
+
+  anyItemVisible(i: number): boolean {
+    return this.itemsAt(i).controls.some((_, j) => this.itemVisible(i, j));
+  }
+
+  itemDomId(i: number, j: number): string {
+    return `ie-${this.uid}-${i}-${j}`;
+  }
+
+  /** Adds an item from the sticky toolbar and scrolls to it, so long lists need no trip to the bottom. */
+  addItemAndJump(isOptional = false): void {
+    const i = this.selectedOption;
+    if (this.filterActive) this.clearFilters();
+    this.addItem(i, isOptional);
+    this.jumpTo(String(this.itemsAt(i).length - 1));
+  }
+
+  jumpTo(value: string): void {
+    const j = Number(value);
+    const i = this.selectedOption;
+    const item = this.itemsAt(i)?.at(j);
+    if (!item) return;
+    this.collapsed.delete(item);
+    this.flashItem = item;
+    setTimeout(() => document.getElementById(this.itemDomId(i, j))?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    setTimeout(() => { if (this.flashItem === item) this.flashItem = null; }, 1600);
+  }
+
+  /** Filter counts for the selected option, and pruning of selected lines that no longer exist. */
+  private recompute(): void {
+    const counts: Record<LineFilter, number> = { missingPrice: 0, notInCatalogue: 0, errors: 0 };
+    const live = new Set<AbstractControl>();
+    this.optionalItems.controls.forEach((_, i) => (this.itemsAt(i)?.controls || []).forEach((__, j) =>
+      (this.detailsAt(i, j)?.controls || []).forEach((line) => {
+        live.add(line);
+        if (i !== this.selectedOption) return;
+        const flags = this.lineFlags(line);
+        (Object.keys(counts) as LineFilter[]).forEach((key) => flags[key] && counts[key]++);
+      })));
+    this.selected.forEach((line) => { if (!live.has(line)) this.selected.delete(line); });
+    this.counts = counts;
+  }
+
+  // --- bulk selection ------------------------------------------------------------
+
+  get bulkEnabled(): boolean { return this.mode === 'quote' || this.isRfq; }
+
+  private selected = new Set<AbstractControl>();
+  private anchor: { i: number; j: number; k: number } | null = null;
+  bulkQtyControl = new FormControl<number | null>(null);
+  bulkUomControl = new FormControl<string | null>(null);
+  bulkPriceControl = new FormControl<number | null>(null);
+  bulkMarginControl = new FormControl<number | null>(null);
+  bulkAvailabilityControl = new FormControl<string | null>(null);
+  bulkSupplierControl = new FormControl<string | null>(null);
+
+  get selectedCount(): number { return this.selected.size; }
+
+  /** The selected line groups, for a host's own bulk actions. */
+  selectedLines(): FormGroup[] {
+    return Array.from(this.selected) as FormGroup[];
+  }
+
+  isSelected(i: number, j: number, k: number): boolean {
+    const line = this.detailsAt(i, j)?.at(k);
+    return !!line && this.selected.has(line);
+  }
+
+  /** Shift-click selects the range from the last clicked line in the same item. */
+  toggleLine(i: number, j: number, k: number, event: MouseEvent): void {
+    const details = this.detailsAt(i, j);
+    if (!details) return;
+    const on = !this.selected.has(details.at(k));
+    const a = this.anchor;
+    const range = event.shiftKey && a && a.i === i && a.j === j
+      ? [Math.min(a.k, k), Math.max(a.k, k)] : [k, k];
+    for (let n = range[0]; n <= range[1]; n++) {
+      if (n !== k && !this.lineVisible(i, j, n)) continue;
+      if (on) this.selected.add(details.at(n)); else this.selected.delete(details.at(n));
+    }
+    this.anchor = { i, j, k };
+  }
+
+  itemSelectState(i: number, j: number): 'none' | 'some' | 'all' {
+    const lines = this.detailsAt(i, j)?.controls || [];
+    const n = lines.filter((l) => this.selected.has(l)).length;
+    return n === 0 ? 'none' : n === lines.length ? 'all' : 'some';
+  }
+
+  toggleItemSelection(i: number, j: number): void {
+    const select = this.itemSelectState(i, j) !== 'all';
+    (this.detailsAt(i, j)?.controls || []).forEach((line, k) => {
+      if (!this.lineVisible(i, j, k)) return;
+      if (select) this.selected.add(line); else this.selected.delete(line);
+    });
+  }
+
+  selectAllVisible(): void {
+    const i = this.selectedOption;
+    this.itemsAt(i).controls.forEach((_, j) =>
+      (this.detailsAt(i, j)?.controls || []).forEach((line, k) => this.lineVisible(i, j, k) && this.selected.add(line)));
+  }
+
+  clearSelection(): void {
+    this.selected.clear();
+    this.anchor = null;
+  }
+
+  private forSelected(fn: (line: FormGroup) => void): void {
+    this.selected.forEach((line) => fn(line as FormGroup));
+  }
+
+  /** Applies every filled-in bulk field to the selected lines; blank fields are left untouched. */
+  bulkApply(): void {
+    const filled = (v: unknown) => v != null && (v as any) !== '';
+    const fields: [string, unknown, boolean][] = [
+      ['quantity', this.bulkQtyControl.value, true],
+      ['uom', this.bulkUomControl.value, false],
+      ['profit', this.marginEnabled ? this.bulkMarginControl.value : null, true],
+      // An RFQ's price is the supplier's unit price, kept in `unitCost`.
+      [this.isRfq ? 'unitCost' : 'unitSellingPrice', !this.isRfq || this.rfqPriced ? this.bulkPriceControl.value : null, true],
+      ['availability', !this.isRfq || this.rfqPriced ? this.bulkAvailabilityControl.value : null, false],
+      ['supplierId', this.isRfq ? null : this.bulkSupplierControl.value, false],
+    ];
+    const active = fields.filter(([, v]) => filled(v));
+    if (!active.length) { this.alerts.warning('Nothing to set', 'Fill in at least one field.'); return; }
+    this.forSelected((line) => active.forEach(([name, v, numeric]) => {
+      const c = line.get(name);
+      c?.setValue(numeric ? Number(v) : v);
+      c?.markAsDirty();
+    }));
+    [this.bulkQtyControl, this.bulkUomControl, this.bulkPriceControl, this.bulkMarginControl,
+      this.bulkAvailabilityControl, this.bulkSupplierControl].forEach((c) => c.reset(null));
+    this.alerts.success(`${active.length} field${active.length > 1 ? 's' : ''} set on ${this.selectedCount} lines`);
+  }
+
+  /** Removes the selected lines with one Undo. A group whose lines are all selected is removed too (the last group of an option keeps one blank line). */
+  bulkDelete(): void {
+    type Op =
+      | { type: 'lines'; i: number; j: number; lines: { item: ItemEntryLineValue; k: number }[]; blank?: FormGroup }
+      | { type: 'group'; i: number; j: number; item: ItemEntryItemValue };
+    const ops: Op[] = [];
+    const seeds: [number, number][] = [];
+    let count = 0;
+    // Snapshot first: nothing below may touch the selection until every group has been processed.
+    const picked = new Set(this.selected);
+    this.optionalItems.controls.forEach((_, i) => {
+      const items = this.itemsAt(i);
+      for (let j = items.length - 1; j >= 0; j--) {
+        const details = this.detailsAt(i, j);
+        if (!details) continue;
+        const ks = details.controls.map((l, k) => (picked.has(l) ? k : -1)).filter((k) => k >= 0);
+        if (!ks.length) continue;
+        count += ks.length;
+        if (ks.length === details.length && items.length > 1) {
+          ops.push({ type: 'group', i, j, item: items.at(j).getRawValue() });
+          items.removeAt(j, { emitEvent: false });
+          continue;
+        }
+        const op: Op = { type: 'lines', i, j, lines: ks.map((k) => ({ item: (details.at(k) as FormGroup).getRawValue(), k })) };
+        for (let n = ks.length - 1; n >= 0; n--) details.removeAt(ks[n], { emitEvent: false });
+        if (!details.length) {
+          op.blank = this.createDetail();
+          details.push(op.blank, { emitEvent: false });
+          seeds.push([i, j]);
+        }
+        ops.push(op);
+      }
+    });
+    if (!count) return;
+    seeds.forEach(([i, j]) => this.seedMargin(i, j, 0));
+    this.clearSelection();
+    this.optionalItems.updateValueAndValidity();
+    this.optionalItems.markAsDirty();
+    this.alerts.action({
+      title: `${count} line${count === 1 ? '' : 's'} removed`,
+      onAction: () => this.undoBulkDelete(ops),
+    });
+  }
+
+  private undoBulkDelete(ops: any[]): void {
+    [...ops].reverse().forEach((op) => {
+      if (op.type === 'group') {
+        this.itemsAt(op.i).insert(op.j, this.rebuildItem(op.item), { emitEvent: false });
+        return;
+      }
+      const blank = op.blank as FormGroup | undefined;
+      const parent = blank?.parent as FormArray | null | undefined;
+      const at = parent && blank ? parent.controls.indexOf(blank) : -1;
+      if (parent && at >= 0) parent.removeAt(at, { emitEvent: false });
+      op.lines.forEach(({ item, k }: { item: ItemEntryLineValue; k: number }) => {
+        const group = this.createDetail();
+        this.writeDetail(group, item);
+        this.detailsAt(op.i, op.j)?.insert(k, group, { emitEvent: false });
+      });
+    });
+    this.optionalItems.updateValueAndValidity();
+    this.emitTotals();
   }
 
   private nonNegativeProfitValidator(): ValidatorFn {

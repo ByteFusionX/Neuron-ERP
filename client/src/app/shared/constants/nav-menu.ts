@@ -116,6 +116,30 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     ],
   },
   {
+    id: 'catalog',
+    label: 'Catalog',
+    group: 'Sales & Jobs',
+    items: [
+      {
+        id: 'salesProducts',
+        label: 'Products',
+        icon: 'heroCube',
+        route: '/products',
+        privilegeKey: 'inventory',
+        privilegeValue: 'none',
+        inventorySubKey: 'products',
+      },
+      {
+        id: 'salesSuppliers',
+        label: 'Suppliers',
+        icon: 'heroBuildingOffice',
+        route: '/suppliers',
+        privilegeKey: 'supplier',
+        privilegeValue: 'none',
+      },
+    ],
+  },
+  {
     id: 'jobs',
     label: 'Jobs',
     group: 'Sales & Jobs',
@@ -156,6 +180,23 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         privilegeKey: 'supplier',
         privilegeValue: 'none',
         notificationKey: 'supplierCount',
+      },
+      {
+        id: 'purchaseProducts',
+        label: 'Products',
+        icon: 'heroCube',
+        route: '/products',
+        privilegeKey: 'inventory',
+        privilegeValue: 'none',
+        inventorySubKey: 'products',
+      },
+      {
+        id: 'purchaseEmployees',
+        label: 'Employees',
+        icon: 'heroIdentification',
+        route: '/hr/employees',
+        privilegeKey: 'employee',
+        privilegeValue: 'none',
       },
       {
         id: 'purchase',
@@ -203,9 +244,32 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         id: 'grn',
         label: 'GRN',
         icon: 'heroInboxArrowDown',
-        route: '/grn/grn-list',
+        hasDropdown: true,
         privilegeKey: 'grn',
         privilegeValue: 'none',
+        children: [
+          {
+            id: 'grnList',
+            label: 'GRN List',
+            route: '/grn/grn-list',
+            privilegeKey: 'grn',
+            privilegeValue: 'none',
+          },
+          {
+            id: 'grnReturns',
+            label: 'Returns',
+            route: '/grn/returns',
+            privilegeKey: 'grn',
+            privilegeValue: 'none',
+          },
+          {
+            id: 'grnResolved',
+            label: 'Resolved',
+            route: '/grn/resolved',
+            privilegeKey: 'grn',
+            privilegeValue: 'none',
+          },
+        ],
       },
     ],
   },
@@ -278,45 +342,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         route: '/dispatch/delivery-note-register',
         privilegeKey: 'dispatch',
         privilegeValue: 'none',
-      },
-      {
-        id: 'invoice',
-        label: 'Invoice',
-        icon: 'heroDocumentText',
-        route: '/invoice',
-        hasDropdown: true,
-        privilegeKey: 'invoice',
-        privilegeValue: 'none',
-        children: [
-          {
-            id: 'invoice-register',
-            label: 'Invoices',
-            route: '/invoice/invoice-register',
-            privilegeKey: 'invoice',
-            privilegeValue: 'none',
-          },
-          {
-            id: 'invoice-dn-linking',
-            label: 'Invoice vs DN',
-            route: '/invoice/invoice-dn-linking',
-            privilegeKey: 'invoice',
-            privilegeValue: 'viewInvoicesVsDn',
-          },
-          {
-            id: 'cancelled-adjusted-invoices',
-            label: 'Cancelled/Adjusted',
-            route: '/invoice/cancelled-invoices',
-            privilegeKey: 'invoice',
-            privilegeValue: 'viewCancelledAdjusted',
-          },
-          {
-            id: 'cancelled-reissued-invoices',
-            label: 'Reissued',
-            route: '/invoice/reissued',
-            privilegeKey: 'invoice',
-            privilegeValue: 'viewReissued',
-          },
-        ],
       },
     ],
   },
@@ -397,14 +422,38 @@ export const MENU_CATEGORIES: MenuCategory[] = [
   },
   {
     id: 'finance',
-    label: 'Finance',
+    label: 'Invoices',
     group: 'Finance',
     items: [
       {
-        id: 'finance',
-        label: 'Finance',
+        id: 'receivables',
+        label: 'Receivables',
         icon: 'heroBanknotes',
-        route: '/finance',
+        route: '/finance/receivables',
+      },
+      {
+        id: 'financeSuppliers',
+        label: 'Suppliers',
+        icon: 'heroBuildingOffice',
+        route: '/suppliers',
+        privilegeKey: 'supplier',
+        privilegeValue: 'none',
+      },
+      {
+        id: 'financeEmployees',
+        label: 'Employees',
+        icon: 'heroIdentification',
+        route: '/hr/employees',
+        privilegeKey: 'employee',
+        privilegeValue: 'none',
+      },
+      {
+        id: 'payables',
+        label: 'Payable',
+        icon: 'heroDocumentText',
+        route: '/finance/payables',
+        privilegeKey: 'invoice',
+        privilegeValue: 'none',
       },
     ],
   },
@@ -415,17 +464,17 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       {
         id: 'claims',
-        label: 'Claims',
+        label: 'Expenses',
         icon: 'heroDocumentPlus',
-        route: '/claims',
+        route: '/claims/expenses',
         privilegeKey: 'claims',
         hasDropdown: true,
         privilegeValue: 'none',
         children: [
           {
-            id: 'myClaims',
-            label: 'My Claims',
-            route: '/claims/my-claims',
+            id: 'expenses',
+            label: 'Expenses',
+            route: '/claims/expenses',
             privilegeKey: 'claims',
             privilegeValue: 'none',
             notificationKey: 'claimsCount',
@@ -480,7 +529,29 @@ export const MENU_CATEGORIES: MenuCategory[] = [
   },
 ];
 
+export const GROUP_KEYS: Record<string, 'sales' | 'operations' | 'projects' | 'finance' | 'administration'> = {
+  'Sales & Jobs': 'sales',
+  Sales: 'sales', // privilege drawer tab name
+  Operations: 'operations',
+  Projects: 'projects',
+  Finance: 'finance',
+  Administration: 'administration',
+};
+
+// A group switched off in the role hides everything under it; its dashboard has its own switch.
+// Missing flags mean allowed, so roles saved before these existed keep working.
+export function groupAllowed(privileges: Privileges | undefined, category: MenuCategory): boolean {
+  if (!privileges || !category.group) return true;
+  const flags = privileges.groups?.[GROUP_KEYS[category.group]];
+  if (flags?.enabled === false) return false;
+  const isDashboard = category.items.length === 1 && category.items[0].id === category.id && category.id.endsWith('-dashboard');
+  return !(isDashboard && flags?.dashboard === false);
+}
+
 export function hasMenuAccess(privileges: Privileges | undefined, item: MenuItem | SubMenuItem): boolean {
+  if (privileges && (item.id === 'home' || item.id === 'dashboard')) {
+    return privileges.main?.[item.id] !== false;
+  }
   if (!privileges || !item.privilegeKey) return true;
 
   if (
@@ -579,6 +650,7 @@ export function buildNavEntries(privileges: Privileges | undefined): NavEntry[] 
   };
 
   for (const category of MENU_CATEGORIES) {
+    if (!groupAllowed(privileges, category)) continue;
     const context = category.group ?? (category.label || 'Overview');
     for (const item of category.items) {
       if (!hasMenuAccess(privileges, item)) continue;
@@ -638,7 +710,11 @@ export function buildBreadcrumbs(url: string): Crumb[] {
 
   const { route, crumbs } = best as { route: string; crumbs: Crumb[] };
   const hasDeeperSegments = path.length > route.length;
-  if (hasDeeperSegments) return [...crumbs, { label: 'Details' }];
+  if (hasDeeperSegments) {
+    // A "/report" sub page is a page in its own right, not a record's details.
+    const next = path.slice(route.length).split('/').filter(Boolean)[0];
+    return [...crumbs, { label: next === 'report' ? 'Report' : 'Details' }];
+  }
   const last = crumbs[crumbs.length - 1];
   return [...crumbs.slice(0, -1), { label: last.label }];
 }

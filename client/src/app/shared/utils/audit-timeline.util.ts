@@ -5,6 +5,7 @@ const ACTION_TONES: Record<string, DetailTimelineEntry['tone']> = {
   created: 'good', quoted: 'good', 'status-changed': 'info', 'presale-rejected': 'bad', deleted: 'bad',
   'attachment-removed': 'warn', 'estimation-deleted': 'warn', 'revision-requested': 'warn',
   'presale-returned': 'warn', 'resent-to-presale': 'info', 'sent-to-presale': 'info', 'estimation-uploaded': 'good',
+  allocated: 'info', 'procurement-transferred': 'info', completed: 'good', lost: 'bad',
 };
 
 export const formatAuditDate = (at: string): string =>

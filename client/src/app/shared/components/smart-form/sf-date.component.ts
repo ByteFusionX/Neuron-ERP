@@ -16,7 +16,7 @@ import { SF_STYLES } from './sf.model';
     @if (type === 'date' && displayFormat) {
       <div class="relative">
         <input class="sf-input tabular-nums cursor-pointer pr-9" type="text" readonly [id]="inputId" [value]="display" [disabled]="disabled"
-          [placeholder]="displayFormat.toLowerCase()" (click)="openPicker(picker)" (blur)="touch()" />
+          [placeholder]="displayFormat.toLowerCase()" (click)="openPicker(picker)" (keydown)="onKeydown($event, picker)" (blur)="touch()" />
         <svg class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm10 6H4v8h12V8z" clip-rule="evenodd" />
         </svg>
@@ -41,6 +41,14 @@ export class SfDateComponent extends SfControl<string> {
   openPicker(input: HTMLInputElement): void {
     if (this.disabled || this.readonly) return;
     try { input.showPicker?.(); } catch { /* not user-activated or unsupported: the native icon still works */ }
+  }
+
+  /** The visible field is a readonly text input with no native keyboard path to the picker — without this,
+   * Enter/Space on a focused field just submits the surrounding form instead of opening the calendar. */
+  onKeydown(event: KeyboardEvent, input: HTMLInputElement): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    this.openPicker(input);
   }
 
   get native(): string {

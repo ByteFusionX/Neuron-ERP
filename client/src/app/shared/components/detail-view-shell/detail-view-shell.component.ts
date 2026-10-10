@@ -51,6 +51,8 @@ export interface DetailViewTab {
  *   [tabBody]        - the active tab's content (consumer does its own *ngSwitch on activeTab)
  *   [sidebar]        - right panel body (only rendered while panelOpen)
  *   [sidebarFooter]  - sticky bottom area of the right panel (e.g. a comment box)
+ *   [footerLeft]     - bottom bar, left: optional / tab-dependent actions (outline buttons)
+ *   [footerRight]    - bottom bar, right: permanent actions shown on every tab (filled buttons)
  *
  * `sections` renders a structured key/value block (title + fields, same shape as detail-panel's
  * `DetailOverviewSection`/`app-detail-overview`, minus the 'dg' field type which is data-grid-only)

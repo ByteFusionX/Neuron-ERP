@@ -104,7 +104,7 @@
             [scrollbar-width:none] [-ms-overflow-style:none]
             [&::-webkit-scrollbar]:hidden">
           <!-- Quick filter -->
-          <div *ngIf="showFullBar" class="mb-3 px-1">
+          <div *ngIf="showFullBar && !isCompactMenu" class="mb-3 px-1">
             <app-search-field [value]="menuSearch" (valueChange)="menuSearch = $event"
               placeholder="Search menu..."></app-search-field>
           </div>
@@ -116,7 +116,7 @@
           <!-- Loop through categories -->
           <ng-container *ngFor="let category of visibleCategories; let first = first; let i = index">
             <!-- Group header: accordion toggle spanning consecutive categories sharing the same group -->
-            <button *ngIf="showFullBar && category.group && isNewGroup(i)" type="button"
+            <button *ngIf="showFullBar && category.group && !isCompactMenu && isNewGroup(i)" type="button"
               class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg select-none transition-colors text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800/60"
               [ngClass]="(first ? 'mt-1' : 'mt-2') + (isGroupCollapsed(category.group) ? '' : ' bg-gray-50 dark:bg-gray-800/40')"
               (click)="toggleGroup(category.group)">
@@ -131,9 +131,9 @@
                 [class.-rotate-90]="isGroupCollapsed(category.group)"></ng-icon>
             </button>
             <!-- Category label (full sidebar) or divider (minimised sidebar) -->
-            <p *ngIf="showFullBar && category.label && !isGroupCollapsed(category.group)"
+            <p *ngIf="showFullBar && category.label && !isGroupCollapsed(groupOf(category))"
               class="mb-0.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider"
-              [ngClass]="category.group ? ('pl-6 ' + (isNewGroup(i) ? 'mt-1.5' : 'mt-3')) : ('px-3 ' + (first ? 'mt-2' : 'mt-6'))">
+              [ngClass]="groupOf(category) ? ('pl-6 ' + (isNewGroup(i) ? 'mt-1.5' : 'mt-3')) : ('px-3 ' + (first ? 'mt-2' : 'mt-6'))">
               {{category.label}}
             </p>
             <div *ngIf="!showFullBar && !first && isNewGroup(i)" class="my-2 mx-2 border-t border-erp-border dark:border-erp-border-dark"></div>
@@ -141,8 +141,8 @@
               <!-- Loop through items in this category -->
               <ng-container *ngFor="let item of category.items">
             <!-- Only show menu items that user has access to -->
-            <ng-container *ngIf="hasAccess(item) && !(showFullBar && isGroupCollapsed(category.group)) && (!showFullBar || itemMatchesSearch(item))">
-            <div [ngClass]="{'ml-3 pl-1 border-l border-erp-border dark:border-erp-border-dark': showFullBar && category.group}">
+            <ng-container *ngIf="hasAccess(item) && !(showFullBar && isGroupCollapsed(groupOf(category))) && (!showFullBar || itemMatchesSearch(item))">
+            <div [ngClass]="{'ml-3 pl-1 border-l border-erp-border dark:border-erp-border-dark': showFullBar && groupOf(category)}">
               <!-- Top-level menu item -->
               <div class="cursor-pointer my-1"
                 [id]="'sidebar-item-' + item.id"

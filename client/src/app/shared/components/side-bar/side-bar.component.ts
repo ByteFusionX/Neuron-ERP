@@ -25,7 +25,7 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { CommonModule } from '@angular/common';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Privileges } from '../../interfaces/employee.interface';
-import { MENU_CATEGORIES, MenuCategory, MenuItem, SubMenuItem, hasMenuAccess } from '../../constants/nav-menu';
+import { MENU_CATEGORIES, MenuCategory, MenuItem, SubMenuItem, groupAllowed, hasMenuAccess } from '../../constants/nav-menu';
 import { combineLatest, Observable, Subscription } from 'rxjs';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { SidebarPreferencesService } from 'src/app/core/services/sidebar-preferences.service';
@@ -319,8 +319,17 @@ export class SideBarComponent
     return hasMenuAccess(this.privileges, item);
   }
 
+  // Items with no privilege key (group dashboards, Finance) are open to everyone, which would
+  // surface empty groups. Inside a group they only count when the user has a gated item there.
   categoryHasAccess(category: MenuCategory): boolean {
-    return category.items.some((item) => this.hasAccess(item));
+    if (!groupAllowed(this.privileges, category)) return false;
+    if (!category.items.some((item) => this.hasAccess(item))) return false;
+    if (!category.group) return true;
+    return MENU_CATEGORIES.some(
+      (c) =>
+        c.group === category.group &&
+        c.items.some((item) => !!item.privilegeKey && this.hasAccess(item)),
+    );
   }
 
   // In the minimised sidebar the sub-tab list is hidden, so highlight the
@@ -338,6 +347,23 @@ export class SideBarComponent
         (!searching ||
           category.items.some((item) => this.hasAccess(item) && this.itemMatchesSearch(item))),
     );
+  }
+
+  // A user whose modules all sit in one group (e.g. only Sales & Jobs) gets a flat menu:
+  // no group accordion and no search box. Both are for people with many modules.
+  get isCompactMenu(): boolean {
+    // Main (Home/Dashboard) has no group and doesn't count toward "many modules".
+    const groups = new Set(
+      this.menuCategories
+        .filter((c) => c.group && this.categoryHasAccess(c))
+        .map((c) => c.group as string),
+    );
+    return groups.size <= 1;
+  }
+
+  // The group a category is shown under, or undefined when the menu is flat.
+  groupOf(category: MenuCategory): string | undefined {
+    return this.isCompactMenu ? undefined : category.group;
   }
 
   // True when the category at this index starts a new run of categories sharing

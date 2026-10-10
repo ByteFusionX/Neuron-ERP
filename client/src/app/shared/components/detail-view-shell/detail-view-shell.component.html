@@ -40,8 +40,10 @@
           <p *ngIf="subtitle" class="dvs-muted text-[13px]">{{ subtitle }}</p>
         </div>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="dvs-header-actions flex flex-wrap items-center gap-2">
         <ng-content select="[headerActions]"></ng-content>
+        <ng-content select="[footerLeft]"></ng-content>
+        <ng-content select="[footerRight]"></ng-content>
       </div>
     </div>
 

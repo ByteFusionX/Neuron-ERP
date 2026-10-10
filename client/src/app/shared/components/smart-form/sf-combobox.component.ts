@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, Input, booleanAttribute, forwardRef, inject, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostListener, Input, Output, booleanAttribute, forwardRef, inject, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
 import { SfControl } from './sf-control';
@@ -27,6 +27,9 @@ import { SF_STYLES, SfOption } from './sf.model';
           (focus)="onFocus()" (blur)="close()" (input)="query = $any($event.target).value; open = true; active = 0; positionDropdown()"
           (keydown)="onKey($event)" />
       </div>
+      <button *ngIf="clearable && !multiple && value && !disabled && !readonly" type="button" aria-label="Clear selection"
+        class="sf-focus absolute right-7 top-2 h-5 w-5 rounded text-base leading-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        (mousedown)="$event.preventDefault()" (click)="update(null); query = ''; open = false">&times;</button>
       <svg class="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
       </svg>
@@ -44,7 +47,14 @@ import { SF_STYLES, SfOption } from './sf.model';
             <path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.58l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd" />
           </svg>
         </li>
-        <li *ngIf="!filtered.length" class="px-3 py-2 text-[13px] text-gray-500 dark:text-gray-500">No matches</li>
+        <li *ngIf="!filtered.length && !creatable" class="px-3 py-2 text-[13px] text-gray-500 dark:text-gray-500">{{ !options.length && emptyText ? emptyText : 'No matches' }}</li>
+        <li *ngIf="creatable" class="sticky bottom-0 border-t border-gray-100 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
+          <button type="button" [disabled]="!canCreate" class="flex w-full items-center gap-1.5 px-3 py-2 text-left text-[13px] font-medium text-violet-700 hover:bg-gray-50 disabled:cursor-default disabled:text-gray-400 disabled:hover:bg-transparent dark:text-violet-300 dark:hover:bg-gray-800 dark:disabled:text-gray-500"
+            (mousedown)="$event.preventDefault(); createFromQuery()">
+            <span aria-hidden="true">+</span>
+            <span class="truncate">{{ canCreate ? 'Add “' + query.trim() + '”' : 'Enter to add' }}</span>
+          </button>
+        </li>
       </ul>
     </div>
   `,
@@ -52,7 +62,15 @@ import { SF_STYLES, SfOption } from './sf.model';
 })
 export class SfComboboxComponent extends SfControl {
   @Input() options: SfOption[] = [];
+  /** Shown instead of "No matches" while there are no options at all (e.g. "Select a client first"). */
+  @Input() emptyText = '';
   @Input({ transform: booleanAttribute }) multiple = false;
+  /** Single-select only: shows a button that resets the value to null. */
+  @Input({ transform: booleanAttribute }) clearable = false;
+
+  /** Adds an "Add …" row to the dropdown; the host creates the option and sets the value. */
+  @Input({ transform: booleanAttribute }) creatable = false;
+  @Output() createOption = new EventEmitter<string>();
 
   @ViewChild('wrapper') private wrapper!: ElementRef<HTMLElement>;
 
@@ -110,6 +128,18 @@ export class SfComboboxComponent extends SfControl {
     return q ? this.options.filter((o) => o.label.toLowerCase().includes(q)) : this.options;
   }
 
+  get canCreate(): boolean {
+    const q = this.query.trim().toLowerCase();
+    return this.creatable && !!q && !this.options.some((o) => o.label.trim().toLowerCase() === q);
+  }
+
+  createFromQuery(): void {
+    if (!this.canCreate) return;
+    this.createOption.emit(this.query.trim());
+    this.open = false;
+    this.query = '';
+  }
+
   isSelected(o: SfOption): boolean {
     return this.multiple ? this.values.includes(o.value) : o.value === this.value;
   }
@@ -141,7 +171,7 @@ export class SfComboboxComponent extends SfControl {
     switch (e.key) {
       case 'ArrowDown': e.preventDefault(); this.open = true; this.active = count ? (this.active + 1) % count : 0; break;
       case 'ArrowUp': e.preventDefault(); this.active = count ? (this.active - 1 + count) % count : 0; break;
-      case 'Enter': if (this.open) { e.preventDefault(); this.choose(this.filtered[this.active]); } break;
+      case 'Enter': if (this.open) { e.preventDefault(); if (this.filtered.length) this.choose(this.filtered[this.active]); else this.createFromQuery(); } break;
       case 'Escape': if (this.open) { e.stopPropagation(); this.open = false; this.query = ''; } break;
       case 'Backspace': if (this.multiple && !this.query && this.values.length) this.update(this.values.slice(0, -1)); break;
     }

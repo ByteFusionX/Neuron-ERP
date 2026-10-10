@@ -21,9 +21,8 @@ import { GeneralPurchaseListComponent } from './modules/purchase/pages/general-p
 import { RfqListComponent } from './modules/purchase/pages/rfq-list/rfq-list.component';
 import { CreatePurchaseComponent } from './modules/purchase/pages/create-purchase/create-purchase.component';
 import { SupplierDiscountComponent } from './modules/purchase/pages/supplier-discount/supplier-discount.component';
-import { ComparisonSheetComponent } from './modules/purchase/pages/comparison-sheet/comparison-sheet.component';
+import { SupplierOffersComponent } from './modules/purchase/pages/supplier-offers/supplier-offers.component';
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
-import { ComparisonSummaryComponent } from './modules/purchase/pages/comparison-summary/comparison-summary.component';
 import { InitiateLpoComponent } from './modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { IssueLpoComponent } from './modules/purchase-order/pages/issue-lpo/issue-lpo.component';
 import { LpoListComponent } from './modules/purchase-order/pages/lpo-list/lpo-list.component';
@@ -61,10 +60,7 @@ import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-deliv
 import { InvoiceLinkingComponent } from './modules/dispatch/pages/invoice-linking/invoice-linking.component';
 import { InventoryDeductionComponent } from './modules/dispatch/pages/inventory-deduction/inventory-deduction.component';
 import { DeliveryNoteViewComponent } from './modules/dispatch/pages/delivery-note-view/delivery-note-view.component';
-import { InvoiceRegisterComponent } from './modules/invoice/pages/invoice-register/invoice-register.component';
 import { CreateInvoiceComponent } from './modules/invoice/pages/create-invoice/create-invoice.component';
-import { InvoiceDnLinkingComponent } from './modules/invoice/pages/invoice-dn-linking/invoice-dn-linking.component';
-import { CancelledInvoicesComponent } from './modules/invoice/pages/cancelled-invoices/cancelled-invoices.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -188,10 +184,11 @@ export const routes: Routes = [
       // Empty on purpose: the shell redirects to the first section the user can see.
       { path: '', pathMatch: 'full', children: [] },
       {
-        path: 'general',
-        data: { section: 'general' },
-        loadComponent: () => import('./modules/settings/pages/general-settings/general-settings.component').then((c) => c.GeneralSettingsComponent),
+        path: 'company-profile',
+        data: { section: 'company-profile' },
+        loadComponent: () => import('./modules/settings/pages/company-profile/company-profile.component').then((c) => c.CompanyProfileComponent),
       },
+      { path: 'general', pathMatch: 'full', redirectTo: 'company-profile' },
       {
         path: 'notes-terms',
         pathMatch: 'full',
@@ -201,13 +198,10 @@ export const routes: Routes = [
         path: 'master-data',
         data: { section: 'master-data' },
         children: [
-          { path: '', pathMatch: 'full', redirectTo: 'customer' },
-          { path: 'customer', loadComponent: () => import('./modules/settings/pages/master-data/customer-data.component').then((c) => c.CustomerDataComponent) },
+          { path: '', pathMatch: 'full', redirectTo: 'product' },
           { path: 'product', loadComponent: () => import('./modules/settings/pages/master-data/product-data.component').then((c) => c.ProductDataComponent) },
-          { path: 'purchase', loadComponent: () => import('./modules/settings/pages/master-data/purchase-data.component').then((c) => c.PurchaseDataComponent) },
-          { path: 'sales-documents', loadComponent: () => import('./modules/settings/pages/master-data/sales-documents.component').then((c) => c.SalesDocumentsComponent) },
+          { path: 'customer', loadComponent: () => import('./modules/settings/pages/master-data/customer-data.component').then((c) => c.CustomerDataComponent) },
           { path: 'notes-terms', loadComponent: () => import('./modules/settings/pages/master-data/notes-terms-data.component').then((c) => c.NotesTermsDataComponent) },
-          { path: 'responsibilities', loadComponent: () => import('./modules/settings/pages/master-data/responsibilities.component').then((c) => c.ResponsibilitiesComponent) },
         ],
       },
       {
@@ -251,7 +245,7 @@ export const routes: Routes = [
   },
   {
     path: 'bug-reports',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/bug-reports/bug-reports.component').then((c) => c.BugReportsComponent)
   },
   {
@@ -261,7 +255,7 @@ export const routes: Routes = [
   },
   {
     path: 'recycle',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/recycle/recycle.component').then((c) => c.RecycleComponent)
   },
   {
@@ -269,7 +263,22 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     loadComponent: () => import('./modules/finance/finance.component').then((c) => c.FinanceComponent),
     children: [
-      { path: '', pathMatch: 'full', loadComponent: () => import('./modules/finance/pages/finance-home/finance-home.component').then((c) => c.FinanceHomeComponent) },
+      { path: '', redirectTo: 'receivables', pathMatch: 'full' },
+      { path: 'receivables', loadComponent: () => import('./modules/finance/pages/receivables/receivables.component').then((c) => c.ReceivablesComponent) },
+      {
+        path: 'payables',
+        loadComponent: () => import('./modules/finance/pages/payables/payables.component').then((c) => c.PayablesComponent),
+        children: [
+          { path: 'invoice-register', redirectTo: '', pathMatch: 'full' },
+          { path: 'invoice-register/create', canActivate: [RoleGuard], component: CreateInvoiceComponent },
+          { path: 'invoice-register/edit/:id', canActivate: [RoleGuard], component: CreateInvoiceComponent },
+          { path: 'invoice-register/reissue/:id', canActivate: [RoleGuard], component: CreateInvoiceComponent },
+          { path: 'invoice-register/view/:id', canActivate: [RoleGuard], loadComponent: () => import('./modules/invoice/pages/invoice-view/invoice-view.component').then(m => m.InvoiceViewComponent) },
+          { path: 'invoice-dn-linking', redirectTo: '', pathMatch: 'full' },
+          { path: 'cancelled-invoices', redirectTo: '', pathMatch: 'full' },
+          { path: 'reissued', redirectTo: '', pathMatch: 'full' },
+        ],
+      },
     ]
   },
   {
@@ -301,14 +310,14 @@ export const routes: Routes = [
       { path: 'pr', component: PurchaseRequestListComponent },
       { path: 'rfq', component: RfqListComponent },
       { path: 'general', component: GeneralPurchaseListComponent },
+      { path: 'returns', redirectTo: '/grn/returns', pathMatch: 'full' },
       { path: 'general-purchase', redirectTo: 'general', pathMatch: 'full' },
       { path: 'pendings', redirectTo: 'pr' },
       { path: 'approves', redirectTo: 'pr' },
       { path: 'create', component: CreatePurchaseComponent },
       { path: 'supplier-discount/:purchaseId', component: SupplierDiscountComponent },
-      { path: 'comparison-sheet/:purchaseId', component: ComparisonSheetComponent },
+      { path: 'rfq-offers/:purchaseId', component: SupplierOffersComponent },
       { path: 'view-purchase/:id', component: ViewPurchaseComponent },
-      { path: 'comparison-summary/:purchaseId', component: ComparisonSummaryComponent },
       { path: 'po', component: LpoApprovalComponent },
       { path: 'po/general', redirectTo: 'general', pathMatch: 'full' },
       { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
@@ -335,10 +344,13 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/grn/grn.component').then((c) => c.GrnComponent),
     children: [
+      { path: '', redirectTo: 'grn-list', pathMatch: 'full' },
       { path: 'create-grn', component: CreateGrnComponent },
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
       { path: 'view-grn/:id', component: ViewGrnComponent },
       { path: 'grn-list', component: GrnListComponent },
+      { path: 'returns', component: GrnStockHoldsComponent, data: { register: 'pending' } },
+      { path: 'resolved', component: GrnStockHoldsComponent, data: { register: 'resolved' } },
       { path: 'stock-holds', component: GrnStockHoldsComponent }
     ]
   },
@@ -369,13 +381,15 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     // loadComponent: () => import('./modules/claims/claims.component').then((c) => c.ClaimsComponent),
     children: [
-      { path: 'my-claims', component: ClaimsComponent },
+      { path: '', redirectTo: 'expenses', pathMatch: 'full' },
+      { path: 'expenses', component: ClaimsComponent },
+      { path: 'my-claims', redirectTo: 'expenses', pathMatch: 'full' },
       { path: 'approval-requests', component: RequestForApprovalsComponent }
     ]
   },
   {
     path: 'products',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     children: [
       { path: '', component: AllProductsComponent }
     ]
@@ -387,7 +401,7 @@ export const routes: Routes = [
   },
   {
     path: 'stock',
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/stocks/stocks.component').then((c) => c.StocksComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'overview' },
@@ -417,16 +431,16 @@ export const routes: Routes = [
   {
     path: 'invoice',
     canActivate: [AuthGuard, RoleGuard],
-    loadComponent: () => import('./modules/invoice/invoice.component').then((c) => c.InvoiceComponent),
     children: [
-      { path: 'invoice-register', component: InvoiceRegisterComponent },
-      { path: 'invoice-register/create', component: CreateInvoiceComponent },
-      { path: 'invoice-register/edit/:id', component: CreateInvoiceComponent },
-      { path: 'invoice-register/reissue/:id', component: CreateInvoiceComponent },
-      { path: 'invoice-register/view/:id', loadComponent: () => import('./modules/invoice/pages/invoice-view/invoice-view.component').then(m => m.InvoiceViewComponent) },
-      { path: 'invoice-dn-linking', component: InvoiceDnLinkingComponent },
-      { path: 'cancelled-invoices', component: CancelledInvoicesComponent },
-      { path: 'reissued', loadComponent: () => import('./modules/invoice/pages/cancelled-reissued-report/cancelled-reissued-report.component').then(c => c.CancelledReissuedReportComponent) },
+      { path: '', redirectTo: '/finance/payables', pathMatch: 'full' },
+      { path: 'invoice-register', redirectTo: '/finance/payables', pathMatch: 'full' },
+      { path: 'invoice-register/create', redirectTo: '/finance/payables/invoice-register/create', pathMatch: 'full' },
+      { path: 'invoice-register/edit/:id', redirectTo: '/finance/payables/invoice-register/edit/:id', pathMatch: 'full' },
+      { path: 'invoice-register/reissue/:id', redirectTo: '/finance/payables/invoice-register/reissue/:id', pathMatch: 'full' },
+      { path: 'invoice-register/view/:id', redirectTo: '/finance/payables/invoice-register/view/:id', pathMatch: 'full' },
+      { path: 'invoice-dn-linking', redirectTo: '/finance/payables', pathMatch: 'full' },
+      { path: 'cancelled-invoices', redirectTo: '/finance/payables', pathMatch: 'full' },
+      { path: 'reissued', redirectTo: '/finance/payables', pathMatch: 'full' },
     ]
   },
   {

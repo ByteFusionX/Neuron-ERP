@@ -42,7 +42,8 @@ interface DataGridPrefs {
  * Detail panel content is projected with:
  *   <ng-template #detailTemplate let-row let-tab="tab"> ... </ng-template>
  * Optional panel slots (let-row): #detailActionsTemplate (top bar), #detailAsideTemplate (status),
- * #detailMetaTemplate (key facts strip), #detailFooterTemplate (bottom action bar).
+ * #detailMetaTemplate (key facts strip), #detailFooterTemplate (bottom action bar, right: permanent, filled),
+ * #detailFooterLeftTemplate (bottom action bar, left: optional per-tab, outline).
  */
 @Component({
   selector: 'app-data-grid',
@@ -82,6 +83,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() fillHeight = false;
   /** Hide the Filter / Sort / Columns toolbar buttons (for small tables). */
   @Input() showToolbarTools = true;
+  /** Show the removable "View: …" pill when a non-first view tab is active. */
+  @Input() showViewPill = true;
   /** When false, row click only emits rowOpen; no slide-in detail panel is shown. */
   @Input() showDetailPanel = true;
   /** Label of the primary "+ New" button; the button is hidden when empty. */
@@ -93,6 +96,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input({ transform: booleanAttribute }) syncViewWithUrl = true;
   /** Query-string key used when `syncViewWithUrl` is enabled. Override if a page already owns `view`. */
   @Input() viewUrlParam = 'view';
+  /** View tab to open first (e.g. the one a routed page already chose), ahead of remembered prefs and the first tab. */
+  @Input() initialViewId = '';
   /** Key for remembering columns, page size and views in this browser; nothing is stored when empty. */
   @Input() storageKey = '';
   /** Shows a skeleton in the detail panel body while the host loads the full record. */
@@ -121,6 +126,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Output() selectionChange = new EventEmitter<T[]>();
   @Output() rowOpen = new EventEmitter<T>();
   @Output() rowAction = new EventEmitter<DataGridRowActionEvent<T>>();
+  /** Server-side grids only hold one page: when observed, Export asks the host for the full filtered set instead. */
+  @Output() exportRequest = new EventEmitter<void>();
   @Output() create = new EventEmitter<void>();
   /** Fires when the user switches view; server-paged hosts reload their data here. */
   @Output() viewChange = new EventEmitter<DataGridView<T>>();
@@ -132,6 +139,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @ContentChild('detailAsideTemplate') detailAsideTemplate?: TemplateRef<any>;
   @ContentChild('detailMetaTemplate') detailMetaTemplate?: TemplateRef<any>;
   @ContentChild('detailFooterTemplate') detailFooterTemplate?: TemplateRef<any>;
+  /** Optional, tab-dependent actions on the footer's left (outline buttons); the right side is #detailFooterTemplate. */
+  @ContentChild('detailFooterLeftTemplate') detailFooterLeftTemplate?: TemplateRef<any>;
 
   sort: DataGridSortState = { key: null, direction: null };
   page = 1;
@@ -181,13 +190,21 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     if (!this.prefs) this.loadPrefs();
     if (changes['columns']) {
       this.columns.forEach((c) => (c.visible = c.visible ?? true));
-      this.defaultColumns = this.columns.map((c) => ({ key: c.key, visible: !!c.visible }));
+      // Capture the true defaults only once. The host can rebuild/replace the `columns` input later
+      // (e.g. once privileges load), and re-deriving defaults from that later, already-mutated array
+      // would bake the user's current show/hide choices in as the "default" — so Reset silently stopped
+      // restoring anything the user had hidden.
+      if (!this.defaultColumns.length) this.defaultColumns = this.columns.map((c) => ({ key: c.key, visible: !!c.visible }));
       if (this.prefs?.columns) this.applyColumnState(this.prefs.columns);
     }
     if ((changes['views'] || !this.activeViewId) && !this.allViews.some((v) => v.id === this.activeViewId)) {
-      const stored = this.routeViewId ?? this.prefs?.activeViewId;
+      const stored = this.routeViewId ?? (this.initialViewId || this.prefs?.activeViewId);
       const view = this.allViews.find((v) => v.id === stored) ?? this.allViews[0];
-      if (view) this.applyView(view);
+      if (view) {
+        this.applyView(view);
+        // Restored from URL/prefs rather than clicked: tell the host which view is active.
+        Promise.resolve().then(() => this.viewChange.emit(view));
+      }
     }
     if (changes['viewUrlParam'] || changes['syncViewWithUrl']) {
       this.pendingRouteViewId = this.route.snapshot.queryParamMap.get(this.viewUrlParam);
@@ -574,6 +591,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   /** Active view that narrows the rows (anything but the first/"All" tab), shown as a removable pill. */
   get scopedView(): DataGridView<T> | undefined {
+    if (!this.showViewPill) return undefined;
     const v = this.activeView;
     return v && this.views.length && v.id !== this.views[0].id ? v : undefined;
   }
@@ -620,9 +638,16 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     }
   }
 
+  /** Shows a search/filter state that was restored from outside (URL) without emitting a query. */
+  setQueryState(search: string, filters: Omit<DataGridFilter, 'id'>[]): void {
+    this.searchTerm = search;
+    this.filters = filters.map((f) => ({ ...f, id: this.nextId++ }));
+  }
+
   /** Discrete values for select-style filters (editor options, badge values). */
   optionsFor(col?: DataGridColumn<T>): { label: string; value: any }[] {
     if (!col) return [];
+    if (col.filterOptions?.length) return col.filterOptions;
     if (col.editorOptions?.length) return col.editorOptions;
     if (col.type === 'badge') {
       const values = Array.from(new Set(this.data.map((r) => this.rawValue(r, col)).filter((v) => v != null)));
@@ -665,7 +690,9 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   get operatorSelectOptions(): SfOption[] {
     const ops = this.operatorsFor(this.draftColumn);
-    return this.cachedOptions('operators', ops.map((o) => o.value).join('|'), () => ops);
+    // Chips read as a sentence ("Date before 01 Jan"), but the dropdown reads better with a capital.
+    return this.cachedOptions('operators', ops.map((o) => o.value).join('|'), () =>
+      ops.map((o) => ({ ...o, label: o.label.charAt(0).toUpperCase() + o.label.slice(1) })));
   }
 
   get valueSelectOptions(): SfOption[] {
@@ -962,9 +989,12 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   // ---- detail panel ----
-  openRow(row: T): void {
+  openRow(row: T, tabId?: string): void {
     if (!this.canOpenRow(row)) return;
     this.activeRow = row;
+    if (tabId && this.detailTabs.some((t) => t.id === tabId)) {
+      this.activeTab = tabId;
+    }
     if (this.detailTabs.length && !this.detailTabs.some((t) => t.id === this.activeTab)) {
       this.activeTab = this.detailTabs[0].id;
     }
@@ -1095,6 +1125,11 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     else if (this.saveViewOpen) this.saveViewOpen = false;
     else if (this.columnMenuOpen) this.columnMenuOpen = false;
     else this.closeDetail();
+  }
+
+  onExportClick(): void {
+    if (this.exportRequest.observed) this.exportRequest.emit();
+    else void this.exportToExcel();
   }
 
   /** Downloads rows (default: all filtered rows) as .xlsx using the visible columns in their current order. */

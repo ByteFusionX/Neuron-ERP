@@ -11,6 +11,9 @@ import { SF_STYLES } from './sf.model';
   imports: [CommonModule],
   providers: [{ provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => SfFileComponent), multi: true }],
   template: `
+    <ng-container *ngIf="listAbove">
+      <ng-container *ngTemplateOutlet="list"></ng-container>
+    </ng-container>
     <label [attr.for]="inputId" class="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-5 text-center transition-colors"
       [ngClass]="dragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-gray-300 dark:border-erp-border-dark hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'"
       [class.pointer-events-none]="disabled" [class.opacity-50]="disabled"
@@ -26,7 +29,11 @@ import { SF_STYLES } from './sf.model';
 
     <p *ngFor="let r of rejected" class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ r }}</p>
 
-    <ul *ngIf="files.length" class="mt-2 divide-y divide-gray-100 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark">
+    <ng-container *ngIf="!listAbove">
+      <ng-container *ngTemplateOutlet="list"></ng-container>
+    </ng-container>
+    <ng-template #list>
+    <ul *ngIf="files.length" [ngClass]="listAbove ? 'mb-2' : 'mt-2'" class="divide-y divide-gray-100 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark">
       <li *ngFor="let f of files; let i = index" class="flex items-center gap-3 px-3 py-2 text-[13px]">
         <span class="grid h-8 w-8 shrink-0 place-content-center rounded bg-gray-100 dark:bg-gray-800 text-[10px] font-semibold uppercase text-gray-500 dark:text-gray-400">{{ ext(f) }}</span>
         <span class="min-w-0 flex-1">
@@ -37,6 +44,7 @@ import { SF_STYLES } from './sf.model';
           (click)="remove(i)">&times;</button>
       </li>
     </ul>
+    </ng-template>
   `,
   styles: [SF_STYLES],
 })
@@ -44,6 +52,8 @@ export class SfFileComponent extends SfControl<File[]> {
   @Input() accept = '';
   @Input() maxSizeMb: number | null = null;
   @Input({ transform: booleanAttribute }) multiple = true;
+  /** Render the selected-files list above the drop zone instead of below. */
+  @Input({ transform: booleanAttribute }) listAbove = false;
 
   dragging = false;
   rejected: string[] = [];

@@ -49,4 +49,8 @@
 </div>
 
 <!-- Footer actions -->
-<div class="dp-footer empty:hidden"><ng-content select="[panelFooter]"></ng-content></div>
+<!-- Left: optional, tab-dependent actions (outline). Right: permanent actions shown on every tab (filled). -->
+<div class="dp-footer">
+  <div class="dp-footer-left"><ng-content select="[panelFooterLeft]"></ng-content></div>
+  <div class="dp-footer-right"><ng-content select="[panelFooter]"></ng-content></div>
+</div>

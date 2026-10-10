@@ -14,6 +14,8 @@ export interface DataGridColumn<T = any> {
   editable?: boolean;
   editor?: DataGridEditorType;
   editorOptions?: { label: string; value: any }[];
+  /** Filter-menu values when they differ from the editable ones (e.g. system-set statuses a user cannot pick). */
+  filterOptions?: { label: string; value: any }[];
   /** Map badge value -> tailwind classes */
   badgeClasses?: Record<string, string>;
   /** Text shown inside the badge; the raw value is still used for colour, filters and export. */

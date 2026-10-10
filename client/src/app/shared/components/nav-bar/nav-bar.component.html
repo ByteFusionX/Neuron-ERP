@@ -4,9 +4,9 @@
             <div class="w-16 h-full flex justify-center items-center shrink-0">
                 <button type="button" (click)="toggleSidebar()" [matTooltip]="sidebarToggleLabel"
                     [attr.aria-label]="sidebarToggleLabel"
-                    [attr.aria-expanded]="layout.isMobile() ? layout.overlayOpen() : !layout.hidden() && layout.showFullBar()"
+                    [attr.aria-expanded]="layout.isMobile() ? layout.overlayOpen() : !layout.hidden()"
                     class="w-9 h-9 rounded-full flex justify-center items-center hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
-                    <ng-icon [name]="layout.showFullBar() && !layout.hidden() ? 'heroBars3' : 'heroBars3CenterLeft'"
+                    <ng-icon [name]="!layout.hidden() ? 'heroBars3' : 'heroBars3CenterLeft'"
                         class="text-xl text-gray-800 dark:text-gray-100"></ng-icon>
                 </button>
             </div>
@@ -94,18 +94,17 @@
                                     <ng-icon name="heroIdentification" class="text-lg mx-3"></ng-icon>
                                     <p class="text-sm">Profile</p>
                                 </li>
-                                <ng-container *ngIf="showPortalMangement || isSuperAdmin">
+                                <ng-container *ngIf="showPortalMangement || canSeeRecycle || canSeeBugs">
                                     <li class="my-2 border-t border-erp-border dark:border-erp-border-dark" role="separator"></li>
-                                    <!-- <li class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Administration</li> -->
                                     <li *ngIf="showPortalMangement" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/settings">
                                         <ng-icon name="heroCog6Tooth" class="text-lg mx-3"></ng-icon>
                                         <p class="text-sm">Settings</p>
                                     </li>
-                                    <li *ngIf="showPortalMangement" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/recycle">
+                                    <li *ngIf="canSeeRecycle" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/recycle">
                                         <ng-icon name="heroTrash" class="text-lg mx-3"></ng-icon>
                                         <p class="text-sm">Recycle Bin</p>
                                     </li>
-                                    <li *ngIf="isSuperAdmin" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/bug-reports">
+                                    <li *ngIf="canSeeBugs" class="mt-1 py-2 flex items-center rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:text-gray-200 dark:hover:text-violet-300 transition-colors cursor-pointer" routerLink="/bug-reports">
                                         <ng-icon name="heroWrenchScrewdriver" class="text-lg mx-3"></ng-icon>
                                         <p class="text-sm">Bug Inbox</p>
                                     </li>
@@ -114,7 +113,8 @@
                         </div>
                         <div class="mt-3 pt-3 border-t border-erp-border dark:border-erp-border-dark flex items-center justify-between" (click)="$event.stopPropagation()">
                             <div class="flex items-center gap-1">
-                                <button type="button" (click)="palette.open()" matTooltip="Search (Ctrl K)" aria-label="Search (Ctrl K)"
+                                <!-- Global search: Ctrl+K, or Ctrl+Shift+K while an item list owns Ctrl+K. -->
+                                <button type="button" (click)="palette.open()" matTooltip="Search everything (Ctrl+K)" aria-label="Search"
                                     class="w-9 h-9 flex items-center justify-center rounded-full dark:text-gray-200 hover:bg-violet-50 dark:hover:bg-violet-950/40 hover:text-violet-900 dark:hover:text-violet-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
                                     <ng-icon name="heroMagnifyingGlass" class="text-lg"></ng-icon>
                                 </button>

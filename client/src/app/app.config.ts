@@ -10,7 +10,8 @@ import { JwtInterceptor } from './core/interceptors/jwt-interceptor/jwt.intercep
 import { BrowserModule, bootstrapApplication } from '@angular/platform-browser';
 import { routes } from './app.routing';
 import { provideAnimations } from '@angular/platform-browser/animations';
-import { ToastrModule } from 'ngx-toastr';
+import { ToastrModule, ToastrService } from 'ngx-toastr';
+import { ToastrAlertAdapter } from './core/services/toastr-alert.adapter';
 import { IconsModule } from './lib/icons/icons.module';
 import { MatDialogModule } from '@angular/material/dialog';
 import { componentModule } from './shared/components/component.module';
@@ -98,6 +99,8 @@ export const appConfig: ApplicationConfig = {
             routes,
             withRouterConfig({ onSameUrlNavigation: 'reload' })
         ),
+        // Existing toastr calls render as the new alerts.
+        { provide: ToastrService, useClass: ToastrAlertAdapter },
         { provide: RouteReuseStrategy, useClass: AppRouteReuseStrategy },
         provideAnimationsAsync(),
         provideNgIdle(),

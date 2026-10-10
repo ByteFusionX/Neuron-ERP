@@ -24,3 +24,10 @@
 :host-context(html.dark) .dvs-muted { color: #a1a1a1; }
 :host-context(html.dark) .dvs-kpi,
 :host-context(html.dark) .dvs-strong { color: #ededed; }
+
+/* Bottom action bar; collapses when neither side has a button. */
+.dvs-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; background: #fff; }
+.dvs-footer:not(:has(button, a)) { display: none; }
+.dvs-footer-left, .dvs-footer-right { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.dvs-footer-right { margin-left: auto; }
+:host-context(html.dark) .dvs-footer { background: #111111; }

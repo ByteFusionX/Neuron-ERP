@@ -12,7 +12,7 @@ import { ApprovalJourneyStage } from './approval-journey.model';
 export class ApprovalJourneyComponent {
   @Input() stages: ApprovalJourneyStage[] = [];
   @Input() orientation: 'vertical' | 'horizontal' = 'vertical';
-  @Input() rejectionNote: string | null = 'A rejection at any stage ends the request — it does not continue down the route.';
+  @Input() rejectionNote: string | null = 'A rejection at any stage ends the request — it does not continue up the route.';
 
   readonly variantClasses: Record<ApprovalJourneyStage['variant'], string> = {
     start: 'bg-sky-100 text-sky-600 ring-sky-50 dark:bg-sky-500/20 dark:text-sky-300 dark:ring-sky-500/5',

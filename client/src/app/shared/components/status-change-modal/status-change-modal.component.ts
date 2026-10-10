@@ -22,6 +22,12 @@ export interface StatusChangeModalData<T extends string = string> {
   reasonLabels?: Partial<Record<T, { label: string; placeholder: string }>>;
   title?: string;
   subtitle?: string;
+  /** The status is fixed to `targetStatus` (shown read-only) for confirm-style prompts such as Approve / Reject. */
+  lockStatus?: boolean;
+  /** Primary button text. Defaults to "Update status". */
+  confirmLabel?: string;
+  /** Display text for a status value (e.g. capitalise raw keys). Defaults to the raw value. */
+  formatStatus?: (status: string) => string;
 }
 
 export interface StatusChangeResult<T extends string = string> {
@@ -44,10 +50,15 @@ export interface StatusChangeResult<T extends string = string> {
       <div class="flex flex-col gap-4 p-4">
         <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <span>Current status</span>
-          <span class="rounded-full border border-gray-200 px-2 py-0.5 text-xs font-medium text-gray-900 dark:border-erp-border-dark dark:text-gray-100">{{ data.currentStatus }}</span>
+          <span class="rounded-full border border-gray-200 px-2 py-0.5 text-xs font-medium text-gray-900 dark:border-erp-border-dark dark:text-gray-100">{{ format(data.currentStatus) }}</span>
         </div>
 
-        <app-sf-field label="New status" required>
+        <div *ngIf="data.lockStatus" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          <span>New status</span>
+          <span class="rounded-full border border-gray-200 px-2 py-0.5 text-xs font-medium text-gray-900 dark:border-erp-border-dark dark:text-gray-100">{{ format(status || '') }}</span>
+        </div>
+
+        <app-sf-field *ngIf="!data.lockStatus" label="New status" required>
           <app-sf-select [ngModelOptions]="{ standalone: true }" [(ngModel)]="status" [options]="options"></app-sf-select>
         </app-sf-field>
 
@@ -75,7 +86,11 @@ export class StatusChangeModalComponent {
     this.status = data.targetStatus && data.targetStatus !== data.currentStatus ? data.targetStatus : null;
     this.options = data.statuses
       .filter((s) => s !== data.currentStatus)
-      .map((s) => ({ label: s, value: s, disabled: data.canSelect ? !data.canSelect(data.currentStatus, s) : false }));
+      .map((s) => ({ label: this.format(s), value: s, disabled: data.canSelect ? !data.canSelect(data.currentStatus, s) : false }));
+  }
+
+  format(status: string): string {
+    return this.data.formatStatus ? this.data.formatStatus(status) : status;
   }
 
   get reasonRequired(): boolean {
@@ -105,7 +120,7 @@ export class StatusChangeModalComponent {
   get footerButtons(): ModalFooterButton[] {
     return [
       { label: 'Cancel', theme: 'cancel', onClick: () => this.onCancel() },
-      { label: 'Update status', theme: 'primary', disabled: !this.canSave, onClick: () => this.onSave() },
+      { label: this.data.confirmLabel || 'Update status', theme: 'primary', disabled: !this.canSave, onClick: () => this.onSave() },
     ];
   }
 

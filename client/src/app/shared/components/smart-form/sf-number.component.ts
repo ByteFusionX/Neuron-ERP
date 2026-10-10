@@ -13,7 +13,7 @@ import { SF_STYLES } from './sf.model';
     <div class="sf-input flex items-center gap-2 !pr-1" [class.sf-disabled]="disabled">
       <input class="sf-bare text-right tabular-nums" inputmode="decimal" [id]="inputId" [value]="value ?? ''"
         [placeholder]="placeholder" [disabled]="disabled" [readOnly]="readonly"
-        (input)="onInput($any($event.target).value)" (blur)="touch()" (keydown.arrowup)="step(1, $event)" (keydown.arrowdown)="step(-1, $event)" />
+        (input)="onInput($any($event.target))" (blur)="touch()" (keydown.arrowup)="step(1, $event)" (keydown.arrowdown)="step(-1, $event)" />
       <span *ngIf="suffix" class="shrink-0 text-gray-400 dark:text-gray-500">{{ suffix }}</span>
       <div *ngIf="stepper" class="flex shrink-0 flex-col">
         <button type="button" tabindex="-1" class="h-3.5 px-1 text-[9px] leading-none text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-200" [disabled]="disabled" aria-label="Increase" (click)="step(1)">&#9650;</button>
@@ -28,10 +28,23 @@ export class SfNumberComponent extends SfControl<number> {
   @Input() max: number | null = null;
   @Input() stepSize = 1;
   @Input() suffix = '';
+  /** Opt-in: stops typing more than this many decimal places (e.g. 2 for money shown to 2 places). */
+  @Input() decimals: number | null = null;
   @Input({ transform: booleanAttribute }) stepper = true;
 
-  onInput(raw: string): void {
-    const n = parseFloat(raw.replace(/[^0-9.-]/g, ''));
+  onInput(el: HTMLInputElement): void {
+    const allowSign = this.min === null || this.min < 0;
+    let clean = el.value.replace(allowSign ? /[^0-9.-]/g : /[^0-9.]/g, '').replace(/(?!^)-/g, '').replace(/\.(?=.*\.)/g, '');
+    if (this.decimals !== null && clean.includes('.')) {
+      const [whole, fraction] = clean.split('.');
+      clean = `${whole}.${fraction.slice(0, this.decimals)}`;
+    }
+    if (clean !== el.value) el.value = clean;
+    let n = parseFloat(clean);
+    if (!Number.isNaN(n) && this.max !== null && n > this.max) {
+      n = this.max;
+      el.value = String(n);
+    }
     this.update(Number.isNaN(n) ? null : n);
   }
 

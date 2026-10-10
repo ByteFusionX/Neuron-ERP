@@ -33,7 +33,8 @@ export type FollowUpModalResult =
   template: `
     <app-form-modal-shell
       icon="clock" tone="emerald" [title]="isComplete ? 'Log follow-up' : (data?.dueDate ? 'Reschedule follow-up' : 'Schedule follow-up')"
-      [context]="data?.context" [contextEmptyText]="isComplete ? 'Record what happened.' : 'Plan the next call, visit or update.'"
+      [context]="data?.context" [contextLabel]="data?.dueDate && !isComplete ? 'Rescheduling for' : 'Adding to'"
+      [contextEmptyText]="isComplete ? 'Record what happened.' : 'Plan the next call, visit or update.'"
       formId="follow-up-create-form" [invalid]="form.invalid && submitted"
       [submitLabel]="isComplete ? 'Mark done' : 'Schedule'" savingLabel="Saving..." [saving]="saving" submitShortcutVerb="save"
       (closed)="close()">
@@ -70,6 +71,9 @@ export type FollowUpModalResult =
               <app-sf-textarea formControlName="note" [rows]="3" [maxlength]="1000" autoresize placeholder="What to follow up on…"></app-sf-textarea>
             </app-sf-field>
           </app-sf-section>
+          <p *ngIf="isUnchangedReschedule" class="-mt-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+            <app-dp-icon name="info" size="w-3.5 h-3.5"></app-dp-icon> This is the same date it's already scheduled for.
+          </p>
         </ng-template>
       </form>
     </app-form-modal-shell>
@@ -110,6 +114,11 @@ export class FollowUpCreateModalComponent {
 
   close(): void {
     this.dialogRef.close();
+  }
+
+  /** True once the user has picked the same date the follow-up is already scheduled for; shown as a warning, not blocked. */
+  get isUnchangedReschedule(): boolean {
+    return !this.isComplete && !!this.data?.dueDate && this.form.controls.date.value === this.data.dueDate;
   }
 
   submit(): void {

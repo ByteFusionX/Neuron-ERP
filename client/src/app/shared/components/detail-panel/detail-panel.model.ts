@@ -112,6 +112,14 @@ export interface DetailSummaryRow {
   tone?: DetailTone;
 }
 
+/** A footer line of <app-detail-table> whose figures sit under the column they belong to. */
+export interface DetailFootRow {
+  label: string;
+  /** Value per column key; columns left out stay blank. */
+  cells: Record<string, { value: string | number; format?: 'text' | 'currency' | 'number' | 'percent' }>;
+  emphasis?: boolean;
+}
+
 export interface DetailTaskItem {
   id: string;
   title: string;

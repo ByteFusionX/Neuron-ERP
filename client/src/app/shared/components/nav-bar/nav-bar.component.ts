@@ -35,6 +35,8 @@ export class NavBarComponent {
   announcementNotificationCount$!: Observable<number>;
   menuState: boolean = false
   showPortalMangement: boolean = false;
+  canSeeRecycle = false;
+  canSeeBugs = false;
   isSuperAdmin: boolean = false;
   employee!: { id: string, employeeId: string };
   employeeData$!: Observable<getEmployee | undefined>
@@ -86,8 +88,12 @@ export class NavBarComponent {
     this.employeeData$ = this._employeeService.employeeData$
     this.employeeData$.subscribe((emp) => {
       if(emp){
-        this.showPortalMangement = Object.values(emp.category.privileges.portalManagement).some(value => value === true);
+        const { recycle, bugReports, ...settingsFlags } = emp.category.privileges.portalManagement ?? {};
+        this.showPortalMangement = Object.values(settingsFlags).some(value => value === true) || !!emp.category.privileges.roles?.view;
         this.isSuperAdmin = emp.category.role === 'superAdmin';
+        const pm = emp.category.privileges.portalManagement;
+        this.canSeeRecycle = this.isSuperAdmin || !!pm?.recycle;
+        this.canSeeBugs = this.isSuperAdmin || !!pm?.bugReports;
       }else{
         this._employeeService.getEmployeeData()
       }
@@ -96,12 +102,11 @@ export class NavBarComponent {
   
   get sidebarToggleLabel(): string {
     if (this.layout.isMobile()) return 'Open menu';
-    if (this.layout.hidden()) return 'Show sidebar (Ctrl+B)';
-    return this.layout.showFullBar() ? 'Collapse sidebar' : 'Expand sidebar';
+    return this.layout.hidden() ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)';
   }
 
   toggleSidebar() {
-    this.layout.toggleFromNavbar();
+    this.layout.toggleHidden();
   }
 
   menuOpened() {
