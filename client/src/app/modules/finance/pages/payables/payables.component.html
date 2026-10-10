@@ -1,0 +1,35 @@
+<router-outlet *ngIf="hasChildRoute"></router-outlet>
+
+<div *ngIf="!hasChildRoute" class="h-full flex flex-col bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <div class="shrink-0 px-6 pt-6">
+    <div class="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-erp-border-dark dark:bg-erp-surface-dark">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-erp-border-dark">
+        <div>
+          <h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Payable</h1>
+          <p class="text-sm text-gray-500 dark:text-gray-400">Invoice register and payable reports</p>
+        </div>
+      </div>
+      <nav class="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-gray-100 px-5 dark:border-erp-border-dark" role="tablist">
+        <button
+          *ngFor="let tab of tabs"
+          type="button"
+          role="tab"
+          class="payables-tab"
+          [class.payables-tab-active]="activeTab === tab.id"
+          [attr.aria-selected]="activeTab === tab.id"
+          (click)="selectTab(tab.id)">
+          {{ tab.label }}
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <div class="min-h-0 flex-1">
+    <ng-container [ngSwitch]="activeTab">
+      <app-invoice-register *ngSwitchCase="'invoice-register'"></app-invoice-register>
+      <app-invoice-dn-linking *ngSwitchCase="'invoice-dn-linking'"></app-invoice-dn-linking>
+      <app-cancelled-invoices *ngSwitchCase="'cancelled-invoices'"></app-cancelled-invoices>
+      <app-cancelled-reissued-report *ngSwitchCase="'reissued'"></app-cancelled-reissued-report>
+    </ng-container>
+  </div>
+</div>
