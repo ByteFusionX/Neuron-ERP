@@ -16,6 +16,7 @@ import cusRouter from './routes/customer.router';
 import equiRouter from './routes/enquiry.router';
 import celebRouter from './routes/celebrationCheck.router';
 import startCronJob from './services/cron.service';
+import { migrateWorkflowsToGlobalLayout } from './services/workflowMigration.service';
 import quoteRouter from './routes/quotation.router';
 import fileRouter from './routes/file.router';
 import PassportMiddleware from './common/middlewares/jwt.middleware';
@@ -37,6 +38,7 @@ import customerTypeRouter from './routes/customerType.router';
 import supplierRouter from './routes/supplier.router';
 import purchaseRequestRouter from './routes/purchaseRequest.router';
 import rfqRouter from './routes/rfq.router';
+import salesRfqRouter from './routes/salesRfq.router';
 import technicalRouter from './routes/technical.router';
 import purchaseOrderRouter from "./routes/purchaseOrder.router";
 import workflowRouter from './routes/workflow.router';
@@ -62,6 +64,8 @@ import invoiceRouter from './routes/invoice.router';
 import scanSessionRouter from './routes/scanSession.router';
 import bugReportRouter from './routes/bugReport.router';
 import stockHoldRouter from './routes/stockHold.router';
+import searchRouter from './routes/search.router';
+import contextRouter from './routes/context.router';
 
 const app = express();
 app.set('etag', false); // API responses are dynamic per request; conditional 304s were silently breaking notification/celebration polling
@@ -138,6 +142,7 @@ app.use('/customerType', customerTypeRouter)
 app.use('/supplier', supplierRouter)
 app.use('/purchase', purchaseRequestRouter)
 app.use('/purchase/rfq', rfqRouter)
+app.use('/sales-rfq', salesRfqRouter)
 app.use('/technical', technicalRouter)
 app.use('/workflow', workflowRouter)
 app.use('/approval-rule', approvalRuleRouter)
@@ -157,6 +162,8 @@ app.use('/invoice', invoiceRouter);
 app.use('/scan-session', scanSessionRouter);
 app.use('/bug-reports', bugReportRouter);
 app.use('/stock-hold', stockHoldRouter);
+app.use('/context', contextRouter);
+app.use('/search', searchRouter);
 
 
 const uploadFolderPath = path.join(__dirname, 'uploads');
@@ -175,6 +182,7 @@ connectToDatabase()
       console.log(`Server running on port ${port}`);
     });
 
+    migrateWorkflowsToGlobalLayout();
     startCronJob();
     socketConnection(io)
     emailWorker.start();
