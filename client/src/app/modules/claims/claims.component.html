@@ -5,7 +5,7 @@
         [isLoading]="isLoading"
         [totalItems]="totalItems"
         [isEmpty]="isEmpty"
-        [tableId]="'claims-' + claimType"
+        [tableId]="'expenses-' + claimType"
         (rowClick)="onViewApprovalStatus($event)"
         (actionClick)="onActionClick($event)"
         (filterChange)="onFilterChange($event)"
@@ -19,7 +19,7 @@
 
     <app-btn theme="primary" (buttonClick)="onCreateClaim()">
       <ng-icon name="heroPlus"></ng-icon>
-        Create Claim
+        Create Expense
     </app-btn>
   </ng-template>
 </data-table>

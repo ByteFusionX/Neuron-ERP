@@ -81,7 +81,7 @@ export class CreateInvoiceComponent implements OnInit {
       if (emp && emp.category && emp.category.privileges) {
         if (!emp.category.privileges.invoice?.createInvoice) {
           this.notificationService.error('You do not have permission to create or edit Invoices');
-          this.router.navigate(['/invoice/invoice-register']);
+          this.router.navigate(['/finance/payables']);
           return;
         }
       }
@@ -275,7 +275,7 @@ export class CreateInvoiceComponent implements OnInit {
           error: () => {
             this.notificationService.error('Failed to load invoice for editing');
             this.isLoading.set(false);
-            this.router.navigate(['/invoice/invoice-register']);
+            this.router.navigate(['/finance/payables']);
           }
         });
       },
@@ -659,7 +659,7 @@ export class CreateInvoiceComponent implements OnInit {
     request$.subscribe({
       next: () => {
         this.notificationService.success(`Invoice ${this.isEditMode() ? 'updated' : 'created'} successfully`);
-        this.router.navigate(['/invoice/invoice-register']);
+        this.router.navigate(['/finance/payables']);
       },
       error: (err) => {
         console.error(err);

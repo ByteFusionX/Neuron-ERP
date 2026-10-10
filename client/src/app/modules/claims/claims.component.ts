@@ -414,6 +414,6 @@ export class ClaimsComponent implements OnInit {
   }
 
   get pageTitle(): string {
-    return this.claimType === 'project' ? 'Project Claims' : 'Claims';
+    return this.claimType === 'project' ? 'Project Claims' : 'Expenses';
   }
 }

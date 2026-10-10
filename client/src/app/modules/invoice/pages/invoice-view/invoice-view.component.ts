@@ -50,7 +50,7 @@ export class InvoiceViewComponent implements OnInit {
             this.loadInvoice(id);
         } else {
             this.notificationService.error('Invalid Invoice ID');
-            this.router.navigate(['/invoice/invoice-register']);
+            this.router.navigate(['/finance/payables']);
         }
     }
 
@@ -66,7 +66,7 @@ export class InvoiceViewComponent implements OnInit {
                     this.loadInvoiceMeta(res.data);
                 } else {
                     this.notificationService.error('Invoice details not found');
-                    this.router.navigate(['/invoice/invoice-register']);
+                    this.router.navigate(['/finance/payables']);
                 }
                 this.isLoading.set(false);
             },
@@ -74,7 +74,7 @@ export class InvoiceViewComponent implements OnInit {
                 console.error('Error fetching invoice', err);
                 this.notificationService.error('Failed to load invoice details');
                 this.isLoading.set(false);
-                this.router.navigate(['/invoice/invoice-register']);
+                this.router.navigate(['/finance/payables']);
             }
         });
     }
@@ -82,7 +82,7 @@ export class InvoiceViewComponent implements OnInit {
     onEdit() {
         const currentInvoice = this.invoice();
         if (currentInvoice && currentInvoice._id) {
-            this.router.navigate(['/invoice/invoice-register/edit', currentInvoice._id]);
+            this.router.navigate(['/finance/payables/invoice-register/edit', currentInvoice._id]);
         }
     }
 
@@ -123,7 +123,7 @@ export class InvoiceViewComponent implements OnInit {
                         this.invoice.set(original);
                         if (original && original._id) {
                             this.router.navigate(
-                                ['/invoice/invoice-register/reissue', original._id],
+                                ['/finance/payables/invoice-register/reissue', original._id],
                                 { state: { reissueInvoiceNo } }
                             );
                         } else {
@@ -140,7 +140,7 @@ export class InvoiceViewComponent implements OnInit {
     }
 
     onBack() {
-        this.router.navigate(['/invoice/invoice-register']);
+        this.router.navigate(['/finance/payables']);
     }
 
     async onPreview() {

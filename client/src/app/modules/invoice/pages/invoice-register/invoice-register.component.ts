@@ -329,7 +329,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
   }
 
   onRowClick(row: Invoice) {
-    this.router.navigate(['/invoice/invoice-register/view', row._id]);
+    this.router.navigate(['/finance/payables/invoice-register/view', row._id]);
   }
 
   onStatusChange(event: { item: Invoice; column: string; oldValue: string; newValue: string }) {

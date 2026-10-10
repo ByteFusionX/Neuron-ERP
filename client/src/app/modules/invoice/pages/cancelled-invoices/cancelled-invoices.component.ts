@@ -343,7 +343,7 @@ export class CancelledInvoicesComponent implements OnInit, OnDestroy {
 
   onRowClick(row: any): void {
     if (row?.invoiceId) {
-      this.router.navigate(['/invoice/invoice-register/view', row.invoiceId]);
+      this.router.navigate(['/finance/payables/invoice-register/view', row.invoiceId]);
     }
   }
 

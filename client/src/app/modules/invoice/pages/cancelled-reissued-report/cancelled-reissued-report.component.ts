@@ -364,7 +364,7 @@ export class CancelledReissuedReportComponent implements OnInit, OnDestroy {
 
   onRowClick(row: any): void {
     // Navigate to original invoice detail by default
-    this.router.navigate(['/invoice/invoice-register/view', row._id]);
+    this.router.navigate(['/finance/payables/invoice-register/view', row._id]);
   }
 
   onActionClick(event: { action: string; item: any }): void {

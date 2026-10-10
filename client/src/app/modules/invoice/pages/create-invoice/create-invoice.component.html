@@ -153,7 +153,7 @@
          </div>
 
          <div class="flex justify-end mt-12 gap-4">
-             <app-btn theme="secondary" routerLink="/invoice" type="button">Cancel</app-btn>
+             <app-btn theme="secondary" routerLink="/finance/payables" type="button">Cancel</app-btn>
              <app-btn theme="primary" type="submit" [loading]="isLoading()" [disabled]="isLoading()">
                  {{ isReissueMode() ? 'Reissue Invoice' : (isEditMode() ? 'Update Invoice' : 'Create Invoice') }}
              </app-btn>
