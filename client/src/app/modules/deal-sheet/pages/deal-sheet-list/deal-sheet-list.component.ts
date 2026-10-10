@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import {
   DatePipe,
+  AsyncPipe,
   NgClass,
   NgIf,
   NgSwitch,
@@ -13,8 +14,7 @@ import { HttpEventType } from '@angular/common/http';
 import { inject } from '@angular/core';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
-import { Subscription } from 'rxjs';
-import { NgIcon } from '@ng-icons/core';
+import { BehaviorSubject, Observable, Subscription, take } from 'rxjs';
 
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -37,34 +37,26 @@ import {
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import {
   DetailOverviewField,
   DetailOverviewSection,
   DetailTableColumn,
   DetailDocument,
+  DetailTimelineEntry,
 } from 'src/app/shared/components/detail-panel/detail-panel.model';
-import {
-  StatusChangeModalComponent,
-  StatusChangeResult,
-} from 'src/app/shared/components/status-change-modal/status-change-modal.component';
+import { AuditLogService } from 'src/app/core/services/audit-log.service';
+import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
-import {
-  FileUploadModalComponent,
-  FileUploadModalData,
-} from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
-import { UpdateDealsheetComponent } from '../update-dealsheet/update-dealsheet.component';
+import { DealDecisionService, DEAL_STATUSES } from '../../services/deal-decision.service';
+import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-error.util';
+import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
+import { statusLabel } from 'src/app/shared/utils/text-format.util';
+import { UpdateDealsheetComponent, UpdateDealsheetData } from '../update-dealsheet/update-dealsheet.component';
 
-/** Deal statuses selectable from the status-change modal; 'pending' is never a target (only a starting point). */
-const DEAL_STATUSES = ['pending', 'approved', 'rejected'] as const;
-type DealStatus = (typeof DEAL_STATUSES)[number];
-
-interface ApprovalRequiredItem {
-  type?: string;
-  message?: string;
-  approverRole?: string;
-  actual?: number | null;
-  threshold?: number | null;
-}
+/** Matches the grid's default page size so the Rows selector is never blank. */
+const DEFAULT_PAGE_SIZE = 15;
 
 /**
  * Merged Pending/Approved deal sheet grid, replacing the two separate Material list pages with one
@@ -75,32 +67,30 @@ interface ApprovalRequiredItem {
 @Component({
   selector: 'app-deal-sheet-list',
   templateUrl: './deal-sheet-list.component.html',
+  styleUrls: ['./deal-sheet-list.component.css'],
   providers: [NumberFormatterPipe, DatePipe],
   imports: [
+    UpdateDealsheetComponent,
     NgIf,
+    AsyncPipe,
     NgClass,
     NgSwitch,
     NgSwitchCase,
     DatePipe,
     FormsModule,
-    NgIcon,
     DataGridComponent,
     DetailOverviewComponent,
     DetailTableComponent,
     DetailDocumentsComponent,
+    DetailTimelineComponent,
+    ActionButtonComponent,
   ],
 })
 export class DealSheetListComponent implements OnInit, OnDestroy {
-  ngAfterViewInit(): void {
-    if (this.grid) {
-      this.grid.activeViewId = this.activeViewId;
-      this.grid.page = this.page;
-    }
-  }
-
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
 
   private confirm = inject(ConfirmDialogService);
+  private _decision = inject(DealDecisionService);
 
   isLoading = true;
   userId: string | undefined;
@@ -109,9 +99,13 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   rows: Quotatation[] = [];
   total = 0;
   page = 1;
-  row = 15;
+  row = DEFAULT_PAGE_SIZE;
   searchQuery = '';
-  searchCriteria: 'dealId' | 'customer' | 'salesperson' = 'dealId';
+  /** Column filters and sort from the grid toolbar; sent to the server with every page request. */
+  gridFilters: { key: string; op: string; value: any }[] = [];
+  sortKey: string | null = null;
+  sortDir: 'asc' | 'desc' | null = null;
+  searchCriteria: 'all' | 'dealId' | 'customer' | 'salesperson' = 'all';
 
   columns: DataGridColumn<Quotatation>[] = [];
   rowActions: DataGridRowAction<Quotatation>[] = [];
@@ -122,7 +116,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     { id: 'rejected', label: 'Rejected' },
     { id: 'revoked', label: 'Revoked' },
   ];
-  private activeViewId:
+  activeViewId:
     | 'all'
     | 'pending'
     | 'approved'
@@ -134,6 +128,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'eye' },
+    { id: 'history', label: 'History', icon: 'clock' },
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
@@ -155,10 +150,13 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   rowAccent = (r: Quotatation): 'warning' | null =>
     r.dealData && !r.dealData.seenByApprover ? 'warning' : null;
 
+  statusText = statusLabel;
+
   dealTitle = (r: Quotatation) => r.dealData?.dealId ?? '';
   dealSubtitle = (r: Quotatation) => r.client?.companyName ?? '';
 
   private subscriptions = new Subscription();
+  private historyCache = new Map<string, BehaviorSubject<DetailTimelineEntry[]>>();
 
   constructor(
     private _quoteService: QuotationService,
@@ -170,6 +168,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     private toaster: ToastrService,
     private numberFormat: NumberFormatterPipe,
     private datePipe: DatePipe,
+    private auditLog: AuditLogService,
   ) {}
 
   ngOnInit(): void {
@@ -182,16 +181,23 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           data['view'],
         )
       ) {
+        const changed = this.activeViewId !== data['view'];
         this.activeViewId = data['view'];
         if (this.grid) this.grid.activeViewId = this.activeViewId;
+        // Same component is reused when the URL segment changes (sidebar link, back button).
+        if (changed && this.grid) {
+          this.page = 1;
+          this.grid.page = 1;
+          this.getDeals();
+        }
       }
     });
 
     this._route.queryParams.subscribe((params) => {
       this.page = params['page'] ? parseInt(params['page'], 10) : 1;
-      this.row = params['row'] ? parseInt(params['row'], 10) : 10;
+      this.row = params['row'] ? parseInt(params['row'], 10) || DEFAULT_PAGE_SIZE : DEFAULT_PAGE_SIZE;
       this.searchQuery = params['search'] || '';
-      this.searchCriteria = params['searchCriteria'] || 'dealId';
+      this.searchCriteria = params['searchCriteria'] || 'all';
       if (this.grid) this.grid.page = this.page;
       this.getDeals();
     });
@@ -210,39 +216,46 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     this.columns = [
       {
         key: 'date',
+        sortable: true,
         label: 'Date',
         type: 'date',
         valueGetter: (r) => r.dealData?.savedDate,
       },
       {
         key: 'dealId',
+        sortable: true,
         label: 'Deal Id',
         valueGetter: (r) => r.dealData?.dealId,
       },
-      { key: 'quoteId', label: 'Quote Id' },
+      { key: 'quoteId', sortable: true, label: 'Quote Id' },
       {
         key: 'customerName',
+        sortable: true,
         label: 'Customer',
         valueGetter: (r) => r.client?.companyName,
       },
       {
         key: 'description',
+        sortable: true,
         label: 'Description',
         valueGetter: (r) => r.subject,
       },
       {
         key: 'salesPerson',
+        sortable: true,
         label: 'Sales Person',
         valueGetter: (r) =>
           r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '',
       },
       {
         key: 'department',
+        sortable: true,
         label: 'Department',
         valueGetter: (r) => r.department?.departmentName,
       },
       {
         key: 'paymentTerms',
+        sortable: true,
         label: 'Payment Terms',
         valueGetter: (r) => r.dealData?.paymentTerms,
       },
@@ -253,10 +266,17 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       },
       {
         key: 'dealStatus',
+        sortable: true,
         label: 'Status',
         type: 'badge',
         valueGetter: (r) => r.dealData?.status ?? null,
         badgeClasses: this.dealStatusBadgeClasses,
+        badgeLabel: statusLabel,
+        // Server-paged grid: the filter menu cannot infer every status from the one loaded page.
+        filterOptions: DEAL_STATUSES.map((v) => ({
+          label: statusLabel(v),
+          value: v,
+        })),
       },
     ];
   }
@@ -264,35 +284,31 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   private buildRowActions(): void {
     this.rowActions = [
       {
-        id: 'viewLpo',
-        label: 'View LPO',
-        icon: 'eye',
-        quick: true,
-        hidden: (r) => !r.lpoFiles?.length,
-      },
-      {
-        id: 'viewAttachments',
-        label: 'View Attachments',
-        icon: 'upload',
-        quick: true,
-        hidden: (r) => !r.dealData?.attachments?.length,
+        id: 'viewDocuments',
+        label: 'View Documents',
+        icon: 'files',
+        hidden: (r) => !this.dealDocuments(r).length,
       },
       {
         id: 'approve',
         label: 'Approve',
-        icon: 'refresh',
+        icon: 'check',
+        quick: true,
         hidden: (r) => r.dealData?.status !== 'pending',
       },
       {
         id: 'reject',
         label: 'Reject',
-        icon: 'trash',
+        icon: 'close',
+        variant: 'danger',
+        quick: true,
         hidden: (r) => r.dealData?.status !== 'pending',
       },
       {
         id: 'update',
         label: 'Update Deal',
         icon: 'pencil',
+        quick: true,
         hidden: (r) => r.dealData?.status === 'approved',
       },
       {
@@ -308,6 +324,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     this.searchQuery = query.search;
     this.page = query.page;
     this.row = query.pageSize;
+    this.gridFilters = (query.filters ?? []).map((f) => ({ key: f.key, op: f.op, value: f.value }));
+    this.sortKey = query.sort?.key ?? null;
+    this.sortDir = query.sort?.direction ?? null;
     this.getDeals();
     this.updateUrlParams();
   }
@@ -332,18 +351,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       | 'revoked';
     this.page = 1;
     if (this.grid) this.grid.page = 1;
-
-    const segment = DealSheetListComponent.viewSegments[this.activeViewId];
-    this._router.navigate(['/deal-sheet', segment], {
-      queryParams: {
-        page: null,
-        row: this.row !== 10 ? this.row : null,
-        search: this.searchQuery || null,
-        searchCriteria:
-          this.searchCriteria !== 'dealId' ? this.searchCriteria : null,
-      },
-      replaceUrl: true,
-    });
+    // The grid emits queryChange right after viewChange, which reloads the data and syncs the URL once.
   }
 
   /** Only the active tab has a known total (rows are server-paged), so the others show no badge. */
@@ -356,26 +364,32 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   }
 
   private updateUrlParams(): void {
-    this._router.navigate([], {
-      relativeTo: this._route,
+    // Absolute path (view segment + params) so a view switch and the query sync can never cancel each other.
+    const segment = DealSheetListComponent.viewSegments[this.activeViewId];
+    this._router.navigate(['/deal-sheet', segment], {
       queryParams: {
         page: this.page !== 1 ? this.page : null,
-        row: this.row !== 10 ? this.row : null,
+        row: this.row !== DEFAULT_PAGE_SIZE ? this.row : null,
         search: this.searchQuery || null,
         searchCriteria:
-          this.searchCriteria !== 'dealId' ? this.searchCriteria : null,
+          this.searchCriteria !== 'all' ? this.searchCriteria : null,
       },
-      queryParamsHandling: 'merge',
       replaceUrl: true,
     });
   }
 
-  getDeals(): void {
+  /** Skips a reload when the URL-driven and grid-driven triggers ask for the same query back to back. */
+  private lastQueryKey = '';
+
+  getDeals(force = false): void {
+    const queryKey = [this.activeViewId, this.page, this.row, this.searchQuery, this.searchCriteria, JSON.stringify(this.gridFilters), this.sortKey, this.sortDir].join('|');
+    if (!force && queryKey === this.lastQueryKey) return;
+    this.lastQueryKey = queryKey;
     this.isLoading = true;
     let access: string | undefined;
     let userId: string | undefined;
     let role: string | undefined;
-    this._employeeService.employeeData$.subscribe((employee) => {
+    this._employeeService.employeeData$.pipe(take(1)).subscribe((employee) => {
       access = employee?.category.privileges.quotation.viewReport;
       role = employee?.category.role;
       userId = employee?._id;
@@ -391,6 +405,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       searchQuery: this.searchQuery,
       searchCriteria: this.searchCriteria,
       view: this.activeViewId,
+      filters: this.gridFilters,
+      sortKey: this.sortKey,
+      sortDir: this.sortDir,
     };
 
     const request =
@@ -410,6 +427,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           this.rows = [];
           this.total = 0;
           this.isLoading = false;
+          this.lastQueryKey = '';
           this.toaster.error('Failed to load deal sheets');
         },
       }),
@@ -419,11 +437,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   onRowAction(event: DataGridRowActionEvent<Quotatation>): void {
     const { action, row } = event;
     switch (action.id) {
-      case 'viewLpo':
-        this.openLpoFiles(row);
-        break;
-      case 'viewAttachments':
-        this.openAttachments(row);
+      case 'viewDocuments':
+        this.openDocumentsTab(row);
         break;
       case 'approve':
         this.approveDeal(row);
@@ -440,6 +455,29 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     }
   }
 
+  openDealSheetView(row: Quotatation): void {
+    if (!row?._id) {
+      this.toaster.error('Unable to open deal sheet: quotation ID is missing');
+      return;
+    }
+
+    this._router.navigate(['/deal-sheet/view', row._id], {
+      state: {
+        approval: row.dealData?.status === 'pending',
+        quoteData: row,
+        quoteItems: selectedDealItems(row.dealData?.updatedItems),
+        priceDetails: dealSheetPriceDetails(row.dealData?.updatedItems, row.dealData?.additionalCosts),
+        jobId: row.job?._id,
+        quoteView: false,
+        returnUrl: this.currentListUrl(),
+      },
+    });
+  }
+
+  openDocumentsTab(row: Quotatation): void {
+    this.grid?.openRow(row, 'documents');
+  }
+
   /** Opening the detail panel is the new "viewed" signal, replacing the old IntersectionObserver. */
   onRowOpen(row: Quotatation): void {
     this.detailLoading = true;
@@ -450,84 +488,28 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Approve/Reject share the generic status-change modal (status + required note for reject). */
-  private statusModal(row: Quotatation, target: DealStatus) {
-    return this._dialog
-      .open<
-        StatusChangeModalComponent,
-        any,
-        StatusChangeResult<DealStatus> | null
-      >(StatusChangeModalComponent, {
-        data: {
-          currentStatus: 'pending' as DealStatus,
-          statuses: DEAL_STATUSES,
-          targetStatus: target,
-          requireReasonFor: ['rejected'],
-          reasonLabels: {
-            approved: { label: 'Note', placeholder: 'Optional comment' },
-            rejected: {
-              label: 'Reason',
-              placeholder: 'Why is this deal being rejected?',
-            },
-          },
-          title: target === 'approved' ? 'Approve deal' : 'Reject deal',
-          subtitle: row.dealData?.dealId,
-        },
-        width: '480px',
-        maxWidth: '95vw',
-        autoFocus: false,
-      })
-      .afterClosed();
-  }
-
   approveDeal(row: Quotatation): void {
-    this.statusModal(row, 'approved').subscribe((result) => {
+    this._decision.ask('approved', row.dealData?.dealId).subscribe((result) => {
       if (!result) return;
       this._quoteService
         .approveDeal(row._id, result.reason, this.userId)
         .subscribe({
           next: () => {
             this.toaster.success('Deal approved');
-            this.getDeals();
+            this.getDeals(true);
           },
-          error: (err) => this.showApprovalGateError(err),
+          error: (err) => this.toaster.error(describeApprovalGateError(err, 'Failed to approve deal')),
         });
     });
   }
 
-  private showApprovalGateError(err: any): void {
-    const message = err?.error?.message || 'Failed to approve deal';
-    const missing = Array.isArray(err?.error?.missing) ? err.error.missing : [];
-    const approvalRequired = Array.isArray(err?.error?.approvalRequired)
-      ? (err.error.approvalRequired as ApprovalRequiredItem[])
-      : [];
-
-    if (missing.length) {
-      this.toaster.error(
-        `${message}: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` and ${missing.length - 4} more` : ''}`,
-      );
-      return;
-    }
-
-    if (approvalRequired.length) {
-      const first = approvalRequired[0];
-      const approver = first?.approverRole
-        ? ` Required approver: ${first.approverRole}.`
-        : '';
-      this.toaster.error(`${first?.message || message}.${approver}`);
-      return;
-    }
-
-    this.toaster.error(message);
-  }
-
   rejectDeal(row: Quotatation): void {
-    this.statusModal(row, 'rejected').subscribe((result) => {
+    this._decision.ask('rejected', row.dealData?.dealId).subscribe((result) => {
       if (!result) return;
       this._quoteService.rejectDeal(result.reason, row._id).subscribe({
         next: () => {
           this.toaster.success('Deal rejected');
-          this.getDeals();
+          this.getDeals(true);
         },
         error: (err) =>
           this.toaster.error(err?.error?.message || 'Failed to reject deal'),
@@ -571,7 +553,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     this._quoteService.revokeDeal(row._id, this.userId).subscribe({
       next: () => {
         this.toaster.success('Deal revoked');
-        this.getDeals();
+        this.getDeals(true);
       },
       error: (err) =>
         this.toaster.error(err?.error?.message || 'Failed to revoke deal'),
@@ -580,60 +562,37 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
 
   /** `UpdateDealsheetComponent` seeds its form from `quoteItems` (the deal's own updated items,
    *  same as what the old view-dealsheet page passed via router state). */
+  updateOpen = false;
+  updateRow: Quotatation | null = null;
+  updateData: UpdateDealsheetData | null = null;
+
   updateDeal(row: Quotatation): void {
-    const updateModal = this._dialog.open(UpdateDealsheetComponent, {
-      data: {
-        approval: false,
-        quoteData: row,
-        quoteItems: row.dealData?.updatedItems ?? [],
-        priceDetails: {
-          totalSellingPrice: this.sellingPrice(row),
-          totalCost: 0,
-          profit: 0,
-          perc: 0,
-        },
-        quoteView: false,
+    this.updateRow = row;
+    this.updateData = {
+      approval: false,
+      quoteData: row,
+      quoteItems: row.dealData?.updatedItems ?? [],
+      priceDetails: {
+        totalSellingPrice: this.sellingPrice(row),
+        totalCost: 0,
+        profit: 0,
+        perc: 0,
       },
-    });
-    updateModal.afterClosed().subscribe((dealData) => {
-      if (!dealData) return;
-      this._quoteService.saveDealSheet(dealData, row._id).subscribe({
-        next: () => {
-          this.toaster.success('Deal sheet updated');
-          this.getDeals();
-        },
-        error: () => this.toaster.error('Failed to save deal sheet'),
-      });
-    });
+      quoteView: false,
+    };
+    this.updateOpen = true;
   }
 
-  openLpoFiles(row: Quotatation): void {
-    if (!row.lpoFiles?.length) return;
-    const modalData: FileUploadModalData = {
-      title: `LPO Files - ${row.dealData?.dealId ?? ''}`,
-      existingFiles: row.lpoFiles,
-      allowMultiple: true,
-      showActions: { upload: false, download: true, view: true, delete: false },
-    };
-    this._dialog.open(FileUploadModalComponent, {
-      data: modalData,
-      width: '800px',
-      maxHeight: '90vh',
-    });
-  }
-
-  openAttachments(row: Quotatation): void {
-    if (!row.dealData?.attachments?.length) return;
-    const modalData: FileUploadModalData = {
-      title: `Deal Sheet Attachments - ${row.dealData?.dealId ?? ''}`,
-      existingFiles: row.dealData.attachments as any,
-      allowMultiple: true,
-      showActions: { upload: false, download: true, view: true, delete: false },
-    };
-    this._dialog.open(FileUploadModalComponent, {
-      data: modalData,
-      width: '800px',
-      maxHeight: '90vh',
+  onUpdateSaved(dealData: FormData): void {
+    const row = this.updateRow;
+    if (!row) return;
+    this._quoteService.saveDealSheet(dealData, row._id).subscribe({
+      next: () => {
+        this.updateOpen = false;
+        this.toaster.success('Deal sheet updated');
+        this.getDeals(true);
+      },
+      error: () => this.toaster.error('Failed to save deal sheet'),
     });
   }
 
@@ -656,27 +615,52 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   }
 
   dealDocuments(row: Quotatation): DetailDocument[] {
-    return (row.dealData?.attachments || []).map((file: any) => ({
-      id: file.fileName,
-      name: file.originalname,
-      kind: (file.originalname?.split('.').pop() || 'FILE')
-        .toUpperCase()
-        .slice(0, 4),
-    }));
+    const docs: DetailDocument[] = [];
+    (row.lpoFiles || []).forEach((file: any) =>
+      docs.push(this.fileDocument(file, 'LPO')),
+    );
+    return docs;
+  }
+
+  private fileDocument(file: any, source: string): DetailDocument {
+    const name = file.originalname || file.fileName || 'Document';
+    return {
+      id: `${source}:${file.fileName}`,
+      name,
+      uploadedBy: source,
+      kind: (name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4),
+    };
   }
 
   onDealDocPreview(row: Quotatation, doc: DetailDocument): void {
-    const file = (row.dealData?.attachments || []).find(
-      (f: any) => f.fileName === doc.id,
-    );
+    const file = this.findDocumentFile(row, doc.id);
     if (file) this.previewOrDownload(file, 'view');
   }
 
   onDealDocDownload(row: Quotatation, doc: DetailDocument): void {
-    const file = (row.dealData?.attachments || []).find(
-      (f: any) => f.fileName === doc.id,
-    );
+    const file = this.findDocumentFile(row, doc.id);
     if (file) this.previewOrDownload(file, 'download');
+  }
+
+  private findDocumentFile(row: Quotatation, id: string): any {
+    const [, fileName] = id.split(':');
+    return (row.lpoFiles || []).find((f: any) => f.fileName === (fileName || id));
+  }
+
+  historyFor(row: Quotatation): Observable<DetailTimelineEntry[]> {
+    const deal = row.dealData as any;
+    const id = row._id || deal?._id || deal?.dealId;
+    if (!id) return new BehaviorSubject<DetailTimelineEntry[]>([]).asObservable();
+    let subject = this.historyCache.get(id);
+    if (!subject) {
+      subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
+      this.historyCache.set(id, subject);
+      this.auditLog.getHistory('quotation', id).subscribe({
+        next: (entries) => subject!.next(toTimelineEntries(entries)),
+        error: () => this.historyCache.delete(id),
+      });
+    }
+    return subject.asObservable();
   }
 
   private previewOrDownload(file: any, mode: 'view' | 'download'): void {
@@ -716,6 +700,19 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     return total;
   }
 
+  private currentListUrl(): string {
+    const segment = DealSheetListComponent.viewSegments[this.activeViewId];
+    const queryParams = new URLSearchParams();
+    if (this.page !== 1) queryParams.set('page', String(this.page));
+    if (this.row !== DEFAULT_PAGE_SIZE) queryParams.set('row', String(this.row));
+    if (this.searchQuery) queryParams.set('search', this.searchQuery);
+    if (this.searchCriteria !== 'all') {
+      queryParams.set('searchCriteria', this.searchCriteria);
+    }
+    const query = queryParams.toString();
+    return `/deal-sheet/${segment}${query ? `?${query}` : ''}`;
+  }
+
   formatAmount(row: Quotatation): string {
     if (!row.dealData) return '';
     return `${this.numberFormat.transform(this.sellingPrice(row))} ${row.currency}`;
@@ -730,6 +727,11 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
 
   overviewSections(row: Quotatation): DetailOverviewSection[] {
     const deal: any = row.dealData;
+    const enquiry = row.enqId as any;
+    const contact = (row as any).contact || enquiry?.contact;
+    const latestComment = deal?.comments?.length
+      ? deal.comments[deal.comments.length - 1]
+      : '';
     return [
       {
         title: 'General',
@@ -737,10 +739,11 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         fields: [
           {
             type: 'field',
-            label: 'Deal Id',
+            label: 'Deal No.',
             value: deal?.dealId,
             numeric: true,
           },
+          { type: 'dg', key: 'dealStatus', label: 'Status', noHover: true },
           {
             type: 'field',
             label: 'Quote Id',
@@ -748,6 +751,13 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
             numeric: true,
           },
           { type: 'field', label: 'Customer', value: row.client?.companyName },
+          {
+            type: 'field',
+            label: 'Contact',
+            value: contact
+              ? `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim()
+              : '—',
+          },
           {
             type: 'field',
             label: 'Sales Person',
@@ -762,10 +772,19 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           },
           {
             type: 'field',
-            label: 'Date',
-            value: this.datePipe.transform(deal?.savedDate, 'dd MMM yyyy'),
+            label: 'Priority',
+            value: enquiry?.priority || '—',
           },
-          { type: 'dg', key: 'dealStatus', label: 'Status', noHover: true },
+          {
+            type: 'field',
+            label: 'Date',
+            value: this.datePipe.transform(deal?.savedDate || row.date, 'dd MMM yyyy') || '—',
+          },
+          {
+            type: 'field',
+            label: 'Payment Terms',
+            value: deal?.paymentTerms || '—',
+          },
           ...(this.approverName(row)
             ? [
                 {
@@ -779,9 +798,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         ],
       },
       {
-        title: 'Overview',
+        title: 'Deal Sheet',
         fields: [
-          { type: 'field', label: 'Payment Terms', value: deal?.paymentTerms },
           {
             type: 'field',
             label: 'Amount',
@@ -789,15 +807,18 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
             numeric: true,
             noHover: true,
           },
-          ...(deal?.comments?.length
-            ? [
-                {
-                  type: 'field' as const,
-                  label: 'Latest Comment',
-                  value: deal.comments[deal.comments.length - 1],
-                },
-              ]
-            : []),
+          {
+            type: 'field',
+            label: 'Description',
+            value: enquiry?.title || (row as any).title || '—',
+            noHover: true,
+          },
+          {
+            type: 'field',
+            label: 'Requirement / Notes',
+            value: enquiry?.requirement || latestComment || '—',
+            noHover: true,
+          },
         ],
       },
       {

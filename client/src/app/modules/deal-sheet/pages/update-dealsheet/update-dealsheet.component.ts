@@ -1,9 +1,12 @@
 import {
   Component,
-  ElementRef,
-  Inject,
+  EventEmitter,
+  HostListener,
+  Input,
+  OnChanges,
   OnInit,
-  ViewChild,
+  Output,
+  SimpleChanges,
 } from '@angular/core';
 import {
   AbstractControl,
@@ -11,37 +14,43 @@ import {
   FormBuilder,
   FormControl,
   FormGroup,
-  ValidatorFn,
-  Validators,
   FormsModule,
   ReactiveFormsModule,
+  Validators,
 } from '@angular/forms';
-import {
-  MAT_DIALOG_DATA,
-  MatDialog,
-  MatDialogRef,
-} from '@angular/material/dialog';
+import { NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { NgIcon } from '@ng-icons/core';
 import {
   priceDetails,
   Quotatation,
   QuoteItem,
-  QuoteItemDetail,
 } from 'src/app/shared/interfaces/quotation.interface';
-import { fileEnterState } from '../../enquiry-animations';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { NgIcon } from '@ng-icons/core';
-import { NgIf, NgFor, NgClass, DecimalPipe } from '@angular/common';
-import { MatTooltip } from '@angular/material/tooltip';
-import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
-import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { ItemEntryComponent, ItemEntryItemValue, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
+import { DealCost } from 'src/app/shared/utils/deal-pricing.util';
 import { SupplierService } from '../../../../core/services/supplier.service';
-import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
 
+export interface UpdateDealsheetData {
+  approval: boolean;
+  quoteData: Quotatation;
+  quoteItems: (QuoteItem | undefined)[];
+  priceDetails: priceDetails;
+  quoteView?: boolean;
+}
+
+type CostType = 'Additional Cost' | 'Supplier Discount' | 'Customer Discount';
+
+/**
+ * Two-step drawer for editing a deal sheet, the same pattern as the convert-to-deal drawer: lines
+ * (the shared `app-item-entry` in deal mode) first, then payment terms, adjustments and attachments.
+ * Emits the multipart body on `saved`; the host performs the save.
+ */
 @Component({
   selector: 'app-update-dealsheet',
+  standalone: true,
   templateUrl: './update-dealsheet.component.html',
-  styleUrls: ['./update-dealsheet.component.css'],
-  animations: [fileEnterState],
   imports: [
     NgIcon,
     FormsModule,
@@ -49,504 +58,382 @@ import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
     NgIf,
     NgFor,
     NgClass,
-    MatTooltip,
-    DecimalPipe,
-    ParseBoldTextPipe,
-    ParseBracketsTextPipe,
+    NgSwitch,
+    NgSwitchCase,
+    SmartFormModule,
+    ActionButtonComponent,
+    ItemEntryComponent,
   ],
 })
-export class UpdateDealsheetComponent implements OnInit {
-  @ViewChild('fileInput') fileInput!: ElementRef;
+export class UpdateDealsheetComponent implements OnInit, OnChanges {
+  @Input() open = false;
+  @Input() data: UpdateDealsheetData | null = null;
+  @Output() saved = new EventEmitter<FormData>();
+  @Output() closed = new EventEmitter<void>();
 
-  costForm!: FormGroup;
-  isSubmitted = false;
-  isAllSelected = false;
-  isSaving = false;
-  selectedFiles: any[] = [];
-  removedFiles: any[] = [];
+  /** One entry per build: swapping it re-creates item-entry, which seeds itself once on init. */
+  forms: FormGroup[] = [];
+  form!: FormGroup;
+  seed: ItemEntryOptionValue[] = [];
+  step: 1 | 2 = 1;
+  readonly steps = [
+    { n: 1 as const, label: 'Items', hint: 'Pick the lines in the deal and set their pricing' },
+    { n: 2 as const, label: 'Terms & Attachments', hint: 'Payment terms, adjustments and supporting files' },
+  ];
+  selectedOption = 0;
+  bulkSupplier: string | null = null;
+  supplierOptions: SfOption<string>[] = [];
+  discountSupplierOptions: SfOption<string>[] = [];
+  readonly costTypes: CostType[] = ['Additional Cost', 'Supplier Discount', 'Customer Discount'];
+  readonly fileAccept = '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.msg,.dwg';
+
+  /** Adjustments folded into the item-entry summary: net extra cost, and customer discount. */
+  costAdjustment = 0;
+  discountAdjustment = 0;
+  selectedCount = 0;
+  lineCount = 0;
+  allSelected = false;
+  lineIssues: string[] = [];
+  termIssues: string[] = [];
+  submitted = false;
+  private recomputeQueued = false;
+
+  /** Files already on the deal, and the ones the user took off it. */
   existingFiles: any[] = [];
-
-  selectedOption: number = 0;
-  suppliers: Supplier[] = [];
+  removedFiles: any[] = [];
+  /** Newly picked files, uploaded on save. */
+  newFiles = new FormControl<File[]>([], { nonNullable: true });
 
   constructor(
-    @Inject(MAT_DIALOG_DATA)
-    public data: {
-      approval: boolean;
-      quoteData: Quotatation;
-      quoteItems: (QuoteItem | undefined)[];
-      priceDetails: priceDetails;
-      quoteView: boolean;
-    },
-    public dialogRef: MatDialogRef<UpdateDealsheetComponent>,
-    public _dialog: MatDialog,
     private fb: FormBuilder,
     private supplierService: SupplierService,
+    private confirm: ConfirmDialogService,
   ) {}
 
-  ngOnInit() {
-    this.loadSuppliers();
-    this.costForm = this.fb.group({
-      paymentTerms: [
-        this.data.quoteData.dealData.paymentTerms || '',
-        Validators.required,
-      ],
-      items: this.fb.array(
-        this.data.quoteItems.map((item) =>
-          this.createItemGroup(item as QuoteItem),
-        ),
-      ),
-      costs: this.fb.array([], this.additionalCostsValidator()),
-    });
-    this.data.quoteData.dealData.additionalCosts.forEach((cost) => {
-      this.patchCost(cost);
-    });
-
-    this.selectedFiles = this.data.quoteData.dealData.attachments;
-    this.existingFiles = [...this.selectedFiles];
+  get title(): string {
+    return 'Update deal sheet ' + (this.data?.quoteData?.dealData?.dealId ?? '');
   }
 
-  loadSuppliers() {
-    this.supplierService.supplierList().subscribe({
-      next: (response) => {
-        this.suppliers = response.data || response;
-      },
-      error: (error) => {
-        console.error('Error loading suppliers:', error);
-      },
-    });
+  get subtitle(): string {
+    return this.steps[this.step - 1].hint;
   }
 
-  onCalculationOptionChange() {
-    this.items.clear();
-    this.data.quoteData.optionalItems[this.selectedOption].items.forEach(
-      (item) => {
-        this.items.push(this.createItemGroup(item));
-      },
-    );
+  get dirty(): boolean {
+    return !!this.form?.dirty || this.newFiles.dirty || this.removedFiles.length > 0;
   }
 
-  setUpFormData(): FormData {
-    let formData = new FormData();
-
-    let data = this.costForm.value;
-    const updatedItems = data.items.map((item: any) => ({
-      ...item,
-      itemDetails: item.itemDetails.map((detail: any) => ({
-        ...detail,
-        supplierId: detail.supplierId,
-      })),
-    }));
-
-    const updatedCosts = data.costs.map((cost: any) => {
-      if (cost.type === 'Supplier Discount') {
-        return {
-          type: cost.type,
-          supplierId: cost.supplierId,
-          value: cost.value,
-        };
-      } else if (cost.type === 'Additional Cost') {
-        return {
-          type: cost.type,
-          name: cost.name,
-          value: cost.value,
-        };
-      } else {
-        return {
-          type: cost.type,
-          value: cost.value,
-        };
-      }
-    });
-
-    formData.append(
-      'dealData',
-      JSON.stringify({
-        ...data,
-        items: updatedItems,
-        costs: updatedCosts,
-        removedFiles: this.removedFiles,
-        existingFiles: this.existingFiles,
-        totalDiscount:
-          this.data.quoteData.optionalItems[this.selectedOption].totalDiscount,
-      }),
-    );
-    for (let i = 0; i < this.selectedFiles.length; i++) {
-      formData.append('attachments', this.selectedFiles[i] as Blob);
-    }
-
-    return formData;
+  get currency(): string {
+    return this.data?.quoteData?.currency ?? '';
   }
 
-  onSubmit() {
-    this.isSubmitted = true;
-    if (this.costForm.valid) {
-      this.isSaving = true;
-      const formData = this.setUpFormData();
-      this.dialogRef.close(formData);
-    }
-  }
-
-  get items(): FormArray {
-    return this.costForm.get('items') as FormArray;
-  }
-
-  get f() {
-    return this.costForm.controls;
-  }
-
-  onFileSelected(event: any) {
-    let files = event.target.files;
-    for (let i = 0; i < files.length; i++) {
-      const newFile = files[i];
-      const exist = (this.selectedFiles as File[]).some(
-        (file: File) => file.name === newFile.name,
-      );
-      if (!exist) {
-        (this.selectedFiles as File[]).push(files[i]);
-      }
-    }
-  }
-
-  onFileRemoved(index: number) {
-    let removedFiles = (this.selectedFiles as File[]).splice(index, 1);
-    this.existingFiles.splice(index, 1);
-    this.removedFiles.push(...removedFiles);
-  }
-
-  fetchLatestQuote() {
-    const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: `Are you absolutely sure?`,
-        description: `This action is irreversible. This will remove all the entered data and replace it with the latest quotation.`,
-        icon: 'heroExclamationCircle',
-        IconColor: 'orange',
-      },
-    });
-
-    dialogRef.afterClosed().subscribe((approved: boolean) => {
-      if (approved) {
-        this.items.clear();
-
-        // Add new controls to the FormArray
-        this.data.quoteData.optionalItems[0].items.forEach((item) => {
-          this.items.push(this.createItemGroup(item as QuoteItem));
-        });
-      }
-    });
-  }
-
-  createItemGroup(item: QuoteItem): FormGroup {
-    return this.fb.group({
-      itemName: [item.itemName || ''],
-      itemDetails: this.fb.array(
-        item.itemDetails.map((detail) => this.createItemDetailGroup(detail)),
-      ),
-    });
-  }
-
-  createItemDetailGroup(detail: QuoteItemDetail): FormGroup {
-    const profit = (
-      ((detail.unitSellingPrice - detail.unitCost) / detail.unitSellingPrice) *
-      100
-    ).toFixed(2);
-
-    return this.fb.group({
-      dealSelected: [detail.dealSelected || false],
-      detail: [detail.detail, Validators.required],
-      quantity: [detail.quantity, Validators.required],
-      unitCost: [detail.unitCost, Validators.required],
-      profit: [profit, Validators.required],
-      unitSellingPrice: [detail.unitSellingPrice, Validators.required],
-      availability: [detail.availability, Validators.required],
-      supplierId: [(detail as any).supplierId || '', Validators.required],
-    });
-  }
-
-  supplierValidator(): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: any } | null => {
-      const formGroup = control.parent as FormGroup;
-      if (formGroup) {
-        const dealSelected = formGroup.get('dealSelected')?.value;
-        if (dealSelected && !control.value) {
-          return { supplierRequired: true };
-        }
-      }
-      return null;
-    };
-  }
-
-  get paymentTermsControl(): AbstractControl {
-    return this.costForm.get('paymentTerms')!;
-  }
-
-  additionalCostsValidator(): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: any } | null => {
-      const costs = control as FormArray;
-      if (costs.length === 0) {
-        return null;
-      }
-
-      for (const cost of costs.controls) {
-        const type = cost?.get('type')?.value;
-        if (type === 'Additional Cost' && !cost?.get('name')?.value) {
-          return { additionalCostInvalid: true };
-        }
-        if (type === 'Supplier Discount' && !cost?.get('supplierId')?.value) {
-          return { additionalCostInvalid: true };
-        }
-        if (!cost?.get('value')?.value) {
-          return { additionalCostInvalid: true };
-        }
-      }
-      return null;
-    };
-  }
-
-  onItemCheckboxChange(i: number, j: number, event: any) {
-    const allSelected = this.items.controls.every((item) => {
-      return this.getItemDetailsArray(item).every(
-        (detail) => detail.get('dealSelected')?.value === true,
-      );
-    });
-
-    const itemDetail = this.getItemDetailsArray(this.items.controls[i])[j];
-
-    if (!event.target.checked) {
-      itemDetail
-        .get('quantity')
-        ?.setValue(this.data.quoteItems[i]?.itemDetails[j].quantity);
-      itemDetail
-        .get('unitCost')
-        ?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitCost);
-      itemDetail
-        .get('unitSellingPrice')
-        ?.setValue(this.data.quoteItems[i]?.itemDetails[j].unitSellingPrice);
-      itemDetail.get('supplierId')?.setValue('');
-    }
-
-    // Trigger validation update for supplier field
-    itemDetail.get('supplierId')?.updateValueAndValidity();
-
-    this.isAllSelected = allSelected;
-  }
-
-  toggleAllSelection(event: Event) {
-    const isChecked = (event.target as HTMLInputElement).checked;
-    this.isAllSelected = isChecked;
-    this.items.controls.forEach((item) => {
-      const itemDetails = this.getItemDetailsArray(item);
-      itemDetails.forEach((detail) => {
-        detail.get('dealSelected')?.setValue(isChecked);
-        // Clear supplier if unchecking and trigger validation
-        if (!isChecked) {
-          detail.get('supplierId')?.setValue('');
-        }
-        detail.get('supplierId')?.updateValueAndValidity();
-      });
-    });
-  }
-
-  getItemDetailsArray(item: AbstractControl): AbstractControl[] {
-    return (item.get('itemDetails') as FormArray).controls;
-  }
-
-  addCost(type: string): void {
-    let group;
-    group = this.fb.group({
-      type: [type, Validators.required],
-      value: ['', Validators.required],
-    });
-
-    if (type === 'Additional Cost') {
-      group = this.fb.group({
-        type: [type, Validators.required],
-        name: ['', Validators.required],
-        value: ['', Validators.required],
-      });
-    } else if (type === 'Supplier Discount') {
-      group = this.fb.group({
-        type: [type, Validators.required],
-        supplierId: ['', Validators.required],
-        value: ['', Validators.required],
-      });
-    }
-
-    this.costs.push(group);
-  }
-
-  patchCost(cost: {
-    type: string;
-    value: number;
-    name: string;
-    supplierId?: string;
-  }): void {
-    let group;
-    if (!cost.type) {
-      cost.type = 'Additional Cost';
-    }
-    group = this.fb.group({
-      type: [cost.type, Validators.required],
-      value: [cost.value, Validators.required],
-    });
-
-    if (cost.type === 'Additional Cost') {
-      group = this.fb.group({
-        type: [cost.type, Validators.required],
-        name: [cost.name, Validators.required],
-        value: [cost.value, Validators.required],
-      });
-    } else if (cost.type === 'Supplier Discount') {
-      group = this.fb.group({
-        type: [cost.type, Validators.required],
-        supplierId: [(cost as any).supplierId || '', Validators.required],
-        value: [cost.value, Validators.required],
-      });
-    }
-
-    this.costs.push(group);
-  }
-
-  removeCost(index: number): void {
-    this.costs.removeAt(index);
+  get optionalItems(): FormArray {
+    return this.form.get('optionalItems') as FormArray;
   }
 
   get costs(): FormArray {
-    return this.costForm.get('costs') as FormArray;
+    return this.form.get('costs') as FormArray;
   }
 
-  trackByIndex(index: number): number {
-    return index;
+  get issues(): string[] {
+    return this.step === 1 ? this.lineIssues : this.termIssues;
   }
 
-  calculateUnitPriceForInput(i: number, j: number) {
-    const itemDetail = this.getItemDetailsControls(i).controls[
-      j
-    ] as FormControl;
-    const decimalMargin = itemDetail.get('profit')?.value / 100 || 0;
-    const unitPrice =
-      itemDetail.get('unitCost')?.value / (1 - decimalMargin) || 0;
-    itemDetail
-      .get('unitPrice')
-      ?.setValue(Number(Math.ceil(unitPrice)).toFixed(2));
+  @HostListener('window:beforeunload', ['$event'])
+  warnBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.open && this.dirty) event.preventDefault();
   }
 
-  calculateProfitForInput(i: number, j: number) {
-    const unitCost =
-      this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
-    const unitSellingPrice =
-      this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
-    if (unitCost && unitSellingPrice) {
-      const profit = ((unitSellingPrice - unitCost) / unitSellingPrice) * 100;
-      this.getItemDetailsControls(i)
-        .controls[j].get('profit')
-        ?.setValue(profit.toFixed(2));
-    } else if (unitCost) {
-      this.getItemDetailsControls(i).controls[j].get('profit')?.setValue('');
-    }
-  }
-
-  calculateSellingPrice(): number {
-    let totalCost = 0;
-    this.items.value.forEach((item: any, i: number) => {
-      this.getItemDetailsControls(i).value.forEach((item: any, j: number) => {
-        if (item.dealSelected) {
-          totalCost += this.calculateTotalPrice(i, j);
-        }
-      });
+  ngOnInit(): void {
+    this.supplierService.supplierList().subscribe({
+      next: (res) => {
+        const list: any[] = res.data || res;
+        this.supplierOptions = list
+          .filter((s) => !!s._id)
+          .map((s) => ({ label: s.supplierName, value: s._id as string }));
+        this.recompute();
+      },
+      error: (err) => console.error('Error loading suppliers:', err),
     });
-    this.costs.value.forEach((cost: any, i: number) => {
-      if (cost.type == 'Customer Discount') {
-        totalCost -= cost.value;
-      }
-    });
-
-    return totalCost;
   }
 
-  calculateAllTotalCost() {
-    let totalCost = 0;
-    this.items.value.forEach((item: any, i: number) => {
-      this.getItemDetailsControls(i).value.forEach((item: any, j: number) => {
-        if (item.dealSelected) {
-          totalCost += this.calculateTotalCost(i, j);
-        }
-      });
-    });
-
-    this.costs.value.forEach((cost: any, i: number) => {
-      if (cost.type == 'Additional Cost') {
-        totalCost += cost.value;
-      } else if (cost.type === 'Supplier Discount') {
-        totalCost -= cost.value;
-      }
-    });
-
-    return totalCost;
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['open'] && this.open && this.data) this.build(this.data);
   }
 
-  calculateTotalCost(i: number, j: number) {
-    return (
-      this.getItemDetailsControls(i).controls[j].get('quantity')?.value *
-      this.getItemDetailsControls(i).controls[j].get('unitCost')?.value
+  /** The deal's own saved lines are the starting point, ticks and suppliers included. */
+  private build(data: UpdateDealsheetData): void {
+    this.step = 1;
+    this.submitted = false;
+    this.selectedOption = 0;
+    this.bulkSupplier = null;
+    this.removedFiles = [];
+    this.newFiles.reset([]);
+    this.existingFiles = [...((data.quoteData.dealData.attachments as any[]) ?? [])];
+
+    const saved = (data.quoteItems ?? []).filter((i): i is QuoteItem => !!i);
+    const quoted = data.quoteData.optionalItems?.[0];
+    this.seed = [{
+      totalDiscount: quoted?.totalDiscount,
+      items: (saved.length ? saved : (quoted?.items ?? [])).map((item) => this.toSeedItem(item)),
+    }];
+
+    this.form = this.fb.group({
+      paymentTerms: [data.quoteData.dealData.paymentTerms || '', Validators.required],
+      optionalItems: this.fb.array([]),
+      costs: this.fb.array([]),
+    });
+    (data.quoteData.dealData.additionalCosts ?? []).forEach((cost: any) => this.patchCost(cost));
+    this.forms = [this.form];
+    this.attach();
+  }
+
+  private attach(): void {
+    this.recompute();
+    // item-entry fills `optionalItems` while the view updates, so derived state is refreshed right after.
+    this.form.valueChanges.subscribe(() => this.queueRecompute());
+  }
+
+  private toSeedItem(item: QuoteItem): ItemEntryItemValue {
+    return {
+      itemName: item.itemName,
+      itemDetails: (item.itemDetails ?? []).map((d: any) => ({
+        productId: d.productId,
+        itemCode: d.itemCode,
+        partNo: d.partNo,
+        detail: d.detail,
+        quantity: d.quantity,
+        unitCost: d.unitCost,
+        profit: d.profit,
+        unitSellingPrice: d.unitSellingPrice,
+        availability: d.availability,
+        supplierId: d.supplierId ?? null,
+        uom: d.uom,
+        dealSelected: !!d.dealSelected,
+      })),
+    };
+  }
+
+  onDrawerClosed(): void {
+    this.closed.emit();
+  }
+
+  // --- step 1 helpers --------------------------------------------------------
+
+  private activeLines(): AbstractControl[] {
+    const option = this.optionalItems.at(this.selectedOption);
+    return ((option?.get('items') as FormArray)?.controls || []).flatMap(
+      (item) => (item.get('itemDetails') as FormArray).controls,
     );
   }
 
-  calculateProfit(i: number, j: number) {
-    const unitCost =
-      this.getItemDetailsControls(i).controls[j].get('unitCost')?.value;
-    const unitSellingPrice =
-      this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')?.value;
-
-    if (unitCost && unitSellingPrice) {
-      return (((unitSellingPrice - unitCost) / unitSellingPrice) * 100).toFixed(
-        2,
+  onOptionChanged(index: number): void {
+    this.selectedOption = index;
+    this.bulkSupplier = null;
+    // A deal is built from one option, so ticks made in another are dropped (which restores the quote).
+    this.optionalItems.controls.forEach((option, i) => {
+      if (i === index) return;
+      (option.get('items') as FormArray).controls.forEach((item) =>
+        (item.get('itemDetails') as FormArray).controls.forEach((d) => d.get('dealSelected')?.setValue(false)),
       );
-    }
-    return 0;
-  }
-
-  calculateTotalPrice(i: number, j: number) {
-    return (
-      this.getItemDetailsControls(i).controls[j].get('unitSellingPrice')
-        ?.value *
-      this.getItemDetailsControls(i).controls[j].get('quantity')?.value
-    );
-  }
-
-  onClose() {
-    this.dialogRef.close();
-  }
-
-  getItemDetailsControls(index: number): FormArray {
-    return this.items.at(index).get('itemDetails') as FormArray;
-  }
-
-  getSupplierById(supplierId: string): Supplier | undefined {
-    return this.suppliers.find((supplier) => supplier._id === supplierId);
-  }
-
-  getSupplierName(supplierId: string): string {
-    const supplier = this.getSupplierById(supplierId);
-    return supplier ? supplier.supplierName : '';
-  }
-
-  getSelectedSuppliers(): Supplier[] {
-    const selectedSupplierIds = new Set<string>();
-
-    this.items.controls.forEach((item) => {
-      const itemDetails = this.getItemDetailsArray(item);
-      itemDetails.forEach((detail) => {
-        const dealSelected = detail.get('dealSelected')?.value;
-        const supplierId = detail.get('supplierId')?.value;
-        if (dealSelected && supplierId) {
-          selectedSupplierIds.add(supplierId);
-        }
-      });
     });
+    this.form.markAsDirty();
+    this.queueRecompute();
+  }
 
-    return this.suppliers.filter(
-      (supplier) => supplier._id && selectedSupplierIds.has(supplier._id),
+  toggleAll(checked: boolean): void {
+    this.activeLines().forEach((d) => d.get('dealSelected')?.setValue(checked));
+    this.form.markAsDirty();
+  }
+
+  applyBulkSupplier(): void {
+    if (!this.bulkSupplier) return;
+    this.activeLines().forEach((d) => {
+      if (d.get('dealSelected')?.value) d.get('supplierId')?.setValue(this.bulkSupplier);
+    });
+    this.bulkSupplier = null;
+    this.form.markAsDirty();
+  }
+
+  /** Replaces the entered lines with the quotation's current ones, nothing ticked. */
+  async fetchLatestQuote(): Promise<void> {
+    const options = this.data?.quoteData.optionalItems ?? [];
+    if (!options.length || !options.some((o) => o.items?.length)) {
+      this.submitted = true;
+      this.lineIssues = ['The quotation has no items to fetch'];
+      return;
+    }
+    const { confirmed } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Replace entered items?',
+      message: 'This removes the line items entered here and loads the latest quotation items instead.',
+      consequence: 'This cannot be undone.',
+      confirmLabel: 'Replace items',
+    });
+    if (!confirmed) return;
+
+    this.seed = options.map((option) => ({
+      totalDiscount: option.totalDiscount,
+      items: (option.items ?? [])
+        .filter((item) => !item.isOptional || !!item.includeInTotal)
+        .map((item) => {
+          const seeded = this.toSeedItem(item);
+          seeded.itemDetails = (seeded.itemDetails ?? []).map((d) => ({ ...d, supplierId: null, dealSelected: false }));
+          return seeded;
+        }),
+    }));
+    this.selectedOption = 0;
+    this.bulkSupplier = null;
+    const costs = this.costs.getRawValue();
+    const paymentTerms = this.paymentTermsControl.value;
+    this.form = this.fb.group({
+      paymentTerms: [paymentTerms, Validators.required],
+      optionalItems: this.fb.array([]),
+      costs: this.fb.array([]),
+    });
+    costs.forEach((c: any) => this.patchCost(c));
+    this.form.markAsDirty();
+    this.forms = [this.form];
+    this.attach();
+  }
+
+  // --- step 2 helpers --------------------------------------------------------
+
+  get paymentTermsControl(): AbstractControl {
+    return this.form.get('paymentTerms')!;
+  }
+
+  addCost(type: CostType): void {
+    const group = this.fb.group({
+      type: [type],
+      ...(type === 'Additional Cost' ? { name: ['', Validators.required] } : {}),
+      ...(type === 'Supplier Discount' ? { supplierId: [null as string | null, Validators.required] } : {}),
+      value: [null as number | null, Validators.required],
+    });
+    this.costs.push(group);
+    this.form.markAsDirty();
+  }
+
+  private patchCost(cost: { type?: string; value?: number | null; name?: string; supplierId?: string }): void {
+    const type = (cost.type || 'Additional Cost') as CostType;
+    this.costs.push(this.fb.group({
+      type: [type],
+      ...(type === 'Additional Cost' ? { name: [cost.name ?? '', Validators.required] } : {}),
+      ...(type === 'Supplier Discount' ? { supplierId: [cost.supplierId || null, Validators.required] } : {}),
+      value: [cost.value ?? null, Validators.required],
+    }));
+  }
+
+  removeCost(i: number): void {
+    this.costs.removeAt(i);
+    this.form.markAsDirty();
+  }
+
+  onExistingFileRemoved(index: number): void {
+    this.removedFiles.push(...this.existingFiles.splice(index, 1));
+  }
+
+  fileLabel(file: any): string {
+    return file?.name || file?.originalname || file?.fileName || 'Attachment';
+  }
+
+  // --- state -----------------------------------------------------------------
+
+  private queueRecompute(): void {
+    if (this.recomputeQueued) return;
+    this.recomputeQueued = true;
+    queueMicrotask(() => {
+      this.recomputeQueued = false;
+      this.recompute();
+    });
+  }
+
+  private recompute(): void {
+    if (!this.form) return;
+    const v = this.form.getRawValue();
+    const option = (v.optionalItems as any[])[this.selectedOption];
+    const lines = ((option?.items as any[]) || []).flatMap((it) =>
+      (it.itemDetails as any[]).map((d) => ({ selected: !!d.dealSelected, supplierId: d.supplierId })),
     );
+    const costs = v.costs as DealCost[];
+    const sum = (type: string) => costs.filter((c) => c.type === type).reduce((s, c) => s + (Number(c.value) || 0), 0);
+    this.costAdjustment = sum('Additional Cost') - sum('Supplier Discount');
+    this.discountAdjustment = sum('Customer Discount');
+    this.lineCount = lines.length;
+    this.selectedCount = lines.filter((l) => l.selected).length;
+    this.allSelected = this.lineCount > 0 && this.selectedCount === this.lineCount;
+
+    const used = new Set(lines.filter((l) => l.selected && l.supplierId).map((l) => l.supplierId));
+    this.discountSupplierOptions = this.supplierOptions.filter((o) => used.has(o.value));
+
+    const lineIssues: string[] = [];
+    if (!this.lineCount) lineIssues.push('Add the quotation items first (Fetch latest quote items)');
+    else if (!this.selectedCount) lineIssues.push('Select at least one line');
+    const missing = lines.filter((l) => l.selected && !l.supplierId).length;
+    if (missing) lineIssues.push(`${missing} selected line${missing === 1 ? ' needs' : 's need'} a supplier`);
+    if (!missing && this.optionalItems.at(this.selectedOption)?.invalid) lineIssues.push('Fix the highlighted fields');
+    this.lineIssues = lineIssues;
+
+    const termIssues: string[] = [];
+    if (!String(v.paymentTerms ?? '').trim()) termIssues.push('Enter the payment terms');
+    if (this.costs.invalid) termIssues.push('Complete the adjustment rows');
+    this.termIssues = termIssues;
+  }
+
+  next(): void {
+    this.form.markAllAsTouched();
+    this.recompute();
+    this.submitted = true;
+    if (!this.lineIssues.length) {
+      this.submitted = false;
+      this.step = 2;
+    }
+  }
+
+  back(): void {
+    this.step = 1;
+  }
+
+  onSubmit(): void {
+    this.form.markAllAsTouched();
+    this.recompute();
+    this.submitted = true;
+    if (this.lineIssues.length || this.termIssues.length) {
+      if (this.lineIssues.length) this.step = 1;
+      return;
+    }
+    this.saved.emit(this.buildFormData());
+  }
+
+  /** Same contract the backend has always received: `dealData` JSON plus `attachments` files. */
+  private buildFormData(): FormData {
+    const value = this.form.getRawValue();
+    const option = (value.optionalItems as any[])[this.selectedOption];
+    const formData = new FormData();
+    formData.append('dealData', JSON.stringify({
+      paymentTerms: value.paymentTerms,
+      items: (option.items as any[]).map((item) => ({
+        itemName: item.itemName,
+        itemDetails: (item.itemDetails as any[]).map((d) => ({
+          dealSelected: !!d.dealSelected,
+          detail: d.detail,
+          quantity: d.quantity,
+          unitCost: d.unitCost,
+          profit: d.profit,
+          unitSellingPrice: d.unitSellingPrice,
+          availability: d.availability,
+          supplierId: d.supplierId ?? '',
+        })),
+      })),
+      costs: (value.costs as any[]).map((c) => {
+        if (c.type === 'Supplier Discount') return { type: c.type, supplierId: c.supplierId, value: c.value };
+        if (c.type === 'Additional Cost') return { type: c.type, name: c.name, value: c.value };
+        return { type: c.type, value: c.value };
+      }),
+      removedFiles: this.removedFiles,
+      existingFiles: this.existingFiles,
+      totalDiscount: option.totalDiscount ?? 0,
+    }));
+    for (const file of this.newFiles.value) formData.append('attachments', file as Blob);
+    return formData;
   }
 }

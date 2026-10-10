@@ -4,7 +4,6 @@ import {
   MatDialog,
   MatDialogRef,
 } from '@angular/material/dialog';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import {
   dealData,
   priceDetails,
@@ -12,7 +11,6 @@ import {
   QuoteItem,
   QuoteItemDetail,
 } from 'src/app/shared/interfaces/quotation.interface';
-import { UpdateDealsheetComponent } from '../update-dealsheet/update-dealsheet.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ViewCommentComponent } from '../../../assigned-jobs/pages/view-comment/view-comment.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -21,7 +19,7 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { HttpEventType } from '@angular/common/http';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
-import { RejectDealComponent } from '../reject-deal/reject-deal.component';
+import { DealDecisionService } from '../../services/deal-decision.service';
 import {
   CommonModule,
   DatePipe,
@@ -40,6 +38,7 @@ import { SupplierService } from '../../../../core/services/supplier.service';
 import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
 import { PurchaseOrderService } from '../../../../core/services/purchaseOrder/purchaseOrder.service';
 import { PurchaseOrder } from '../../../../shared/interfaces/purchase.interface';
+import { ModalLayoutComponent, ModalFooterButton } from '../../../../shared/components/modal-layout/modal-layout.component';
 import {
   FileUploadModalComponent,
   FileUploadModalData,
@@ -58,18 +57,21 @@ import {
     NgIconsModule,
     MatTooltipModule,
     CommonModule,
+    ModalLayoutComponent,
   ],
 })
 export class ApproveDealComponent implements OnInit {
   isApproving: boolean = false;
   suppliers: Supplier[] = [];
 
+  footerButtons: ModalFooterButton[] = [];
   approvedPo: PurchaseOrder | null = null;
   viewMode: 'deal' | 'po' = 'deal';
 
   constructor(
     public dialogRef: MatDialogRef<ApproveDealComponent>,
     private _dialog: MatDialog,
+    private _decision: DealDecisionService,
     private _quoteService: QuotationService,
     private _employeeService: EmployeeService,
     private _enquiryService: EnquiryService,
@@ -91,7 +93,7 @@ export class ApproveDealComponent implements OnInit {
   userId!: string;
 
   ngOnInit(): void {
-    console.log(this.data.quoteData);
+    this.rebuildFooter();
     this.loadSuppliers();
     this.loadApprovedPo();
     this._employeeService.employeeData$.subscribe((data) => {
@@ -122,10 +124,21 @@ export class ApproveDealComponent implements OnInit {
 
   switchToPoView(): void {
     if (this.approvedPo) this.viewMode = 'po';
+    this.rebuildFooter();
   }
 
   switchToDealView(): void {
     this.viewMode = 'deal';
+    this.rebuildFooter();
+  }
+
+  private rebuildFooter(): void {
+    const buttons: ModalFooterButton[] = [];
+    if (this.viewMode === 'deal' && this.data.approval) {
+      buttons.push({ label: 'Close', theme: 'cancel', onClick: () => this.onClose() });
+      buttons.push({ label: 'Approve', theme: 'success', loading: this.isApproving, onClick: () => this.onApprove() });
+    }
+    this.footerButtons = buttons;
   }
 
   private getPoItem(
@@ -220,28 +233,6 @@ export class ApproveDealComponent implements OnInit {
     });
   }
 
-  onUpdate() {
-    const updateModal = this._dialog.open(UpdateDealsheetComponent, {
-      data: this.data,
-    });
-
-    updateModal.afterClosed().subscribe((dealData: dealData) => {
-      if (dealData) {
-        this._quoteService
-          .saveDealSheet(dealData, this.data.quoteData._id)
-          .subscribe({
-            next: (res) => {
-              this.dialogRef.close({ approve: false, updatedData: res });
-            },
-            error: (error) => {
-              console.error('Error saving deal sheet:', error);
-              this.toast.error('Failed to save deal sheet');
-            },
-          });
-      }
-    });
-  }
-
   calculateUnitPrice(item: any) {
     const decimalMargin = item.profit / 100;
     return Math.ceil(Number((item.unitCost / (1 - decimalMargin)).toFixed(2)));
@@ -274,16 +265,18 @@ export class ApproveDealComponent implements OnInit {
   }
 
   onApprove() {
-    const rejectModal = this._dialog.open(RejectDealComponent, {
-      data: { reject: false },
-      width: '500px',
-    });
-    rejectModal.afterClosed().subscribe(({ submit, comment }) => {
-      if (submit) {
+    this._decision
+      .ask('approved', this.data.quoteData.dealData?.dealId)
+      .subscribe((result) => {
+        if (!result) return;
         this.isApproving = true;
-        this.dialogRef.close({ approve: true, updating: false, comment });
-      }
-    });
+        this.rebuildFooter();
+        this.dialogRef.close({
+          approve: true,
+          updating: false,
+          comment: result.reason,
+        });
+      });
   }
 
   checkAtLeastOneDealSelected(item: any) {

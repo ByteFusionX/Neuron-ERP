@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import {
   dealData,
   priceDetails,
@@ -16,22 +15,18 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { HttpEventType } from '@angular/common/http';
+import { switchMap, take } from 'rxjs';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
-import { RejectDealComponent } from '../reject-deal/reject-deal.component';
+import { DealDecisionService } from '../../services/deal-decision.service';
+import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-error.util';
+import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
+import { statusLabel } from 'src/app/shared/utils/text-format.util';
 import {
   CommonModule,
   DatePipe,
-  NgFor,
-  NgIf,
-  NgSwitch,
-  NgSwitchDefault,
 } from '@angular/common';
 
-import { NgIconsModule } from '@ng-icons/core';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
-import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 import { SupplierService } from '../../../../core/services/supplier.service';
 import { Supplier } from '../../../../shared/interfaces/suppliers.interface';
@@ -41,6 +36,27 @@ import {
   FileUploadModalComponent,
   FileUploadModalData,
 } from '../../../../shared/components/file-upload-modal/file-upload-modal.component';
+import {
+  DetailViewBadge,
+  DetailViewBreadcrumb,
+  DetailViewShellComponent,
+  DetailViewStat,
+  DetailViewTab,
+} from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
+import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
+import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
+import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
+import { DetailMetricsComponent } from 'src/app/shared/components/detail-panel/detail-metrics.component';
+import {
+  DetailDocument,
+  DetailMetric,
+  DetailFootRow,
+  DetailTableColumn,
+} from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 
 interface ViewDealsheetNavState {
   approval: boolean;
@@ -52,27 +68,23 @@ interface ViewDealsheetNavState {
   returnUrl?: string;
 }
 
-interface ApprovalRequiredItem {
-  type?: string;
-  message?: string;
-  approverRole?: string;
-  actual?: number | null;
-  threshold?: number | null;
-}
-
 @Component({
   selector: 'app-view-dealsheet',
   templateUrl: './view-dealsheet.component.html',
   styleUrls: ['./view-dealsheet.component.css'],
   standalone: true,
   imports: [
+    UpdateDealsheetComponent,
     DatePipe,
-    ParseBoldTextPipe,
-    ParseBracketsTextPipe,
-    NumberFormatterPipe,
-    NgIconsModule,
-    MatTooltipModule,
     CommonModule,
+    DetailViewShellComponent,
+    ActionButtonComponent,
+    DetailSectionComponent,
+    DetailFieldComponent,
+    DetailBadgeComponent,
+    DetailTableComponent,
+    DetailDocumentsComponent,
+    DetailMetricsComponent,
   ],
 })
 export class ViewDealsheetComponent implements OnInit {
@@ -84,7 +96,35 @@ export class ViewDealsheetComponent implements OnInit {
   viewMode: 'deal' | 'po' = 'deal';
 
   data!: ViewDealsheetNavState;
-  private returnUrl: string = '/deal-sheet/pendings';
+  returnUrl: string = '/deal-sheet/pendings';
+  tab: 'overview' | 'items' | 'costs' | 'documents' = 'overview';
+  tabs: DetailViewTab[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'items', label: 'Items' },
+    { id: 'costs', label: 'Costs' },
+    { id: 'documents', label: 'Documents' },
+  ];
+  breadcrumbs: DetailViewBreadcrumb[] = [];
+  badges: DetailViewBadge[] = [];
+  stats: DetailViewStat[] = [];
+  itemRows: Record<string, any>[] = [];
+  costRows: Record<string, any>[] = [];
+  documents: DetailDocument[] = [];
+  private docFiles = new Map<string, any>();
+  readonly itemColumns: DetailTableColumn[] = [
+    { key: 'detail', label: 'Item Details', type: 'text', wrap: true },
+    { key: 'quantity', label: 'Qty', type: 'number', align: 'center' },
+    { key: 'unitSellingPrice', label: 'Unit Selling Price', type: 'currency', align: 'right' },
+    { key: 'totalSellingPrice', label: 'Total Selling Price', type: 'currency', align: 'right', total: true },
+    { key: 'unitCost', label: 'Unit Cost', type: 'currency', align: 'right' },
+    { key: 'totalCost', label: 'Total Cost', type: 'currency', align: 'right', total: true },
+    { key: 'supplier', label: 'Supplier', type: 'text' },
+  ];
+  readonly costColumns: DetailTableColumn[] = [
+    { key: 'type', label: 'Type', type: 'text' },
+    { key: 'name', label: 'Name', type: 'text', wrap: true },
+    { key: 'value', label: 'Value', type: 'currency', align: 'right', total: true },
+  ];
 
   constructor(
     private router: Router,
@@ -97,6 +137,7 @@ export class ViewDealsheetComponent implements OnInit {
     private _notificationService: NotificationService,
     private supplierService: SupplierService,
     private _purchaseOrderService: PurchaseOrderService,
+    private _decision: DealDecisionService,
   ) {}
 
   userId!: string;
@@ -104,19 +145,69 @@ export class ViewDealsheetComponent implements OnInit {
   ngOnInit(): void {
     const state = history.state as ViewDealsheetNavState;
 
-    if (!state || !state.quoteData) {
-      this.toast.error(
-        'Deal sheet data is unavailable. Please open it again from the list.',
-      );
-      this.router.navigate([this.returnUrl]);
+    if (state?.quoteData) {
+      this.data = state;
+      if (state.returnUrl) this.returnUrl = state.returnUrl;
+      this.start();
       return;
     }
 
-    this.data = state;
-    if (state.returnUrl) this.returnUrl = state.returnUrl;
+    // Opened by URL (bookmark, shared link, reload in a new tab): there is no list row to reuse, so fetch the deal.
+    const id = this.route.snapshot.paramMap.get('id');
+    if (!id) {
+      this.router.navigate([this.returnUrl]);
+      return;
+    }
+    this._employeeService.employeeData$
+      .pipe(
+        take(1),
+        switchMap((employee) =>
+          this._quoteService.getQuotationById(
+            id,
+            employee?.category?.privileges?.quotation?.viewReport,
+            employee?._id,
+          ),
+        ),
+      )
+      .subscribe({
+        next: (quote) => {
+          if (!quote?.dealData) {
+            this.toast.error('This quotation has no deal sheet yet.');
+            this.router.navigate([this.returnUrl]);
+            return;
+          }
+          const listByStatus: Record<string, string> = {
+            approved: '/deal-sheet/approved',
+            rejected: '/deal-sheet/rejecteds',
+          };
+          this.returnUrl = listByStatus[quote.dealData.status ?? ''] ?? '/deal-sheet/pendings';
+          this.data = {
+            approval: quote.dealData.status === 'pending',
+            quoteData: quote,
+            quoteItems: selectedDealItems(quote.dealData.updatedItems),
+            priceDetails: dealSheetPriceDetails(
+              quote.dealData.updatedItems,
+              quote.dealData.additionalCosts,
+            ),
+            quoteView: false,
+          };
+          this.start();
+        },
+        error: (error) => {
+          this.toast.error(
+            error?.status === 404
+              ? 'Deal sheet not found.'
+              : 'Could not load the deal sheet. Please try again.',
+          );
+          this.router.navigate([this.returnUrl]);
+        },
+      });
+  }
 
+  private start(): void {
     this.loadSuppliers();
     this.loadApprovedPo();
+    this.rebuildView();
     this._employeeService.employeeData$.subscribe((data) => {
       if (data?._id) {
         this.userId = data?._id;
@@ -144,11 +235,15 @@ export class ViewDealsheetComponent implements OnInit {
   }
 
   switchToPoView(): void {
-    if (this.approvedPo) this.viewMode = 'po';
+    if (this.approvedPo) {
+      this.viewMode = 'po';
+      this.rebuildView();
+    }
   }
 
   switchToDealView(): void {
     this.viewMode = 'deal';
+    this.rebuildView();
   }
 
   private getPoItem(
@@ -217,6 +312,7 @@ export class ViewDealsheetComponent implements OnInit {
     this.supplierService.supplierList().subscribe({
       next: (response) => {
         this.suppliers = response.data || response;
+        this.rebuildView();
       },
       error: (error) => {
         console.error('Error loading suppliers:', error);
@@ -243,25 +339,23 @@ export class ViewDealsheetComponent implements OnInit {
     });
   }
 
-  onUpdate() {
-    const updateModal = this._dialog.open(UpdateDealsheetComponent, {
-      data: this.data,
-    });
+  updateOpen = false;
 
-    updateModal.afterClosed().subscribe((dealData: dealData) => {
-      if (dealData) {
-        this._quoteService
-          .saveDealSheet(dealData, this.data.quoteData._id)
-          .subscribe({
-            next: (res) => {
-              this.router.navigate([this.returnUrl]);
-            },
-            error: (error) => {
-              console.error('Error saving deal sheet:', error);
-              this.toast.error('Failed to save deal sheet');
-            },
-          });
-      }
+  onUpdate() {
+    this.updateOpen = true;
+  }
+
+  onUpdateSaved(dealData: FormData) {
+    this._quoteService.saveDealSheet(dealData, this.data.quoteData._id).subscribe({
+      next: () => {
+        this.updateOpen = false;
+        this.toast.success('Deal sheet updated');
+        this.router.navigate([this.returnUrl]);
+      },
+      error: (error) => {
+        console.error('Error saving deal sheet:', error);
+        this.toast.error('Failed to save deal sheet');
+      },
     });
   }
 
@@ -289,6 +383,164 @@ export class ViewDealsheetComponent implements OnInit {
     });
   }
 
+  private rebuildView(): void {
+    if (!this.data?.quoteData) return;
+    const q = this.data.quoteData;
+    const d = q.dealData;
+    const currency = q.currency ? ` ${q.currency}` : '';
+    this.breadcrumbs = [
+      { label: 'Home', link: ['/home'] },
+      { label: 'Deal Sheets', link: [this.returnUrl] },
+      { label: d.dealId || 'Deal Sheet' },
+    ];
+    this.badges = [
+      { label: statusLabel(d.status || 'pending'), tone: this.statusTone(d.status) },
+      ...(this.viewMode === 'po' ? [{ label: 'Purchase Order', tone: 'info' as DetailTone }] : []),
+    ];
+    this.stats = [
+      { label: `Total Selling Price${currency}`, value: this.formatNumber(this.data.priceDetails.totalSellingPrice) },
+      { label: `Total Cost${currency}`, value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryTotalCost : this.data.priceDetails.totalCost) },
+      { label: `Profit${currency}`, value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryProfit : this.data.priceDetails.profit) },
+      { label: 'Profit %', value: `${(this.viewMode === 'po' ? this.poSummaryPerc : this.data.priceDetails.perc).toFixed(2)}%` },
+    ];
+    this.itemRows = this.buildItemRows();
+    this.costRows = this.buildCostRows();
+    this.documents = this.buildDocuments();
+  }
+
+  get headerTitle(): string {
+    return this.data?.quoteData?.dealData?.dealId || '';
+  }
+
+  get headerSubtitle(): string {
+    return this.viewMode === 'po'
+      ? `Purchase Order view for ${this.data?.quoteData?.client?.companyName || ''}`
+      : `Deal sheet for ${this.data?.quoteData?.client?.companyName || ''}`;
+  }
+
+  get headerAvatarText(): string {
+    return this.initials(this.data?.quoteData?.client?.companyName);
+  }
+
+  get salesPersonName(): string {
+    const p = this.data?.quoteData?.createdBy;
+    return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || 'N/A' : 'N/A';
+  }
+
+  get approverName(): string {
+    const approver: any = this.data?.quoteData?.dealData?.approvedBy;
+    return approver && typeof approver === 'object'
+      ? `${approver.firstName ?? ''} ${approver.lastName ?? ''}`.trim()
+      : '';
+  }
+
+  get metricItems(): DetailMetric[] {
+    return [
+      { label: 'Selling price', value: this.formatNumber(this.data.priceDetails.totalSellingPrice) },
+      { label: 'Cost', value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryTotalCost : this.data.priceDetails.totalCost) },
+      { label: 'Profit', value: this.formatNumber(this.viewMode === 'po' ? this.poSummaryProfit : this.data.priceDetails.profit), tone: 'good' },
+      { label: 'Profit %', value: `${(this.viewMode === 'po' ? this.poSummaryPerc : this.data.priceDetails.perc).toFixed(2)}%`, tone: 'info' },
+    ];
+  }
+
+  /** Totals shown in the item table footer, each figure under the column it belongs to. */
+  get itemFootRows(): DetailFootRow[] {
+    const po = this.viewMode === 'po';
+    const cost = po ? this.poSummaryTotalCost : this.data.priceDetails.totalCost;
+    const profit = po ? this.poSummaryProfit : this.data.priceDetails.profit;
+    const perc = po ? this.poSummaryPerc : this.data.priceDetails.perc;
+    const sell = this.data.priceDetails.totalSellingPrice;
+    return [
+      { label: 'Total', emphasis: true, cells: { totalSellingPrice: { value: sell, format: 'currency' }, totalCost: { value: cost, format: 'currency' } } },
+      { label: 'Profit', cells: { totalSellingPrice: { value: profit, format: 'currency' } } },
+      { label: 'Profit %', cells: { totalSellingPrice: { value: perc, format: 'percent' } } },
+    ];
+  }
+
+  statusText = statusLabel;
+
+  statusTone(status?: string): DetailTone {
+    const s = (status || '').toLowerCase();
+    if (s === 'approved') return 'good';
+    if (s === 'rejected') return 'bad';
+    if (s === 'pending') return 'warn';
+    return 'neutral';
+  }
+
+  private buildItemRows(): Record<string, any>[] {
+    const rows: Record<string, any>[] = [];
+    this.data.quoteItems.forEach((item: any) => {
+      const selected = (item?.itemDetails || []).filter((detail: QuoteItemDetail) => detail.dealSelected);
+      if (!selected.length) return;
+      rows.push({ _group: true, label: item.itemName });
+      selected.forEach((detail: QuoteItemDetail) => {
+        const unitCost = this.viewMode === 'po' ? this.getPoUnitCost(detail) : detail.unitCost;
+        rows.push({
+          detail: detail.detail,
+          quantity: detail.quantity,
+          unitSellingPrice: detail.unitSellingPrice,
+          totalSellingPrice: detail.unitSellingPrice * detail.quantity,
+          unitCost,
+          totalCost: this.viewMode === 'po' ? this.getPoItemTotalCost(detail) : detail.quantity * detail.unitCost,
+          supplier: detail.supplierName || (detail.supplierId ? this.getSupplierName(detail.supplierId) : '-') || '-',
+        });
+      });
+    });
+    return rows;
+  }
+
+  private buildCostRows(): Record<string, any>[] {
+    return (this.data.quoteData.dealData.additionalCosts || []).map((cost: any) => ({
+      type: cost.type || 'Cost',
+      name: cost.type === 'Supplier Discount'
+        ? cost.supplierDetails?.supplierName || cost.name || 'Supplier discount'
+        : cost.name || cost.type || 'Additional cost',
+      value: cost.value || 0,
+    }));
+  }
+
+  private buildDocuments(): DetailDocument[] {
+    const docs: DetailDocument[] = [];
+    this.docFiles.clear();
+    const add = (file: any, source: string) => {
+      const name = file.originalname || file.fileName || 'Document';
+      const id = `${source}:${file.fileName}`;
+      this.docFiles.set(id, file);
+      docs.push({
+        id,
+        name,
+        uploadedBy: source,
+        kind: (name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4),
+      });
+    };
+    (this.data.quoteData.lpoFiles || []).forEach((file: any) => add(file, 'LPO'));
+    return docs;
+  }
+
+  onDocumentOpen(doc: DetailDocument): void {
+    const file = this.docFiles.get(doc.id);
+    if (file) this.onViewPDF(file);
+  }
+
+  onDocumentDownload(doc: DetailDocument): void {
+    const file = this.docFiles.get(doc.id);
+    if (file) this.onDownloadClicks(file);
+  }
+
+  private formatNumber(value: number): string {
+    return new NumberFormatterPipe().transform(value || 0);
+  }
+
+  private initials(name?: string): string {
+    return (name || '')
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+  }
+
   openReview() {
     this._dialog.open(ViewCommentComponent, {
       data: { comment: this.data.quoteData.dealData.comments[0] },
@@ -297,85 +549,49 @@ export class ViewDealsheetComponent implements OnInit {
   }
 
   onApprove() {
-    const rejectModal = this._dialog.open(RejectDealComponent, {
-      data: { reject: false },
-      width: '500px',
-    });
-    rejectModal.afterClosed().subscribe(({ submit, comment }) => {
-      if (submit) {
+    this._decision
+      .ask('approved', this.data.quoteData.dealData.dealId)
+      .subscribe((result) => {
+        if (!result) return;
         this.isApproving = true;
         this._quoteService
-          .approveDeal(this.data.quoteData._id, comment, this.userId)
+          .approveDeal(this.data.quoteData._id, result.reason, this.userId)
           .subscribe({
             next: (res) => {
               this.isApproving = false;
               if (res.success) {
+                this.toast.success('Deal approved');
                 this.router.navigate([this.returnUrl]);
               }
             },
             error: (error) => {
               this.isApproving = false;
-              console.error('Error approving deal:', error);
-              this.showApprovalGateError(error);
+              this.toast.error(describeApprovalGateError(error, 'Failed to approve deal'));
             },
           });
-      }
-    });
-  }
-
-  private showApprovalGateError(error: any): void {
-    const message = error?.error?.message || 'Failed to approve deal';
-    const missing = Array.isArray(error?.error?.missing)
-      ? error.error.missing
-      : [];
-    const approvalRequired = Array.isArray(error?.error?.approvalRequired)
-      ? (error.error.approvalRequired as ApprovalRequiredItem[])
-      : [];
-
-    if (missing.length) {
-      this.toast.error(
-        `${message}: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` and ${missing.length - 4} more` : ''}`,
-      );
-      return;
-    }
-
-    if (approvalRequired.length) {
-      const first = approvalRequired[0];
-      const approver = first?.approverRole
-        ? ` Required approver: ${first.approverRole}.`
-        : '';
-      this.toast.error(`${first?.message || message}.${approver}`);
-      return;
-    }
-
-    this.toast.error(message);
+      });
   }
 
   onReject() {
-    const rejectModal = this._dialog.open(RejectDealComponent, {
-      data: { reject: true },
-      width: '500px',
-    });
-    rejectModal.afterClosed().subscribe(({ submit, comment }) => {
-      if (submit && comment) {
+    this._decision
+      .ask('rejected', this.data.quoteData.dealData.dealId)
+      .subscribe((result) => {
+        if (!result?.reason) return;
         this.isRejecting = true;
         this._quoteService
-          .rejectDeal(comment, this.data.quoteData._id)
+          .rejectDeal(result.reason, this.data.quoteData._id)
           .subscribe({
-            next: (res) => {
+            next: () => {
               this.isRejecting = false;
-              if (res) {
-                this.router.navigate([this.returnUrl]);
-              }
+              this.toast.success('Deal rejected');
+              this.router.navigate([this.returnUrl]);
             },
             error: (error) => {
               this.isRejecting = false;
-              console.error('Error rejecting deal:', error);
-              this.toast.error('Failed to reject deal');
+              this.toast.error(error?.error?.message || 'Failed to reject deal');
             },
           });
-      }
-    });
+      });
   }
 
   checkAtLeastOneDealSelected(item: any) {

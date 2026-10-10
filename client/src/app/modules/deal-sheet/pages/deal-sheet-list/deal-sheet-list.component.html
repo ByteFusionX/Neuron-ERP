@@ -10,10 +10,12 @@
         [columns]="columns"
         [loading]="isLoading"
         [pageSize]="row"
-        searchPlaceholder="Search by Deal Id"
+        searchPlaceholder="Search deal, quote, customer or sales person"
         emptyMessage="No deal sheets found"
         [rowActions]="rowActions"
         [views]="views"
+        [initialViewId]="activeViewId"
+        [syncViewWithUrl]="false"
         (viewChange)="onViewChange($event)"
         [rowAccent]="rowAccent"
         [detailLoading]="detailLoading"
@@ -25,28 +27,23 @@
         (rowAction)="onRowAction($event)">
 
         <ng-template #detailAsideTemplate let-row>
-            <span *ngIf="row.dealData?.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
-                [ngClass]="dealStatusBadgeClasses[row.dealData?.status] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ row.dealData?.status }}</span>
-            <ng-template #asideStatusEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+                <span *ngIf="row.dealData?.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
+                    [ngClass]="dealStatusBadgeClasses[row.dealData?.status] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ statusText(row.dealData?.status) }}</span>
+                <ng-template #asideStatusEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
+            </div>
+        </ng-template>
+
+        <!-- right: permanent, every tab (filled) -->
+        <ng-template #detailFooterTemplate let-row let-tab="tab">
+            <app-action-button variant="primary" (click)="openDealSheetView(row)" icon="view">View full deal sheet</app-action-button>
         </ng-template>
 
         <ng-template #detailMetaTemplate let-row>
-            <div class="qt-meta">
-                <p class="qt-meta-label">Customer</p>
-                <p class="qt-meta-value">{{ row.client?.companyName }}</p>
-            </div>
-            <div class="qt-meta">
-                <p class="qt-meta-label">Payment Terms</p>
-                <p class="qt-meta-value">{{ row.dealData?.paymentTerms }}</p>
-            </div>
-            <div class="qt-meta">
-                <p class="qt-meta-label">Amount</p>
-                <p class="qt-meta-value">{{ formatAmount(row) }}</p>
-            </div>
-            <div class="qt-meta">
-                <p class="qt-meta-label">Date</p>
-                <p class="qt-meta-value">{{ row.dealData?.savedDate | date: 'dd MMM yyyy' }}</p>
-            </div>
+            <div class="dealsheet-meta"><p class="dealsheet-meta-label">Customer</p><p class="dealsheet-meta-value">{{ row.client?.companyName }}</p></div>
+            <div class="dealsheet-meta"><p class="dealsheet-meta-label">Department</p><p class="dealsheet-meta-value">{{ row.department?.departmentName }}</p></div>
+            <div class="dealsheet-meta"><p class="dealsheet-meta-label">Sales person</p><p class="dealsheet-meta-value">{{ row.createdBy?.firstName }} {{ row.createdBy?.lastName }}</p></div>
+            <div class="dealsheet-meta"><p class="dealsheet-meta-label">Date</p><p class="dealsheet-meta-value">{{ row.dealData?.savedDate | date: 'dd MMM yyyy' }}</p></div>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">
@@ -60,27 +57,22 @@
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'documents'">
-                    <div class="flex flex-col gap-4">
-                        <div>
-                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Customer LPO</p>
-                            <button type="button" *ngIf="row.lpoFiles?.length" (click)="openLpoFiles(row)"
-                                class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-erp-surface-dark-alt">
-                                <ng-icon name="heroEye" class="h-4 w-4"></ng-icon>
-                                View LPO Files ({{ row.lpoFiles?.length }})
-                            </button>
-                            <span *ngIf="!row.lpoFiles?.length" class="text-sm text-gray-400 dark:text-gray-600">No LPO files uploaded.</span>
-                        </div>
-                        <div>
-                            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Deal Sheet Attachments</p>
-                            <app-detail-documents
-                                emptyMessage="No attachments uploaded."
-                                [documents]="dealDocuments(row)"
-                                (open)="onDealDocPreview(row, $event)"
-                                (download)="onDealDocDownload(row, $event)"></app-detail-documents>
-                        </div>
-                    </div>
+                    <app-detail-documents
+                        title="Customer LPO"
+                        emptyMessage="No customer LPO files available."
+                        [documents]="dealDocuments(row)"
+                        (open)="onDealDocPreview(row, $event)"
+                        (download)="onDealDocDownload(row, $event)"></app-detail-documents>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'history'">
+                    <app-detail-timeline
+                        [entries]="(historyFor(row) | async) ?? []"
+                        emptyMessage="No history recorded yet."></app-detail-timeline>
                 </ng-container>
             </ng-container>
         </ng-template>
     </app-data-grid>
 </div>
+
+<app-update-dealsheet [open]="updateOpen" [data]="updateData" (saved)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-update-dealsheet>

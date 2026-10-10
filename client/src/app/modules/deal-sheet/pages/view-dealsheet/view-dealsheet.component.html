@@ -1,270 +1,115 @@
-<div class="bg-white mx-5 mt-5 rounded-2xl" *ngIf="data">
-    <div class="border-b p-3 px-6 flex justify-between items-center bg-white">
-        <div class="flex items-center gap-3">
-            <h3 class="text-md font-medium">{{ viewMode === 'po' ? 'Purchase Order' : 'Deal Sheet' }}</h3>
-            <button *ngIf="approvedPo && viewMode === 'deal'"
-                class="border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 rounded px-3 py-1 text-xs font-medium"
-                (click)="switchToPoView()">
-                View Purchase Order
-            </button>
-            <button *ngIf="approvedPo && viewMode === 'po'"
-                class="border border-gray-300 text-gray-700 bg-gray-50 hover:bg-gray-100 rounded px-3 py-1 text-xs font-medium"
-                (click)="switchToDealView()">
-                Back to Deal Sheet
-            </button>
-        </div>
-    </div>
+<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+    <app-detail-view-shell
+        class="min-h-0 flex-1"
+        [loading]="false"
+        [empty]="!data"
+        emptyTitle="Deal sheet not found"
+        emptyMessage="Please open the deal sheet again from the list."
+        [emptyLink]="[returnUrl]"
+        emptyLinkLabel="Back to deal sheets"
+        [breadcrumbs]="breadcrumbs"
+        [avatarText]="headerAvatarText"
+        [title]="headerTitle"
+        [subtitle]="headerSubtitle"
+        [badges]="badges"
+        [stats]="stats"
+        [tabs]="tabs"
+        [activeTab]="tab"
+        (activeTabChange)="tab = $any($event)"
+        [hasSidebar]="true"
+        *ngIf="data"
+    >
+        <ng-container footerLeft>
+            <app-action-button variant="outline" *ngIf="approvedPo && viewMode === 'deal'" (click)="switchToPoView()" icon="view">View Purchase Order</app-action-button>
+            <app-action-button variant="outline" *ngIf="approvedPo && viewMode === 'po'" (click)="switchToDealView()">Back to Deal Sheet</app-action-button>
+        </ng-container>
+        <ng-container footerRight>
+            <app-action-button variant="secondary" (click)="onClose()">Close</app-action-button>
+            <app-action-button variant="primary" *ngIf="data.approval && viewMode === 'deal'" [disabled]="isRejecting" (click)="onReject()">
+                {{ isRejecting ? 'Rejecting...' : 'Reject' }}
+            </app-action-button>
+            <app-action-button variant="primary" *ngIf="data.approval && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
+                {{ isApproving ? 'Approving...' : 'Approve' }}
+            </app-action-button>
+            <app-action-button variant="primary" *ngIf="data.quoteView && data.quoteData.dealData.status === 'rejected' && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>
+        </ng-container>
 
-    <div class="flex flex-col py-6 mx-auto text-gray-900 bg-white px-6 overflow-y-scroll max-h-[77vh] no-scrollbar">
+        <ng-container sidebar>
+            <app-detail-section title="Deal">
+                <app-detail-field label="Status">
+                    <app-detail-badge [label]="statusText(data.quoteData.dealData.status || 'pending')" [tone]="statusTone(data.quoteData.dealData.status)"></app-detail-badge>
+                </app-detail-field>
+                <app-detail-field label="Saved date">{{ data.quoteData.dealData.savedDate | date: 'dd MMM yyyy' }}</app-detail-field>
+                <app-detail-field label="Payment terms">{{ data.quoteData.dealData.paymentTerms || 'N/A' }}</app-detail-field>
+                <app-detail-field label="Approved by" *ngIf="approverName">{{ approverName }}</app-detail-field>
+            </app-detail-section>
 
-        <!-- Deal details -->
-        <section class="rounded-md border border-gray-200 bg-white mb-8">
-            <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
-                <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Deal Details</h4>
-                <div class="flex items-center gap-2" *ngIf="data?.quoteData?.dealData?.attachments?.length">
-                    <button type="button" (click)="openAttachments()"
-                        class="inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-gray-400 hover:bg-gray-50">
-                        <ng-icon name="heroDocumentText" class="text-sm"></ng-icon>
-                        Attachments
-                        <span class="rounded-full bg-gray-100 px-1.5 text-[11px] text-gray-600">{{ data.quoteData.dealData.attachments.length }}</span>
-                    </button>
-                </div>
+            <app-detail-section title="Quotation">
+                <app-detail-field label="Quote ID" numeric>{{ data.quoteData.quoteId || 'N/A' }}</app-detail-field>
+                <app-detail-field label="Revision" numeric>{{ data.quoteData.revision ?? 0 }}</app-detail-field>
+                <app-detail-field label="Sales person">{{ salesPersonName }}</app-detail-field>
+                <app-detail-field label="Department">{{ data.quoteData.department?.departmentName || 'N/A' }}</app-detail-field>
+            </app-detail-section>
+
+            <app-detail-section title="Customer">
+                <app-detail-field label="Company">{{ data.quoteData.client?.companyName || 'N/A' }}</app-detail-field>
+                <app-detail-field label="LPO">{{ data.quoteData.lpoFiles?.length ? data.quoteData.lpoFiles.length + ' file(s)' : 'Not uploaded' }}</app-detail-field>
+                <app-detail-field label="Currency">{{ data.quoteData.currency || 'N/A' }}</app-detail-field>
+            </app-detail-section>
+        </ng-container>
+
+        <div tabBody [ngSwitch]="tab">
+            <div *ngSwitchCase="'overview'" class="space-y-6">
+                <app-detail-section title="Deal Details">
+                    <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <app-detail-field label="Customer" stacked>{{ data.quoteData.client?.companyName || 'N/A' }}</app-detail-field>
+                        <app-detail-field label="Deal ID" stacked>{{ data.quoteData.dealData.dealId || 'N/A' }}</app-detail-field>
+                        <app-detail-field label="Quote ID" stacked>{{ data.quoteData.quoteId || 'N/A' }}</app-detail-field>
+                        <app-detail-field label="Date" stacked>{{ data.quoteData.dealData.savedDate | date: 'dd MMM yyyy' }}</app-detail-field>
+                        <app-detail-field label="Sales Person" stacked>{{ salesPersonName }}</app-detail-field>
+                        <app-detail-field label="Payment Terms" stacked>{{ data.quoteData.dealData.paymentTerms || 'N/A' }}</app-detail-field>
+                    </div>
+                </app-detail-section>
+
+                <app-detail-section title="Summary">
+                    <app-detail-metrics [items]="metricItems"></app-detail-metrics>
+                </app-detail-section>
             </div>
-            <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-4 px-4 py-4">
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Customer Name</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{ data.quoteData.client.companyName }}
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Deal ID</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        <div class="flex gap-2 items-center">
-                            <p>{{ data.quoteData.dealData.dealId }}</p>
-                            <div *ngIf="data.quoteView" [ngSwitch]="data.quoteData.dealData.status"
-                                class="flex items-center space-x-2">
-                                <div *ngSwitchCase="'pending'"
-                                    class="bg-yellow-100 text-yellow-800 border border-yellow-300 rounded-lg px-4  text-sm">
-                                    Pending
-                                </div>
-                                <div *ngSwitchCase="'approved'"
-                                    class="bg-green-100 text-green-800 border border-green-300 rounded-lg px-4  text-sm">
-                                    Approved
-                                </div>
-                                <div (click)="openReview()" *ngSwitchCase="'rejected'"
-                                    class="flex justify-center items-center gap-2 bg-red-100 text-red-800 border cursor-pointer border-red-300 rounded-lg px-4  text-sm">
-                                    Rejected <ng-icon name="heroInformationCircle"
-                                        class="text-center text-gray-700 text-md"></ng-icon>
-                                </div>
-                                <div *ngSwitchDefault
-                                    class="bg-gray-100 text-gray-800 border border-gray-300 rounded-lg px-4  text-sm">
-                                    Unknown Status
-                                </div>
-                            </div>
-                        </div>
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Date</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{ data.quoteData.dealData.savedDate | date }}
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Sales Person Name</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{ data.quoteData.createdBy.firstName + ' ' + data.quoteData.createdBy.lastName }}
-                    </dd>
-                </div>
-                <div class="min-w-0">
-                    <dt class="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Payment Terms</dt>
-                    <dd class="mt-0.5 text-md leading-snug text-gray-900 break-words">
-                        {{ data.quoteData.dealData.paymentTerms }}
-                    </dd>
-                </div>
-            </dl>
-        </section>
 
-        <div class="w-full mb-8">
-            <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-3">
-                Items
-            </label>
-        <div class="max-h-[450px] overflow-y-scroll no-scrollbar">
-            <table class="w-full text-sm text-left rtl:text-right text-gray-500 border mb-4 border-collapse bg-white">
-                <thead class="text-xs text-gray-700 uppercase bg-gray-50  sticky top-0 border">
-                    <tr class="border">
-                        <th scope="col" class=" border px-2">
-                            Sl/<br>No.
+            <div *ngSwitchCase="'items'">
+                <app-detail-table
+                    [title]="viewMode === 'po' ? 'Purchase order costs' : 'Deal items'"
+                    [columns]="itemColumns"
+                    [rows]="itemRows"
+                    [currency]="data.quoteData.currency"
+                    [footRows]="itemFootRows"
+                    groupStyle="band"
+                    numbered
+                    groupTotals
+                    spread
+                    emptyMessage="No selected deal items."></app-detail-table>
+            </div>
 
-                        </th>
-                        <th scope="col" class=" w-96 border " key="itemDetail">
-                            <div class="px-6 py-3">Item Details</div>
+            <div *ngSwitchCase="'costs'">
+                <app-detail-table
+                    title="Additional costs and discounts"
+                    [columns]="costColumns"
+                    [rows]="costRows"
+                    [currency]="data.quoteData.currency"
+                    showTotals
+                    emptyMessage="No additional costs or discounts."></app-detail-table>
+            </div>
 
-                        </th>
-                        <th scope="col" class=" border   text-center min-w-[66px]">
-                            <div class="px-2 py-3">QTY</div>
-                        </th>
-                        <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Unit Selling Price ({{ data.quoteData.currency }})</div>
-                        </th>
-                        <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Total Selling Price ({{ data.quoteData.currency }})</div>
-                        </th>
-                        <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Unit Cost ({{ data.quoteData.currency }})</div>
-                        </th>
-                        <th scope="col" class="border   text-center">
-                            <div class="px-6 py-3">Total Cost ({{ data.quoteData.currency }})</div>
-                        </th>
-
-                        <th scope="col" class="border   text-center min-w-[90px]">
-                            <div class="px-2 py-3">Supplier Name</div>
-                        </th>
-
-                    </tr>
-                </thead>
-                <tbody>
-                    <ng-container *ngFor="let item of data.quoteItems; let i = index">
-                        <ng-container *ngIf="checkAtLeastOneDealSelected(item)">
-                            <tr>
-                                <td colspan="8" class="border px-6 py-2 bg-gray-50">
-                                    <div
-                                        class="flex justify-center items-center text-md text-black font-medium uppercase">
-                                        {{ item?.itemName }}
-                                    </div>
-                                </td>
-                            </tr>
-
-                            <ng-container *ngFor="let detail of item?.itemDetails; let j = index">
-                                <tr class="border-b text-gray-800" *ngIf="detail.dealSelected">
-                                    <td class="px-2 border text-center">
-                                        {{ j + 1 }}
-                                    </td>
-                                    <th scope="row" class="px-6 border font-normal py-2 whitespace-pre-line">
-                                        <div [innerHTML]="detail.detail | parseBracketsText | parseBoldText"></div>
-                                    </th>
-                                    <td class="px-2 border text-center">
-                                        {{ detail.quantity }}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{ detail.unitSellingPrice| numberFormatter }}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{ detail.unitSellingPrice * detail.quantity | numberFormatter }}
-                                    </td>
-                                    <td class="px-2 py-2 border text-center">
-                                        {{ (viewMode === 'po' ? getPoUnitCost(detail) : detail.unitCost) | numberFormatter }}
-                                    </td>
-                                    <td class="py-2 border text-center">
-                                        {{ (viewMode === 'po' ? getPoItemTotalCost(detail) : (detail.quantity * detail.unitCost)) | numberFormatter }}
-                                    </td>
-                                    <td class="py-2 border text-center">
-                                        <!-- Legacy supplier data -->
-                                        <span *ngIf="detail.supplierName || !detail.supplierId">
-                                            {{ detail.supplierName || '-' }}
-                                        </span>
-                                        <!-- New supplier data -->
-                                        <span *ngIf="detail.supplierId && !detail.supplierName">
-                                            {{ getSupplierName(detail.supplierId) || '-' }}
-                                        </span>
-                                    </td>
-                                </tr>
-                            </ng-container>
-                        </ng-container>
-                    </ng-container>
-                    <tr class="border-none text-gray-800">
-                        <td colspan="8" class="px-6 py-2 "></td>
-                    </tr>
-                    <ng-container *ngFor="let cost of data.quoteData.dealData.additionalCosts;let i = index">
-                        <tr class=" border-b text-gray-800 mt-4">
-
-                            <td *ngIf="cost.type" colspan="2"
-                                class="px-6 border bg-gray-50 py-2 whitespace-pre-line font-semibold">
-                                {{ cost?.type }}
-                            </td>
-                            <td colspan="1" class="border px-6 py-2 bg-gray-50" *ngIf="!cost.type"></td>
-                            <td [attr.colspan]="cost.type ? (cost.type === 'Customer Discount' ? 2 : 4) : 5"
-                                class="border px-6 py-2">
-                                <span *ngIf="cost.type === 'Supplier Discount' && cost.supplierDetails">
-                                    {{ cost.supplierDetails.supplierName }}
-                                </span>
-                                <span *ngIf="cost.type === 'Supplier Discount' && cost.name && !cost.supplierDetails">
-                                    {{ cost.name }}
-                                </span>
-                                <span *ngIf="cost.type !== 'Supplier Discount'">
-                                    {{ cost?.name }}
-                                </span>
-                            </td>
-                            <td colspan="1" class=" border py-2 text-center">
-                                {{ cost.value }}
-                            </td>
-                            <td [attr.colspan]="cost.type ? (cost.type === 'Customer Discount' ? 5 : 3) : 2"
-                                class="border px-6 py-2 bg-gray-50">
-
-                            </td>
-                        </tr>
-                    </ng-container>
-                </tbody>
-
-            </table>
+            <div *ngSwitchCase="'documents'">
+                <app-detail-documents
+                    title="Customer LPO"
+                    [documents]="documents"
+                    emptyMessage="No customer LPO files available."
+                    (open)="onDocumentOpen($event)"
+                    (download)="onDocumentDownload($event)"></app-detail-documents>
+            </div>
         </div>
-        </div>
-
-        <!-- Totals -->
-        <div class="mb-8">
-            <section class="rounded-md border border-gray-200 bg-white">
-                <div class="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                    <h4 class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Summary</h4>
-                </div>
-                <dl class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 px-4">
-                    <div class="flex flex-col justify-center py-3 pr-4">
-                        <dt class="font-medium text-gray-700">Profit</dt>
-                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryProfit : data.priceDetails.profit) | numberFormatter }} {{ data.quoteData.currency }}</dd>
-                    </div>
-                    <div class="flex flex-col justify-center py-3 px-4">
-                        <dt class="font-medium text-gray-700">Profit %</dt>
-                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryPerc : data.priceDetails.perc).toFixed(3) }}</dd>
-                    </div>
-                    <div class="flex flex-col justify-center py-3 px-4">
-                        <dt class="font-medium text-gray-700">Total Cost</dt>
-                        <dd class="text-xl">{{ (viewMode === 'po' ? poSummaryTotalCost : data.priceDetails.totalCost) | numberFormatter }} {{ data.quoteData.currency }}</dd>
-                    </div>
-                    <div class="flex flex-col justify-center py-3 pl-4">
-                        <dt class="font-medium text-gray-700">Total Selling Price</dt>
-                        <dd class="text-xl">{{ data.priceDetails.totalSellingPrice | numberFormatter }} {{ data.quoteData.currency }}</dd>
-                    </div>
-                </dl>
-            </section>
-        </div>
-    </div>
-
-    <div class="border-t py-3 px-6 flex justify-end gap-2 bg-white" *ngIf="data.approval && viewMode === 'deal'">
-        <div class="flex gap-2 ">
-            <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onClose()">
-                Close
-            </button>
-            <button class="border text-white font-medium py-2 px-4 rounded text-sm bg-red-600" (click)="onReject()">
-                <ng-icon *ngIf="isRejecting" class="spin" name="heroArrowPath"></ng-icon>
-                Reject
-            </button>
-            <button class="border text-white font-medium py-2 px-4 rounded text-sm bg-green-600" (click)="onApprove()">
-                <ng-icon *ngIf="isApproving" class="spin" name="heroArrowPath"></ng-icon>
-                Approve
-            </button>
-        </div>
-    </div>
-
-    <div class="border-t py-3 px-6 flex justify-end gap-2 bg-white"
-        *ngIf="data.quoteView && data.quoteData.dealData.status == 'rejected' && viewMode === 'deal'">
-        <div class="flex gap-2 ">
-            <button class="border text-black font-medium py-2 px-4 rounded text-sm" (click)="onClose()">
-                Close
-            </button>
-            <button class="border text-white font-medium py-2 px-4 rounded text-sm bg-purple-600 hover:bg-purple-700"
-                (click)="onUpdate()">
-                Edit Deal (Rejected)
-            </button>
-        </div>
-    </div>
+    </app-detail-view-shell>
 </div>
+
+<app-update-dealsheet [open]="updateOpen" [data]="data" (saved)="onUpdateSaved($event)" (closed)="updateOpen = false"></app-update-dealsheet>
