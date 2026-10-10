@@ -14,6 +14,7 @@ interface PurchaseOrder extends Document {
     purchaseId: any;
     jobId: any;
     quoteId: any;
+    rfqId?: any;
     etaTerms: string;
     paymentTerms: string;
     shippingTerms: string;
@@ -126,6 +127,11 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         quoteId: {
             type: Schema.Types.ObjectId,
             ref: "Quotation",
+        },
+        // The RFQ the supplier price came from, for sales-vs-final price variance.
+        rfqId: {
+            type: Schema.Types.ObjectId,
+            ref: "Rfq",
         },
         createdAt: {
             type: Date,
