@@ -643,13 +643,13 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                     }
                 }
             },
-            ...(poProgress === 'remaining' ? [{
+            ...(poProgress === 'ready' ? [{
                 $match: {
                     status: PurchaseRequestStatus.Approved,
-                    hasRemainingPo: true
+                    issuedPoQuantity: { $lte: 0 }
                 }
             }] : []),
-            ...(poProgress === 'in-progress' ? [{
+            ...(poProgress === 'remaining' ? [{
                 $match: {
                     status: PurchaseRequestStatus.Approved,
                     issuedPoQuantity: { $gt: 0 },
@@ -1154,7 +1154,7 @@ export const updatePurchaseItems = async (req: Request, res: Response, next: Nex
     }
 };
 
-export const updatePurchaseComparisons = async (req: Request, res: Response, next: NextFunction) => {
+export const updatePurchaseSupplierOffers = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
         const tokenData = req.user;
@@ -1224,7 +1224,7 @@ export const updatePurchaseComparisons = async (req: Request, res: Response, nex
 
         return res.status(200).json({
             success: true,
-            message: "Purchase comparisons updated successfully",
+            message: "Purchase supplier offers updated successfully",
             data: updatedPurchaseRequest,
             status: 200
         });
@@ -2811,49 +2811,6 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
 //         return res.status(200).json({
 //             success: true,
 //             message: "Purchase request deleted successfully",
-//             status: 200
-//         });
-//     } catch (error) {
-//         next(error);
-//     }
-// };
-
-// // Update comparison summary
-// export const updateComparisonSummary = async (req: Request, res: Response, next: NextFunction) => {
-//     try {
-//         const { id } = req.params;
-//         const { comparisonSummary } = req.body;
-
-//         if (!comparisonSummary) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "Comparison summary is required",
-//                 status: 400
-//             });
-//         }
-
-//         const updatedPurchaseRequest = await PurchaseRequest.findOneAndUpdate(
-//             { _id: id, isDeleted: false },
-//             {
-//                 // comparisonSummary,
-//                 updatedBy: req.user?._id,
-//                 updatedAt: new Date()
-//             },
-//             { new: true }
-//         );
-
-//         if (!updatedPurchaseRequest) {
-//             return res.status(404).json({
-//                 success: false,
-//                 message: "Purchase request not found",
-//                 status: 404
-//             });
-//         }
-
-//         return res.status(200).json({
-//             success: true,
-//             message: "Comparison summary updated successfully",
-//             data: updatedPurchaseRequest,
 //             status: 200
 //         });
 //     } catch (error) {

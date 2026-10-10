@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { PurchaseData, ProductPartNumber, QuoteItem, QuoteItemDetails } from 'src/app/shared/interfaces/purchase.interface';
-import { ComparisonFormComponent } from '../comparison-form/comparison-form.component';
+import { SupplierOfferFormComponent } from '../supplier-offer-form/supplier-offer-form.component';
 import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
@@ -28,7 +28,7 @@ interface PartNumberDropdownOption {
 }
 
 @Component({
-  selector: 'app-comparison-sheet',
+  selector: 'app-supplier-offers',
   imports: [
     CommonModule,
     FormsModule,
@@ -41,11 +41,11 @@ interface PartNumberDropdownOption {
     DetailCalloutComponent,
     DetailPanelIconComponent,
   ],
-  templateUrl: './comparison-sheet.component.html',
-  styleUrl: './comparison-sheet.component.css'
+  templateUrl: './supplier-offers.component.html',
+  styleUrl: './supplier-offers.component.css'
 })
-export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestroy {
-  /** Renders the comparison sheet in a slide-over instead of as a page, stacked above the create/edit PR drawer. */
+export class SupplierOffersComponent implements OnInit, AfterViewInit, OnDestroy {
+  /** Renders supplier offers in a slide-over instead of as a page, stacked above the create/edit PR drawer. */
   @Input() drawer = false;
   /** Drawer mode: the PR to compare against (replaces the `purchaseId` route param). */
   @Input() purchaseIdInput: string | null = null;
@@ -240,7 +240,7 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
     const updatedItems = this.updateComparisonList();
     
     this.subscriptions.add(
-      this.purchaseService.updatePurchaseComparisons(this.purchaseId, updatedItems).subscribe({
+      this.purchaseService.updatePurchaseSupplierOffers(this.purchaseId, updatedItems).subscribe({
         next: (res) => {
           if (res.success) {
             this.toaster.success('Supplier offers updated successfully');
@@ -345,11 +345,11 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
     return items[0];
   }
 
-  onComparisonClicks() {
+  onAddOffer() {
     const selectedItemDetail = this.findSelectedItemDetail();
     const quantity = selectedItemDetail?.quantity || 0;
 
-    const dialog = this.modal.open<any>(ComparisonFormComponent, {
+    const dialog = this.modal.open<any>(SupplierOfferFormComponent, {
       width: '600px',
       closeOnBackdrop: false,
       data: {
@@ -379,12 +379,12 @@ export class ComparisonSheetComponent implements OnInit, AfterViewInit, OnDestro
     const selectedItemDetail = this.findSelectedItemDetail();
     const wasSelected = comparison.selected;
 
-    const dialog = this.modal.open<any>(ComparisonFormComponent, {
+    const dialog = this.modal.open<any>(SupplierOfferFormComponent, {
       width: '600px',
       closeOnBackdrop: false,
       data: {
         itemDetail: selectedItemDetail,
-        existingComparison: comparison,
+        existingOffer: comparison,
         isEditMode: true,
         quantity: selectedItemDetail?.quantity || comparison.quantity || 0,
         currency: this.currency()

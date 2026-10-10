@@ -1,6 +1,8 @@
 import { NextFunction, Request, Response } from "express";
-import Rfq, { RfqStatus } from "../models/rfq.model";
+import Rfq, { RfqStage, RfqStatus, RfqType } from "../models/rfq.model";
 import PurchaseRequest from "../models/purchaseRequest.model";
+import Job from "../models/job.model";
+import Quotation from "../models/quotation.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
 import { getNextSequence } from "../models/counter.model";
 const mongoose = require('mongoose');
@@ -78,6 +80,71 @@ const statusFromQuotes = (quotes: any[]) => {
     return RfqStatus.Open;
 };
 
+const stageFromQuotes = (quotes: any[]) => {
+    if (quotes.some((quote) => quote.selected)) return RfqStage.FinalizedForPo;
+    if (quotes.length > 0) return RfqStage.ProcurementReview;
+    return RfqStage.ProcurementReview;
+};
+
+const quoteIdentity = (quote: any) =>
+    [quote.itemDetailKey, quote.supplierId?.toString?.() || quote.supplierName || ''].join('|');
+
+const changed = (previous: any, next: any) =>
+    Number(previous?.unitPrice ?? 0) !== Number(next?.unitPrice ?? 0) ||
+    String(previous?.currency || 'QAR') !== String(next?.currency || 'QAR') ||
+    String(previous?.paymentTerms || '') !== String(next?.paymentTerms || '') ||
+    String(previous?.etaTerms || '') !== String(next?.etaTerms || '') ||
+    Number(previous?.leadTimeDays ?? 0) !== Number(next?.leadTimeDays ?? 0) ||
+    Boolean(previous?.selected) !== Boolean(next?.selected) ||
+    String(previous?.supplierId || previous?.supplierName || '') !== String(next?.supplierId || next?.supplierName || '');
+
+const buildProcurementRevisions = (previousQuotes: any[] = [], nextQuotes: any[] = [], employeeId: any) => {
+    const previousByIdentity = new Map(previousQuotes.map((quote) => [quoteIdentity(quote), quote]));
+    return nextQuotes
+        .map((quote) => {
+            const previous = previousByIdentity.get(quoteIdentity(quote));
+            if (!previous || !changed(previous, quote)) return null;
+            const previousPrice = Number(previous.unitPrice ?? 0);
+            const revisedPrice = Number(quote.unitPrice ?? 0);
+            return {
+                itemDetailKey: quote.itemDetailKey,
+                itemName: quote.itemName,
+                detail: quote.detail,
+                supplierId: quote.supplierId,
+                supplierName: quote.supplierName,
+                previousSupplierId: previous.supplierId,
+                previousSupplierName: previous.supplierName,
+                previousUnitPrice: previous.unitPrice,
+                revisedUnitPrice: quote.unitPrice,
+                previousCurrency: previous.currency || 'QAR',
+                revisedCurrency: quote.currency || 'QAR',
+                previousPaymentTerms: previous.paymentTerms,
+                revisedPaymentTerms: quote.paymentTerms,
+                previousDeliveryTerms: previous.etaTerms,
+                revisedDeliveryTerms: quote.etaTerms,
+                previousLeadTimeDays: previous.leadTimeDays,
+                revisedLeadTimeDays: quote.leadTimeDays,
+                previousSelected: previous.selected,
+                revisedSelected: quote.selected,
+                savingsAmount: previousPrice - revisedPrice,
+                reason: 'Procurement revision',
+                revisedBy: employeeId,
+                revisedAt: new Date()
+            };
+        })
+        .filter(Boolean);
+};
+
+const resolveSourceSalesRfqId = async (purchase: any) => {
+    const jobId = purchase.jobId?._id || purchase.jobId;
+    if (!jobId || !ObjectId.isValid(jobId)) return undefined;
+    const job: any = await Job.findById(jobId, { quoteId: 1 }).lean();
+    const quoteId = job?.quoteId?._id || job?.quoteId;
+    if (!quoteId || !ObjectId.isValid(quoteId)) return undefined;
+    const quotation: any = await Quotation.findById(quoteId, { sourceRfqId: 1 }).lean();
+    return quotation?.sourceRfqId;
+};
+
 const seedRfqNoSequence = async (): Promise<number> => {
     const latest = await Rfq.findOne().sort({ rfqNo: -1 });
     if (!latest) return 0;
@@ -85,7 +152,7 @@ const seedRfqNoSequence = async (): Promise<number> => {
     return Number.isNaN(lastCounter) ? 0 : lastCounter;
 };
 
-const nextRfqNo = async () => {
+export const nextRfqNo = async () => {
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2);
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -97,15 +164,21 @@ export const syncRfqFromPurchase = async (purchase: any, employeeId: any) => {
     const requestedLines = buildRequestedLines(purchase);
     const quotes = buildQuotesFromPurchase(purchase, employeeId);
     const status = statusFromQuotes(quotes);
-    const existing = await Rfq.findOne({ purchaseRequestId: purchase._id, isDeleted: false });
+    const stage = stageFromQuotes(quotes);
+    const sourceRfqId = await resolveSourceSalesRfqId(purchase);
+    const existing = await Rfq.findOne({ purchaseRequestId: purchase._id, rfqType: { $ne: RfqType.Sales }, isDeleted: false });
 
     if (existing) {
+        const revisions = buildProcurementRevisions(existing.quotes || [], quotes, employeeId);
+        if (sourceRfqId) existing.sourceRfqId = sourceRfqId;
         existing.purchaseNo = purchase.purchaseNo;
         existing.jobId = purchase.jobId;
         existing.customerId = purchase.customerId;
         existing.requestedLines = requestedLines;
         existing.quotes = quotes;
         existing.status = status;
+        existing.stage = revisions.length ? RfqStage.ProcurementRevised : stage;
+        existing.revisions = [...(existing.revisions || []), ...revisions] as any;
         existing.awardedAt = status === RfqStatus.Awarded && !existing.awardedAt ? new Date() : existing.awardedAt;
         existing.awardedBy = status === RfqStatus.Awarded && !existing.awardedBy ? employeeId : existing.awardedBy;
         existing.updatedBy = employeeId;
@@ -115,6 +188,8 @@ export const syncRfqFromPurchase = async (purchase: any, employeeId: any) => {
 
     return Rfq.create({
         rfqNo: await nextRfqNo(),
+        rfqType: RfqType.Procurement,
+        sourceRfqId,
         purchaseRequestId: purchase._id,
         purchaseNo: purchase.purchaseNo,
         jobId: purchase.jobId,
@@ -122,6 +197,7 @@ export const syncRfqFromPurchase = async (purchase: any, employeeId: any) => {
         requestedLines,
         quotes,
         status,
+        stage,
         awardedAt: status === RfqStatus.Awarded ? new Date() : undefined,
         awardedBy: status === RfqStatus.Awarded ? employeeId : undefined,
         createdBy: employeeId
@@ -159,7 +235,8 @@ export const getRfqs = async (req: Request, res: Response, next: NextFunction) =
             ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
             : {};
 
-        const matchStage: any = { isDeleted: false, ...accessFilter };
+        // Supplier RFQs stay in the same business language; this list shows the procurement view.
+        const matchStage: any = { isDeleted: false, rfqType: { $ne: RfqType.Sales }, ...accessFilter };
         if (Array.isArray(status) && status.length) matchStage.status = { $in: status };
         else if (status) matchStage.status = status;
         if (search) {

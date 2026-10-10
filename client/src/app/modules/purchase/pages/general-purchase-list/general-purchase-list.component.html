@@ -46,9 +46,10 @@
             </div>
         </ng-template>
 
+        <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row>
-            <app-action-button variant="secondary" (click)="onEditPurchase(row, $event)">Edit</app-action-button>
-            <app-action-button variant="primary" (click)="openFullPurchase(row, $event)">Open full purchase</app-action-button>
+            <app-action-button variant="primary" (click)="onEditPurchase(row, $event)" icon="edit">Edit</app-action-button>
+            <app-action-button variant="primary" (click)="openFullPurchase(row, $event)" icon="view">Open full purchase</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">

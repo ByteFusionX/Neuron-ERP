@@ -117,8 +117,7 @@ export class RfqListComponent {
 
   private buildRowActions(): void {
     this.rowActions = [
-      { id: 'comparisonSheet', label: 'Manage Offers', icon: 'pencil', quick: true, panel: true },
-      { id: 'comparisonSummary', label: 'Award Summary', icon: 'eye', quick: true, panel: true },
+      { id: 'manageOffers', label: 'Manage Offers', icon: 'pencil', quick: true, panel: true },
       {
         id: 'initiatePo',
         label: 'Create PO',
@@ -210,19 +209,13 @@ export class RfqListComponent {
   }
 
   onRowAction(event: DataGridRowActionEvent<any>): void {
-    if (event.action.id === 'comparisonSheet') this.openComparisonSheet(event.row);
-    if (event.action.id === 'comparisonSummary') this.openComparisonSummary(event.row);
+    if (event.action.id === 'manageOffers') this.openSupplierOffers(event.row);
     if (event.action.id === 'initiatePo') this.router.navigate(['/purchase/initiate-lpo', event.row.purchaseRequestId?._id || event.row.purchaseRequestId]);
   }
 
-  openComparisonSheet(row: any, event?: Event): void {
+  openSupplierOffers(row: any, event?: Event): void {
     event?.stopPropagation();
-    this.router.navigate(['/purchase/comparison-sheet', row.purchaseRequestId?._id || row.purchaseRequestId]);
-  }
-
-  openComparisonSummary(row: any, event?: Event): void {
-    event?.stopPropagation();
-    this.router.navigate(['/purchase/comparison-summary', row.purchaseRequestId?._id || row.purchaseRequestId]);
+    this.router.navigate(['/purchase/rfq-offers', row.purchaseRequestId?._id || row.purchaseRequestId]);
   }
 
   openPr(row: any, event?: Event): void {

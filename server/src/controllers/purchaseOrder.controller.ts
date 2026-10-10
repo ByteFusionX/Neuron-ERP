@@ -4,6 +4,7 @@ import GRN from "../models/grn.model";
 import purchaseRequest from "../models/purchaseRequest.model"
 import Supplier from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
+import Rfq, { RfqType } from "../models/rfq.model";
 import jobModel from "../models/job.model";
 import mongoose from "mongoose";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
@@ -188,6 +189,9 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     if (stockHoldId && mongoose.Types.ObjectId.isValid(stockHoldId)) {
       purchaseOrderData.stockHoldId = stockHoldId;
     }
+
+    const rfqId = await resolvePoRfqId(purchaseId, quoteId);
+    if (rfqId) purchaseOrderData.rfqId = rfqId;
 
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
@@ -1839,4 +1843,24 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
       error: error.message,
     });
   }
+};
+
+/**
+ * The RFQ a PO's supplier price traces back to: the procurement RFQ of its PR when there is one,
+ * otherwise the sales RFQ that seeded the quotation. Lets reports compare quoted vs final cost.
+ */
+const resolvePoRfqId = async (purchaseId: any, quoteId: any) => {
+  try {
+    if (purchaseId && mongoose.Types.ObjectId.isValid(purchaseId)) {
+      const procurement = await Rfq.findOne({ purchaseRequestId: purchaseId, rfqType: { $ne: RfqType.Sales }, isDeleted: false }, { _id: 1 }).lean();
+      if (procurement) return procurement._id;
+    }
+    if (quoteId && mongoose.Types.ObjectId.isValid(quoteId)) {
+      const quote: any = await Quotation.findById(quoteId, { sourceRfqId: 1 }).lean();
+      if (quote?.sourceRfqId) return quote.sourceRfqId;
+    }
+  } catch (error) {
+    console.error('Failed to resolve RFQ for PO:', error);
+  }
+  return undefined;
 };

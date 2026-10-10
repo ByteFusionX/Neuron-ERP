@@ -19,7 +19,7 @@
     </button>
   </header>
 
-  <form id="comparison-form" [formGroup]="comparisonForm" (ngSubmit)="onSubmit()" novalidate class="overflow-y-auto px-6 py-5">
+  <form id="supplier-offer-form" [formGroup]="comparisonForm" (ngSubmit)="onSubmit()" novalidate class="overflow-y-auto px-6 py-5">
     <div class="grid gap-4 sm:grid-cols-3">
       <app-sf-field label="Supplier" [control]="f['supplierId']" full>
         <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Search supplier"></app-sf-combobox>
@@ -83,6 +83,6 @@
 
   <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
     <app-action-button variant="secondary" (click)="onCancel()">Cancel</app-action-button>
-    <app-action-button variant="primary" type="submit" form="comparison-form">{{ isEditMode() ? 'Save changes' : 'Add offer' }}</app-action-button>
+    <app-action-button variant="primary" type="submit" form="supplier-offer-form">{{ isEditMode() ? 'Save changes' : 'Add offer' }}</app-action-button>
   </footer>
 </div>

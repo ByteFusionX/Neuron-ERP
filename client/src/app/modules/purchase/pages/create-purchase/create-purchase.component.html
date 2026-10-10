@@ -11,9 +11,11 @@
     [hasSidebar]="false"
     [tabParam]="''"
   >
-    <ng-container headerActions>
+    <ng-container footerLeft>
+      <app-action-button variant="outline" *ngIf="!isEditing" (click)="onDraftClicks()">Save as draft</app-action-button>
+    </ng-container>
+    <ng-container footerRight>
       <app-action-button (click)="onDiscardClicks()">Discard</app-action-button>
-      <app-action-button *ngIf="!isEditing" (click)="onDraftClicks()">Save as draft</app-action-button>
       <app-action-button variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
     </ng-container>
 
@@ -90,11 +92,10 @@
 
     <ng-container *ngIf="selectedJobSheet || isJobLess; else noJob">
       <div class="border-t border-gray-100 dark:border-erp-border-dark p-4">
-        <app-item-entry mode="purchase" [optionalItems]="entryItems" [seedOptionalItems]="entrySeed()"
+        <app-item-entry mode="purchase" paletteTargetLabel="Purchase request" [optionalItems]="entryItems" [seedOptionalItems]="entrySeed()"
           [currency]="currency() || 'QAR'" [showTotalsBar]="false" [supplierOptions]="supplierOptions()"
           [allowCreateProduct]="true"
-          [lineLocked]="lineLocked" [lineBadge]="lineBadge" [compareLabel]="compareLabel"
-          [showCompareButton]="!isJobLess" (compareClicked)="onEntryCompare($event)"
+          [lineLocked]="lineLocked" [lineBadge]="lineBadge"
           (createProductRequested)="onCreatePartNumber()"></app-item-entry>
       </div>
 
@@ -127,13 +128,6 @@
       </span>
       <span class="h-2 w-2 shrink-0 rounded-full" [ngClass]="checkSupplierExists() ? 'bg-emerald-500' : 'bg-amber-400'"></span>
     </button>
-    <button *ngIf="!isJobLess" type="button" class="cp-tile" (click)="onComparisonSummaryClicks()">
-      <span class="cp-tile-icon"><app-dp-icon name="chart" size="w-4 h-4"></app-dp-icon></span>
-      <span class="min-w-0 flex-1 text-left">
-        <span class="cp-tile-title">Comparison summary</span>
-        <span class="cp-tile-sub">Approved vs. all supplier quotes</span>
-      </span>
-    </button>
     <button *ngIf="purchaseId" type="button" class="cp-tile" (click)="onFinalDasdboardClicks()">
       <span class="cp-tile-icon"><app-dp-icon name="eye" size="w-4 h-4"></app-dp-icon></span>
       <span class="min-w-0 flex-1 text-left">
@@ -148,6 +142,3 @@
 
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
 
-<!-- Stacked above this drawer (or full page) so comparing quotes never navigates away from an in-progress PR. -->
-<app-comparison-sheet *ngIf="comparisonDrawerOpen" [drawer]="true" [purchaseIdInput]="comparisonDrawerPurchaseId" [selectedItemIdInput]="comparisonDrawerItemId"
-  (saved)="onComparisonDrawerSaved()" (closed)="onComparisonDrawerClosed()"></app-comparison-sheet>

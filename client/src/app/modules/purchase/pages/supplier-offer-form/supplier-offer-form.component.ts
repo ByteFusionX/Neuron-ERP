@@ -9,26 +9,26 @@ import { MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { QuoteItemDetails, Comparisons } from 'src/app/shared/interfaces/purchase.interface';
 
-export interface ComparisonFormData {
+export interface SupplierOfferFormData {
   itemDetail?: QuoteItemDetails;
-  existingComparison?: Comparisons;
+  existingOffer?: Comparisons;
   isEditMode?: boolean;
   quantity?: number;
 }
 
 @Component({
-  selector: 'app-comparison-form',
+  selector: 'app-supplier-offer-form',
   imports: [CommonModule, ReactiveFormsModule, SmartFormModule, DetailPanelIconComponent, ActionButtonComponent],
-  templateUrl: './comparison-form.component.html',
-  styleUrl: './comparison-form.component.css'
+  templateUrl: './supplier-offer-form.component.html',
+  styleUrl: './supplier-offer-form.component.css'
 })
-export class ComparisonFormComponent implements OnInit {
+export class SupplierOfferFormComponent implements OnInit {
 
   private fb = inject(FormBuilder)
   private modalRef = inject<ModalRef<any>>(ModalRef)
   private supplierService = inject(SupplierService)
   private toaster = inject(ToastrService)
-  private data = inject(MODAL_DATA, { optional: true }) as ComparisonFormData | null
+  private data = inject(MODAL_DATA, { optional: true }) as SupplierOfferFormData | null
 
   suppliers = signal<any[]>([])
   supplierOptions = computed<SfOption[]>(() => this.suppliers().map((s) => ({ label: s.supplierName, value: s._id })));
@@ -69,9 +69,9 @@ export class ComparisonFormComponent implements OnInit {
     })
 
     if (this.data) {
-      if (this.data.isEditMode && this.data.existingComparison) {
+      if (this.data.isEditMode && this.data.existingOffer) {
         this.isEditMode.set(true);
-        this.populateFormForEdit(this.data.existingComparison);
+        this.populateFormForEdit(this.data.existingOffer);
       } else if (this.data.quantity !== undefined) {
         this.comparisonForm.patchValue({
           quantity: this.data.quantity

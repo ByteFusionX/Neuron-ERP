@@ -32,7 +32,7 @@ export class PurchaseService {
     toDate?: string;
     search?: string;
     sourceType?: string;
-    poProgress?: 'remaining' | 'in-progress' | 'completed';
+    poProgress?: 'ready' | 'remaining' | 'completed';
     rfqStatus?: 'not-started' | 'quoted' | 'awarded';
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
@@ -91,8 +91,8 @@ export class PurchaseService {
     return this.http.patch<any>(`${this.api}/purchase/purchase-request/items/${purchaseId}`, { items });
   }
 
-  updatePurchaseComparisons(purchaseId: string, items: any[]): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/comparison/${purchaseId}`, { items }, { context: context() });
+  updatePurchaseSupplierOffers(purchaseId: string, items: any[]): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/supplier-offers/${purchaseId}`, { items }, { context: context() });
   }
 
   updatePurchaseSupplierDiscounts(purchaseId: string, supplierDiscounts: any): Observable<any> {

@@ -11,8 +11,10 @@
     [hasSidebar]="false"
     [tabParam]="''"
   >
-    <ng-container headerActions>
-      <app-action-button variant="ghost" class="mr-auto" (click)="onAddSupplier()">New supplier</app-action-button>
+    <ng-container footerLeft>
+      <app-action-button variant="outline" icon="plus" (click)="onAddSupplier()">New supplier</app-action-button>
+    </ng-container>
+    <ng-container footerRight>
       <app-action-button (click)="onClose()">Discard</app-action-button>
       <app-action-button variant="primary" (click)="onSubmit()">Save &amp; close</app-action-button>
     </ng-container>
@@ -49,7 +51,7 @@
             <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Supplier offers</h2>
             <app-detail-badge *ngIf="comparisonList().length" [label]="comparisonList().length + ''" tone="neutral"></app-detail-badge>
           </div>
-          <app-action-button variant="secondary" (click)="onComparisonClicks()">Add offer</app-action-button>
+          <app-action-button variant="secondary" (click)="onAddOffer()">Add offer</app-action-button>
         </div>
 
         <app-detail-callout *ngIf="comparisonList().length > 0 && !getSelectedComparison()" class="mb-3" tone="warn"
@@ -124,7 +126,7 @@
             </span>
             <p class="text-[13px] font-medium text-gray-900 dark:text-gray-100">No supplier offers yet</p>
             <p class="max-w-sm text-xs text-gray-500 dark:text-gray-400">Enter offers from suppliers, including discounts, tax, freight and terms, then award the supplier for this item.</p>
-            <app-action-button class="mx-auto mt-2" variant="primary" (click)="onComparisonClicks()">Add first offer</app-action-button>
+            <app-action-button class="mx-auto mt-2" variant="primary" (click)="onAddOffer()">Add first offer</app-action-button>
           </div>
         </ng-template>
       </section>

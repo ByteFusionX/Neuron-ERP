@@ -18,24 +18,26 @@
     (activeTabChange)="tab = $event"
     [sections]="sidebarSections"
   >
-    <ng-container headerActions *ngIf="purchase as p">
-      <app-action-button *ngIf="p.status === 'Rejected' && p.rejectedReason?.length" (click)="showStatusHistory()">View reason</app-action-button>
-      <app-action-button *ngIf="dealId" (click)="onViewDealSheet()">Deal sheet {{ dealId }}</app-action-button>
-
+    <ng-container footerLeft *ngIf="purchase as p">
+      <app-action-button variant="outline" *ngIf="p.status === 'Rejected' && p.rejectedReason?.length" (click)="showStatusHistory()" icon="view">View reason</app-action-button>
+      <app-action-button variant="outline" *ngIf="dealId" (click)="onViewDealSheet()">Deal sheet {{ dealId }}</app-action-button>
       <ng-container *ngIf="p.status === 'Pending'">
-        <app-action-button *ngIf="!isManual && hasNewItemsToMerge()" [disabled]="isMerging" (click)="onMergeItems()">
+        <app-action-button variant="outline" *ngIf="!isManual && hasNewItemsToMerge()" [disabled]="isMerging" (click)="onMergeItems()">
           {{ isMerging ? 'Merging…' : 'Merge items' }}
         </app-action-button>
-        <app-action-button *ngIf="!isManual && hasMergedItems()" [disabled]="isRevoking" (click)="onRevokeMerge()">
+        <app-action-button variant="outline" *ngIf="!isManual && hasMergedItems()" [disabled]="isRevoking" (click)="onRevokeMerge()">
           {{ isRevoking ? 'Revoking…' : 'Revoke merge' }}
         </app-action-button>
-        <ng-container *ngIf="canApproveOrReject()">
-          <app-action-button [disabled]="isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
-          <app-action-button variant="primary" [disabled]="isApproving" (click)="onApprove()">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
-        </ng-container>
+      </ng-container>
+    </ng-container>
+
+    <ng-container footerRight *ngIf="purchase as p">
+      <ng-container *ngIf="p.status === 'Pending' && canApproveOrReject()">
+        <app-action-button [disabled]="isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
+        <app-action-button variant="primary" [disabled]="isApproving" (click)="onApprove()">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
       </ng-container>
 
-      <app-action-button *ngIf="purchaseId !== 'none' && p.status !== 'Pending'" variant="primary" (click)="onEdit()">Edit</app-action-button>
+      <app-action-button *ngIf="purchaseId !== 'none' && p.status !== 'Pending'" variant="primary" (click)="onEdit()" icon="edit">Edit</app-action-button>
     </ng-container>
 
     <div tabBody [ngSwitch]="tab">

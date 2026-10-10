@@ -10,8 +10,10 @@
     [hasSidebar]="false"
     [tabParam]="''"
   >
-    <ng-container headerActions>
-      <app-action-button *ngIf="isExist" variant="ghost" (click)="onClearClicks()">Clear all</app-action-button>
+    <ng-container footerLeft>
+      <app-action-button *ngIf="isExist" variant="outline" (click)="onClearClicks()">Clear all</app-action-button>
+    </ng-container>
+    <ng-container footerRight>
       <app-action-button (click)="onClose()">Discard</app-action-button>
       <app-action-button variant="primary" (click)="onSubmit()">Save &amp; exit</app-action-button>
     </ng-container>

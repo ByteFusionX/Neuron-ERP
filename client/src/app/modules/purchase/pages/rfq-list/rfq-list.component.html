@@ -48,10 +48,10 @@
             </div>
         </ng-template>
 
+        <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row>
-            <app-action-button variant="secondary" (click)="openPr(row, $event)">Open PR</app-action-button>
-            <app-action-button variant="secondary" (click)="openComparisonSummary(row, $event)">Award Summary</app-action-button>
-            <app-action-button variant="primary" (click)="openComparisonSheet(row, $event)">Manage Offers</app-action-button>
+            <app-action-button variant="primary" (click)="openPr(row, $event)" icon="view">Open PR</app-action-button>
+            <app-action-button variant="primary" (click)="openSupplierOffers(row, $event)">Manage Offers</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">

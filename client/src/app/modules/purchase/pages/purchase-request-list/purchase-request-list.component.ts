@@ -79,7 +79,6 @@ export class PurchaseRequestListComponent {
     { id: 'draft', label: 'Draft' },
     { id: 'pending', label: 'Pending' },
     { id: 'readyToPo', label: 'Ready to PO' },
-    { id: 'inProgress', label: 'In Progress' },
     { id: 'remainingPo', label: 'Remaining PO' },
     { id: 'completed', label: 'Completed' },
   ];
@@ -164,16 +163,15 @@ export class PurchaseRequestListComponent {
       case 'pending': return PENDING_STATUSES;
       case 'readyToPo':
       case 'remainingPo':
-      case 'inProgress':
       case 'completed':
         return APPROVED_STATUSES;
       default: return ALL_STATUSES;
     }
   }
 
-  private poProgressForView(viewId: string): 'remaining' | 'in-progress' | 'completed' | undefined {
+  private poProgressForView(viewId: string): 'ready' | 'remaining' | 'completed' | undefined {
+    if (viewId === 'readyToPo') return 'ready';
     if (viewId === 'remainingPo') return 'remaining';
-    if (viewId === 'inProgress') return 'in-progress';
     if (viewId === 'completed') return 'completed';
     return undefined;
   }

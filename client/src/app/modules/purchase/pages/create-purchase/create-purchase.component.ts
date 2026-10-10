@@ -12,7 +12,6 @@ import { Subscription } from 'rxjs';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
-import { ComparisonSheetComponent } from '../comparison-sheet/comparison-sheet.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -42,7 +41,6 @@ interface PartNumberDropdownOption {
     ReactiveFormsModule,
     FormsModule,
     ProductFormDrawerComponent,
-    ComparisonSheetComponent,
     SmartFormModule,
     DetailViewShellComponent,
     ActionButtonComponent,
@@ -175,15 +173,6 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   lineBadge = (i: number, j: number, k: number): string | null =>
     this.originalAt(i, j, k)?.fromMrRequest ? 'MR' : null;
-
-  compareLabel = (i: number, j: number, k: number): string => {
-    const count = this.originalAt(i, j, k)?.comparisons?.length || 0;
-    return count ? `${count} quotes` : 'Compare';
-  };
-
-  onEntryCompare({ i, j, k }: { i: number; j: number; k: number }): void {
-    this.onComparisonClicks(this.originalAt(i, j, k) ?? ({} as QuoteItemDetails));
-  }
 
   private lineHasContent(d: any): boolean {
     return !!(d?.detail || '').toString().trim() || d?.quantity != null || d?.unitCost != null;
@@ -991,68 +980,6 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         console.error(error);
       }
     });
-  }
-
-  onComparisonClicks(item: QuoteItemDetails) {
-    if (!this.selectedJobSheet) {
-      this.warningMessage('Please select any job from given list');
-      return;
-    }
-
-    if (!item._id) {
-      this.warningMessage('Please save the item first before adding comparisons');
-      return;
-    }
-
-    item.comparison = true;
-
-    this.ensurePurchaseId().then((purchaseId) => {
-      // Stacked drawer instead of navigating away, so this form isn't lost mid-edit.
-      this.comparisonDrawerPurchaseId = purchaseId;
-      this.comparisonDrawerItemId = item._id!;
-      this.comparisonDrawerOpen = true;
-    }).catch(() => {});
-  }
-
-  // --- Comparison sheet drawer -------------------------------------------------------
-
-  comparisonDrawerOpen = false;
-  comparisonDrawerPurchaseId: string | null = null;
-  comparisonDrawerItemId: string | null = null;
-
-  onComparisonDrawerSaved(): void {
-    if (this.purchaseId) this.loadPurchaseData();
-  }
-
-  onComparisonDrawerClosed(): void {
-    this.comparisonDrawerOpen = false;
-    this.comparisonDrawerPurchaseId = null;
-    this.comparisonDrawerItemId = null;
-  }
-
-  onComparisonSummaryClicks() {
-    if (!this.selectedJobSheet) {
-      this.warningMessage('Please select any job from given list');
-      return;
-    }
-
-    const items = this.itemsList();
-    const max = Math.max(
-      ...items.map((item: any) =>
-        item.itemDetails.reduce((sum: any, detail: any) => {
-          return sum + (detail.comparisons?.length || 0);
-        }, 0)
-      )
-    );
-
-    if (max == 0 || items.length == 0) {
-      this.warningMessage('No comparisons found!');
-      return;
-    }
-
-    this.ensurePurchaseId().then((purchaseId) => {
-      this.router.navigate(['/purchase/comparison-summary', purchaseId]);
-    }).catch(() => {});
   }
 
   getPurchaseNo() {
