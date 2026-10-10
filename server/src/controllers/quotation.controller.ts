@@ -6,7 +6,6 @@ import Department from '../models/department.model';
 import Employee from '../models/employee.model'
 import Customer from '../models/customer.model';
 import ApprovalRule from '../models/approvalRule.model';
-import MasterListItem from '../models/masterListItem.model';
 import Enquiry from "../models/enquiry.model";
 import Product from "../models/products.model";
 import ProductCategory from "../models/productCategory.model";
@@ -14,14 +13,18 @@ import StockEntry from "../models/stockEntry.model";
 import StockBlock from "../models/stockBlock.model";
 import StockReservation from "../models/stockReservation.model";
 import StockMovement from "../models/stockMovement.model";
+import Warehouse from "../models/warehouse.model";
 import { Server } from "socket.io";
 import { logEnquiryAudit } from "../services/enquiryAudit.service";
+import { logAudit } from "../services/audit.service";
 import { cancelOpenFollowUp } from "../services/enquiryFollowUp.service";
-import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmployees, getEmployeeData, getUSDRated } from "../common/utils/util";
+import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmployees, escapeRegex, getEmployeeData, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
+import { linkSalesRfqToQuotation } from './salesRfq.controller';
+import { releaseQuoteStockHolds } from './quoteStockHold.controller';
 import Event from '../models/events.model'
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
@@ -110,69 +113,6 @@ const applyRequestedQuoteOwner = async (quoteData: any, actor: any) => {
     }
 };
 
-const quoteApprovalBreaches = async (quote: any, actor: any): Promise<any[]> => {
-    const enabledRules = await ApprovalRule.find({ enabled: true }).populate('approverRole', 'categoryName').lean();
-    if (!enabledRules.length) return [];
-
-    const grossSelling = quoteGrossSelling(quote);
-    const customerDiscount = quoteCustomerDiscount(quote);
-    const netSelling = Math.max(grossSelling - customerDiscount, 0);
-    const totalCost = quoteGrossCost(quote);
-    const discountPercent = grossSelling > 0 ? (customerDiscount / grossSelling) * 100 : 0;
-    const marginPercent = netSelling > 0 ? ((netSelling - totalCost) / netSelling) * 100 : 0;
-    const days = await paymentTermDays(quote?.paymentTerms);
-
-    const customer = await Customer.findById(quote?.client, 'companyName creditLimit creditStatus').lean();
-    const creditLimit = Number(customer?.creditLimit);
-    const creditExceptionAmount = Number.isFinite(creditLimit) ? Math.max(netSelling - creditLimit, 0) : 0;
-    const creditStatusRequiresApproval = !!customer?.creditStatus && customer.creditStatus !== 'Good Standing';
-
-    return enabledRules
-        .filter((rule: any) => {
-            const threshold = Number(rule.threshold);
-            if (!Number.isFinite(threshold)) return false;
-            switch (rule.type) {
-                case 'discount':
-                    return discountPercent > threshold;
-                case 'margin':
-                    return marginPercent < threshold;
-                case 'paymentTerms':
-                    return days !== null && days > threshold;
-                case 'creditException':
-                    return creditExceptionAmount > threshold || (creditStatusRequiresApproval && netSelling > threshold);
-                case 'deal':
-                    return netSelling > threshold;
-                default:
-                    return false;
-            }
-        })
-        .filter((rule: any) => !matchesApproverRole(actor, rule.approverRole))
-        .map((rule: any) => {
-            const threshold = Number(rule.threshold);
-            const values: Record<string, number | null> = {
-                discount: Number(discountPercent.toFixed(2)),
-                margin: Number(marginPercent.toFixed(2)),
-                paymentTerms: days,
-                creditException: Number(creditExceptionAmount.toFixed(2)),
-                deal: Number(netSelling.toFixed(2)),
-            };
-            const labels: Record<string, string> = {
-                discount: `Discount ${values.discount}% is above allowed ${threshold}%`,
-                margin: `Margin ${values.margin}% is below required ${threshold}%`,
-                paymentTerms: `Payment terms ${values.paymentTerms} days exceed allowed ${threshold} days`,
-                creditException: `Credit exception ${values.creditException} exceeds allowed ${threshold}`,
-                deal: `Quote value ${values.deal} exceeds approval threshold ${threshold}`,
-            };
-            return {
-                type: rule.type,
-                threshold,
-                actual: values[rule.type],
-                approverRole: rule.approverRole?.categoryName || 'Configured approver role',
-                message: labels[rule.type],
-            };
-        });
-};
-
 const expireOverdueQuotes = async () => {
     const now = new Date();
     await Quotation.updateMany(
@@ -207,6 +147,17 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
             const linkedEnquiry = await Enquiry.findById(quoteData.enqId, { status: 1, client: 1, contact: 1, title: 1 }).lean();
             if (!linkedEnquiry) {
                 return res.status(404).json({ success: false, message: 'Linked enquiry was not found.' });
+            }
+            const existingQuoteForEnquiry = await Quotation.findOne({
+                enqId: quoteData.enqId,
+                isDeleted: { $ne: true },
+                status: { $nin: [quoteStatus.Lost, quoteStatus.Expired] },
+            }).select('quoteId status').lean();
+            if (existingQuoteForEnquiry) {
+                return res.status(409).json({
+                    success: false,
+                    message: `This enquiry already has active quotation ${existingQuoteForEnquiry.quoteId || ''} (${existingQuoteForEnquiry.status}). Continue from that quotation instead of creating another one.`.replace(/\s+/g, ' ').trim()
+                });
             }
             if (!linkedEnquiry.client || !linkedEnquiry.contact) {
                 return res.status(400).json({ success: false, message: 'Select a customer and contact person on the enquiry before creating a quote.' });
@@ -247,6 +198,8 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         const quote = new Quotation(quoteData)
 
         const saveQuote = await (await quote.save()).populate('department')
+
+        if (quoteData.sourceRfqId) await linkSalesRfqToQuotation(quoteData.sourceRfqId, saveQuote._id, createdBy._id);
 
         if (quoteData.enqId) {
             const enquiry = await Enquiry.findById(quoteData.enqId);
@@ -442,7 +395,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 
         const sortableFields: Record<string, string> = { date: 'date', quoteId: 'quoteId', status: 'status' };
         const sortStage: Record<string, 1 | -1> = sortKey && sortableFields[sortKey]
-            ? { [sortableFields[sortKey]]: sortDir === 'desc' ? -1 : 1 }
+            ? { [sortableFields[sortKey]]: sortDir === 'desc' ? -1 : 1, _id: -1 }
             : { _id: -1 };
 
         let isSalesPerson = salesPerson == null ? true : false;
@@ -456,7 +409,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
             $and: [
                 ...(quoteStatus ? [{ status: quoteStatus }] : []),
                 ...(dealStatus ? [{ 'dealData.status': dealStatus }] : []),
-                { quoteId: { $regex: search, $options: 'i' } },
+                { quoteId: { $regex: escapeRegex(String(search ?? '')), $options: 'i' } },
                 { $or: [{ createdBy: new ObjectId(salesPerson) }, { createdBy: { $exists: isSalesPerson } }] },
                 { $or: [{ client: new ObjectId(customer) }, { client: { $exists: isCustomer } }] },
                 {
@@ -527,6 +480,7 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 
     } catch (error) {
         console.log(error)
+        next(error)
     }
 }
 
@@ -589,10 +543,122 @@ export const getQuotationById = async (req: Request, res: Response, next: NextFu
     }
 }
 
+/**
+ * Search box filter for the deal sheet grids. Runs after the client/employee lookups, so it can match
+ * customer and sales person as well. "all" (the grid default) searches every visible text column.
+ */
+const buildDealSearchFilter = (searchQuery: unknown, searchCriteria: unknown): Record<string, any> => {
+    const text = String(searchQuery ?? '').trim();
+    if (!text) return {};
+    const re = { $regex: escapeRegex(text), $options: 'i' };
+    // Full-name match, so "sales exec" finds "sales executive".
+    const salesPersonName = {
+        $expr: {
+            $regexMatch: {
+                input: { $trim: { input: { $concat: [{ $ifNull: ['$createdBy.firstName', ''] }, ' ', { $ifNull: ['$createdBy.lastName', ''] }] } } },
+                regex: escapeRegex(text),
+                options: 'i',
+            },
+        },
+    };
+    switch (searchCriteria) {
+        case 'dealId':
+            return { 'dealData.dealId': re };
+        case 'customer':
+            return { 'client.companyName': re };
+        case 'salesperson':
+            return salesPersonName;
+        default:
+            return {
+                $or: [
+                    { 'dealData.dealId': re },
+                    { quoteId: re },
+                    { subject: re },
+                    { 'client.companyName': re },
+                    salesPersonName,
+                ],
+            };
+    }
+};
+
+const DEAL_SORT_FIELDS: Record<string, string> = {
+    date: 'dealData.savedDate',
+    dealId: 'dealData.dealId',
+    quoteId: 'quoteId',
+    customerName: 'client.companyName',
+    description: 'subject',
+    salesPerson: 'createdBy.firstName',
+    department: 'department.departmentName',
+    paymentTerms: 'dealData.paymentTerms',
+    dealStatus: 'dealData.status',
+};
+
+/** Grid column filters (applied after the lookups, like search) and the sort stage for the deal sheet grids. */
+const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown) => {
+    const clauses: Record<string, any>[] = [];
+    const list = Array.isArray(filters) ? filters : [];
+    for (const f of list) {
+        const key = String(f?.key ?? '');
+        const op = String(f?.op ?? 'contains');
+        const raw = f?.value;
+        const field = DEAL_SORT_FIELDS[key];
+        if (!field) continue;
+        if (op === 'empty') {
+            clauses.push({ [field]: { $in: [null, ''] } });
+            continue;
+        }
+        if (raw === undefined || raw === null || raw === '') continue;
+        if (key === 'date') {
+            const day = new Date(String(raw));
+            if (isNaN(day.getTime())) continue;
+            const next = new Date(day.getTime() + 24 * 60 * 60 * 1000);
+            if (op === 'on') clauses.push({ [field]: { $gte: day, $lt: next } });
+            else if (op === 'before') clauses.push({ [field]: { $lt: day } });
+            else if (op === 'after') clauses.push({ [field]: { $gte: next } });
+            continue;
+        }
+        const text = escapeRegex(String(raw).trim());
+        const target = key === 'salesPerson'
+            ? { $expr: { $regexMatch: { input: { $trim: { input: { $concat: [{ $ifNull: ['$createdBy.firstName', ''] }, ' ', { $ifNull: ['$createdBy.lastName', ''] }] } } }, regex: op === 'is' || op === 'isNot' || op === 'eq' ? `^${text}$` : text, options: 'i' } } }
+            : null;
+        const exact = op === 'is' || op === 'eq';
+        const negate = op === 'isNot' || op === 'notContains';
+        if (target) {
+            clauses.push(negate ? { $nor: [target] } : target);
+            continue;
+        }
+        const re = { $regex: exact || op === 'isNot' ? `^${text}$` : text, $options: 'i' };
+        clauses.push(negate ? { [field]: { $not: re } } : { [field]: re });
+    }
+    const sortField = DEAL_SORT_FIELDS[String(sortKey ?? '')];
+    const sort: Record<string, 1 | -1> = sortField
+        ? { [sortField]: sortDir === 'desc' ? -1 : 1, _id: -1 }
+        : { 'dealData.savedDate': -1, _id: -1 };
+    return { filter: clauses.length ? { $and: clauses } : {}, sort };
+};
+
+/** Counts deals the same way the page query does (same lookups/unwinds and the same search), so "of N" matches the rows. */
+const countDealSheets = async (filters: Record<string, any>, searchFilter: Record<string, any>): Promise<number> => {
+    const result = await Quotation.aggregate([
+        { $match: filters },
+        { $lookup: { from: 'customers', localField: 'client', foreignField: '_id', as: 'client' } },
+        { $unwind: '$client' },
+        { $lookup: { from: 'departments', localField: 'department', foreignField: '_id', as: 'department' } },
+        { $unwind: '$department' },
+        { $lookup: { from: 'employees', localField: 'createdBy', foreignField: '_id', as: 'createdBy' } },
+        { $unwind: '$createdBy' },
+        { $match: searchFilter },
+        { $count: 'total' },
+    ]).exec();
+    return result?.[0]?.total ?? 0;
+};
+
 export const getDealSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, access, userId, searchQuery, searchCriteria, view } = req.body;
+        let { page, row, access, userId, searchQuery, searchCriteria, view, filters: gridFilters, sortKey, sortDir } = req.body;
 
+        page = Math.max(1, parseInt(page) || 1);
+        row = Math.min(100, Math.max(1, parseInt(row) || 15));
         let skipNum: number = (page - 1) * row;
 
         let matchFilters: any = {
@@ -601,7 +667,7 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
         };
 
         if (view === 'all') {
-            matchFilters['dealData.status'] = { $ne: 'rejected' };
+            // Every deal sheet, whatever its status (rejected ones included, so All = Pending + Approved + Rejected).
         } else if (view === 'rejected') {
             matchFilters['dealData.status'] = 'rejected';
         } else if (view === 'revoked') {
@@ -617,24 +683,8 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
         let accessFilter = {};
         let searchFilter = {};
 
-        if (searchCriteria && searchQuery) {
-            switch (searchCriteria) {
-                case 'dealId':
-                    searchFilter['dealData.dealId'] = { $regex: searchQuery, $options: 'i' }
-                    break;
-                case 'customer':
-                    searchFilter['client.companyName'] = { $regex: searchQuery, $options: 'i' }
-                    break;
-                case 'salesperson':
-                    searchFilter['$or'] = [
-                        { 'createdBy.firstName': { $regex: searchQuery, $options: 'i' } },
-                        { 'createdBy.lastName': { $regex: searchQuery, $options: 'i' } }
-                    ];
-                    break;
-                default:
-                    break;
-            }
-        }
+        const gridQuery = buildDealGridQuery(gridFilters, sortKey, sortDir);
+        searchFilter = { $and: [buildDealSearchFilter(searchQuery, searchCriteria), gridQuery.filter] };
 
         let reportedToUserIds = await getAllReportedEmployees(userId);
 
@@ -658,30 +708,11 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
 
         const filters = { $and: [matchFilters, accessFilter] }
 
-        let total: number = 0;
-        await Quotation.aggregate([
-            {
-                $match: filters
-            },
-            {
-                $group: { _id: null, total: { $sum: 1 } }
-            },
-            {
-                $project: { total: 1, _id: 0 }
-            }
-        ]).exec()
-            .then((result: { total: number }[]) => {
-                if (result && result.length > 0) {
-                    total = result[0].total
-                }
-            })
+        const total: number = await countDealSheets(filters, searchFilter);
 
         let dealData = await Quotation.aggregate([
             {
                 $match: filters,
-            },
-            {
-                $sort: { 'dealData.savedDate': -1 }
             },
 
             {
@@ -735,6 +766,9 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
             },
             {
                 $match: searchFilter,
+            },
+            {
+                $sort: gridQuery.sort
             },
             {
                 $skip: skipNum
@@ -856,12 +890,15 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
 
     } catch (error) {
         console.log(error)
+        next(error)
     }
 }
 
 export const getApprovedDealSheet = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, access, userId, role, searchQuery, searchCriteria } = req.body;
+        let { page, row, access, userId, role, searchQuery, searchCriteria, filters: gridFilters, sortKey, sortDir } = req.body;
+        page = Math.max(1, parseInt(page) || 1);
+        row = Math.min(100, Math.max(1, parseInt(row) || 15));
         let skipNum: number = (page - 1) * row;
 
         let accessFilter = {};
@@ -871,6 +908,7 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
         let reportedToUserIds = await getAllReportedEmployees(userId);
         if (role == "superAdmin") {
             matchFilters = {
+                isDeleted: { $ne: true },
                 dealData: { $exists: true },
                 'dealData.status': 'approved'
             };
@@ -892,60 +930,23 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             }
 
             matchFilters = {
+                isDeleted: { $ne: true },
                 dealData: { $exists: true },
                 'dealData.status': 'approved',
                 'dealData.approvedBy': new ObjectId(userId)
             };
         }
 
-        if (searchCriteria && searchQuery) {
-            switch (searchCriteria) {
-                case 'dealId':
-                    searchFilter['dealData.dealId'] = { $regex: searchQuery, $options: 'i' }
-                    break;
-                case 'customer':
-                    searchFilter['client.companyName'] = { $regex: searchQuery, $options: 'i' }
-                    break;
-                case 'salesperson':
-                    searchFilter['$or'] = [
-                        { 'createdBy.firstName': { $regex: searchQuery, $options: 'i' } },
-                        { 'createdBy.lastName': { $regex: searchQuery, $options: 'i' } }
-                    ];
-                    break;
-                default:
-                    break;
-            }
-        }
-
-
+        const gridQuery = buildDealGridQuery(gridFilters, sortKey, sortDir);
+        searchFilter = { $and: [buildDealSearchFilter(searchQuery, searchCriteria), gridQuery.filter] };
 
         const filters = { $and: [matchFilters, accessFilter] }
 
-        let total: number = 0;
-        await Quotation.aggregate([
-            {
-                $match: filters
-            },
-            {
-                $group: { _id: null, total: { $sum: 1 } }
-            },
-            {
-                $project: { total: 1, _id: 0 }
-            }
-        ]).exec()
-            .then((result: { total: number }[]) => {
-                if (result && result.length > 0) {
-                    total = result[0].total
-                }
-            })
-
+        const total: number = await countDealSheets(filters, searchFilter);
 
         let dealData = await Quotation.aggregate([
             {
                 $match: filters,
-            },
-            {
-                $sort: { 'dealData.savedDate': -1 }
             },
 
             {
@@ -1016,6 +1017,9 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                 $match: searchFilter,
             },
             {
+                $sort: gridQuery.sort
+            },
+            {
                 $skip: skipNum
             },
             {
@@ -1130,13 +1134,12 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             }
         ]);
 
-        console.log(dealData)
-
         if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
         return res.status(200).json({ total: total, dealSheet: dealData })
 
     } catch (error) {
         console.log(error)
+        next(error)
     }
 }
 
@@ -1151,6 +1154,7 @@ export const getNextQuoteId = async (req: Request, res: Response, next: NextFunc
 
     } catch (error) {
         console.log(error)
+        next(error)
     }
 }
 
@@ -1213,7 +1217,9 @@ const generateQuoteId = async (departmentId: string, employeeId: string, date: s
         let quoteId: string;
 
         if (employee && department) {
-            const salesId = `${employee.firstName[0]}${employee.lastName[0]}`;
+            // Guard against blank/whitespace-only name fields producing a stray space or "undefined" in the generated number.
+            const initial = (value?: string) => (value || '').trim().charAt(0).toUpperCase() || 'X';
+            const salesId = `${initial(employee.firstName)}${initial(employee.lastName)}`;
             const departmentName = department.departmentName.split(' ')[0].replace(/\s/g, "").toUpperCase().slice(0, 4);
 
             const [year, month] = date.split('-');
@@ -1256,9 +1262,6 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         }
         if (quoteStatusRequiresReason(statusCheck.status, status) && !String(reason ?? '').trim()) {
             return res.status(400).json({ message: status === quoteStatus.Lost ? "A reason is required when marking a quote as Lost" : "A reason is required for this status change" });
-        }
-        if (status === quoteStatus.QuoteSubmitted && statusCheck.approval?.status && ['required', 'pending', 'rejected'].includes(statusCheck.approval.status)) {
-            return res.status(403).json({ message: "This quotation requires approval before it can be submitted to the customer" });
         }
         // Once a deal sheet is raised (and not rejected) the order is in handover; it must not be silently undone from here.
         if (statusCheck.status === quoteStatus.Won && statusCheck.dealData?.status && statusCheck.dealData.status !== 'rejected') {
@@ -1334,6 +1337,10 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
 
         if (quoteUpdated) {
             await markEnquiryQuotedIfPromoted(quoteUpdated, statusCheck.status, targetStatus, req);
+            // Stock held for the win has nothing to hold for once the quote is no longer Won.
+            if (statusCheck.status === quoteStatus.Won) {
+                await releaseQuoteStockHolds(quoteUpdated._id, `Quote moved from Won to ${targetStatus}`, editorData?._id);
+            }
             return res.status(200).json(targetStatus);
         }
         return res.status(404).json({ message: "Quote not found" });
@@ -1358,6 +1365,12 @@ const acceptedRevisionMatchesCurrentQuote = (quote: any): boolean =>
     && quote.customerAcceptance.acceptedRevision === (quote.revision ?? 0)
     && Array.isArray(quote.customerAcceptance.lpoFiles)
     && quote.customerAcceptance.lpoFiles.length > 0;
+
+const currentRevisionWasSent = (quote: any): boolean => {
+    const revision = quote?.revision ?? 0;
+    return quote?.currentSentRevision === revision
+        && (Array.isArray(quote?.sendHistory) ? quote.sendHistory : []).some((entry: any) => entry?.revision === revision);
+};
 
 const isPositiveNumber = (value: any): boolean => Number.isFinite(Number(value)) && Number(value) > 0;
 const isNonNegativeNumber = (value: any): boolean => Number.isFinite(Number(value)) && Number(value) >= 0;
@@ -1442,15 +1455,6 @@ const dealAdditionalCostImpact = (dealData: any): number =>
 const paymentTermDays = async (paymentTerms: string): Promise<number | null> => {
     const trimmedTerms = String(paymentTerms ?? '').trim();
     if (!trimmedTerms) return null;
-
-    const configuredTerm = await MasterListItem.findOne({
-        list: 'paymentTerms',
-        label: { $regex: `^${trimmedTerms.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
-        isActive: true,
-    }).lean();
-    if (Number.isFinite(Number(configuredTerm?.value))) {
-        return Number(configuredTerm?.value);
-    }
 
     const parsed = trimmedTerms.match(/\d+/);
     return parsed ? Number(parsed[0]) : null;
@@ -1627,85 +1631,6 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
     }
 }
 
-export const requestQuoteApproval = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { quoteId } = req.params;
-        const quote = await Quotation.findById(quoteId);
-        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
-        if (quote.status === quoteStatus.Expired) return res.status(400).json({ message: "Expired quotes cannot be sent for approval" });
-
-        const actor = await getEmployeeData(req.user);
-        const breaches = await quoteApprovalBreaches(quote, actor);
-        const status = breaches.length ? 'pending' : 'not_required';
-        const now = new Date();
-        const approval = breaches.length
-            ? { status, requestedAt: now, requestedBy: actor?._id, breaches }
-            : { status, approvedAt: now, approvedBy: actor?._id, breaches: [] };
-
-        const updated = await Quotation.findByIdAndUpdate(
-            quoteId,
-            {
-                $set: { approval },
-                $push: {
-                    editHistory: {
-                        editedBy: actor?._id,
-                        editedAt: now,
-                        action: breaches.length ? 'ApprovalRequested' : 'ApprovalApproved',
-                        reason: breaches.length ? breaches.map((b: any) => b.message).join(' | ') : 'No approval rules breached',
-                    }
-                }
-            },
-            { new: true }
-        );
-        return res.status(200).json({ approval: updated?.approval, approvalRequired: breaches });
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const decideQuoteApproval = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { quoteId } = req.params;
-        const { decision, reason } = req.body;
-        if (!['approved', 'rejected'].includes(decision)) {
-            return res.status(400).json({ message: "Decision must be approved or rejected" });
-        }
-        const quote = await Quotation.findById(quoteId);
-        if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
-        const actor = await getEmployeeData(req.user);
-        const now = new Date();
-        const set: any = {
-            'approval.status': decision,
-            'approval.reason': String(reason || '').trim(),
-        };
-        if (decision === 'approved') {
-            set['approval.approvedAt'] = now;
-            set['approval.approvedBy'] = actor?._id;
-        } else {
-            set['approval.rejectedAt'] = now;
-            set['approval.rejectedBy'] = actor?._id;
-        }
-        const updated = await Quotation.findByIdAndUpdate(
-            quoteId,
-            {
-                $set: set,
-                $push: {
-                    editHistory: {
-                        editedBy: actor?._id,
-                        editedAt: now,
-                        action: decision === 'approved' ? 'ApprovalApproved' : 'ApprovalRejected',
-                        reason: String(reason || '').trim(),
-                    }
-                }
-            },
-            { new: true }
-        );
-        return res.status(200).json({ approval: updated?.approval });
-    } catch (error) {
-        next(error);
-    }
-};
-
 export const sendQuote = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { quoteId } = req.params;
@@ -1713,9 +1638,6 @@ export const sendQuote = async (req: Request, res: Response, next: NextFunction)
         const quote = await Quotation.findById(quoteId);
         if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
         if (!String(recipient || '').trim()) return res.status(400).json({ message: "Recipient is required" });
-        if (quote.approval?.status && ['required', 'pending', 'rejected'].includes(quote.approval.status)) {
-            return res.status(403).json({ message: "Approve this quotation before sending it to the customer" });
-        }
         const actor = await getEmployeeData(req.user);
         const now = new Date();
         const revision = quote.revision ?? 0;
@@ -1802,6 +1724,22 @@ export const recordCustomerDecision = async (req: Request, res: Response, next: 
         if (!quote || quote.isDeleted) return res.status(404).json({ message: "Quote not found" });
         const actor = await getEmployeeData(req.user);
         const nextStatus = decision === 'accepted' ? quoteStatus.Won : decision === 'rejected' ? quoteStatus.Lost : quote.status;
+        if (nextStatus !== quote.status) {
+            if (!canTransitionQuoteStatus(quote.status, nextStatus)) {
+                return res.status(400).json({ message: `A quote cannot move from "${quote.status}" to "${nextStatus}"` });
+            }
+            if (quoteStatusRequiresReason(quote.status, nextStatus) && !String(reason ?? '').trim()) {
+                return res.status(400).json({ message: nextStatus === quoteStatus.Lost ? "A reason is required when marking a quote as Lost" : "A reason is required for this status change" });
+            }
+            if (quote.status === quoteStatus.Won && quote.dealData?.status && quote.dealData.status !== 'rejected') {
+                return res.status(400).json({ message: "A deal sheet is in progress or approved, so this quote can no longer leave Won" });
+            }
+        }
+        if (decision === 'accepted') {
+            if (!currentRevisionWasSent(quote)) {
+                return res.status(409).json({ message: "Send the current quotation revision to the customer before marking it as accepted" });
+            }
+        }
         const now = new Date();
         const customerDecision: any = {
             decision,
@@ -1834,6 +1772,9 @@ export const recordCustomerDecision = async (req: Request, res: Response, next: 
             },
             { new: true }
         );
+        if (quote.status === quoteStatus.Won && nextStatus !== quoteStatus.Won) {
+            await releaseQuoteStockHolds(quote._id, `Customer decision: ${decision}`, actor?._id);
+        }
         return res.status(200).json(updated);
     } catch (error) {
         next(error);
@@ -1910,8 +1851,19 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         if (!String(paymentTerms ?? '').trim()) {
             return res.status(400).json({ message: "Payment terms are required before raising a deal sheet" });
         }
+        if (String(paymentTerms).trim().length > 200) {
+            return res.status(400).json({ message: "Payment terms must be 200 characters or fewer" });
+        }
         if (!selectedDealLines(items).length) {
             return res.status(400).json({ message: "Select at least one deal line before raising a deal sheet" });
+        }
+        const badLine = selectedDealLines(items).find((l: any) =>
+            !(Number(l?.quantity) > 0) || !(Number(l?.unitCost) >= 0) || !(Number(l?.unitSellingPrice) > 0));
+        if (badLine) {
+            return res.status(400).json({ message: "Every selected line needs a quantity above 0, a cost of 0 or more and a selling price above 0" });
+        }
+        if ((Array.isArray(costs) ? costs : []).some((c: any) => !(Number(c?.value) >= 0))) {
+            return res.status(400).json({ message: "Additional costs and discounts cannot be negative" });
         }
 
         const dealFiles = req.files;
@@ -1931,7 +1883,8 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
             files = [...files]
         }
 
-        let dealId: string = await generateDealId();
+        // A resubmitted (previously rejected) deal keeps its number instead of burning a new one.
+        let dealId: string = quote.dealData?.dealId || await generateDealId();
 
         const createdDate = new Date()
         let updateQuoteData = {
@@ -2026,6 +1979,20 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
         if (existingJob) {
             return res.status(409).json({ message: "A job already exists for this quotation" });
         }
+        if (quote.enqId) {
+            const enquiryQuoteIds = await Quotation.find({
+                enqId: quote.enqId,
+                _id: { $ne: quote._id },
+                isDeleted: { $ne: true },
+            }).distinct('_id');
+            const existingEnquiryJob = enquiryQuoteIds.length ? await Job.findOne({
+                isDeleted: { $ne: true },
+                quoteId: { $in: enquiryQuoteIds },
+            }) : null;
+            if (existingEnquiryJob) {
+                return res.status(409).json({ message: "A job already exists for another quotation from this enquiry" });
+            }
+        }
         const customerGuard = await getCustomerCommercialGuard(quote.client, estimateQuoteValue(quote));
         if (customerGuard.blocked || customerGuard.warnings.length) {
             return res.status(403).json({
@@ -2047,14 +2014,17 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
         const job = new Job(jobData);
         const saveJob = await job.save()
         if (saveJob) {
+            await logAudit(req, { entityType: 'job', entityId: saveJob._id, entityLabel: jobId, action: 'created', summary: `Job ${jobId} created from approved deal sheet`, changes: String(req.body.comment ?? '').trim() ? [{ label: 'Comment', to: String(req.body.comment).trim() }] : undefined });
             const quoteUpdate = await Quotation.updateOne(
                 { _id: jobData.quoteId },
                 {
-                    $set: { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(req.body.userId) },
-                    $push: { editHistory: { editedBy: req.body.userId, editedAt: new Date(), action: 'DealApproved' } }
+                    $set: { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(String(approverData?._id ?? req.body.userId)) },
+                    $push: { editHistory: { editedBy: approverData?._id ?? req.body.userId, editedAt: new Date(), action: 'DealApproved', reason: String(req.body.comment ?? '').trim() || undefined } }
                 }
             )
             if (quoteUpdate) {
+                // The job's own reservation below takes over from any hold placed when the quote was won.
+                await releaseQuoteStockHolds(quote._id, `Taken over by job ${jobId}`, approverData?._id, 'Converted');
                 const selectedLines = selectedDealLines(quote.dealData.updatedItems)
                     .filter((line: any) => hasReferenceValue(line?.partNo) && isPositiveNumber(line?.quantity));
                 const expiresAt = quote.validityDate ? new Date(quote.validityDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -2074,7 +2044,7 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                         createdBy: approverData?._id,
                         createdDate: new Date(),
                         updatedDate: new Date(),
-                        isDeleted: false,
+                        isDeleted: { $ne: true },
                     });
                     await StockMovement.create({
                         product: reservation.product,
@@ -2126,10 +2096,17 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
 export const rejectDeal = async (req: Request, res: Response, next: NextFunction) => {
     try {
 
-        const { quoteId, comment } = req.body;
+        const { quoteId } = req.body;
+        const comment = String(req.body.comment ?? '').trim();
         const deal = await Quotation.findById(quoteId);
-        if (!deal) {
-            return res.status(502).json({ message: 'Deal not found' });
+        if (!deal || deal.isDeleted || !deal.dealData) {
+            return res.status(404).json({ message: 'Deal not found' });
+        }
+        if (deal.dealData.status !== 'pending') {
+            return res.status(409).json({ message: `Only a pending deal can be rejected (this one is ${deal.dealData.status})` });
+        }
+        if (!comment) {
+            return res.status(400).json({ message: 'A reason is required to reject a deal' });
         }
         deal.dealData.status = 'rejected';
         deal.dealData.seenedBySalsePerson = false
@@ -2177,8 +2154,11 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
 
         const { quoteId } = req.body;
         const deal = await Quotation.findById(quoteId);
-        if (!deal) {
-            return res.status(502).json({ message: 'Deal not found' });
+        if (!deal || deal.isDeleted || !deal.dealData) {
+            return res.status(404).json({ message: 'Deal not found' });
+        }
+        if (deal.dealData.status !== 'approved') {
+            return res.status(409).json({ message: `Only an approved deal can be revoked (this one is ${deal.dealData.status})` });
         }
 
         const job = await Job.findOne({ quoteId: quoteId });
@@ -2197,6 +2177,27 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
         } as any);
         await deal.save();
         const jobDelete = await Job.deleteOne({ quoteId: quoteId })
+        if (job) {
+            // The job's stock reservations die with it; leaving them Active would block that stock forever.
+            const reservations: any[] = await StockReservation.find({ job: job._id, status: 'Active' }).lean();
+            for (const reservation of reservations) {
+                await StockReservation.updateOne(
+                    { _id: reservation._id, status: 'Active' },
+                    { $set: { status: 'Released', releaseReason: 'Deal revoked', releasedAt: new Date(), releasedBy: revokerData?._id, updatedDate: new Date() } }
+                );
+                await StockMovement.create({
+                    product: reservation.product,
+                    movementType: 'Release',
+                    reservedQuantity: reservation.quantity,
+                    referenceType: 'Job',
+                    referenceId: job._id,
+                    remarks: 'Deal revoked - job removed',
+                    movementDate: new Date(),
+                    createdBy: revokerData?._id,
+                    createdDate: new Date(),
+                });
+            }
+        }
 
         if (jobDelete.deletedCount) {
             const socket = req.app.get('io') as Server;
@@ -2414,7 +2415,7 @@ const tally = (map: Map<string, any>, id: string, name: string, value: number, w
     if (won) { row.wonCount += 1; row.wonValue += value; }
 };
 
-export const getReportDetails = async (req: Request, res: Response) => {
+export const getReportDetails = async (req: Request, res: Response, next: NextFunction) => {
     try {
         await expireOverdueQuotes();
         let { salesPerson, customer, fromDate, toDate, department, access, userId } = req.body;
@@ -2746,6 +2747,22 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
                 message: 'Quote not found or already deleted'
             });
         }
+        if (quote.isDeleted) {
+            return res.status(404).json({
+                message: 'Quote not found or already deleted'
+            });
+        }
+        if (hasActiveDeal(quote)) {
+            return res.status(409).json({
+                message: 'A quotation with an active or approved deal sheet cannot be deleted'
+            });
+        }
+        const existingJob = await Job.findOne({ quoteId: dataId, isDeleted: { $ne: true } });
+        if (existingJob) {
+            return res.status(409).json({
+                message: 'A quotation with a job sheet cannot be deleted'
+            });
+        }
 
         // Soft delete the quote
         await Quotation.findByIdAndUpdate(dataId, {
@@ -2764,8 +2781,10 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
 }
 export const getProductSuggestions = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { search = '', departments = '', limit = '20', category = '' } = req.query;
-        const filter: any = { isDeleted: { $ne: true }, approvalStatus: { $nin: ['Draft', 'Pending'] } };
+        const { search = '', departments = '', limit = '20', category = '', includePending = '' } = req.query;
+        // Supplier RFQs work with products still awaiting approval (product approval is skipped there for now).
+        const hidden = includePending === 'true' ? ['Draft'] : ['Draft', 'Pending'];
+        const filter: any = { isDeleted: { $ne: true }, approvalStatus: { $nin: hidden } };
 
         const departmentIds = (typeof departments === 'string' && departments.trim())
             ? departments.split(',').map((d) => d.trim()).filter(Boolean)
@@ -2809,7 +2828,7 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
         const stockEntries = productIds.length ? await StockEntry.find({
             partNo: { $in: productIds },
             isDeleted: { $ne: true },
-        }).select('_id partNo quantity isQuarantined').lean() : [];
+        }).select('_id partNo targetWarehouse quantity isQuarantined dateOfPurchase supplierName supplierLpoNo').lean() : [];
 
         const activeBlocks = stockEntries.length ? await StockBlock.find({
             stockEntryId: { $in: stockEntries.map((entry: any) => entry._id) },
@@ -2825,16 +2844,33 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
             }
         });
 
-        const stockByProduct = new Map<string, { onHandQuantity: number; blockedQuantity: number; quarantinedQuantity: number }>();
+        const warehouseIds = [...new Set(stockEntries.map((entry: any) => entry.targetWarehouse?.toString()).filter(Boolean))];
+        const warehouses = warehouseIds.length ? await Warehouse.find({ _id: { $in: warehouseIds } }).select('wareHouseName').lean() : [];
+        const warehouseById = new Map(warehouses.map((warehouse: any) => [warehouse._id.toString(), warehouse.wareHouseName]));
+
+        type ProductStockSnapshot = {
+            onHandQuantity: number;
+            blockedQuantity: number;
+            warehouseQuantity: Map<string, number>;
+            lastEntry?: any;
+        };
+        const emptyStock = (): ProductStockSnapshot => ({ onHandQuantity: 0, blockedQuantity: 0, warehouseQuantity: new Map<string, number>() });
+        const stockByProduct = new Map<string, ProductStockSnapshot>();
+        const quarantinedByProduct = new Map<string, number>();
         stockEntries.forEach((entry: any) => {
             const productId = entry.partNo?.toString();
             if (!productId) return;
-            const current = stockByProduct.get(productId) || { onHandQuantity: 0, blockedQuantity: 0, quarantinedQuantity: 0 };
+            const current = stockByProduct.get(productId) || emptyStock();
             if (entry.isQuarantined) {
-                current.quarantinedQuantity += entry.quantity || 0;
+                quarantinedByProduct.set(productId, (quarantinedByProduct.get(productId) || 0) + (entry.quantity || 0));
             } else {
                 current.onHandQuantity += entry.quantity || 0;
                 current.blockedQuantity += blockedByEntryId.get(entry._id.toString()) || 0;
+                const warehouseId = entry.targetWarehouse?.toString();
+                if (warehouseId) current.warehouseQuantity.set(warehouseId, (current.warehouseQuantity.get(warehouseId) || 0) + (entry.quantity || 0));
+                if (!current.lastEntry || new Date(entry.dateOfPurchase).getTime() > new Date(current.lastEntry.dateOfPurchase).getTime()) {
+                    current.lastEntry = entry;
+                }
             }
             stockByProduct.set(productId, current);
         });
@@ -2853,18 +2889,109 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
         const reservationByProduct = new Map<string, number>();
         reservations.forEach((reservation: any) => reservationByProduct.set(reservation._id.toString(), reservation.quantity || 0));
 
+        const recentUsage = productIds.length ? await Quotation.aggregate([
+            { $match: { isDeleted: { $ne: true }, 'optionalItems.items.itemDetails.productId': { $in: productIds } } },
+            { $unwind: '$optionalItems' },
+            { $unwind: '$optionalItems.items' },
+            { $unwind: '$optionalItems.items.itemDetails' },
+            { $match: { 'optionalItems.items.itemDetails.productId': { $in: productIds } } },
+            { $sort: { date: -1, createdAt: -1, _id: -1 } },
+            {
+                $lookup: {
+                    from: 'customers',
+                    localField: 'client',
+                    foreignField: '_id',
+                    as: 'clientInfo',
+                },
+            },
+            { $unwind: { path: '$clientInfo', preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    productId: '$optionalItems.items.itemDetails.productId',
+                    quoteId: 1,
+                    quoteMongoId: '$_id',
+                    date: 1,
+                    status: 1,
+                    dealStatus: '$dealData.status',
+                    customerName: '$clientInfo.companyName',
+                    quantity: '$optionalItems.items.itemDetails.quantity',
+                    unitSellingPrice: '$optionalItems.items.itemDetails.unitSellingPrice',
+                },
+            },
+            {
+                $group: {
+                    _id: '$productId',
+                    usage: { $push: '$$ROOT' },
+                    quoteCount: { $sum: 1 },
+                    soldCount: {
+                        $sum: {
+                            $cond: [
+                                { $or: [{ $eq: ['$status', quoteStatus.Won] }, { $eq: ['$dealStatus', 'approved'] }] },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                },
+            },
+            {
+                $project: {
+                    quoteCount: 1,
+                    soldCount: 1,
+                    recent: { $slice: ['$usage', 3] },
+                },
+            },
+        ]) : [];
+        const usageByProduct = new Map(recentUsage.map((usage: any) => [usage._id.toString(), usage]));
+
         const suggestionsWithAvailability = suggestions.map((product: any) => {
-            const stock = stockByProduct.get(product._id.toString()) || { onHandQuantity: 0, blockedQuantity: 0, quarantinedQuantity: 0 };
+            const stock = stockByProduct.get(product._id.toString()) || emptyStock();
             const reservationQuantity = reservationByProduct.get(product._id.toString()) || 0;
             const reservedQuantity = stock.blockedQuantity + reservationQuantity;
+            const availableQuantity = Math.max(0, stock.onHandQuantity - reservedQuantity);
+            const usage = usageByProduct.get(product._id.toString());
             return {
                 ...product,
                 onHandQuantity: stock.onHandQuantity,
                 blockedQuantity: stock.blockedQuantity,
                 reservationQuantity,
                 reservedQuantity,
-                quarantinedQuantity: stock.quarantinedQuantity,
-                availableQuantity: Math.max(0, stock.onHandQuantity - reservedQuantity),
+                quarantinedQuantity: quarantinedByProduct.get(product._id.toString()) || 0,
+                availableQuantity,
+                stockStatus: product.type && product.type !== 'Stock'
+                    ? 'Non-stock'
+                    : availableQuantity > 0
+                        ? 'In stock'
+                        : stock.onHandQuantity > 0
+                            ? 'Reserved / blocked'
+                            : 'Not in stock',
+                warehouseAvailability: [...(stock.warehouseQuantity || new Map()).entries()]
+                    .map(([warehouseId, quantity]) => ({
+                        warehouseId,
+                        warehouseName: warehouseById.get(warehouseId) || 'Warehouse',
+                        quantity,
+                    }))
+                    .filter((warehouse) => warehouse.quantity > 0)
+                    .sort((a, b) => b.quantity - a.quantity)
+                    .slice(0, 5),
+                lastStockEntry: stock.lastEntry ? {
+                    dateOfPurchase: stock.lastEntry.dateOfPurchase,
+                    supplierLpoNo: stock.lastEntry.supplierLpoNo || '',
+                } : null,
+                salesHistory: {
+                    quotedCount: usage?.quoteCount || 0,
+                    soldCount: usage?.soldCount || 0,
+                    recent: (usage?.recent || []).map((row: any) => ({
+                        quoteId: row.quoteId,
+                        quotationId: row.quoteMongoId,
+                        date: row.date,
+                        status: row.status,
+                        dealStatus: row.dealStatus || '',
+                        customerName: row.customerName || '',
+                        quantity: row.quantity || 0,
+                        unitSellingPrice: row.unitSellingPrice || 0,
+                    })),
+                },
             };
         });
 

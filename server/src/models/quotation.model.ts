@@ -175,6 +175,7 @@ interface Quotation extends Document {
     enqId: Types.ObjectId;
     isDeleted: boolean;
     rfqNo: string;
+    sourceRfqId?: Types.ObjectId;
     closingDate: Date;
     eventId: any;
     saveNote: string;
@@ -567,6 +568,11 @@ const quotationSchema = new Schema<Quotation>({
     enqId: {
         type: Schema.Types.ObjectId,
         ref: 'Enquiry'
+    },
+    // The sales RFQ whose awarded supplier prices seeded this quote's costs.
+    sourceRfqId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Rfq'
     },
     isDeleted: {
         type: Boolean,

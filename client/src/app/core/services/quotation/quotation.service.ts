@@ -12,6 +12,14 @@ import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/er
 // show their own error toast on failure, so requests opt out of the interceptor's global toast.
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
+export interface QuoteStockHold {
+  lines: { productId: string; partNo: string; detail: string; uom: string; requested: number; available: number; held: number }[];
+  /** When the hold lapses if no job has been created; null when nothing is held. */
+  expiresAt: string | null;
+  /** Won, and the deal is not yet approved (after that the job reserves the stock). */
+  canHold: boolean;
+}
+
 
 @Injectable({
   providedIn: 'root'
@@ -53,7 +61,7 @@ export class QuotationService {
     return this.http.post<{ quoteId: string }>(`${this.api}/quotation/nextQuoteId`, quoteData)
   }
 
-  getProductSuggestions(params: { search: string; departments?: string[]; category?: string }): Observable<{ success: boolean; message: string; data: { _id: string; productCategory: { _id: string; categoryName: string }; productDescription: string; partNo?: string; itemCode?: string; unitOfMeasure?: string; availableQuantity?: number; reservedQuantity?: number; quarantinedQuantity?: number }[] }> {
+  getProductSuggestions(params: { search: string; departments?: string[]; category?: string; includePending?: boolean }): Observable<{ success: boolean; message: string; data: any[] }> {
     let httpParams: any = { search: params.search || '' };
     if (params.departments?.length) {
       httpParams.departments = params.departments.join(',');
@@ -61,19 +69,12 @@ export class QuotationService {
     if (params.category?.trim()) {
       httpParams.category = params.category.trim();
     }
+    if (params.includePending) httpParams.includePending = 'true';
     return this.http.get<{ success: boolean; message: string; data: any[] }>(`${this.api}/quotation/product-suggestions`, { params: httpParams })
   }
 
   updateQuoteStatus(quoteId: string, status: QuoteStatus, reason?: string): Observable<QuoteStatus> {
     return this.http.patch<QuoteStatus>(`${this.api}/quotation/status/${quoteId}`, { status, reason })
-  }
-
-  requestQuoteApproval(quoteId: string): Observable<any> {
-    return this.http.post<any>(`${this.api}/quotation/approval/request/${quoteId}`, {}, { context: context() })
-  }
-
-  decideQuoteApproval(quoteId: string, decision: 'approved' | 'rejected', reason?: string): Observable<any> {
-    return this.http.post<any>(`${this.api}/quotation/approval/decision/${quoteId}`, { decision, reason }, { context: context() })
   }
 
   sendQuote(quoteId: string, data: { recipient: string; emailStatus?: 'prepared' | 'sent' | 'failed'; pdfFileName?: string; note?: string }): Observable<Quotatation> {
@@ -92,7 +93,21 @@ export class QuotationService {
     return this.http.patch<Quotatation>(`${this.api}/quotation/optional-decisions/${quoteId}`, { decisions }, { context: context() })
   }
 
-  saveDealSheet(dealDatas: dealData, quoteId?: string): Observable<Quotatation> {
+  /** Stock held for a Won quote before it becomes a job: each product line with requested, free and held quantity. */
+  getStockHold(quoteId: string): Observable<{ success: boolean; data: QuoteStockHold }> {
+    return this.http.get<{ success: boolean; data: QuoteStockHold }>(`${this.api}/quotation/stock-hold/${quoteId}`, { context: context() })
+  }
+
+  /** Holds the free stock for `days` days; running it again replaces the earlier hold. */
+  holdStock(quoteId: string, days: number): Observable<{ success: boolean; message: string; data: QuoteStockHold }> {
+    return this.http.post<{ success: boolean; message: string; data: QuoteStockHold }>(`${this.api}/quotation/stock-hold/${quoteId}`, { days }, { context: context() })
+  }
+
+  releaseStockHold(quoteId: string): Observable<{ success: boolean; message: string; data: QuoteStockHold }> {
+    return this.http.delete<{ success: boolean; message: string; data: QuoteStockHold }>(`${this.api}/quotation/stock-hold/${quoteId}`, { context: context() })
+  }
+
+  saveDealSheet(dealDatas: dealData | FormData, quoteId?: string): Observable<Quotatation> {
     return this.http.patch<Quotatation>(`${this.api}/quotation/deal/${quoteId}`, dealDatas, { context: context() })
   }
 

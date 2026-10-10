@@ -64,10 +64,15 @@
             </div>
         </ng-template>
 
+        <!-- left: optional, per-tab (outline) -->
+        <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <app-action-button *ngIf="tab === 'events'" variant="outline" icon="plus" (click)="onAddEvent(row)">Add event</app-action-button>
+            <app-action-button *ngIf="tab === 'lpo' && canUploadLpo(row)" variant="outline" (click)="startLpoUpload(row)">Upload LPO</app-action-button>
+        </ng-template>
+
+        <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
-            <app-action-button *ngIf="tab === 'events'" variant="secondary" (click)="onAddEvent(row)">Add event</app-action-button>
-            <app-action-button *ngIf="tab === 'lpo' && canUploadLpo(row)" variant="secondary" (click)="startLpoUpload(row)">Upload LPO</app-action-button>
-            <app-action-button variant="primary" (click)="openFullQuotation(row, $event)">Open full quotation</app-action-button>
+            <app-action-button variant="primary" (click)="openFullQuotation(row, $event)" icon="view">Open full quotation</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">

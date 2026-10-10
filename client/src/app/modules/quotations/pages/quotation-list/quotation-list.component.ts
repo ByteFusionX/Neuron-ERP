@@ -31,7 +31,7 @@ import { LpoUploadModalComponent, LpoUploadModalResult } from './lpo-upload-moda
 import { Events } from 'src/app/shared/interfaces/evets.interface';
 import { NgIcon } from '@ng-icons/core';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
-import { DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent, DataGridColumn, DataGridDetailTab, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
+import { DataGridBreadcrumb, DataGridBulkAction, DataGridBulkActionEvent, DataGridCellEditEvent, DataGridColumn, DataGridDetailTab, DataGridFilter, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DataGridFieldComponent } from 'src/app/shared/components/data-grid/data-grid-field.component';
 import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
 import { DetailSectionComponent } from 'src/app/shared/components/detail-panel/detail-section.component';
@@ -232,8 +232,28 @@ export class QuotationListComponent implements AfterViewInit {
    *  its UI too, not just the fetched data. */
   ngAfterViewInit(): void {
     if (this.grid) this.grid.page = this.page;
+    // Deferred so the toolbar chips update after this check pass, without NG0100.
+    Promise.resolve().then(() => this.showUrlFiltersInGrid());
 
     this.watchForEnquiryHandoff();
+  }
+
+  /** A search or filter that arrived through the URL (reload, shared link, Back) filters the data; show it in the toolbar too. */
+  private showUrlFiltersInGrid(): void {
+    if (!this.grid) return;
+    const filters: Omit<DataGridFilter, 'id'>[] = [];
+    const add = (key: string, op: DataGridFilter['op'], value: string | null) => {
+      if (value) filters.push({ key, op, value });
+    };
+    add('customerName', 'is', this.selectedCustomer);
+    add('salesPerson', 'is', this.selectedSalesPerson);
+    add('department', 'is', this.selectedDepartment);
+    add('status', 'is', this.selectedQuoteStatus);
+    add('dealStatus', 'is', this.selectedDealStatus);
+    if (this.fromDate) add('date', 'after', this.fromDate);
+    if (this.toDate) add('date', 'before', this.toDate);
+    if (!this.searchQuery && !filters.length) return;
+    this.grid.setQueryState(this.searchQuery, filters);
   }
 
   /** Populate id->label editor options for the grid's inline filter dropdowns. */
@@ -319,11 +339,12 @@ export class QuotationListComponent implements AfterViewInit {
       { key: 'customerName', label: 'Customer', valueGetter: (r) => r.client?.companyName },
       { key: 'description', label: 'Description', valueGetter: (r) => r.subject },
       { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '' },
-      { key: 'department', label: 'Department', valueGetter: (r) => this.departmentNames(r) },
-      { key: 'totalCost', label: 'Amount', valueGetter: (r) => `${this.numberFormat.transform(this.calculateDiscoutPrice(r))} ${r.currency}` },
+      { key: 'department', label: 'Department', width: '130px', valueGetter: (r) => this.departmentNames(r) },
+      { key: 'totalCost', label: 'Amount', width: '150px', align: 'right', valueGetter: (r) => `${this.numberFormat.transform(this.calculateDiscoutPrice(r))} ${r.currency}` },
       {
         key: 'status', label: 'Status', type: 'badge', editable: true, editor: 'select',
         editorOptions: this.selectableQuoteStatuses.map((s) => ({ label: s, value: s })),
+        filterOptions: this.quoteStatuses.map((s) => ({ label: s, value: s })),
         badgeClasses: this.statusBadgeClasses,
       },
       {
@@ -331,6 +352,7 @@ export class QuotationListComponent implements AfterViewInit {
         valueGetter: (r) => r.dealData?.status ?? null,
         editorOptions: this.dealStatuses.map((s) => ({ label: s.charAt(0).toUpperCase() + s.slice(1), value: s })),
         badgeClasses: this.dealStatusBadgeClasses,
+        badgeLabel: (v) => (v ? String(v).charAt(0).toUpperCase() + String(v).slice(1) : ''),
       },
       { key: 'closingDate', label: 'Closing Date', type: 'date', editable: true, editor: 'date' },
     ];
@@ -439,17 +461,14 @@ export class QuotationListComponent implements AfterViewInit {
     if (action.id !== 'delete') return;
 
     const count = `${rows.length} quotation${rows.length === 1 ? '' : 's'}`;
-    const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: `Delete ${count}?`,
-        description: 'This cannot be undone.',
-        icon: 'heroExclamationCircle',
-        IconColor: 'orange',
-      },
-    });
-
-    dialogRef.afterClosed().subscribe((approved: boolean) => {
-      if (!approved) return;
+    this.confirm.open({
+      tone: 'reject',
+      title: `Delete ${count}?`,
+      message: 'The selected quotations will be removed from the list.',
+      consequence: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    }).then(({ confirmed }) => {
+      if (!confirmed) return;
 
       this._employeeService.employeeData$.subscribe((employee) => {
         const employeeId = employee?._id as string;
@@ -771,7 +790,7 @@ export class QuotationListComponent implements AfterViewInit {
   /** LPO tab renders files as an inline document list (same pattern as the home-landing
    *  single-view page's Documents tab) instead of embedding the upload dialog component. */
   lpoFileUrl(fileName: string): string {
-    return `${environment.api}/file/${fileName}`;
+    return `${environment.api}/file/${encodeURIComponent(fileName)}`;
   }
 
   isLpoApproved(row: Quotatation): boolean {

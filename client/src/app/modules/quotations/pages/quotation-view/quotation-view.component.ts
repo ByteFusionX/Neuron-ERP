@@ -20,10 +20,11 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
-import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
+import { QuotationService, QuoteStockHold } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
 import { EditHistoryModalComponent } from 'src/app/shared/components/edit-history-modal/edit-history-modal.component';
 import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app/shared/components/revision-history-modal/revision-history-modal.component';
 import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer.component';
@@ -215,6 +216,9 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   dealFacts: QvFact[] = [];
   handoverFacts: QvFact[] = [];
   lifecycleFacts: QvFact[] = [];
+  /** Stock held for this Won quote until the job takes it over; null until loaded or when not Won. */
+  stockHold: QuoteStockHold | null = null;
+  stockHoldBusy = false;
 
   private subscriptions = new Subscription();
   private confirm = inject(ConfirmDialogService);
@@ -272,6 +276,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
               this.isNoteOwner = !!employee && employee._id === this.quoteData?.createdBy?._id;
             });
             this.rebuild();
+            this.loadStockHold();
             this.loading = false;
           },
           error: () => {
@@ -352,10 +357,97 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
             this.toast.success('Status updated.');
             this.reloadHistory();
             this.rebuild();
+            this.loadStockHold();
           },
           error: (e) => this.toast.error(e?.error?.message || 'Failed to update status.'),
         });
       });
+  }
+
+  // --- stock hold: stock kept for a Won quote until the deal is approved and the job reserves it ---
+
+  get heldLines(): QuoteStockHold['lines'] {
+    return (this.stockHold?.lines || []).filter((l) => l.held > 0);
+  }
+
+  get canHoldStock(): boolean {
+    return !!this.stockHold?.canHold && this.stockHold.lines.length > 0;
+  }
+
+  private loadStockHold(): void {
+    const q = this.quoteData;
+    if (!q?._id || q.status !== QuoteStatus.Won) {
+      this.stockHold = null;
+      return;
+    }
+    this.quotationService.getStockHold(q._id as string).subscribe({
+      next: (res) => (this.stockHold = res.data),
+      error: () => (this.stockHold = null),
+    });
+  }
+
+  /** For an urgent order: keep the free stock for a few days; it lapses on its own if no job is created by then. */
+  async onHoldStock(): Promise<void> {
+    const q = this.quoteData;
+    const hold = this.stockHold;
+    if (!q?._id || !hold || this.stockHoldBusy) return;
+    const short = hold.lines.filter((l) => l.available + l.held < l.requested);
+    const { confirmed, choice } = await this.confirm.open({
+      tone: 'note',
+      title: this.heldLines.length ? 'Change stock hold' : 'Hold stock for this order',
+      message: 'Stock is normally reserved when the deal is approved. Hold it now if the order is urgent. If no job is created in time, the hold is released on its own.',
+      details: hold.lines.slice(0, 8).map((l) => ({
+        label: l.partNo ? `${l.partNo} · ${l.detail}` : l.detail,
+        value: `need ${l.requested}, free ${l.available + l.held}${l.uom ? ' ' + l.uom : ''}`,
+      })),
+      consequence: short.length ? `${short.length} line(s) are short; only what is free will be held.` : undefined,
+      choices: [
+        { value: '3', label: '3 days' },
+        { value: '5', label: '5 days' },
+        { value: '7', label: '7 days' },
+        { value: '14', label: '14 days' },
+      ],
+      defaultChoice: '3',
+      confirmLabel: 'Hold stock',
+    });
+    if (!confirmed || !choice) return;
+    this.stockHoldBusy = true;
+    this.quotationService.holdStock(q._id as string, Number(choice)).subscribe({
+      next: (res) => {
+        this.stockHoldBusy = false;
+        this.stockHold = res.data;
+        this.toast.success(res.message || 'Stock held.');
+      },
+      error: (e) => {
+        this.stockHoldBusy = false;
+        this.toast.error(e?.error?.message || 'Could not hold the stock.');
+      },
+    });
+  }
+
+  async onReleaseStockHold(): Promise<void> {
+    const q = this.quoteData;
+    if (!q?._id || this.stockHoldBusy) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Release held stock?',
+      message: 'The held quantities go back to free stock and can be sold on other orders.',
+      confirmLabel: 'Release',
+      cancelLabel: 'Keep holding',
+    });
+    if (!confirmed) return;
+    this.stockHoldBusy = true;
+    this.quotationService.releaseStockHold(q._id as string).subscribe({
+      next: (res) => {
+        this.stockHoldBusy = false;
+        this.stockHold = res.data;
+        this.toast.success(res.message || 'Stock hold released.');
+      },
+      error: (e) => {
+        this.stockHoldBusy = false;
+        this.toast.error(e?.error?.message || 'Could not release the stock hold.');
+      },
+    });
   }
 
   onTabChange(id: string): void {
@@ -518,59 +610,59 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       });
   }
 
-  onRequestApproval(): void {
-    const q = this.quoteData;
-    if (!q?._id) return;
-    this.quotationService.requestQuoteApproval(q._id).subscribe({
-      next: (res) => {
-        const count = res?.approvalRequired?.length || 0;
-        this.toast.success(count ? `Approval requested for ${count} rule breach(es).` : 'No approval needed for this quote.');
-        this.reload$.next();
-      },
-      error: (e) => this.toast.error(e?.error?.message || 'Failed to request approval.'),
-    });
+  private readonly formPrompt = inject(FormPromptService);
+
+  /** True when at least one line is flagged optional, so customer decisions per option make sense. */
+  get hasOptionalItems(): boolean {
+    return (this.quoteData?.optionalItems || []).some((o) => (o.items || []).some((i: any) => i.isOptional));
   }
 
-  onApproveQuote(decision: 'approved' | 'rejected'): void {
+  /** Customer accept/reject only applies while the quote is still open. */
+  get canRecordCustomerDecision(): boolean {
+    const status = this.quoteData?.status;
+    return !!status && ![QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.Expired].includes(status as QuoteStatus);
+  }
+
+  private todayIso(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  async onSendQuote(): Promise<void> {
     const q = this.quoteData;
     if (!q?._id) return;
-    const reason = window.prompt(decision === 'approved' ? 'Approval note' : 'Rejection reason') || '';
-    if (decision === 'rejected' && !reason.trim()) {
-      this.toast.error('Rejection reason is required.');
-      return;
-    }
-    this.quotationService.decideQuoteApproval(q._id, decision, reason).subscribe({
+    const answer = await this.formPrompt.prompt({
+      title: 'Send quote',
+      message: 'Record that this quote was sent to the customer.',
+      confirmLabel: 'Mark as sent',
+      fields: [
+        { key: 'recipient', label: 'Recipient email', type: 'email', required: true, value: q.attention?.email || q.client?.customerEmailId || '' },
+        { key: 'note', label: 'Note', type: 'textarea' },
+      ],
+    });
+    if (!answer) return;
+    this.quotationService.sendQuote(q._id, { recipient: answer['recipient'], emailStatus: 'sent', note: answer['note'] }).subscribe({
       next: () => {
-        this.toast.success(decision === 'approved' ? 'Quote approved to send.' : 'Quote approval rejected.');
+        this.toast.success('Quote marked as sent.');
         this.reload$.next();
       },
-      error: (e) => this.toast.error(e?.error?.message || 'Failed to update approval.'),
+      error: (e) => this.toast.error(e?.error?.message || 'Failed to mark quote as sent.'),
     });
   }
 
-  onSendQuote(): void {
+  async onUpdateFollowUp(): Promise<void> {
     const q = this.quoteData;
     if (!q?._id) return;
-    const defaultRecipient = q.attention?.email || q.client?.customerEmailId || '';
-    const recipient = window.prompt('Recipient email', defaultRecipient);
-    if (!recipient?.trim()) return;
-    const note = window.prompt('Send note', '') || '';
-    this.quotationService.sendQuote(q._id, { recipient: recipient.trim(), emailStatus: 'sent', note }).subscribe({
-      next: () => {
-        this.toast.success('Quote send tracked.');
-        this.reload$.next();
-      },
-      error: (e) => this.toast.error(e?.error?.message || 'Failed to track quote send.'),
+    const answer = await this.formPrompt.prompt({
+      title: 'Follow up',
+      confirmLabel: 'Save follow-up',
+      fields: [
+        { key: 'nextFollowUpDate', label: 'Next follow-up date', type: 'date', required: true, min: this.todayIso(), value: q.followUp?.nextFollowUpDate?.slice(0, 10) || '' },
+        { key: 'note', label: 'Follow-up note', type: 'textarea', value: q.followUp?.note || '' },
+      ],
     });
-  }
-
-  onUpdateFollowUp(): void {
-    const q = this.quoteData;
-    if (!q?._id) return;
-    const nextFollowUpDate = window.prompt('Next follow-up date (YYYY-MM-DD)', q.followUp?.nextFollowUpDate?.slice(0, 10) || '');
-    if (nextFollowUpDate === null) return;
-    const note = window.prompt('Follow-up note', q.followUp?.note || '') || '';
-    this.quotationService.updateQuoteFollowUp(q._id, { nextFollowUpDate, note }).subscribe({
+    if (!answer) return;
+    this.quotationService.updateQuoteFollowUp(q._id, { nextFollowUpDate: answer['nextFollowUpDate'], note: answer['note'] }).subscribe({
       next: () => {
         this.toast.success('Follow-up updated.');
         this.reload$.next();
@@ -579,18 +671,29 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     });
   }
 
-  onCustomerDecision(decision: 'accepted' | 'rejected' | 'no_response'): void {
+  async onCustomerDecision(decision: 'accepted' | 'rejected' | 'no_response'): Promise<void> {
     const q = this.quoteData;
     if (!q?._id) return;
-    const reason = window.prompt(decision === 'accepted' ? 'Acceptance note' : decision === 'rejected' ? 'Lost reason' : 'No-response note', '') || '';
-    if (decision === 'rejected' && !reason.trim()) {
-      this.toast.error('Lost reason is required.');
-      return;
-    }
-    const competitor = decision === 'rejected' ? (window.prompt('Competitor', '') || '') : '';
-    const lostValueRaw = decision === 'rejected' ? (window.prompt('Expected value lost', '') || '') : '';
-    const expectedValueLost = lostValueRaw.trim() ? Number(lostValueRaw) : undefined;
-    this.quotationService.recordCustomerDecision(q._id, { decision, reason, competitor, expectedValueLost }).subscribe({
+    const rejected = decision === 'rejected';
+    const answer = await this.formPrompt.prompt({
+      title: decision === 'accepted' ? 'Customer accepted' : rejected ? 'Customer rejected' : 'No response from customer',
+      confirmLabel: 'Record decision',
+      fields: [
+        { key: 'reason', label: decision === 'accepted' ? 'Acceptance note' : rejected ? 'Lost reason' : 'Note', type: 'textarea', required: rejected },
+        ...(rejected ? [
+          { key: 'competitor', label: 'Competitor', type: 'text' as const },
+          { key: 'expectedValueLost', label: 'Expected value lost', type: 'number' as const, min: 0 },
+        ] : []),
+      ],
+    });
+    if (!answer) return;
+    const lostRaw = answer['expectedValueLost'];
+    this.quotationService.recordCustomerDecision(q._id, {
+      decision,
+      reason: answer['reason'],
+      competitor: answer['competitor'] ?? '',
+      expectedValueLost: lostRaw ? Number(lostRaw) : undefined,
+    }).subscribe({
       next: () => {
         this.toast.success('Customer decision recorded.');
         this.reload$.next();
@@ -599,19 +702,39 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     });
   }
 
-  onUpdateOptionalDecisions(): void {
+  async onUpdateOptionalDecisions(): Promise<void> {
     const q = this.quoteData;
     if (!q?._id) return;
-    const decisions: { itemId: string; decision: 'pending' | 'accepted' | 'declined' }[] = [];
+    const optional: any[] = [];
     (q.optionalItems || []).forEach((option) => {
-      (option.items || []).filter((item) => item.isOptional).forEach((item: any) => {
-        const current = item.customerDecision || (item.includeInTotal ? 'accepted' : 'pending');
-        const answer = window.prompt(`Decision for optional item "${item.itemName}" (pending/accepted/declined)`, current);
-        if (answer && ['pending', 'accepted', 'declined'].includes(answer)) {
-          decisions.push({ itemId: item._id, decision: answer as any });
-        }
-      });
+      (option.items || []).filter((item) => item.isOptional).forEach((item: any) => optional.push(item));
     });
+    if (!optional.length) {
+      this.toast.info('This quote has no optional items.');
+      return;
+    }
+    const choices = [
+      { label: 'Pending', value: 'pending' },
+      { label: 'Accepted', value: 'accepted' },
+      { label: 'Declined', value: 'declined' },
+    ];
+    const answer = await this.formPrompt.prompt({
+      title: 'Optional item decisions',
+      message: 'Record what the customer decided for each optional item.',
+      confirmLabel: 'Save decisions',
+      fields: optional.map((item) => ({
+        key: String(item._id),
+        label: item.itemName,
+        type: 'select' as const,
+        required: true,
+        options: choices,
+        value: item.customerDecision || (item.includeInTotal ? 'accepted' : 'pending'),
+      })),
+    });
+    if (!answer) return;
+    const decisions = optional
+      .filter((item) => answer[String(item._id)] !== (item.customerDecision || (item.includeInTotal ? 'accepted' : 'pending')))
+      .map((item) => ({ itemId: item._id, decision: answer[String(item._id)] as 'pending' | 'accepted' | 'declined' }));
     if (!decisions.length) {
       this.toast.info('No optional item decisions changed.');
       return;
@@ -655,16 +778,13 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       return;
     }
     const employee = this._employeeService.employeeToken();
-    const dialogRef = this._dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Delete Quote',
-        description: 'Are you sure you want to delete this quote?',
-        icon: 'heroExclamationCircle',
-        IconColor: 'red',
-      },
-    });
-
-    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+    this.confirm.open({
+      tone: 'reject',
+      title: 'Delete quote',
+      message: `Delete ${this.quoteData?.quoteId ?? 'this quote'}?`,
+      consequence: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    }).then(({ confirmed }) => {
       if (confirmed) {
         this.quotationService
           .deleteQuotation({
@@ -1143,7 +1263,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     const isFollowUpOverdue = !!followUpDue && followUpDue.getTime() < new Date().setHours(0, 0, 0, 0);
     this.lifecycleFacts = keep([
       { label: 'Lifecycle', value: this.lifecycleStage(q), pill: true, tone: this.lifecycleTone(q) },
-      { label: 'Approval', value: q.approval?.status || 'not_required', pill: true, tone: q.approval?.status === 'approved' ? 'good' : q.approval?.status === 'pending' ? 'warn' : q.approval?.status === 'rejected' ? 'bad' : 'neutral' },
       { label: 'Last sent', value: lastSent ? `${date(lastSent.sentAt)} to ${lastSent.recipient}` : '' },
       { label: 'Sent revision', value: q.currentSentRevision !== undefined ? `Rev ${q.currentSentRevision}` : '' },
       { label: 'Next follow-up', value: q.followUp?.nextFollowUpDate ? date(q.followUp.nextFollowUpDate) : '', tone: isFollowUpOverdue ? 'bad' : null },
@@ -1199,8 +1318,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
   private lifecycleStage(q: getQuotatation): string {
     if (q.status === QuoteStatus.Draft) return 'Draft';
-    if (q.approval?.status === 'pending') return 'Ready for internal review';
-    if (q.approval?.status === 'approved') return 'Approved to send';
     if (q.sendHistory?.length && q.status === QuoteStatus.QuoteSubmitted) return 'Sent';
     if (q.status === QuoteStatus.UnderNegotiation) return 'Negotiation';
     if ([QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.Expired].includes(q.status as QuoteStatus)) return q.status;
@@ -1211,7 +1328,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     if (q.status === QuoteStatus.Won) return 'good';
     if (q.status === QuoteStatus.Lost) return 'bad';
     if (q.status === QuoteStatus.Expired) return 'neutral';
-    if (q.approval?.status === 'pending') return 'warn';
     return q.sendHistory?.length ? 'info' : 'neutral';
   }
 
@@ -1297,4 +1413,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     });
     return rows;
   }
+
+  /** Human label for the approval status enum ('not_required' -> 'Not required'). */
 }

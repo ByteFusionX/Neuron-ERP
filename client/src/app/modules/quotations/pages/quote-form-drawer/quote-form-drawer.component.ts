@@ -1,6 +1,7 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { DatePipe, DecimalPipe, NgClass, NgFor, NgIf } from '@angular/common';
-import { FormArray, FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { AbstractControl, FormArray, FormBuilder, FormsModule, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { NgIcon } from '@ng-icons/core';
 import { ToastrService } from 'ngx-toastr';
@@ -94,9 +95,16 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   private employeeService = inject(EmployeeService);
   private customerService = inject(CustomerService);
   private profileService = inject(ProfileService);
+  private confirmDialog = inject(ConfirmDialogService);
   private jobService = inject(JobService);
   private customers$!: Observable<getCustomer[]>;
   private subscriptions = new Subscription();
+
+  /** yyyy-MM-dd strings compare correctly as text. */
+  private static notBeforeQuoteDate(control: AbstractControl): ValidationErrors | null {
+    const quoteDate = control.parent?.get('date')?.value;
+    return control.value && quoteDate && control.value < quoteDate ? { beforeQuoteDate: true } : null;
+  }
 
   /** Mirrors the shape the old full-page form posted, so the payload cannot drift. */
   quoteForm = this.fb.group({
@@ -109,8 +117,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     currency: ['QAR', Validators.required],
     quoteCompany: [null as string | null, Validators.required],
     accountingManager: [null as string | null],
-    closingDate: ['', Validators.required],
-    validityDate: ['', Validators.required],
+    closingDate: ['', [Validators.required, QuoteFormDrawerComponent.notBeforeQuoteDate]],
+    validityDate: ['', [Validators.required, QuoteFormDrawerComponent.notBeforeQuoteDate]],
     optionalItems: this.fb.array([] as any[]),
     customerNote: ['', Validators.required],
     termsAndCondition: ['', Validators.required],
@@ -119,6 +127,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     warranty: [''],
     deliveryLocation: [''],
     enqId: [null as string | null],
+    // Set when the quote is raised from a sales RFQ; the server links the RFQ back and closes it.
+    sourceRfqId: [null as string | null],
   });
   /** Step 1 and step 3 own these; step 2 owns `optionalItems`. */
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
@@ -269,21 +279,26 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   // --- seeding ---------------------------------------------------------------
 
   private seedFromEnquiry(enquiry: getEnquiry): void {
+    // A sales RFQ hand-off carries the confirmed supplier costs; they win over the presale estimate.
+    const rfqSeed = (enquiry as any).rfqSeed as { rfqId: string; currency?: string; optionalItems?: any[] } | undefined;
     this.sourceEnquiry = enquiry;
     this.seeding = true;
     this.quoteForm.patchValue({
       client: (enquiry.client as any)?._id ?? null,
       attention: (enquiry.contact as any)?._id ?? null,
       subject: enquiry.title ?? '',
-      currency: enquiry.preSale?.estimations?.currency ?? 'QAR',
+      currency: rfqSeed?.currency ?? enquiry.preSale?.estimations?.currency ?? 'QAR',
       enqId: enquiry._id ?? null,
+      sourceRfqId: rfqSeed?.rfqId ?? null,
     });
     this.setDepartments([
       (enquiry.department as unknown as getDepartment)?._id ?? (enquiry.department as unknown as string),
     ]);
-    this.seedOptionalItems = enquiry.preSale?.estimations?.optionalItems?.length
-      ? enquiry.preSale.estimations.optionalItems
-      : null;
+    this.seedOptionalItems = rfqSeed?.optionalItems?.length
+      ? rfqSeed.optionalItems
+      : enquiry.preSale?.estimations?.optionalItems?.length
+        ? enquiry.preSale.estimations.optionalItems
+        : null;
     this.quoteForm.markAsDirty();
     this.seeding = false;
   }
@@ -333,7 +348,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.quoteForm.reset({
       client: null, attention: null, date: this.todayIso(), department: null, departments: [], subject: '',
       currency: 'QAR', quoteCompany: null, closingDate: '', validityDate: '', customerNote: '', termsAndCondition: '',
-      paymentTerms: '', deliveryTerms: '', warranty: '', deliveryLocation: '', enqId: null, accountingManager: null,
+      paymentTerms: '', deliveryTerms: '', warranty: '', deliveryLocation: '', enqId: null, sourceRfqId: null, accountingManager: null,
     });
     this.step = 1;
   }
@@ -490,6 +505,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     });
 
     if (v.enqId) payload.enqId = v.enqId;
+    if (v.sourceRfqId && !this.isEdit) payload.sourceRfqId = v.sourceRfqId;
     if (note) {
       payload.saveNote = note;
       if (this.isEdit) payload.editReason = note;
@@ -534,34 +550,30 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     }
 
     const edit = this.isEdit;
-    this.dialog
-      .open(ActionConfirmationDialogComponent, {
-        data: {
-          title: edit ? 'Save changes' : 'Create quotation',
-          description: edit
-            ? this.revisesOnChange
-              ? 'This quotation has already been sent. If the items, notes, terms or currency changed, the current version is kept as a revision. Say what changed.'
-              : 'Say what you changed. It is recorded in the quotation history.'
-            : this.sourceEnquiry
-              ? 'This will create the quotation from the converted enquiry. Add a note to record why.'
-              : 'This will create the quotation. Add a note to record why.',
-          icon: 'heroExclamationTriangle',
-          iconColor: 'orange',
-          confirmButtonText: edit ? 'Save' : 'Create',
-          requireComment: true,
-          showComment: true,
-          commentLabel: edit ? 'What changed' : 'Note',
-          commentPlaceholder: edit ? 'Describe the change...' : 'Enter a note about this quotation...',
-        },
+    const description = edit
+      ? this.revisesOnChange
+        ? 'This quotation has already been sent. If the items, notes, terms or currency changed, the current version is kept as a revision. Say what changed.'
+        : 'Say what you changed. It is recorded in the quotation history.'
+      : this.sourceEnquiry
+        ? 'This will create the quotation from the converted enquiry. Add a note to record why.'
+        : 'This will create the quotation. Add a note to record why.';
+    this.confirmDialog
+      .open({
+        tone: 'approve',
+        title: edit ? 'Save changes' : 'Create quotation',
+        message: description,
+        confirmLabel: edit ? 'Save' : 'Create',
+        reason: true,
+        reasonLabel: edit ? 'What changed' : 'Note',
       })
-      .afterClosed()
-      .subscribe((result) => {
-        if (!result?.isConfirmed) return;
+      .then((result) => {
+        if (!result.confirmed) return;
 
         this.saving = true;
+        const comment = result.reason ?? '';
         const request$ = edit
-          ? this.quoteService.updateQuotation(this.buildPayload(undefined, result.comment), this.quote._id)
-          : this.quoteService.saveQuotation(this.buildPayload(QuoteStatus.WorkInProgress, result.comment));
+          ? this.quoteService.updateQuotation(this.buildPayload(undefined, comment), this.quote._id)
+          : this.quoteService.saveQuotation(this.buildPayload(QuoteStatus.WorkInProgress, comment));
         request$.subscribe({
           next: () => {
             this.saving = false;

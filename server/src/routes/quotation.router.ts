@@ -22,16 +22,19 @@ import {
     updateQuoteStatus,
     uploadLpo,
     deleteQuotation,
-    decideQuoteApproval,
     recordCustomerDecision,
-    requestQuoteApproval,
     sendQuote,
     updateOptionalItemDecisions,
     updateQuoteFollowUp,
 } from "../controllers/quotation.controller";
-import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
+import { requireAnyPrivilege, requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
+import { getQuoteStockHold, holdQuoteStock, releaseQuoteStockHold } from "../controllers/quoteStockHold.controller";
+
 const quoteRouter = Router()
 const upload = require("../common/multer.storage")
+
+// Product picker used by item entry (presale estimation, quotation, deal sheet, purchase).
+quoteRouter.get('/product-suggestions', requireAnyPrivilege("quotation", "assignedJob", "dealSheet", "purchase"), getProductSuggestions)
 
 quoteRouter.use(requirePrivilege("quotation"));
 
@@ -39,12 +42,13 @@ quoteRouter.post('/', requirePrivilege("quotation", "create"), saveQuotation)
 quoteRouter.post('/lpo', requireUnlessDenied("quotation", "lpo"), upload.array('files'), uploadLpo)
 quoteRouter.patch('/status/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), updateQuoteStatus)
 quoteRouter.patch('/update/:quoteId', requireUnlessDenied("quotation", "edit"), updateQuotation)
-quoteRouter.post('/approval/request/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), requestQuoteApproval)
-quoteRouter.post('/approval/decision/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), decideQuoteApproval)
 quoteRouter.post('/send/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), sendQuote)
 quoteRouter.patch('/follow-up/:quoteId', requireUnlessDenied("quotation", "edit"), updateQuoteFollowUp)
 quoteRouter.patch('/customer-decision/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), recordCustomerDecision)
 quoteRouter.patch('/optional-decisions/:quoteId', requireUnlessDenied("quotation", "edit"), updateOptionalItemDecisions)
+quoteRouter.get('/stock-hold/:quoteId', getQuoteStockHold)
+quoteRouter.post('/stock-hold/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), holdQuoteStock)
+quoteRouter.delete('/stock-hold/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), releaseQuoteStockHold)
 // Converting a won quote into a deal sheet is done by the quote's own owner,
 // so it's gated by the same `quotation.create` privilege as creating the
 // quote in the first place - not by `dealSheet`, which is reserved for
@@ -57,7 +61,6 @@ quoteRouter.post('/deal/get', requirePrivilege("dealSheet"), getDealSheet)
 quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprovedDealSheet)
 quoteRouter.post('/get', getQuotations)
 quoteRouter.post('/get/:id', getQuotationById)
-quoteRouter.get('/product-suggestions', getProductSuggestions)
 quoteRouter.get('/note/:quoteId', getQuoteNote)
 quoteRouter.get('/revisions/:quoteId', getQuoteRevisions)
 quoteRouter.post('/report', getReportDetails)

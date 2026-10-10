@@ -139,7 +139,7 @@ export interface Quotatation {
     closingDate: string;
     eventId?: any;
     saveNote?: string;
-    job?: { allocateStatus?: string };
+    job?: { _id?: string; allocateStatus?: string };
     editHistory?: EditHistoryEntry[];
     /** Bumped when a sent quote's commercial content is edited. 0 on quotes that never were. */
     revision?: number;

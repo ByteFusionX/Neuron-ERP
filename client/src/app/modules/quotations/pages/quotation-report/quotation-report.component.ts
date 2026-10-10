@@ -222,6 +222,10 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
       this._quoteService.getQuotationReport(filter).subscribe({
         next: (res) => {
           this.report = res;
+          // Land on the first attention list that has something in it, instead of an empty "Overdue" tab.
+          if (!this.attentionCount(this.attentionKey)) {
+            this.attentionKey = (['overdue', 'closingSoon', 'idle'] as AttentionKey[]).find((k) => this.attentionCount(k)) ?? this.attentionKey;
+          }
           this.loading = false;
           this.buildCharts();
           this.fetchPrevious(filter, seq);

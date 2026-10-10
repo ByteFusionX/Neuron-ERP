@@ -3,7 +3,7 @@
     [width]="step === 2 ? 'min(1400px, 96vw)' : '860px'"
     [open]="open" [dirty]="quoteForm.dirty" (closed)="onDrawerClosed($event)">
 
-    <span sfDrawerHeader *ngIf="!isEdit && draftRef.savedAt" class="text-xs text-gray-400 dark:text-gray-500">Draft saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
+    <span sfDrawerHeader *ngIf="!isEdit && draftRef.savedAt" class="text-xs text-gray-400 dark:text-gray-500">Details auto-saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
 
     <!-- Stepper -->
     <ol class="mb-5 flex items-center gap-2">
@@ -31,7 +31,8 @@
     <div *ngIf="sourceEnquiry" class="mb-5 flex flex-wrap items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
         <ng-icon name="heroInformationCircle" class="mt-0.5 h-4 w-4 shrink-0"></ng-icon>
         <span class="min-w-0">
-            Prefilled from enquiry <span class="font-medium">{{ sourceEnquiry.enquiryId || sourceEnquiry.title }}</span>.
+            Prefilled from enquiry <span class="font-medium">{{ sourceEnquiry.enquiryId || sourceEnquiry.title }}</span><ng-container *ngIf="$any(sourceEnquiry).rfqSeed">
+            with supplier costs from <span class="font-medium">{{ $any(sourceEnquiry).rfqSeed.rfqNo }}</span>; set the selling prices in Items</ng-container>.
             Review the details below — saving as a draft leaves the enquiry at its current status,
             creating the quotation marks it <span class="font-medium">Quoted</span>.
         </span>
@@ -55,7 +56,7 @@
         <!-- Inside the form on purpose: `draft.pending` is only set once the directive's
              ngOnInit has run, which is after anything checked ahead of the form element. -->
         <div *ngIf="!isEdit && draftRef.pending" class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 text-[13px] text-violet-900 dark:text-violet-200">
-            <span>You have an unsaved draft from {{ draftRef.pending.savedAt | date: 'dd MMM, HH:mm' }}.</span>
+            <span>You have an unsaved draft from {{ draftRef.pending.savedAt | date: 'dd MMM, HH:mm' }}. Item lines are not kept in auto-saved drafts; use Save as Draft to keep them.</span>
             <span class="flex gap-3">
                 <button type="button" class="font-medium hover:underline" (click)="draftRef.restore()">Restore</button>
                 <button type="button" class="text-violet-700 dark:text-violet-400 hover:underline" (click)="draftRef.discard()">Discard</button>
@@ -68,7 +69,7 @@
                 <app-sf-field label="Customer" [control]="quoteForm.controls.client">
                     <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
                 </app-sf-field>
-                <app-sf-field label="Attention" hint="Select customer first" [control]="quoteForm.controls.attention">
+                <app-sf-field label="Attention" [hint]="quoteForm.controls.client.value ? '' : 'Select customer first'" [control]="quoteForm.controls.attention">
                     <app-sf-combobox formControlName="attention" [options]="contactOptions" placeholder="Select contact"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field full label="Department(s)" [control]="quoteForm.controls.departments">
@@ -84,10 +85,10 @@
                 <app-sf-field label="Date" [control]="quoteForm.controls.date">
                     <app-sf-date formControlName="date" [readonly]="true" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
-                <app-sf-field label="Closing Date" [control]="quoteForm.controls.closingDate">
+                <app-sf-field label="Closing Date" [control]="quoteForm.controls.closingDate" [messages]="{ beforeQuoteDate: 'Closing date cannot be before the quote date' }">
                     <app-sf-date formControlName="closingDate" [min]="isEdit ? null : today" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
-                <app-sf-field label="Valid Until" [control]="quoteForm.controls.validityDate">
+                <app-sf-field label="Valid Until" [control]="quoteForm.controls.validityDate" [messages]="{ beforeQuoteDate: 'Valid-until date cannot be before the quote date' }">
                     <app-sf-date formControlName="validityDate" [min]="isEdit ? null : today" displayFormat="dd/MM/yy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Currency" [control]="quoteForm.controls.currency">
@@ -107,7 +108,7 @@
         <!-- Step 2 — items. Kept mounted across steps: the component owns the per-line pricing
              subscriptions, and re-creating it over an existing FormArray would leave them unwired. -->
         <div [hidden]="step !== 2">
-            <app-item-entry [optionalItems]="optionalItems"
+            <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Quotation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
                 [seedOptionalItems]="seedOptionalItems" [currency]="quoteForm.controls.currency.value || 'QAR'"
                 [previousJobItemsCount]="previousJobItemsCount"
                 (totals)="onItemTotals($event)" (previousJobsClicked)="openPreviousJobsModal()"
@@ -171,7 +172,16 @@
     </form>
 
     <ng-container sfDrawerFooter>
-        <span *ngIf="!isStepValid(step) && quoteForm.touched" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+
+        <div *ngIf="step === 2" class="mr-auto flex flex-wrap items-center gap-2">
+            <app-action-button variant="secondary" (click)="itemEntry.addItemAndJump()">
+                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
+            </app-action-button>
+            <app-action-button *ngIf="itemEntry.optionalItemsEnabled" variant="secondary" (click)="itemEntry.addItemAndJump(true)">
+                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
+            </app-action-button>
+        </div>
+        <span *ngIf="!isStepValid(step) && quoteForm.touched" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>
