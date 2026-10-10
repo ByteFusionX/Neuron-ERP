@@ -52,3 +52,43 @@ export function dealTotals(lines: DealLine[], costs: DealCost[]): DealTotals {
   const profit = sellingPrice - totalCost;
   return { sellingPrice, totalCost, profit, marginPct: sellingPrice ? (profit / sellingPrice) * 100 : 0 };
 }
+
+/** Deal items that have at least one line selected for the deal. */
+export function selectedDealItems<T extends { itemDetails?: { dealSelected?: boolean }[] }>(items: (T | undefined)[] | undefined): T[] {
+  return (items ?? []).filter((item): item is T => !!item?.itemDetails?.some((d) => d.dealSelected));
+}
+
+export interface DealPriceDetails {
+  totalSellingPrice: number;
+  totalCost: number;
+  profit: number;
+  perc: number;
+}
+
+/**
+ * Totals for a saved deal sheet (selected lines plus its additional costs/discounts), shaped like the
+ * `priceDetails` the deal-sheet screens already pass around. Any cost type other than the two discounts counts as a cost.
+ */
+export function dealSheetPriceDetails(
+  items: { itemDetails?: { dealSelected?: boolean; quantity?: number; unitCost?: number; unitSellingPrice?: number }[] }[] | undefined,
+  additionalCosts: { type?: string; value?: number }[] | undefined,
+): DealPriceDetails {
+  const details: DealPriceDetails = { totalSellingPrice: 0, totalCost: 0, profit: 0, perc: 0 };
+  for (const item of items ?? []) {
+    for (const d of item.itemDetails ?? []) {
+      if (!d.dealSelected) continue;
+      const quantity = num(d.quantity);
+      details.totalSellingPrice += num(d.unitSellingPrice) * quantity;
+      details.totalCost += num(d.unitCost) * quantity;
+    }
+  }
+  for (const cost of additionalCosts ?? []) {
+    const value = num(cost.value);
+    if (cost.type === 'Customer Discount') details.totalSellingPrice -= value;
+    else if (cost.type === 'Supplier Discount') details.totalCost -= value;
+    else details.totalCost += value;
+  }
+  details.profit = details.totalSellingPrice - details.totalCost;
+  details.perc = details.totalSellingPrice ? (details.profit / details.totalSellingPrice) * 100 : 0;
+  return details;
+}

@@ -103,16 +103,23 @@
             </section>
         </div>
 
-        <!-- Price summary: the shared item-entry totals bar, kept on both steps (items hidden on step 2) -->
-        <div [class.mt-4]="step === 2">
+        <!-- Step 1 owns the editable line table. Step 2 renders the same totals above the drawer footer. -->
+        <div *ngIf="step === 1">
             <app-item-entry mode="deal" [optionalItems]="$any(f.get('optionalItems'))" [seedOptionalItems]="seed"
                 [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
-                [itemsHidden]="step !== 1" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
+                [itemsHidden]="false" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
                 [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
         </div>
 
         <p *ngIf="issues.length" class="mt-2 text-right text-xs text-red-600 dark:text-red-400">{{ issues[0] }}<ng-container *ngIf="issues.length > 1"> (+{{ issues.length - 1 }} more)</ng-container></p>
     </form>
+
+    <div *ngIf="step === 2 && form" sfDrawerBottom class="bg-gray-50 px-6 py-3 dark:bg-erp-surface-dark-alt">
+        <app-item-entry mode="deal" [optionalItems]="$any(form.get('optionalItems'))" [seedOptionalItems]="seed"
+            [currency]="q?.currency || 'QAR'" [supplierOptions]="supplierOptions"
+            [itemsHidden]="true" [costAdjustment]="costAdjustment" [discountAdjustment]="discountAdjustment"
+            [allowOptionalItems]="false" [allowCreateProduct]="false" (optionChanged)="onOptionChanged($event)"></app-item-entry>
+    </div>
 
     <ng-container sfDrawerFooter>
         <app-action-button variant="secondary" (click)="drawer?.requestClose()">Cancel</app-action-button>
