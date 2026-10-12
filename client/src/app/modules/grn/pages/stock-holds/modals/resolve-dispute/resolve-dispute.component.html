@@ -1,14 +1,17 @@
-<app-modal-layout
-  title="Resolve Dispute"
-  [subtitle]="stockHold?.holdNo"
-  [onClose]="onCancel.bind(this)"
-  [footerButtons]="[
-    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
-    { label: 'Resolve Dispute', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
-  ]"
-  contentClass="p-6">
-  <form [formGroup]="resolveForm" (ngSubmit)="onSubmit()">
-    <div class="space-y-4">
+<form [formGroup]="resolveForm" (ngSubmit)="onSubmit()" class="flex max-h-[88vh] flex-col overflow-hidden rounded-lg bg-white text-gray-900 shadow-xl dark:bg-erp-surface-dark dark:text-gray-100">
+  <div class="border-b border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-base font-semibold">Resolve Dispute</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ stockHold?.holdNo }}</p>
+      </div>
+      <button type="button" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-100" (click)="onCancel()">
+        <span class="material-icons text-xl">close</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
 
       <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
         <div class="min-w-0">
@@ -32,15 +35,14 @@
         </p>
       </div>
 
-      <app-form-field
-        label="Resolution note"
-        [control]="resolveForm.get('disputeNote')"
-        [isSubmitted]="formSubmitted"
-        type="textarea"
-        [rows]="4"
-        placeholder="Explain how the dispute was resolved">
-      </app-form-field>
+    <label class="space-y-1.5 text-sm font-medium">
+      <span>Resolution note</span>
+      <textarea formControlName="disputeNote" rows="4" class="sf-input min-h-28" [class.sf-invalid]="resolveForm.get('disputeNote')?.invalid && formSubmitted" placeholder="Explain how the dispute was resolved"></textarea>
+    </label>
+  </div>
 
-    </div>
-  </form>
-</app-modal-layout>
+  <div class="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+    <button type="button" class="sf-btn sf-btn-secondary" (click)="onCancel()">Discard</button>
+    <button type="submit" class="sf-btn sf-btn-primary" [disabled]="isSubmitting">{{ isSubmitting ? 'Resolving...' : 'Resolve Dispute' }}</button>
+  </div>
+</form>

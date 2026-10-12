@@ -4,21 +4,16 @@ import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
-import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
   selector: 'app-create-stock-hold',
   standalone: true,
   imports: [
     CommonModule,
-    ReactiveFormsModule,
-    FormFieldComponent,
-    SelectDropdownComponent,
-    ModalLayoutComponent
+    ReactiveFormsModule
   ],
-  templateUrl: './create-stock-hold.component.html'
+  templateUrl: './create-stock-hold.component.html',
+  styleUrl: './create-stock-hold.component.css'
 })
 export class CreateStockHoldComponent implements OnInit {
   private fb = inject(FormBuilder);

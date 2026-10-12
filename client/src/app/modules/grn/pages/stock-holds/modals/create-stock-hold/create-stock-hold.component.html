@@ -1,81 +1,65 @@
-<app-modal-layout
-  title="Create Purchase Return"
-  [onClose]="onCancel.bind(this)"
-  [footerButtons]="[
-    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
-    { label: 'Create Return', onClick: onSubmit.bind(this), theme: 'primary', loading: isSubmitting }
-  ]"
-  contentClass="p-6">
-  <form [formGroup]="holdForm" (ngSubmit)="onSubmit()">
-    <div class="space-y-4">
-      <p class="text-sm text-gray-500">
-        {{ data?.itemDescription }} — rejected qty available to resolve: {{ data?.rejectedQty }}
-      </p>
-
-      <div class="grid grid-cols-2 gap-4">
-        <app-form-field
-          label="Vendor Authorization No."
-          [control]="holdForm.get('vendorAuthorizationNo')"
-          [isSubmitted]="isSubmitting"
-          placeholder="RMA / vendor reference">
-        </app-form-field>
-
-        <app-form-field
-          label="Return Reason"
-          [control]="holdForm.get('returnReason')"
-          [isSubmitted]="isSubmitting"
-          placeholder="Defective, wrong item, damaged...">
-        </app-form-field>
+<form [formGroup]="holdForm" (ngSubmit)="onSubmit()" class="flex max-h-[88vh] flex-col overflow-hidden rounded-lg bg-white text-gray-900 shadow-xl dark:bg-erp-surface-dark dark:text-gray-100">
+  <div class="border-b border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-base font-semibold">Create Purchase Return</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ data?.itemDescription }} - rejected qty available: {{ data?.rejectedQty }}</p>
       </div>
-
-      <app-form-field
-        label="Return Quantity"
-        [control]="holdForm.get('qty')"
-        [isSubmitted]="isSubmitting"
-        type="number"
-        placeholder="Enter quantity">
-      </app-form-field>
-
-      <app-select-dropdown
-        label="Return Logistics"
-        [options]="logisticsOptions"
-        optionLabel="label"
-        optionValue="value"
-        formControlName="logisticsType"
-        placeholder="Select how the item will be returned"
-        [isSubmitted]="isSubmitting">
-      </app-select-dropdown>
-
-      <div class="grid grid-cols-2 gap-4" *ngIf="holdForm.get('logisticsType')?.value === 'Courier'">
-        <app-form-field
-          label="Courier Name"
-          [control]="holdForm.get('courierName')"
-          [isSubmitted]="isSubmitting"
-          placeholder="Courier / 3rd party name">
-        </app-form-field>
-
-        <app-form-field
-          label="Tracking Reference"
-          [control]="holdForm.get('trackingRef')"
-          [isSubmitted]="isSubmitting"
-          placeholder="Tracking number">
-        </app-form-field>
-      </div>
-
-      <app-form-field
-        label="Dispatch Date"
-        [control]="holdForm.get('dispatchDate')"
-        [isSubmitted]="isSubmitting"
-        type="date"
-        placeholder="Select dispatch date">
-      </app-form-field>
-
-      <app-form-field
-        label="Return Notes"
-        [control]="holdForm.get('returnNotes')"
-        [isSubmitted]="isSubmitting"
-        placeholder="Short note for supplier or internal team">
-      </app-form-field>
+      <button type="button" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-100" (click)="onCancel()">
+        <span class="material-icons text-xl">close</span>
+      </button>
     </div>
-  </form>
-</app-modal-layout>
+  </div>
+
+  <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <label class="space-y-1.5 text-sm font-medium">
+        <span>Vendor Authorization No.</span>
+        <input formControlName="vendorAuthorizationNo" class="sf-input" placeholder="RMA / vendor reference">
+      </label>
+      <label class="space-y-1.5 text-sm font-medium">
+        <span>Return Reason</span>
+        <input formControlName="returnReason" class="sf-input" placeholder="Defective, wrong item, damaged">
+      </label>
+    </div>
+
+    <label class="space-y-1.5 text-sm font-medium">
+      <span>Return Quantity</span>
+      <input formControlName="qty" type="number" class="sf-input" [class.sf-invalid]="holdForm.get('qty')?.invalid && isSubmitting" placeholder="Enter quantity">
+    </label>
+
+    <label class="space-y-1.5 text-sm font-medium">
+      <span>Return Logistics</span>
+      <select formControlName="logisticsType" class="sf-input" [class.sf-invalid]="holdForm.get('logisticsType')?.invalid && isSubmitting">
+        <option value="">Select how the item will be returned</option>
+        <option *ngFor="let option of logisticsOptions" [value]="option.value">{{ option.label }}</option>
+      </select>
+    </label>
+
+    <div class="grid gap-4 sm:grid-cols-2" *ngIf="holdForm.get('logisticsType')?.value === 'Courier'">
+      <label class="space-y-1.5 text-sm font-medium">
+        <span>Courier Name</span>
+        <input formControlName="courierName" class="sf-input" [class.sf-invalid]="holdForm.get('courierName')?.invalid && isSubmitting" placeholder="Courier / 3rd party name">
+      </label>
+      <label class="space-y-1.5 text-sm font-medium">
+        <span>Tracking Reference</span>
+        <input formControlName="trackingRef" class="sf-input" [class.sf-invalid]="holdForm.get('trackingRef')?.invalid && isSubmitting" placeholder="Tracking number">
+      </label>
+    </div>
+
+    <label class="space-y-1.5 text-sm font-medium">
+      <span>Dispatch Date</span>
+      <input formControlName="dispatchDate" type="date" class="sf-input">
+    </label>
+
+    <label class="space-y-1.5 text-sm font-medium">
+      <span>Return Notes</span>
+      <textarea formControlName="returnNotes" class="sf-input min-h-24" placeholder="Short note for supplier or internal team"></textarea>
+    </label>
+  </div>
+
+  <div class="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+    <button type="button" class="sf-btn sf-btn-secondary" (click)="onCancel()">Discard</button>
+    <button type="submit" class="sf-btn sf-btn-primary" [disabled]="isSubmitting">{{ isSubmitting ? 'Creating...' : 'Create Return' }}</button>
+  </div>
+</form>

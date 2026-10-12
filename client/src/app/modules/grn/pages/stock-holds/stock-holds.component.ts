@@ -1,7 +1,6 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
@@ -41,7 +40,6 @@ type ReturnRecord = any;
 })
 export class GrnStockHoldsComponent implements OnInit {
   @ViewChild('returnsGrid') returnsGrid!: DataGridComponent<ReturnRecord>;
-  @ViewChild('pendingGrid') pendingGrid!: DataGridComponent<ReturnRecord>;
 
   private grnService = inject(GrnService);
   private stockHoldService = inject(StockHoldService);
@@ -49,28 +47,24 @@ export class GrnStockHoldsComponent implements OnInit {
   private employeeService = inject(EmployeeService);
   private dialog = inject(MatDialog);
   private datePipe = inject(DatePipe);
-  private route = inject(ActivatedRoute);
-
   canInitiateHold = signal<boolean>(false);
   pendingRows: ReturnRecord[] = [];
   returnRows: ReturnRecord[] = [];
+  combinedRows: ReturnRecord[] = [];
   pendingLoading = false;
   returnsLoading = false;
-  activeRegister: 'pending' | 'resolved' = 'pending';
   density: 'comfortable' | 'compact' = 'comfortable';
 
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'GRN' }, { label: 'Returns' }];
-  pendingColumns: DataGridColumn<ReturnRecord>[] = [];
   returnColumns: DataGridColumn<ReturnRecord>[] = [];
   rowActions: DataGridRowAction<ReturnRecord>[] = [];
-  pendingActions: DataGridRowAction<ReturnRecord>[] = [];
   views: DataGridView<ReturnRecord>[] = [
     { id: 'all', label: 'All' },
-    { id: 'awaiting', label: 'Awaiting', predicate: (r) => ['AwaitingReturn', 'AwaitingReplacement'].includes(r.status) },
+    { id: 'pending', label: 'Pending', predicate: (r) => r.recordType === 'pending' },
+    { id: 'awaiting', label: 'In Return', predicate: (r) => ['AwaitingReturn', 'AwaitingReplacement'].includes(r.status) },
     { id: 'disputed', label: 'Disputed', predicate: (r) => r.disputeStatus === 'SupplierDisputed' },
     { id: 'resolved', label: 'Resolved', predicate: (r) => ['Resolved', 'Disposed'].includes(r.status) },
   ];
-  pendingViews: DataGridView<ReturnRecord>[] = [{ id: 'pending', label: 'Pending Rejections' }];
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Overview', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
@@ -102,14 +96,11 @@ export class GrnStockHoldsComponent implements OnInit {
     PartiallyResolved: 'bg-violet-50 text-violet-700 ring-violet-200 border-violet-200',
     Resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200',
     Disposed: 'bg-slate-100 text-slate-700 ring-slate-200 border-slate-200',
+    PendingReturn: 'bg-orange-50 text-orange-700 ring-orange-200 border-orange-200',
   };
 
   ngOnInit(): void {
-    this.route.data.subscribe((data) => {
-      this.activeRegister = data['register'] === 'resolved' ? 'resolved' : 'pending';
-    });
     this.checkPrivileges();
-    this.buildPendingColumns();
     this.buildReturnColumns();
     this.buildActions();
     this.getRejections();
@@ -124,33 +115,14 @@ export class GrnStockHoldsComponent implements OnInit {
     });
   }
 
-  private buildPendingColumns(): void {
-    this.pendingColumns = [
-      { key: 'grnDate', label: 'GRN Date', type: 'date', sortable: true, width: '130px' },
-      { key: 'grnNo', label: 'GRN No', sortable: true },
-      { key: 'poNo', label: 'LPO No', valueGetter: (r) => r?.purchaseOrderId?.poNo || 'N/A' },
-      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
-      { key: 'itemDescription', label: 'Item' },
-      { key: 'partNo', label: 'Part No', valueGetter: (r) => this.formatPartNumber(r.partNo) },
-      { key: 'rejectedQty', label: 'Rejected Qty', type: 'number', align: 'right' },
-      { key: 'rejectionReason', label: 'Reason' },
-      { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r?.warehouse?.wareHouseName || 'N/A' },
-    ];
-    this.pendingActions = [
-      { id: 'createReturn', label: 'Create Purchase Return', icon: 'refresh', quick: true, panel: true, hidden: () => !this.canInitiateHold() },
-      { id: 'viewGrn', label: 'View GRN', icon: 'eye', panel: true },
-      { id: 'viewLpo', label: 'View LPO', icon: 'wallet', panel: true, hidden: (r) => !r?.purchaseOrderId?.poNo },
-    ];
-  }
-
   private buildReturnColumns(): void {
     this.returnColumns = [
-      { key: 'returnNo', label: 'Return No', sortable: true, valueGetter: (r) => r.returnNo || this.displayReturnNo(r) },
-      { key: 'grn', label: 'GRN', valueGetter: (r) => r?.grnId?.grnNo || 'N/A' },
-      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.supplierId?.supplierName || 'N/A' },
+      { key: 'returnNo', label: 'Return No', sortable: true, valueGetter: (r) => r.recordType === 'pending' ? 'Pending' : (r.returnNo || this.displayReturnNo(r)) },
+      { key: 'grn', label: 'GRN', valueGetter: (r) => r?.grnNo || r?.grnId?.grnNo || 'N/A' },
+      { key: 'supplier', label: 'Supplier', valueGetter: (r) => r?.supplierId?.supplierName || r?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
       { key: 'itemDescription', label: 'Item' },
       { key: 'rejectedQty', label: 'Return Qty', type: 'number', align: 'right' },
-      { key: 'unresolvedQty', label: 'Open Qty', type: 'number', align: 'right' },
+      { key: 'unresolvedQty', label: 'Open Qty', type: 'number', align: 'right', valueGetter: (r) => r.recordType === 'pending' ? r.rejectedQty : r.unresolvedQty },
       { key: 'logisticsType', label: 'Return Method', valueGetter: (r) => this.logisticsLabel(r.logisticsType) },
       { key: 'resolutionType', label: 'Vendor Resolution', valueGetter: (r) => this.resolutionLabel(r.resolutionType) },
       { key: 'disputeStatus', label: 'Dispute', valueGetter: (r) => this.disputeLabel(r.disputeStatus) },
@@ -160,9 +132,10 @@ export class GrnStockHoldsComponent implements OnInit {
 
   private buildActions(): void {
     this.rowActions = [
-      { id: 'resolve', label: 'Resolve Return', icon: 'check', quick: true, panel: true, hidden: (r) => !this.canInitiateHold() || r?.unresolvedQty <= 0 || r?.disputeStatus === 'SupplierDisputed' },
-      { id: 'dispute', label: 'Mark Supplier Dispute', icon: 'flag', quick: true, panel: true, hidden: (r) => !this.canInitiateHold() || r?.disputeStatus !== 'None' },
-      { id: 'resolveDispute', label: 'Resolve Dispute', icon: 'check', quick: true, panel: true, hidden: (r) => !this.canInitiateHold() || r?.disputeStatus !== 'SupplierDisputed' },
+      { id: 'createReturn', label: 'Create Purchase Return', icon: 'refresh', quick: true, panel: true, hidden: (r) => r.recordType !== 'pending' || !this.canInitiateHold() },
+      { id: 'resolve', label: 'Resolve Return', icon: 'check', quick: true, panel: true, hidden: (r) => r.recordType === 'pending' || !this.canInitiateHold() || r?.unresolvedQty <= 0 || r?.disputeStatus === 'SupplierDisputed' },
+      { id: 'dispute', label: 'Mark Supplier Dispute', icon: 'flag', quick: true, panel: true, hidden: (r) => r.recordType === 'pending' || !this.canInitiateHold() || r?.disputeStatus !== 'None' },
+      { id: 'resolveDispute', label: 'Resolve Dispute', icon: 'check', quick: true, panel: true, hidden: (r) => r.recordType === 'pending' || !this.canInitiateHold() || r?.disputeStatus !== 'SupplierDisputed' },
       { id: 'viewGrn', label: 'View GRN', icon: 'eye', panel: true },
       { id: 'viewLpo', label: 'View LPO', icon: 'wallet', hidden: (r) => !this.poNo(r) },
     ];
@@ -174,8 +147,12 @@ export class GrnStockHoldsComponent implements OnInit {
       next: (response) => {
         const rows = response.success ? (response.data || []).flatMap((grn: any) =>
           (grn.items || []).map((item: any) => ({
+            recordType: 'pending',
+            status: 'PendingReturn',
+            disputeStatus: 'None',
             grnId: grn.grnId,
             pendingKey: `${grn.grnId}-${item.itemIndex}`,
+            registerKey: `pending-${grn.grnId}-${item.itemIndex}`,
             grnNo: grn.grnNo,
             grnDate: grn.grnDate,
             purchaseOrderId: grn.purchaseOrderId,
@@ -188,6 +165,7 @@ export class GrnStockHoldsComponent implements OnInit {
           }))
         ) : [];
         this.pendingRows = rows;
+        this.mergeReturnRows();
         this.pendingLoading = false;
       },
       error: () => {
@@ -201,8 +179,8 @@ export class GrnStockHoldsComponent implements OnInit {
     this.returnsLoading = true;
     this.stockHoldService.getStockHolds().subscribe({
       next: (response) => {
-        this.returnRows = response.success ? response.data || [] : [];
-        this.refreshViewCounts();
+        this.returnRows = response.success ? (response.data || []).map((row: any) => ({ ...row, recordType: 'return', registerKey: row._id })) : [];
+        this.mergeReturnRows();
         this.returnsLoading = false;
       },
       error: () => {
@@ -212,13 +190,8 @@ export class GrnStockHoldsComponent implements OnInit {
     });
   }
 
-  onPendingAction(event: DataGridRowActionEvent<ReturnRecord>): void {
-    if (event.action.id === 'createReturn') this.openInitiateHoldModal(event.row);
-    if (event.action.id === 'viewGrn') this.openGrnDetails(event.row);
-    if (event.action.id === 'viewLpo') this.openLpoDetails(event.row);
-  }
-
   onReturnAction(event: DataGridRowActionEvent<ReturnRecord>): void {
+    if (event.action.id === 'createReturn') this.openInitiateHoldModal(event.row);
     if (event.action.id === 'resolve') this.openResolveModal(event.row);
     if (event.action.id === 'dispute') this.openDisputeModal(event.row);
     if (event.action.id === 'resolveDispute') this.openResolveDisputeModal(event.row);
@@ -285,8 +258,10 @@ export class GrnStockHoldsComponent implements OnInit {
     this.dialog.open(ViewPoDetailsModalComponent, { data: { poNo }, width: '1200px', maxWidth: '95vw', maxHeight: '90vh' });
   }
 
-  title = (row: ReturnRecord): string => this.displayReturnNo(row);
-  subtitle = (row: ReturnRecord): string => [row?.supplierId?.supplierName, row?.grnId?.grnNo ? `GRN ${row.grnId.grnNo}` : ''].filter(Boolean).join('  •  ');
+  title = (row: ReturnRecord): string => row.recordType === 'pending' ? (row?.grnNo || 'Pending Rejection') : this.displayReturnNo(row);
+  subtitle = (row: ReturnRecord): string => row.recordType === 'pending'
+    ? [row?.purchaseOrderId?.supplierId?.supplierName, row?.purchaseOrderId?.poNo ? `LPO ${row.purchaseOrderId.poNo}` : ''].filter(Boolean).join('  •  ')
+    : [row?.supplierId?.supplierName, row?.grnId?.grnNo ? `GRN ${row.grnId.grnNo}` : ''].filter(Boolean).join('  •  ');
   pendingTitle = (row: ReturnRecord): string => row?.grnNo || 'Pending Rejection';
   pendingSubtitle = (row: ReturnRecord): string => [row?.purchaseOrderId?.supplierId?.supplierName, row?.purchaseOrderId?.poNo ? `LPO ${row.purchaseOrderId.poNo}` : ''].filter(Boolean).join('  •  ');
 
@@ -428,7 +403,7 @@ export class GrnStockHoldsComponent implements OnInit {
   }
 
   statusLabel(value: string): string {
-    return { AwaitingReturn: 'Awaiting Return', AwaitingReplacement: 'Awaiting Replacement', PartiallyResolved: 'Partially Resolved', Resolved: 'Resolved', Disposed: 'Disposed' }[value] || value || '-';
+    return { PendingReturn: 'Pending Return', AwaitingReturn: 'Awaiting Return', AwaitingReplacement: 'Awaiting Replacement', PartiallyResolved: 'Partially Resolved', Resolved: 'Resolved', Disposed: 'Disposed' }[value] || value || '-';
   }
 
   statusTone(value: string): 'neutral' | 'info' | 'warn' | 'good' | 'bad' {
@@ -468,6 +443,11 @@ export class GrnStockHoldsComponent implements OnInit {
   }
 
   private refreshViewCounts(): void {
-    this.views = this.views.map((v) => ({ ...v, count: v.id === 'all' ? this.returnRows.length : undefined, hideCount: v.id !== 'all' }));
+    this.views = this.views.map((v) => ({ ...v, count: v.id === 'all' ? this.combinedRows.length : undefined, hideCount: v.id !== 'all' }));
+  }
+
+  private mergeReturnRows(): void {
+    this.combinedRows = [...this.pendingRows, ...this.returnRows];
+    this.refreshViewCounts();
   }
 }

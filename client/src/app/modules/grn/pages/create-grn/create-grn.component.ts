@@ -12,13 +12,10 @@ import { ToastrService } from 'ngx-toastr';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { AddWarehouseComponent } from 'src/app/modules/products/modals/add-warehouse/add-warehouse.component';
 import {
   FileUploadModalComponent,
@@ -33,9 +30,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
   imports: [
     CommonModule,
     ReactiveFormsModule,
-    FormFieldComponent,
-    SelectDropdownComponent,
-    ButtonComponent,
     IconsModule,
     MatTooltipModule,
   ],

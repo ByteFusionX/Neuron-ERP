@@ -30,22 +30,18 @@
                 <div class="grn-panel">
                     <div class="flex flex-col md:flex-row md:mb-5 gap-3">
                         @if(!isLpoPreselected()) {
-                            <app-select-dropdown
-                                label="Select LPO Number"
-                                [options]="lpoOptions"
-                                optionLabel="label"
-                                optionValue="_id"
-                                formControlName="selectedLpo"
-                                [placeholder]="isLpoOptionsLoading() ? 'Loading LPOs...' : 'Select LPO to create GRN against'"
-                                [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500"
-                                (onSelected)="onLpoSelected($event)"
-                                class="w-full">
-                            </app-select-dropdown>
+                            <label class="grn-field w-full">
+                                <span>Select LPO Number</span>
+                                <select formControlName="selectedLpo" class="grn-input"
+                                    [class.border-orange-500]="f['selectedLpo'].invalid && formSubmitted()"
+                                    (change)="onLpoSelected($any($event.target).value)">
+                                    <option value="">{{ isLpoOptionsLoading() ? 'Loading LPOs...' : 'Select LPO to create GRN against' }}</option>
+                                    <option *ngFor="let option of lpoOptions" [value]="option._id">{{ option.label }}</option>
+                                </select>
+                            </label>
                         }
-                        <app-form-field label="GRN Number" [control]="f['grnNo']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
-                        </app-form-field>
-                        <app-form-field label="GRN Date" [control]="f['grnDate']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="date" class="w-full">
-                        </app-form-field>
+                        <label class="grn-field w-full"><span>GRN Number</span><input formControlName="grnNo" class="grn-input" readonly></label>
+                        <label class="grn-field w-full"><span>GRN Date</span><input formControlName="grnDate" type="date" class="grn-input" [class.border-orange-500]="f['grnDate'].invalid && formSubmitted()"></label>
                     </div>
 
                     @if(isLoading()) {
@@ -86,17 +82,13 @@
                             </div>
                         </div>
                         <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <app-form-field label="Supplier Name" [control]="f['supplierName']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
-                            </app-form-field>
-                            <app-form-field label="Linked LPO Number" [control]="f['linkedLpoNo']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
-                            </app-form-field>
-                            <app-form-field *ngIf="!isJobLess" label="Job ID" [control]="f['jobId']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" class="w-full" [readonly]="true">
-                            </app-form-field>
+                            <label class="grn-field w-full"><span>Supplier Name</span><input formControlName="supplierName" class="grn-input" readonly></label>
+                            <label class="grn-field w-full"><span>Linked LPO Number</span><input formControlName="linkedLpoNo" class="grn-input" readonly></label>
+                            <label *ngIf="!isJobLess" class="grn-field w-full"><span>Job ID</span><input formControlName="jobId" class="grn-input" readonly></label>
                         </div>
 
                         <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <app-form-field label="Supplier Invoice Date" [control]="f['supplierInvoiceDate']" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="date" class="w-full">
-                            </app-form-field>
+                            <label class="grn-field w-full"><span>Supplier Invoice Date</span><input formControlName="supplierInvoiceDate" type="date" class="grn-input" [class.border-orange-500]="f['supplierInvoiceDate'].invalid && formSubmitted()"></label>
 
                             <div class="mb-1 w-full">
                                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierInvoiceNo">
@@ -150,18 +142,16 @@
                                     class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
                                     type="text"/>
                             </div>
-                            <app-select-dropdown
-                                label="Location / Warehouse"
-                                [options]="warehouses"
-                                optionLabel="wareHouseName"
-                                optionValue="_id"
-                                formControlName="warehouse"
-                                placeholder="Select warehouse"
-                                [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500"
-                                footerLabel="+ Add warehouse"
-                                (footerAction)="onAddWarehouse()"
-                                class="w-full">
-                            </app-select-dropdown>
+                            <label class="grn-field w-full">
+                                <span>Location / Warehouse</span>
+                                <div class="flex gap-2">
+                                    <select formControlName="warehouse" class="grn-input" [class.border-orange-500]="f['warehouse'].invalid && formSubmitted()">
+                                        <option value="">Select warehouse</option>
+                                        <option *ngFor="let warehouse of warehouses" [value]="warehouse._id">{{ warehouse.wareHouseName }}</option>
+                                    </select>
+                                    <button type="button" class="grn-tool-button" (click)="onAddWarehouse()">+ Add</button>
+                                </div>
+                            </label>
                         </div>
                     }
                 </div>
@@ -222,8 +212,7 @@
                                             {{ item.get('itemDescription')?.value || '-' }}
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('uom')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" placeholder="Enter UOM" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                            </app-form-field>
+                                            <input formControlName="uom" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter UOM">
                                         </td>
                                         <td class="px-4 py-2 border text-center">
                                             {{ item.get('orderedQty')?.value || 0 }}
@@ -234,8 +223,7 @@
                                             </span>
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('receivedQty')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                            </app-form-field>
+                                            <input formControlName="receivedQty" type="number" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0">
                                             @if(item.get('receivedQty')?.errors?.['max']) {
                                                 <span class="text-xs text-red-600">Cannot exceed balance</span>
                                             }
@@ -246,16 +234,14 @@
                                         <td class="px-4 py-2 border text-center"
                                             [class.text-red-600]="(item.get('rejectedQty')?.value || 0) > 0"
                                             [class.font-medium]="(item.get('rejectedQty')?.value || 0) > 0">
-                                            <app-form-field [control]="item.get('rejectedQty')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="number" placeholder="0" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                            </app-form-field>
+                                            <input formControlName="rejectedQty" type="number" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0">
                                             @if(item.get('rejectedQty')?.errors?.['max']) {
                                                 <span class="text-xs text-red-600">Cannot exceed balance</span>
                                             }
                                         </td>
                                         <td class="px-4 py-2 border text-center">
                                             @if((item.get('rejectedQty')?.value || 0) > 0) {
-                                                <app-form-field [control]="item.get('rejectionReason')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" placeholder="Enter rejection reason" class="w-full" [readonly]="isFormDisabled()">
-                                                </app-form-field>
+                                                <input formControlName="rejectionReason" class="grn-input grn-table-input" [readonly]="isFormDisabled()" placeholder="Enter rejection reason">
                                                 @if(item.get('rejectionReason')?.errors?.['required']) {
                                                     <span class="text-xs text-red-600">Required</span>
                                                 }
@@ -264,12 +250,10 @@
                                             }
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('remarks')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" placeholder="Enter remarks" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                            </app-form-field>
+                                            <input formControlName="remarks" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter remarks">
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <app-form-field [control]="item.get('date')" [isSubmitted]="formSubmitted()" invalidBorderClass="border-orange-500" type="date" class="w-full" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
-                                            </app-form-field>
+                                            <input formControlName="date" type="date" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
                                         </td>
                                     </tr>
                                 </ng-container>
@@ -301,8 +285,10 @@
         </div>
         <div class="grn-footer">
             <div class="md:flex gap-3">
-                <app-btn theme="cancel" type="button" (buttonClick)="onDiscard()">Discard</app-btn>
-                <app-btn theme="primary" type="button" [loading]="isSubmitting()" [disabled]="isFormDisabled() || !lpo" (buttonClick)="onSave()">Save &amp; Exit</app-btn>
+                <button class="grn-action grn-action-secondary" type="button" (click)="onDiscard()">Discard</button>
+                <button class="grn-action grn-action-primary" type="button" [disabled]="isSubmitting() || isFormDisabled() || !lpo" (click)="onSave()">
+                    {{ isSubmitting() ? 'Saving...' : 'Save & Exit' }}
+                </button>
             </div>
         </div>
     </form>

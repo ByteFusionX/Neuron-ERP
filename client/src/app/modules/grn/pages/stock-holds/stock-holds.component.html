@@ -1,16 +1,15 @@
 <div class="h-full flex flex-col gap-5 bg-gray-50 p-6 dark:bg-erp-surface-dark-alt">
   <app-data-grid
-    *ngIf="activeRegister === 'resolved'"
     #returnsGrid
     class="flex-1 min-h-0"
     [fillHeight]="true"
-    title="Resolved"
-    subtitle="Purchase returns created from rejected GRN items, with supplier resolution and recovery tracking"
+    title="Returns"
+    subtitle="Rejected GRN items, supplier returns, disputes, and resolved recovery in one register"
     [breadcrumbs]="breadcrumbs"
-    rowKey="_id"
-    [data]="returnRows"
+    rowKey="registerKey"
+    [data]="combinedRows"
     [columns]="returnColumns"
-    [loading]="returnsLoading"
+    [loading]="returnsLoading || pendingLoading"
     [pageSize]="15"
     searchPlaceholder="Search return no, GRN, supplier, item, or status"
     emptyMessage="No purchase returns created yet"
@@ -35,7 +34,7 @@
     <ng-template #detailMetaTemplate let-row>
       <div class="return-meta">
         <p class="return-meta-label">Supplier</p>
-        <p class="return-meta-value">{{ row.supplierId?.supplierName || 'N/A' }}</p>
+        <p class="return-meta-value">{{ row.supplierId?.supplierName || row.purchaseOrderId?.supplierId?.supplierName || 'N/A' }}</p>
       </div>
       <div class="return-meta">
         <p class="return-meta-label">Return Qty</p>
@@ -43,11 +42,11 @@
       </div>
       <div class="return-meta">
         <p class="return-meta-label">Open Qty</p>
-        <p class="return-meta-value">{{ row.unresolvedQty || 0 }}</p>
+        <p class="return-meta-value">{{ row.recordType === 'pending' ? (row.rejectedQty || 0) : (row.unresolvedQty || 0) }}</p>
       </div>
       <div class="return-meta">
-        <p class="return-meta-label">Method</p>
-        <p class="return-meta-value">{{ logisticsLabel(row.logisticsType) }}</p>
+        <p class="return-meta-label">{{ row.recordType === 'pending' ? 'Reason' : 'Method' }}</p>
+        <p class="return-meta-value">{{ row.recordType === 'pending' ? (row.rejectionReason || '-') : logisticsLabel(row.logisticsType) }}</p>
       </div>
     </ng-template>
 
@@ -59,11 +58,14 @@
 
     <!-- right: permanent, every tab (filled) -->
     <ng-template #detailFooterTemplate let-row let-tab="tab">
-      <app-action-button *ngIf="row.unresolvedQty > 0 && row.disputeStatus !== 'SupplierDisputed'" variant="primary" (click)="openResolveModal(row)">Resolve Return</app-action-button>
+      <app-action-button *ngIf="row.recordType === 'pending' && canInitiateHold()" variant="primary" (click)="openInitiateHoldModal(row)">Create Purchase Return</app-action-button>
+      <app-action-button *ngIf="row.recordType !== 'pending' && row.unresolvedQty > 0 && row.disputeStatus !== 'SupplierDisputed'" variant="primary" (click)="openResolveModal(row)">Resolve Return</app-action-button>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
-      <ng-container [ngSwitch]="tab">
+      <app-detail-overview *ngIf="row.recordType === 'pending'" [grid]="returnsGrid" [row]="row" [sections]="pendingOverviewSections(row)"></app-detail-overview>
+
+      <ng-container *ngIf="row.recordType !== 'pending'" [ngSwitch]="tab">
         <app-detail-overview *ngSwitchCase="'overview'" [grid]="returnsGrid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
 
         <app-detail-table
@@ -104,41 +106,6 @@
           emptyMessage="No return events yet.">
         </app-detail-table>
       </ng-container>
-    </ng-template>
-  </app-data-grid>
-
-  <app-data-grid
-    *ngIf="activeRegister === 'pending'"
-    #pendingGrid
-    class="flex-1 min-h-0"
-    [fillHeight]="true"
-    title="Pending"
-    subtitle="Rejected receipt lines waiting to become a purchase return"
-    rowKey="pendingKey"
-    [data]="pendingRows"
-    [columns]="pendingColumns"
-    [loading]="pendingLoading"
-    [pageSize]="15"
-    searchPlaceholder="Search GRN, LPO, supplier, item, or reason"
-    emptyMessage="No rejected GRN items waiting for return"
-    [rowActions]="pendingActions"
-    [views]="pendingViews"
-    storageKey="purchase-returns-pending"
-    [density]="density"
-    [detailTabs]="[{ id: 'overview', label: 'Overview', icon: 'info' }]"
-    [detailTitle]="pendingTitle"
-    [detailSubtitle]="pendingSubtitle"
-    (rowAction)="onPendingAction($event)">
-
-    <!-- right: permanent, every tab (filled) -->
-    <ng-template #detailFooterTemplate let-row>
-      <app-action-button variant="primary" (click)="openGrnDetails(row)" icon="view">View GRN</app-action-button>
-      <app-action-button *ngIf="row.purchaseOrderId?.poNo" variant="primary" (click)="openLpoDetails(row)" icon="view">View LPO</app-action-button>
-      <app-action-button *ngIf="canInitiateHold()" variant="primary" (click)="openInitiateHoldModal(row)">Create Purchase Return</app-action-button>
-    </ng-template>
-
-    <ng-template #detailTemplate let-row>
-      <app-detail-overview [grid]="pendingGrid" [row]="row" [sections]="pendingOverviewSections(row)"></app-detail-overview>
     </ng-template>
   </app-data-grid>
 </div>

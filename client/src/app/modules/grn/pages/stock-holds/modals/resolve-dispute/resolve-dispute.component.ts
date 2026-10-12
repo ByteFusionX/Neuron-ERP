@@ -4,19 +4,16 @@ import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
   selector: 'app-resolve-dispute',
   standalone: true,
   imports: [
     CommonModule,
-    ReactiveFormsModule,
-    FormFieldComponent,
-    ModalLayoutComponent
+    ReactiveFormsModule
   ],
-  templateUrl: './resolve-dispute.component.html'
+  templateUrl: './resolve-dispute.component.html',
+  styleUrl: './resolve-dispute.component.css'
 })
 export class ResolveDisputeComponent {
   private fb = inject(FormBuilder);

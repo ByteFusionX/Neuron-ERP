@@ -1,14 +1,17 @@
-<app-modal-layout
-  title="Mark Stock Hold Disputed"
-  [subtitle]="stockHold?.holdNo"
-  [onClose]="onCancel.bind(this)"
-  [footerButtons]="[
-    { label: 'Discard', onClick: onCancel.bind(this), theme: 'cancel' },
-    { label: 'Mark Disputed', onClick: onSubmit.bind(this), theme: 'danger', loading: isSubmitting }
-  ]"
-  contentClass="p-6">
-  <form [formGroup]="disputeForm" (ngSubmit)="onSubmit()">
-    <div class="space-y-4">
+<form [formGroup]="disputeForm" (ngSubmit)="onSubmit()" class="flex max-h-[88vh] flex-col overflow-hidden rounded-lg bg-white text-gray-900 shadow-xl dark:bg-erp-surface-dark dark:text-gray-100">
+  <div class="border-b border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-base font-semibold">Mark Stock Hold Disputed</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ stockHold?.holdNo }}</p>
+      </div>
+      <button type="button" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-100" (click)="onCancel()">
+        <span class="material-icons text-xl">close</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
 
       <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
         <div class="min-w-0">
@@ -27,15 +30,14 @@
         </p>
       </div>
 
-      <app-form-field
-        label="Reason for dispute"
-        [control]="disputeForm.get('disputeNote')"
-        [isSubmitted]="formSubmitted"
-        type="textarea"
-        [rows]="4"
-        placeholder="Explain why the supplier is disputing this rejection">
-      </app-form-field>
+    <label class="space-y-1.5 text-sm font-medium">
+      <span>Reason for dispute</span>
+      <textarea formControlName="disputeNote" rows="4" class="sf-input min-h-28" [class.sf-invalid]="disputeForm.get('disputeNote')?.invalid && formSubmitted" placeholder="Explain why the supplier is disputing this rejection"></textarea>
+    </label>
+  </div>
 
-    </div>
-  </form>
-</app-modal-layout>
+  <div class="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-erp-border-dark">
+    <button type="button" class="sf-btn sf-btn-secondary" (click)="onCancel()">Discard</button>
+    <button type="submit" class="sf-btn bg-red-600 text-white hover:bg-red-500" [disabled]="isSubmitting">{{ isSubmitting ? 'Marking...' : 'Mark Disputed' }}</button>
+  </div>
+</form>

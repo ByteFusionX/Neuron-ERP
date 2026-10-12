@@ -5,19 +5,13 @@ import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
-import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
 
 @Component({
   selector: 'app-resolve-stock-hold',
   standalone: true,
   imports: [
     CommonModule,
-    ReactiveFormsModule,
-    FormFieldComponent,
-    SelectDropdownComponent,
-    ModalLayoutComponent
+    ReactiveFormsModule
   ],
   templateUrl: './resolve-stock-hold.component.html',
   styleUrl: './resolve-stock-hold.component.css'
