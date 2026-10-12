@@ -1,4 +1,4 @@
-<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
     <app-data-grid #grid
         class="flex-1 min-h-0"
         [fillHeight]="true"
@@ -12,7 +12,7 @@
             [columns]="columns"
             [loading]="isLoading"
             [pageSize]="row"
-            searchPlaceholder="Search by QuoteId"
+            searchPlaceholder="Search quote ID, customer or subject"
             emptyMessage="No quotations found"
             [createLabel]="createQuotation ? 'Create Quote' : ''"
             [rowActions]="rowActions"
@@ -66,6 +66,16 @@
 
         <!-- left: optional, per-tab (outline) -->
         <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <ng-container *ngIf="tab === 'followups' && !isFollowUpClosed(row)">
+                <ng-container *ngIf="followUpView(row).open; else scheduleOnly">
+                    <app-action-button variant="outline" (click)="onScheduleFollowUp(row)">Reschedule</app-action-button>
+                    <app-action-button variant="outline" (click)="onLogFollowUp(row)">Mark done</app-action-button>
+                </ng-container>
+                <ng-template #scheduleOnly>
+                    <app-action-button variant="outline" (click)="onLogFollowUp(row)">Log a follow-up</app-action-button>
+                    <app-action-button variant="outline" icon="plus" (click)="onScheduleFollowUp(row)">Schedule follow-up</app-action-button>
+                </ng-template>
+            </ng-container>
             <app-action-button *ngIf="tab === 'events'" variant="outline" icon="plus" (click)="onAddEvent(row)">Add event</app-action-button>
             <app-action-button *ngIf="tab === 'lpo' && canUploadLpo(row)" variant="outline" (click)="startLpoUpload(row)">Upload LPO</app-action-button>
         </ng-template>
@@ -88,6 +98,8 @@
                 <ng-container *ngSwitchCase="'items'">
                     <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals [currency]="row.currency"></app-detail-table>
                 </ng-container>
+
+                <app-follow-up-panel *ngSwitchCase="'followups'" subject="quotation" [view]="followUpView(row)" [closed]="isFollowUpClosed(row)" (cancel)="onCancelFollowUp(row)"></app-follow-up-panel>
 
                 <ng-container *ngSwitchCase="'events'">
                     <app-detail-task-list
@@ -118,9 +130,9 @@
     </app-data-grid>
 
     <!-- Create and edit share one drawer; the list only decides which mode to open it in. -->
-    <app-quote-form-drawer [open]="formOpen" [mode]="formMode" [quote]="formQuote" [enquiry]="sourceEnquiry"
+    <app-quote-form-drawer class="contents" [open]="formOpen" [mode]="formMode" [quote]="formQuote" [enquiry]="sourceEnquiry"
         (saved)="getQuotations()" (closed)="onFormClosed()"></app-quote-form-drawer>
 
     <!-- Convert to deal sheet: opens from the row action, or straight after an LPO upload. -->
-    <app-deal-form [quotation]="dealQuote" (saved)="onDealSaved($event)" (closed)="dealQuote = null"></app-deal-form>
+    <app-deal-form class="contents" [quotation]="dealQuote" (saved)="onDealSaved($event)" (closed)="dealQuote = null"></app-deal-form>
 </div>

@@ -28,21 +28,24 @@ function needsReason(current: S, target: S): boolean {
 
 /** Quotation rules for the shared `app-status-change-modal`. */
 export function quoteStatusModalData(currentStatus: S, targetStatus?: S): StatusChangeModalData<S> {
-  const statuses = Object.values(S).filter((s) => s !== S.Expired);
+  // Only the moves this quote can actually make are offered; unreachable ones are hidden, not greyed out.
+  const statuses = Object.values(S).filter((s) => s !== S.Expired && canSelectQuoteStatus(currentStatus, s));
   const reopening = currentStatus === S.Won || currentStatus === S.Lost;
   return {
     currentStatus,
     targetStatus,
     statuses,
     canSelect: canSelectQuoteStatus,
-    requireReasonFor: statuses.filter((s) => needsReason(currentStatus, s)),
+    // Marking Won asks for the acceptance note, so it is never a one-click change.
+    requireReasonFor: statuses.filter((s) => s === S.Won || needsReason(currentStatus, s)),
     reasonLabels: {
+      [S.Won]: { label: 'How the customer accepted', placeholder: 'e.g. Accepted by email on 12 Oct, PO to follow' },
       [S.Lost]: { label: 'Reason for losing', placeholder: 'Why did we lose this quote?' },
       ...(reopening ? Object.fromEntries(statuses.filter((s) => s !== S.Lost).map((s) => [s, { label: 'Reason for reopening', placeholder: `Why is this ${currentStatus} quote being reopened?` }])) : {}),
     },
     warnings: currentStatus === S.Won
       ? { [S.UnderNegotiation]: 'This removes the deal sheet and LPO files from the quote. Not allowed once the deal sheet is approved.', [S.Lost]: 'This removes the deal sheet and LPO files from the quote. Not allowed once the deal sheet is approved.' }
       : { [S.Won]: 'Upload the customer LPO next, then raise the deal sheet to continue the handover.' },
-    subtitle: "Record the customer's response. Quote content is not changed.",
+    subtitle: "Update where this quote stands. Quote content is not changed.",
   };
 }

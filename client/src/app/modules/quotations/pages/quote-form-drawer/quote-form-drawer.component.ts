@@ -118,7 +118,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     quoteCompany: [null as string | null, Validators.required],
     accountingManager: [null as string | null],
     closingDate: ['', [Validators.required, QuoteFormDrawerComponent.notBeforeQuoteDate]],
-    validityDate: ['', [Validators.required, QuoteFormDrawerComponent.notBeforeQuoteDate]],
+    // Optional: an empty value falls back to the closing date when the payload is built.
+    validityDate: ['', [QuoteFormDrawerComponent.notBeforeQuoteDate]],
     optionalItems: this.fb.array([] as any[]),
     customerNote: ['', Validators.required],
     termsAndCondition: ['', Validators.required],
@@ -209,7 +210,12 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     );
     this.subscriptions.add(
       this.customers$.subscribe((customers) => {
-        this.customerOptions = customers.map((c) => ({ label: c.companyName, value: c._id }));
+        // The server blocks new quotes for these customers, so they can't be picked (an existing quote keeps its own customer).
+        const keep = this.quoteForm.controls['client'].value;
+        this.customerOptions = customers.map((c) => {
+          const reason = c._id !== keep ? this.customerBlockReason(c) : '';
+          return { label: c.companyName, value: c._id, disabled: !!reason, description: reason || undefined };
+        });
         // The quote's contacts can only be listed once the customers are known.
         const clientId = this.quoteForm.controls['client'].value;
         if (clientId) this.loadContacts(clientId);
@@ -224,16 +230,28 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       this.profileService.getNotes().subscribe((res: Notes) => {
         this.customerNoteOptions = res.customerNotes.map((n) => ({ label: n.note, value: n.note }));
         this.termsOptions = res.termsAndConditions.map((n) => ({ label: n.note, value: n.note }));
+        this.applyDefaultNotes();
       })
     );
     this.subscriptions.add(
-      this.employeeService.getAllEmployees().subscribe((employees: getEmployee[]) => {
-        this.accountingManagerOptions = employees.map((employee) => ({
-          label: `${employee.firstName} ${employee.lastName}`.trim(),
-          value: employee._id,
-        })).filter((option): option is SfOption => !!option.value);
+      this.employeeService.getAllEmployees().subscribe({
+        next: (employees: getEmployee[]) => {
+          this.accountingManagerOptions = employees.map((employee) => ({
+            label: `${employee.firstName} ${employee.lastName}`.trim(),
+            value: employee._id,
+          })).filter((option): option is SfOption => !!option.value);
+        },
+        // Users without employee access (403) just get an empty accounting-manager list.
+        error: () => { this.accountingManagerOptions = []; },
       })
     );
+  }
+
+  /** Why new quotes are blocked for this customer; mirrors the server's commercial guard. Empty when allowed. */
+  private customerBlockReason(c: getCustomer): string {
+    if (['On Hold', 'Blacklisted', 'Inactive'].includes(c.status as string)) return `${c.status} - new quotes are blocked`;
+    if (['Hold', 'Exceeded'].includes(c.creditStatus as string)) return `Credit ${c.creditStatus} - new quotes are blocked`;
+    return '';
   }
 
   /**
@@ -257,6 +275,9 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
           value: c._id,
         }));
         if (this.seeding) return;
+        // A customer with a single contact needs no choice.
+        const attention = this.quoteForm.controls['attention'];
+        if (this.contactOptions.length === 1 && !attention.value) attention.setValue(this.contactOptions[0].value as string);
         const departmentId = (customer.department as unknown as getDepartment)?._id ?? (customer.department as unknown as string);
         // Only a hand-picked customer in create mode suggests a department; the enquiry's and the quote's own win.
         if (departmentId && !this.isEdit && !this.sourceEnquiry) this.setDepartments([departmentId]);
@@ -289,7 +310,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       subject: enquiry.title ?? '',
       currency: rfqSeed?.currency ?? enquiry.preSale?.estimations?.currency ?? 'QAR',
       enqId: enquiry._id ?? null,
-      sourceRfqId: rfqSeed?.rfqId ?? null,
+      // An estimation filled from RFQs keeps that link, so saving the quote still closes the enquiry's RFQs.
+      sourceRfqId: rfqSeed?.rfqId ?? (enquiry.preSale?.estimations as any)?.sourceRfqId ?? null,
     });
     this.setDepartments([
       (enquiry.department as unknown as getDepartment)?._id ?? (enquiry.department as unknown as string),
@@ -336,6 +358,20 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.quoteForm.markAsUntouched();
   }
 
+  /** `patchValue` can't create the item controls, so the restored lines are fed to item-entry as a seed. */
+  onDraftRestored(value: Record<string, any>): void {
+    const items = value['optionalItems'];
+    if (Array.isArray(items) && items.length) this.seedOptionalItems = JSON.parse(JSON.stringify(items));
+  }
+
+  /** A new quotation starts from the first saved templates, so the required notes are not blank. */
+  private applyDefaultNotes(): void {
+    if (this.isEdit) return;
+    const c = this.quoteForm.controls;
+    if (!c.customerNote.value && this.customerNoteOptions.length) c.customerNote.setValue(String(this.customerNoteOptions[0].value), { emitEvent: false });
+    if (!c.termsAndCondition.value && this.termsOptions.length) c.termsAndCondition.setValue(String(this.termsOptions[0].value), { emitEvent: false });
+  }
+
   private resetWizard(): void {
     this.draft?.clear();
     this.contactOptions = [];
@@ -350,7 +386,9 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       currency: 'QAR', quoteCompany: null, closingDate: '', validityDate: '', customerNote: '', termsAndCondition: '',
       paymentTerms: '', deliveryTerms: '', warranty: '', deliveryLocation: '', enqId: null, sourceRfqId: null, accountingManager: null,
     });
+    this.applyDefaultNotes();
     this.step = 1;
+    this.stepAttempted = false;
   }
 
   get today(): string {
@@ -384,8 +422,12 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     return this.stepControls[step].every((name) => this.quoteForm.get(name)?.valid);
   }
 
+  /** True after a failed attempt to leave or submit the current step; reset once the step changes. */
+  stepAttempted = false;
+
   private markStepTouched(step: 1 | 2 | 3): void {
     this.stepControls[step].forEach((name) => this.quoteForm.get(name)?.markAllAsTouched());
+    this.stepAttempted = true;
   }
 
   goToStep(step: 1 | 2 | 3): void {
@@ -400,6 +442,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       }
     }
     this.step = step;
+    this.stepAttempted = false;
   }
 
   nextStep(): void {
@@ -408,6 +451,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
   previousStep(): void {
     if (this.step > 1) this.step = (this.step - 1) as 1 | 2;
+    this.stepAttempted = false;
   }
 
   createProductOpen = false;
@@ -546,17 +590,18 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       this.quoteForm.markAllAsTouched();
       const firstIncomplete = ([1, 2, 3] as const).find((s) => !this.isStepValid(s));
       if (firstIncomplete) this.step = firstIncomplete;
+      this.stepAttempted = true;
       return;
     }
 
     const edit = this.isEdit;
     const description = edit
       ? this.revisesOnChange
-        ? 'This quotation has already been sent. If the items, notes, terms or currency changed, the current version is kept as a revision. Say what changed.'
+        ? 'This quotation is past the draft stage. If the items, notes, terms or currency changed, the current version is kept as a revision. Say what changed.'
         : 'Say what you changed. It is recorded in the quotation history.'
       : this.sourceEnquiry
-        ? 'This will create the quotation from the converted enquiry. Add a note to record why.'
-        : 'This will create the quotation. Add a note to record why.';
+        ? 'This creates the quotation from the converted enquiry. The note is saved in its history.'
+        : 'This creates the quotation. The note is saved in its history.';
     this.confirmDialog
       .open({
         tone: 'approve',

@@ -172,8 +172,11 @@ export class QuotationReportComponent implements OnInit, OnDestroy {
 
   private loadFilterOptions(): void {
     this.subscriptions.add(
-      this._employeeService.getAllEmployees().subscribe((people: getEmployee[]) => {
-        this.setOptions('salesPerson', people.map((p) => ({ label: `${p.firstName} ${p.lastName}`, value: p._id })));
+      this._employeeService.getAllEmployees().subscribe({
+        next: (people: getEmployee[]) => {
+          this.setOptions('salesPerson', people.map((p) => ({ label: `${p.firstName} ${p.lastName}`, value: p._id })));
+        },
+        error: () => { /* no employee access: the Sales Person filter stays empty */ },
       })
     );
     this.subscriptions.add(

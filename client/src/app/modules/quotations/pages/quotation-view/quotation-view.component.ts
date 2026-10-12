@@ -26,8 +26,11 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
 import { EditHistoryModalComponent } from 'src/app/shared/components/edit-history-modal/edit-history-modal.component';
-import { RevisionHistoryModalComponent, RevisionHistoryModalData } from 'src/app/shared/components/revision-history-modal/revision-history-modal.component';
+import { RevisionHistoryComponent, RevisionHistoryData } from 'src/app/shared/components/revision-history/revision-history.component';
 import { QuoteFormDrawerComponent } from '../quote-form-drawer/quote-form-drawer.component';
+import { DealFormComponent } from '../deal-form/deal-form.component';
+import { LpoUploadModalComponent, LpoUploadModalResult } from '../quotation-list/lpo-upload-modal.component';
+import { ActionMenuComponent, ActionMenuItem } from 'src/app/shared/components/action-menu/action-menu.component';
 import { DetailRevisionChipComponent } from 'src/app/shared/components/detail-panel/detail-revision-chip.component';
 import {
   FileUploadModalComponent,
@@ -44,7 +47,6 @@ import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/
 import { DetailClauseListComponent } from 'src/app/shared/components/detail-panel/detail-clause-list.component';
 import { DetailClause, DetailDocument, DetailSummaryRow, DetailTableColumn, DetailTaskItem } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
-import { DEAL_COST_COLUMNS, DealView, buildDealView, hasDeal } from '../deal-form/deal-view';
 import { marginFromPrice } from 'src/app/shared/utils/deal-pricing.util';
 import {
   DetailViewBadge,
@@ -58,7 +60,7 @@ import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
 import { NumberFormatterPipe } from '../../../../shared/pipes/numFormatter.pipe';
 
-type Tab = 'overview' | 'items' | 'pricing' | 'deal' | 'documents' | 'events' | 'history';
+type Tab = 'overview' | 'items' | 'pricing' | 'revisions' | 'documents' | 'events' | 'history';
 
 const QUOTE_STATUS_TONE: Record<string, DetailTone> = {
   Won: 'good',
@@ -142,7 +144,10 @@ export interface QvHistoryEntry {
     DetailMetricsComponent,
     DetailOverviewComponent,
     DetailRevisionChipComponent,
+    RevisionHistoryComponent,
+    ActionMenuComponent,
     QuoteFormDrawerComponent,
+    DealFormComponent,
     NumberFormatterPipe,
   ],
 })
@@ -168,13 +173,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     { id: 'events', label: 'Events' },
   ];
   private readonly baseTabs = this.tabs;
-  private readonly dealTab: { id: Tab; label: string } = { id: 'deal', label: 'Deal sheet' };
+  private readonly revisionsTab: { id: Tab; label: string } = { id: 'revisions', label: 'Revisions' };
   private readonly historyTab: { id: Tab; label: string } = { id: 'history', label: 'History' };
-  /** Deal sheet tab content, built with the same helper the list panel's summary uses. */
-  dealView: DealView | null = null;
-  /** Selected deal lines, laid out like the Items tab. */
-  dealItemRows: Record<string, any>[] = [];
-  readonly dealCostCols = DEAL_COST_COLUMNS;
   /** `?tab=` is honoured once, on the first load, so later reloads don't yank the user back. */
   private tabFromUrlApplied = false;
   historyLog: QvHistoryEntry[] = [];
@@ -214,8 +214,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   customerFacts: QvFact[] = [];
   enquiryFacts: QvFact[] = [];
   dealFacts: QvFact[] = [];
-  handoverFacts: QvFact[] = [];
-  lifecycleFacts: QvFact[] = [];
+  /** Overview cards: the quotation's own data, grouped by what it describes. */
+  overviewSections: { title: string; facts: QvFact[] }[] = [];
   /** Stock held for this Won quote until the job takes it over; null until loaded or when not Won. */
   stockHold: QuoteStockHold | null = null;
   stockHoldBusy = false;
@@ -253,7 +253,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       combineLatest([this._route.paramMap, this.reload$])
         .pipe(
           map(([params]) => params),
-          tap(() => (this.loading = true)),
+          // Only a different quote gets the full-page skeleton; reloading after an action keeps the page in place.
+          tap((params) => (this.loading = !this.quoteData || (this.quoteData as any)._id !== params.get('id'))),
           switchMap((params) =>
             this._employeeService.employeeData$.pipe(
               filter((employee) => !!employee),
@@ -290,7 +291,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   /** Base tabs, plus Deal sheet once a deal exists and History for super admins. */
   private syncTabs(): void {
     const tabs = [...this.baseTabs];
-    if (hasDeal(this.quoteData)) { tabs.splice(tabs.findIndex((t) => t.id === 'pricing') + 1, 0, this.dealTab); }
+    if (this.revision) { tabs.splice(tabs.findIndex((t) => t.id === 'pricing') + 1, 0, this.revisionsTab); }
     if (this.isSuperAdmin) { tabs.push(this.historyTab); }
     this.tabs = tabs;
     if (!tabs.some((t) => t.id === this.tab)) { this.tab = 'overview'; }
@@ -312,10 +313,128 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     return this.isDealApproved || (this.quoteData?.status === 'Won' && !this.isSuperAdmin);
   }
 
+  /** Why Edit is greyed out, shown as its tooltip; empty when it is available. */
+  get editDisabledReason(): string {
+    if (this.isDealApproved) return 'The deal sheet is approved, so the quotation is locked.';
+    if (this.isEditDisabled) return 'A Won quotation can only be edited by a super admin.';
+    return '';
+  }
+
   /** Same lock the quotation list applies: an active (non-rejected) deal sheet freezes the status. */
   get isStatusLocked(): boolean {
     const q = this.quoteData;
     return q?.status === 'Expired' || (!!q?.dealData?.status && q.dealData.status !== 'rejected');
+  }
+
+  get statusLockedReason(): string {
+    if (this.quoteData?.status === 'Expired') return 'The quotation expired, so its status can no longer change.';
+    return this.isStatusLocked ? 'A deal sheet is in progress or approved, so the status is locked.' : '';
+  }
+
+  // --- LPO and deal sheet handover (same flow as the quotation list) ---
+
+  /** Quotation whose deal sheet is being built; the deal drawer is open while this is set. */
+  dealQuote: any = null;
+  isUploadingLpo = false;
+  readonly acceptedLpoFiles = '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xlsx,.msg,.dwg';
+
+  get canUploadLpo(): boolean {
+    return this.quoteData?.status === QuoteStatus.Won && !this.quoteData?.lpoFiles?.length;
+  }
+
+  /** A Won quote with its LPO in, and no deal sheet yet (or one that was rejected). */
+  get canConvertToDeal(): boolean {
+    const q = this.quoteData;
+    return q?.status === QuoteStatus.Won && !!q.lpoFiles?.length && (!q.dealData?.status || q.dealData.status === 'rejected');
+  }
+
+  /** The one step this quote is waiting on, shown as the header's primary button. */
+  get nextStep(): { label: string; run: () => void } | null {
+    const q = this.quoteData;
+    if (!q) return null;
+    if (this.canUploadLpo) return { label: 'Upload LPO', run: () => this.onUploadLpo() };
+    if (this.canConvertToDeal) {
+      return { label: q.dealData?.status === 'rejected' ? 'Resubmit deal sheet' : 'Convert to deal sheet', run: () => (this.dealQuote = q) };
+    }
+    return null;
+  }
+
+  /** Everything else lives in the More menu so the header stays to two or three buttons. */
+  get moreItems(): ActionMenuItem[] {
+    const items: ActionMenuItem[] = [];
+    if (this.nextStep) {
+      items.push({ id: 'status', label: 'Update status', disabled: this.isStatusLocked, hint: this.statusLockedReason });
+    }
+    if (this.canRecordCustomerDecision) {
+      items.push({ id: 'accepted', label: 'Customer accepted' }, { id: 'rejected', label: 'Customer rejected' });
+    }
+    if (this.hasOptionalItems) items.push({ id: 'optional', label: 'Optional decisions' });
+    if (this.isQuoteOpen) items.push({ id: 'followUp', label: 'Follow up' });
+    if (this.canHoldStock) {
+      items.push({ id: 'hold', label: this.heldLines.length ? 'Change stock hold' : 'Hold stock', disabled: this.stockHoldBusy });
+    }
+    if (this.isNoteOwner) items.push({ id: 'note', label: 'View note' });
+    items.push({ id: 'preview', label: this.isPreviewing ? 'Preparing…' : 'Preview PDF', disabled: this.isPreviewing, separator: true });
+    if (this.canStampPdf) {
+      items.push({ id: 'stamped', label: this.isDownloadingStamped ? 'Generating…' : 'Download stamped PDF', disabled: this.isDownloadingStamped });
+    }
+    items.push({ id: 'pdf', label: this.isDownloading ? 'Generating…' : 'Download PDF', disabled: this.isDownloading });
+    return items;
+  }
+
+  onMenu(id: string): void {
+    switch (id) {
+      case 'status': this.onUpdateStatus(); break;
+      case 'accepted': void this.onCustomerDecision('accepted'); break;
+      case 'rejected': void this.onCustomerDecision('rejected'); break;
+      case 'optional': void this.onUpdateOptionalDecisions(); break;
+      case 'followUp': void this.onUpdateFollowUp(); break;
+      case 'hold': void this.onHoldStock(); break;
+      case 'note': this.onViewNote(); break;
+      case 'preview': this.onPreviewPdf(); break;
+      case 'stamped': this.onDownloadPdf(true); break;
+      case 'pdf': this.onDownloadPdf(false); break;
+    }
+  }
+
+  onUploadLpo(): void {
+    const q = this.quoteData;
+    if (!q?._id || !this.canUploadLpo || this.isUploadingLpo) return;
+    const contactOptions: SfOption[] = ((q.client as any)?.contactDetails || [])
+      .map((contact: ContactDetail) => ({ label: `${contact.firstName || ''} ${contact.lastName || ''}`.trim(), value: contact._id }))
+      .filter((option: SfOption) => !!option.label && !!option.value);
+    this.modal
+      .open<LpoUploadModalResult>(LpoUploadModalComponent, {
+        width: '680px',
+        data: { context: q.quoteId || (q._id as string), acceptedFiles: this.acceptedLpoFiles, contactOptions },
+      })
+      .afterClosed()
+      .subscribe((result) => {
+        if (!result?.files?.length) return;
+        const formData = new FormData();
+        formData.append('quoteId', q._id as string);
+        if (result.customerPoNumber) formData.append('customerPoNumber', result.customerPoNumber);
+        if (result.acceptedByName) formData.append('acceptedByName', result.acceptedByName);
+        result.files.forEach((file) => formData.append('files', file));
+        this.isUploadingLpo = true;
+        this.quotationService.uploadLpo(formData).subscribe({
+          next: () => {
+            this.isUploadingLpo = false;
+            this.toast.success('LPO uploaded. Review the lines to convert to a deal sheet.');
+            this.reload$.next();
+          },
+          error: () => {
+            this.isUploadingLpo = false;
+            this.toast.error('Failed to upload the LPO.');
+          },
+        });
+      });
+  }
+
+  onDealSaved(): void {
+    this.dealQuote = null;
+    this.toast.success('Deal sheet submitted for approval.');
+    this.reload$.next();
   }
 
   /** The status endpoint only returns the new status, so pull the fresh history entry (and revision) separately. */
@@ -353,7 +472,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
         this.quotationService.updateQuoteStatus(q._id as string, result.status, result.reason).subscribe({
           next: (res) => {
             q.status = (res as any) || result.status;
-            if (wasWon) { q.lpoFiles = [] as any; delete (q as any).dealData; }
+            if (wasWon) { q.lpoFiles = [] as any; delete (q as any).dealData; delete (q as any).customerAcceptance; }
             this.toast.success('Status updated.');
             this.reloadHistory();
             this.rebuild();
@@ -485,6 +604,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
         priceDetails.totalCost += cost.value;
       }
     });
+    // The discount quoted to the customer travels with the deal and comes off its selling price.
+    priceDetails.totalSellingPrice -= Number(q.dealData.totalDiscount) || 0;
     priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
     priceDetails.perc = (priceDetails.profit / priceDetails.totalSellingPrice) * 100;
 
@@ -535,23 +656,21 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     return this.quoteData?.revision ?? 0;
   }
 
+  /** Revisions are a tab, not a dialog: a quote can carry dozens of lines and needs the full page width. */
   onViewRevisions(): void {
-    if (!this.quoteData?._id) {
-      return;
-    }
-    const quoteId = this.quoteData._id;
-    const data: RevisionHistoryModalData = {
-      load: () => this.quotationService.getQuoteRevisions(quoteId),
-      entityLabel: 'quotation',
-      ref: this.quoteData.quoteId,
-    };
-    this._dialog.open(RevisionHistoryModalComponent, {
-      data,
-      width: '920px',
-      maxWidth: '95vw',
-      autoFocus: false,
-    });
+    if (this.tabs.some((x) => x.id === 'revisions')) { this.onTabChange('revisions'); }
   }
+
+  get revisionSource(): RevisionHistoryData {
+    const quoteId = this.quoteData?._id as string;
+    return this._revSource?.id === quoteId
+      ? this._revSource.data
+      : (this._revSource = {
+          id: quoteId,
+          data: { load: () => this.quotationService.getQuoteRevisions(quoteId), entityLabel: 'quotation', ref: this.quoteData?.quoteId },
+        }).data;
+  }
+  private _revSource?: { id: string; data: RevisionHistoryData };
 
   onQuoteEdit(): void {
     if (this.isEditDisabled) {
@@ -618,9 +737,22 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   }
 
   /** Customer accept/reject only applies while the quote is still open. */
+  /** A customer can only accept or reject a quote that has gone out, so not while it is still being drafted or worked on. */
   get canRecordCustomerDecision(): boolean {
     const status = this.quoteData?.status;
+    return !!status && ![QuoteStatus.Draft, QuoteStatus.WorkInProgress, QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.Expired].includes(status as QuoteStatus);
+  }
+
+  /** Sending or following up only makes sense while the quote is still open. */
+  get isQuoteOpen(): boolean {
+    const status = this.quoteData?.status;
     return !!status && ![QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.Expired].includes(status as QuoteStatus);
+  }
+
+  /** The stamped copy is the one that goes to the customer, so it is not offered on a quote still in progress. */
+  get canStampPdf(): boolean {
+    const status = this.quoteData?.status;
+    return !!status && ![QuoteStatus.Draft, QuoteStatus.WorkInProgress].includes(status as QuoteStatus);
   }
 
   private todayIso(): string {
@@ -662,7 +794,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       ],
     });
     if (!answer) return;
-    this.quotationService.updateQuoteFollowUp(q._id, { nextFollowUpDate: answer['nextFollowUpDate'], note: answer['note'] }).subscribe({
+    this.quotationService.scheduleQuoteFollowUp(q._id, { dueDate: answer['nextFollowUpDate'], note: answer['note'] }).subscribe({
       next: () => {
         this.toast.success('Follow-up updated.');
         this.reload$.next();
@@ -1161,14 +1293,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     const q = this.quoteData;
     if (!q) {
       this.breadcrumbs = this.badges = this.stats = this.itemRows = this.docList = [];
-      this.dealView = null;
-      this.dealItemRows = [];
       return;
     }
-    this.dealView = hasDeal(q)
-      ? buildDealView(q, { number: (n) => this.numberFormatter.transform(n), date: (v) => (v ? this.formatDate(v as string) : null) })
-      : null;
-    this.dealItemRows = this.dealView ? this.buildDealItemRows() : [];
     this.syncTabs();
     if (!this.tabFromUrlApplied) {
       this.tabFromUrlApplied = true;
@@ -1181,11 +1307,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     const num = (v: number) => this.numberFormatter.transform(v);
     const currency = q.currency ? ` (${q.currency})` : '';
 
-    this.breadcrumbs = [
-      { label: 'Home', link: ['/home'] },
-      { label: 'Quotations', link: ['/quotations'] },
-      { label: q.quoteId || 'Quote' },
-    ];
+    // The nav bar already shows where we are, so the header carries no breadcrumb of its own.
+    this.breadcrumbs = [];
 
     this.badges = [];
     if (q.status) {
@@ -1250,47 +1373,66 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       { label: 'Pre-sale', value: this.personName(q.enqId?.preSale?.presalePerson) },
     ]);
 
-    this.handoverFacts = keep([
-      { label: 'Current step', value: handover.stage, pill: true, tone: handover.tone },
-      { label: 'Next action', value: handover.next },
-      { label: 'Customer LPO', value: q.lpoFiles?.length ? `${q.lpoFiles.length} file(s) uploaded` : 'Not uploaded' },
-      { label: 'Customer PO', value: q.customerAcceptance?.customerPoNumber || '' },
-      { label: 'Accepted by', value: q.customerAcceptance?.acceptedByName || '' },
-    ]);
-
     const lastSent = (q.sendHistory || [])[q.sendHistory?.length ? q.sendHistory.length - 1 : 0];
     const followUpDue = q.followUp?.nextFollowUpDate ? new Date(q.followUp.nextFollowUpDate) : null;
     const isFollowUpOverdue = !!followUpDue && followUpDue.getTime() < new Date().setHours(0, 0, 0, 0);
-    this.lifecycleFacts = keep([
-      { label: 'Lifecycle', value: this.lifecycleStage(q), pill: true, tone: this.lifecycleTone(q) },
-      { label: 'Last sent', value: lastSent ? `${date(lastSent.sentAt)} to ${lastSent.recipient}` : '' },
-      { label: 'Sent revision', value: q.currentSentRevision !== undefined ? `Rev ${q.currentSentRevision}` : '' },
-      { label: 'Next follow-up', value: q.followUp?.nextFollowUpDate ? date(q.followUp.nextFollowUpDate) : '', tone: isFollowUpOverdue ? 'bad' : null },
-      { label: 'Last activity', value: q.followUp?.lastActivityDate ? date(q.followUp.lastActivityDate) : '' },
-      { label: 'Customer decision', value: q.customerDecision?.decision || '', pill: true, tone: q.customerDecision?.decision === 'accepted' ? 'good' : q.customerDecision?.decision === 'rejected' ? 'bad' : 'warn' },
-      { label: 'Lost competitor', value: q.customerDecision?.competitor || '' },
-      { label: 'Payment terms', value: q.paymentTerms || '' },
-      { label: 'Delivery terms', value: q.deliveryTerms || '' },
-      { label: 'Warranty', value: q.warranty || '' },
-      { label: 'Delivery location', value: q.deliveryLocation || '' },
-    ]);
+    const person = (p: any) => this.personName(p) || '';
+    this.overviewSections = [
+      {
+        title: 'Quotation',
+        facts: keep([
+          { label: 'Subject', value: q.subject || '' },
+          { label: 'Date', value: date(q.date) },
+          { label: 'Closing date', value: date(q.closingDate) },
+          { label: 'Valid until', value: date(q.validityDate) },
+          { label: 'Quoting company', value: q.quoteCompany || '' },
+          { label: 'Department', value: q.department?.departmentName || '' },
+          { label: 'Sales person', value: person(q.createdBy) },
+          { label: 'Created by user', value: person(q.createdByUser) },
+        ]),
+      },
+      {
+        title: 'Terms',
+        facts: keep([
+          { label: 'Payment terms', value: q.paymentTerms || '' },
+          { label: 'Delivery terms', value: q.deliveryTerms || '' },
+          { label: 'Warranty', value: q.warranty || '' },
+          { label: 'Delivery location', value: q.deliveryLocation || '' },
+        ]),
+      },
+      {
+        title: 'Follow-up',
+        facts: keep([
+          { label: 'Last sent', value: lastSent ? `${date(lastSent.sentAt)} to ${lastSent.recipient}` : '' },
+          { label: 'Sent revision', value: q.currentSentRevision !== undefined ? `Rev ${q.currentSentRevision}` : '' },
+          { label: 'Next follow-up', value: date(q.followUp?.nextFollowUpDate), tone: isFollowUpOverdue ? 'bad' : null },
+          { label: 'Last activity', value: date(q.followUp?.lastActivityDate) },
+          { label: 'Customer decision', value: q.customerDecision?.decision || '', pill: true, tone: q.customerDecision?.decision === 'accepted' ? 'good' : q.customerDecision?.decision === 'rejected' ? 'bad' : 'warn' },
+          { label: 'Lost to competitor', value: q.customerDecision?.competitor || '' },
+        ] as QvFact[]),
+      },
+    ].filter((sec) => sec.facts.length);
 
-    this.dealFacts = d
-      ? keep([
-          { label: 'Deal ID', value: d.dealId || '', deal: true },
-          { label: 'Status', value: d.status || '', pill: true, tone: DEAL_STATUS_TONE[(d.status || '').toLowerCase()] ?? 'neutral' },
-          { label: 'Saved date', value: date(d.savedDate) },
-          { label: 'Payment terms', value: d.paymentTerms || '' },
-          { label: 'Approved by', value: this.personName(d.approvedBy) },
-          { label: 'Deal discount', value: this.numberFormatter.transform(d.totalDiscount), numeric: true },
-          ...(d.additionalCosts || []).map((c) => ({
-            label: c.type,
-            value: this.numberFormatter.transform(c.value),
-            numeric: true,
-          })),
-          { label: 'Comments', value: (d.comments || []).join(' · ') },
-        ])
-      : [];
+    // The next module in the flow: where the quote stands on its way to a deal sheet.
+    this.dealFacts = keep([
+      { label: 'Current step', value: handover.stage, pill: true, tone: handover.tone },
+      { label: 'Next action', value: handover.next },
+      { label: 'Customer LPO', value: q.lpoFiles?.length ? `${q.lpoFiles.length} file(s) uploaded` : q.status === QuoteStatus.Won ? 'Not uploaded' : '' },
+      { label: 'Customer PO', value: q.customerAcceptance?.customerPoNumber || '' },
+      { label: 'Accepted by', value: q.customerAcceptance?.acceptedByName || '' },
+      ...(d
+        ? [
+            { label: 'Deal ID', value: d.dealId || '', deal: true },
+            { label: 'Deal status', value: d.status || '', pill: true, tone: DEAL_STATUS_TONE[(d.status || '').toLowerCase()] ?? 'neutral' },
+            { label: 'Saved date', value: date(d.savedDate) },
+            { label: 'Payment terms', value: d.paymentTerms || '' },
+            { label: 'Approved by', value: this.personName(d.approvedBy) },
+            { label: 'Deal discount', value: this.numberFormatter.transform(d.totalDiscount), numeric: true },
+            ...(d.additionalCosts || []).map((c) => ({ label: c.type, value: this.numberFormatter.transform(c.value), numeric: true })),
+            { label: 'Comments', value: (d.comments || []).join(' · ') },
+          ]
+        : []),
+    ] as QvFact[]);
   }
 
   private handoverStep(q: getQuotatation): { stage: string; next: string; tone: DetailTone } {
@@ -1314,21 +1456,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       return { stage: 'Deal sheet rejected', next: 'Revise and resubmit the deal sheet, or update the quote status.', tone: 'bad' };
     }
     return { stage: `Deal sheet ${dealStatus || 'in progress'}`, next: 'Review the deal sheet status.', tone: 'info' };
-  }
-
-  private lifecycleStage(q: getQuotatation): string {
-    if (q.status === QuoteStatus.Draft) return 'Draft';
-    if (q.sendHistory?.length && q.status === QuoteStatus.QuoteSubmitted) return 'Sent';
-    if (q.status === QuoteStatus.UnderNegotiation) return 'Negotiation';
-    if ([QuoteStatus.Won, QuoteStatus.Lost, QuoteStatus.Expired].includes(q.status as QuoteStatus)) return q.status;
-    return q.status || 'Work in progress';
-  }
-
-  private lifecycleTone(q: getQuotatation): DetailTone {
-    if (q.status === QuoteStatus.Won) return 'good';
-    if (q.status === QuoteStatus.Lost) return 'bad';
-    if (q.status === QuoteStatus.Expired) return 'neutral';
-    return q.sendHistory?.length ? 'info' : 'neutral';
   }
 
   /** Every file the quote can reach, tagged with where it came from (shown in the row's meta line). */
@@ -1357,33 +1484,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
   private formatDate(value: string): string {
     return formatDate(value, 'dd MMM yyyy', 'en-US');
-  }
-
-  private buildDealItemRows(): Record<string, any>[] {
-    const num = (v: number) => this.numberFormatter.transform(v);
-    const rows: Record<string, any>[] = [];
-    ((this.quoteData as any).dealData.updatedItems ?? []).forEach((item: any) => {
-      const picked = (item.itemDetails ?? []).filter((d: any) => d.dealSelected);
-      if (!picked.length) return;
-      rows.push({ _group: true, label: item.itemName, badge: '', note: '' });
-      picked.forEach((d: any) => {
-        const totalCost = (d.quantity ?? 0) * (d.unitCost ?? 0);
-        const totalPrice = (d.quantity ?? 0) * (d.unitSellingPrice ?? 0);
-        rows.push({
-          detail: this.boldPipe.transform(this.bracketsPipe.transform(d.detail) as string),
-          quantity: d.quantity,
-          unitCost: num(d.unitCost ?? 0),
-          totalCost: num(totalCost),
-          totalCostRaw: totalCost,
-          totalPriceRaw: totalPrice,
-          profit: marginFromPrice(d.unitCost, d.unitSellingPrice) + '%',
-          unitPrice: num(d.unitSellingPrice ?? 0),
-          totalPrice: num(totalPrice),
-          availability: d.availability,
-        });
-      });
-    });
-    return rows;
   }
 
   private buildItemRows(num: (v: number) => string): Record<string, any>[] {

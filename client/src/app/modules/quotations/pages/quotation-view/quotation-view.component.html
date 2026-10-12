@@ -20,37 +20,12 @@
     *ngIf="quoteData as q; else emptyShell"
   >
     <ng-container headerActions>
-      <app-detail-revision-chip
-        [revision]="revision"
-        hideZero
-        title="View revision history"
-        (open)="onViewRevisions()"
-      ></app-detail-revision-chip>
-    </ng-container>
-
-    <ng-container footerLeft>
-      <app-action-button variant="outline" *ngIf="isNoteOwner" (click)="onViewNote()">Note</app-action-button>
-      <app-action-button variant="outline" *ngIf="hasOptionalItems" (click)="onUpdateOptionalDecisions()">Optional decisions</app-action-button>
-      <app-action-button variant="outline" *ngIf="canRecordCustomerDecision" (click)="onCustomerDecision('accepted')">Customer accepted</app-action-button>
-      <app-action-button variant="outline" *ngIf="canRecordCustomerDecision" (click)="onCustomerDecision('rejected')">Customer rejected</app-action-button>
-      <app-action-button variant="outline" *ngIf="canHoldStock" [disabled]="stockHoldBusy" (click)="onHoldStock()"
-        title="Keep the free stock for this order for a few days, until the deal is approved">{{ heldLines.length ? 'Change stock hold' : 'Hold stock' }}</app-action-button>
-    </ng-container>
-
-    <ng-container footerRight>
-      <app-action-button variant="primary" [disabled]="isPreviewing" (click)="onPreviewPdf()">
-        {{ isPreviewing ? 'Preparing…' : 'Preview' }}
-      </app-action-button>
-      <app-action-button variant="primary" (click)="onSendQuote()">Send quote</app-action-button>
-      <app-action-button variant="primary" (click)="onUpdateFollowUp()">Follow up</app-action-button>
-      <app-action-button variant="primary" [disabled]="isDownloadingStamped" (click)="onDownloadPdf(true)">
-        {{ isDownloadingStamped ? 'Generating…' : 'Stamped PDF' }}
-      </app-action-button>
-      <app-action-button variant="primary" [disabled]="isDownloading" (click)="onDownloadPdf(false)">
-        {{ isDownloading ? 'Generating…' : 'Download PDF' }}
-      </app-action-button>
-      <app-action-button variant="primary" [disabled]="isStatusLocked" (click)="onUpdateStatus()">Update status</app-action-button>
-      <app-action-button variant="primary" [disabled]="isEditDisabled" (click)="onQuoteEdit()" icon="edit">Edit quote</app-action-button>
+      <app-detail-revision-chip [revision]="revision" hideZero title="View revision history" (open)="onViewRevisions()"></app-detail-revision-chip>
+      <app-action-button variant="outline" [title]="editDisabledReason" [disabled]="isEditDisabled" (click)="onQuoteEdit()" icon="edit">Edit quote</app-action-button>
+      <app-action-menu [items]="moreItems" (selected)="onMenu($event)"></app-action-menu>
+      <!-- "Send quote" stays hidden until mail is integrated; it only recorded the quote as sent. -->
+      <app-action-button *ngIf="nextStep as step" variant="primary" [disabled]="isUploadingLpo" (click)="step.run()">{{ step.label }}</app-action-button>
+      <app-action-button *ngIf="!nextStep" variant="primary" [title]="statusLockedReason" [disabled]="isStatusLocked" (click)="onUpdateStatus()">Update status</app-action-button>
     </ng-container>
 
     <div tabToolbar *ngIf="(tab === 'items' || tab === 'pricing') && q.optionalItems.length > 1" class="flex items-center gap-2">
@@ -66,17 +41,17 @@
     </div>
 
     <ng-container sidebar>
-      <app-detail-section title="Lifecycle" *ngIf="lifecycleFacts.length">
-        <app-detail-field *ngFor="let f of lifecycleFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
-          <app-detail-badge *ngIf="f.pill" class="capitalize" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
-          <ng-container *ngIf="!f.pill">{{ f.value }}</ng-container>
+      <!-- previous module -->
+      <app-detail-section title="Enquiry" *ngIf="enquiryFacts.length">
+        <app-detail-field *ngFor="let f of enquiryFacts" [label]="f.label" [tone]="f.tone ?? null" [numeric]="f.numeric ?? false">
+          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
         </app-detail-field>
       </app-detail-section>
 
-      <app-detail-section title="Handover" *ngIf="handoverFacts.length">
-        <app-detail-field *ngFor="let f of handoverFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
-          <app-detail-badge *ngIf="f.pill" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
-          <ng-container *ngIf="!f.pill">{{ f.value }}</ng-container>
+      <!-- next module: handover to the deal sheet -->
+      <app-detail-section title="Deal sheet" *ngIf="dealFacts.length">
+        <app-detail-field *ngFor="let f of dealFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
+          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
         </app-detail-field>
       </app-detail-section>
 
@@ -90,53 +65,25 @@
           class="mt-1 text-xs font-medium text-red-600 hover:underline disabled:opacity-50 dark:text-red-400">Release hold</button>
       </app-detail-section>
 
-      <app-detail-section title="Deal" *ngIf="dealFacts.length">
-        <app-detail-field *ngFor="let f of dealFacts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" [numeric]="f.numeric ?? false">
-          <app-detail-badge *ngIf="f.pill" class="capitalize" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
-          <a *ngIf="f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="qv-link">{{ f.value }}</a>
-          <button *ngIf="f.deal" type="button" class="qv-link" (click)="onDealClick()">{{ f.value }}</button>
-          <ng-container *ngIf="!f.link && !f.deal && !f.pill">{{ f.value }}</ng-container>
-        </app-detail-field>
-      </app-detail-section>
-
+      <!-- shared by every module -->
       <app-detail-section title="Customer" *ngIf="customerFacts.length">
         <app-detail-field *ngFor="let f of customerFacts" [label]="f.label" [tone]="f.tone ?? null" [numeric]="f.numeric ?? false">
-          <a *ngIf="f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="qv-link">{{ f.value }}</a>
-          <button *ngIf="f.deal" type="button" class="qv-link" (click)="onDealClick()">{{ f.value }}</button>
-          <ng-container *ngIf="!f.link && !f.deal">{{ f.value }}</ng-container>
+          <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
         </app-detail-field>
       </app-detail-section>
-      
-      <app-detail-section title="Enquiry" *ngIf="enquiryFacts.length">
-        <app-detail-field *ngFor="let f of enquiryFacts" [label]="f.label" [tone]="f.tone ?? null" [numeric]="f.numeric ?? false">
-          <a *ngIf="f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="qv-link">{{ f.value }}</a>
-          <button *ngIf="f.deal" type="button" class="qv-link" (click)="onDealClick()">{{ f.value }}</button>
-          <ng-container *ngIf="!f.link && !f.deal">{{ f.value }}</ng-container>
-        </app-detail-field>
-      </app-detail-section>
-
     </ng-container>
 
     <div tabBody [ngSwitch]="tab">
       <!-- overview -->
-      <div *ngSwitchCase="'overview'" class="space-y-6">
-        <app-detail-section title="Quote Details">
-          <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-            <app-detail-field label="Client" stacked>{{
-              (q.client.companyName || 'N/A') + (q.client.clientRef ? ' (' + q.client.clientRef + ')' : '')
-            }}</app-detail-field>
-            <app-detail-field label="Attention" stacked>{{ fullName(q.attention) }}</app-detail-field>
-            <app-detail-field label="Date" stacked>{{ q.date ? (q.date | date: 'dd/MM/yyyy') : 'N/A' }}</app-detail-field>
-            <app-detail-field label="Subject" stacked>{{ q.subject || 'N/A' }}</app-detail-field>
-            <app-detail-field label="Closing Date" stacked>{{ q.closingDate ? (q.closingDate | date: 'dd/MM/yyyy') : 'N/A' }}</app-detail-field>
-            <app-detail-field label="Sales Person" stacked>{{ fullName(q.createdBy) }}</app-detail-field>
-            <app-detail-field *ngIf="q.createdByUser" label="Created By User" stacked>{{ fullName(q.createdByUser) }}</app-detail-field>
-            <app-detail-field *ngIf="q.enqId?.enquiryId" label="Enq Ref Id" stacked>{{ q.enqId.enquiryId }}</app-detail-field>
-            <app-detail-field label="Quoting Company" stacked>{{ q.quoteCompany || 'N/A' }}</app-detail-field>
-            <app-detail-field label="Status" stacked>{{ q.status || 'N/A' }}</app-detail-field>
-            <app-detail-field label="Department" stacked>{{ q.department?.departmentName || 'N/A' }}</app-detail-field>
+      <div *ngSwitchCase="'overview'" class="grid gap-4 xl:grid-cols-2">
+        <section *ngFor="let sec of overviewSections; let first = first" class="rounded-lg border border-gray-200 p-4 dark:border-erp-border-dark" [class.xl:col-span-2]="first">
+          <h3 class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{{ sec.title }}</h3>
+          <div class="grid gap-x-6 gap-y-3 sm:grid-cols-2" [class.xl:grid-cols-3]="first">
+            <app-detail-field *ngFor="let f of sec.facts" [label]="f.label" [tone]="f.pill ? null : (f.tone ?? null)" stacked [class.sm:col-span-2]="f.label === 'Subject'" [class.xl:col-span-3]="f.label === 'Subject'">
+              <ng-container *ngTemplateOutlet="factValue; context: { $implicit: f }"></ng-container>
+            </app-detail-field>
           </div>
-        </app-detail-section>
+        </section>
       </div>
 
       <!-- items -->
@@ -144,15 +91,9 @@
         <app-detail-table [columns]="itemCols" [rows]="itemRows" groupStyle="band" numbered groupTotals spread centerGroups emptyMessage="No items in this option."></app-detail-table>
       </div>
 
-      <!-- deal sheet -->
-      <div *ngSwitchCase="'deal'" class="space-y-6">
-        <ng-container *ngIf="dealView as deal">
-          <app-detail-metrics [items]="deal.metrics"></app-detail-metrics>
-          <app-detail-overview [grid]="$any(null)" [row]="q" [sections]="deal.sections"></app-detail-overview>
-          <app-detail-table title="Selected items" [columns]="itemCols" [rows]="dealItemRows" groupStyle="band" numbered groupTotals spread centerGroups
-            emptyMessage="No items were selected for this deal."></app-detail-table>
-          <app-detail-table *ngIf="deal.costRows.length" title="Additional costs and discounts" [columns]="dealCostCols" [rows]="deal.costRows" [currency]="q.currency"></app-detail-table>
-        </ng-container>
+      <!-- revisions -->
+      <div *ngSwitchCase="'revisions'">
+        <app-revision-history [data]="revisionSource" [reloadKey]="revision"></app-revision-history>
       </div>
 
       <!-- documents -->
@@ -184,17 +125,6 @@
 
       <!-- history -->
       <div *ngSwitchCase="'history'">
-        <!-- revisions are a separate, content-level history; the log below is every action -->
-        <div *ngIf="revision" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2.5 dark:border-erp-border-dark">
-          <div class="flex items-center gap-2">
-            <app-detail-revision-chip [revision]="revision"></app-detail-revision-chip>
-            <span class="text-[13px] text-gray-600 dark:text-gray-400">
-              This quote has been revised {{ revision }} {{ revision === 1 ? 'time' : 'times' }} since it was sent.
-            </span>
-          </div>
-          <app-action-button variant="secondary" (click)="onViewRevisions()" icon="view">View revisions</app-action-button>
-        </div>
-
         <!-- the log itself, newest first, bucketed by day -->
         <div *ngFor="let g of historyGroups" class="mb-5 last:mb-0">
           <div class="mb-2 flex items-center gap-3">
@@ -288,6 +218,15 @@
 
   <app-quote-form-drawer [open]="editOpen" mode="edit" [quote]="quoteData"
     (saved)="onQuoteEdited()" (closed)="editOpen = false"></app-quote-form-drawer>
+
+  <app-deal-form class="contents" [quotation]="dealQuote" (saved)="onDealSaved()" (closed)="dealQuote = null"></app-deal-form>
+
+  <ng-template #factValue let-f>
+    <app-detail-badge *ngIf="f.pill" class="capitalize" [label]="f.value" [tone]="f.tone ?? 'neutral'"></app-detail-badge>
+    <a *ngIf="f.link" [routerLink]="f.link" [queryParams]="f.queryParams" class="qv-link">{{ f.value }}</a>
+    <button *ngIf="f.deal" type="button" class="qv-link" (click)="onDealClick()">{{ f.value }}</button>
+    <ng-container *ngIf="!f.link && !f.deal && !f.pill">{{ f.value }}</ng-container>
+  </ng-template>
 
   <ng-template #emptyShell>
     <app-detail-view-shell

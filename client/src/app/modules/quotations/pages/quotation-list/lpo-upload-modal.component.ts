@@ -52,7 +52,7 @@ export interface LpoUploadModalResult {
 
       <div class="flex-1 overflow-y-auto px-6 py-6 min-h-[280px]">
         <div class="mb-5 grid gap-4 sm:grid-cols-2">
-          <app-sf-field label="Customer PO / LPO No.">
+          <app-sf-field label="Customer PO / LPO No." hint="Optional">
             <app-sf-input [(ngModel)]="customerPoNumber" [ngModelOptions]="{ standalone: true }" placeholder="e.g. PO-1245"></app-sf-input>
           </app-sf-field>
           <app-sf-field label="Accepted By">
@@ -61,6 +61,7 @@ export interface LpoUploadModalResult {
           </app-sf-field>
         </div>
         <p class="mb-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Files</p>
+        <p class="mb-3 text-xs text-gray-500">After the upload, the Convert to Deal Sheet form opens so you can continue.</p>
         <app-sf-file [(ngModel)]="files" [accept]="data?.acceptedFiles || ''" [maxSizeMb]="5" [disabled]="uploading"></app-sf-file>
       </div>
 

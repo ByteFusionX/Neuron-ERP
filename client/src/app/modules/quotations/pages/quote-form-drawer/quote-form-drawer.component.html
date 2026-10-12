@@ -42,21 +42,20 @@
     <div *ngIf="revisesOnChange" class="mb-5 flex flex-wrap items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[13px] text-violet-900 dark:border-violet-900/60 dark:bg-violet-950/40 dark:text-violet-200">
         <ng-icon name="heroInformationCircle" class="mt-0.5 h-4 w-4 shrink-0"></ng-icon>
         <span class="min-w-0">
-            This quotation has already been sent. Changing the items, notes, terms or currency keeps the current version as
+            This quotation is past the draft stage. Changing the items, notes, terms or currency keeps the current version as
             <span class="font-medium">Revision {{ currentRevision }}</span> and saves this one as
             <span class="font-medium">Revision {{ currentRevision + 1 }}</span>.
         </span>
     </div>
 
-    <!-- Line items are excluded from the local autosave: `restore()` patches values and cannot
-         rebuild a FormArray. Items are persisted properly by "Save as Draft", which hits the server. -->
+    <!-- Line items are autosaved too; `restore()` only patches values, so `restored` hands the items back to item-entry. -->
     <form id="quote-form" [formGroup]="quoteForm" sfDraft="quotation-list-create" #draftRef="sfDraft"
-        [sfDraftDisabled]="isEdit" [sfDraftExclude]="['optionalItems']" (ngSubmit)="submit()" novalidate>
+        [sfDraftDisabled]="isEdit" (restored)="onDraftRestored($event)" (ngSubmit)="submit()" novalidate>
 
         <!-- Inside the form on purpose: `draft.pending` is only set once the directive's
              ngOnInit has run, which is after anything checked ahead of the form element. -->
         <div *ngIf="!isEdit && draftRef.pending" class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 text-[13px] text-violet-900 dark:text-violet-200">
-            <span>You have an unsaved draft from {{ draftRef.pending.savedAt | date: 'dd MMM, HH:mm' }}. Item lines are not kept in auto-saved drafts; use Save as Draft to keep them.</span>
+            <span>You have an unsaved draft from {{ draftRef.pending.savedAt | date: 'dd MMM, HH:mm' }}.</span>
             <span class="flex gap-3">
                 <button type="button" class="font-medium hover:underline" (click)="draftRef.restore()">Restore</button>
                 <button type="button" class="text-violet-700 dark:text-violet-400 hover:underline" (click)="draftRef.discard()">Discard</button>
@@ -83,13 +82,13 @@
                     <app-sf-input formControlName="subject" placeholder="Quotation subject"></app-sf-input>
                 </app-sf-field>
                 <app-sf-field label="Date" [control]="quoteForm.controls.date">
-                    <app-sf-date formControlName="date" [readonly]="true" displayFormat="dd/MM/yy"></app-sf-date>
+                    <app-sf-date formControlName="date" [readonly]="true" displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
-                <app-sf-field label="Closing Date" [control]="quoteForm.controls.closingDate" [messages]="{ beforeQuoteDate: 'Closing date cannot be before the quote date' }">
-                    <app-sf-date formControlName="closingDate" [min]="isEdit ? null : today" displayFormat="dd/MM/yy"></app-sf-date>
+                <app-sf-field label="Closing Date" hint="Last day to submit this quotation (the customer's deadline)" [control]="quoteForm.controls.closingDate" [messages]="{ beforeQuoteDate: 'Closing date cannot be before the quote date' }">
+                    <app-sf-date formControlName="closingDate" typeable [min]="isEdit ? null : today" displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
-                <app-sf-field label="Valid Until" [control]="quoteForm.controls.validityDate" [messages]="{ beforeQuoteDate: 'Valid-until date cannot be before the quote date' }">
-                    <app-sf-date formControlName="validityDate" [min]="isEdit ? null : today" displayFormat="dd/MM/yy"></app-sf-date>
+                <app-sf-field label="Valid Until" hint="How long our prices hold. Leave empty to use the closing date" [control]="quoteForm.controls.validityDate" [messages]="{ beforeQuoteDate: 'Valid-until date cannot be before the quote date' }">
+                    <app-sf-date formControlName="validityDate" typeable [min]="isEdit ? null : today" displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
                 <app-sf-field label="Currency" [control]="quoteForm.controls.currency">
                     <app-sf-select formControlName="currency" [options]="currencyOptions"></app-sf-select>
@@ -137,7 +136,7 @@
                 description="Pick a saved note to start from, then edit it — what you type here is what the customer sees.">
                 <app-sf-field label="Insert a saved note">
                     <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="customerNoteOptions"
-                        placeholder="Choose a template…" (ngModelChange)="applyNoteTemplate('customerNote', $event)"></app-sf-select>
+                        [placeholder]="customerNoteOptions.length ? 'Choose a template…' : 'No saved notes yet'" (ngModelChange)="applyNoteTemplate('customerNote', $event)"></app-sf-select>
                 </app-sf-field>
                 <app-sf-field label="Customer Note" [control]="quoteForm.controls.customerNote">
                     <app-sf-textarea formControlName="customerNote" [rows]="6" placeholder="Note shown on the quotation"></app-sf-textarea>
@@ -148,7 +147,7 @@
                 description="Same here — the template is a starting point, not a fixed choice.">
                 <app-sf-field label="Insert saved terms">
                     <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="termsOptions"
-                        placeholder="Choose a template…" (ngModelChange)="applyNoteTemplate('termsAndCondition', $event)"></app-sf-select>
+                        [placeholder]="termsOptions.length ? 'Choose a template…' : 'No saved terms yet'" (ngModelChange)="applyNoteTemplate('termsAndCondition', $event)"></app-sf-select>
                 </app-sf-field>
                 <app-sf-field label="Terms and Conditions" [control]="quoteForm.controls.termsAndCondition">
                     <app-sf-textarea formControlName="termsAndCondition" [rows]="8" placeholder="Terms shown on the quotation"></app-sf-textarea>
@@ -181,7 +180,7 @@
                 <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
             </app-action-button>
         </div>
-        <span *ngIf="!isStepValid(step) && quoteForm.touched" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+        <span *ngIf="stepAttempted && !isStepValid(step)" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>

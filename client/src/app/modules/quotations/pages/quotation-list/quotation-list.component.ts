@@ -9,7 +9,10 @@ import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { canSelectQuoteStatus, quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
 import { getQuotation, Quotatation, QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
-import { BehaviorSubject, Observable, Subscription, filter, forkJoin, of, shareReplay, switchMap, take } from 'rxjs';
+import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
+import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
+import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
+import { BehaviorSubject, Observable, Subscription, catchError, filter, forkJoin, of, shareReplay, switchMap, take } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
@@ -56,7 +59,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
     templateUrl: './quotation-list.component.html',
     styleUrls: ['./quotation-list.component.css'],
     providers: [NumberFormatterPipe, DatePipe],
-    imports: [ViewToggleComponent, NgIcon, NgIf, NgClass, NgSwitch, NgSwitchCase, NgComponentOutlet, DatePipe, AsyncPipe, RouterLink, DataGridComponent, DataGridFieldComponent, DetailFieldComponent, DetailSectionComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent]
+    imports: [ViewToggleComponent, NgIcon, NgIf, NgClass, NgSwitch, NgSwitchCase, NgComponentOutlet, DatePipe, AsyncPipe, RouterLink, DataGridComponent, DataGridFieldComponent, DetailFieldComponent, DetailSectionComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTableComponent, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DealFormComponent, QuoteFormDrawerComponent, FollowUpPanelComponent]
 })
 export class QuotationListComponent implements AfterViewInit {
   @ViewChild('grid') grid!: DataGridComponent<Quotatation>;
@@ -95,6 +98,9 @@ export class QuotationListComponent implements AfterViewInit {
     { id: 'pending-deal', label: 'Pending Deal', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'pending' }] },
     { id: 'rejected-deal', label: 'Rejected Deal', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'rejected' }] },
     { id: 'ready-for-job', label: 'Ready For Job', filters: [{ id: 1, key: 'dealStatus', op: 'eq', value: 'approved' }] },
+    { id: 'fu-overdue', label: 'Overdue' },
+    { id: 'fu-today', label: 'Today' },
+    { id: 'fu-upcoming', label: 'Upcoming' },
   ];
   bulkActions: DataGridBulkAction[] = [
     { id: 'delete', label: 'Delete', variant: 'danger' },
@@ -108,6 +114,7 @@ export class QuotationListComponent implements AfterViewInit {
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
+    { id: 'followups', label: 'Follow-ups', icon: 'chat' },
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'lpo', label: 'Documents', icon: 'eye' },
     { id: 'deal', label: 'Deal Sheet', icon: 'wallet' },
@@ -192,7 +199,8 @@ export class QuotationListComponent implements AfterViewInit {
     this.checkPermission();
     this.buildColumns();
     this.buildRowActions();
-    this.salesPerson$ = this._employeeService.getAllEmployees();
+    // Users without employee access get a 403 here; the Sales Person filter is just left empty for them.
+    this.salesPerson$ = this._employeeService.getAllEmployees().pipe(catchError(() => of([] as getEmployee[])));
     this.departments$ = this._departetmentService.getDepartments();
     // userId isn't known yet on first render, so wait for the employee before fetching (else the request hits /customer/ and fails)
     this.customers$ = this._employeeService.employeeData$.pipe(
@@ -313,10 +321,13 @@ export class QuotationListComponent implements AfterViewInit {
       this._enquiryService.enquiryData$.subscribe((enquiry) => {
         if (!enquiry) return;
         this._enquiryService.quoteSubject.next(undefined);
-        this.formMode = 'create';
-        this.formQuote = null;
-        this.sourceEnquiry = enquiry;
-        this.formOpen = true;
+        // Deferred: the enquiry can already be waiting when the view initialises, which would change bindings mid-check (NG0100).
+        Promise.resolve().then(() => {
+          this.formMode = 'create';
+          this.formQuote = null;
+          this.sourceEnquiry = enquiry;
+          this.formOpen = true;
+        });
       })
     );
   }
@@ -337,12 +348,9 @@ export class QuotationListComponent implements AfterViewInit {
       { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px' },
       { key: 'quoteId', label: 'Quote Id', sortable: true },
       { key: 'customerName', label: 'Customer', valueGetter: (r) => r.client?.companyName },
-      { key: 'description', label: 'Description', valueGetter: (r) => r.subject },
-      { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '' },
-      { key: 'department', label: 'Department', width: '130px', valueGetter: (r) => this.departmentNames(r) },
-      { key: 'totalCost', label: 'Amount', width: '150px', align: 'right', valueGetter: (r) => `${this.numberFormat.transform(this.calculateDiscoutPrice(r))} ${r.currency}` },
+      // Status and Deal Status come right after the customer so they stay on screen at ~1400px.
       {
-        key: 'status', label: 'Status', type: 'badge', editable: true, editor: 'select',
+        key: 'status', label: 'Status', type: 'badge', editable: true, editor: 'select', width: '190px',
         editorOptions: this.selectableQuoteStatuses.map((s) => ({ label: s, value: s })),
         filterOptions: this.quoteStatuses.map((s) => ({ label: s, value: s })),
         badgeClasses: this.statusBadgeClasses,
@@ -354,6 +362,11 @@ export class QuotationListComponent implements AfterViewInit {
         badgeClasses: this.dealStatusBadgeClasses,
         badgeLabel: (v) => (v ? String(v).charAt(0).toUpperCase() + String(v).slice(1) : ''),
       },
+      { key: 'nextFollowUpDate', label: 'Next Follow-up', type: 'date', sortable: true, width: '140px', valueGetter: (r) => r.followUp?.nextFollowUpDate ?? null, cellClass: (r) => followUpCellClass(r.followUp?.nextFollowUpDate, this.isFollowUpClosed(r)) },
+      { key: 'totalCost', label: 'Amount', width: '150px', align: 'right', valueGetter: (r) => `${this.numberFormat.transform(this.calculateDiscoutPrice(r))} ${r.currency}` },
+      { key: 'description', label: 'Description', width: '220px', valueGetter: (r) => r.subject },
+      { key: 'salesPerson', label: 'Sales Person', valueGetter: (r) => r.createdBy ? `${r.createdBy.firstName} ${r.createdBy.lastName}` : '' },
+      { key: 'department', label: 'Department', width: '130px', valueGetter: (r) => this.departmentNames(r) },
       { key: 'closingDate', label: 'Closing Date', type: 'date', editable: true, editor: 'date' },
     ];
   }
@@ -361,6 +374,10 @@ export class QuotationListComponent implements AfterViewInit {
   /** Row actions shown as quick hover icon buttons. Add actions open the relevant detail tab. */
   private buildRowActions(): void {
     this.rowActions = [
+      {
+        id: 'followUp', label: 'Follow-ups', icon: 'chat', quick: true,
+        hidden: (r) => this.isCreatorOnlyView(r) || this.isFollowUpClosed(r),
+      },
       {
         id: 'addEvent', label: 'Add Event', icon: 'calendar', quick: true,
         hidden: (r) => this.isCreatorOnlyView(r),
@@ -376,6 +393,11 @@ export class QuotationListComponent implements AfterViewInit {
       {
         id: 'convertToDealSheet', label: 'Convert To Deal Sheet', icon: 'refresh', quick: true,
         hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && r.lpoFiles?.length && (!r.dealData || !(r.dealData as any)._id)),
+      },
+      {
+        // A rejected deal sheet is raised again from here; it keeps its deal number (the server reuses it).
+        id: 'resubmitDealSheet', label: 'Resubmit Deal Sheet', icon: 'refresh', quick: true,
+        hidden: (r) => this.isCreatorOnlyView(r) || !(r.status === 'Won' && r.lpoFiles?.length && (r.dealData as any)?.status === 'rejected'),
       },
       {
         id: 'viewDeal', label: 'View Deal Sheet', icon: 'eye',
@@ -423,11 +445,13 @@ export class QuotationListComponent implements AfterViewInit {
     const { action, row } = event;
     if (this.isCreatorOnlyView(row)) return;
     switch (action.id) {
+      case 'followUp':
+        this.openDetailTab(row, 'followups');
+        break;
       case 'addEvent':
         this.openDetailTab(row, 'events');
         break;
       case 'addDocument':
-        this.openDetailTab(row, 'lpo');
         this.startLpoUpload(row);
         break;
       case 'viewLpo':
@@ -446,12 +470,13 @@ export class QuotationListComponent implements AfterViewInit {
         this.openRevisions(row);
         break;
       case 'convertToDealSheet':
+      case 'resubmitDealSheet':
         this.dealQuote = row;
         break;
     }
   }
 
-  private openDetailTab(row: Quotatation, tab: 'events' | 'lpo'): void {
+  private openDetailTab(row: Quotatation, tab: 'events' | 'lpo' | 'followups'): void {
     if (this.isCreatorOnlyView(row)) return;
     this.grid.activeTab = tab;
     this.grid.openRow(row);
@@ -510,6 +535,7 @@ export class QuotationListComponent implements AfterViewInit {
     this.row = query.pageSize;
     this.sortKey = query.sort.key;
     this.sortDir = query.sort.direction;
+    this.activeViewId = query.viewId ?? 'all';
 
     this.selectedCustomer = null;
     this.selectedSalesPerson = null;
@@ -591,25 +617,29 @@ export class QuotationListComponent implements AfterViewInit {
       department: this.selectedDepartment,
       quoteStatus: this.selectedQuoteStatus,
       dealStatus: this.selectedDealStatus,
+      followUpView: this.activeViewId.startsWith('fu-') ? this.activeViewId.slice(3) : null,
       access: access,
       userId: userId
     };
 
-    this.subscriptions.add(
-      this._quoteService.getQuotation(filterData)
-        .subscribe({
-          next: (data: getQuotation) => {
-            this.rows = data ? [...data.quotations] : [];
-            this.total = data ? data.total : 0;
-            this.refreshViewCounts();
-            this.isLoading = false;
-          },
-          error: () => {
-            this.isLoading = false;
-          }
-        })
-    );
+    // Only the newest request may fill the grid: a slower, older one (e.g. the unfiltered first load that
+    // runs while a restored filtered tab re-queries) must not overwrite it.
+    this.loadSub?.unsubscribe();
+    this.loadSub = this._quoteService.getQuotation(filterData)
+      .subscribe({
+        next: (data: getQuotation) => {
+          this.rows = data ? [...data.quotations] : [];
+          this.total = data ? data.total : 0;
+          this.refreshViewCounts();
+          this.isLoading = false;
+        },
+        error: () => {
+          this.isLoading = false;
+        }
+      });
+    this.subscriptions.add(this.loadSub);
   }
+  private loadSub?: Subscription;
 
   isStatusLocked(element: Quotatation): boolean {
     return !!element.dealData?.status && element.dealData.status !== 'rejected';
@@ -918,7 +948,6 @@ export class QuotationListComponent implements AfterViewInit {
   uploadLpoFiles(row: Quotatation, result: LpoUploadModalResult): void {
     const files = result.files || [];
     if (!files.length || this.isUploadingFiles || !this.canUploadLpo(row)) return;
-    const rowIndex = this.rows.indexOf(row);
     const formData = new FormData();
     formData.append('quoteId', row._id as string);
     if (result.customerPoNumber) formData.append('customerPoNumber', result.customerPoNumber);
@@ -930,12 +959,13 @@ export class QuotationListComponent implements AfterViewInit {
       next: (quote: Quotatation) => {
         this.isUploadingFiles = false;
         if (quote) {
-          this.rows[rowIndex].lpoFiles = quote.lpoFiles;
-          this.rows[rowIndex].customerAcceptance = quote.customerAcceptance;
-          const uploaded = this.rows[rowIndex];
-          if (uploaded.status === 'Won' && !(uploaded.dealData as any)?._id) this.dealQuote = uploaded;
+          // The list can be re-filtered/reloaded while the upload runs, so look the row up again.
+          const uploaded = this.rows.find((r) => r._id === row._id) ?? row;
+          uploaded.lpoFiles = quote.lpoFiles;
+          uploaded.customerAcceptance = quote.customerAcceptance;
         }
-        this.toaster.success('Files uploaded successfully');
+        // The drawer is not opened for them: Convert To Deal Sheet is the next step, taken when they are ready.
+        this.toaster.success(row.status === 'Won' && !(row.dealData as any)?._id ? 'LPO uploaded. Use Convert To Deal Sheet when you are ready.' : 'Files uploaded successfully');
       },
       error: () => {
         this.isUploadingFiles = false;
@@ -1018,6 +1048,80 @@ export class QuotationListComponent implements AfterViewInit {
         })
     );
     this.loader.complete();
+  }
+
+  // --- follow-ups: schedule → log → next, same flow as enquiries -----------------------------------------------------
+
+  /** Won, lost and expired quotes are done being chased. */
+  isFollowUpClosed(row: Quotatation): boolean {
+    return ['Won', 'Lost', 'Expired'].includes(String(row.status));
+  }
+
+  private readonly followUpViewFor = followUpViewer();
+
+  followUpView(row: Quotatation): FollowUpViewModel {
+    return this.followUpViewFor(row, row.followUp, this.isFollowUpClosed(row));
+  }
+
+  onScheduleFollowUp(row: Quotatation): void {
+    const open = this.followUpView(row).open;
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: { context: row.quoteId || row._id, mode: 'schedule', dueDate: open?.dueIso || null },
+    }).afterClosed().subscribe((result) => {
+      if (result?.mode === 'schedule') this.saveFollowUp(row, this._quoteService.scheduleQuoteFollowUp(row._id as string, { dueDate: result.dueDate, note: result.note }), 'Follow-up scheduled');
+    });
+  }
+
+  onLogFollowUp(row: Quotatation): void {
+    const open = this.followUpView(row).open;
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: { context: row.quoteId || row._id, mode: 'complete', plannedFor: open?.due || null },
+    }).afterClosed().subscribe((result) => {
+      if (result?.mode === 'complete') {
+        this.saveFollowUp(row, this._quoteService.completeQuoteFollowUp(row._id as string, {
+          date: result.date, outcome: result.outcome, note: result.note, nextFollowUpDate: result.nextFollowUpDate,
+        }), 'Follow-up logged');
+      }
+    });
+  }
+
+  async onCancelFollowUp(row: Quotatation): Promise<void> {
+    const open = this.followUpView(row).open;
+    if (!open) return;
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Cancel Follow-up',
+      message: 'Close this follow-up without logging an outcome?',
+      details: [{ label: 'Planned for', value: open.due }],
+      reason: 'optional',
+      confirmLabel: 'Cancel follow-up',
+      cancelLabel: 'Keep',
+    });
+    if (!confirmed) return;
+    this.saveFollowUp(row, this._quoteService.cancelQuoteFollowUp(row._id as string, reason), 'Follow-up cancelled');
+  }
+
+  private followUpSaving = false;
+
+  private saveFollowUp(row: Quotatation, request: Observable<{ success: boolean; followUp: any }>, successMessage: string): void {
+    if (this.followUpSaving) return;
+    this.followUpSaving = true;
+    request.subscribe({
+      next: (response) => {
+        row.followUp = response.followUp;
+        this.followUpSaving = false;
+        this.toaster.success(successMessage);
+        // The Overdue / Today / Upcoming views depend on the new date, so reload them.
+        if (this.activeViewId.startsWith('fu-')) this.getQuotations();
+        else this.rows = [...this.rows];
+      },
+      error: (err) => {
+        this.followUpSaving = false;
+        this.toaster.error(err?.error?.message || 'Failed to save follow-up');
+      },
+    });
   }
 
   onViewChange(view: DataGridView<Quotatation>) {
@@ -1103,7 +1207,7 @@ export class QuotationListComponent implements AfterViewInit {
   /** The full deal sheet: items, costs and attachments open on the quotation view page. */
   openDealSheet(row: Quotatation, event?: Event): void {
     event?.stopPropagation();
-    this._router.navigate(['/quotations/view', row._id], { queryParams: { tab: 'deal' } });
+    this._router.navigate(['/quotations/view', row._id]);
   }
 
   /** Light deal summary for the Deal Sheet tab: status, price, terms and approver, with no tables. */
