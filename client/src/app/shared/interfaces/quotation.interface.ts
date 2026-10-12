@@ -1,3 +1,4 @@
+import { FollowUpTaskEntry } from '../utils/follow-up.util';
 import { ApexChart, ApexDataLabels, ApexLegend, ApexNonAxisChartSeries, ApexPlotOptions, ApexTooltip } from "ng-apexcharts";
 import { ContactDetail, getCustomer } from "./customer.interface";
 import { getDepartment } from "./department.interface";
@@ -269,6 +270,8 @@ export interface QuoteFollowUp {
     reminderOwner?: getEmployee | string;
     lastActivityDate?: string;
     note?: string;
+    lastOutcome?: string;
+    history?: FollowUpTaskEntry[];
 }
 
 export interface QuoteCustomerDecision {
@@ -283,10 +286,11 @@ export interface QuoteCustomerDecision {
 export enum QuoteStatus {
     Draft = 'Draft',
     WorkInProgress = 'Work In Progress',
-    QuoteSubmitted = 'Quote Submitted',
-    UnderNegotiation = 'Under negotiation',
-    UnderReview = 'Under review',
+    // Listed in pipeline order: dropdowns and filters render Object.values(QuoteStatus) as-is.
     ReadyForSubmission = 'Ready for submission',
+    QuoteSubmitted = 'Quote Submitted',
+    UnderReview = 'Under review',
+    UnderNegotiation = 'Under negotiation',
     Won = 'Won',
     Lost = 'Lost',
     Expired = 'Expired',
@@ -304,6 +308,9 @@ export interface dealData {
     seenByApprover: boolean;
     status: string;
     approvedBy?: any;
+    approvalStatus?: any[];
+    /** Where a pending deal is waiting right now (set by the server). */
+    waiting?: DealWaiting | null;
     comments: string[]
     seenedBySalsePerson: boolean
     attachments: Files[]
@@ -320,6 +327,9 @@ export interface FilterQuote {
     toDate: string | null;
     sortKey?: string | null;
     sortDir?: 'asc' | 'desc' | null;
+    followUpView?: string | null;
+    followUpFromDate?: string | null;
+    followUpToDate?: string | null;
 }
 
 export interface FilterDeal {
@@ -494,3 +504,12 @@ export const QuoteStatusColors: { [key in QuoteStatus]: string } = {
     [QuoteStatus.Lost]: '#FF0000', // Red
     [QuoteStatus.Expired]: '#6B7280', // Gray
 };
+
+export interface DealWaiting {
+    step: number;
+    roleIds: string[];
+    approverIds: string[];
+    roleName: string;
+    escalated: boolean;
+    dueAt: string | null;
+}

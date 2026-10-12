@@ -1,3 +1,4 @@
+import { FollowUpBlockData } from 'src/app/shared/utils/follow-up.util';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
@@ -60,15 +61,32 @@ export class EnquiryService {
     return this.http.post<EnquiryTable>(`${this.api}/enquiry/get`, filterData)
   }
 
-  getPresale(page: number, row: number, filter: string, access?: string, userId?: string, search?: string, sort?: { key: string | null; direction: string | null }): Observable<EnquiryTable> {
+  getPresale(page: number, row: number, filter: string, access?: string, userId?: string, search?: string, sort?: { key: string | null; direction: string | null }, followUp?: string | null): Observable<EnquiryTable> {
     let url = `${this.api}/enquiry/presales?filter=${filter}&page=${page}&row=${row}&access=${access}&userId=${userId}`;
+    if (followUp) url += `&followUp=${followUp}`;
     if (sort?.key && sort.direction) url += `&sortKey=${sort.key}&sortDir=${sort.direction}`;
     if (search?.trim()) url += `&search=${encodeURIComponent(search.trim())}`;
     return this.http.get<EnquiryTable>(url)
   }
 
+  updateEnquiryDetails(enquiryId: string, details: { title?: string; contact?: string | null; priority?: string | null; source?: string; enquiryCategory?: string; requirement?: string }): Observable<{ success: boolean; data: getEnquiry }> {
+    return this.http.patch<{ success: boolean; data: getEnquiry }>(`${this.api}/enquiry/${enquiryId}/details`, details)
+  }
+
   updateEnquiryStatus(selectedEnquiry: { id: string, status: string, lostReason?: string, competitorName?: string, competitorPriceGap?: string }): Observable<{ update: getEnquiry, quoteId: string | undefined }> {
     return this.http.put<{ update: getEnquiry, quoteId: string | undefined }>(`${this.api}/enquiry/update`, selectedEnquiry)
+  }
+
+  schedulePresaleFollowUp(enquiryId: string, data: { dueDate: string; note?: string }): Observable<{ success: boolean; followUp: FollowUpBlockData }> {
+    return this.http.patch<{ success: boolean; followUp: FollowUpBlockData }>(`${this.api}/enquiry/presales/${enquiryId}/follow-up/schedule`, data)
+  }
+
+  completePresaleFollowUp(enquiryId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null }): Observable<{ success: boolean; followUp: FollowUpBlockData }> {
+    return this.http.patch<{ success: boolean; followUp: FollowUpBlockData }>(`${this.api}/enquiry/presales/${enquiryId}/follow-up/complete`, data)
+  }
+
+  cancelPresaleFollowUp(enquiryId: string, reason?: string): Observable<{ success: boolean; followUp: FollowUpBlockData }> {
+    return this.http.patch<{ success: boolean; followUp: FollowUpBlockData }>(`${this.api}/enquiry/presales/${enquiryId}/follow-up/cancel`, { reason })
   }
 
   scheduleFollowUp(enquiryId: string, data: { dueDate: string; note?: string }): Observable<{ success: boolean; enquiry: getEnquiry }> {
@@ -87,8 +105,8 @@ export class EnquiryService {
     return this.http.put<{ success: boolean }>(`${this.api}/enquiry/presales/reject`, { enqId, comment, role, clearEstimation })
   }
 
-  returnJob(enqId: string): Observable<{ success: boolean; message: string }> {
-    return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/return`, { enqId })
+  returnJob(enqId: string, note?: string): Observable<{ success: boolean; message: string }> {
+    return this.http.put<{ success: boolean; message: string }>(`${this.api}/enquiry/presales/return`, { enqId, note })
   }
 
   restartAssignmentWorkflow(enqId: string, stepRoleIds?: string[]): Observable<{ success: boolean; message: string }> {
@@ -204,7 +222,7 @@ export class EnquiryService {
 
 }
 
-export interface PresaleTabCounts { new: number; assignedTab: number; rejected: number; resolve: number; completedTab: number; cancelledTab: number; }
+export interface PresaleTabCounts { new: number; assignedTab: number; rejected: number; resolve: number; completedTab: number; cancelledTab: number; fuOverdue: number; fuToday: number; fuUpcoming: number; }
 
 export interface PresaleReportRow { id: string; name: string; count: number; new: number; assigned: number; completed: number; rejected: number; }
 export interface PresaleReportItem { id: string; enquiryId: string; title: string; customer: string; salesPerson: string; presale: string; status: string; days: number; }

@@ -10,6 +10,17 @@ import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/er
 // show their own error toast on failure, so requests opt out of the interceptor's global toast.
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
+export interface PartyMatch {
+  _id: string;
+  name: string;
+  code?: string;
+  level: 'block' | 'warn';
+  field: 'name' | 'trn' | 'email' | 'phone' | 'iban';
+  reason: string;
+}
+
+export interface PartyDuplicateGroup { key: string; count: number; records: { _id: string; [k: string]: any }[] }
+
 @Injectable({
   providedIn: 'root'
 })
@@ -26,6 +37,16 @@ export class CustomerService {
     let url = `${this.apiUrl}/customer/checkCompanyExists?companyName=${encodeURIComponent(companyName)}`;
     if (excludeId) url += `&excludeId=${encodeURIComponent(excludeId)}`;
     return this.http.get<{ companyExist: boolean }>(url, { context: context() });
+  }
+
+  checkDuplicate(p: { companyName?: string; email?: string; phone?: string; trn?: string }, excludeId?: string): Observable<{ matches: PartyMatch[] }> {
+    const q = new URLSearchParams();
+    Object.entries({ ...p, excludeId }).forEach(([k, v]) => { if (v) q.set(k, v); });
+    return this.http.get<{ matches: PartyMatch[] }>(`${this.apiUrl}/customer/checkDuplicate?${q}`, { context: context() });
+  }
+
+  getDuplicatesReport(): Observable<Record<'sameName' | 'sameTrn' | 'similarName' | 'sameEmail' | 'samePhone', PartyDuplicateGroup[]>> {
+    return this.http.get<any>(`${this.apiUrl}/customer/duplicatesReport`);
   }
 
   getAllCustomers(userId?:string | undefined): Observable<getCustomer[]> {

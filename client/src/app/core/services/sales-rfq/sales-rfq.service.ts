@@ -103,8 +103,8 @@ export class SalesRfqService {
   }
 
   /** Quotation seed from every awarded product of the enquiry. */
-  prepareEnquiryQuotation(enquiryId: string): Observable<any> {
-    return this.http.post<any>(`${this.api}/enquiry/${enquiryId}/prepare-quotation`, {}, { context: context() });
+  prepareEnquiryQuotation(enquiryId: string, partial = false): Observable<any> {
+    return this.http.post<any>(`${this.api}/enquiry/${enquiryId}/prepare-quotation${partial ? '?partial=1' : ''}`, {}, { context: context() });
   }
 
   addSupplier(id: string, body: SalesRfqSupplierInput): Observable<{ success: boolean; data: SalesRfq }> {
@@ -157,5 +157,11 @@ export class SalesRfqService {
   priceHistory(params: { detail?: string; partNo?: string; supplierId?: string }): Observable<any> {
     const query = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]).toString();
     return this.http.get<any>(`${this.api}/price-history?${query}`, { context: context() });
+  }
+
+  /** One row per (supplier, product) from past quotes; pass a productId or a supplierId. */
+  supplierProducts(params: { productId?: string; supplierId?: string }): Observable<any> {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]).toString();
+    return this.http.get<any>(`${this.api}/supplier-products?${query}`, { context: context() });
   }
 }

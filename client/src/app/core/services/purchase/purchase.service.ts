@@ -34,8 +34,21 @@ export class PurchaseService {
     sourceType?: string;
     poProgress?: 'ready' | 'remaining' | 'completed';
     rfqStatus?: 'not-started' | 'quoted' | 'awarded';
+    allocation?: 'new';
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
+  }
+
+  getPurchaseAssignees(): Observable<any> {
+    return this.http.get<any>(`${this.api}/purchase/purchase-request/assignees`, { context: context() });
+  }
+
+  allocatePurchase(purchaseId: string, employeeId: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/allocate/${purchaseId}`, { employeeId }, { context: context() });
+  }
+
+  getRfqComparison(rfqId: string): Observable<any> {
+    return this.http.get<any>(`${this.api}/purchase/rfq/${rfqId}/compare`, { context: context() });
   }
 
   getRfqs(params: {

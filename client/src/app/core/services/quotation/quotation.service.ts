@@ -1,7 +1,7 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
-import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse } from 'src/app/shared/interfaces/quotation.interface';
+import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse, QuoteFollowUp } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -85,6 +85,18 @@ export class QuotationService {
     return this.http.patch<Quotatation>(`${this.api}/quotation/follow-up/${quoteId}`, data, { context: context() })
   }
 
+  scheduleQuoteFollowUp(quoteId: string, data: { dueDate: string; note?: string }): Observable<{ success: boolean; followUp: QuoteFollowUp }> {
+    return this.http.patch<{ success: boolean; followUp: QuoteFollowUp }>(`${this.api}/quotation/follow-up/${quoteId}/schedule`, data, { context: context() })
+  }
+
+  completeQuoteFollowUp(quoteId: string, data: { date: string; outcome: string; note?: string; nextFollowUpDate?: string | null }): Observable<{ success: boolean; followUp: QuoteFollowUp }> {
+    return this.http.patch<{ success: boolean; followUp: QuoteFollowUp }>(`${this.api}/quotation/follow-up/${quoteId}/complete`, data, { context: context() })
+  }
+
+  cancelQuoteFollowUp(quoteId: string, reason?: string): Observable<{ success: boolean; followUp: QuoteFollowUp }> {
+    return this.http.patch<{ success: boolean; followUp: QuoteFollowUp }>(`${this.api}/quotation/follow-up/${quoteId}/cancel`, { reason }, { context: context() })
+  }
+
   recordCustomerDecision(quoteId: string, data: { decision: 'accepted' | 'rejected' | 'no_response'; reason?: string; competitor?: string; expectedValueLost?: number }): Observable<Quotatation> {
     return this.http.patch<Quotatation>(`${this.api}/quotation/customer-decision/${quoteId}`, data, { context: context() })
   }
@@ -120,8 +132,8 @@ export class QuotationService {
     return this.http.post<any>(`${this.api}/quotation/lpo`, lpoData)
   }
 
-  approveDeal(quoteId: string | undefined, comment: string | undefined, userId: string | undefined): Observable<{ success: true }> {
-    return this.http.post<{ success: true }>(`${this.api}/quotation/deal/approve`, { quoteId, userId, comment }, { context: context() })
+  approveDeal(quoteId: string | undefined, comment: string | undefined, userId: string | undefined): Observable<{ success: true; awaitingNextApproval?: boolean; message?: string }> {
+    return this.http.post<{ success: true; awaitingNextApproval?: boolean; message?: string }>(`${this.api}/quotation/deal/approve`, { quoteId, userId, comment }, { context: context() })
   }
 
   rejectDeal(comment: string, quoteId?: string): Observable<{ success: true }> {
@@ -130,6 +142,11 @@ export class QuotationService {
 
   revokeDeal(quoteId: string | undefined, userId: string | undefined): Observable<{ success: true }> {
     return this.http.post<{ success: true }>(`${this.api}/quotation/deal/revoke`, { quoteId, userId }, { context: context() })
+  }
+
+  /** Super Admin restarts a pending deal's approval route; `stepRoleIds` are the stages that get another chance. */
+  resetDealWorkflow(quoteId: string, stepRoleIds: string[]): Observable<{ success: true; message: string }> {
+    return this.http.post<{ success: true; message: string }>(`${this.api}/quotation/deal/reset-workflow`, { quoteId, stepRoleIds }, { context: context() })
   }
 
   markDealAsViewed(quoteIds: any): Observable<any> {
@@ -439,13 +456,13 @@ export class QuotationService {
             body: [
               [{ style: 'tableHead', text: 'Company:', alignment: 'left' }, { style: 'tableHead', text: quoteData.client.companyName, alignment: 'left', colSpan: 4 }, {}, {}, {}, { text: ['Total Pages : 0', { pageReference: 'lastPage' }], alignment: 'left', style: 'pageNumber' }],
               [{ style: 'tableHead', text: 'Attention:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.attention.courtesyTitle + ' ' + quoteData.attention.firstName + ' ' + quoteData.attention.lastName}`, alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Date:', alignment: 'left' }, { style: 'tableHead', text: new Date(quoteData.date).toLocaleDateString('en-GB'), alignment: 'left' }],
-              [{ rowSpan: 2, style: 'vCentertableHead', text: 'Address:', alignment: 'left' }, { rowSpan: 2, style: 'vCentertableHead', text: quoteData.client.companyAddress, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'stableHead', text: 'RFQ No:', alignment: 'left' }, { style: 'stableHead', text: quoteData.client.clientRef, alignment: 'left' }],
+              [{ rowSpan: 2, style: 'vCentertableHead', text: 'Address:', alignment: 'left' }, { rowSpan: 2, style: 'vCentertableHead', text: quoteData.client.companyAddress, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'stableHead', text: 'Client Ref:', alignment: 'left' }, { style: 'stableHead', text: quoteData.client.clientRef || '-', alignment: 'left' }],
               ['', '', '', '', { style: 'stableHead', text: 'Closing Date:', alignment: 'left' }, { style: 'stableHead', text: quoteData.closingDate ? new Date(quoteData.closingDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Client Tel:', alignment: 'left' }, { style: 'tableHead', text: `+974 ${quoteData.attention.phoneNo}`, alignment: 'left' }, { style: 'tableHead', text: 'FAX:', alignment: 'center' }, { style: 'tableHead', text: '+974', alignment: 'left' }, { style: 'tableHead', text: 'Salesperson:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.createdBy.firstName + ' ' + quoteData.createdBy.lastName}`, alignment: 'left' }],
               [{ style: 'tableHead', text: 'Subject:', alignment: 'left' }, { style: 'tableHead', text: quoteData.subject, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Quote Ref:', alignment: 'left' }, { style: 'quoteId', text: quoteData.quoteId, alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Payment Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.paymentTerms || '', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'tableHead', text: quoteData.validityDate ? new Date(quoteData.validityDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Delivery Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryTerms || '', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
-              [{ style: 'tableHead', text: 'Warranty:', alignment: 'left' }, { style: 'tableHead', text: quoteData.warranty || '', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Delivery Location:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryLocation || '', alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Payment Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.paymentTerms || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'tableHead', text: quoteData.validityDate ? new Date(quoteData.validityDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Delivery Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryTerms || '-', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
+              [{ style: 'tableHead', text: 'Warranty:', alignment: 'left' }, { style: 'tableHead', text: quoteData.warranty || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Delivery Location:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryLocation || '-', alignment: 'left' }],
             ]
           }
         },

@@ -5,7 +5,7 @@ import {
   HttpEvent,
   HttpInterceptor
 } from '@angular/common/http';
-import { catchError, Observable, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { EmployeeService } from '../../services/employee/employee.service';
 
 // Attaches the self-issued employeeId/password JWT (from localStorage) to outgoing
@@ -38,14 +38,7 @@ export class JwtInterceptor implements HttpInterceptor {
           'Authorization': `Bearer ${token}`
         }
       });
-      return next.handle(modifiedReq).pipe(
-        catchError((err) => {
-          if (err.status === 401) {
-            localStorage.removeItem('employeeToken');
-          }
-          return throwError(() => err);
-        })
-      );
+      return next.handle(modifiedReq);
     }
 
     return next.handle(request);

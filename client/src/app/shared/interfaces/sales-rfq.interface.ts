@@ -69,6 +69,7 @@ export interface SalesRfqCompareRow {
   quantity: number;
   uom?: string;
   partNo?: string;
+  itemCode?: string;
   status: SalesRfqCompareRowStatus;
   awardedRfqId: string | null;
   lowestRfqId: string | null;
@@ -133,6 +134,11 @@ export interface SalesRfqQuote {
   paymentTerms?: string;
   validityDate?: string;
   warrantyTerms?: string;
+  productId?: string;
+  brandOffered?: string;
+  modelOffered?: string;
+  moq?: number;
+  isAlternative?: boolean;
   remarks?: string;
   attachments?: { fileName: string; originalname?: string; uploadedAt?: string }[];
   selected: boolean;
@@ -236,6 +242,10 @@ export interface SalesRfqReplyPrice {
   leadTimeDays?: number | null;
   quantity?: number;
   remarks?: string;
+  paymentTerms?: string;
+  deliveryTerms?: string;
+  modelOffered?: string;
+  isAlternative?: boolean;
 }
 
 /** Stock position of one RFQ line, and the suppliers to ask when it is short. */

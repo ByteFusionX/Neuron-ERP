@@ -96,9 +96,9 @@ export class NotificationService {
                 return { routePath: '/announcements' };
             
             case 'AssignedJob':
-                return { routePath: '/assigned-jobs' };
+                return { routePath: '/presales' };
             case 'ReAssignedJob':
-                return { routePath: '/assigned-jobs' };
+                return { routePath: '/presales' };
 
             case 'FeedbackRequest':
             case 'Enquiry':

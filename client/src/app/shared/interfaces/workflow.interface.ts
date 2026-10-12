@@ -118,7 +118,9 @@ export interface WorkflowFilter {
 export enum WorkflowFeature {
     PRESALE = 'presale',
     PURCHASE_APPROVAL = 'purchaseApproval',
+    DEAL_SHEET = 'dealSheet',
     PROJECT_CLAIM = 'projectClaim',
+    PROCUREMENT_ASSIGNMENT = 'procurementAssignment',
     CLAIM = 'claim',
 }
 

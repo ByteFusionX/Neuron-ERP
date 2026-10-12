@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { ActivatedRoute, ActivatedRouteSnapshot, CanActivateFn, NavigationStart, Router, RouterStateSnapshot } from '@angular/router';
 import { EmployeeService } from '../../services/employee/employee.service';
-import { Observable, filter, map, switchMap, take, of } from 'rxjs';
+import { Observable, catchError, filter, map, switchMap, take, of } from 'rxjs';
 import { Privileges, getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { ToastrService } from 'ngx-toastr';
 
@@ -29,7 +29,10 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
             }
             
             return checkPermission()
-        })
+        }),
+        // API unreachable: the interceptor already shows the connection toast. Stay where we are instead of
+        // letting the failed navigation drop the user out of their session.
+        catchError(() => of(false))
     );
 
     function checkPermission() {
@@ -72,7 +75,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 }
                 break;
 
-            case '/assigned-jobs':
+            case '/presales':
                 if (privileges?.assignedJob?.viewReport == 'none') {
                     router.navigate(['/home']);
                     return false;

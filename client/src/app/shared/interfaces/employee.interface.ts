@@ -229,6 +229,7 @@ export interface Privileges {
     viewReport: string;
     create: boolean;
     canApprovePR: boolean;
+    canAssign?: boolean;
   };
   purchaseOrder: {
     viewReport: string;

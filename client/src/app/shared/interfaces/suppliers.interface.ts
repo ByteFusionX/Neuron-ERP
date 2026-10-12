@@ -89,6 +89,7 @@ export interface Supplier {
     approvedBy: string;
     isDeleted: boolean;
     isBlocked?: boolean;
+    blockHistory?: { date: Date; blocked: boolean; reason?: string; byName?: string }[];
     hasOrders?: boolean;
     approvedHistory?: {
         date: Date;

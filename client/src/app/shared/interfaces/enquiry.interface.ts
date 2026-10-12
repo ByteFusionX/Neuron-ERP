@@ -1,3 +1,4 @@
+import { FollowUpBlockData } from '../utils/follow-up.util';
 import { ContactDetail, getCustomer } from "./customer.interface";
 import { getDepartment } from "./department.interface";
 import { getEmployee, getEmployeeDetails } from "./employee.interface";
@@ -35,6 +36,8 @@ export interface Estimations {
     totalDiscount: number;
     presaleNote: string;
     version?: number;
+    /** The supplier RFQ the costs were filled from. */
+    sourceRfqId?: string;
 }
 
 /** A superseded estimation version, archived on revision or reject. */
@@ -71,6 +74,7 @@ export interface getEnquiry {
     daysSinceLastFollowUp?: number | null;
     attachments: Files[];
     preSale: {
+        followUp?: FollowUpBlockData;
         presalePerson: getEmployeeDetails;
         presaleFiles: Files[] | null;
         items?: QuoteItem[];
