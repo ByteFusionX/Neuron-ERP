@@ -1,0 +1,22 @@
+.lpo-input {
+  width: 100%;
+  min-height: 2.625rem;
+  border-radius: 0.375rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  color: #111827;
+  outline: none;
+}
+
+.lpo-input:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgb(124 58 237 / 0.14);
+}
+
+:host-context(html.dark) .lpo-input {
+  border-color: #262626;
+  background: #111;
+  color: #e5e7eb;
+}

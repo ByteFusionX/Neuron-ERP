@@ -2,11 +2,11 @@
     <div class="border-b p-3 px-9 flex justify-between items-center">
         <h3 class="text-md font-medium">View Purchase Order <span class="uppercase"></span></h3>
         <div class="flex gap-3">
-            <app-btn
-                theme="secondary"
-                (buttonClick)="onBack()">
+            <app-action-button
+                variant="secondary"
+                (click)="onBack()">
                 Back
-            </app-btn>
+            </app-action-button>
         </div>
     </div>
 
@@ -132,6 +132,25 @@
             </div>
         </div>
 
+        <div *ngIf="approvalSteps.length" class="w-full mb-8">
+            <label class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">Approval Workflow</label>
+            <div class="flex flex-wrap gap-3">
+                <div *ngFor="let step of approvalSteps" class="border rounded px-3 py-2 text-sm min-w-[200px]"
+                    [ngClass]="{
+                        'bg-green-50 border-green-200': step.status === 'approved',
+                        'bg-red-50 border-red-200': step.status === 'rejected',
+                        'bg-yellow-50 border-yellow-200': step.status === 'pending'
+                    }">
+                    <div class="font-medium">Step {{step.step}} · {{stepLabel(step)}}</div>
+                    <div class="text-xs capitalize">{{step.status}}<span *ngIf="stepActor(step)"> · {{stepActor(step)}}</span></div>
+                    <div *ngIf="step.comment" class="text-xs text-gray-600">{{step.comment}}</div>
+                </div>
+            </div>
+            <p *ngIf="lpo.poStatus === 'Pending for Approval' && canApprovePOs() && !isOwnLpo() && !isMyTurn()" class="text-xs text-gray-500 mt-2">
+                Waiting for the current approval step; it is not your turn yet.
+            </p>
+        </div>
+
         <div class="w-full mb-8">
             <div class="flex justify-between gap-3 py-5">
                 <div class="md:w-1/3">
@@ -196,20 +215,18 @@
         </div>
 
         <div *ngIf="canApproveOrReject()" class="w-full mt-8 pt-6 border-t flex justify-end gap-3">
-            <app-btn
-                theme="success"
+            <app-action-button
+                variant="primary"
                 [disabled]="isApproving || isRejecting"
-                [loading]="isApproving"
-                (buttonClick)="onApprove()">
-                Approve
-            </app-btn>
-            <app-btn
-                theme="danger"
+                (click)="onApprove()">
+                {{ isApproving ? 'Approving...' : 'Approve' }}
+            </app-action-button>
+            <app-action-button
+                variant="outline"
                 [disabled]="isApproving || isRejecting"
-                [loading]="isRejecting"
-                (buttonClick)="onReject()">
-                Reject
-            </app-btn>
+                (click)="onReject()">
+                {{ isRejecting ? 'Rejecting...' : 'Reject' }}
+            </app-action-button>
         </div>
     </div>
 </div>

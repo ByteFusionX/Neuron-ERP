@@ -18,9 +18,8 @@ import { ModalService } from 'src/app/shared/components/modal';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
-import { DetailFieldComponent } from 'src/app/shared/components/detail-panel/detail-field.component';
-import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
-import { ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
+import { ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
+import { PrFormComponent } from './pr-form/pr-form.component';
 import {
   DetailViewBadge,
   DetailViewBreadcrumb,
@@ -45,9 +44,7 @@ interface PartNumberDropdownOption {
     DetailViewShellComponent,
     ActionButtonComponent,
     DetailBadgeComponent,
-    DetailFieldComponent,
-    DetailPanelIconComponent,
-    ItemEntryComponent,
+    PrFormComponent,
   ],
   templateUrl: './create-purchase.component.html',
   styleUrl: './create-purchase.component.css',
@@ -164,15 +161,15 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return key ? this.originalsByKey().get(key) : undefined;
   }
 
-  /** Deal-sheet lines are fixed on a job-linked PR; only lines added here stay editable. */
+  /** Job PR lines stay structurally protected by the saved record, but commercial fields can change here. */
   lineLocked = (i: number, j: number, k: number): boolean => {
-    if (this.isJobLess) return false;
-    const original = this.originalAt(i, j, k);
-    return !!original && !original.isNewlyAdded;
+    return false;
   };
 
   lineBadge = (i: number, j: number, k: number): string | null =>
     this.originalAt(i, j, k)?.fromMrRequest ? 'MR' : null;
+
+  addRfqLabel = () => 'Add RFQ';
 
   private lineHasContent(d: any): boolean {
     return !!(d?.detail || '').toString().trim() || d?.quantity != null || d?.unitCost != null;
@@ -941,6 +938,37 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     }).catch(() => {});
   }
 
+  onAddRfqForLine(): void {
+    if (!this.purchaseId && !this.selectedJobSheet && !this.isJobLess) {
+      this.warningMessage('Please select any job from given list');
+      return;
+    }
+
+    const openRfq = (purchaseId: string) => {
+      this.purchaseService.createRfqFromPurchase(purchaseId).subscribe({
+        next: () => {
+          this.toaster.success('RFQ created successfully');
+          this.router.navigate(['/purchase/rfq']);
+        },
+        error: (error) => {
+          this.toaster.error(error?.error?.message || 'Failed to create RFQ');
+          console.error('Error creating RFQ:', error);
+        }
+      });
+    };
+
+    const run = () => this.ensurePurchaseId().then(openRfq).catch(() => {});
+    if (this.entryItems.dirty) {
+      const items = this.collectEntryItems();
+      if (!items) return;
+      this.itemsList.set(items);
+      this.updateTotalLpo();
+      this.entryItems.markAsPristine();
+      this.saveItemsToBackend(items);
+    }
+    run();
+  }
+
   deelSheets(requestedJobId?: string | null) {
     this.subscriptions.add(
       this.jobService.getConvertibleJobs().subscribe({
@@ -1233,6 +1261,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             unitCost: typeof detail.unitCost === 'number' ? detail.unitCost : (detail.unitCost ? parseFloat(String(detail.unitCost)) : 0),
             availability: detail.availability || '',
             supplierName: detail.supplierName || '',
+            supplierId: typeof detail.supplierId === 'object' && detail.supplierId !== null ? detail.supplierId._id : (detail.supplierId || ''),
+            uom: detail.uom || '',
             email: detail.email || '',
             phoneNo: detail.phoneNo || '',
             dealSelected: detail.dealSelected || false,

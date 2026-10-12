@@ -19,8 +19,7 @@ import { DetailTableComponent } from 'src/app/shared/components/detail-panel/det
 import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 
-const ALL_STATUSES = ['Draft', 'Pending for Approval', 'Approved', 'Closed', 'Rejected'];
-const DRAFT_STATUSES = ['Draft'];
+const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Closed', 'Rejected'];
 const PENDING_STATUSES = ['Pending for Approval'];
 const APPROVED_STATUSES = ['Approved'];
 const CLOSED_STATUSES = ['Closed'];
@@ -30,7 +29,6 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
   'Pending for Approval': 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
   Closed: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
-  Draft: 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
 };
 
@@ -78,7 +76,6 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PO' }];
   views: DataGridView<any>[] = [
     { id: 'all', label: 'All' },
-    { id: 'draft', label: 'Draft' },
     { id: 'pending', label: 'Pending' },
     { id: 'approved', label: 'Approved' },
     { id: 'partiallyReceived', label: 'Partially Received' },
@@ -164,8 +161,6 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
 
   private statusesForView(viewId: string): string[] {
     switch (viewId) {
-      case 'draft':
-        return DRAFT_STATUSES;
       case 'pending':
         return PENDING_STATUSES;
       case 'approved':

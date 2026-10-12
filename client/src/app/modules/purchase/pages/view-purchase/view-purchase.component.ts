@@ -312,6 +312,8 @@ export class ViewPurchaseComponent {
       });
     }
 
+    // The discount quoted to the customer travels with the deal and comes off its selling price.
+    priceDetails.totalSellingPrice -= Number(quoteData.dealData.totalDiscount) || 0;
     priceDetails.profit = priceDetails.totalSellingPrice - priceDetails.totalCost;
     priceDetails.perc = priceDetails.totalSellingPrice
       ? (priceDetails.profit / priceDetails.totalSellingPrice) * 100

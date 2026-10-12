@@ -2,10 +2,11 @@ import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
-import { MatDialog } from '@angular/material/dialog';
 import { forkJoin, Subscription } from 'rxjs';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
+import { ModalService } from 'src/app/shared/components/modal';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
   DataGridBreadcrumb,
@@ -22,6 +23,7 @@ import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/
 import { DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { CreatePurchaseComponent } from '../create-purchase/create-purchase.component';
+import { AllocatePurchaseModalComponent, AllocatePurchaseResult } from '../allocate-purchase-modal/allocate-purchase-modal.component';
 
 type SourceType = 'job' | 'manual';
 
@@ -29,6 +31,8 @@ const ALL_STATUSES = ['Pending', 'Drafted', 'Rejected', 'Approved'];
 const DRAFT_STATUSES = ['Drafted'];
 const PENDING_STATUSES = ['Pending'];
 const APPROVED_STATUSES = ['Approved'];
+// "Open to work": submitted requests that can be handed to a buyer.
+const NEW_STATUSES = ['Pending', 'Approved'];
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
@@ -51,8 +55,9 @@ export class PurchaseRequestListComponent {
   private route = inject(ActivatedRoute);
   private purchaseService = inject(PurchaseService);
   private notificationService = inject(ToastrService);
-  private dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private datePipe = inject(DatePipe);
+  private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
 
   detailLoading = false;
@@ -74,7 +79,9 @@ export class PurchaseRequestListComponent {
   isLoading = false;
 
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR' }];
-  views: DataGridView<any>[] = [
+  /** Shown to everyone; the New tab is added in `views` for assigners, or for buyers who were allocated something. */
+  private readonly newView: DataGridView<any> = { id: 'new', label: 'New' };
+  private baseViews: DataGridView<any>[] = [
     { id: 'all', label: 'All' },
     { id: 'draft', label: 'Draft' },
     { id: 'pending', label: 'Pending' },
@@ -82,6 +89,9 @@ export class PurchaseRequestListComponent {
     { id: 'remainingPo', label: 'Remaining PO' },
     { id: 'completed', label: 'Completed' },
   ];
+  views: DataGridView<any>[] = this.baseViews;
+  canAssign = false;
+  private newCount = 0;
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
 
@@ -96,6 +106,16 @@ export class PurchaseRequestListComponent {
   ngOnInit(): void {
     this.buildColumns();
     this.buildRowActions();
+
+    this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe((data: any) => {
+        const role = data?.category?.role;
+        this.canAssign = role === 'superAdmin' || role === 'admin'
+          || data?.category?.privileges?.purchase?.canAssign === true
+          || data?.extraPrivileges?.purchase?.canAssign === true;
+        this.refreshViews();
+      })
+    );
 
     this.route.queryParams.subscribe((params) => {
       this.page = params['page'] ? parseInt(params['page'], 10) : 1;
@@ -151,6 +171,10 @@ export class PurchaseRequestListComponent {
         hidden: (r) => (r.overallStatus || r.status) !== 'Approved',
       },
       {
+        id: 'allocate', label: 'Allocate', icon: 'user-round-check', quick: true,
+        hidden: (r) => !this.canAssign || !!r.allocatedTo || !NEW_STATUSES.includes(r.overallStatus === 'approved' ? 'Approved' : r.status),
+      },
+      {
         id: 'createRfq', label: 'Create RFQ', icon: 'card', quick: true,
         hidden: (r) => (r.overallStatus || r.status) !== 'Approved',
       },
@@ -159,6 +183,7 @@ export class PurchaseRequestListComponent {
 
   private statusesForView(viewId: string): string[] {
     switch (viewId) {
+      case 'new': return NEW_STATUSES;
       case 'draft': return DRAFT_STATUSES;
       case 'pending': return PENDING_STATUSES;
       case 'readyToPo':
@@ -178,7 +203,7 @@ export class PurchaseRequestListComponent {
 
   /** PR list stays scoped to job-linked requests; General has its own page under PO. */
   private sourceTypeForView(viewId: string): SourceType | undefined {
-    return 'job';
+    return viewId === 'new' ? undefined : 'job';
   }
 
   onQueryChange(query: DataGridQuery): void {
@@ -203,6 +228,7 @@ export class PurchaseRequestListComponent {
       search: this.searchQuery || undefined,
       sourceType: this.sourceTypeForView(this.activeViewId),
       poProgress: this.poProgressForView(this.activeViewId),
+      allocation: this.activeViewId === 'new' ? ('new' as const) : undefined,
     };
 
     this.subscriptions.add(
@@ -224,7 +250,9 @@ export class PurchaseRequestListComponent {
   }
 
   private loadViewCounts(): void {
-    const requests = this.views.reduce((acc, view) => {
+    // The New count is always fetched so a buyer with allocations gets the tab even without the privilege.
+    const countViews = [...this.baseViews, this.newView];
+    const requests = countViews.reduce((acc, view) => {
       acc[view.id] = this.purchaseService.getPurchases({
         page: 1,
         row: 1,
@@ -232,6 +260,7 @@ export class PurchaseRequestListComponent {
         search: this.searchQuery || undefined,
         sourceType: this.sourceTypeForView(view.id),
         poProgress: this.poProgressForView(view.id),
+        allocation: view.id === 'new' ? ('new' as const) : undefined,
       });
       return acc;
     }, {} as Record<string, ReturnType<PurchaseService['getPurchases']>>);
@@ -239,14 +268,21 @@ export class PurchaseRequestListComponent {
     this.subscriptions.add(
       forkJoin(requests).subscribe({
         next: (results) => {
-          this.views = this.views.map((view) => ({
+          this.baseViews = this.baseViews.map((view) => ({
             ...view,
             count: results[view.id]?.purchase?.total ?? 0,
           }));
+          this.newCount = results['new']?.purchase?.total ?? 0;
+          this.refreshViews();
         },
         error: (error) => console.error('Error loading view counts:', error),
       })
     );
+  }
+
+  private refreshViews(): void {
+    const showNew = this.canAssign || this.newCount > 0;
+    this.views = showNew ? [{ ...this.newView, count: this.newCount }, ...this.baseViews] : this.baseViews;
   }
 
   updateUrlParams(): void {
@@ -280,7 +316,32 @@ export class PurchaseRequestListComponent {
       case 'createRfq':
         this.createRfq(row);
         break;
+      case 'allocate':
+        this.allocate(row);
+        break;
     }
+  }
+
+  allocate(row: any): void {
+    if (!this.canAssign) {
+      this.notificationService.warning('You do not have permission to assign purchases');
+      return;
+    }
+    this.modal
+      .open<AllocatePurchaseResult>(AllocatePurchaseModalComponent, { width: '520px', data: { purchaseNo: row.purchaseNo } })
+      .afterClosed()
+      .subscribe((result) => {
+        if (!result?.employeeId) return;
+        this.subscriptions.add(
+          this.purchaseService.allocatePurchase(row._id, result.employeeId).subscribe({
+            next: () => {
+              this.notificationService.success('Purchase request allocated');
+              this.getPurchases();
+            },
+            error: (error) => this.notificationService.error(error?.error?.message || 'Failed to allocate purchase request'),
+          })
+        );
+      });
   }
 
   createRfq(row: any): void {
@@ -374,7 +435,7 @@ export class PurchaseRequestListComponent {
     }
     try {
       const dialogData: ApprovalStatusData = { entity: purchase, entityType: 'purchaseRequest' };
-      this.dialog.open(ApprovalStatusComponent, { width: '800px', maxHeight: '90vh', data: dialogData });
+      this.modal.open<void, ApprovalStatusData>(ApprovalStatusComponent, { width: '800px', data: dialogData });
     } catch (error) {
       console.error('Error opening approval status dialog:', error);
       this.notificationService.error('Failed to open approval status');

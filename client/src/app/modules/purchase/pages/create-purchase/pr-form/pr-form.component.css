@@ -1,0 +1,83 @@
+:host {
+  display: block;
+}
+
+.pr-drawer-banner {
+  display: block;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #fff;
+  padding: 1rem;
+}
+
+.pr-banner-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgb(107 114 128);
+}
+
+.pr-banner-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgb(17 24 39);
+}
+
+.pr-banner-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: rgb(107 114 128);
+}
+
+.pr-meta {
+  min-width: 0;
+}
+
+.pr-meta-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgb(107 114 128);
+}
+
+.pr-meta-value {
+  margin: 0.15rem 0 0;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: rgb(17 24 39);
+}
+
+.pr-empty-state {
+  border: 1px dashed #d1d5db;
+  border-radius: 0.5rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+:host-context(html.dark) .pr-drawer-banner {
+  border-color: #262626;
+  background: #0a0a0a;
+}
+
+:host-context(html.dark) .pr-banner-title,
+:host-context(html.dark) .pr-meta-value {
+  color: rgb(243 244 246);
+}
+
+:host-context(html.dark) .pr-banner-kicker,
+:host-context(html.dark) .pr-banner-subtitle,
+:host-context(html.dark) .pr-meta-label {
+  color: rgb(156 163 175);
+}
+
+:host-context(html.dark) .pr-empty-state {
+  border-color: #262626;
+  color: #a1a1a1;
+}

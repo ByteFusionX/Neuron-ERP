@@ -1,8 +1,7 @@
-import { CommonModule, NgFor } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
@@ -10,9 +9,8 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
-import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
+import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
-import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 
 @Component({
   selector: 'app-issue-lpo',
@@ -20,12 +18,7 @@ import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
-    FormFieldComponent,
-    NgSelectComponent,
-    NgFor,
-    NgOptionComponent,
-    NgFooterTemplateDirective,
-    NumberFormatterPipe
+    SmartFormModule
   ],
   templateUrl: './issue-lpo.component.html',
   styleUrl: './issue-lpo.component.css'
@@ -45,7 +38,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   requestedSupplierId = signal<string>('');
   purchaseId!: string;
   lpoId: string | null = null;
-  isEditMode = false;
   isReissueMode = false;
   originalLpoItems = signal<Map<string, number>>(new Map());
   purchase: PurchaseData | null = null;
@@ -59,7 +51,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   subscriptions = new Subscription();
   generatedPONumber = signal<string>('');
   isCreatingPO = signal<boolean>(false);
-  isSavingDraft = signal<boolean>(false);
   currency = signal<string>('QAR');
   canInitiateLPO = signal<boolean>(false);
   canReissueAndRevoke = signal<boolean>(false);
@@ -91,7 +82,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     // Detect mode from URL
     const url = this.router.url;
     this.isReissueMode = url.includes('/reissue/');
-    this.isEditMode = url.includes('/edit/') || this.isReissueMode;
     
     if (!this.purchaseId) {
       this.notificationService.error('Invalid Purchase ID');
@@ -99,12 +89,8 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.isEditMode && this.lpoId) {
-      if (this.isReissueMode) {
-        this.loadReissueLpo(this.lpoId);
-      } else {
-        this.loadDraftLpo(this.lpoId);
-      }
+    if (this.isReissueMode && this.lpoId) {
+      this.loadReissueLpo(this.lpoId);
     } else {
       this.generatePONumber();
     }
@@ -118,7 +104,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
                          'QAR';
           this.currency.set(currency);
           this.isLoading = false;
-          if (this.purchase && !this.isEditMode) {
+          if (this.purchase && !this.isReissueMode) {
             this.loadSuppliers(preselectedSupplierId || undefined);
           }
         },
@@ -143,6 +129,45 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       termsAndCondition: ['', [Validators.required]],
       discount: [0, [Validators.min(0)]]
     });
+
+    this.subscriptions.add(
+      this.poForm.get('supplierId')!.valueChanges.subscribe((supplierId) => {
+        if ((supplierId || '') === this.requestedSupplierId()) {
+          return;
+        }
+        this.onSupplierSelected(supplierId);
+      })
+    );
+  }
+
+  supplierOptions(): SfOption[] {
+    return this.suppliersList().map((supplier) => ({
+      label: supplier.supplierName,
+      value: supplier._id,
+      disabled: !supplier.canSelect,
+      description: !supplier.canSelect ? 'All quantities issued' : ''
+    }));
+  }
+
+  placeOfDeliveryOptions(): SfOption[] {
+    return this.placesOfDelivery.map((place) => ({
+      label: place.note,
+      value: place.note
+    }));
+  }
+
+  shippingTermOptions(): SfOption[] {
+    return this.shippingTermsList.map((term) => ({
+      label: term.note,
+      value: term.note
+    }));
+  }
+
+  termsAndConditionOptions(): SfOption[] {
+    return this.termsAndConditions.map((terms) => ({
+      label: terms.note,
+      value: terms._id || terms.note
+    }));
   }
 
   loadTermsAndConditions(): void {
@@ -255,6 +280,11 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     }
   }
 
+  findTermsAndCondition(value: string): any {
+    if (!value) return null;
+    return this.termsAndConditions.find((terms) => (terms._id || terms.note) === value);
+  }
+
   hasComparisons(purchase: any): any[] {
     if (!purchase?.items?.length) return [];
 
@@ -295,7 +325,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       this.poForm.patchValue({
         supplierId: '',
         discount: 0
-      });
+      }, { emitEvent: false });
       this.poForm.get('poNo')?.setValue(this.generatedPONumber());
       this.requestedSupplierId.set('');
       return;
@@ -306,7 +336,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     
     if (hasSupplier && !hasSupplier.canSelect) {
       this.notificationService.warning('All quantities for this supplier have already been issued.');
-      this.poForm.patchValue({ supplierId: '' });
+      this.poForm.patchValue({ supplierId: '' }, { emitEvent: false });
       this.requestedSupplierId.set('');
       return;
     }
@@ -318,12 +348,12 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       this.poForm.patchValue({
         supplierId: supplierId,
         discount: supplierDiscount
-      });
+      }, { emitEvent: false });
       
       this.loadItemsForSupplier(supplierId);
     } else {
       this.notificationService.error('Selected supplier is not associated with this purchase order.');
-      this.poForm.patchValue({ supplierId: '' });
+      this.poForm.patchValue({ supplierId: '' }, { emitEvent: false });
       this.requestedSupplierId.set('');
     }
   }
@@ -363,7 +393,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
           if (response.success) {
             this.suppliersList.set(response.data);
             if (preselectedSupplierId) {
-              this.poForm.patchValue({ supplierId: preselectedSupplierId });
+              this.poForm.patchValue({ supplierId: preselectedSupplierId }, { emitEvent: false });
               this.onSupplierSelected(preselectedSupplierId);
             }
           }
@@ -430,9 +460,9 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     });
   }
 
-  updateItemQuantity(itemId: string, value: string) {
+  updateItemQuantity(itemId: string, value: string | number | null) {
     const quantities = new Map(this.itemQuantities());
-    const numValue = value === '' ? 0 : parseFloat(value);
+    const numValue = value === '' || value === null ? 0 : typeof value === 'number' ? value : parseFloat(value);
     if (isNaN(numValue)) {
       quantities.set(itemId, 0);
     } else {
@@ -642,25 +672,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     if (this.isReissueMode && this.lpoId) {
       // Use reissue API endpoint
       this.reissuePurchaseOrder(purchaseOrderData);
-    } else if (this.isEditMode && this.lpoId) {
-      this.subscriptions.add(
-        this.purchaseOrderService.updatePurchaseOrder(this.lpoId, purchaseOrderData).subscribe({
-          next: (response) => {
-            this.isCreatingPO.set(false);
-            if (response) {
-              this.notificationService.success('Purchase Order updated and issued successfully!');
-              this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
-            } else {
-              this.notificationService.error('Failed to update Purchase Order');
-            }
-          },
-          error: (error) => {
-            this.isCreatingPO.set(false);
-            console.error('Error updating purchase order:', error);
-            this.notificationService.error('Failed to update Purchase Order. Please try again.');
-          }
-        })
-      );
     } else {
       this.subscriptions.add(
         this.purchaseOrderService.createPurchaseOrder(purchaseOrderData).subscribe({
@@ -681,104 +692,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
         })
       );
     }
-  }
-
-  loadDraftLpo(lpoId: string) {
-    this.isLoading = true;
-    this.subscriptions.add(
-      this.purchaseOrderService.getPurchaseOrderById(lpoId).subscribe({
-        next: (response: any) => {
-          if (response.success || response._id) {
-            const lpo = response.success ? response.data : response;
-            this.lpoId = lpo._id;
-            this.generatedPONumber.set(lpo.poNo);
-            
-            this.poForm.patchValue({
-              supplierId: lpo.supplierId?._id || lpo.supplierId,
-              poNo: lpo.poNo,
-              subject: lpo.subject,
-              shippingTerms: lpo.shippingTerms,
-              placeOfDelivery: lpo.placeOfDelivery,
-              poDate: lpo.poDate ? new Date(lpo.poDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-              termsAndCondition: lpo.termsAndCondition,
-              discount: lpo.discount || 0
-            });
-
-            if (lpo.supplierId) {
-              const supplierId = lpo.supplierId._id || lpo.supplierId;
-              this.requestedSupplierId.set(supplierId);
-              
-              // Load suppliers first, then load items
-              this.subscriptions.add(
-                this.purchaseOrderService.getSuppliersForPurchaseRequest(this.purchaseId).subscribe({
-                  next: (suppliersResponse) => {
-                    if (suppliersResponse.success) {
-                      this.suppliersList.set(suppliersResponse.data);
-                      const supplier = this.suppliersList().find(s => s._id === supplierId);
-                      if (supplier) {
-                        this.selectedSupplier.set(supplier);
-                        const supplierDiscount = this.purchase?.supplierDiscounts?.suppliers.find(s => s.supplierId === supplierId)?.discount || 0;
-                        this.poForm.patchValue({
-                          discount: supplierDiscount
-                        });
-                      }
-                      
-                      // Now load items for the supplier
-                      this.subscriptions.add(
-                        this.purchaseOrderService.getItemsForPurchaseRequest(this.purchaseId, supplierId).subscribe({
-                          next: (itemsResponse) => {
-                            if (itemsResponse.success) {
-                              const items = itemsResponse.data;
-                              this.items.set(items);
-                              
-                              const quantitiesMap = new Map<string, number>();
-                              const selectedIds = new Set<string>();
-                              
-                              if (lpo.items && Array.isArray(lpo.items)) {
-                                lpo.items.forEach((lpoItem: any) => {
-                                  const matchingItem = items.find((i: any) => i.detail === lpoItem.detail);
-                                  if (matchingItem) {
-                                    quantitiesMap.set(matchingItem._id, lpoItem.quantity || 0);
-                                    selectedIds.add(matchingItem._id);
-                                  }
-                                });
-                              }
-                              
-                              this.itemQuantities.set(quantitiesMap);
-                              this.selectedItems.set(selectedIds);
-                              
-                              this.isLoading = false;
-                            }
-                          },
-                          error: (error) => {
-                            console.error('Error loading items for draft:', error);
-                            this.notificationService.error('Failed to load items for draft');
-                            this.isLoading = false;
-                          }
-                        })
-                      );
-                    }
-                  },
-                  error: (error) => {
-                    console.error('Error loading suppliers for draft:', error);
-                    this.notificationService.error('Failed to load suppliers for draft');
-                    this.isLoading = false;
-                  }
-                })
-              );
-            } else {
-              this.isLoading = false;
-            }
-          }
-        },
-        error: (error) => {
-          console.error('Error loading draft LPO:', error);
-          this.notificationService.error('Failed to load draft LPO');
-          this.isLoading = false;
-          this.generatePONumber();
-        }
-      })
-    );
   }
 
   loadReissueLpo(lpoId: string) {
@@ -844,7 +757,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
       poDate: lpo.poDate ? new Date(lpo.poDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       termsAndCondition: lpo.termsAndCondition,
       discount: lpo.discount || 0
-    });
+    }, { emitEvent: false });
   }
 
   private loadSupplierAndItemsForReissue(supplierId: string, lpoItems: any[]): void {
@@ -950,122 +863,6 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
         }
       })
     );
-  }
-
-  onSaveClicks() {
-    this.isSubmitted.set(true);
-    
-    if (this.poForm.invalid) {
-      this.notificationService.error('Please fill in all required fields');
-      return;
-    }
-
-    if (!this.selectedSupplier()) {
-      this.notificationService.error('Please select a supplier');
-      return;
-    }
-
-    const selectedItems = this.getSelectedItems();
-    if (selectedItems.length === 0) {
-      this.notificationService.error('Please select at least one item to save');
-      return;
-    }
-
-    const quantities = this.itemQuantities();
-    const invalidItems: string[] = [];
-    
-    selectedItems.forEach(item => {
-      const qty = quantities.get(item._id) || 0;
-      const maxQty = item.remainingQuantity || item.originalQuantity || 0;
-      
-      if (qty <= 0) {
-        invalidItems.push(`${item.detail} (quantity must be greater than 0)`);
-      } else if (qty > maxQty) {
-        invalidItems.push(`${item.detail} (quantity cannot exceed ${maxQty})`);
-      }
-    });
-
-    if (invalidItems.length > 0) {
-      this.notificationService.error(`Please fix quantity errors: ${invalidItems.join(', ')}`);
-      return;
-    }
-
-    this.isSavingDraft.set(true);
-    
-    const formData = this.poForm.value;
-    const subtotal = this.getSubTotal();
-    const discount = formData.discount || 0;
-    
-    const purchaseOrderData = {
-      poNo: this.generatedPONumber(),
-      poStatus: 'Draft',
-      items: selectedItems.map(item => {
-        const partNo = item.partNo || null;
-        const quantity = quantities.get(item._id) || 0;
-        const unitPrice = item.comparisons?.unitPrice || item.unitPrice || 0;
-        
-        return {
-          detail: item.detail,
-          partNo: partNo,
-          quantity: quantity,
-          unitCost: unitPrice,
-          totalCost: quantity * unitPrice
-        };
-      }),
-      supplierId: this.selectedSupplier()._id,
-      purchaseId: this.purchaseId,
-      jobId: this.purchase?.jobId._id,
-      quoteId: this.purchase?.quoteId?._id,
-      etaTerms: selectedItems[0]?.comparisons?.etaTerms || '',
-      paymentTerms: selectedItems[0]?.comparisons?.paymentTerms || '',
-      shippingTerms: formData.shippingTerms,
-      deliveryTerms: selectedItems[0]?.comparisons?.etaTerms || selectedItems[0]?.comparisons?.paymentTerms || 'As per terms',
-      placeOfDelivery: formData.placeOfDelivery,
-      subject: formData.subject,
-      poDate: new Date(formData.poDate),
-      termsAndCondition: formData.termsAndCondition,
-      discount: discount,
-    };
-
-    if (this.isEditMode && this.lpoId) {
-      this.subscriptions.add(
-        this.purchaseOrderService.updatePurchaseOrder(this.lpoId, purchaseOrderData).subscribe({
-          next: (response) => {
-            this.isSavingDraft.set(false);
-            if (response) {
-              this.notificationService.success('Draft saved successfully!');
-              this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
-            } else {
-              this.notificationService.error('Failed to save draft');
-            }
-          },
-          error: (error) => {
-            this.isSavingDraft.set(false);
-            console.error('Error saving draft:', error);
-            this.notificationService.error('Failed to save draft. Please try again.');
-          }
-        })
-      );
-    } else {
-      this.subscriptions.add(
-        this.purchaseOrderService.createPurchaseOrder(purchaseOrderData).subscribe({
-          next: (response) => {
-            this.isSavingDraft.set(false);
-            if (response.success) {
-              this.notificationService.success('Draft saved successfully!');
-              this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
-            } else {
-              this.notificationService.error('Failed to save draft');
-            }
-          },
-          error: (error) => {
-            this.isSavingDraft.set(false);
-            console.error('Error saving draft:', error);
-            this.notificationService.error('Failed to save draft. Please try again.');
-          }
-        })
-      );
-    }
   }
 
   checkPrivileges(): void {

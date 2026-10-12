@@ -60,6 +60,10 @@
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
                 </ng-container>
 
+                <ng-container *ngSwitchCase="'compare'">
+                    <app-rfq-compare-tab [rfqId]="row._id"></app-rfq-compare-tab>
+                </ng-container>
+
                 <ng-container *ngSwitchCase="'quotes'">
                     <app-detail-table title="Supplier offers" [columns]="quoteColumns" [rows]="quoteRows(row)" showTotals [currency]="row.currency"></app-detail-table>
                 </ng-container>

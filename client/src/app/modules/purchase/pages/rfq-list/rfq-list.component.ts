@@ -18,6 +18,7 @@ import {
 import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
+import { RfqCompareTabComponent } from './rfq-compare-tab.component';
 
 const RFQ_BADGE_CLASSES: Record<string, string> = {
   Open: 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
@@ -29,7 +30,7 @@ const RFQ_BADGE_CLASSES: Record<string, string> = {
 
 @Component({
   selector: 'app-rfq-list',
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ActionButtonComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ActionButtonComponent, RfqCompareTabComponent],
   providers: [DatePipe],
   templateUrl: './rfq-list.component.html',
   styleUrl: './rfq-list.component.css',
@@ -66,6 +67,7 @@ export class RfqListComponent {
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'quotes', label: 'Supplier Offers', icon: 'card' },
+    { id: 'compare', label: 'Compare', icon: 'card' },
   ];
 
   quoteColumns: DetailTableColumn[] = [
@@ -104,7 +106,7 @@ export class RfqListComponent {
     this.columns = [
       { key: 'createdAt', label: 'Date', type: 'date', sortable: true, width: '120px' },
       { key: 'rfqNo', label: 'RFQ No', sortable: true, locked: true },
-      { key: 'purchaseNo', label: 'PR No', sortable: true },
+      { key: 'purchaseNo', label: 'PR No', sortable: true, valueGetter: (row) => row.purchaseNo || row.purchaseRequestId?.purchaseNo || '-' },
       { key: 'customer', label: 'Customer', valueGetter: (row) => row.customerId?.companyName || '-' },
       { key: 'jobId', label: 'Job ID', valueGetter: (row) => row.jobId?.jobId || '-' },
       { key: 'requestedLineCount', label: 'Lines', align: 'right', valueGetter: (row) => row.requestedLineCount ?? row.requestedLines?.length ?? 0 },

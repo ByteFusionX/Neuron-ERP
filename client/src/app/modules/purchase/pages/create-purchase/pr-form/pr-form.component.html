@@ -1,0 +1,107 @@
+<form [formGroup]="purchaseForm" class="space-y-4" (ngSubmit)="$event.preventDefault()">
+  <section class="pr-drawer-banner">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="min-w-0">
+        <p class="pr-banner-kicker">Purchase request</p>
+        <h2 class="pr-banner-title">{{ sourceTitle }}</h2>
+        <p class="pr-banner-subtitle">{{ sourceSubtitle }}</p>
+      </div>
+      <app-sf-switch
+        *ngIf="!isEditing && !sourceLocked"
+        class="shrink-0"
+        label="Create without a job"
+        [ngModel]="isJobLess"
+        (ngModelChange)="jobLessChange.emit($event)"
+        [ngModelOptions]="{ standalone: true }"
+      ></app-sf-switch>
+    </div>
+
+    <div class="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-5">
+      <ng-container *ngIf="!isJobLess">
+        <app-sf-field *ngIf="!isEditing" label="Job" required class="sm:col-span-2">
+          <app-sf-combobox
+            [options]="jobOptions()"
+            placeholder="Search job ID"
+            [ngModel]="requestedJobId()"
+            (ngModelChange)="jobSelected.emit($event)"
+            [ngModelOptions]="{ standalone: true }"
+          ></app-sf-combobox>
+        </app-sf-field>
+        <div *ngIf="isEditing" class="pr-meta">
+          <p class="pr-meta-label">Job ID</p>
+          <p class="pr-meta-value">{{ f['jobId'].value || '-' }}</p>
+        </div>
+        <div class="pr-meta">
+          <p class="pr-meta-label">PR No</p>
+          <p class="pr-meta-value tabular-nums">{{ f['purchaseNo'].value || '-' }}</p>
+        </div>
+        <div class="pr-meta">
+          <p class="pr-meta-label">Deal sheet</p>
+          <p class="pr-meta-value">{{ f['dealSheetId'].value || '-' }}</p>
+        </div>
+        <div class="pr-meta">
+          <p class="pr-meta-label">Customer</p>
+          <p class="pr-meta-value">{{ f['customer'].value || '-' }}</p>
+        </div>
+        <div class="pr-meta">
+          <p class="pr-meta-label">Sales manager</p>
+          <p class="pr-meta-value">{{ f['salesManager'].value || '-' }}</p>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="isJobLess">
+        <div class="pr-meta">
+          <p class="pr-meta-label">PR No</p>
+          <p class="pr-meta-value tabular-nums">{{ f['purchaseNo'].value || '-' }}</p>
+        </div>
+        <div class="pr-meta">
+          <p class="pr-meta-label">Created by</p>
+          <p class="pr-meta-value">{{ f['salesManager'].value || '-' }}</p>
+        </div>
+        <app-sf-field label="Supplier" required class="sm:col-span-2">
+          <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Search supplier"></app-sf-combobox>
+        </app-sf-field>
+      </ng-container>
+
+      <div class="pr-meta">
+        <p class="pr-meta-label">Items</p>
+        <p class="pr-meta-value tabular-nums">{{ itemCount() }}</p>
+      </div>
+      <div class="pr-meta">
+        <p class="pr-meta-label">Total LPO value</p>
+        <p class="pr-meta-value tabular-nums">{{ liveTotalLpo() | number: '1.2-2' }} {{ currency() || 'QAR' }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div *ngIf="selectedJobSheet || isJobLess" class="flex flex-wrap items-center gap-2">
+    <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">Items</span>
+    <app-detail-badge [label]="itemCount() + ''" tone="neutral"></app-detail-badge>
+    <app-action-button *ngIf="!isJobLess" class="ml-auto" variant="tool" (click)="materialRequestsClicked.emit()">
+      From MR
+    </app-action-button>
+  </div>
+
+  <ng-container *ngIf="selectedJobSheet || isJobLess; else noJob">
+    <app-item-entry
+      mode="purchase"
+      paletteTargetLabel="Purchase request"
+      [optionalItems]="entryItems"
+      [seedOptionalItems]="entrySeed()"
+      [currency]="currency() || 'QAR'"
+      [showTotalsBar]="false"
+      [supplierOptions]="supplierOptions()"
+      [allowCreateProduct]="true"
+      [showCompareButton]="true"
+      [compareLabel]="addRfqLabel"
+      [lineLocked]="lineLocked"
+      [lineBadge]="lineBadge"
+      (compareClicked)="addRfqClicked.emit()"
+      (createProductRequested)="createProductRequested.emit()"
+    ></app-item-entry>
+  </ng-container>
+
+  <ng-template #noJob>
+    <div class="pr-empty-state">Select a job to load its items.</div>
+  </ng-template>
+</form>

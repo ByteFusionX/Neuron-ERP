@@ -1,12 +1,12 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { Component, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 import { forkJoin, Subscription } from 'rxjs';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
+import { ModalService } from 'src/app/shared/components/modal';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
   DataGridBreadcrumb,
@@ -48,7 +48,7 @@ export class GeneralPurchaseListComponent {
   private route = inject(ActivatedRoute);
   private purchaseService = inject(PurchaseService);
   private notificationService = inject(ToastrService);
-  private dialog = inject(MatDialog);
+  private modal = inject(ModalService);
   private datePipe = inject(DatePipe);
   private subscriptions = new Subscription();
 
@@ -305,7 +305,7 @@ export class GeneralPurchaseListComponent {
       return;
     }
     const dialogData: ApprovalStatusData = { entity: purchase, entityType: 'purchaseRequest' };
-    this.dialog.open(ApprovalStatusComponent, { width: '800px', maxHeight: '90vh', data: dialogData });
+    this.modal.open<void, ApprovalStatusData>(ApprovalStatusComponent, { width: '800px', data: dialogData });
   }
 
   createDrawerOpen = false;

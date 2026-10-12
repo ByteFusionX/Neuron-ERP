@@ -11,7 +11,7 @@ import { QuotationService } from 'src/app/core/services/quotation/quotation.serv
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-deal/approve-deal.component';
 import { PurchaseViewModalComponent } from 'src/app/shared/components/purchase-view-modal/purchase-view-modal.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 
 @Component({
@@ -20,7 +20,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
   imports: [
     CommonModule,
     IconsModule,
-    ButtonComponent
+    ActionButtonComponent
   ],
   templateUrl: './view-lpo.component.html',
   styleUrl: './view-lpo.component.css'
@@ -47,6 +47,8 @@ export class ViewLpoComponent implements OnInit {
   isRejecting = false;
   canApprovePOs = signal<boolean>(false);
   currentEmployeeId: string | null = null;
+  currentCategoryId: string | null = null;
+  isSuperAdmin = false;
 
   ngOnInit(): void {
     this.lpoId = <string>this.route.snapshot.paramMap.get('id');
@@ -62,6 +64,8 @@ export class ViewLpoComponent implements OnInit {
   checkPrivileges(): void {
     this.employeeService.employeeData$.subscribe((data) => {
       this.currentEmployeeId = data?._id || null;
+      this.currentCategoryId = data?.category?._id || null;
+      this.isSuperAdmin = /^superadmin$/i.test(data?.category?.role ?? '');
       if (data?.category?.privileges) {
         this.canApprovePOs.set(data.category.privileges.purchaseOrder?.canApprovePOs || false);
       }
@@ -353,7 +357,35 @@ export class ViewLpoComponent implements OnInit {
   }
 
   canApproveOrReject(): boolean {
-    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs() && !this.isOwnLpo();
+    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs() && !this.isOwnLpo() && this.isMyTurn();
+  }
+
+  get approvalSteps(): any[] {
+    return [...(this.lpo?.approvalStatus || [])].sort((a, b) => a.step - b.step);
+  }
+
+  /** Approval stage currently waiting (the lowest pending step), as the workflow routes one stage at a time. */
+  get currentStepApprovals(): any[] {
+    const pending = this.approvalSteps.filter((a) => a.status === 'pending');
+    return pending.filter((a) => a.step === pending[0]?.step);
+  }
+
+  /** LPOs raised before the workflow was wired in have no steps and stay open to any approver. */
+  isMyTurn(): boolean {
+    if (!this.approvalSteps.length) return true;
+    if (this.isSuperAdmin) return true;
+    return this.currentStepApprovals.some((a) =>
+      a.managerApproval ? a.approver === this.currentEmployeeId : (a.role?._id || a.role) === this.currentCategoryId
+    );
+  }
+
+  stepLabel(step: any): string {
+    return step.managerApproval ? 'Reporting manager' : (step.role?.categoryName || 'Approver');
+  }
+
+  stepActor(step: any): string {
+    const by = step.updatedBy;
+    return by ? `${by.firstName ?? ''} ${by.lastName ?? ''}`.trim() : '';
   }
 
   onViewPurchase(): void {

@@ -16,28 +16,9 @@
                             <td
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Supplier</td>
                             <td class="px-2 py-2 border w-2/6 align-middle h-full">
-                                    <ng-select 
-                                        formControlName="supplierId"
-                                        (change)="onSupplierSelected($event)"
-                                        [class.border-orange-500]="f['supplierId'].invalid && isSubmitted()"
-                                        class="w-full form-component border capitalize"
-                                        placeholder="Select Supplier Id"
-                                        appendTo="body"
-                                        [clearable]="true"
-                                    >
-                                        <ng-option 
-                                            *ngFor="let supplier of suppliersList()" 
-                                            [value]="supplier._id"
-                                            [disabled]="!supplier.canSelect"
-                                            class="capitalize"
-                                        >
-                                            {{ supplier.supplierName }}
-                                            <span *ngIf="!supplier.canSelect" class="text-gray-400 ml-2">(All quantities issued)</span>
-                                        </ng-option>
-                                    </ng-select>
-                                    <div class="mb-2 text-red-700 text-sm" *ngIf="f['supplierId'].invalid && isSubmitted()">
-                                        Please select a supplier.
-                                    </div>
+                                    <app-sf-field label="Supplier" [control]="f['supplierId']">
+                                        <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Select supplier"></app-sf-combobox>
+                                    </app-sf-field>
                             </td>
                             <td
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Delivery
@@ -64,22 +45,9 @@
                             <td class="px-2 py-2 border w-2/6">
                                 <div class="flex flex-col gap-1 justify-center h-full min-h-[60px]">
                                     <div class="flex items-center gap-2">
-                                        <ng-select 
-                                            formControlName="placeOfDelivery"
-                                            [class.border-orange-500]="f['placeOfDelivery'].invalid && isSubmitted()"
-                                            class="w-full form border capitalize"
-                                            placeholder="Select or enter place of delivery"
-                                            appendTo="body"
-                                            [searchable]="true"
-                                            [clearable]="true"
-                                            [addTag]="true"
-                                            [items]="placesOfDelivery"
-                                            bindLabel="note"
-                                            bindValue="note">
-                                            <ng-option *ngFor="let place of placesOfDelivery" [value]="place.note">
-                                                {{place.note}}
-                                            </ng-option>
-                                        </ng-select>
+                                        <app-sf-field class="flex-1" label="Place of Delivery" [control]="f['placeOfDelivery']">
+                                            <app-sf-input formControlName="placeOfDelivery" placeholder="Select or enter place of delivery"></app-sf-input>
+                                        </app-sf-field>
 
                                         <button
                                             *ngIf="f['placeOfDelivery'].value && !isPlaceSaved(f['placeOfDelivery'].value)"
@@ -134,22 +102,9 @@
                             <td class="px-2 py-2 border w-2/6">
                                 <div class="flex flex-col gap-1 justify-center h-full min-h-[60px]">
                                     <div class="flex items-center gap-2">
-                                        <ng-select 
-                                            formControlName="shippingTerms"
-                                            [class.border-orange-500]="f['shippingTerms'].invalid && isSubmitted()"
-                                            class="w-full form border"
-                                            placeholder="Select or enter shipping terms"
-                                            appendTo="body"
-                                            [searchable]="true"
-                                            [clearable]="true"
-                                            [addTag]="true"
-                                            [items]="shippingTermsList"
-                                            bindLabel="note"
-                                            bindValue="note">
-                                            <ng-option *ngFor="let term of shippingTermsList" [value]="term.note">
-                                                {{term.note}}
-                                            </ng-option>
-                                        </ng-select>
+                                        <app-sf-field class="flex-1" label="Shipping Terms" [control]="f['shippingTerms']">
+                                            <app-sf-input formControlName="shippingTerms" placeholder="Select or enter shipping terms"></app-sf-input>
+                                        </app-sf-field>
 
                                         <button
                                             *ngIf="f['shippingTerms'].value && !isShippingTermSaved(f['shippingTerms'].value)"
@@ -186,14 +141,9 @@
                                 Date</td>
                             <td class="px-2 py-2 border w-2/6">
                                 <div class="flex items-center justify-center h-full min-h-[60px]">
-                                    <app-form-field
-                                        label=""
-                                        [control]="f['poDate']"
-                                        [isSubmitted]="isSubmitted()"
-                                        type="date"
-                                        placeholder="Select PO Date"
-                                        class="w-full justify-center items-center mb-0">
-                                    </app-form-field>
+                                    <app-sf-field class="w-full" label="PO Date" [control]="f['poDate']">
+                                        <app-sf-date formControlName="poDate" displayFormat="dd/MM/yyyy"></app-sf-date>
+                                    </app-sf-field>
                                 </div>
                             </td>
                         </tr>
@@ -211,15 +161,9 @@
                                 No</td>
                             <td class="px-2 py-2 border w-2/6">
                                 <div class="flex items-center justify-center h-full min-h-[60px]">
-                                    <app-form-field
-                                        label=""
-                                        [control]="f['poNo']"
-                                        [isSubmitted]="isSubmitted()"
-                                        type="text"
-                                        placeholder="PO Number"
-                                        [readonly]="true"
-                                        class="w-full justify-center items-center mb-0">
-                                    </app-form-field>
+                                    <app-sf-field class="w-full" label="PO No" [control]="f['poNo']">
+                                        <app-sf-input formControlName="poNo" readonly placeholder="PO Number"></app-sf-input>
+                                    </app-sf-field>
                                 </div>
                             </td>
                         </tr>
@@ -228,14 +172,9 @@
                                 class="px-2 py-2 border font-medium bg-gray-50 w-1/6">Subject</td>
                             <td class="px-2 py-2 border w-2/6">
                                 <div class="flex items-center justify-center h-full min-h-[60px]">
-                                    <app-form-field
-                                        label=""
-                                        [control]="f['subject']"
-                                        [isSubmitted]="isSubmitted()"
-                                        type="text"
-                                        placeholder="Enter Subject"
-                                        class="w-full justify-center items-center mb-0">
-                                    </app-form-field>
+                                    <app-sf-field class="w-full" label="Subject" [control]="f['subject']">
+                                        <app-sf-input formControlName="subject" placeholder="Enter subject"></app-sf-input>
+                                    </app-sf-field>
                                 </div>
                             </td>
                             <td
@@ -318,17 +257,16 @@
                                 <td class="px-4 py-2 border">{{item.remainingQuantity || 0}}</td>
                                 <td class="px-4 py-2 border">
                                     <div *ngIf="(!isIssued || isReissueMode) && isItemSelected(itemId)" class="flex flex-col">
-                                        <input 
-                                            type="number" 
-                                            [value]="issueQuantity"
-                                            (input)="updateItemQuantity(itemId, $any($event.target).value)"
-                                            (blur)="updateItemQuantity(itemId, $any($event.target).value)"
-                                            [disabled]="(isIssued && !isReissueMode) || !isItemSelected(itemId)"
-                                            class="w-20 px-2 py-1 border rounded text-center"
-                                            [class.border-gray-300]="!getItemQuantityError(itemId)"
-                                            [class.border-orange-500]="getItemQuantityError(itemId)"
+                                        <app-sf-number
+                                            class="block w-24"
+                                            [ngModel]="issueQuantity"
+                                            (ngModelChange)="updateItemQuantity(itemId, $event)"
+                                            [ngModelOptions]="{ standalone: true }"
+                                            [min]="0"
+                                            [stepper]="false"
+                                            [readonly]="(isIssued && !isReissueMode) || !isItemSelected(itemId)"
                                             placeholder="0"
-                                        />
+                                        ></app-sf-number>
                                         <span *ngIf="getItemQuantityError(itemId)" class="text-xs text-red-600 mt-1">
                                             {{getItemQuantityError(itemId)}}
                                         </span>
@@ -349,18 +287,15 @@
             <div class="w-1/3">
                 <label for="termsAndCondition"
                     class="block uppercase tracking-wide text-gray-700 text-xs font-semibold mb-2">Terms and Conditions</label>
-                <ng-select class="form border" (change)="onTermsAndConditionSelect($event)"
-                    placeholder="Default Terms & Condition" appendTo="body">
-                    <ng-option *ngFor="let terms of termsAndConditions" [value]="terms">{{terms.note}}</ng-option>
-                </ng-select>
-                <app-form-field
-                    label=""
-                    [control]="f['termsAndCondition']"
-                    [isSubmitted]="isSubmitted()"
-                    type="textarea"
-                    placeholder="Enter Terms and Conditions"
-                    class="mt-2">
-                </app-form-field>
+                <app-sf-select
+                    [ngModel]="null"
+                    [ngModelOptions]="{ standalone: true }"
+                    [options]="termsAndConditionOptions()"
+                    placeholder="Default Terms & Condition"
+                    (ngModelChange)="onTermsAndConditionSelect(findTermsAndCondition($event))"></app-sf-select>
+                <app-sf-field class="mt-2 block" label="Terms and Conditions" [control]="f['termsAndCondition']">
+                    <app-sf-textarea formControlName="termsAndCondition" placeholder="Enter terms and conditions" [rows]="5" autoresize></app-sf-textarea>
+                </app-sf-field>
             </div>
             <div class="w-1/2 py-5">
                 <table class="w-full text-md text-left border">
@@ -378,14 +313,9 @@
                                 class="px-2 py-2 border font-medium bg-gray-50">Discount</td>
                             <td class="px-2 py-2 border">
                                 <div class="flex items-center justify-center h-full min-h-[60px]">
-                                    <app-form-field
-                                        label=""
-                                        [control]="f['discount']"
-                                        [isSubmitted]="isSubmitted()"
-                                        type="number"
-                                        placeholder="Enter Discount"
-                                        class="w-full justify-center items-center mb-0">
-                                    </app-form-field>
+                                    <app-sf-field class="w-full" label="Discount" [control]="f['discount']">
+                                        <app-sf-number formControlName="discount" placeholder="Enter discount" [min]="0" [stepper]="false"></app-sf-number>
+                                    </app-sf-field>
                                 </div>
                             </td>
                         </tr>
@@ -405,10 +335,6 @@
         <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
                 <button
-                    class="w-fit px-3 py-2 text-sm border border-orange-500 hover:ring-1 hover:ring-orange-400 rounded mb-3"
-                    type="button" (click)="onSaveClicks()">Save
-                    & Close</button>
-                <button
                     class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
                     type="button" (click)="onDiscardClicks()">Exit</button>
             </div>
@@ -418,14 +344,14 @@
                     [disabled]="isCreatingPO()"
                     (click)="onIssueClicks()">
                     <span *ngIf="!isCreatingPO()">
-                      {{isReissueMode ? 'Re-issue LPO' : (isEditMode ? 'Update & Issue LPO' : 'Issue LPO')}}
+                      {{isReissueMode ? 'Re-issue LPO' : 'Issue LPO'}}
                     </span>
                     <span *ngIf="isCreatingPO()" class="flex items-center">
                         <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        {{isReissueMode ? 'Re-issuing...' : (isEditMode ? 'Updating...' : 'Creating PO...')}}
+                        {{isReissueMode ? 'Re-issuing...' : 'Creating PO...'}}
                     </span>
                 </button>
         </div>

@@ -16,7 +16,6 @@ import { DeliveryNoteService } from 'src/app/core/services/delivery-note/deliver
 import { DnStatus } from 'src/app/shared/interfaces/delivery-note.interface';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { PurchaseData, QuoteItem } from 'src/app/shared/interfaces/purchase.interface';
-import { LpoListComponent } from '../lpo-list/lpo-list.component';
 import { ItemIssueHistoryModalComponent, ItemIssueEntry, LpoStatusEntry } from 'src/app/shared/components/item-issue-history-modal/item-issue-history-modal.component';
 
 type ComparisonItem = ReturnType<InitiateLpoComponent['selectedComparison']>[number];
@@ -37,8 +36,7 @@ interface SupplierGroup {
   imports: [
     CommonModule,
     NgIcon,
-    MatTooltipModule,
-    LpoListComponent
+    MatTooltipModule
   ],
   templateUrl: './initiate-lpo.component.html',
   styleUrl: './initiate-lpo.component.css'
