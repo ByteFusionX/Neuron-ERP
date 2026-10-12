@@ -13,6 +13,8 @@ import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-d
 import { PurchaseViewModalComponent } from 'src/app/shared/components/purchase-view-modal/purchase-view-modal.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
+import { DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 
 @Component({
   selector: 'app-view-lpo',
@@ -20,12 +22,20 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
   imports: [
     CommonModule,
     IconsModule,
-    ActionButtonComponent
+    ActionButtonComponent,
+    DetailTableComponent
   ],
   templateUrl: './view-lpo.component.html',
   styleUrl: './view-lpo.component.css'
 })
 export class ViewLpoComponent implements OnInit {
+  readonly itemColumns: DetailTableColumn[] = [
+    { key: 'description', label: 'Description', wrap: true },
+    { key: 'partNo', label: 'Part No.' },
+    { key: 'quantity', label: 'Qty', type: 'number' },
+    { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
+    { key: 'totalCost', label: 'Total', type: 'currency', total: true },
+  ];
   private purchaseOrderService = inject(PurchaseOrderService);
   private purchaseService = inject(PurchaseService);
   private notificationService = inject(ToastrService);
@@ -402,5 +412,12 @@ export class ViewLpoComponent implements OnInit {
       maxHeight: '90vh',
       panelClass: 'purchase-view-modal'
     });
+  }
+
+  itemRows(): Record<string, any>[] {
+    return this.items().map((item: any) => ({
+      description: item.detail || '-', partNo: this.formatPartNumber(item.partNo),
+      quantity: item.quantity || 0, unitCost: item.unitCost || 0, totalCost: item.totalCost || 0,
+    }));
   }
 }

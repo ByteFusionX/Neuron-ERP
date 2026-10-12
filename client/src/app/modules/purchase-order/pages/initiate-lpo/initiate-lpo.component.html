@@ -1,14 +1,13 @@
-<div class="bg-white m-6">
-    <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">Purchase Details<span class="uppercase"></span>
-        </h3>
+<div class="initiate-page">
+    <div class="initiate-header">
+        <div><p class="initiate-kicker">Purchase order</p><h3 class="initiate-title">Initiate LPO</h3><p class="initiate-subtitle">Review confirmed supplier allocations and issue one LPO per supplier.</p></div>
     </div>
 
     <div *ngIf="isLoading" class="flex justify-center items-center h-64">
         <ng-icon name="heroArrowPath" class="animate-spin text-4xl"></ng-icon>
     </div>
 
-    <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9" *ngIf="!isLoading && purchase">
+    <div class="initiate-body" *ngIf="!isLoading && purchase">
         <div class="w-full mb-8">
             <div class="relative overflow-x-auto">
                 <table class="w-full text-md text-left border">
@@ -37,8 +36,7 @@
                 <p class="text-sm text-gray-600">
                     {{ comparisonItems.length }} item(s) from {{ supplierGroups.length }} supplier(s), as confirmed by sales. Export a supplier's list, then issue its LPO.
                 </p>
-                <button type="button" *ngIf="supplierGroups.length > 1" (click)="exportAllSuppliers()"
-                    class="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">Export all suppliers</button>
+                <app-action-button *ngIf="supplierGroups.length > 1" variant="tool" icon="download" (click)="exportAllSuppliers()">Export all suppliers</app-action-button>
             </div>
 
             <div *ngFor="let group of supplierGroups" class="mb-5 rounded-lg border">
@@ -51,12 +49,8 @@
                         </p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button type="button" (click)="exportSupplier(group)"
-                            class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50">Export</button>
-                        <button type="button" *ngIf="canIssueForSupplier(group.supplierId)" (click)="onIssueLpoClickForItem(group)"
-                            class="inline-flex items-center gap-1.5 rounded-md border border-green-600 bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700">
-                            <ng-icon name="heroPaperAirplane" color="currentColor"></ng-icon> Issue LPO
-                        </button>
+                        <app-action-button variant="tool" icon="download" (click)="exportSupplier(group)">Export</app-action-button>
+                        <app-action-button *ngIf="canIssueForSupplier(group.supplierId)" variant="primary" (click)="onIssueLpoClickForItem(group)">Issue LPO</app-action-button>
                     </div>
                 </div>
                 <div class="relative overflow-x-auto">

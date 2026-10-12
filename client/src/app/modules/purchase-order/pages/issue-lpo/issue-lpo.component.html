@@ -1,12 +1,10 @@
-<div class="bg-white m-6">
-    <div class="border-b p-3 px-9 flex justify-between items-center">
-        <h3 class="text-md font-medium">Purchase Order <span
-                class="uppercase"></span>
-        </h3>
+<div class="lpo-page">
+    <div class="lpo-header">
+        <div><p class="lpo-kicker">Purchase order</p><h3 class="lpo-title">{{ isReissueMode ? 'Re-issue LPO' : 'Issue LPO' }}</h3><p class="lpo-subtitle">Select a supplier, confirm quantities and submit the order for approval.</p></div>
     </div>
 
     <form [formGroup]="poForm">
-        <div class="flex flex-col py-6 mx-auto w-full text-gray-900 bg-white px-9">
+        <div class="lpo-body">
 
         <div class="w-full mb-8">
             <div class="relative overflow-x-auto">
@@ -206,13 +204,7 @@
                     <thead class="text-xs text-gray-700 uppercase bg-gray-50">
                         <tr>
                             <th class="px-4 py-2 border">
-                                <input 
-                                    type="checkbox" 
-                                    [checked]="isAllSelected()"
-                                    (change)="toggleSelectAll()"
-                                    class="cursor-pointer"
-                                    *ngIf="this.selectedSupplier() && this.items().length > 0"
-                                />
+                                <app-sf-checkbox *ngIf="this.selectedSupplier() && this.items().length > 0" aria-label="Select all items" [ngModel]="isAllSelected()" (ngModelChange)="toggleSelectAll()" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
                             </th>
                             <th class="px-4 py-2 border">SL.NO</th>
                             <th class="px-4 py-2 border">Description</th>
@@ -235,13 +227,7 @@
                             @let issueQuantity = getItemQuantity(itemId);
                             <tr class="border-b" [class.opacity-50]="isIssued && !isReissueMode" [class.bg-gray-100]="isIssued && !isReissueMode">
                                 <td class="px-4 py-2 border">
-                                    <input
-                                        type="checkbox"
-                                        [checked]="isItemSelected(itemId) && (!isIssued || isReissueMode)"
-                                        (change)="toggleItemSelection(itemId, isIssued)"
-                                        [disabled]="isIssued && !isReissueMode"
-                                        class="cursor-pointer"
-                                    />
+                                    <app-sf-checkbox [attr.aria-label]="'Select ' + item.detail" [ngModel]="isItemSelected(itemId) && (!isIssued || isReissueMode)" (ngModelChange)="toggleItemSelection(itemId, isIssued)" [ngModelOptions]="{ standalone: true }" [disabled]="isIssued && !isReissueMode"></app-sf-checkbox>
                                 </td>
                                 <td class="px-4 py-2 border">{{i+1}}</td>
                                 <td class="px-4 py-2 border">
@@ -334,26 +320,9 @@
 
         <div class="w-full flex md:justify-between mb-3 px-8 py-3 border-t">
             <div class="md:flex gap-3">
-                <button
-                    class="w-fit px-3 py-2 text-sm border bg-orange-500 text-white hover:bg-orange-400 rounded mb-3"
-                    type="button" (click)="onDiscardClicks()">Exit</button>
+                <app-action-button variant="secondary" (click)="onDiscardClicks()">Exit</app-action-button>
             </div>
-                <button
-                    class="w-fit px-3 py-2 text-sm border bg-violet-600 text-white hover:bg-violet-500 rounded mb-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                    type="button" 
-                    [disabled]="isCreatingPO()"
-                    (click)="onIssueClicks()">
-                    <span *ngIf="!isCreatingPO()">
-                      {{isReissueMode ? 'Re-issue LPO' : 'Issue LPO'}}
-                    </span>
-                    <span *ngIf="isCreatingPO()" class="flex items-center">
-                        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        {{isReissueMode ? 'Re-issuing...' : 'Creating PO...'}}
-                    </span>
-                </button>
+                <app-action-button variant="primary" [disabled]="isCreatingPO()" (click)="onIssueClicks()">{{ isCreatingPO() ? (isReissueMode ? 'Re-issuing...' : 'Creating PO...') : (isReissueMode ? 'Re-issue LPO' : 'Issue LPO') }}</app-action-button>
         </div>
         </div>
     </form>

@@ -17,7 +17,9 @@ import {
     revokeMergedItems,
     getApprovalsByEmployee,
     getPurchaseAssignees,
-    allocatePurchaseRequest
+    allocatePurchaseRequest,
+    rejectPurchaseAllocation,
+    resetPurchaseAllocation
 } from '../controllers/purchaseRequest.controller'
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
@@ -33,7 +35,9 @@ purchaseRequestRouter.get('/purchase-request/generate-purchase-no', generatePurc
 purchaseRequestRouter.get('/purchase-request/convertible-jobs', getConvertibleJobs)
 purchaseRequestRouter.get('/purchase-request/assignees', requirePrivilege("purchase", "canAssign"), getPurchaseAssignees)
 purchaseRequestRouter.patch('/purchase-request/allocate/:id', requirePrivilege("purchase", "canAssign"), allocatePurchaseRequest)
-purchaseRequestRouter.get('/purchase-request/:id', getPurchaseRequestById)
+purchaseRequestRouter.patch('/purchase-request/reject-allocation/:id', rejectPurchaseAllocation)
+purchaseRequestRouter.patch('/purchase-request/reset-allocation/:id', resetPurchaseAllocation)
+purchaseRequestRouter.get('/purchase-request/:id',getPurchaseRequestById)
 purchaseRequestRouter.put('/purchase-update/:id', updatePurchaseRequest)
 purchaseRequestRouter.patch('/purchase-request/status/:id', requirePrivilege("purchase", "canApprovePR"), updatePurchaseRequestStatus)
 purchaseRequestRouter.patch('/purchase-request/items/:id', updatePurchaseItems)

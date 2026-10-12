@@ -47,6 +47,14 @@ export class PurchaseService {
     return this.http.patch<any>(`${this.api}/purchase/purchase-request/allocate/${purchaseId}`, { employeeId }, { context: context() });
   }
 
+  rejectAllocation(purchaseId: string, reason: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/reject-allocation/${purchaseId}`, { reason }, { context: context() });
+  }
+
+  resetAllocation(purchaseId: string): Observable<any> {
+    return this.http.patch<any>(`${this.api}/purchase/purchase-request/reset-allocation/${purchaseId}`, {}, { context: context() });
+  }
+
   getRfqComparison(rfqId: string): Observable<any> {
     return this.http.get<any>(`${this.api}/purchase/rfq/${rfqId}/compare`, { context: context() });
   }

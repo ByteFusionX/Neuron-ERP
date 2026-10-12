@@ -11,6 +11,7 @@ import { ToastrService } from 'ngx-toastr';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 import { ModalService } from 'src/app/shared/components/modal';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailCalloutComponent } from 'src/app/shared/components/detail-panel/detail-callout.component';
@@ -102,6 +103,20 @@ export class SupplierOffersComponent implements OnInit, AfterViewInit, OnDestroy
     const list = this.comparisonList();
     return list.length > 1 ? Math.min(...list.map((c) => this.offerTotal(c))) : null;
   });
+
+  supplierAwardOptions(): SfOption[] {
+    return this.comparisonList().map((offer, index) => ({ label: offer.supplierName || `Offer ${index + 1}`, value: index }));
+  }
+
+  selectedOfferIndex(): number | null {
+    const index = this.comparisonList().findIndex((offer) => offer.selected);
+    return index >= 0 ? index : null;
+  }
+
+  onAwardChange(value: number | string | null): void {
+    if (value === null || value === '') return;
+    this.onSelectionChange(Number(value));
+  }
 
   stats = computed<DetailViewStat[]>(() => {
     const list = this.comparisonList();

@@ -4,6 +4,7 @@ import {
   FormArray,
   FormBuilder,
   FormGroup,
+  FormsModule,
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
@@ -23,6 +24,8 @@ import {
 } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 
 @Component({
   selector: 'app-create-grn',
@@ -30,8 +33,11 @@ import { MatTooltipModule } from '@angular/material/tooltip';
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    FormsModule,
     IconsModule,
     MatTooltipModule,
+    SmartFormModule,
+    ActionButtonComponent,
   ],
   templateUrl: './create-grn.component.html',
   styleUrl: './create-grn.component.css',
@@ -86,6 +92,9 @@ export class CreateGrnComponent implements OnInit {
     this.loadEmployees();
     this.generateGRNNumber();
     this.setDefaultReceivedBy();
+    this.grnForm.get('selectedLpo')?.valueChanges.subscribe((value) => {
+      if (value && value !== this.lpoId) this.onLpoSelected(value);
+    });
 
     if (this.lpoId) {
       this.isLpoPreselected.set(true);
@@ -94,6 +103,14 @@ export class CreateGrnComponent implements OnInit {
       this.isLoading.set(false);
       this.loadEligibleLpos();
     }
+  }
+
+  get lpoSelectOptions(): SfOption[] {
+    return this.lpoOptions.map((option) => ({ label: option.label, value: option._id }));
+  }
+
+  get warehouseOptions(): SfOption[] {
+    return this.warehouses.map((warehouse) => ({ label: warehouse.wareHouseName, value: warehouse._id }));
   }
 
   loadEligibleLpos(): void {

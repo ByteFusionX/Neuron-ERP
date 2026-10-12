@@ -23,6 +23,7 @@ import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/
 import { DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { CreatePurchaseComponent } from '../create-purchase/create-purchase.component';
+import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
 import { AllocatePurchaseModalComponent, AllocatePurchaseResult } from '../allocate-purchase-modal/allocate-purchase-modal.component';
 
 type SourceType = 'job' | 'manual';
@@ -58,6 +59,7 @@ export class PurchaseRequestListComponent {
   private modal = inject(ModalService);
   private datePipe = inject(DatePipe);
   private employeeService = inject(EmployeeService);
+  private formPrompt = inject(FormPromptService);
   private subscriptions = new Subscription();
 
   detailLoading = false;
@@ -91,6 +93,8 @@ export class PurchaseRequestListComponent {
   ];
   views: DataGridView<any>[] = this.baseViews;
   canAssign = false;
+  isSuperAdmin = false;
+  myId = '';
   private newCount = 0;
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
@@ -110,6 +114,8 @@ export class PurchaseRequestListComponent {
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe((data: any) => {
         const role = data?.category?.role;
+        this.myId = data?._id ?? '';
+        this.isSuperAdmin = /^superadmin$/i.test(role ?? '');
         this.canAssign = role === 'superAdmin' || role === 'admin'
           || data?.category?.privileges?.purchase?.canAssign === true
           || data?.extraPrivileges?.purchase?.canAssign === true;
@@ -173,6 +179,14 @@ export class PurchaseRequestListComponent {
       {
         id: 'allocate', label: 'Allocate', icon: 'user-round-check', quick: true,
         hidden: (r) => !this.canAssign || !!r.allocatedTo || !NEW_STATUSES.includes(r.overallStatus === 'approved' ? 'Approved' : r.status),
+      },
+      {
+        id: 'rejectAllocation', label: 'Reject Allocation', icon: 'close', quick: true,
+        hidden: (r) => !this.myId || (r.allocatedTo?._id ?? r.allocatedTo) !== this.myId,
+      },
+      {
+        id: 'resetAllocation', label: 'Reset Workflow', icon: 'refresh', quick: true,
+        hidden: (r) => !this.isSuperAdmin || !r.allocationHeld,
       },
       {
         id: 'createRfq', label: 'Create RFQ', icon: 'card', quick: true,
@@ -319,6 +333,12 @@ export class PurchaseRequestListComponent {
       case 'allocate':
         this.allocate(row);
         break;
+      case 'rejectAllocation':
+        void this.rejectAllocation(row);
+        break;
+      case 'resetAllocation':
+        this.resetAllocation(row);
+        break;
     }
   }
 
@@ -342,6 +362,37 @@ export class PurchaseRequestListComponent {
           })
         );
       });
+  }
+
+  async rejectAllocation(row: any): Promise<void> {
+    const answer = await this.formPrompt.prompt({
+      title: 'Reject allocation',
+      message: `Send ${row.purchaseNo} back to the person who assigned it.`,
+      confirmLabel: 'Reject',
+      fields: [{ key: 'reason', label: 'Reason', type: 'textarea', required: true }],
+    });
+    if (!answer) return;
+    this.subscriptions.add(
+      this.purchaseService.rejectAllocation(row._id, answer['reason']).subscribe({
+        next: () => {
+          this.notificationService.success('Allocation rejected');
+          this.getPurchases();
+        },
+        error: (error) => this.notificationService.error(error?.error?.message || 'Failed to reject allocation'),
+      })
+    );
+  }
+
+  resetAllocation(row: any): void {
+    this.subscriptions.add(
+      this.purchaseService.resetAllocation(row._id).subscribe({
+        next: () => {
+          this.notificationService.success('Assignment workflow reset');
+          this.getPurchases();
+        },
+        error: (error) => this.notificationService.error(error?.error?.message || 'Failed to reset the workflow'),
+      })
+    );
   }
 
   createRfq(row: any): void {

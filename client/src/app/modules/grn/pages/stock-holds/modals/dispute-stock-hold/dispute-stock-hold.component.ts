@@ -4,13 +4,17 @@ import { CommonModule } from '@angular/common';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { StockHoldService } from 'src/app/core/services/stock-hold/stock-hold.service';
+import { FormModalShellComponent } from 'src/app/shared/components/modal/form-modal-shell/form-modal-shell.component';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
 
 @Component({
   selector: 'app-dispute-stock-hold',
   standalone: true,
   imports: [
     CommonModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    FormModalShellComponent,
+    SmartFormModule
   ],
   templateUrl: './dispute-stock-hold.component.html',
   styleUrl: './dispute-stock-hold.component.css'

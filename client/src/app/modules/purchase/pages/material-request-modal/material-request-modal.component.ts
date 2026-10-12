@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { TechnicalService } from 'src/app/core/services/technical.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
@@ -11,6 +12,7 @@ import { MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailBadgeComponent } from 'src/app/shared/components/detail-panel/detail-badge.component';
 import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
 
 export interface MaterialRequestModalData {
   purchaseId: string;
@@ -29,7 +31,7 @@ interface MaterialRequest {
 
 @Component({
   selector: 'app-material-request-modal',
-  imports: [CommonModule, NumberFormatterPipe, ActionButtonComponent, DetailBadgeComponent, DetailPanelIconComponent],
+  imports: [CommonModule, FormsModule, SmartFormModule, NumberFormatterPipe, ActionButtonComponent, DetailBadgeComponent, DetailPanelIconComponent],
   templateUrl: './material-request-modal.component.html',
   styleUrl: './material-request-modal.component.css'
 })

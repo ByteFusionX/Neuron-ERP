@@ -30,18 +30,10 @@
                 <div class="grn-panel">
                     <div class="flex flex-col md:flex-row md:mb-5 gap-3">
                         @if(!isLpoPreselected()) {
-                            <label class="grn-field w-full">
-                                <span>Select LPO Number</span>
-                                <select formControlName="selectedLpo" class="grn-input"
-                                    [class.border-orange-500]="f['selectedLpo'].invalid && formSubmitted()"
-                                    (change)="onLpoSelected($any($event.target).value)">
-                                    <option value="">{{ isLpoOptionsLoading() ? 'Loading LPOs...' : 'Select LPO to create GRN against' }}</option>
-                                    <option *ngFor="let option of lpoOptions" [value]="option._id">{{ option.label }}</option>
-                                </select>
-                            </label>
+                            <app-sf-field class="w-full" label="LPO number" [control]="f['selectedLpo']"><app-sf-combobox formControlName="selectedLpo" [options]="lpoSelectOptions" [placeholder]="isLpoOptionsLoading() ? 'Loading LPOs...' : 'Select LPO to create GRN against'"></app-sf-combobox></app-sf-field>
                         }
-                        <label class="grn-field w-full"><span>GRN Number</span><input formControlName="grnNo" class="grn-input" readonly></label>
-                        <label class="grn-field w-full"><span>GRN Date</span><input formControlName="grnDate" type="date" class="grn-input" [class.border-orange-500]="f['grnDate'].invalid && formSubmitted()"></label>
+                        <app-sf-field class="w-full" label="GRN number" [control]="f['grnNo']"><app-sf-input formControlName="grnNo" readonly></app-sf-input></app-sf-field>
+                        <app-sf-field class="w-full" label="GRN date" required [control]="f['grnDate']"><app-sf-date formControlName="grnDate" displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
                     </div>
 
                     @if(isLoading()) {
@@ -82,23 +74,20 @@
                             </div>
                         </div>
                         <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <label class="grn-field w-full"><span>Supplier Name</span><input formControlName="supplierName" class="grn-input" readonly></label>
-                            <label class="grn-field w-full"><span>Linked LPO Number</span><input formControlName="linkedLpoNo" class="grn-input" readonly></label>
-                            <label *ngIf="!isJobLess" class="grn-field w-full"><span>Job ID</span><input formControlName="jobId" class="grn-input" readonly></label>
+                            <app-sf-field class="w-full" label="Supplier name" [control]="f['supplierName']"><app-sf-input formControlName="supplierName" readonly></app-sf-input></app-sf-field>
+                            <app-sf-field class="w-full" label="Linked LPO number" [control]="f['linkedLpoNo']"><app-sf-input formControlName="linkedLpoNo" readonly></app-sf-input></app-sf-field>
+                            <app-sf-field *ngIf="!isJobLess" class="w-full" label="Job ID" [control]="f['jobId']"><app-sf-input formControlName="jobId" readonly></app-sf-input></app-sf-field>
                         </div>
 
                         <div class="flex flex-col md:flex-row md:mb-5 gap-3">
-                            <label class="grn-field w-full"><span>Supplier Invoice Date</span><input formControlName="supplierInvoiceDate" type="date" class="grn-input" [class.border-orange-500]="f['supplierInvoiceDate'].invalid && formSubmitted()"></label>
+                            <app-sf-field class="w-full" label="Supplier invoice date" required [control]="f['supplierInvoiceDate']"><app-sf-date formControlName="supplierInvoiceDate" displayFormat="dd/MM/yyyy"></app-sf-date></app-sf-field>
 
                             <div class="mb-1 w-full">
                                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="supplierInvoiceNo">
                                     Supplier Invoice No.
                                 </label>
                                 <div class="flex items-stretch gap-2">
-                                    <input id="supplierInvoiceNo" formControlName="supplierInvoiceNo"
-                                        [class.border-orange-500]="f['supplierInvoiceNo'].invalid && formSubmitted()"
-                                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                        type="text"/>
+                                    <app-sf-input id="supplierInvoiceNo" formControlName="supplierInvoiceNo"></app-sf-input>
                                     <button type="button"
                                         (click)="openInvoiceUpload()"
                                         class="cursor-pointer flex justify-center items-center px-3 rounded border border-violet-500 hover:border-violet-600 text-violet-500 hover:text-violet-600 shrink-0"
@@ -116,10 +105,7 @@
                                     Supplier Delivery Note No.
                                 </label>
                                 <div class="flex items-stretch gap-2">
-                                    <input id="supplierDeliveryNoteNo" formControlName="supplierDeliveryNoteNo"
-                                        [class.border-orange-500]="f['supplierDeliveryNoteNo'].invalid && formSubmitted()"
-                                        class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                        type="text"/>
+                                    <app-sf-input id="supplierDeliveryNoteNo" formControlName="supplierDeliveryNoteNo"></app-sf-input>
                                     <button type="button"
                                         (click)="openDeliveryNoteUpload()"
                                         class="cursor-pointer flex justify-center items-center px-3 rounded border border-orange-500 hover:border-orange-600 text-orange-500 hover:text-orange-600 shrink-0"
@@ -138,20 +124,14 @@
                                 <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="receivedByDisplay">
                                     Received By
                                 </label>
-                                <input id="receivedByDisplay" [value]="receivedByName" readonly
-                                    class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-                                    type="text"/>
+                                <app-sf-input id="receivedByDisplay" [ngModel]="receivedByName" [ngModelOptions]="{ standalone: true }" readonly></app-sf-input>
                             </div>
-                            <label class="grn-field w-full">
-                                <span>Location / Warehouse</span>
+                            <app-sf-field class="w-full" label="Location / warehouse" required [control]="f['warehouse']">
                                 <div class="flex gap-2">
-                                    <select formControlName="warehouse" class="grn-input" [class.border-orange-500]="f['warehouse'].invalid && formSubmitted()">
-                                        <option value="">Select warehouse</option>
-                                        <option *ngFor="let warehouse of warehouses" [value]="warehouse._id">{{ warehouse.wareHouseName }}</option>
-                                    </select>
-                                    <button type="button" class="grn-tool-button" (click)="onAddWarehouse()">+ Add</button>
+                                    <app-sf-select class="flex-1" formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"></app-sf-select>
+                                    <app-action-button variant="tool" icon="plus" (click)="onAddWarehouse()">Add</app-action-button>
                                 </div>
-                            </label>
+                            </app-sf-field>
                         </div>
                     }
                 </div>
@@ -212,7 +192,7 @@
                                             {{ item.get('itemDescription')?.value || '-' }}
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <input formControlName="uom" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter UOM">
+                                            <app-sf-input formControlName="uom" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter UOM"></app-sf-input>
                                         </td>
                                         <td class="px-4 py-2 border text-center">
                                             {{ item.get('orderedQty')?.value || 0 }}
@@ -223,7 +203,7 @@
                                             </span>
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <input formControlName="receivedQty" type="number" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0">
+                                            <app-sf-number formControlName="receivedQty" [min]="0" [stepper]="false" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0"></app-sf-number>
                                             @if(item.get('receivedQty')?.errors?.['max']) {
                                                 <span class="text-xs text-red-600">Cannot exceed balance</span>
                                             }
@@ -234,14 +214,14 @@
                                         <td class="px-4 py-2 border text-center"
                                             [class.text-red-600]="(item.get('rejectedQty')?.value || 0) > 0"
                                             [class.font-medium]="(item.get('rejectedQty')?.value || 0) > 0">
-                                            <input formControlName="rejectedQty" type="number" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0">
+                                            <app-sf-number formControlName="rejectedQty" [min]="0" [stepper]="false" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="0"></app-sf-number>
                                             @if(item.get('rejectedQty')?.errors?.['max']) {
                                                 <span class="text-xs text-red-600">Cannot exceed balance</span>
                                             }
                                         </td>
                                         <td class="px-4 py-2 border text-center">
                                             @if((item.get('rejectedQty')?.value || 0) > 0) {
-                                                <input formControlName="rejectionReason" class="grn-input grn-table-input" [readonly]="isFormDisabled()" placeholder="Enter rejection reason">
+                                                <app-sf-input formControlName="rejectionReason" [readonly]="isFormDisabled()" placeholder="Enter rejection reason"></app-sf-input>
                                                 @if(item.get('rejectionReason')?.errors?.['required']) {
                                                     <span class="text-xs text-red-600">Required</span>
                                                 }
@@ -250,10 +230,10 @@
                                             }
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <input formControlName="remarks" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter remarks">
+                                            <app-sf-input formControlName="remarks" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0" placeholder="Enter remarks"></app-sf-input>
                                         </td>
                                         <td class="px-4 py-2 border text-center">
-                                            <input formControlName="date" type="date" class="grn-input grn-table-input" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0">
+                                            <app-sf-date formControlName="date" [readonly]="isFormDisabled() || (item.get('balanceQty')?.value || 0) === 0"></app-sf-date>
                                         </td>
                                     </tr>
                                 </ng-container>

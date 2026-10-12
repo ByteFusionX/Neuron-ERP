@@ -10,6 +10,16 @@
   outline: none;
 }
 
+.lpo-page { margin: 1.5rem; overflow: hidden; border: 1px solid #e5e7eb; border-radius: .5rem; background: #fff; }
+.lpo-header { padding: 1rem 1.5rem; border-bottom: 1px solid #e5e7eb; }
+.lpo-kicker { margin: 0 0 .2rem; color: #6b7280; font-size: .72rem; font-weight: 600; }
+.lpo-title { margin: 0; color: #111827; font-size: 1rem; font-weight: 700; }
+.lpo-subtitle { margin: .2rem 0 0; color: #6b7280; font-size: .8rem; }
+.lpo-body { display: flex; flex-direction: column; padding: 1.5rem; color: #111827; background: #fff; }
+:host-context(html.dark) .lpo-page, :host-context(html.dark) .lpo-body { border-color: #262626; background: #0a0a0a; color: #f3f4f6; }
+:host-context(html.dark) .lpo-header { border-color: #262626; }
+:host-context(html.dark) .lpo-title { color: #f3f4f6; }
+
 .lpo-input:focus {
   border-color: #7c3aed;
   box-shadow: 0 0 0 3px rgb(124 58 237 / 0.14);

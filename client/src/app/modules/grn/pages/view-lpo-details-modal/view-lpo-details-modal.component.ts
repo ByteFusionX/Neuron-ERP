@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, Inject, OnInit, signal } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
+import { FormModalShellComponent } from 'src/app/shared/components/modal/form-modal-shell/form-modal-shell.component';
+import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
+import { DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { ToastrService } from 'ngx-toastr';
 
@@ -12,11 +14,20 @@ export interface ViewLpoDetailsModalData {
 @Component({
   selector: 'app-view-lpo-details-modal',
   standalone: true,
-  imports: [CommonModule, ModalLayoutComponent],
+  imports: [CommonModule, FormModalShellComponent, DetailTableComponent],
   templateUrl: './view-lpo-details-modal.component.html',
   styleUrls: ['./view-lpo-details-modal.component.css']
 })
 export class ViewLpoDetailsModalComponent implements OnInit {
+  readonly itemColumns: DetailTableColumn[] = [
+    { key: 'partNo', label: 'Part No.' },
+    { key: 'description', label: 'Description', wrap: true },
+    { key: 'orderedQty', label: 'Ordered', type: 'number' },
+    { key: 'issuedQty', label: 'Issued', type: 'number' },
+    { key: 'pendingQty', label: 'Pending', type: 'number' },
+    { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
+    { key: 'totalCost', label: 'Total', type: 'currency', total: true },
+  ];
   purchaseOrder: any = null;
   isLoading = signal<boolean>(true);
 
@@ -67,5 +78,14 @@ export class ViewLpoDetailsModalComponent implements OnInit {
     if (typeof employee === 'string') return employee;
     const name = [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim();
     return name || employee.userName || employee.email || 'N/A';
+  }
+
+  itemRows(): Record<string, any>[] {
+    return (this.purchaseOrder?.items || []).map((item: any) => ({
+      partNo: this.formatPartNumber(item.partNo), description: item.detail || '-',
+      orderedQty: item.quantity || 0, issuedQty: item.issuedQty || 0,
+      pendingQty: item.pendingQty || 0, unitCost: item.unitCost || 0,
+      totalCost: item.totalCost || 0,
+    }));
   }
 }

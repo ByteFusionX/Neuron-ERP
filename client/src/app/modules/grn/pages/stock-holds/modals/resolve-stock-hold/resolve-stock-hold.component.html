@@ -1,59 +1,23 @@
-<form [formGroup]="resolveForm" (ngSubmit)="onSubmit()" class="flex max-h-[88vh] flex-col overflow-hidden rounded-lg bg-white text-gray-900 shadow-xl dark:bg-erp-surface-dark dark:text-gray-100">
-  <div class="border-b border-gray-200 px-6 py-4 dark:border-erp-border-dark">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h2 class="text-base font-semibold">Resolve Stock Hold</h2>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ stockHold?.itemDescription }} - unresolved qty: {{ stockHold?.unresolvedQty }}</p>
-      </div>
-      <button type="button" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-100" (click)="onCancel()">
-        <span class="material-icons text-xl">close</span>
-      </button>
-    </div>
-  </div>
-
-  <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
-    <label class="space-y-1.5 text-sm font-medium">
-      <span>Quantity to resolve now</span>
-      <input formControlName="qty" type="number" class="sf-input" [class.sf-invalid]="resolveForm.get('qty')?.invalid && isSubmitting" placeholder="Enter quantity">
-    </label>
-
-    <label class="space-y-1.5 text-sm font-medium">
-      <span>Resolution Type</span>
-      <select formControlName="resolutionType" class="sf-input" [class.sf-invalid]="resolveForm.get('resolutionType')?.invalid && isSubmitting">
-        <option value="">Select how this qty is being resolved</option>
-        <option *ngFor="let option of resolutionOptions" [value]="option.value">{{ option.label }}</option>
-      </select>
-    </label>
-
-    <label *ngIf="isPhysicalResolution" class="space-y-1.5 text-sm font-medium">
-      <span>Replacement Purchase Order ID (optional)</span>
-      <input formControlName="replacementPoId" class="sf-input" placeholder="Paste the replacement/alternate-supplier PO ID">
-    </label>
+<app-form-modal-shell icon="check" tone="emerald" title="Resolve stock hold"
+  [context]="stockHold?.itemDescription" contextLabel="Resolving"
+  formId="resolve-stock-hold-form" submitLabel="Resolve" savingLabel="Resolving..."
+  submitIcon="check" [saving]="isSubmitting" [invalid]="resolveForm.invalid && resolveForm.touched"
+  (closed)="onCancel()">
+  <form id="resolve-stock-hold-form" [formGroup]="resolveForm" (ngSubmit)="onSubmit()" class="space-y-4">
+    <p class="text-xs text-gray-500 dark:text-gray-400">Unresolved quantity: {{ stockHold?.unresolvedQty }}</p>
+    <app-sf-field label="Quantity to resolve now" required [control]="resolveForm.get('qty')"><app-sf-number formControlName="qty" [min]="1" [stepper]="false" placeholder="Enter quantity"></app-sf-number></app-sf-field>
+    <app-sf-field label="Resolution type" required [control]="resolveForm.get('resolutionType')"><app-sf-select formControlName="resolutionType" [options]="resolutionOptions" placeholder="Select how this quantity is being resolved"></app-sf-select></app-sf-field>
+    <app-sf-field *ngIf="isPhysicalResolution" label="Replacement purchase order ID" [control]="resolveForm.get('replacementPoId')"><app-sf-input formControlName="replacementPoId" placeholder="Replacement or alternate-supplier PO ID"></app-sf-input></app-sf-field>
 
     <ng-container *ngIf="isFinancialResolution">
-      <label class="flex items-start gap-2 rounded-md border border-gray-200 p-3 text-sm text-gray-700 dark:border-erp-border-dark dark:text-gray-300">
-        <input type="checkbox" formControlName="invoiced" class="mt-0.5">
-        <span>This PO has already been invoiced by the supplier (issue a Credit Note instead of a pre-invoice adjustment)</span>
-      </label>
-
-      <label *ngIf="resolveForm.get('invoiced')?.value" class="space-y-1.5 text-sm font-medium">
-        <span>Purchase Order ID</span>
-        <input formControlName="poId" class="sf-input" [class.sf-invalid]="resolveForm.get('poId')?.invalid && isSubmitting" placeholder="Paste the invoiced PO ID">
-      </label>
+      <app-sf-switch formControlName="invoiced" label="Supplier invoice already issued"></app-sf-switch>
+      <app-sf-field *ngIf="resolveForm.get('invoiced')?.value" label="Purchase order ID" required [control]="resolveForm.get('poId')"><app-sf-input formControlName="poId" placeholder="Invoiced PO ID"></app-sf-input></app-sf-field>
 
       <p *ngIf="resolveForm.get('invoiced')?.value && !canIssueCreditNote" class="text-xs text-red-600">
         You don't have permission to issue a Credit Note. This action will be rejected server-side.
       </p>
     </ng-container>
 
-    <label class="space-y-1.5 text-sm font-medium">
-      <span>Note</span>
-      <textarea formControlName="note" class="sf-input min-h-24" placeholder="Optional note for the audit trail"></textarea>
-    </label>
-  </div>
-
-  <div class="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-erp-border-dark">
-    <button type="button" class="sf-btn sf-btn-secondary" (click)="onCancel()">Discard</button>
-    <button type="submit" class="sf-btn sf-btn-primary" [disabled]="isSubmitting">{{ isSubmitting ? 'Resolving...' : 'Resolve' }}</button>
-  </div>
-</form>
+    <app-sf-field label="Note" [control]="resolveForm.get('note')"><app-sf-textarea formControlName="note" placeholder="Optional note for the audit trail" [rows]="4" autoresize></app-sf-textarea></app-sf-field>
+  </form>
+</app-form-modal-shell>

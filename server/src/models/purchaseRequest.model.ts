@@ -204,8 +204,27 @@ interface PurchaseRequest extends Document {
     allocatedTo?: Types.ObjectId;
     allocatedBy?: Types.ObjectId;
     allocatedAt?: Date;
+    allocationApproval?: any;
+    allocationRejections?: { rejectedBy: Types.ObjectId; reason?: string; rejectedAt: Date }[];
     currency?: String;
 }
+
+const allocationApprovalSchema = new Schema({
+    stepIndex: { type: Number, default: 0 },
+    restartCount: { type: Number, default: 0 },
+    disabledRoles: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
+    role: { type: Schema.Types.ObjectId, ref: 'Category' },
+    roles: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
+    assignedAt: { type: Date },
+    escalationDueAt: { type: Date },
+    escalatedFrom: { type: Schema.Types.ObjectId, ref: 'Category' },
+    reminderDueAt: { type: Date },
+    reminderSentAt: { type: Date },
+    timeoutAction: { type: String, enum: ['escalate', 'notify', 'reject'], default: 'escalate' },
+    repeatReminder: { type: Boolean, default: true },
+    timeoutHandledAt: { type: Date },
+    workflowVersion: { type: Number },
+}, { _id: false });
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
     jobId: {
@@ -312,6 +331,13 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     allocatedAt: {
         type: Date
     },
+    // Escalation ladder while the PR waits for a buyer (procurementAssignment workflow); cleared once allocated.
+    allocationApproval: { type: allocationApprovalSchema },
+    allocationRejections: [{
+        rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+        reason: { type: String, default: '' },
+        rejectedAt: { type: Date, default: Date.now }
+    }],
     currency: {
         type: String
     }

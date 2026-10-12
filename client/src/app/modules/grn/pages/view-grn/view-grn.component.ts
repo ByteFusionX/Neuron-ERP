@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
@@ -7,7 +8,8 @@ import { GrnService } from 'src/app/core/services/grn/grn.service';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { FileUploadModalComponent, FileUploadModalData } from 'src/app/shared/components/file-upload-modal/file-upload-modal.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 
 @Component({
   selector: 'app-view-grn',
@@ -15,7 +17,9 @@ import { ButtonComponent } from 'src/app/shared/components/button/button.compone
   imports: [
     CommonModule,
     IconsModule,
-    ButtonComponent
+    FormsModule,
+    SmartFormModule,
+    ActionButtonComponent
   ],
   templateUrl: './view-grn.component.html',
   styleUrl: './view-grn.component.css'

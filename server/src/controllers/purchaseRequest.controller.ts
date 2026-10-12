@@ -12,6 +12,8 @@ import { getNextSequence } from "../models/counter.model";
 import technicalModel from "../models/technical.model";
 import Employee from "../models/employee.model";
 import { syncRfqFromPurchase } from "./rfq.controller";
+import { buildAssignmentChain, resolveCurrentAssignmentStep, assignmentHeldChecker, stageRoleIds } from "../services/presaleAssignment.service";
+import { notify } from "../services/notify.service";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -43,7 +45,7 @@ const hasPurchaseFlag = (employee: any, flag: string): boolean => {
 };
 const canAssignPurchase = (employee: any) => hasPurchaseFlag(employee, 'canAssign');
 
-// Buyers a PR can be allocated to: everyone who can create purchases.
+// Buyers a PR can be allocated to: holders of the purchase "create" privilege.
 export const getPurchaseAssignees = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const employees = await Employee.find({ isDeleted: { $ne: true }, isBlocked: { $ne: true } })
@@ -98,11 +100,49 @@ export const allocatePurchaseRequest = async (req: Request, res: Response, next:
             return res.status(400).json({ success: false, message: "Selected employee cannot be assigned purchases" });
         }
 
+        // A buyer holds the PR until they reject it; only then can it be handed to someone else.
+        if (purchase.allocatedTo) {
+            return res.status(400).json({ success: false, message: "Purchase request is already allocated. The assigned buyer must reject it before it can be reallocated" });
+        }
+
+        // While the assignment ladder is running only the role holding the current stage (or an admin) may allocate.
+        const chain: any = purchase.allocationApproval;
+        if (chain && !/^(superadmin|admin)$/i.test((actor.category as any)?.role ?? '')) {
+            const resolved: any = await resolveCurrentAssignmentStep(chain, new Date(), 'procurement');
+            const myRole = String((actor.category as any)?._id ?? actor.category);
+            if (!stageRoleIds(resolved ?? chain).includes(myRole)) {
+                return res.status(403).json({ success: false, message: "This purchase request is waiting on another role in the assignment workflow" });
+            }
+        }
+
         purchase.allocatedTo = assignee._id;
+        purchase.allocationApproval = undefined;
         purchase.allocatedBy = actor._id as any;
         purchase.allocatedAt = new Date();
         purchase.procurementPerson = assignee._id;
         await purchase.save();
+
+        // Keep the job's procurement person in step with the buyer.
+        if (purchase.jobId) {
+            await jobModel.updateOne({ _id: purchase.jobId }, { procurementPerson: assignee._id, updatedDate: new Date() });
+        }
+
+        const buyerId = assignee._id.toString();
+        void createNotificationWithPrivileges(
+            {
+                type: 'PurchaseRequestAllocated',
+                referenceModel: 'PurchaseRequest',
+                title: 'Purchase request assigned to you',
+                message: `Purchase request ${(purchase as any).purchaseNo ?? ''} has been assigned to you.`.replace('  ', ' '),
+                sentBy: actor._id?.toString(),
+                referenceId: purchase._id,
+            },
+            {
+                privilegeKey: 'purchase',
+                checkFunction: (_privileges, employeeId) => employeeId === buyerId,
+            },
+            req.app.get('io') as Server
+        ).catch((err) => console.error('PR allocation notification failed:', err));
 
         return res.status(200).json({ success: true, message: "Purchase request allocated" });
     } catch (error) {
@@ -110,8 +150,143 @@ export const allocatePurchaseRequest = async (req: Request, res: Response, next:
     }
 };
 
+// The assigned buyer hands the PR back to whoever assigned it, who can then reallocate it.
+export const rejectPurchaseAllocation = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const reason = String(req.body?.reason ?? '').trim();
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: "Purchase request is required" });
+        }
+        if (!reason) {
+            return res.status(400).json({ success: false, message: "A reason is required to reject the allocation" });
+        }
+
+        const actor = await getEmployeeData(req.user);
+        if (!actor) {
+            return res.status(401).json({ success: false, message: "Employee not found" });
+        }
+
+        const purchase = await PurchaseRequest.findOne({ _id: id, isDeleted: false });
+        if (!purchase) {
+            return res.status(404).json({ success: false, message: "Purchase request not found" });
+        }
+        if (!purchase.allocatedTo || purchase.allocatedTo.toString() !== actor._id?.toString()) {
+            return res.status(403).json({ success: false, message: "Only the assigned buyer can reject this allocation" });
+        }
+
+        const assignerId = purchase.allocatedBy?.toString();
+        const previousBuyer = purchase.allocatedTo;
+
+        purchase.allocationRejections = [
+            ...(purchase.allocationRejections ?? []),
+            { rejectedBy: actor._id as any, reason, rejectedAt: new Date() },
+        ];
+        purchase.allocatedTo = undefined;
+        purchase.allocatedAt = undefined;
+        if (purchase.procurementPerson?.toString() === previousBuyer.toString()) {
+            purchase.procurementPerson = undefined;
+        }
+        await purchase.save();
+
+        if (purchase.jobId) {
+            await jobModel.updateOne(
+                { _id: purchase.jobId, procurementPerson: previousBuyer },
+                { $unset: { procurementPerson: 1 }, updatedDate: new Date() }
+            );
+        }
+
+        if (assignerId) {
+            void createNotificationWithPrivileges(
+                {
+                    type: 'PurchaseAllocationRejected',
+                    referenceModel: 'PurchaseRequest',
+                    title: 'Purchase allocation rejected',
+                    message: `Purchase request ${(purchase as any).purchaseNo ?? ''} was rejected by the assigned buyer. Reason: ${reason}`,
+                    sentBy: actor._id?.toString(),
+                    referenceId: purchase._id,
+                },
+                {
+                    privilegeKey: 'purchase',
+                    checkFunction: (_privileges, employeeId) => employeeId === assignerId,
+                },
+                req.app.get('io') as Server
+            ).catch((err) => console.error('PR allocation rejection notification failed:', err));
+        }
+
+        return res.status(200).json({ success: true, message: "Allocation rejected" });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Once the assignment ladder has run out of roles (nobody below acted and it reached the admin stage),
+// a super admin can restart it from the first stage. Allocating directly is the other way out.
+export const resetPurchaseAllocation = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: "Purchase request is required" });
+        }
+
+        const actor = await getEmployeeData(req.user);
+        if (!actor) {
+            return res.status(401).json({ success: false, message: "Employee not found" });
+        }
+        if (!/^superadmin$/i.test((actor.category as any)?.role ?? '')) {
+            return res.status(403).json({ success: false, message: "Only a super admin can reset the assignment workflow" });
+        }
+
+        const purchase = await PurchaseRequest.findOne({ _id: id, isDeleted: false });
+        if (!purchase) {
+            return res.status(404).json({ success: false, message: "Purchase request not found" });
+        }
+        if (purchase.allocatedTo) {
+            return res.status(400).json({ success: false, message: "This purchase request is already allocated" });
+        }
+        const held = await assignmentHeldChecker('procurement');
+        if (!held(purchase.allocationApproval)) {
+            return res.status(400).json({ success: false, message: "The assignment workflow has not reached its final stage yet" });
+        }
+
+        const previous: any = purchase.allocationApproval;
+        const chain = await buildAssignmentChain([], 'procurement');
+        if (!chain) {
+            return res.status(400).json({ success: false, message: "No assignment workflow is configured" });
+        }
+        purchase.allocationApproval = { ...chain, restartCount: (previous?.restartCount ?? 0) + 1 };
+        purchase.updatedBy = actor._id as any;
+        purchase.updatedAt = new Date();
+        await purchase.save();
+
+        void notifyAllocationStage(purchase, purchase.allocationApproval, 'Purchase assignment restarted', `Purchase request ${purchase.purchaseNo} needs a buyer and is waiting on your role`, 'restart', actor._id?.toString())
+            .catch((err) => console.error('PR assignment reset notification failed:', err));
+
+        return res.status(200).json({ success: true, message: "Assignment workflow reset" });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const notifyAllocationStage = async (purchase: any, chain: any, title: string, message: string, suffix: string, sentBy?: string) => {
+    const recipients = (await Employee.find({ category: { $in: stageRoleIds(chain) }, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id);
+    if (!recipients.length) return;
+    await notify({
+        type: 'PurchaseAllocationRequest',
+        referenceModel: 'PurchaseRequest',
+        title,
+        message,
+        sentBy,
+        recipients,
+        referenceId: purchase._id,
+        additionalData: { purchaseId: purchase._id.toString() },
+        dedupeKey: `pr-alloc:${purchase._id}:${chain.restartCount ?? 0}:${suffix}`,
+        channels: ['inapp', 'push', 'email'],
+    });
+};
+
 // Create a new Purchase Request
-export const createPurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
+export const createPurchaseRequest =async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tokenData = req.user;
         const employee = await getEmployeeData(tokenData);
@@ -835,6 +1010,14 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 }
             }
         ]);
+
+        // Flag PRs the assignment ladder has run out on, so a super admin can allocate or restart them.
+        if (isNewTab && purchases[0]?.data?.length) {
+            const held = await assignmentHeldChecker('procurement');
+            for (const row of purchases[0].data) {
+                row.allocationHeld = !row.allocatedTo && held(row.allocationApproval);
+            }
+        }
 
         return res.status(200).json({
             success: true,

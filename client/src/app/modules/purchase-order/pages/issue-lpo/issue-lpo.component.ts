@@ -10,6 +10,7 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 
 @Component({
@@ -18,7 +19,8 @@ import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
-    SmartFormModule
+    SmartFormModule,
+    ActionButtonComponent
   ],
   templateUrl: './issue-lpo.component.html',
   styleUrl: './issue-lpo.component.css'

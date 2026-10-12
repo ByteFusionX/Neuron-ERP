@@ -35,10 +35,9 @@
           <thead class="bg-gray-50 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:bg-white/5 dark:text-gray-400">
             <tr>
               <th class="w-10 px-3 py-2.5">
-                <input type="checkbox" class="mr-check" aria-label="Select all available"
-                  [disabled]="getAvailableItemsCount() === 0"
-                  [checked]="selectedRequests.size > 0 && selectedRequests.size === getAvailableItemsCount()"
-                  (change)="toggleAllSelection()">
+                <app-sf-checkbox aria-label="Select all available" [disabled]="getAvailableItemsCount() === 0"
+                  [ngModel]="selectedRequests.size > 0 && selectedRequests.size === getAvailableItemsCount()"
+                  (ngModelChange)="toggleAllSelection()" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
               </th>
               <th class="px-3 py-2.5">Item</th>
               <th class="px-3 py-2.5 text-right">Qty</th>
@@ -54,8 +53,8 @@
               [ngClass]="isAlreadyAdded(i) ? 'bg-emerald-50/40 dark:bg-emerald-950/10' : selectedRequests.has(i) ? 'bg-violet-50/60 dark:bg-violet-950/20' : 'hover:bg-gray-50 dark:hover:bg-white/5'"
               (click)="toggleSelection(i)" [class.cursor-pointer]="!isAlreadyAdded(i)">
               <td class="px-3 py-3" (click)="$event.stopPropagation()">
-                <input type="checkbox" class="mr-check" [attr.aria-label]="'Select ' + request.itemName"
-                  [checked]="selectedRequests.has(i)" [disabled]="isAlreadyAdded(i)" (change)="toggleSelection(i)">
+                <app-sf-checkbox [attr.aria-label]="'Select ' + request.itemName" [ngModel]="selectedRequests.has(i)"
+                  [disabled]="isAlreadyAdded(i)" (ngModelChange)="toggleSelection(i)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
               </td>
               <td class="px-3 py-3">
                 <p class="font-medium text-gray-900 dark:text-gray-100">{{ request.itemName }}</p>

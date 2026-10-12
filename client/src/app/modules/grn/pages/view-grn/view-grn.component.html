@@ -7,9 +7,7 @@
       <p class="grn-view-subtitle">{{ headerSubtitle || 'Receipt details' }}</p>
     </div>
     <div class="flex gap-3">
-      <app-btn theme="secondary" (buttonClick)="onBack()">
-        Back
-      </app-btn>
+      <app-action-button variant="secondary" (click)="onBack()">Back</app-action-button>
     </div>
   </div>
 
@@ -70,10 +68,7 @@
           <thead class="text-xs text-gray-700 uppercase bg-gray-50">
             <tr>
               <th class="px-4 py-2 border text-center">
-                <input type="checkbox" class="cursor-pointer align-middle"
-                  [checked]="areAllItemsSelected()"
-                  (change)="toggleAllItems()"
-                  title="Select all items">
+                <app-sf-checkbox aria-label="Select all items" [ngModel]="areAllItemsSelected()" (ngModelChange)="toggleAllItems()" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
               </th>
               <th class="px-4 py-2 border text-center">SL.NO</th>
               <th class="px-4 py-2 border">Part No.</th>
@@ -91,10 +86,7 @@
           <tbody>
             <tr *ngFor="let item of grn.items; let i = index" class="border-b hover:bg-gray-50" [class.bg-purple-50]="isItemSelected(i)">
               <td class="px-4 py-2 border text-center">
-                <input type="checkbox"
-                  [checked]="isItemSelected(i)"
-                  (change)="toggleItemSelection(i)"
-                  class="cursor-pointer">
+                <app-sf-checkbox [attr.aria-label]="'Select ' + (item.itemDescription || 'item')" [ngModel]="isItemSelected(i)" (ngModelChange)="toggleItemSelection(i)" [ngModelOptions]="{ standalone: true }"></app-sf-checkbox>
               </td>
               <td class="px-4 py-2 border text-center">{{ i + 1 }}</td>
               <td class="px-4 py-2 border">{{ formatPartNumber(item.partNo) }}</td>
@@ -130,9 +122,7 @@
       </div>
       <div class="flex justify-end items-center gap-3 mt-4 pt-4 border-t border-gray-200">
         <span *ngIf="!hasSelectedItems()" class="text-xs text-gray-400">Select items to generate a receipt</span>
-        <app-btn theme="primary" [disabled]="!hasSelectedItems()" [loading]="isGenerating()" (buttonClick)="onGenerateReceipt()">
-          Generate Receipt
-        </app-btn>
+        <app-action-button variant="primary" [disabled]="!hasSelectedItems() || isGenerating()" (click)="onGenerateReceipt()">{{ isGenerating() ? 'Generating...' : 'Generate receipt' }}</app-action-button>
       </div>
     </div>
   </div>
