@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ToastrService } from 'ngx-toastr';
 import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
+import { Observable } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 
 export interface ResetWorkflowModalData {
@@ -13,6 +14,11 @@ export interface ResetWorkflowModalData {
   context?: string;
   /** Stages that can get another chance (Super Admin is not listed: it always stays). */
   stages: { id: string; label: string }[];
+  /** Other workflows (e.g. Deal Sheet) supply their own reset call; presale's assignment restart is the default. */
+  restart?: (stageIds: string[]) => Observable<{ message: string }>;
+  contextLabel?: string;
+  /** Replaces the intro line, which is worded for the presale assignment. */
+  description?: string;
 }
 
 /**
@@ -26,13 +32,13 @@ export interface ResetWorkflowModalData {
   template: `
     <app-form-modal-shell
       icon="refresh" tone="amber" title="Reset workflow"
-      contextLabel="Enquiry" [context]="data?.context" contextEmptyText="Restart this job's assignment workflow."
+      [contextLabel]="data?.contextLabel || 'Enquiry'" [context]="data?.context" contextEmptyText="Restart this job's assignment workflow."
       formId="reset-workflow-form" [saving]="saving"
       submitLabel="Reset workflow" savingLabel="Resetting..." submitIcon="refresh" submitShortcutVerb="reset"
       (closed)="close()">
       <form id="reset-workflow-form" (ngSubmit)="submit()" novalidate>
         <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-          Tick the stages that get another chance to assign this job. Unticked stages are skipped for this job only.
+          {{ data?.description || 'Tick the stages that get another chance to assign this job. Unticked stages are skipped for this job only.' }}
         </p>
 
         <!-- Same stepper as Settings → Workflow: Super Admin on top, the bottom stage acts first -->
@@ -104,7 +110,8 @@ export class ResetWorkflowComponent {
   submit(): void {
     if (this.saving || !this.data) return;
     this.saving = true;
-    this.enquiryService.restartAssignmentWorkflow(this.data.jobId, [...this.selected]).subscribe({
+    const ids = [...this.selected];
+    (this.data.restart ? this.data.restart(ids) : this.enquiryService.restartAssignmentWorkflow(this.data.jobId, ids)).subscribe({
       next: (res) => {
         this.toast.success(res.message);
         this.dialogRef.close(true);

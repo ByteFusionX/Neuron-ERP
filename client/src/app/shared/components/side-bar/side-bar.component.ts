@@ -460,9 +460,20 @@ export class SideBarComponent
     unviewed: TextNotification[],
   ): Partial<NotificationCounts> {
     const counts: Partial<NotificationCounts> = {};
+    // Enquiry alerts pile up per enquiry (follow-ups, feedback...); the badge counts enquiries that need a look,
+    // so it lines up with what the list shows instead of the number of messages.
+    const seenEnquiries = new Set<string>();
     for (const notification of unviewed || []) {
       const key = this.notificationTypeToKey[notification.type];
       if (!key) continue;
+      if (key === 'enquiryCount') {
+        const ref = notification.additionalData?.enquiryId ?? notification.referenceId?._id ?? notification.referenceId;
+        const id = ref ? String(ref) : '';
+        if (id) {
+          if (seenEnquiries.has(id)) continue;
+          seenEnquiries.add(id);
+        }
+      }
       counts[key] = (counts[key] || 0) + 1;
     }
     return counts;

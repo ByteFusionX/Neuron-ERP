@@ -271,7 +271,7 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
 
   /** Opens the presale list on the matching tab. */
   openJob(_item: { enquiryId: string }): void {
-    this._router.navigate(['/assigned-jobs'], { queryParams: { tab: this.attentionKey } });
+    this._router.navigate(['/presales'], { queryParams: { tab: this.attentionKey } });
   }
 
   // --- Export -------------------------------------------------------------------------------

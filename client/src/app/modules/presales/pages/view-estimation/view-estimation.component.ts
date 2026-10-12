@@ -175,7 +175,7 @@ export class ViewEstimationComponent implements OnChanges {
       state: { estimation: this.estimation, enquiryId: this.enquiryId },
     };
     this.closed.emit();
-    this.router.navigate(['/assigned-jobs/edit-estimations'], navigationExtras);
+    this.router.navigate(['/presales/edit-estimations'], navigationExtras);
   }
 
   private sum(fn: (d: any) => number): number {

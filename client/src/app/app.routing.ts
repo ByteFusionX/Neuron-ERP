@@ -8,8 +8,8 @@ import { ViewEmployeeComponent } from './modules/employees/view-employee/view-em
 import { EmployeesComponent } from './modules/employees/employees.component';
 import { HomeLandingComponent } from './modules/home/pages/home-landing/home-landing.component';
 import { CustomersListComponent } from './modules/customers/pages/customers-list/customers-list.component';
-import { AssignedJobsListComponent } from './modules/assigned-jobs/pages/assigned-jobs-list/assigned-jobs-list.component';
-import { UploadEstimationComponent } from './modules/assigned-jobs/pages/upload-estimation/upload-estimation.component';
+import { PresalesListComponent } from './modules/presales/pages/presales-list/presales-list.component';
+import { UploadEstimationComponent } from './modules/presales/pages/upload-estimation/upload-estimation.component';
 import { QuotationViewComponent } from './modules/quotations/pages/quotation-view/quotation-view.component';
 import { QuotationListComponent } from './modules/quotations/pages/quotation-list/quotation-list.component';
 import { DealSheetListComponent } from './modules/deal-sheet/pages/deal-sheet-list/deal-sheet-list.component';
@@ -25,7 +25,6 @@ import { SupplierOffersComponent } from './modules/purchase/pages/supplier-offer
 import { ViewPurchaseComponent } from './modules/purchase/pages/view-purchase/view-purchase.component';
 import { InitiateLpoComponent } from './modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { IssueLpoComponent } from './modules/purchase-order/pages/issue-lpo/issue-lpo.component';
-import { LpoListComponent } from './modules/purchase-order/pages/lpo-list/lpo-list.component';
 import { LpoApprovalComponent } from './modules/purchase-order/pages/lpo-approval/lpo-approval.component';
 import { ViewLpoComponent } from './modules/purchase-order/pages/view-lpo/view-lpo.component';
 import { CreateGrnComponent } from './modules/grn/pages/create-grn/create-grn.component';
@@ -91,7 +90,15 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'employees' },
       { path: 'departments', canActivate: [RoleGuard], loadComponent: () => import('./modules/hr/pages/hr-departments/hr-departments.component').then((c) => c.HrDepartmentsComponent) },
       { path: 'departments/overview', redirectTo: 'departments' },
-      { path: 'roles-privileges', redirectTo: '/settings/roles-privileges' },
+      {
+        path: 'roles-privileges',
+        canActivate: [RoleGuard],
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'roles' },
+          { path: 'roles', loadComponent: () => import('./modules/hr/pages/roles-privileges/roles-privileges.component').then((c) => c.RolesPrivilegesComponent) },
+          { path: 'individual', loadComponent: () => import('./modules/hr/pages/employee-privileges/employee-privileges.component').then((c) => c.EmployeePrivilegesComponent) },
+        ],
+      },
       { path: 'employees', canActivate: [RoleGuard], component: EmployeesComponent },
       { path: 'employees/view/:employeeId', canActivate: [RoleGuard], component: ViewEmployeeComponent },
       { path: 'employees/category/create', canActivate: [RoleGuard], loadComponent: () => import('./modules/employees/create-category/create-category.component').then((c) => c.CreateCategoryComponent) },
@@ -115,17 +122,18 @@ export const routes: Routes = [
       { path: 'report', loadComponent: () => import('./modules/enquirys/pages/enquiry-report/enquiry-report.component').then((c) => c.EnquiryReportComponent) }
     ]
   },
+  { path: 'assigned-jobs', redirectTo: 'presales', pathMatch: 'prefix' },
   {
-    path: 'assigned-jobs',
+    path: 'presales',
     canActivate: [AuthGuard, RoleGuard],
-    loadComponent: () => import('./modules/assigned-jobs/assigned-jobs.component').then((c) => c.AssignedJobsComponent),
+    loadComponent: () => import('./modules/presales/presales.component').then((c) => c.PresalesComponent),
     children: [
-      { path: '', component: AssignedJobsListComponent },
-      { path: 'report', loadComponent: () => import('./modules/assigned-jobs/pages/presale-report/presale-report.component').then((c) => c.PresaleReportComponent) },
+      { path: '', component: PresalesListComponent },
+      { path: 'report', loadComponent: () => import('./modules/presales/pages/presale-report/presale-report.component').then((c) => c.PresaleReportComponent) },
       { path: 'upload-estimations', component: UploadEstimationComponent },
       { path: 'edit-estimations', component: UploadEstimationComponent },
-      { path: 'completed', redirectTo: () => inject(Router).parseUrl('/assigned-jobs?tab=completed') },
-      { path: 'reassigned', redirectTo: () => inject(Router).parseUrl('/assigned-jobs?tab=assigned') }
+      { path: 'completed', redirectTo: () => inject(Router).parseUrl('/presales?tab=completed') },
+      { path: 'reassigned', redirectTo: () => inject(Router).parseUrl('/presales?tab=assigned') }
     ]
   },
   {
@@ -206,12 +214,7 @@ export const routes: Routes = [
       },
       {
         path: 'roles-privileges',
-        data: { section: 'roles-privileges' },
-        children: [
-          { path: '', pathMatch: 'full', redirectTo: 'roles' },
-          { path: 'roles', loadComponent: () => import('./modules/settings/pages/roles-privileges/roles-privileges.component').then((c) => c.RolesPrivilegesComponent) },
-          { path: 'individual', loadComponent: () => import('./modules/settings/pages/employee-privileges/employee-privileges.component').then((c) => c.EmployeePrivilegesComponent) },
-        ],
+        redirectTo: '/hr/roles-privileges',
       },
       {
         path: 'approval-rules',
@@ -239,7 +242,7 @@ export const routes: Routes = [
       },
       {
         path: 'employee-privileges',
-        redirectTo: '/settings/roles-privileges/individual',
+        redirectTo: '/hr/roles-privileges/individual',
       },
     ]
   },
@@ -322,7 +325,6 @@ export const routes: Routes = [
       { path: 'po/general', redirectTo: 'general', pathMatch: 'full' },
       { path: 'initiate-lpo/:id', component: InitiateLpoComponent },
       { path: 'issue-lpo/:id', component: IssueLpoComponent },
-      { path: 'issue-lpo/:id/edit/:lpoId', component: IssueLpoComponent },
       { path: 'issue-lpo/:id/reissue/:lpoId', component: IssueLpoComponent },
       { path: 'view-lpo/:id', component: ViewLpoComponent },
       { path: 'edit/:id', component: CreatePurchaseComponent }
@@ -349,8 +351,8 @@ export const routes: Routes = [
       { path: 'create-grn/:lpoId', component: CreateGrnComponent },
       { path: 'view-grn/:id', component: ViewGrnComponent },
       { path: 'grn-list', component: GrnListComponent },
-      { path: 'returns', component: GrnStockHoldsComponent, data: { register: 'pending' } },
-      { path: 'resolved', component: GrnStockHoldsComponent, data: { register: 'resolved' } },
+      { path: 'returns', component: GrnStockHoldsComponent },
+      { path: 'resolved', redirectTo: 'returns', pathMatch: 'full' },
       { path: 'stock-holds', component: GrnStockHoldsComponent }
     ]
   },

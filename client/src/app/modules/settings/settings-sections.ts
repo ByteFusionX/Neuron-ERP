@@ -3,7 +3,6 @@ import { Privileges } from 'src/app/shared/interfaces/employee.interface';
 export type SettingsSectionId =
   | 'company-profile'
   | 'master-data'
-  | 'roles-privileges'
   | 'approval-rules'
   | 'numbering'
   | 'notifications'
@@ -62,25 +61,12 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     canView: ({ privileges }) => !!privileges?.portalManagement?.masterData,
   },
   {
-    id: 'roles-privileges',
-    label: 'Roles & Privileges',
-    description: 'Roles (categories of employees) and what each role is allowed to see and do.',
-    icon: 'heroShieldCheck',
-    group: 'Privilege and workflow',
-    children: [
-      { path: 'roles', label: 'Role Based' },
-      { path: 'individual', label: 'User Specific' },
-    ],
-    keywords: ['role', 'roles', 'privilege', 'permission', 'category', 'access', 'individual', 'grant', 'override', 'flag', 'responsibility'],
-    canView: ({ privileges }) => !!privileges?.roles?.view,
-  },
-  {
     id: 'approval-rules',
     label: 'Workflow',
     description: 'Approval workflows: who approves each request, in what order.',
     icon: 'heroCheckBadge',
-    group: 'Privilege and workflow',
-    keywords: ['approval', 'workflow', 'approver', 'escalation', 'steps'],
+    group: 'Workflow',
+    keywords: ['approval', 'workflow', 'approver', 'escalation', 'steps', 'deal sheet', 'presale', 'purchase'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.approvalRules,
   },
   {

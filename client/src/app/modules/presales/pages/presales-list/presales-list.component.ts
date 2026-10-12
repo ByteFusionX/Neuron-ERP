@@ -11,6 +11,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { HttpEventType } from '@angular/common/http';
 import { AskFeedbackComponent } from '../ask-feedback/ask-feedback.component';
 import { ReplyFeedbackComponent } from '../reply-feedback/reply-feedback.component';
+import { RfqChaseComponent } from 'src/app/shared/components/rfq-chase/rfq-chase.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { GiveFeedbackComponent, GiveFeedbackResult } from '../give-feedback/give-feedback.component';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -46,16 +47,19 @@ import { downloadRequestSheet } from 'src/app/modules/sales-rfq/sales-rfq-sheets
 const LIMIT_UNIT_MS: Record<string, number> = { minute: 60_000, hour: 3_600_000, day: 86_400_000 };
 const LIMIT_UNIT_SHORT: Record<string, string> = { minute: 'm', hour: 'h', day: 'd' };
 
-export type PresaleTab = 'all' | 'new' | 'assigned' | 'completed' | 'resolve' | 'cancelled' | 'rejected';
+export type PresaleTab = 'all' | 'new' | 'assigned' | 'completed' | 'resolve' | 'cancelled' | 'rejected' | 'fu-overdue' | 'fu-today' | 'fu-upcoming';
 
+import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
+import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
+import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
 import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-toggle.component';
 @Component({
-  selector: 'app-assigned-jobs-list',
-  templateUrl: './assigned-jobs-list.component.html',
-  styleUrls: ['./assigned-jobs-list.component.css'],
-  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe, NgIcon, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTimelineComponent, ApprovalJourneyComponent, ViewEstimationComponent, EstimationFormDrawerComponent, ActionButtonComponent, SalesRfqCreateDrawerComponent, SalesRfqCompareDrawerComponent]
+  selector: 'app-presales-list',
+  templateUrl: './presales-list.component.html',
+  styleUrls: ['./presales-list.component.css'],
+  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe, NgIcon, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTimelineComponent, ApprovalJourneyComponent, ViewEstimationComponent, EstimationFormDrawerComponent, ActionButtonComponent, RfqChaseComponent, SalesRfqCreateDrawerComponent, SalesRfqCompareDrawerComponent, FollowUpPanelComponent]
 })
-export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestroy {
+export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<any>;
 
   rows: any[] = [];
@@ -63,6 +67,8 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   rowActions: DataGridRowAction<any>[] = [];
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
+    { id: 'followups', label: 'Follow-ups', icon: 'clock' },
+    { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'feedback', label: 'Feedback', icon: 'chat' },
     { id: 'supplierRfqs', label: "RFQ's", icon: 'scale' },
     { id: 'progress', label: 'Progress', icon: 'account_tree' },
@@ -73,13 +79,17 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   views: DataGridView[] = [];
   detailLoading = false;
 
-  readonly tabs: { id: PresaleTab; label: string; countKey: keyof PresaleTabCounts | 'all'; serverFilter: string }[] = [
+  readonly tabs: { id: PresaleTab; label: string; countKey: keyof PresaleTabCounts | 'all' | 'none'; serverFilter: string; followUp?: string }[] = [
     { id: 'all', label: 'All Jobs', countKey: 'all', serverFilter: 'all' },
     { id: 'new', label: 'New Jobs', countKey: 'new', serverFilter: 'new' },
     { id: 'assigned', label: 'Assigned Jobs', countKey: 'assignedTab', serverFilter: 'assignedTab' },
     { id: 'completed', label: 'Completed Jobs', countKey: 'completedTab', serverFilter: 'completedTab' },
     { id: 'resolve', label: 'To Resolve', countKey: 'resolve', serverFilter: 'resolve' },
     { id: 'cancelled', label: 'Cancelled Jobs', countKey: 'cancelledTab', serverFilter: 'cancelledTab' },
+    // Estimations being chased, across every open tab; the server leaves out finished jobs.
+    { id: 'fu-overdue', label: 'Overdue', countKey: 'fuOverdue', serverFilter: 'all', followUp: 'overdue' },
+    { id: 'fu-today', label: 'Today', countKey: 'fuToday', serverFilter: 'all', followUp: 'today' },
+    { id: 'fu-upcoming', label: 'Upcoming', countKey: 'fuUpcoming', serverFilter: 'all', followUp: 'upcoming' },
   ];
   activeTab: PresaleTab = 'assigned';
   tabCounts: Partial<PresaleTabCounts> = {};
@@ -161,6 +171,11 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
         this.activeTab = 'all';
         this.getJobsData();
       }
+      // A deep link to a tab this role doesn't get falls back to its default.
+      if (!this.visibleTabs.some((t) => t.id === this.activeTab)) {
+        this.activeTab = this.canAssign ? 'all' : 'assigned';
+        this.getJobsData();
+      }
       this.buildColumns();
       this.buildRowActions();
       this.refreshViews();
@@ -182,11 +197,16 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   private hasTabParam = false;
 
   get visibleTabs() {
-    // The New pool belongs to the people who assign it; employees work from their Assigned tab.
-    return this.tabs.filter((t) => t.id !== 'new' || this.canAssign);
+    // Assigners run the pipeline (New, Resolve, Completed); assignees work their own queue and chase follow-ups.
+    const assignerTabs: PresaleTab[] = ['all', 'new', 'assigned', 'resolve', 'completed', 'cancelled'];
+    const assigneeTabs: PresaleTab[] = ['all', 'assigned', 'cancelled', 'fu-overdue', 'fu-today', 'fu-upcoming'];
+    if (this.isSuperAdmin) return this.tabs;
+    const allowed = this.canAssign ? assignerTabs : assigneeTabs;
+    return this.tabs.filter((t) => allowed.includes(t.id));
   }
 
-  countFor(key: keyof PresaleTabCounts | 'all'): number | undefined {
+  countFor(key: keyof PresaleTabCounts | 'all' | 'none'): number | undefined {
+    if (key === 'none') return undefined;
     if (key === 'all') {
       const { new: n, assignedTab, completedTab, resolve, cancelledTab } = this.tabCounts;
       if (n === undefined && assignedTab === undefined && completedTab === undefined && resolve === undefined && cancelledTab === undefined) return undefined;
@@ -228,8 +248,9 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       { key: 'description', sortable: true, label: 'Description', valueGetter: (r) => r.title },
       { key: 'assignedBy', sortable: true, label: 'Sent By', valueGetter: (r) => `${r.salesPerson?.[0]?.firstName ?? ''} ${r.salesPerson?.[0]?.lastName ?? ''}`.trim() },
       { key: 'assignedTo', label: 'Assigned To', locked: true, visible: this.viewAssignedFor && this.activeTab !== 'new', valueGetter: (r) => this.assigneeName(r) },
+      { key: 'nextFollowUp', sortable: true, label: 'Follow-up', type: 'date', width: '140px', valueGetter: (r) => r.preSale?.followUp?.nextFollowUpDate ?? null, cellClass: (r) => followUpCellClass(r.preSale?.followUp?.nextFollowUpDate, this.isFollowUpClosed(r)) },
       { key: 'department', sortable: true, label: 'Depart.', valueGetter: (r) => r.department?.[0]?.departmentName },
-      { key: 'status', sortable: true, label: 'Status', type: 'badge', locked: true, visible: this.viewAssignedFor || this.activeTab === 'all' || this.activeTab === 'resolve', valueGetter: (r) => this.displayStatus(r), badgeClasses: this.statusBadgeClasses, badgeLabel: (v) => this.statusLabel(v) },
+      { key: 'status', sortable: true, label: 'Status', type: 'badge', locked: true, visible: this.viewAssignedFor || this.isMixedTab, valueGetter: (r) => this.displayStatus(r), badgeClasses: this.statusBadgeClasses, badgeLabel: (v) => this.statusLabel(v) },
     ];
   }
 
@@ -320,9 +341,14 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     'lost': 'bg-gray-100 text-gray-700 ring-gray-300',
   };
 
+  /** Tabs that mix jobs of every stage, where an action's eligibility must follow the row's own status. */
+  private get isMixedTab(): boolean {
+    return this.activeTab === 'all' || this.activeTab === 'resolve' || this.activeTab.startsWith('fu-');
+  }
+
   /** In the mixed "All Jobs" tab, an action's eligibility must follow the row's own status, not the tab id. */
   private rowStage(r: any): PresaleTab {
-    if (this.activeTab !== 'all' && this.activeTab !== 'resolve') return this.activeTab;
+    if (!this.isMixedTab) return this.activeTab;
     const s: string = r?.status ?? '';
     const ps: string | undefined = r?.preSale?.status;
     if (ps === 'cancelled') return 'cancelled';
@@ -344,6 +370,14 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     const stageIn = (r: any, ...tabs: PresaleTab[]) => !tabs.includes(this.rowStage(r));
     this.rowActions = [
       {
+        id: 'followUp', label: 'Follow-ups', icon: 'clock',
+        hidden: (r) => this.isFollowUpClosed(r) || this.rowStage(r) === 'new',
+      },
+      {
+        id: 'addEvent', label: 'Add Event', icon: 'calendar',
+        hidden: (r) => this.rowStage(r) === 'new',
+      },
+      {
         id: 'assign', label: 'Assign', icon: 'user', quick: true,
         hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign,
       },
@@ -361,7 +395,8 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       },
       {
         id: 'rejectNew', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true,
-        hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign || !this.canReject,
+        // A job held at a workflow step already has the super admin "Reject Job" above; don't show a second one.
+        hidden: (r) => this.rowStage(r) !== 'new' || !this.canAssign || !this.canReject || (this.isSuperAdmin && this.isHeldAtStep(r)),
       },
       {
         id: 'reassign', label: 'Reassign', icon: 'user', quick: true,
@@ -396,13 +431,15 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
         id: 'send', label: 'Send to Enquiry', icon: 'send', quick: true,
         hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate,
       },
+      // One entry for both cases (no RFQ yet / RFQ raised): the tab shows existing RFQs and the Create button.
+      // Hover button only until the estimation is uploaded; after that it stays in the actions menu.
       {
-        id: 'createRfq', label: 'Create RFQ', icon: 'scale', quick: true,
-        hidden: (r) => !this.canRequestPrices(r),
+        id: 'rfq', label: "Supplier RFQ's", icon: 'scale', quick: true,
+        hidden: (r) => !!r.preSale?.estimations || !this.hasRfqAccess(r),
       },
       {
-        id: 'viewRfqs', label: "View Supplier RFQ's", icon: 'scale', quick: true,
-        hidden: (r) => !this.rfqFor(r) || this.canRequestPrices(r),
+        id: 'rfqMenu', label: "Supplier RFQ's", icon: 'scale',
+        hidden: (r) => !r.preSale?.estimations || !this.hasRfqAccess(r),
       },
     ];
   }
@@ -410,6 +447,10 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   onRowAction(event: DataGridRowActionEvent<any>): void {
     const { action, row } = event;
     switch (action.id) {
+      case 'followUp': this.openFollowUps(row); break;
+      case 'addEvent':
+        if (this.grid) { this.grid.activeTab = 'events'; this.grid.openRow(row); }
+        break;
       case 'assign': this.onAssignClicks(row._id, 'assign'); break;
       case 'reassign': this.onAssignClicks(row._id, 'reassign'); break;
       case 'restartWorkflow': this.onRestartWorkflow(row); break;
@@ -424,8 +465,8 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
       case 'viewEstimation': this.onViewEstimation(row.preSale?.estimations, row._id, row.preSale?.estimationHistory, row); break;
       case 'reject': this.onRejectJob(row); break;
       case 'send': this.onSendClicked(row); break;
-      case 'createRfq': this.openRfqTab(row); break;
-      case 'viewRfqs': this.openRfqTab(row); break;
+      case 'rfq':
+      case 'rfqMenu': this.openRfqTab(row); break;
     }
   }
 
@@ -446,7 +487,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     if (this.userId) {
       this.isLoading = true;
       this.subscriptions.add(
-        this._enquiryService.getPresale(this.page, this.row, this.serverFilter, access, this.userId, this.searchQuery, this.sort).subscribe({
+        this._enquiryService.getPresale(this.page, this.row, this.serverFilter, access, this.userId, this.searchQuery, this.sort, this.tabs.find((t) => t.id === this.activeTab)?.followUp).subscribe({
           next: (data) => {
             this.rows = data.enquiry;
             this.total = data.total;
@@ -460,6 +501,87 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
         })
       );
     }
+  }
+
+  // --- follow-ups: chasing the estimation, same flow as enquiries --------------------------------------------------
+
+  /** An estimation that is done, cancelled or back with sales is no longer chased. */
+  isFollowUpClosed(r: any): boolean {
+    return ['approved', 'completed', 'cancelled', 'returned'].includes(String(r?.preSale?.status)) || ['quoted', 'lost'].includes(String(r?.status || '').toLowerCase());
+  }
+
+  private readonly followUpViewFor = followUpViewer();
+
+  followUpView(row: any): FollowUpViewModel {
+    return this.followUpViewFor(row, row.preSale?.followUp, this.isFollowUpClosed(row));
+  }
+
+  openFollowUps(row: any): void {
+    if (!this.grid) return;
+    this.grid.activeTab = 'followups';
+    this.grid.openRow(row);
+  }
+
+  onScheduleFollowUp(row: any): void {
+    const open = this.followUpView(row).open;
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: { context: row.enquiryId || row._id, mode: 'schedule', dueDate: open?.dueIso || null },
+    }).afterClosed().subscribe((result) => {
+      if (result?.mode === 'schedule') this.saveFollowUp(row, this._enquiryService.schedulePresaleFollowUp(row._id, { dueDate: result.dueDate, note: result.note }), 'Follow-up scheduled');
+    });
+  }
+
+  onLogFollowUp(row: any): void {
+    const open = this.followUpView(row).open;
+    this.modal.open<FollowUpModalResult>(FollowUpCreateModalComponent, {
+      width: '520px',
+      data: { context: row.enquiryId || row._id, mode: 'complete', plannedFor: open?.due || null },
+    }).afterClosed().subscribe((result) => {
+      if (result?.mode === 'complete') {
+        this.saveFollowUp(row, this._enquiryService.completePresaleFollowUp(row._id, {
+          date: result.date, outcome: result.outcome, note: result.note, nextFollowUpDate: result.nextFollowUpDate,
+        }), 'Follow-up logged');
+      }
+    });
+  }
+
+  async onCancelFollowUp(row: any): Promise<void> {
+    const open = this.followUpView(row).open;
+    if (!open) return;
+    const { confirmed, reason } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Cancel Follow-up',
+      message: 'Close this follow-up without logging an outcome?',
+      details: [{ label: 'Planned for', value: open.due }],
+      reason: 'optional',
+      confirmLabel: 'Cancel follow-up',
+      cancelLabel: 'Keep',
+    });
+    if (!confirmed) return;
+    this.saveFollowUp(row, this._enquiryService.cancelPresaleFollowUp(row._id, reason), 'Follow-up cancelled');
+  }
+
+  private followUpSaving = false;
+
+  private saveFollowUp(row: any, request: Observable<{ success: boolean; followUp: any }>, successMessage: string): void {
+    if (this.followUpSaving) return;
+    this.followUpSaving = true;
+    request.subscribe({
+      next: (response) => {
+        row.preSale = { ...row.preSale, followUp: response.followUp };
+        this.followUpSaving = false;
+        this.toast.success(successMessage);
+        this.loadTabCounts();
+        // The Overdue / Today / Upcoming tabs depend on the new date, so reload them.
+        if (this.activeTab.startsWith('fu-')) this.getJobsData();
+        else this.rows = [...this.rows];
+      },
+      error: (err) => {
+        this.followUpSaving = false;
+        this.toast.error(err?.error?.message || 'Failed to save follow-up');
+      },
+    });
   }
 
   private get serverFilter(): string {
@@ -796,7 +918,7 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   /** Drops the cached RFQ list so the next render re-reads it after a new one is created. */
-  private refreshRfqList(row?: any): void {
+  refreshRfqList(row?: any): void {
     if (row) this.rfqListCache.delete(row._id);
     else this.rfqListCache.clear();
   }
@@ -839,6 +961,11 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
     const rfq = this.rfqFor(row);
     if (!rfq || rfq.status === 'Cancelled') return true;
     return (rfq.requestedLines || []).every((l) => !!l.lineStatus && l.lineStatus !== 'Pending');
+  }
+
+  /** Can raise RFQs on this job, or there are already RFQs to look at. */
+  hasRfqAccess(row: any): boolean {
+    return this.canRequestPrices(row) || !!this.rfqFor(row);
   }
 
   canRequestPrices(row: any): boolean {
@@ -1075,15 +1202,17 @@ export class AssignedJobsListComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   async onReturnJob(row: any): Promise<void> {
-    const { confirmed } = await this.confirm.open({
+    const { confirmed, reason } = await this.confirm.open({
       tone: 'approve',
       title: 'Return to enquiry?',
       message: 'The job goes back to the salesperson with the rejection reason. They can resend it or mark the enquiry lost.',
+      reason: 'optional',
+      reasonLabel: 'Note for the salesperson',
       confirmLabel: 'Return',
       cancelLabel: 'Cancel',
     });
     if (!confirmed) return;
-    this._enquiryService.returnJob(row._id).subscribe({
+    this._enquiryService.returnJob(row._id, reason?.trim() || undefined).subscribe({
       next: (res) => {
         this.toast.success(res.message);
         this.getJobsData();

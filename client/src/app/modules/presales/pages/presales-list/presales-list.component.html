@@ -28,7 +28,7 @@
         (rowAction)="onRowAction($event)"
         (queryChange)="onQueryChange($event)">
 
-        <app-view-toggle dgToolbarExtra label="Presale" active="list" listLink="/assigned-jobs" reportLink="/assigned-jobs/report"></app-view-toggle>
+        <app-view-toggle dgToolbarExtra label="Presale" active="list" listLink="/presales" reportLink="/presales/report"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
             <span *ngIf="displayStatus(row); else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
@@ -56,6 +56,22 @@
             <ng-container [ngSwitch]="tab">
                 <ng-container *ngSwitchCase="'overview'">
                     <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+                </ng-container>
+
+                <app-follow-up-panel *ngSwitchCase="'followups'" subject="presale job" [view]="followUpView(row)" [closed]="isFollowUpClosed(row)" (cancel)="onCancelFollowUp(row)"></app-follow-up-panel>
+
+                <ng-container *ngSwitchCase="'events'">
+                    <app-detail-task-list
+                        [items]="eventItems((eventsFor(row) | async) ?? [])"
+                        defaultFilter="event"
+                        [showTasks]="false"
+                        [showEvents]="true"
+                        (add)="onAddEvent(row)"
+                        (toggle)="onToggleEvent(row, $event)"
+                        (eventOutcome)="onEventOutcome(row, $event.item, $event.status)"
+                        (remove)="onDeleteEvent(row, $event)"
+                        (previewFile)="onPreviewEventFile($event.file)"
+                        (deleteFile)="onDeleteEventFile(row, $event.item, $event.file)"></app-detail-task-list>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'feedback'">
@@ -115,6 +131,7 @@
                             <span>Expected: <span class="font-medium" [ngClass]="rfqOverdue(rfq) ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'">{{ rfq.deadline ? (rfq.deadline | date: 'dd MMM yyyy') : '—' }}</span>
                                 <ng-container *ngIf="rfqOverdue(rfq)"> · overdue</ng-container></span>
                         </div>
+                        <app-rfq-chase [rfq]="rfq" [allowed]="canRequestPrices(row)" (changed)="refreshRfqList(row)"></app-rfq-chase>
                     </div>
                     <div *ngIf="!(rfqListFor(row) | async)?.length"
                         class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-erp-border-dark">
@@ -144,6 +161,17 @@
 
         <!-- left: optional, per-tab (outline) -->
         <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
+            <ng-container *ngIf="tab === 'followups' && !isFollowUpClosed(row)">
+                <ng-container *ngIf="followUpView(row).open; else scheduleOnly">
+                    <app-action-button variant="outline" (click)="onScheduleFollowUp(row)">Reschedule</app-action-button>
+                    <app-action-button variant="outline" (click)="onLogFollowUp(row)">Mark done</app-action-button>
+                </ng-container>
+                <ng-template #scheduleOnly>
+                    <app-action-button variant="outline" (click)="onLogFollowUp(row)">Log a follow-up</app-action-button>
+                    <app-action-button variant="outline" icon="plus" (click)="onScheduleFollowUp(row)">Schedule follow-up</app-action-button>
+                </ng-template>
+            </ng-container>
+            <app-action-button *ngIf="tab === 'events'" variant="outline" icon="plus" (click)="onAddEvent(row)">Add event</app-action-button>
             <app-action-button *ngIf="tab === 'feedback' && pendingFeedbackForMe(row)" variant="outline" (click)="onGiveFeedback(row, true)">Send feedback</app-action-button>
             <app-action-button *ngIf="tab === 'feedback' && replyTarget(row)" variant="outline" (click)="onReplyFeedback(row)">Reply to feedback</app-action-button>
             <app-action-button *ngIf="tab === 'feedback' && canAskFeedback(row)" variant="outline" (click)="onFeedback(row)">Ask for feedback</app-action-button>
