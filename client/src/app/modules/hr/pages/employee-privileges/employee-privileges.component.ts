@@ -75,6 +75,7 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
   { key: 'purchase', label: 'Purchase', flags: [
     { path: 'purchase.create', label: 'Create purchases' },
     { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' },
+    { path: 'purchase.canAssign', label: 'Assign purchase' },
   ]},
   { key: 'purchaseOrder', label: 'Purchase Orders', flags: [
     { path: 'purchaseOrder.canInitiateLPO', label: 'Initiate LPO and issue PO' },
@@ -303,7 +304,7 @@ export class EmployeePrivilegesComponent implements OnInit {
   canCreate = false;
   saving = new Set<string>();
 
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Settings' }, { label: 'Roles & Privileges' }, { label: 'User Specific' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Administration' }, { label: 'HR' }, { label: 'Roles & Privileges' }, { label: 'User Specific' }];
   views: DataGridView<EmployeeRow>[] = [];
   columns: DataGridColumn<EmployeeRow>[] = [
     { key: 'name', label: 'Employee', sortable: true, locked: true },

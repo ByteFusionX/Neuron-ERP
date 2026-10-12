@@ -24,7 +24,7 @@ export class RolesPrivilegesComponent implements OnInit, OnDestroy {
   formCategory: GetCategory | null = null;
   isCategoryLoading: boolean = true;
   roles: GetCategory[] = [];
-  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Settings' }, { label: 'Roles & Privileges' }];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Administration' }, { label: 'HR' }, { label: 'Roles & Privileges' }];
   views: DataGridView<GetCategory>[] = [];
 
   columns: DataGridColumn<GetCategory>[] = [

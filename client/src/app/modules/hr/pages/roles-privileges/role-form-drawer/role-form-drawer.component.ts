@@ -214,7 +214,7 @@ export class RoleFormDrawerComponent implements OnChanges {
     {
       key: 'purchase', label: 'Purchase', abbr: 'PR', description: 'Purchase requisitions', master: 'purchaseChecked', group: 'purchase',
       scopes: [scope('purchase.viewReport')],
-      flags: [{ path: 'purchase.create', label: 'Create purchases' }, { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' }],
+      flags: [{ path: 'purchase.create', label: 'Create purchases' }, { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' }, { path: 'purchase.canAssign', label: 'Assign purchase' }],
     },
     {
       key: 'purchaseOrder', label: 'Purchase Orders', abbr: 'PO', description: 'LPOs and purchase orders', master: 'purchaseOrderChecked', group: 'purchaseOrder',
@@ -444,6 +444,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         viewReport: 'none',
         create: [false],
         canApprovePR: [false],
+        canAssign: [false],
       }),
       purchaseOrder: this._fb.group({
         viewReport: 'none',
@@ -812,9 +813,9 @@ export class RoleFormDrawerComponent implements OnChanges {
       }
     } else if (formControlName === 'purchase') {
       if (checked) {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canApprovePR: false } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canApprovePR: false, canAssign: false } } });
       } else {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false, canAssign: false } } });
       }
     } else if (formControlName === 'grn') {
       if (checked) {
