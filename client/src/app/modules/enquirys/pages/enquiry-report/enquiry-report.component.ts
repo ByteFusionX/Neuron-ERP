@@ -635,7 +635,7 @@ export class EnquiryReportComponent implements OnInit, OnDestroy {
         columns: [
           { header: 'List', key: 'list', width: 16 },
           { header: 'Enquiry No.', key: 'enquiryId', width: 26 },
-          { header: 'Description', key: 'title', width: 36 },
+          { header: 'Enquiry Title', key: 'title', width: 36 },
           { header: 'Customer', key: 'customer', width: 30 },
           { header: 'Sales Person', key: 'salesPerson', width: 24 },
           { header: 'Presale', key: 'presale', width: 24 },

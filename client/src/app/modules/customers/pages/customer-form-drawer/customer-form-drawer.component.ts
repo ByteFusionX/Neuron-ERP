@@ -1,12 +1,12 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
-import { NgFor, NgIf } from '@angular/common';
+import { NgClass, NgFor, NgIf } from '@angular/common';
 import { FormArray, FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { HttpEventType } from '@angular/common/http';
 import { ToastrService } from 'ngx-toastr';
 import { saveAs } from 'file-saver';
-import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
-import { CustomerService } from 'src/app/core/services/customer/customer.service';
+import { Subscription, debounceTime, distinctUntilChanged, of, switchMap, catchError } from 'rxjs';
+import { CustomerService, PartyMatch } from 'src/app/core/services/customer/customer.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { MasterListName, MasterListService } from 'src/app/core/services/master-list.service';
 import { ModalService } from 'src/app/shared/components/modal/modal.service';
@@ -35,7 +35,7 @@ import { departmentPrivileges } from 'src/app/shared/utils/privilege-fallback';
   selector: 'app-customer-form-drawer',
   standalone: true,
   templateUrl: './customer-form-drawer.component.html',
-  imports: [NgIf, NgFor, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DetailDocumentsComponent,
+  imports: [NgIf, NgFor, NgClass, ReactiveFormsModule, FormsModule, SmartFormModule, ActionButtonComponent, DetailDocumentsComponent,
     CustomerAddressFieldsComponent, CustomerContactRepeaterComponent, CustomerFormStepperComponent],
 })
 export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
@@ -55,6 +55,10 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   ];
   saving = false;
   companyExists = false;
+  /** Customers that already use this name, TRN, email or phone; refreshed as the user types. */
+  duplicateMatches: PartyMatch[] = [];
+  private confirmDuplicates = false;
+  get hasBlock(): boolean { return this.duplicateMatches.some((m) => m.level === 'block'); }
   duplicateField: 'email' | 'phone' | 'trn' | null = null;
   canCreateDepartment = false;
   canCreateCustomerType = false;
@@ -71,6 +75,10 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   readonly titleOptions: SfOption[] = [
     { label: 'Mr', value: 'Mr' },
     { label: 'Ms', value: 'Ms' },
+    { label: 'Mrs', value: 'Mrs' },
+    { label: 'Dr', value: 'Dr' },
+    { label: 'Eng', value: 'Eng' },
+    { label: 'Prof', value: 'Prof' },
   ];
   paymentTermsOptions: SfOption[] = [];
   creditStatusOptions: SfOption[] = [];
@@ -109,7 +117,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     currency: [null as string | null],
     source: [null as string | null],
     shippingSites: this.fb.array([] as FormGroup[]),
-    contactDetails: this.fb.array([this.newContact()]),
+    contactDetails: this.fb.array([this.newContact(true)]),
   });
 
   get contactDetails(): FormArray<FormGroup> {
@@ -159,7 +167,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     });
   }
 
-  private newContact(): FormGroup {
+  private newContact(primary = false): FormGroup {
     return this.fb.group({
       _id: [null as string | null],
       courtesyTitle: ['', Validators.required],
@@ -169,7 +177,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       phoneNo: ['', Validators.required],
       department: [null as string | null, Validators.required],
       designation: [''],
-      isPrimary: [false],
+      isPrimary: [primary],
     }) as unknown as FormGroup;
   }
 
@@ -221,13 +229,25 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     if (this.companyNameWatched) return;
     this.companyNameWatched = true;
     this.subscriptions.add(
-      this.customerForm.controls.companyName.valueChanges.pipe(debounceTime(400), distinctUntilChanged()).subscribe((name) => {
-        this.companyExists = false;
-        const trimmed = (name ?? '').trim();
-        if (!trimmed) return;
-        this.customerService.checkCompanyExists(trimmed, this.isEdit ? this.customer?._id : undefined).subscribe((res) => {
-          this.companyExists = !!res.companyExist;
-        });
+      this.customerForm.valueChanges.pipe(
+        debounceTime(400),
+        switchMap(() => {
+          const v = this.customerForm.getRawValue();
+          const probe = {
+            companyName: (v.companyName ?? '').trim(),
+            email: (v.customerEmailId ?? '').trim(),
+            phone: String(v.contactNo ?? '').trim(),
+            trn: (v.trn ?? '').trim(),
+          };
+          if (!probe.companyName && !probe.email && !probe.phone && !probe.trn) return of({ matches: [] as PartyMatch[] });
+          return this.customerService.checkDuplicate(probe, this.isEdit ? this.customer?._id : undefined)
+            .pipe(catchError(() => of({ matches: [] as PartyMatch[] })));
+        }),
+        distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      ).subscribe((r) => {
+        this.duplicateMatches = r.matches;
+        this.companyExists = r.matches.some((m) => m.level === 'block' && m.field === 'name');
+        this.confirmDuplicates = false;
       })
     );
   }
@@ -512,11 +532,19 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       return;
     }
 
+    const hard = this.duplicateMatches.find((m) => m.level === 'block');
+    if (hard) {
+      this.step = 1;
+      this.toaster.error(`${hard.reason}. Use the existing customer instead.`, 'Duplicate');
+      return;
+    }
+
     this.saving = true;
     this.companyExists = false;
     this.duplicateField = null;
     this.syncPrimaryDepartment();
     const payload: any = this.customerForm.getRawValue();
+    if (this.confirmDuplicates) payload.confirmDuplicates = true;
     payload.department = payload.departments?.[0] ?? null;
     payload.contactDetails = payload.contactDetails.map((c: any, i: number) => {
       const { _id, ...rest } = c;
@@ -534,8 +562,23 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       request$ = this.customerService.createCustomer(payload);
     }
     request$.subscribe({
-      next: (res: any) => {
+      next: async (res: any) => {
         this.saving = false;
+        if (res.matches) this.duplicateMatches = res.matches;
+        if (res.duplicateWarning) {
+          this.step = 1;
+          const { confirmed } = await this.confirm.open({
+            tone: 'warning',
+            title: 'Similar customer found',
+            message: `${(res.matches as PartyMatch[]).map((m) => m.reason).join('. ')}. Save this as a new customer anyway?`,
+            confirmLabel: 'Save anyway',
+          });
+          if (confirmed) {
+            this.confirmDuplicates = true;
+            this.submit();
+          }
+          return;
+        }
         if (res.companyExist) {
           this.companyExists = true;
           this.step = 1;

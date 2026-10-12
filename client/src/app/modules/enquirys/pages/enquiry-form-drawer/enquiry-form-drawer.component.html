@@ -1,10 +1,10 @@
-<app-sf-drawer title="Create Enquiry" [subtitle]="steps[step - 1].label" width="720px"
+<app-sf-drawer [title]="isEdit ? 'Edit Enquiry' : 'Create Enquiry'" [subtitle]="isEdit ? (enquiry?.enquiryId ?? '') : steps[step - 1].label" width="720px"
     [open]="open" [dirty]="enquiryForm.dirty" (closed)="onDrawerClosed($event)">
 
-    <span sfDrawerHeader *ngIf="draftRef.savedAt" class="text-xs text-gray-400 dark:text-gray-500">Draft saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
+    <span sfDrawerHeader *ngIf="draftRef.savedAt && !isEdit" class="text-xs text-gray-400 dark:text-gray-500">Draft saved {{ draftRef.savedAt | date: 'HH:mm' }}</span>
 
     <!-- Stepper -->
-    <ol class="mb-5 flex items-center gap-2">
+    <ol *ngIf="!isEdit" class="mb-5 flex items-center gap-2">
         <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
             <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
                 [ngClass]="s.n === step ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
@@ -23,9 +23,9 @@
     </ol>
 
     <form id="enquiry-form" [formGroup]="enquiryForm" sfDraft="enquiry-list-create" #draftRef="sfDraft"
-        [sfDraftExclude]="['attachments']" (ngSubmit)="submit()" novalidate>
+        [sfDraftExclude]="['attachments']" [sfDraftDisabled]="isEdit" (ngSubmit)="submit()" novalidate>
 
-        <div *ngIf="draftRef.pending" class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 text-[13px] text-violet-900 dark:text-violet-200">
+        <div *ngIf="draftRef.pending && !isEdit" class="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 text-[13px] text-violet-900 dark:text-violet-200">
             <span>You have an unsaved draft from {{ draftRef.pending.savedAt | date: 'dd MMM, HH:mm' }}.</span>
             <span class="flex gap-3">
                 <button type="button" class="font-medium hover:underline" (click)="draftRef.restore()">Restore</button>
@@ -39,7 +39,7 @@
                 <app-sf-field label="Client" [control]="enquiryForm.controls.client">
                     <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
                 </app-sf-field>
-                <app-sf-field label="Point of Contact" hint="Select client first" [control]="enquiryForm.controls.contact">
+                <app-sf-field label="Point of Contact" [hint]="enquiryForm.controls.client.value ? '' : 'Select client first'" [control]="enquiryForm.controls.contact">
                     <app-sf-combobox formControlName="contact" [options]="contactOptions" emptyText="Select a client first" placeholder="Select contact"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Department" [control]="enquiryForm.controls.department">
@@ -60,15 +60,21 @@
                 <app-sf-field label="Source" hint="Optional" [control]="enquiryForm.controls.source">
                     <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="Select source"></app-sf-select>
                 </app-sf-field>
-                <app-sf-field label="Create on behalf of" hint="Optional — the enquiry is owned by this person instead of you" [control]="enquiryForm.controls.accountingManager">
+                <app-sf-field *ngIf="!isEdit" label="Create on behalf of" hint="Optional — the enquiry is owned by this person instead of you" [control]="enquiryForm.controls.accountingManager">
                     <app-sf-combobox formControlName="accountingManager" clearable [options]="accountingManagerOptions"
                         placeholder="Myself"></app-sf-combobox>
                 </app-sf-field>
-                <app-sf-field label="Enquiry Date" [control]="enquiryForm.controls.date">
-                    <app-sf-date formControlName="date" [min]="earliestEnquiryDate" [max]="today" displayFormat="dd/MM/yy"></app-sf-date>
+                <app-sf-field *ngIf="!isEdit" label="Enquiry Date" [control]="enquiryForm.controls.date">
+                    <app-sf-date formControlName="date" [min]="earliestEnquiryDate" [max]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
                 </app-sf-field>
-                <app-sf-field label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
-                    <app-sf-date formControlName="nextFollowUpDate" [min]="today" displayFormat="dd/MM/yy"></app-sf-date>
+                <app-sf-field *ngIf="!isEdit" label="Next Follow-up Date" [control]="enquiryForm.controls.nextFollowUpDate">
+                    <app-sf-date formControlName="nextFollowUpDate" [min]="today" typeable displayFormat="dd/MM/yyyy"></app-sf-date>
+                </app-sf-field>
+            </app-sf-section>
+
+            <app-sf-section *ngIf="isEdit" title="Notes">
+                <app-sf-field full label="Requirement" hint="Optional" [control]="enquiryForm.controls.requirement">
+                    <app-sf-textarea formControlName="requirement" [rows]="6" placeholder="Requirement, scope or important notes"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
         </ng-container>
@@ -76,7 +82,7 @@
         <!-- Step 2 — requirement / notes & files ------------------------------------------- -->
         <ng-container *ngIf="step === 2">
             <app-sf-section title="Notes">
-                <app-sf-field full label="Requirement" [control]="enquiryForm.controls.requirement">
+                <app-sf-field full label="Requirement" hint="Optional" [control]="enquiryForm.controls.requirement">
                     <app-sf-textarea formControlName="requirement" [rows]="6" placeholder="Requirement, scope or important notes"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
@@ -91,13 +97,16 @@
 
     <ng-container sfDrawerFooter>
         <!-- Leaves for the customer form; the draft is saved first so this form comes back filled in. -->
-        <app-action-button *ngIf="step === 1" class="mr-auto" variant="tool" [disabled]="saving" (click)="createCustomer()">+ Create Customer</app-action-button>
+        <app-action-button *ngIf="step === 1 && !isEdit" class="mr-auto" variant="tool" [disabled]="saving" (click)="createCustomer()">+ Create Customer</app-action-button>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2" variant="secondary" (click)="previousStep()">Back</app-action-button>
 
-        <app-action-button *ngIf="step === 1" variant="primary" (click)="nextStep()">Next: {{ steps[1].label }}</app-action-button>
-        <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
+        <app-action-button *ngIf="step === 1 && !isEdit" variant="primary" (click)="nextStep()">Next: {{ steps[1].label }}</app-action-button>
+        <app-action-button *ngIf="isEdit" variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
+            {{ saving ? 'Saving…' : 'Save changes' }}
+        </app-action-button>
+        <app-action-button *ngIf="step === 2 && !isEdit" variant="primary" type="submit" form="enquiry-form" [disabled]="saving">
             {{ saving ? 'Creating…' : 'Create Enquiry' }}
         </app-action-button>
     </ng-container>

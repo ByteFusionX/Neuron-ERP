@@ -1,3 +1,5 @@
+import { ModalService } from 'src/app/shared/components/modal';
+import { PartyDuplicatesReportComponent } from 'src/app/shared/components/party-duplicates-report/party-duplicates-report.component';
 import { canAccessBanking } from '../../supplier-banking-access';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { DatePipe, DecimalPipe, NgClass, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
@@ -65,9 +67,7 @@ export class SupplierListComponent implements OnInit, OnDestroy {
   rowActions: DataGridRowAction<Supplier>[] = [];
   views: DataGridView<Supplier>[] = [
     { id: 'all', label: 'All' },
-    { id: 'pending', label: 'Pending', filters: [{ id: 1, key: 'status', op: 'eq', value: SupplierStatus.PENDING }] },
-    { id: 'approved', label: 'Approved', filters: [{ id: 1, key: 'status', op: 'eq', value: SupplierStatus.APPROVED }] },
-    { id: 'rejected', label: 'Rejected', filters: [{ id: 1, key: 'status', op: 'eq', value: SupplierStatus.REJECTED }] },
+    { id: 'blocked', label: 'Blocked', filters: [{ id: 1, key: 'status', op: 'eq', value: 'Blocked' }] },
   ];
   breadcrumbs: DataGridBreadcrumb[] = buildBreadcrumbs('/suppliers').map((c, i, all) => ({ label: c.label, link: i === all.length - 1 ? undefined : c.route }));
 
@@ -92,11 +92,12 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     [SupplierStatus.APPROVED]: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
     [SupplierStatus.PENDING]: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
     [SupplierStatus.REJECTED]: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
-  };
-
-  readonly blockedBadgeClasses: Record<string, string> = {
     Blocked: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
   };
+
+  /** Approval is switched off for now, so the Status shown is Approved unless the supplier is blocked. */
+  displayStatus = (r: Supplier): string => (r.isBlocked ? 'Blocked' : r.status === SupplierStatus.REJECTED || r.status === SupplierStatus.PENDING ? SupplierStatus.APPROVED : r.status);
+
 
   supplierTitle = (r: Supplier) => r.supplierId ?? '';
   supplierSubtitle = (r: Supplier) => r.supplierName ?? '';
@@ -116,6 +117,12 @@ export class SupplierListComponent implements OnInit, OnDestroy {
   toDate: string | null = null;
 
   private confirm = inject(ConfirmDialogService);
+  private modal = inject(ModalService);
+
+  openDuplicatesReport(): void {
+    this.modal.open<any, string>(PartyDuplicatesReportComponent, { width: '720px', data: 'supplier' });
+  }
+
   private fileService = inject(FileService);
   private subscriptions = new Subscription();
 
@@ -178,26 +185,17 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       { key: 'location', label: 'Location', valueGetter: (r) => r.address?.location },
       { key: 'creditDays', label: 'Credit Days', type: 'number', align: 'right' },
       { key: 'creditValue', label: 'Credit Limit', type: 'number', align: 'right', valueGetter: (r) => this.numberFormat.transform(r.creditValue) },
-      { key: 'status', label: 'Status', type: 'badge', badgeClasses: this.statusBadgeClasses },
-      { key: 'blocked', label: 'Blocked', type: 'badge', badgeClasses: this.blockedBadgeClasses, valueGetter: (r) => (r.isBlocked ? 'Blocked' : '') },
+      {
+        key: 'status', label: 'Status', type: 'badge', badgeClasses: this.statusBadgeClasses, valueGetter: this.displayStatus,
+        editorOptions: [SupplierStatus.APPROVED, 'Blocked'].map((s) => ({ label: s, value: s })),
+      },
       { key: 'createdDate', label: 'Created Date', type: 'date', sortable: true },
     ];
   }
 
   private buildRowActions(): void {
     this.rowActions = [
-      {
-        id: 'approve', label: 'Approve', icon: 'check', quick: true,
-        hidden: (r) => r.status !== SupplierStatus.PENDING || !this.canApproveSupplier,
-      },
-      {
-        id: 'reject', label: 'Reject', icon: 'close', quick: true,
-        hidden: (r) => r.status !== SupplierStatus.PENDING || !this.canApproveSupplier,
-      },
-      {
-        id: 'edit', label: 'Edit', icon: 'pencil', quick: true,
-        hidden: (r) => !this.canEdit(r),
-      },
+      { id: 'edit', label: 'Edit', icon: 'pencil', quick: true },
       {
         id: 'block', label: 'Block Supplier', icon: 'close',
         hidden: (r) => r.status !== SupplierStatus.APPROVED || !!r.isBlocked,
@@ -209,16 +207,9 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     ];
   }
 
-  /** Pending suppliers can be corrected before review; editing a rejected one sends it back for approval. */
-  canEdit(r: Supplier): boolean {
-    return r.status === SupplierStatus.PENDING || r.status === SupplierStatus.REJECTED;
-  }
-
   onRowAction(event: DataGridRowActionEvent<Supplier>): void {
     const { action, row } = event;
     switch (action.id) {
-      case 'approve': this.approveSupplier(row); break;
-      case 'reject': this.rejectSupplier(row); break;
       case 'edit': this.openEditDrawer(row); break;
       case 'block': this.toggleBlock(row); break;
       case 'unblock': this.toggleBlock(row); break;
@@ -263,16 +254,20 @@ export class SupplierListComponent implements OnInit, OnDestroy {
 
   async toggleBlock(row: Supplier): Promise<void> {
     const willBlock = !row.isBlocked;
-    const { confirmed } = await this.confirm.open({
+    const { confirmed, reason } = await this.confirm.open({
       tone: 'warning',
       title: willBlock ? 'Block Supplier' : 'Unblock Supplier',
+      reason: willBlock ? true : 'optional',
+      reasonLabel: willBlock ? 'Reason for blocking' : 'Note',
       message: willBlock
         ? 'Blocking prevents any new purchase orders from being created for this supplier; existing orders are unaffected.'
         : 'This will allow new purchase orders to be created for this supplier again.',
     });
     if (!confirmed || !row._id) return;
-    this._supplierService.blockSupplier(row._id).subscribe({
-      next: (res) => { row.isBlocked = res.isBlocked; this.grid.notify(willBlock ? 'Supplier blocked' : 'Supplier unblocked'); },
+    this._supplierService.blockSupplier(row._id, reason).subscribe({
+      next: (res) => {
+        row.isBlocked = res.isBlocked;
+        row.blockHistory = [...(row.blockHistory || []), { date: new Date(), blocked: res.isBlocked, reason: reason || '', byName: '' }]; this.grid.notify(willBlock ? 'Supplier blocked' : 'Supplier unblocked'); },
       error: (error) => this.toaster.error(error?.error?.message || 'Failed to update supplier block status'),
     });
   }
@@ -411,13 +406,12 @@ export class SupplierListComponent implements OnInit, OnDestroy {
         columns: '2',
         fields: [
           { type: 'field', label: 'Supplier Id', value: row.supplierId, numeric: true },
-          { type: 'field', label: 'Status', value: row.status, pill: true, tone: this.statusTone(row.status) },
+          { type: 'field', label: 'Status', value: this.displayStatus(row), pill: true, tone: row.isBlocked ? 'bad' : 'good' },
           { type: 'field', label: 'Category', value: row.category?.departmentName },
           { type: 'field', label: 'Supplier Type', value: row.supplierType },
           { type: 'field', label: 'Credit Days', value: row.creditDays, numeric: true },
           { type: 'field', label: 'Credit Limit', value: this.numberFormat.transform(row.creditValue), numeric: true },
           { type: 'field', label: 'Created Date', value: this.datePipe.transform(row.createdDate as any, 'dd MMM yyyy') },
-          { type: 'field', label: 'Blocked', value: row.isBlocked ? 'Yes' : 'No', visible: row.status === SupplierStatus.APPROVED },
         ],
       },
       {
@@ -513,7 +507,14 @@ export class SupplierListComponent implements OnInit, OnDestroy {
       reason: h.reason,
       tone: 'bad' as const,
     }));
-    return [...approved, ...rejected]
+    const blocks = (row.blockHistory || []).map((h) => ({
+      date: h.date,
+      text: h.blocked ? 'Blocked' : 'Unblocked',
+      by: h.byName || '',
+      reason: h.reason,
+      tone: (h.blocked ? 'bad' : 'good') as 'bad' | 'good',
+    }));
+    return [...approved, ...rejected, ...blocks]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .map((h) => ({
         text: `${h.text}${h.by ? ` by ${h.by}` : ''}`,

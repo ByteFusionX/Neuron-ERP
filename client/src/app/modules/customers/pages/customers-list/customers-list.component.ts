@@ -22,6 +22,7 @@ import { FormatStringPipe } from 'src/app/shared/pipes/formatString.pipe';
 import { NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { FormControl, FormsModule } from '@angular/forms';
 import { ModalService } from 'src/app/shared/components/modal';
+import { PartyDuplicatesReportComponent } from 'src/app/shared/components/party-duplicates-report/party-duplicates-report.component';
 import { DocumentUploadModalComponent, DocumentUploadModalResult } from 'src/app/shared/components/detail-panel/document-upload-modal/document-upload-modal.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { DetailAvatarComponent } from 'src/app/shared/components/detail-panel/detail-avatar.component';
@@ -83,6 +84,11 @@ export class CustomersListComponent implements OnInit, OnDestroy {
 
   private formatString = new FormatStringPipe();
   private modal = inject(ModalService);
+
+  openDuplicatesReport(): void {
+    this.modal.open<any, string>(PartyDuplicatesReportComponent, { width: '720px', data: 'customer' });
+  }
+
   private confirm = inject(ConfirmDialogService);
   private subscriptions = new Subscription();
 
@@ -110,6 +116,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         this.getAllCustomers();
         // Other modules hand over here with ?create=1 to start a new customer; the flag is consumed once.
         if (params['create'] && this.createCustomer) {
+          this.returnTo = params['returnTo'] || null;
           this.onCreateCustomer();
           this.updateUrlParams();
         }
@@ -279,6 +286,7 @@ export class CustomersListComponent implements OnInit, OnDestroy {
         employee: this.selectedEmployee,
         search: this.searchQuery ? this.searchQuery : null,
         create: null,
+        returnTo: null,
       },
       queryParamsHandling: 'merge',
       replaceUrl: true,
@@ -409,7 +417,15 @@ export class CustomersListComponent implements OnInit, OnDestroy {
     this.formOpen = true;
   }
 
+  /** Module that sent the user here to create a customer; they go back there once it is saved. */
+  private returnTo: string | null = null;
+
   onFormSaved(): void {
+    if (this.returnTo === 'enquiry' && this.formMode === 'create') {
+      this.returnTo = null;
+      this._router.navigate(['/enquiry'], { queryParams: { create: 1 } });
+      return;
+    }
     this.details.clear();
     this.getAllCustomers(() => {
       const open = this.grid?.activeRow;

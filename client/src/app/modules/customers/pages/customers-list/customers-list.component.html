@@ -31,6 +31,10 @@
         (bulkAction)="onBulkAction($event, grid)"
         (create)="onCreateCustomer()">
 
+        <div dgToolbarExtra class="flex items-center gap-2">
+            <button type="button" (click)="openDuplicatesReport()" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200">Duplicates</button>
+        </div>
+
         <ng-template #detailAsideTemplate let-row>
             <app-status-pill [status]="row.status" [toneMap]="statusToneMap"></app-status-pill>
         </ng-template>

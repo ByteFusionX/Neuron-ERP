@@ -15,6 +15,11 @@
             <app-sf-field label="Supplier Name" [control]="supplierForm.controls.supplierName">
                 <app-sf-input formControlName="supplierName" placeholder="Supplier name"></app-sf-input>
             </app-sf-field>
+            <div *ngIf="duplicateMatches.length" class="col-span-2 rounded-md border px-3 py-2 text-sm" role="alert"
+                [ngClass]="hasBlock ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
+                <p class="font-medium">{{ hasBlock ? 'This supplier already exists' : 'Similar suppliers found' }}</p>
+                <p *ngFor="let m of duplicateMatches">{{ m.reason }}</p>
+            </div>
             <app-sf-field label="Category" [control]="supplierForm.controls.category">
                 <app-sf-select formControlName="category" [options]="categoryOptions" placeholder="Select category"></app-sf-select>
             </app-sf-field>

@@ -62,7 +62,8 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
 
   employeeForm = this.fb.group({
     firstName: ['', Validators.required],
-    lastName: ['', Validators.required],
+    // At least one word: refs like ENQ-NT/<initials>/... are built from the first and last name.
+    lastName: ['', [Validators.required, Validators.pattern(/\S/)]],
     email: ['', [Validators.required, Validators.email]],
     contactNo: ['', Validators.required],
     dob: ['', Validators.required],
@@ -350,7 +351,7 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
 
     const payload: any = {
       firstName: v.firstName,
-      lastName: v.lastName,
+      lastName: (v.lastName ?? '').trim(),
       email: v.email,
       contactNo: v.contactNo,
       dob: v.dob,

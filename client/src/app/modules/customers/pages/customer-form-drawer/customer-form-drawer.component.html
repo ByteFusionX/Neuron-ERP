@@ -13,6 +13,11 @@
                 <app-sf-input formControlName="companyName" placeholder="Company name"></app-sf-input>
                 <p *ngIf="companyExists" class="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">Company already exists</p>
             </app-sf-field>
+            <div *ngIf="duplicateMatches.length" class="col-span-2 rounded-md border px-3 py-2 text-sm" role="alert"
+                [ngClass]="hasBlock ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
+                <p class="font-medium">{{ hasBlock ? 'This customer already exists' : 'Similar customers found' }}</p>
+                <p *ngFor="let m of duplicateMatches">{{ m.reason }}</p>
+            </div>
             <app-sf-field label="Billing Address" [control]="customerForm.controls.companyAddress">
                 <app-sf-input formControlName="companyAddress" placeholder="Billing address"></app-sf-input>
             </app-sf-field>

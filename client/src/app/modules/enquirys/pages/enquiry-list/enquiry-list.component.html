@@ -21,6 +21,9 @@
     emptyMessage="No enquiries found"
     [createLabel]="createEnquiry ? 'Create Enquiry' : ''"
     [rowActions]="rowActions"
+    [rowSelectable]="canSelectEnquiryRow"
+    [bulkActions]="bulkActions"
+    (bulkAction)="onBulkAction($event, grid)"
     [views]="views"
     storageKey="enquiry-list"
     exportable
@@ -168,8 +171,9 @@
               <span>Expected: <span class="font-medium" [ngClass]="rfqOverdue(rfq) ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'">{{ rfq.deadline ? (rfq.deadline | date: 'dd MMM yyyy') : '—' }}</span>
                 <ng-container *ngIf="rfqOverdue(rfq)"> · overdue</ng-container></span>
             </div>
+            <app-rfq-chase [rfq]="rfq" [allowed]="!isPresaleLocked(row)" (changed)="refreshRfqList(row)"></app-rfq-chase>
           </div>
-          <div *ngIf="!(rfqListFor(row) | async)?.length"
+          <div *ngIf="!(rfqListFor(row) | async)?.length && rfqLoaded.has(row._id)"
             class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-erp-border-dark">
             <app-dp-icon name="scale" size="w-6 h-6" class="text-gray-400"></app-dp-icon>
             <p class="text-[13px] text-gray-500 dark:text-gray-400">No supplier RFQs raised for this enquiry yet.</p>
@@ -198,7 +202,7 @@
     </ng-template>
   </app-data-grid>
 
-  <app-enquiry-form-drawer class="contents" [open]="formOpen" (saved)="onEnquiryCreated($event)" (closed)="onFormClosed()"></app-enquiry-form-drawer>
+  <app-enquiry-form-drawer class="contents" [open]="formOpen" [enquiry]="editTarget" (saved)="onEnquiryCreated($event)" (updated)="onEnquiryUpdated()" (closed)="onFormClosed()"></app-enquiry-form-drawer>
 
   <app-enquiry-estimation-view class="contents" [open]="!!estimationTarget" [enquiry]="estimationTarget?.enquiry" [readOnly]="!!estimationTarget && isReturnedFromPresales(estimationTarget.enquiry)" (seen)="onEstimationSeen()" (revised)="onEstimationRevised()" (closed)="estimationTarget = null"></app-enquiry-estimation-view>
 

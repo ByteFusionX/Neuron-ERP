@@ -1,10 +1,11 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
-import { NgFor, NgIf } from '@angular/common';
+import { NgClass, NgFor, NgIf } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
-import { Subscription } from 'rxjs';
+import { Subscription, debounceTime, distinctUntilChanged, of, switchMap, catchError } from 'rxjs';
 
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { PartyMatch } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { getDepartment } from 'src/app/shared/interfaces/department.interface';
@@ -26,7 +27,7 @@ import { SupplierFormStepperComponent } from '../../components/form-stepper/form
   selector: 'app-supplier-form-drawer',
   standalone: true,
   templateUrl: './supplier-form-drawer.component.html',
-  imports: [NgIf, NgFor, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, SupplierFormStepperComponent],
+  imports: [NgIf, NgFor, NgClass, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, SupplierFormStepperComponent],
 })
 export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -77,6 +78,34 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
   private optionsLoaded = false;
+  private duplicateWatched = false;
+  /** Suppliers that already use this name, IBAN, email or phone; refreshed as the user types. */
+  duplicateMatches: PartyMatch[] = [];
+  get hasBlock(): boolean { return this.duplicateMatches.some((m) => m.level === 'block'); }
+
+  /** Checks the name, contact and IBAN against the server as the user types, instead of waiting for submit. */
+  private watchDuplicates(): void {
+    if (this.duplicateWatched) return;
+    this.duplicateWatched = true;
+    this.subscriptions.add(
+      this.supplierForm.valueChanges.pipe(
+        debounceTime(400),
+        switchMap(() => {
+          const v = this.supplierForm.getRawValue();
+          const probe = {
+            supplierName: (v.supplierName ?? '').trim(),
+            email: (v.contactDetails?.email ?? '').trim(),
+            phone: (v.contactDetails?.phoneNumber ?? '').trim(),
+            iban: (v.bankDetails?.iban ?? '').trim(),
+          };
+          if (!probe.supplierName && !probe.email && !probe.phone && !probe.iban) return of({ matches: [] as PartyMatch[] });
+          return this.supplierService.checkDuplicate(probe, this.isEdit ? this.supplier?._id : undefined)
+            .pipe(catchError(() => of({ matches: [] as PartyMatch[] })));
+        }),
+        distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      ).subscribe((r) => (this.duplicateMatches = r.matches))
+    );
+  }
 
   supplierForm = this.fb.group({
     supplierId: [{ value: 'NT-SP-', disabled: true }],
@@ -173,6 +202,8 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     if (!this.open || !(opened || changes['supplier'])) return;
 
     this.ensureOptions();
+    this.watchDuplicates();
+    this.duplicateMatches = [];
     if (this.isEdit) {
       if (this.supplier) this.seedFromSupplier(this.supplier);
     } else {
@@ -264,6 +295,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
 
   private resetForm(): void {
     this.step = 1;
+    this.duplicateMatches = [];
     this.existingDocuments = [];
     this.newDocuments = [];
     this.newBankDocuments = [];
@@ -301,7 +333,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     ) as T;
   }
 
-  private buildPayload(): any {
+  private buildPayload(confirmDuplicates = false): any {
     const v = this.supplierForm.getRawValue();
     const employeeId = this.employeeService.employeeToken()?.id;
     return {
@@ -315,10 +347,11 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
       creditDays: v.creditDays,
       creditValue: v.creditValue,
       ...(this.isEdit ? {} : { createdBy: employeeId }),
+      ...(confirmDuplicates ? { confirmDuplicates: true } : {}),
     };
   }
 
-  async submit(): Promise<void> {
+  async submit(confirmDuplicates = false): Promise<void> {
     if (this.supplierForm.invalid) {
       this.supplierForm.markAllAsTouched();
       this.step = 1;
@@ -326,15 +359,25 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
       return;
     }
 
-    const { confirmed } = await this.confirm.open({
-      tone: 'note',
-      title: this.isEdit ? 'Save changes' : 'Create supplier',
-      confirmLabel: this.isEdit ? 'Save' : 'Create',
-      message: this.isEdit
-        ? `Save changes to "${this.supplierForm.value.supplierName?.trim()}"?${this.supplier?.status === 'Rejected' ? ' It will be sent back for approval.' : ''}`
-        : `Create supplier "${this.supplierForm.value.supplierName?.trim()}"? It will need approval before it can be used.`,
-    });
-    if (!confirmed) return;
+    const hard = this.duplicateMatches.find((m) => m.level === 'block');
+    if (hard) {
+      this.step = 1;
+      this.toaster.error(`${hard.reason}. Use the existing supplier instead.`);
+      return;
+    }
+
+    // Creating is already confirmed by pressing Create; only edits ask first.
+    if (!confirmDuplicates && this.isEdit) {
+      const { confirmed } = await this.confirm.open({
+        tone: 'note',
+        title: this.isEdit ? 'Save changes' : 'Create supplier',
+        confirmLabel: this.isEdit ? 'Save' : 'Create',
+        message: this.isEdit
+          ? `Save changes to "${this.supplierForm.value.supplierName?.trim()}"?`
+          : `Create supplier "${this.supplierForm.value.supplierName?.trim()}"?`,
+      });
+      if (!confirmed) return;
+    }
 
     this.saving = true;
     // Bank documents have no dedicated backend field, so they ride along in the same
@@ -346,19 +389,34 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     });
 
     if (this.isEdit && this.supplier?._id) {
-      this.supplierService.updateSupplierWithFiles(this.supplier._id, this.buildPayload(), files).subscribe({
+      this.supplierService.updateSupplierWithFiles(this.supplier._id, this.buildPayload(confirmDuplicates), files).subscribe({
         next: () => { this.saving = false; this.finish(); this.toaster.success('Supplier updated successfully'); },
-        error: (error) => { this.saving = false; this.toaster.error(error?.error?.message || 'Failed to update supplier'); },
+        error: (error) => { this.saving = false; void this.onSaveError(error, 'Failed to update supplier'); },
       });
     } else {
-      this.supplierService.createSupplierWithFiles(this.buildPayload(), files).subscribe({
+      this.supplierService.createSupplierWithFiles(this.buildPayload(confirmDuplicates), files).subscribe({
         next: (res) => { this.saving = false; this.finish(res?.data); this.toaster.success('Supplier created successfully'); },
-        error: (error) => {
-          this.saving = false;
-          this.toaster.error(error?.error?.message === 'Supplier already exists' ? 'Supplier already exists' : 'Failed to create supplier');
-        },
+        error: (error) => { this.saving = false; void this.onSaveError(error, 'Failed to create supplier'); },
       });
     }
+  }
+
+  /** A duplicate warning asks the user whether to save anyway; every other error is shown as a toast. */
+  private async onSaveError(error: any, fallback: string): Promise<void> {
+    const body = error?.error;
+    if (body?.matches) this.duplicateMatches = body.matches;
+    if (!body?.duplicateWarning) {
+      this.toaster.error(body?.message || fallback);
+      return;
+    }
+    this.step = 1;
+    const { confirmed } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Similar supplier found',
+      message: `${(body.matches as PartyMatch[]).map((m) => m.reason).join('. ')}. Save this as a separate supplier anyway?`,
+      confirmLabel: 'Save anyway',
+    });
+    if (confirmed) void this.submit(true);
   }
 
   private finish(saved?: any): void {

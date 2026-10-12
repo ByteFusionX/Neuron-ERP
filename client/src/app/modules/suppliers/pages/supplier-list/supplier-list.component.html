@@ -10,7 +10,7 @@
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Suppliers"
-        subtitle="Manage supplier records, approvals and banking details"
+        subtitle="Manage supplier records and banking details"
         [breadcrumbs]="breadcrumbs"
         rowKey="_id"
         [serverSide]="true"
@@ -37,11 +37,15 @@
         (rowAction)="onRowAction($event)"
         (create)="onCreateSupplier()">
 
+        <div dgToolbarExtra class="flex items-center gap-2">
+            <button type="button" (click)="openDuplicatesReport()" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200">Duplicates</button>
+        </div>
+
         <app-view-toggle dgToolbarExtra label="Supplier" active="list" listLink="/suppliers" reportLink="/suppliers/report" [reportQueryParams]="reportQueryParams"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
             <span *ngIf="row.status; else asideStatusEmpty" class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset"
-                [ngClass]="statusBadgeClasses[row.status] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ row.status }}</span>
+                [ngClass]="statusBadgeClasses[displayStatus(row)] || 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700'">{{ displayStatus(row) }}</span>
             <ng-template #asideStatusEmpty><span class="text-gray-400 dark:text-gray-600">—</span></ng-template>
         </ng-template>
 
@@ -66,9 +70,7 @@
 
         <!-- left: optional, per-tab (outline) -->
         <ng-template #detailFooterLeftTemplate let-row let-tab="tab">
-            <app-action-button *ngIf="row.status === 'Pending' && canApproveSupplier" variant="primary" (click)="approveSupplier(row)">Approve</app-action-button>
-            <app-action-button *ngIf="row.status === 'Pending' && canApproveSupplier" variant="outline" (click)="rejectSupplier(row)">Reject</app-action-button>
-            <app-action-button *ngIf="tab === 'detail' && canEdit(row)" variant="outline" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
+            <app-action-button *ngIf="tab === 'detail'"variant="outline" (click)="openEditDrawer(row)" icon="edit">Edit</app-action-button>
         </ng-template>
 
         <ng-template #detailTemplate let-row let-tab="tab">

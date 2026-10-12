@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import { GetCategory } from 'src/app/shared/interfaces/employee.interface';
-import { RoleFormDrawerComponent } from 'src/app/modules/settings/pages/roles-privileges/role-form-drawer/role-form-drawer.component';
+import { RoleFormDrawerComponent } from 'src/app/modules/hr/pages/roles-privileges/role-form-drawer/role-form-drawer.component';
 
 /**
  * Standalone route that hosts the role drawer, opened in its own window from the employee forms.
@@ -21,12 +21,12 @@ export class CreateCategoryComponent {
       window.opener.postMessage({ type: 'categoryCreated', data: category }, '*');
       window.close();
     } else {
-      this.router.navigate(['/settings/roles-privileges']);
+      this.router.navigate(['/hr/roles-privileges']);
     }
   }
 
   onClosed(): void {
     if (window.opener) window.close();
-    else this.router.navigate(['/settings/roles-privileges']);
+    else this.router.navigate(['/hr/roles-privileges']);
   }
 }

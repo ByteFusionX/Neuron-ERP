@@ -9,11 +9,11 @@ import {
   ReactiveFormsModule,
 } from '@angular/forms';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { BehaviorSubject, Observable, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription, forkJoin, of, switchMap } from 'rxjs';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
-import { SALES_RFQ_BADGE_CLASSES, SalesRfq, SalesRfqSummary, salesRfqStatusLabel } from 'src/app/shared/interfaces/sales-rfq.interface';
+import { SALES_RFQ_BADGE_CLASSES, SALES_RFQ_DECLINE_REASONS, SalesRfq, SalesRfqSummary, SalesRfqSupplier, salesRfqStatusLabel } from 'src/app/shared/interfaces/sales-rfq.interface';
 import { SalesRfqCreateDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-create-drawer/sales-rfq-create-drawer.component';
 import { SalesRfqCompareDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-compare-drawer/sales-rfq-compare-drawer.component';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
@@ -45,6 +45,8 @@ import {
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
   DataGridBreadcrumb,
+  DataGridBulkAction,
+  DataGridBulkActionEvent,
   DataGridColumn,
   DataGridDetailTab,
   DataGridQuery,
@@ -60,6 +62,7 @@ import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/
 import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-journey/approval-journey.component';
 import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
 import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+import { RfqChaseComponent } from 'src/app/shared/components/rfq-chase/rfq-chase.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ENQUIRY_STATUS_TONES, STATUS_TONE_CLASSES } from 'src/app/shared/components/status-indicator/status-tone';
 import { StatusPillComponent } from 'src/app/shared/components/status-indicator/status-pill.component';
@@ -124,6 +127,7 @@ const PRESALE_AUDIT_ACTIONS = new Set([
     ApprovalJourneyComponent,
     DetailPanelIconComponent,
     ActionButtonComponent,
+    RfqChaseComponent,
     EnquiryFormDrawerComponent,
     EnquiryEstimationViewComponent,
     SalesRfqCreateDrawerComponent,
@@ -329,6 +333,11 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Read URL parameters and initialize filters
     this._route.queryParams.subscribe((params) => {
+      // Coming back from creating a customer: reopen Create Enquiry (its draft is offered for restore).
+      if (params['create']) {
+        this.formOpen = true;
+        this._router.navigate([], { relativeTo: this._route, queryParams: { create: null }, queryParamsHandling: 'merge', replaceUrl: true });
+      }
       this.page = params['page'] ? parseInt(params['page']) : 1;
       this.row = params['row'] ? parseInt(params["row"]) : 15;
       this.fromDate = params['fromDate'] || null;
@@ -409,7 +418,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       { key: 'enquiryId', label: 'Enquiry No.', sortable: true, locked: true },
       { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.client?.companyName },
       { key: 'contactPerson', label: 'Contacted By', valueGetter: (row) => row.contact ? `${row.contact.firstName ?? ''} ${row.contact.lastName ?? ''}`.trim() : '—' },
-      { key: 'description', label: 'Description', sortable: true, valueGetter: (row) => row.title },
+      { key: 'description', label: 'Enquiry Title', sortable: true, valueGetter: (row) => row.title },
       { key: 'priority', label: 'Priority', sortable: true, editorOptions: this.priorityOptions, valueGetter: (row) => row.priority || '—' },
       { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (row) => this.salesPersonName(row) },
       { key: 'department', label: 'Department', sortable: true, valueGetter: (row) => row.department?.departmentName },
@@ -422,6 +431,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private buildRowActions(): void {
     const actions: (DataGridRowAction<getEnquiry> & { hidden: (row: getEnquiry) => boolean })[] = [
+      { id: 'edit', label: 'Edit', icon: 'edit', hidden: (row) => !this.isCreator(row) || !['new', 'in progress', 'work in progress'].includes(String(row.status || '').toLowerCase()) },
       { id: 'followUp', label: 'Follow-ups', icon: 'chat', hidden: (row) => ['Quoted', 'Lost', 'quoted', 'lost'].includes(row.status) || !this.isCreator(row) },
       { id: 'estimations', label: 'View Estimations', icon: 'eye', quick: true, hidden: (row) => !this.canViewEstimations(row) },
       { id: 'presaleHistory', label: 'Presale Progress', icon: 'clock', hidden: (row) => (!row.preSale?.presalePerson && row.status !== 'Sent to Presales') || !!row.preSale?.estimations },
@@ -489,6 +499,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     const index = this.dataSource.data.indexOf(row);
     const click = new Event('click');
     switch (action.id) {
+      case 'edit': this.editTarget = row; this.formOpen = true; break;
       case 'followUp': this.openFollowUps(row); break;
       case 'estimations': this.onViewPresale(click, index, row); break;
       case 'presaleHistory': this.openPresaleProgress(row); break;
@@ -546,14 +557,16 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   async onCompareQuotationPrepared(seed: any): Promise<void> {
     const row = this.compareEnquiry;
     if (!row) return;
-    if (!this.canConvertToQuote(row)) {
-      this.toaster.warning('Customer, contact and requirement summary are required before quotation.');
+    // Awarding moves a new enquiry to in progress on the server, but this row still holds the old status,
+    // so only the details are checked here; the server checks the status.
+    if (!row.client || !row.contact || !row.title?.trim()) {
+      this.toaster.warning(this.convertBlockedReason(row));
       return;
     }
     const { confirmed } = await this.confirm.open({
       tone: 'approve',
       title: 'Prepare quotation?',
-      message: `Enquiry ${row.enquiryId} will be marked Quoted and a quotation will open with the awarded supplier costs from ${seed?.rfqNo || 'its RFQs'}.`,
+      message: `Enquiry ${row.enquiryId} will be marked Quoted once the quotation is created, and a quotation will open with the awarded supplier costs from ${seed?.rfqNo || 'its RFQs'}.`,
       consequence: 'Once the quotation is saved, every supplier RFQ of this enquiry is closed and the awards are final.',
       confirmLabel: 'Prepare',
       cancelLabel: 'Cancel',
@@ -567,7 +580,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         this._enquiryService.emitToQuote({ ...row, rfqSeed: seed } as any);
         this.router.navigate(['/quotations']);
       },
-      error: () => this.toaster.error('Failed to convert enquiry to quote'),
+      error: (err) => this.toaster.error(err?.error?.message || 'Failed to convert enquiry to quote'),
     });
   }
 
@@ -613,15 +626,21 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** After the confirm, the enquiry is Quoted and the rest of the process lives on the quotation. */
+  /** Says which of the two checks failed, instead of blaming the details when it is the status. */
+  convertBlockedReason(row: getEnquiry): string {
+    if (!row.client || !row.contact || !row.title?.trim()) return 'Customer, contact and requirement summary are required before quotation.';
+    return `This enquiry is "${this.statusLabel(row.status)}" — only in-progress or estimated enquiries can be converted to a quotation.`;
+  }
+
   async convertToQuote(row: getEnquiry): Promise<void> {
     if (!this.canConvertToQuote(row)) {
-      this.toaster.warning('Customer, contact and requirement summary are required before quotation.');
+      this.toaster.warning(this.convertBlockedReason(row));
       return;
     }
     const { confirmed } = await this.confirm.open({
       tone: 'approve',
       title: 'Convert to quote?',
-      message: `Enquiry ${row.enquiryId} will be marked Quoted and a quotation will open with its details prefilled.`,
+      message: `Enquiry ${row.enquiryId} will be marked Quoted once the quotation is created, and a quotation will open with its details prefilled.`,
       consequence: 'Everything after this happens on the quotation. Its outcome, even if lost, does not change the enquiry.',
       confirmLabel: 'Convert',
       cancelLabel: 'Cancel',
@@ -637,6 +656,37 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         this.router.navigate(['/quotations']);
       },
       error: () => this.toaster.error('Failed to convert enquiry to quote'),
+    });
+  }
+
+  /** Only a Lost enquiry can be deleted (and only by an admin), so those are the only rows that get a checkbox. */
+  readonly canSelectEnquiryRow = (row: getEnquiry): boolean => this.isAdmin && this.isLost(row);
+  readonly bulkActions: DataGridBulkAction[] = [{ id: 'delete', label: 'Delete', variant: 'danger' }];
+
+  async onBulkAction({ action, rows }: DataGridBulkActionEvent<getEnquiry>, grid: DataGridComponent<getEnquiry>): Promise<void> {
+    if (action.id !== 'delete') return;
+    const deletable = rows.filter((r) => this.canSelectEnquiryRow(r));
+    if (!deletable.length) return;
+    const count = `${deletable.length} enquir${deletable.length === 1 ? 'y' : 'ies'}`;
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: `Delete ${count}?`,
+      message: 'The selected enquiries will be moved to the recycle bin.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+    forkJoin(deletable.map((r) => this._enquiryService.deleteEnquiry({ dataId: r._id, employeeId: this.currentEmployeeId as string }))).subscribe({
+      next: () => {
+        grid.clearSelection();
+        this.toaster.success(`${count} deleted`);
+        this.getEnquiries();
+      },
+      error: () => {
+        grid.clearSelection();
+        this.toaster.error('Failed to delete one or more enquiries');
+        this.getEnquiries();
+      },
     });
   }
 
@@ -1011,7 +1061,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       {
         title: 'Enquiry', fields: [
-          { type: 'field', label: 'Description', value: row.title, noHover: true },
+          { type: 'field', label: 'Enquiry Title', value: row.title, noHover: true },
           { type: 'field', label: 'Requirement / Notes', value: row.requirement || '—', noHover: true },
           { type: 'field', label: 'Follow-up Outcome', value: row.followUpOutcome || '—', noHover: true },
           { type: 'field', label: 'Lost Reason', value: row.lostReason || '—', noHover: true },
@@ -1119,9 +1169,12 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
     return subject.asObservable();
   }
 
+  /** Enquiries whose RFQ list has arrived, so the empty state is not shown while it is still loading. */
+  rfqLoaded = new Set<string>();
+
   private fetchRfqList(enquiryId: string, subject: BehaviorSubject<SalesRfq[]>): void {
     this.salesRfqService.list({ enquiryId, row: 50 }).subscribe({
-      next: (res) => subject.next(res?.rfqs?.data || []),
+      next: (res) => { this.rfqLoaded.add(enquiryId); subject.next(res?.rfqs?.data || []); },
       error: () => this.rfqListCache.delete(enquiryId),
     });
   }
@@ -1161,7 +1214,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Re-reads the cached RFQ lists after one is created or changed. The old list stays on screen until the new one
    * arrives, so the tab never flashes "No supplier RFQs raised" while it reloads. */
-  private refreshRfqList(row?: getEnquiry): void {
+  refreshRfqList(row?: getEnquiry): void {
     if (row) {
       const subject = this.rfqListCache.get(row._id);
       if (subject) this.fetchRfqList(row._id, subject);
@@ -1488,6 +1541,17 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   onFormClosed(): void {
     this.formOpen = false;
+    this.editTarget = null;
+  }
+
+  /** The enquiry open in the form drawer for editing; null when the drawer creates a new one. */
+  editTarget: getEnquiry | null = null;
+
+  onEnquiryUpdated(): void {
+    this.formOpen = false;
+    this.editTarget = null;
+    this.toaster.success('Enquiry updated');
+    this.getEnquiries();
   }
 
   onEnquiryCreated(result: getEnquiry): void {

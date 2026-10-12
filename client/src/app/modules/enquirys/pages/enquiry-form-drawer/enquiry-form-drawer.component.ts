@@ -9,6 +9,7 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
+import { getEnquiry } from 'src/app/shared/interfaces/enquiry.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { SfDraftDirective, SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
@@ -17,6 +18,7 @@ import { dateRangeValidator, isoDateFromToday, notBlankValidator, notPastDateVal
 
 /**
  * Create-enquiry slide-over. The host binds `open` and reacts to `saved` / `closed`.
+ * Passing `enquiry` switches it to edit mode: the customer, department and dates stay as raised, the rest can change.
  * New enquiries are captured first. Quotation is started from the enquiry list after review.
  */
 @Component({
@@ -27,8 +29,12 @@ import { dateRangeValidator, isoDateFromToday, notBlankValidator, notPastDateVal
 })
 export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
+  /** The enquiry being edited; leave null to create one. */
+  @Input() enquiry: getEnquiry | null = null;
   /** Fires with the created enquiry. */
   @Output() saved = new EventEmitter<any>();
+  /** Fires after an edit is saved. */
+  @Output() updated = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
   @ViewChild(SfDraftDirective) draft?: SfDraftDirective;
@@ -50,6 +56,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   customerOptions: SfOption[] = [];
   contactOptions: SfOption[] = [];
   departmentOptions: SfOption[] = [];
+  /** Every active department; the visible list narrows to the chosen customer's own departments. */
+  private allDepartmentOptions: SfOption[] = [];
   accountingManagerOptions: SfOption[] = [];
   private readonly defaultSources = ['Referral', 'Website', 'Walk-in', 'Cold Call', 'Exhibition', 'Existing Customer', 'Other'];
   private readonly defaultCategories = ['Product', 'Project', 'Both', 'Supply only', 'Installation'];
@@ -86,7 +94,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     requirement: [''],
     followUpOutcome: [''],
     date: [this.todayIso(), [Validators.required, dateRangeValidator(isoDateFromToday(-this.maxBackdateDays), isoDateFromToday(0))]],
-    nextFollowUpDate: [this.todayIso(), [Validators.required, notPastDateValidator]],
+    nextFollowUpDate: [this.tomorrowIso(), [Validators.required, notPastDateValidator]],
     attachments: [[] as File[]],
   });
 
@@ -105,7 +113,37 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     if (changes['open'] && this.open) {
       this.ensureOptions();
       this.step = 1;
+      if (this.enquiry) this.loadForEdit(this.enquiry);
     }
+  }
+
+  get isEdit(): boolean {
+    return !!this.enquiry;
+  }
+
+  /** Fields that fix the enquiry's identity (number, customer, department, dates) are shown but locked. */
+  private readonly lockedOnEdit = ['client', 'department', 'date', 'nextFollowUpDate'] as const;
+
+  private loadForEdit(e: getEnquiry): void {
+    const id = (x: any): string | null => (x && typeof x === 'object' ? x._id : x) ?? null;
+    this.lockedOnEdit.forEach((name) => this.enquiryForm.get(name)!.disable({ emitEvent: false }));
+    this.salesPersonName = `${e.salesPerson?.firstName ?? ''} ${e.salesPerson?.lastName ?? ''}`.trim();
+    if (!this.customerOptions.length && e.client) this.customerOptions = [{ label: e.client.companyName, value: e.client._id }];
+    if (!this.departmentOptions.length && e.department) this.departmentOptions = [{ label: e.department.departmentName, value: e.department._id }];
+    this.contactOptions = (e.client?.contactDetails || []).map((c: ContactDetail) => ({ label: `${c.firstName} ${c.lastName}`, value: c._id }));
+    this.enquiryForm.patchValue({
+      client: id(e.client),
+      contact: id(e.contact),
+      department: id(e.department),
+      title: e.title,
+      source: e.source ?? null,
+      enquiryCategory: e.enquiryCategory ?? null,
+      priority: e.priority || 'Normal',
+      requirement: e.requirement || '',
+      date: String(e.date || '').slice(0, 10),
+      nextFollowUpDate: String(e.nextFollowUpDate || '').slice(0, 10),
+    }, { emitEvent: false });
+    this.enquiryForm.markAsPristine();
   }
 
   // --- stepping ----------------------------------------------------------------
@@ -168,7 +206,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     );
     this.subscriptions.add(
       this.profileService.getDepartments(true).subscribe((departments) => {
-        this.departmentOptions = departments.map((d) => ({ label: d.departmentName, value: d._id }));
+        this.allDepartmentOptions = departments.map((d) => ({ label: d.departmentName, value: d._id }));
+        this.narrowDepartments(this.enquiryForm.controls.client.value);
       })
     );
     this.subscriptions.add(
@@ -184,7 +223,24 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   private onClientChange(clientId: string | null): void {
     this.enquiryForm.controls.contact.reset(null);
     this.contactOptions = [];
+    this.narrowDepartments(null);
     if (clientId && this.optionsLoaded) this.loadContacts(clientId);
+  }
+
+  /** A customer is served by specific departments; offer only those (all of them if none is recorded). */
+  private narrowDepartments(clientId: string | null, customer?: getCustomer): void {
+    if (this.isEdit) { this.departmentOptions = this.allDepartmentOptions; return; }
+    const ids = new Set(
+      [...(customer?.departments ?? []), customer?.department]
+        .map((d: any) => (d && typeof d === 'object' ? d._id : d))
+        .filter(Boolean),
+    );
+    this.departmentOptions = ids.size && clientId
+      ? this.allDepartmentOptions.filter((o) => ids.has(o.value as string))
+      : this.allDepartmentOptions;
+    const current = this.enquiryForm.controls.department.value;
+    if (current && !this.departmentOptions.some((o) => o.value === current)) this.enquiryForm.controls.department.reset(null);
+    else if (!current && this.departmentOptions.length === 1 && clientId) this.enquiryForm.controls.department.setValue(this.departmentOptions[0].value as string);
   }
 
   private loadContacts(clientId: string): void {
@@ -195,6 +251,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
           label: `${c.firstName} ${c.lastName}`,
           value: c._id,
         }));
+        this.narrowDepartments(clientId, customer);
       })
     );
   }
@@ -203,7 +260,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
 
   /** `discarded` is true when the user confirmed throwing away unsaved changes. */
   onDrawerClosed(discarded: boolean): void {
-    if (discarded) this.reset();
+    if (discarded || this.isEdit) this.reset();
     this.closed.emit();
   }
 
@@ -212,15 +269,17 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     this.drawer?.requestClose();
   }
 
-  /** Leaves for the customer form. The draft is saved first so this form comes back filled in. */
+  /** Leaves for the customer form. The draft is saved first, and saving the customer returns here with the form reopened. */
   createCustomer(): void {
     if (this.enquiryForm.dirty) this.draft?.save();
     this.closed.emit();
-    this.router.navigate(['/customers'], { queryParams: { create: 1 } });
+    this.router.navigate(['/customers'], { queryParams: { create: 1, returnTo: 'enquiry' } });
   }
 
   private reset(): void {
-    this.draft?.clear();
+    // A half-written new enquiry is kept while someone edits another one.
+    if (!this.isEdit) this.draft?.clear();
+    this.lockedOnEdit.forEach((name) => this.enquiryForm.get(name)!.enable({ emitEvent: false }));
     this.contactOptions = [];
     this.enquiryForm.reset({
       client: null,
@@ -234,7 +293,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
       requirement: '',
       followUpOutcome: '',
       date: this.todayIso(),
-      nextFollowUpDate: this.todayIso(),
+      nextFollowUpDate: this.tomorrowIso(),
       attachments: []
     });
     this.step = 1;
@@ -250,8 +309,12 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   }
 
   /** Local calendar date as yyyy-MM-dd (toISOString would shift it by the UTC offset). */
-  private todayIso(): string {
+  /** New enquiries start with a follow-up due tomorrow, so they do not show as due today straight away. */
+  private tomorrowIso(): string { return this.todayIso(1); }
+
+  private todayIso(addDays = 0): string {
     const d = new Date();
+    d.setDate(d.getDate() + addDays);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
@@ -316,7 +379,36 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     return confirmed;
   }
 
+  private saveEdit(): void {
+    if (this.saving || !this.enquiry) return;
+    if (this.enquiryForm.invalid) {
+      this.enquiryForm.markAllAsTouched();
+      this.toaster.warning('Check the fields properly!', 'Warning !');
+      return;
+    }
+    const v = this.enquiryForm.getRawValue();
+    this.saving = true;
+    this.subscriptions.add(
+      this.enquiryService.updateEnquiryDetails(this.enquiry._id, {
+        title: v.title ?? '',
+        contact: v.contact,
+        priority: v.priority,
+        source: v.source ?? '',
+        enquiryCategory: v.enquiryCategory ?? '',
+        requirement: v.requirement ?? '',
+      }).subscribe({
+        next: () => {
+          this.saving = false;
+          this.reset();
+          this.updated.emit();
+        },
+        error: () => (this.saving = false),
+      })
+    );
+  }
+
   async submit(): Promise<void> {
+    if (this.isEdit) return this.saveEdit();
     if (this.saving || !this.isReady()) return;
     this.saving = true;
     if (!(await this.confirmNotDuplicate())) {
