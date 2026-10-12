@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import ProductCategory from "../models/productCategory.model";
 import { getEmployeeData } from "../common/utils/util";
 import { ObjectId } from "mongodb";
+import Product from "../models/products.model";
 
 export const createProductCategory = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -84,6 +85,8 @@ export const deleteProductCategory = async (req: Request, res: Response, next: N
     try {
         const { id } = req.params;
         if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
+        const inUse = await Product.countDocuments({ productCategory: id, isDeleted: { $ne: true } });
+        if (inUse) return res.status(409).json({ message: `Used by ${inUse} product${inUse === 1 ? '' : 's'}. Move them to another category first.` });
         const deleted = await ProductCategory.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, { $set: { isDeleted: true } }, { new: true });
         if (!deleted) return res.status(404).json({ message: "Category not found or already deleted" });
         return res.status(200).json({ success: true, message: "Category deleted" });

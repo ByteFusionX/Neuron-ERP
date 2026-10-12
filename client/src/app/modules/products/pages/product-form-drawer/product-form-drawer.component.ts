@@ -1,8 +1,8 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
-import { FormBuilder, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
-import { Subscription } from 'rxjs';
-import { ProductService, Product } from 'src/app/core/services/product/product.service';
+import { Subscription, debounceTime, distinctUntilChanged, of, switchMap, catchError } from 'rxjs';
+import { ProductService, Product, DuplicateMatch, PRODUCT_ALIAS_TYPES, ProductAliasType } from 'src/app/core/services/product/product.service';
 import { ProductCategoryService } from 'src/app/core/services/product-category/product-category.service';
 import { WarehouseService } from 'src/app/core/services/warehouse/warehouse.service';
 import { MasterListService } from 'src/app/core/services/master-list.service';
@@ -12,6 +12,10 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { PRODUCT_TYPES } from 'src/app/shared/interfaces/product.interface';
 import { ModalService } from 'src/app/shared/components/modal';
 import { QuickAddDialogComponent, QuickAddDialogData } from '../../modals/quick-add-dialog/quick-add-dialog.component';
+
+/** Rejects whitespace-only text, which `Validators.required` lets through. */
+const notBlank = (c: AbstractControl): ValidationErrors | null =>
+  typeof c.value === 'string' && c.value.length > 0 && !c.value.trim() ? { required: true } : null;
 
 /**
  * Slide-over used to create and edit catalogue items (stock, non-stock or service).
@@ -52,19 +56,25 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   brandOptions: SfOption[] = [];
   private optionsLoaded = false;
 
+  aliasTypeOptions: SfOption[] = PRODUCT_ALIAS_TYPES.map((t) => ({ label: t, value: t }));
+  /** Products that already use this part number or one of the aliases; refreshed as the user types. */
+  duplicateMatches: DuplicateMatch[] = [];
+  get blockingMatch(): DuplicateMatch | undefined { return this.duplicateMatches.find((m) => m.level === 'block'); }
+
   productForm = this.fb.group({
-    partNo: ['', Validators.required],
+    isGeneric: [false],
+    parentModel: [''],
+    aliases: this.fb.array<FormGroup<{ value: FormControl<string | null>; type: FormControl<string | null> }>>([]),
+    partNo: ['', [Validators.required, notBlank, Validators.maxLength(100)]],
     itemCode: [{ value: '', disabled: true }],
-    productName: [''],
-    productDescription: ['', Validators.required],
+    productName: ['', [Validators.required, notBlank, Validators.maxLength(200)]],
+    productDescription: ['', [Validators.required, notBlank, Validators.maxLength(2000)]],
     type: ['' as string, Validators.required],
     productSegment: ['', Validators.required],
     productCategory: ['', Validators.required],
     warehouse: ['', Validators.required],
-    brand: ['', Validators.required],
+    brand: ['', [Validators.required, notBlank]],
     unitOfMeasure: [''],
-    defaultSellingPrice: [null as number | null, [Validators.min(0), Validators.max(1e12)]],
-    estimatedCost: [null as number | null, [Validators.min(0), Validators.max(1e12)]],
     isActive: [true],
   });
 
@@ -119,6 +129,31 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       })
     );
 
+    // Services and generic items need neither a brand nor a part number.
+    this.subscriptions.add(
+      this.productForm.controls.isGeneric.valueChanges.subscribe((generic) => {
+        const { partNo, brand } = this.productForm.controls;
+        [partNo, brand].forEach((c) => {
+          c.setValidators(generic ? [] : [Validators.required, notBlank]);
+          c.updateValueAndValidity({ emitEvent: false });
+        });
+      })
+    );
+
+    this.subscriptions.add(
+      this.productForm.valueChanges.pipe(
+        debounceTime(400),
+        switchMap(() => {
+          const v = this.productForm.getRawValue();
+          const part = (v.partNo ?? '').trim();
+          const name = (v.productName ?? '').trim();
+          if (!part && !name) return of({ matches: [] as DuplicateMatch[] });
+          return this.productService.checkDuplicate(part, (v.brand ?? '').trim(), this.product?._id, name).pipe(catchError(() => of({ matches: [] as DuplicateMatch[] })));
+        }),
+        distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      ).subscribe((r) => (this.duplicateMatches = r.matches))
+    );
+
     this.subscriptions.add(
       this.productForm.controls.productSegment.valueChanges.subscribe((departmentId) => {
         if (!this.isEdit) departmentId ? this.generateItemCode(departmentId) : this.productForm.controls.itemCode.setValue('');
@@ -158,6 +193,23 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     });
   }
 
+  get aliasRows(): FormArray { return this.productForm.controls.aliases as unknown as FormArray; }
+
+  addAlias(value = '', type: ProductAliasType = 'Supplier SKU'): void {
+    this.aliasRows.push(this.fb.group({ value: [value], type: [type] }));
+    this.productForm.markAsDirty();
+  }
+
+  removeAlias(index: number): void {
+    this.aliasRows.removeAt(index);
+    this.productForm.markAsDirty();
+  }
+
+  private seedAliases(aliases: any[] | undefined): void {
+    this.aliasRows.clear();
+    (aliases ?? []).forEach((a) => this.addAlias(a.value, a.type));
+  }
+
   private seedFromProduct(product: any): void {
     const id = (v: any): string => v?._id ?? (typeof v === 'string' ? v : '');
     this.productForm.patchValue({
@@ -171,10 +223,12 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       warehouse: id(product.warehouse),
       brand: product.brand || '',
       unitOfMeasure: product.unitOfMeasure || '',
-      defaultSellingPrice: product.defaultSellingPrice ?? null,
-      estimatedCost: product.estimatedCost ?? null,
       isActive: product.isActive ?? true,
+      isGeneric: product.isGeneric ?? false,
+      parentModel: product.parentModel || '',
     });
+    this.seedAliases(product.aliases);
+    this.duplicateMatches = [];
     this.productForm.controls.itemCode.disable();
     this.productForm.markAsPristine();
   }
@@ -199,8 +253,10 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     this.productForm.reset({
       partNo: '', itemCode: '', productName: '', productDescription: '', type: '',
       productSegment: '', productCategory: '', warehouse: '', brand: '', unitOfMeasure: '',
-      defaultSellingPrice: null, estimatedCost: null, isActive: true,
+      isActive: true, isGeneric: false, parentModel: '',
     });
+    this.aliasRows.clear();
+    this.duplicateMatches = [];
   }
 
   createCategory(): void {
@@ -210,6 +266,17 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
         this.toastr.success('Category created successfully');
         this.categoryOptions = [...this.categoryOptions, { label: category.categoryName, value: category._id }];
         this.productForm.patchValue({ productCategory: category._id });
+      });
+  }
+
+  createBrand(): void {
+    this.openQuickAdd('Brand', (name) => this.masterList.createItem('brand', { label: name, value: null }))
+      .subscribe((res) => {
+        const brand = res?.data;
+        if (!brand) return;
+        this.toastr.success('Brand created successfully');
+        this.brandOptions = [...this.brandOptions, { label: brand.label, value: brand.label }];
+        this.productForm.patchValue({ brand: brand.label });
       });
   }
 
@@ -241,6 +308,11 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       return;
     }
 
+    if (this.blockingMatch) {
+      this.toastr.error(`${this.blockingMatch.reason}. Use the existing product instead.`);
+      return;
+    }
+
     this.saving = true;
     const raw = this.productForm.getRawValue();
     const payload: Partial<Product> = {
@@ -254,9 +326,10 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       warehouse: raw.warehouse ?? '',
       brand: raw.brand ?? '',
       unitOfMeasure: raw.unitOfMeasure ?? '',
-      defaultSellingPrice: raw.defaultSellingPrice,
-      estimatedCost: raw.estimatedCost,
       isActive: raw.isActive ?? true,
+      isGeneric: raw.isGeneric ?? false,
+      parentModel: raw.parentModel ?? '',
+      aliases: (raw.aliases ?? []).filter((a) => (a.value ?? '').trim()).map((a) => ({ value: (a.value ?? '').trim(), type: (a.type ?? 'Superseded') as ProductAliasType })),
     };
 
     const request$ = this.isEdit && this.product?._id

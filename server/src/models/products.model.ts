@@ -6,8 +6,31 @@ export type ProductType = typeof PRODUCT_TYPES[number];
 export const PRODUCT_APPROVAL_STATUSES = ['Draft', 'Pending', 'Approved'] as const;
 export type ProductApprovalStatus = typeof PRODUCT_APPROVAL_STATUSES[number];
 
+export const PRODUCT_SOURCES = ['Manual', 'RFQ', 'Import'] as const;
+export type ProductSource = typeof PRODUCT_SOURCES[number];
+
+export const PRODUCT_ALIAS_TYPES = ['Superseded', 'Supplier SKU', 'Customer Ref', 'Old Code'] as const;
+export type ProductAliasType = typeof PRODUCT_ALIAS_TYPES[number];
+
+export interface ProductAlias {
+    value: string;
+    valueNormalized: string;
+    type: ProductAliasType;
+    supplierId?: Types.ObjectId;
+    customerId?: Types.ObjectId;
+    note?: string;
+}
+
 interface Product {
     partNo: string;
+    partNoNormalized?: string;
+    brandKey?: string;
+    aliases?: ProductAlias[];
+    source?: ProductSource;
+    /** Groups size / voltage variants under one model. */
+    parentModel?: string;
+    /** Services and generic items: brand and part number are optional. */
+    isGeneric?: boolean;
     itemCode: string;
     productName?: string;
     productDescription: string;
@@ -52,7 +75,39 @@ interface Product {
 const productSchema = new Schema<Product>({
     partNo: {
         type: String,
-        required: true,
+        required: function (this: any) { return !this.isGeneric && this.approvalStatus !== 'Pending'; },
+    },
+    partNoNormalized: {
+        type: String,
+        index: true,
+    },
+    brandKey: {
+        type: String,
+    },
+    aliases: {
+        type: [{
+            value: { type: String, required: true, trim: true },
+            valueNormalized: { type: String, required: true, index: true },
+            type: { type: String, enum: PRODUCT_ALIAS_TYPES, default: 'Superseded' },
+            supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier' },
+            customerId: { type: Schema.Types.ObjectId, ref: 'Customer' },
+            note: { type: String, trim: true },
+        }],
+        default: [],
+    },
+    source: {
+        type: String,
+        enum: PRODUCT_SOURCES,
+        default: 'Manual',
+    },
+    parentModel: {
+        type: String,
+        trim: true,
+        index: true,
+    },
+    isGeneric: {
+        type: Boolean,
+        default: false,
     },
     itemCode: {
         type: String,
@@ -68,21 +123,21 @@ const productSchema = new Schema<Product>({
     productCategory: {
         type: Schema.Types.ObjectId,
         ref: 'ProductCategory',
-        required: true,
+        required: function (this: any) { return this.approvalStatus !== 'Pending'; },
     },
     productSegment: {
         type: Schema.Types.ObjectId,
         ref: 'Department',
-        required: true,
+        required: function (this: any) { return this.approvalStatus !== 'Pending'; },
     },
     warehouse: {
         type: Schema.Types.ObjectId,
         ref: 'Warehouse',
-        required: true,
+        required: function (this: any) { return this.approvalStatus !== 'Pending'; },
     },
     brand: {
         type: String,
-        required: true,
+        required: function (this: any) { return !this.isGeneric && this.approvalStatus !== 'Pending'; },
     },
     type: {
         type: String,
@@ -194,5 +249,8 @@ const productSchema = new Schema<Product>({
         default: false,
     },
 });
+
+// Lookup used by the duplicate check: same brand + same normalised part number.
+productSchema.index({ brandKey: 1, partNoNormalized: 1 });
 
 export default model<Product>('Product', productSchema);

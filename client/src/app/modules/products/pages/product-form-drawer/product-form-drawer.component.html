@@ -8,7 +8,7 @@
                 <app-sf-input formControlName="itemCode" placeholder="Generated after you pick a department"></app-sf-input>
             </app-sf-field>
             <app-sf-field label="Part No" [control]="productForm.controls.partNo">
-                <app-sf-input formControlName="partNo" placeholder="Part number"></app-sf-input>
+                <app-sf-input formControlName="partNo" [placeholder]="productForm.value.isGeneric ? 'Optional for generic items' : 'Part number'"></app-sf-input>
             </app-sf-field>
             <app-sf-field label="Product Name" [control]="productForm.controls.productName">
                 <app-sf-input formControlName="productName" placeholder="Product / service name"></app-sf-input>
@@ -16,6 +16,15 @@
             <app-sf-field label="Brand" [control]="productForm.controls.brand">
                 <app-sf-select formControlName="brand" [options]="brandOptions" placeholder="Select brand"></app-sf-select>
             </app-sf-field>
+            @if (duplicateMatches.length) {
+                <div class="col-span-2 rounded-md border px-3 py-2 text-sm"
+                    [class]="blockingMatch ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
+                    <p class="font-medium">{{ blockingMatch ? 'This part number is already in the catalogue' : 'Similar part number found' }}</p>
+                    @for (m of duplicateMatches; track m._id) {
+                        <p>{{ m.reason }}@if (m.productDescription) { — {{ m.productDescription }} }</p>
+                    }
+                </div>
+            }
             <app-sf-field full label="Description" [control]="productForm.controls.productDescription">
                 <app-sf-textarea formControlName="productDescription" placeholder="Standard description"></app-sf-textarea>
             </app-sf-field>
@@ -24,7 +33,27 @@
             </app-sf-field>
         </app-sf-section>
 
+        <app-sf-section title="Other part numbers" columns="1">
+            <p class="text-xs text-gray-500">Supplier SKUs, customer references and replaced part numbers. Searching any of them finds this product.</p>
+            <div formArrayName="aliases" class="space-y-2">
+                @for (row of aliasRows.controls; track row; let i = $index) {
+                    <div [formGroupName]="i" class="flex items-center gap-2">
+                        <app-sf-select formControlName="type" [options]="aliasTypeOptions" class="w-44"></app-sf-select>
+                        <app-sf-input formControlName="value" placeholder="Number"></app-sf-input>
+                        <app-action-button variant="tool" (click)="removeAlias(i)">Remove</app-action-button>
+                    </div>
+                }
+            </div>
+            <app-action-button variant="tool" (click)="addAlias()">+ Add part number</app-action-button>
+        </app-sf-section>
+
         <app-sf-section title="Classification" columns="2">
+            <app-sf-field label="Model / Family" [control]="productForm.controls.parentModel">
+                <app-sf-input formControlName="parentModel" placeholder="Groups size or voltage variants"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Generic item" [control]="productForm.controls.isGeneric">
+                <app-sf-checkbox formControlName="isGeneric" label="Service or generic item (no brand or part no)"></app-sf-checkbox>
+            </app-sf-field>
             <app-sf-field label="Department" [control]="productForm.controls.productSegment">
                 <app-sf-select formControlName="productSegment" [options]="segmentOptions" placeholder="Select department"></app-sf-select>
             </app-sf-field>
@@ -39,13 +68,7 @@
             </app-sf-field>
         </app-sf-section>
 
-        <app-sf-section title="Pricing" columns="2">
-            <app-sf-field label="Default Selling Price" [control]="productForm.controls.defaultSellingPrice">
-                <app-sf-currency formControlName="defaultSellingPrice" placeholder="0.00"></app-sf-currency>
-            </app-sf-field>
-            <app-sf-field label="Estimated Cost" [control]="productForm.controls.estimatedCost">
-                <app-sf-currency formControlName="estimatedCost" placeholder="0.00"></app-sf-currency>
-            </app-sf-field>
+        <app-sf-section title="Status" columns="2">
             <app-sf-field label="Status" [control]="productForm.controls.isActive">
                 <app-sf-checkbox formControlName="isActive" label="Active"></app-sf-checkbox>
             </app-sf-field>
@@ -54,6 +77,7 @@
 
     <ng-container sfDrawerFooter>
         <app-action-button variant="tool" (click)="createCategory()">+ Create Category</app-action-button>
+        <app-action-button variant="tool" (click)="createBrand()">+ Create Brand</app-action-button>
         <app-action-button variant="tool" (click)="createWarehouse()">+ Create Warehouse</app-action-button>
         <span class="mr-auto"></span>
         <app-action-button variant="secondary" (click)="drawer.requestClose()">Cancel</app-action-button>

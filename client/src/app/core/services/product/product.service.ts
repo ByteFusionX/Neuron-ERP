@@ -8,9 +8,69 @@ import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/er
 // show their own error toast on failure, so requests opt out of the interceptor's global toast.
 const context = () => new HttpContext().set(SKIP_ERROR_TOAST, true);
 
+export type ProductAliasType = 'Superseded' | 'Supplier SKU' | 'Customer Ref' | 'Old Code';
+export const PRODUCT_ALIAS_TYPES: ProductAliasType[] = ['Superseded', 'Supplier SKU', 'Customer Ref', 'Old Code'];
+
+export interface ProductAlias {
+  value: string;
+  type: ProductAliasType;
+  supplierId?: string;
+  customerId?: string;
+  note?: string;
+}
+
+export interface DuplicateMatch {
+  _id: string;
+  itemCode: string;
+  partNo: string;
+  brand: string;
+  productDescription?: string;
+  approvalStatus?: string;
+  /** `block` would stop the save; `warn` is only a heads-up. */
+  level: 'block' | 'warn';
+  reason: string;
+}
+
+export interface ProductImportRow {
+  partNo?: string;
+  brand?: string;
+  productName?: string;
+  productDescription: string;
+  unitOfMeasure?: string;
+  parentModel?: string;
+}
+
+export interface ProductImportResult {
+  dryRun: boolean;
+  created: number;
+  duplicates: number;
+  invalid: number;
+  results: { row: number; status: 'ok' | 'created' | 'duplicate' | 'invalid'; message?: string; itemCode?: string; existing?: DuplicateMatch }[];
+}
+
+export interface DuplicateGroupProduct {
+  _id: string;
+  itemCode: string;
+  partNo: string;
+  brand: string;
+  productDescription?: string;
+  approvalStatus?: string;
+  source?: string;
+}
+
+export interface DuplicatesReport {
+  unmigrated: number;
+  samePartNumber: { key: string; sameBrand: boolean; count: number; products: DuplicateGroupProduct[] }[];
+  sameDescription: { brand: string; description: string; count: number; products: DuplicateGroupProduct[] }[];
+}
+
 export interface Product {
   _id?: string;
   partNo: string;
+  aliases?: ProductAlias[];
+  source?: 'Manual' | 'RFQ' | 'Import';
+  parentModel?: string;
+  isGeneric?: boolean;
   itemCode: string;
   productName?: string;
   productDescription: string;
@@ -79,6 +139,8 @@ export interface ProductQueryParams {
   unitOfMeasure?: string;
   isActive?: string;
   approvalStatus?: string;
+  source?: string;
+  parentModel?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   /** JSON list of {key, op, value} for operators the flat params can't express. */
@@ -147,6 +209,27 @@ export class ProductService {
 
   deleteProduct(id: string): Observable<any> {
     return this.http.delete(`${this.api}/product/${id}`);
+  }
+
+  /** Matches for a part number; the form shows them before the user saves. */
+  checkDuplicate(partNo: string, brand: string, excludeId?: string, name?: string): Observable<{ matches: DuplicateMatch[] }> {
+    let params = new HttpParams().set('partNo', partNo).set('brand', brand);
+    if (name) params = params.set('name', name);
+    if (excludeId) params = params.set('excludeId', excludeId);
+    return this.http.get<{ matches: DuplicateMatch[] }>(`${this.api}/product/check-duplicate`, { params, context: context() });
+  }
+
+  /** Adds an unknown item (RFQ line) as a Pending product, or returns the existing one when the part number is known. */
+  quickCreateProduct(row: Partial<ProductImportRow> & { productSegment?: string }): Observable<{ created: boolean; product: any; message?: string; matches: DuplicateMatch[] }> {
+    return this.http.post<any>(`${this.api}/product/quick`, row, { context: context() });
+  }
+
+  importProducts(rows: ProductImportRow[], dryRun: boolean): Observable<ProductImportResult> {
+    return this.http.post<ProductImportResult>(`${this.api}/product/import`, { rows, dryRun }, { context: context() });
+  }
+
+  getDuplicatesReport(): Observable<DuplicatesReport> {
+    return this.http.get<DuplicatesReport>(`${this.api}/product/duplicates-report`);
   }
 
   generateItemCode(departmentId?: string): Observable<{ success: boolean; itemCode: string }> {

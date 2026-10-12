@@ -13,8 +13,10 @@ import PurchaseOrder from "../models/purchaseOrder.model";
 import StockEntry from "../models/stockEntry.model";
 import Item from "../models/item.model";
 import { logAudit } from "../services/audit.service";
+import { cleanAliases, derivedKeys, findDuplicates, normalizePartNo, brandKeyOf } from "../common/utils/productMatch";
+import { PRODUCT_SOURCES, PRODUCT_TYPES } from "../models/products.model";
 
-const auditProduct = (req: Request, product: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
+export const auditProduct = (req: Request, product: any, action: string, summary: string, changes?: { label: string; from?: string; to?: string }[]) =>
     logAudit(req, { entityType: "product", entityId: product._id, entityLabel: product.itemCode, action, summary, changes });
 
 const AUDITED_FIELDS: { label: string; get: (p: any) => unknown }[] = [
@@ -45,6 +47,14 @@ export const APPROVED_PRODUCT_FILTER = { approvalStatus: { $nin: ['Draft', 'Pend
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** "ab 123" should also find AB-123: match the normalised part number and alias keys too. */
+const normalizedSearchClauses = (term: string): any[] => {
+    const norm = normalizePartNo(term);
+    if (norm.length < 2) return [];
+    const re = new RegExp(escapeRegex(norm), 'i');
+    return [{ partNoNormalized: re }, { 'aliases.valueNormalized': re }];
+};
+
 /** Prices and cost must be real non-negative amounts; tax is a percentage. Unset values are allowed. */
 const unset = (v: unknown) => v === undefined || v === null || v === '';
 const validateMoney = (data: any): string | null => {
@@ -60,6 +70,26 @@ const validateMoney = (data: any): string | null => {
             return `${label} must be a number between 0 and ${max === 100 ? '100' : '1,000,000,000,000'}`;
         }
     }
+    return null;
+};
+
+/** Length and enum limits so a direct API call can't store a 5,000-character name or an unknown type. */
+const validateText = (data: any, creating: boolean): string | null => {
+    const limits: [string, unknown, number][] = [
+        ['Product name', data.productName, 200],
+        ['Description', data.productDescription, 2000],
+        ['Part number', data.partNo, 100],
+        ['Brand', data.brand, 100],
+        ['Unit', data.unitOfMeasure, 40],
+        ['Model / family', data.parentModel, 100],
+    ];
+    for (const [label, value, max] of limits) {
+        if (typeof value === 'string' && value.trim().length > max) return `${label} must be ${max} characters or fewer`;
+    }
+    const validType = (PRODUCT_TYPES as readonly string[]).includes(data.type);
+    if (creating ? !validType : (data.type !== undefined && data.type !== '' && !validType)) return 'Type must be Stock or Non-Stock';
+    if (creating && (typeof data.productName !== 'string' || !data.productName.trim())) return 'Product name is required';
+    if (typeof data.productDescription === 'string' && !data.productDescription.trim()) return 'Description is required';
     return null;
 };
 
@@ -107,7 +137,7 @@ const buildAdvancedFilters = (raw: unknown): any[] => {
 
 const isAdminRole =(employee: any): boolean => ['admin', 'superAdmin'].includes(employee?.category?.role);
 
-const getDepartmentCode = (departmentName?: string): string => {
+export const getDepartmentCode = (departmentName?: string): string => {
     const words = (departmentName || '').trim().split(/\s+/).filter(Boolean);
 
     if (words.length >= 3) {
@@ -127,6 +157,21 @@ const getDepartmentCode = (departmentName?: string): string => {
     return 'DEP';
 };
 
+export const nextItemCode = async (deptCode: string, skip = 0): Promise<string> => {
+    const pattern = /^NR-ITM-[A-Z]+-(\d+)$/i;
+    const products = await Product.find({ itemCode: { $regex: pattern } }).select('itemCode').lean();
+
+    let maxNum = 0;
+    for (const product of products) {
+        const match = (product.itemCode || '').match(pattern);
+        if (match) {
+            maxNum = Math.max(maxNum, parseInt(match[1], 10));
+        }
+    }
+
+    return `NR-ITM-${deptCode}-${(maxNum + 1 + skip).toString().padStart(4, '0')}`;
+};
+
 export const generateItemCode = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { departmentId } = req.query;
@@ -143,18 +188,7 @@ export const generateItemCode = async (req: Request, res: Response, next: NextFu
             deptCode = getDepartmentCode(department.departmentName);
         }
 
-        const pattern = /^NR-ITM-[A-Z]+-(\d+)$/i;
-        const products = await Product.find({ itemCode: { $regex: pattern } }).select('itemCode').lean();
-
-        let maxNum = 0;
-        for (const product of products) {
-            const match = (product.itemCode || '').match(pattern);
-            if (match) {
-                maxNum = Math.max(maxNum, parseInt(match[1], 10));
-            }
-        }
-
-        const itemCode = `NR-ITM-${deptCode}-${(maxNum + 1).toString().padStart(4, '0')}`;
+        const itemCode = await nextItemCode(deptCode);
 
         return res.status(200).json({ success: true, itemCode });
     } catch (error) {
@@ -169,11 +203,19 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         const token = (req as any).user;
 
         const blank = (v: unknown) => typeof v !== 'string' || !v.trim();
-        if (blank(data.partNo) || blank(data.itemCode) || blank(data.productDescription) || blank(data.brand) || !data.productCategory || !data.productSegment || !data.warehouse) {
+        const isGeneric = data.isGeneric === true;
+        if ((!isGeneric && (blank(data.partNo) || blank(data.brand))) || blank(data.itemCode) || blank(data.productDescription) || !data.productCategory || !data.productSegment || !data.warehouse) {
             return res.status(400).json({ message: "Missing required fields" });
         }
+        const partNo = typeof data.partNo === 'string' ? data.partNo.trim() : '';
+        const brand = typeof data.brand === 'string' ? data.brand.trim() : '';
+        const { aliases, error: aliasError } = cleanAliases(data.aliases);
+        if (aliasError) return res.status(400).json({ message: aliasError });
+        if (data.source !== undefined && !(PRODUCT_SOURCES as readonly string[]).includes(data.source)) {
+            return res.status(400).json({ message: "Invalid product source" });
+        }
 
-        const moneyError = validateMoney(data);
+        const moneyError = validateMoney(data) ?? validateText(data, true);
         if (moneyError) return res.status(400).json({ message: moneyError });
 
         // Ensure refs are valid ObjectIds
@@ -182,16 +224,23 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
             return res.status(400).json({ message: "Invalid reference id(s) provided" });
         }
 
-        // Uniqueness check on partNo (case-insensitive)
-        const existing = await Product.findOne({ partNo: new RegExp(`^${escapeRegex(data.partNo.trim())}$`, 'i'), isDeleted: { $ne: true } });
-        if (existing) {
-            return res.status(409).json({ message: "Product with this part number already exists" });
+        // Same brand + same part number (ignoring case, spaces and dashes), or an alias already taken.
+        const duplicates = await findDuplicates({ partNo, brand, aliases });
+        const blocking = duplicates.find((d) => d.level === 'block');
+        if (blocking) {
+            return res.status(409).json({ message: `${blocking.reason}. Use the existing product instead.`, matches: duplicates });
         }
 
         // Uniqueness check on itemCode (case-insensitive)
-        const existingItemCode = await Product.findOne({ itemCode: new RegExp(`^${escapeRegex(data.itemCode.trim())}$`, 'i'), isDeleted: { $ne: true } });
-        if (existingItemCode) {
-            return res.status(409).json({ message: "Product with this item code already exists" });
+        // Two people creating at once can be handed the same generated code: give the later one the next free code.
+        let itemCode = data.itemCode.trim();
+        const codeTaken = (code: string) => Product.exists({ itemCode: new RegExp(`^${escapeRegex(code)}$`, 'i'), isDeleted: { $ne: true } });
+        if (await codeTaken(itemCode)) {
+            const dept = itemCode.match(/^NR-ITM-([A-Z]+)-\d+$/i)?.[1]?.toUpperCase();
+            if (!dept) return res.status(409).json({ message: "Product with this item code already exists" });
+            let next = await nextItemCode(dept);
+            for (let i = 1; i < 10 && await codeTaken(next); i++) next = await nextItemCode(dept, i);
+            itemCode = next;
         }
 
         // Validate referenced docs exist
@@ -210,23 +259,30 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         }
 
         const product = await Product.create({
-            partNo: data.partNo.trim(),
-            itemCode: data.itemCode.trim(),
+            partNo,
+            ...derivedKeys(partNo, brand),
+            aliases,
+            source: data.source ?? 'Manual',
+            parentModel: typeof data.parentModel === 'string' && data.parentModel.trim() ? data.parentModel.trim() : undefined,
+            isGeneric,
+            itemCode,
             productName: data.productName?.trim(),
             productDescription: data.productDescription.trim(),
             productCategory: data.productCategory,
             productSegment: data.productSegment,
             warehouse: data.warehouse,
-            brand: data.brand.trim(),
+            brand,
             type: data.type,
             unitOfMeasure: data.unitOfMeasure?.trim(),
             defaultTaxRate: data.defaultTaxRate,
             defaultSellingPrice: data.defaultSellingPrice,
             estimatedCost: data.estimatedCost,
             isActive: data.isActive ?? true,
-            // New items wait for approval before they can be used; admins are auto-approved.
-            approvalStatus: isAdminRole(employee) ? 'Approved' : 'Pending',
-            ...(isAdminRole(employee) ? { approvedBy: employee._id, approvedDate: new Date() } : {}),
+            // Approval is switched off for now: every new item is saved as Approved. Re-enable by restoring the
+            // non-admin 'Pending' branch (the approve/reject endpoints are still in place).
+            approvalStatus: 'Approved',
+            approvedBy: employee._id,
+            approvedDate: new Date(),
             createdBy: employee._id,
             createdDate: data.createdDate ?? new Date(),
             updatedDate: new Date(),
@@ -239,7 +295,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
             .populate('warehouse')
             .populate('createdBy', 'firstName lastName');
 
-        await auditProduct(req, product, "created", `Product ${product.itemCode} created${isAdminRole(employee) ? "" : " and sent for approval"}`);
+        await auditProduct(req, product, "created", `Product ${product.itemCode} created`);
         return res.status(201).json(populated);
     } catch (error) {
         console.error(error);
@@ -266,6 +322,8 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             defaultSellingPrice,
             isActive,
             approvalStatus,
+            source,
+            parentModel,
             createdBy,
             sortBy,
             sortDir,
@@ -330,6 +388,14 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             filter.isActive = isActive === 'true';
         }
 
+        if (typeof source === 'string' && (PRODUCT_SOURCES as readonly string[]).includes(source)) {
+            filter.source = source;
+        }
+
+        if (typeof parentModel === 'string' && parentModel.trim()) {
+            filter.parentModel = new RegExp(`^${escapeRegex(parentModel.trim())}$`, 'i');
+        }
+
         if (approvalStatus === 'Pending' || approvalStatus === 'Draft') {
             filter.approvalStatus = approvalStatus;
         } else if (approvalStatus === 'Approved') {
@@ -357,6 +423,9 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
             const regex = new RegExp(escapeRegex(searchTerm), 'i');
             filter.$or = [
                 { partNo: regex },
+                { 'aliases.value': regex },
+                ...normalizedSearchClauses(searchTerm),
+                { parentModel: regex },
                 { itemCode: regex },
                 { productName: regex },
                 { productDescription: regex },
@@ -504,13 +573,38 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
 
         if (!ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid id" });
 
-        const moneyError = validateMoney(data);
+        const moneyError = validateMoney(data) ?? validateText(data, false);
         if (moneyError) return res.status(400).json({ message: moneyError });
 
-        // Optional uniqueness check if partNo changes
-        if (data.partNo) {
-            const exist = await Product.findOne({ _id: { $ne: id }, partNo: new RegExp(`^${escapeRegex(data.partNo.trim())}$`, 'i'), isDeleted: { $ne: true } });
-            if (exist) return res.status(409).json({ message: "Product with this part number already exists" });
+        const current: any = await Product.findOne({ _id: id, isDeleted: { $ne: true } }).select('partNo partNoNormalized brand aliases isGeneric').lean();
+        if (!current) return res.status(404).json({ message: "Product not found" });
+
+        const nextPartNo = typeof data.partNo === 'string' ? data.partNo.trim() : (current.partNo ?? '');
+        const nextBrand = typeof data.brand === 'string' ? data.brand.trim() : (current.brand ?? '');
+        const nextGeneric = data.isGeneric !== undefined ? data.isGeneric === true : current.isGeneric === true;
+        if (!nextGeneric && (!nextPartNo || !nextBrand)) return res.status(400).json({ message: "Part number and brand are required unless the item is generic" });
+
+        let aliasList: any[] | undefined;
+        if (data.aliases !== undefined) {
+            const cleaned = cleanAliases(data.aliases);
+            if (cleaned.error) return res.status(400).json({ message: cleaned.error });
+            aliasList = cleaned.aliases;
+        }
+        // A replaced part number stays searchable (GRNs and delivery notes only hold it as text).
+        const partNoChanged = normalizePartNo(nextPartNo) !== normalizePartNo(current.partNo) && !!current.partNo;
+        if (partNoChanged) {
+            const base = aliasList ?? (current.aliases ?? []);
+            const oldNorm = normalizePartNo(current.partNo);
+            if (!base.some((a: any) => a.valueNormalized === oldNorm && a.type === 'Superseded')) {
+                aliasList = [...base, { value: current.partNo, valueNormalized: oldNorm, type: 'Superseded', note: 'Replaced part number' }];
+            }
+        }
+
+        const keysChanged = nextPartNo !== (current.partNo ?? '') || nextBrand !== (current.brand ?? '') || aliasList !== undefined;
+        if (keysChanged) {
+            const duplicates = await findDuplicates({ partNo: nextPartNo, brand: nextBrand, aliases: aliasList, excludeId: id });
+            const blocking = duplicates.find((d) => d.level === 'block');
+            if (blocking) return res.status(409).json({ message: `${blocking.reason}. Use the existing product instead.`, matches: duplicates });
         }
 
         if (data.itemCode) {
@@ -531,10 +625,14 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
         const employee = await getEmployeeData(token);
         if (!employee) return res.status(401).json({ message: "Unauthorized" });
 
-        // A non-admin edit (re)submits the item for approval; a rejected item is resubmitted this way.
-        const needsReapproval = !isAdminRole(employee);
-        // An admin has no one to approve for them, so editing a rejected item approves it again.
-        const rejected = isAdminRole(employee) && !!(await Product.exists({ _id: id, isDeleted: { $ne: true }, approvalStatus: 'Draft' }));
+        // Approval is switched off for now: an edit never sends an item back for approval, and any item
+        // that is still Pending/Rejected from before becomes Approved when it is edited. Products waiting in the
+        // review queue (from an RFQ or an import) stay Pending: only the Approve action releases them.
+        const needsReapproval = false;
+        const rejected = !!(await Product.exists({
+            _id: id, isDeleted: { $ne: true },
+            $or: [{ approvalStatus: 'Draft' }, { approvalStatus: 'Pending', source: { $nin: ['RFQ', 'Import'] } }],
+        }));
 
         const before = await Product.findOne({ _id: id, isDeleted: { $ne: true } })
             .populate("productCategory").populate("productSegment").populate("warehouse").lean();
@@ -543,13 +641,17 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
             { _id: id, isDeleted: { $ne: true } },
             {
                 $set: {
-                    ...(data.partNo ? { partNo: data.partNo.trim() } : {}),
+                    ...(data.partNo !== undefined ? { partNo: nextPartNo } : {}),
+                    ...(keysChanged || current.partNoNormalized === undefined ? derivedKeys(nextPartNo, nextBrand) : {}),
+                    ...(aliasList !== undefined ? { aliases: aliasList } : {}),
+                    ...(data.parentModel !== undefined ? { parentModel: String(data.parentModel ?? '').trim() } : {}),
+                    ...(data.isGeneric !== undefined ? { isGeneric: nextGeneric } : {}),
                     ...(data.itemCode ? { itemCode: data.itemCode.trim() } : {}),
-                    ...(data.productDescription ? { productDescription: data.productDescription.trim() } : {}),
+                    ...(data.productDescription?.trim() ? { productDescription: data.productDescription.trim() } : {}),
                     ...(data.productCategory ? { productCategory: data.productCategory } : {}),
                     ...(data.productSegment ? { productSegment: data.productSegment } : {}),
                     ...(data.warehouse ? { warehouse: data.warehouse } : {}),
-                    ...(data.brand ? { brand: data.brand.trim() } : {}),
+                    ...(data.brand !== undefined ? { brand: nextBrand } : {}),
                     ...(data.productName !== undefined ? { productName: data.productName?.trim() } : {}),
                     ...(data.type ? { type: data.type } : {}),
                     ...(data.unitOfMeasure !== undefined ? { unitOfMeasure: data.unitOfMeasure?.trim() } : {}),
@@ -576,7 +678,7 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
         const changes = before ? diffProduct(before, updated) : [];
         if (changes.length) await auditProduct(req, updated, "updated", `Updated ${changes.map((c) => c.label.toLowerCase()).join(", ")}`, changes);
         if (needsReapproval && before?.approvalStatus !== "Pending") await auditProduct(req, updated, "resubmitted", "Sent back for approval after an edit");
-        if (rejected) await auditProduct(req, updated, "approved", "Approved on edit (was rejected)");
+        if (rejected) await auditProduct(req, updated, "approved", "Approved on edit (approval is switched off)");
         return res.status(200).json(updated);
     } catch (error) {
         console.error(error);
@@ -591,6 +693,21 @@ export const approveProduct = async (req: Request, res: Response, next: NextFunc
 
         const employee = await getEmployeeData((req as any).user);
         if (!employee) return res.status(401).json({ message: "Unauthorized" });
+
+        const pending: any = await Product.findOne({ _id: id, isDeleted: { $ne: true }, approvalStatus: 'Pending' }).lean();
+        if (pending) {
+            const missing = [
+                !pending.isGeneric && !pending.partNo && 'part number',
+                !pending.isGeneric && !pending.brand && 'brand',
+                !pending.productCategory && 'category',
+                !pending.productSegment && 'department',
+                !pending.warehouse && 'warehouse',
+            ].filter(Boolean);
+            if (missing.length) return res.status(409).json({ message: `Complete the ${missing.join(', ')} before approving this product.` });
+            const duplicates = await findDuplicates({ partNo: pending.partNo, brand: pending.brand, aliases: pending.aliases, excludeId: id });
+            const blocking = duplicates.find((d) => d.level === 'block');
+            if (blocking) return res.status(409).json({ message: `${blocking.reason}. Reject this one and use the existing product.`, matches: duplicates });
+        }
 
         const product = await Product.findOneAndUpdate(
             { _id: id, isDeleted: { $ne: true }, approvalStatus: 'Pending' },
@@ -669,6 +786,9 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
             const regex = new RegExp(escapeRegex(search.trim()), 'i');
             filter.$or = [
                 { partNo: regex },
+                { 'aliases.value': regex },
+                ...normalizedSearchClauses(String(search)),
+                { parentModel: regex },
                 { itemCode: regex },
                 { productName: regex },
                 { productDescription: regex },
@@ -679,7 +799,7 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
         const limitValue = Math.min(Math.max(parseInt(limit as string, 10) || 25, 1), 100);
 
         const partNumbers = await Product.find(filter)
-            .select('partNo itemCode productDescription brand')
+            .select('partNo itemCode productDescription brand aliases isGeneric')
             .sort({ partNo: 1 })
             .limit(limitValue);
 
