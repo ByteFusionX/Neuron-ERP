@@ -8,7 +8,7 @@ import PurchaseRequest, { PurchaseRequestStatus } from '../models/purchaseReques
 import Enquiry from '../models/enquiry.model';
 import Category from '../models/category.model';
 import Workflow from '../models/workflow.model';
-import { resolveCurrentAssignmentStep, rejectUnassignedPresale, stageRoleIds } from './presaleAssignment.service';
+import { resolveCurrentAssignmentStep, rejectUnassignedPresale, stageRoleIds, buildAssignmentChain } from './presaleAssignment.service';
 import { notify } from './notify.service';
 import { logAudit } from './audit.service';
 import { processOutbox } from './outbox.service';
@@ -471,6 +471,88 @@ const processPresaleAssignments = async () => {
     }
 };
 
+const PR_ALLOCATION_STATUSES = [PurchaseRequestStatus.Pending, PurchaseRequestStatus.Approved];
+const prAllocationKey = (pr: any, approval: any, suffix: string) =>
+    `pr-alloc:${pr._id}:${approval.restartCount ?? 0}:${approval.stepIndex ?? 0}:${approval.assignedAt ? new Date(approval.assignedAt).getTime() : 0}:${suffix}`;
+
+const notifyPurchaseRoles = (pr: any, recipientIds: any[], title: string, message: string, dedupeKey: string) =>
+    notify({
+        type: 'PurchaseAllocationRequest',
+        referenceModel: 'PurchaseRequest',
+        title,
+        message,
+        sentBy: pr.createdBy?.toString(),
+        recipients: recipientIds,
+        referenceId: pr._id,
+        additionalData: { purchaseId: pr._id.toString() },
+        dedupeKey,
+        channels: ['inapp', 'push', 'email'],
+    });
+
+/**
+ * Drives the procurementAssignment workflow for PRs still waiting for a buyer, the same ladder presale jobs use:
+ * a PR enters it once it is pending/approved and unallocated, the bottom role gets first go, it escalates when the
+ * stage's time runs out, and at the last stage the Super Admins are alerted each working morning to allocate it or restart the workflow.
+ */
+const processPurchaseAllocations = async () => {
+    try {
+        const now = new Date();
+        const waiting = { isDeleted: { $ne: true }, status: { $in: PR_ALLOCATION_STATUSES }, allocatedTo: null };
+
+        // Start the ladder for PRs that have none yet (new PRs, and PRs a buyer rejected back).
+        const unstarted = await PurchaseRequest.find({ ...waiting, allocationApproval: { $exists: false } }).select('_id').limit(200).lean();
+        if (unstarted.length) {
+            const chain = await buildAssignmentChain([], 'procurement');
+            if (chain) {
+                for (const pr of unstarted) {
+                    await PurchaseRequest.updateOne({ _id: pr._id, allocationApproval: { $exists: false }, allocatedTo: null }, { $set: { allocationApproval: { ...chain, restartCount: 0 } } });
+                }
+            }
+        }
+
+        const withChain = { ...waiting, allocationApproval: { $exists: true } };
+
+        const toRemind = await PurchaseRequest.find({ ...withChain, 'allocationApproval.reminderDueAt': { $lte: now }, 'allocationApproval.reminderSentAt': null, 'allocationApproval.timeoutHandledAt': null }).select('purchaseNo createdBy allocationApproval');
+        for (const pr of toRemind) {
+            const approval: any = pr.allocationApproval;
+            const claim = await PurchaseRequest.updateOne(
+                { _id: pr._id, 'allocationApproval.reminderSentAt': null, 'allocationApproval.timeoutHandledAt': null, 'allocationApproval.escalationDueAt': approval.escalationDueAt },
+                { $set: { 'allocationApproval.reminderSentAt': now } }
+            );
+            if (!claim.modifiedCount) continue;
+            const hoursLeft = Math.max(1, Math.round((new Date(approval.escalationDueAt).getTime() - now.getTime()) / 3600000));
+            try {
+                await notifyPurchaseRoles(pr, await employeeIdsOfStage(approval), 'Assignment reminder', `Purchase request ${pr.purchaseNo} still needs a buyer and escalates in about ${hoursLeft}h`, prAllocationKey(pr, approval, 'reminder'));
+            } catch (error) {
+                await PurchaseRequest.updateOne({ _id: pr._id, 'allocationApproval.reminderSentAt': now }, { $set: { 'allocationApproval.reminderSentAt': null } });
+                throw error;
+            }
+        }
+
+        const overdue = await PurchaseRequest.find({ ...withChain, 'allocationApproval.escalationDueAt': { $lte: now } }).select('purchaseNo createdBy allocationApproval');
+        for (const pr of overdue) {
+            const approval: any = pr.allocationApproval;
+            const resolved: any = (approval.timeoutAction || 'escalate') === 'escalate' ? await resolveCurrentAssignmentStep(approval, now, 'procurement') : approval;
+            if (resolved !== approval) {
+                const claim = await PurchaseRequest.updateOne(
+                    { _id: pr._id, 'allocationApproval.escalationDueAt': approval.escalationDueAt, 'allocationApproval.stepIndex': approval.stepIndex },
+                    { $set: { allocationApproval: resolved } }
+                );
+                if (!claim.modifiedCount) continue;
+                await notifyPurchaseRoles(pr, await employeeIdsOfStage(resolved), 'Purchase assignment escalated', `Purchase request ${pr.purchaseNo} was not assigned in time and is now waiting on your role`, prAllocationKey(pr, resolved, 'escalated'));
+                continue;
+            }
+            // Nothing further to escalate to (last stage, or a notify/reject stage): the Super Admins decide. One alert per working day.
+            const day = now.toISOString().slice(0, 10);
+            const superAdminRole = await Category.findOne({ role: /^superadmin$/i }).select('_id').lean();
+            const superAdmins = superAdminRole ? await employeeIdsWithRole(superAdminRole) : [];
+            await notifyPurchaseRoles(pr, superAdmins, 'Purchase assignment needs a decision', `Purchase request ${pr.purchaseNo} is still without a buyer and has reached the final stage. Allocate it or reset the workflow`, prAllocationKey(pr, approval, `superadmin:${day}`));
+        }
+    } catch (error) {
+        console.error('Purchase assignment workflow error:', error.message);
+    }
+};
+
 /**
  * Tells the owner of an open enquiry follow-up that it is overdue (its due day has passed). The owner is whoever
  * scheduled it, else the enquiry's salesperson. One notification per follow-up, however often this runs.
@@ -630,6 +712,7 @@ const startCronJob = () => {
         await processDealApprovalTimeouts();
         await processDealEscalations();
         await processPresaleAssignments();
+        await processPurchaseAllocations();
         // Hourly is plenty for a day-level due date
         if (new Date().getMinutes() === 0) {
             await processOverdueFollowUps();

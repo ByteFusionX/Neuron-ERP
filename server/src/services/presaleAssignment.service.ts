@@ -12,15 +12,22 @@ const UNIT_MINUTES: Record<string, number> = { minute: 1, hour: 60, day: 24 * 60
  * The assignment ladder: the bottom row of the workflow acts first and the job climbs towards
  * order 1. Admin is pinned on top automatically, so the ladder always ends with someone who can decide.
  */
-const getPresaleWorkflow = async (disabledRoles: any[] = []) => {
+export type AssignmentKind = 'presale' | 'procurement';
+
+/** Which workflow feature drives each ladder, and which privilege lets a role act on it. */
+const canActOn = (kind: AssignmentKind, role: any) => kind === 'procurement'
+    ? role?.privileges?.purchase?.canAssign === true
+    : role?.privileges?.assignedJob?.assign === true;
+
+const getPresaleWorkflow = async (disabledRoles: any[] = [], kind: AssignmentKind = 'presale') => {
     const skipped = new Set(disabledRoles.map(id => String((id as any)?._id ?? id)));
-    const workflow = await Workflow.findOne({ feature: 'presale' }).populate('steps.role');
+    const workflow = await Workflow.findOne({ feature: kind === 'procurement' ? 'procurementAssignment' : 'presale' }).populate('steps.role');
     if (!workflow) return null;
 
     // A role that lost the assign privilege can no longer act, so its step is skipped until the privilege returns.
     const live: any[] = [...workflow.steps]
         .filter(step => step.enabled !== false)
-        .filter(step => (step.role as any)?.privileges?.assignedJob?.assign === true)
+        .filter(step => canActOn(kind, step.role))
         .filter(step => !skipped.has(String((step.role as any)?._id ?? step.role)))
         .sort((a, b) => b.order - a.order);
 
@@ -88,8 +95,8 @@ const stepWindow = (workflow: any, step: any, start: Date) => {
  * last configured step never escalates further, so it acts as the default top-level
  * fallback purely by being the last entry an admin configured.
  */
-export const buildAssignmentChain = async (disabledRoles: any[] = []) => {
-    const found = await getPresaleWorkflow(disabledRoles);
+export const buildAssignmentChain = async (disabledRoles: any[] = [], kind: AssignmentKind = 'presale') => {
+    const found = await getPresaleWorkflow(disabledRoles, kind);
     if (!found) return null;
 
     return {
@@ -110,10 +117,10 @@ export const buildAssignmentChain = async (disabledRoles: any[] = []) => {
  * (the cron notifies or auto-rejects, and a Super Admin can escalate or reject a held job). Returns the same object (by reference) when nothing
  * changed, or a new object with the escalated state.
  */
-export const resolveCurrentAssignmentStep = async (assignment: any, now = new Date()) => {
+export const resolveCurrentAssignmentStep = async (assignment: any, now = new Date(), kind: AssignmentKind = 'presale') => {
     if (!assignment) return null;
 
-    const found = await getPresaleWorkflow(assignment.disabledRoles ?? []);
+    const found = await getPresaleWorkflow(assignment.disabledRoles ?? [], kind);
     if (!found) return assignment;
     const { workflow, steps } = found;
 
@@ -153,9 +160,9 @@ export const resolveCurrentAssignmentStep = async (assignment: any, now = new Da
  * Moves a job held at a 'notify' (or any) step up to the next step right now, starting that step's own
  * window from `now`. Used when a Super Admin escalates a held job. Returns null at the last step.
  */
-export const advanceAssignmentStep = async (assignment: any, now = new Date()) => {
+export const advanceAssignmentStep = async (assignment: any, now = new Date(), kind: AssignmentKind = 'presale') => {
     if (!assignment) return null;
-    const found = await getPresaleWorkflow(assignment.disabledRoles ?? []);
+    const found = await getPresaleWorkflow(assignment.disabledRoles ?? [], kind);
     if (!found) return null;
     const { workflow, steps } = found;
     const current = assignment.stepIndex ?? 0;
@@ -183,4 +190,12 @@ export const rejectUnassignedPresale = async (enquiryId: any, reason: string, re
             $unset: { 'preSale.assignApproval': '' }
         }
     );
+};
+
+/** True once the chain sits on the last step and that step's window has run out: nobody below acted, so it is the Super Admin's call. */
+export const assignmentHeldChecker = async (kind: AssignmentKind) => {
+    const found = await getPresaleWorkflow([], kind);
+    const last = (found?.steps.length ?? 0) - 1;
+    return (assignment: any, now = new Date()) =>
+        !!assignment && last >= 0 && (assignment.stepIndex ?? 0) >= last && !!assignment.escalationDueAt && new Date(assignment.escalationDueAt) <= now;
 };

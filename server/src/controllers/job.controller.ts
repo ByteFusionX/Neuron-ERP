@@ -850,6 +850,27 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             ],
         });
 
+        // Hand off to purchase: everyone who can assign purchases is told the job is ready for a buyer.
+        if (currentJob.allocateStatus === allocateStatus.Pending) {
+            const actor = await getEmployeeData(req.user);
+            void createNotificationWithPrivileges(
+                {
+                    type: 'JobAllocatedForPurchase',
+                    referenceModel: 'Job',
+                    title: 'Job allocated - assign a buyer',
+                    message: `Job ${updateJob.jobId} has been allocated (${scopeLabel}). Assign a buyer for its purchase.`,
+                    sentBy: actor?._id?.toString(),
+                    referenceId: updateJob._id,
+                    additionalData: { jobId: updateJob._id.toString() },
+                },
+                {
+                    privilegeKey: 'purchase',
+                    checkFunction: (privileges) => privileges.purchase?.canAssign === true,
+                },
+                req.app.get('io') as Server
+            ).catch((err) => console.error('Job allocation notification failed:', err));
+        }
+
         res.status(200).json({ success: true, message: 'Job allocated successfully', data: updateJob });
     } catch (error) {
         next(error);
