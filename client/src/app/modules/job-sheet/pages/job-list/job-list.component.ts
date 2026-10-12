@@ -1,7 +1,6 @@
 import { HttpEventType } from '@angular/common/http';
 import { AsyncPipe, DatePipe, DecimalPipe, NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
 import { Component, ViewChild, inject } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject, Observable, Subscription, firstValueFrom, switchMap, take } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
@@ -18,7 +17,7 @@ import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { ModalService } from 'src/app/shared/components/modal';
 import { AllocateTypeModalComponent, AllocateTypeResult } from '../allocate-type-modal/allocate-type-modal.component';
 import { MarkLostModalComponent } from '../mark-lost-modal/mark-lost-modal.component';
-import { TransferProcurementPersonComponent } from '../transfer-procurement-person/transfer-procurement-person.component';
+import { TransferProcurementPersonComponent, TransferProcurementPersonResult } from '../transfer-procurement-person/transfer-procurement-person.component';
 
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
@@ -128,7 +127,6 @@ export class JobListComponent {
     private _jobService: JobService,
     private _jobHistoryService: JobHistoryService,
     private _employeeService: EmployeeService,
-    private _dialog: MatDialog,
     private _router: Router,
     private _route: ActivatedRoute,
     private toast: ToastrService,
@@ -190,20 +188,21 @@ export class JobListComponent {
     this.columns = [
       { key: 'updatedDate', label: 'Last Updated', type: 'date', sortable: true, width: '120px' },
       { key: 'jobId', label: 'Job Id', sortable: true },
-      { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
-      { key: 'description', label: 'Description', sortable: true, valueGetter: (r) => r.quotation?.subject },
-      { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
-      { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },
-      { key: 'quoteId', label: 'Quote Id', sortable: true, valueGetter: (r) => r.quotation?.quoteId },
-      { key: 'dealId', label: 'Deal Id', sortable: true, valueGetter: (r) => (r.quotation?.dealData as any)?.dealId ?? '' },
-      { key: 'procurementPerson', label: 'Procurement Person', sortable: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
-      { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', sortable: true, valueGetter: (r) => r.lpoValue ?? 0 },
+      // Status, owner and value come first so they stay in view without horizontal scrolling at ~1500 px.
       {
         key: 'allocateStatus', label: 'Allocate Status', type: 'badge', sortable: true,
         badgeClasses: this.allocateStatusBadgeClasses,
         badgeLabel: allocateStatusLabel,
         filterOptions: Object.entries(ALLOCATE_STATUS_LABELS).map(([value, label]) => ({ value, label })),
       },
+      { key: 'customerName', label: 'Customer', sortable: true, valueGetter: (r) => r.clientDetails?.companyName },
+      { key: 'description', label: 'Description', sortable: true, valueGetter: (r) => r.quotation?.subject },
+      { key: 'procurementPerson', label: 'Procurement Person', sortable: true, valueGetter: (r) => this.fullName(r.procurementPerson) },
+      { key: 'lpoValue', label: 'LPO Value (QAR)', type: 'currency', currencyCode: 'QAR', sortable: true, valueGetter: (r) => r.lpoValue ?? 0 },
+      { key: 'salesPerson', label: 'Sales Person', sortable: true, valueGetter: (r) => this.fullName(r.salesPersonDetails?.[0]) },
+      { key: 'department', label: 'Department', sortable: true, valueGetter: (r) => r.departmentDetails?.[0]?.departmentName ?? '' },
+      { key: 'quoteId', label: 'Quote Id', sortable: true, valueGetter: (r) => r.quotation?.quoteId },
+      { key: 'dealId', label: 'Deal Id', sortable: true, valueGetter: (r) => (r.quotation?.dealData as any)?.dealId ?? '' },
     ];
   }
 
@@ -414,21 +413,18 @@ export class JobListComponent {
 
   onTransferProcurementPerson(row: getJob): void {
     if (!this.canTransferProcurementPerson) {
-      this.toast.warning('You do not have permission to transfer procurement person');
+      this.toast.warning('You do not have permission to assign or transfer procurement person');
       return;
     }
-    const dialogRef = this._dialog.open(TransferProcurementPersonComponent, {
+    this.modal.open<TransferProcurementPersonResult>(TransferProcurementPersonComponent, {
+      width: '520px',
       data: { jobId: row._id, jobLabel: row.jobId, currentProcurementPerson: row.procurementPerson },
-      width: '500px',
-      disableClose: true,
-    });
-
-    dialogRef.afterClosed().subscribe((result) => {
+    }).afterClosed().subscribe((result) => {
       if (!result?.procurementPersonId) return;
       this._jobService.transferProcurementPerson(row._id, result.procurementPersonId).subscribe({
         next: (response) => {
           if (response.success) {
-            this.toast.success('Procurement person transferred successfully');
+            this.toast.success(row.procurementPerson ? 'Procurement person transferred successfully' : 'Procurement person assigned successfully');
             this.getJobs(true);
           }
         },
@@ -438,8 +434,8 @@ export class JobListComponent {
   }
 
   canTransfer(row: getJob): boolean {
-    // Only supply jobs have a procurement owner to hand over.
-    return this.canTransferProcurementPerson && !!row.procurementPerson &&
+    // Supply jobs have a procurement owner to hand over, or to assign when allocation left it blank.
+    return this.canTransferProcurementPerson && (!!row.procurementPerson || this.hasSupply(row)) &&
       (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
   }
 
@@ -447,10 +443,17 @@ export class JobListComponent {
     this._router.navigate(['/purchase/create'], { queryParams: { jobId: row.jobId } });
   }
 
+  private hasSupply(row: getJob): boolean {
+    return row.allocateType === 'Supply Only' || row.allocateType === 'Project With Supply';
+  }
+
+  transferLabel(row: getJob): string {
+    return row.procurementPerson ? 'Transfer Procurement' : 'Assign Procurement';
+  }
+
   canConvert(row: getJob): boolean {
     // The purchase page only accepts jobs that include supply; AMC / Projects Without Supply would be rejected there.
-    const hasSupply = row.allocateType === 'Supply Only' || row.allocateType === 'Project With Supply';
-    return this.canConvertToPurchase && hasSupply && !row.hasPurchaseRequest &&
+    return this.canConvertToPurchase && this.hasSupply(row) && !row.hasPurchaseRequest &&
       (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
   }
 

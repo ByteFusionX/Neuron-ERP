@@ -1,56 +1,76 @@
-import { Component, Inject, OnInit } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Observable } from 'rxjs';
+import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from '@angular/core';
+import { FormBuilder, Validators } from '@angular/forms';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
-import { ModalLayoutComponent } from 'src/app/shared/components/modal-layout/modal-layout.component';
-import { NgSelectComponent, NgOptionComponent } from '@ng-select/ng-select';
-import { FormsModule } from '@angular/forms';
-import { NgFor, NgIf, AsyncPipe, CommonModule } from '@angular/common';
+import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
+
+export interface TransferProcurementPersonData {
+  jobId: string;
+  jobLabel?: string;
+  currentProcurementPerson?: any;
+}
+
+export interface TransferProcurementPersonResult {
+  procurementPersonId: string;
+}
 
 @Component({
     selector: 'app-transfer-procurement-person',
     standalone: true,
-    imports: [ModalLayoutComponent, NgSelectComponent, FormsModule, NgFor, NgOptionComponent, NgIf, AsyncPipe, CommonModule],
+    imports: [CommonModule, SmartFormModule, FormModalShellComponent],
     templateUrl: './transfer-procurement-person.component.html',
     styleUrls: ['./transfer-procurement-person.component.css']
 })
 export class TransferProcurementPersonComponent implements OnInit {
-  employees$!: Observable<getEmployee[]>
-  selectedEmployee!: string;
-  showError: boolean = false;
+  private fb = inject(FormBuilder);
+  private dialogRef = inject<ModalRef<TransferProcurementPersonResult>>(ModalRef);
+  private employeeService = inject(EmployeeService);
+  data = inject(MODAL_DATA, { optional: true }) as TransferProcurementPersonData | null;
 
-  constructor(
-    private dialogRef: MatDialogRef<TransferProcurementPersonComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { jobId: string, jobLabel?: string, currentProcurementPerson?: any },
-    private _employeeService: EmployeeService,
-  ) { }
+  employeeOptions: SfOption[] = [];
+  submitted = false;
+  form = this.fb.group({
+    procurementPerson: [null as string | null, Validators.required],
+  });
 
-  ngOnInit() {
-    this.employees$ = this._employeeService.getProcurementEmployees()
+  ngOnInit(): void {
+    this.employeeService.getProcurementEmployees().subscribe({
+      next: (employees) => {
+        this.employeeOptions = employees.map((employee) => ({
+          value: employee._id || '',
+          label: `${employee.firstName} ${employee.lastName}`,
+          disabled: employee._id === this.currentId,
+        }));
+      },
+      error: (error) => console.error('Error loading employees:', error),
+    });
   }
 
-  onClose() {
-    this.dialogRef.close()
+  close(): void {
+    this.dialogRef.close();
   }
 
   get currentId(): string | undefined {
-    return this.data.currentProcurementPerson?._id;
+    return this.data?.currentProcurementPerson?._id;
   }
 
-  getFooterButtons(): any[] {
-    return [
-      { label: 'Cancel', onClick: this.onClose.bind(this), theme: 'cancel' },
-      { label: 'Transfer', onClick: this.onSubmit.bind(this), theme: 'primary' },
-    ];
+  get currentProcurementPersonName(): string {
+    const person = this.data?.currentProcurementPerson;
+    return person ? `${person.firstName || ''} ${person.lastName || ''}`.trim() : '';
   }
 
-  onSubmit() {
-    if (this.selectedEmployee) {
-      this.dialogRef.close({ procurementPersonId: this.selectedEmployee })
-    } else {
-      this.showError = true
+  submit(): void {
+    this.submitted = true;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
     }
+
+    const procurementPersonId = this.form.controls.procurementPerson.value;
+    if (!procurementPersonId) return;
+    this.dialogRef.close({ procurementPersonId });
   }
 }
 

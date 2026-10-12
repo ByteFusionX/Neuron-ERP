@@ -22,6 +22,7 @@
         [views]="views"
         [initialViewId]="activeViewId"
         [syncViewWithUrl]="false"
+        [showViewPill]="false"
         (viewChange)="onViewChange($event)"
         storageKey="job-sheet-list"
         exportable
@@ -65,7 +66,7 @@
         <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row let-tab="tab">
             <app-action-button *ngIf="canAllocate(row)" variant="primary" (click)="openAllocateTypeSelecter(row)">Allocate</app-action-button>
-            <app-action-button *ngIf="canTransfer(row)" variant="primary" (click)="onTransferProcurementPerson(row)">Transfer Procurement</app-action-button>
+            <app-action-button *ngIf="canTransfer(row)" variant="primary" (click)="onTransferProcurementPerson(row)">{{ transferLabel(row) }}</app-action-button>
             <app-action-button *ngIf="canConvert(row)" variant="primary" (click)="onConvertToPurchase(row)">Convert To Purchase</app-action-button>
             <app-action-button *ngIf="canMarkLost(row)" variant="outline" (click)="onMarkLost(row)">Mark as lost</app-action-button>
         </ng-template>

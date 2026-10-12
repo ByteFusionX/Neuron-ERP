@@ -1,33 +1,30 @@
-<app-modal-layout
-  title="Transfer Procurement Person"
-  [subtitle]="data.jobLabel ? 'Job ID: ' + data.jobLabel : ''"
-  [onClose]="onClose.bind(this)"
-  [footerButtons]="getFooterButtons()"
-  contentClass="p-6 min-w-[400px]">
+<app-form-modal-shell
+  icon="user-round-check"
+  tone="sky"
+  [title]="currentProcurementPersonName ? 'Transfer procurement' : 'Assign procurement'"
+  contextLabel="Job"
+  [context]="data?.jobLabel"
+  contextEmptyText="Choose the procurement owner."
+  formId="transfer-procurement-form"
+  [invalid]="form.invalid && submitted"
+  invalidText="Select a procurement person"
+  [submitLabel]="currentProcurementPersonName ? 'Transfer' : 'Assign'"
+  submitIcon="check"
+  submitShortcutVerb="transfer"
+  (closed)="close()">
+  <form id="transfer-procurement-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <div *ngIf="currentProcurementPersonName" class="current-person">
+      <span>Current Procurement Person</span>
+      <strong>{{ currentProcurementPersonName }}</strong>
+    </div>
 
-  <div *ngIf="data.currentProcurementPerson" class="mb-4 p-3 rounded-md bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
-    <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Current Procurement Person</p>
-    <p class="text-base font-medium text-gray-900 dark:text-gray-100">
-      {{ data.currentProcurementPerson.firstName }} {{ data.currentProcurementPerson.lastName }}
-    </p>
-  </div>
-
-  <label for="employee" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-    New Procurement Person <span class="text-red-500">*</span>
-  </label>
-  <ng-select
-    id="employee"
-    class="filter"
-    placeholder="Select employee..."
-    appendTo="body"
-    [(ngModel)]="selectedEmployee"
-    (ngModelChange)="showError = false"
-    [ngClass]="{'border-orange-500': showError}">
-    <ng-option *ngFor="let employee of employees$ | async" [value]="employee._id" [disabled]="employee._id === currentId">
-      {{ employee.firstName }} {{ employee.lastName }}<span *ngIf="employee._id === currentId"> (current)</span>
-    </ng-option>
-  </ng-select>
-  <div *ngIf="showError" class="text-red-500 mt-1 text-sm">
-    Please select an employee.
-  </div>
-</app-modal-layout>
+    <app-sf-section title="Procurement" columns="1">
+      <app-sf-field [label]="currentProcurementPersonName ? 'New procurement person' : 'Procurement person'" [control]="form.controls.procurementPerson">
+        <app-sf-combobox
+          formControlName="procurementPerson"
+          [options]="employeeOptions"
+          placeholder="Select procurement person"></app-sf-combobox>
+      </app-sf-field>
+    </app-sf-section>
+  </form>
+</app-form-modal-shell>

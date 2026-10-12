@@ -1,10 +1,8 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, Validators } from '@angular/forms';
-import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
-import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
+import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
 
 export enum allocateType {
@@ -17,15 +15,16 @@ export enum allocateType {
 export interface AllocateTypeResult {
   id: string;
   jobId: string;
-  allocationType: allocateType;
-  procurementPerson?: string;
+  productDistribution: boolean;
+  projectInstallation: boolean;
+  amc: boolean;
 }
 
-/** Picks how a pending job will be delivered. Closes with the choice, or undefined on cancel. */
+/** Picks what a pending job covers: product distribution, project installation, AMC, or any mix. Closes with the choice, or undefined on cancel. */
 @Component({
   selector: 'app-allocate-type-modal',
   standalone: true,
-  imports: [CommonModule, SmartFormModule, FormModalShellComponent],
+  imports: [CommonModule, ReactiveFormsModule, SmartFormModule, FormModalShellComponent],
   template: `
     <app-form-modal-shell
       icon="refresh" tone="sky" title="Allocate job"
@@ -34,12 +33,31 @@ export interface AllocateTypeResult {
       submitLabel="Allocate" submitIcon="check" submitShortcutVerb="allocate"
       (closed)="close()">
       <form id="allocate-job-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        <app-sf-section title="Allocation" columns="1">
-          <app-sf-field label="Allocation type" [control]="form.controls.allocationType">
-            <app-sf-radio-group formControlName="allocationType" [options]="allocationTypes"></app-sf-radio-group>
-          </app-sf-field>
-          <app-sf-field *ngIf="needsProcurement" label="Procurement person" [control]="form.controls.procurementPerson">
-            <app-sf-combobox formControlName="procurementPerson" [options]="employeeOptions" placeholder="Select procurement person"></app-sf-combobox>
+        <app-sf-section title="Job scope" columns="1">
+          <app-sf-field label="What does this job cover?" hint="Select any that apply." [control]="form" [messages]="{ scopeRequired: 'Select at least one.' }">
+            <div class="space-y-3">
+              @for (o of scopes; track o.key) {
+                <div class="flex cursor-pointer items-center gap-3 rounded-lg border p-3.5 shadow-sm transition-colors"
+                     [ngClass]="form.controls[o.key].value
+                       ? o.card
+                       : 'border-gray-200 bg-white hover:border-gray-300 dark:border-erp-border-dark dark:bg-gray-800/60'"
+                     (click)="toggle(o.key)">
+                  <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                        [ngClass]="form.controls[o.key].value
+                          ? o.iconOn
+                          : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300'">
+                    <span class="material-icons text-[16px]">{{ o.icon }}</span>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ o.label }}</span>
+                    <span class="block text-[11px] text-gray-500 dark:text-gray-400">{{ o.description }}</span>
+                  </span>
+                  <span (click)="$event.stopPropagation()">
+                    <app-sf-checkbox [formControlName]="o.key"></app-sf-checkbox>
+                  </span>
+                </div>
+              }
+            </div>
           </app-sf-field>
         </app-sf-section>
       </form>
@@ -47,42 +65,29 @@ export interface AllocateTypeResult {
   `,
   styles: [':host{display:block}'],
 })
-export class AllocateTypeModalComponent implements OnInit {
+export class AllocateTypeModalComponent {
   private fb = inject(FormBuilder);
   private dialogRef = inject<ModalRef<AllocateTypeResult>>(ModalRef);
-  private employeeService = inject(EmployeeService);
   data = inject(MODAL_DATA, { optional: true }) as getJob | null;
 
-  readonly allocationTypes: SfOption[] = [
-    { value: allocateType.SupplyOnly, label: 'Supply Only', description: 'Material supply without installation' },
-    { value: allocateType.ProjectWithSupply, label: 'Project With Supply', description: 'Complete project with material supply' },
-    { value: allocateType.ProjectsWithOutSupply, label: 'Projects Without Supply', description: 'Project execution without material supply' },
-    { value: allocateType.AMC, label: 'AMC', description: 'Annual Maintenance Contract' },
+  readonly scopes = [
+    { key: 'productDistribution' as const, label: 'Product distribution', icon: 'local_shipping', card: 'border-emerald-300 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10', iconOn: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300', description: 'Supply the materials to the customer' },
+    { key: 'projectInstallation' as const, label: 'Project installation', icon: 'construction', card: 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10', iconOn: 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-300', description: 'Install and commission on site' },
+    { key: 'amc' as const, label: 'AMC', icon: 'event_repeat', card: 'border-violet-300 bg-violet-50 dark:border-violet-500/40 dark:bg-violet-500/10', iconOn: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300', description: 'Annual maintenance contract after handover' },
   ];
 
-  employeeOptions: SfOption[] = [];
   submitted = false;
-  form = this.fb.group({
-    allocationType: [null as allocateType | null, Validators.required],
-    procurementPerson: [null as string | null],
-  });
+  form = this.fb.nonNullable.group({
+    productDistribution: false,
+    projectInstallation: false,
+    amc: false,
+  }, { validators: (g) => (g.value.productDistribution || g.value.projectInstallation || g.value.amc ? null : { scopeRequired: true }) });
 
-  get needsProcurement(): boolean {
-    const t = this.form.controls.allocationType.value;
-    return t === allocateType.SupplyOnly || t === allocateType.ProjectWithSupply;
-  }
-
-  ngOnInit(): void {
-    this.employeeService.getProcurementEmployees().subscribe({
-      next: (employees) => (this.employeeOptions = employees.map((e) => ({ value: e._id || '', label: `${e.firstName} ${e.lastName}` }))),
-      error: (error) => console.error('Error loading employees:', error),
-    });
-    this.form.controls.allocationType.valueChanges.subscribe(() => {
-      const person = this.form.controls.procurementPerson;
-      person.setValidators(this.needsProcurement ? Validators.required : null);
-      if (!this.needsProcurement) person.setValue(null);
-      person.updateValueAndValidity();
-    });
+  toggle(key: 'productDistribution' | 'projectInstallation' | 'amc'): void {
+    const control = this.form.controls[key];
+    control.setValue(!control.value);
+    control.markAsDirty();
+    this.form.markAllAsTouched();
   }
 
   close(): void {
@@ -95,12 +100,7 @@ export class AllocateTypeModalComponent implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
-    const { allocationType, procurementPerson } = this.form.getRawValue();
-    this.dialogRef.close({
-      id: this.data._id,
-      jobId: this.data.jobId,
-      allocationType: allocationType as allocateType,
-      ...(this.needsProcurement && procurementPerson ? { procurementPerson } : {}),
-    });
+    const { productDistribution, projectInstallation, amc } = this.form.getRawValue();
+    this.dialogRef.close({ id: this.data._id, jobId: this.data.jobId, productDistribution, projectInstallation, amc });
   }
 }
