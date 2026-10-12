@@ -83,12 +83,12 @@
             </div>
             <p class="text-xs text-gray-600 mt-1 break-words whitespace-normal max-w-sm leading-relaxed">{{ notification.message }}</p>
             <p class="text-xs text-gray-500 mt-2 flex items-center gap-2">
-              <span *ngIf="notification.sentBy.avatar"
+              <span *ngIf="notification.sentBy?.avatar"
                 class="flex-shrink-0 w-5 h-5 rounded-full overflow-hidden">
                 <img [src]="notification.sentBy.avatar" alt="{{ notification.sentBy.firstName }}" />
               </span>
-              <span>Assigned by: {{ notification.sentBy.firstName }} {{notification.sentBy.lastName}}
-                <span *ngIf="notification.type === 'Event' && notification.referenceId.collectionId"
+              <span>{{ notification.sentBy ? 'Assigned by: ' + (notification.sentBy.firstName || '') + ' ' + (notification.sentBy.lastName || '') : 'System notification' }}
+                <span *ngIf="notification.type === 'Event' && notification.referenceId?.collectionId"
                   class="px-2 py-1 bg-gray-200 text-gray-800 rounded text-xs font-medium">
                   {{ notification.referenceId.collectionId.enquiryId }}
                 </span>

@@ -12,6 +12,7 @@ import { RouterLink } from '@angular/router';
       <svg *ngIf="icon" class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" [ngSwitch]="icon">
         <path *ngSwitchCase="'plus'" d="M8 3v10M3 8h10" />
         <path *ngSwitchCase="'edit'" d="M11 2.5l2.5 2.5L5.5 13H3v-2.5L11 2.5z" />
+        <path *ngSwitchCase="'download'" d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M2.5 13.5h11" />
         <g *ngSwitchCase="'view'"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></g>
       </svg>
       <ng-content></ng-content>
@@ -61,7 +62,7 @@ import { RouterLink } from '@angular/router';
 export class ActionButtonComponent {
   @Input() variant: 'primary' | 'secondary' | 'tool' | 'ghost' | 'outline' = 'secondary';
   /** Optional leading icon. */
-  @Input() icon: 'plus' | 'edit' | 'view' | null = null;
+  @Input() icon: 'plus' | 'edit' | 'view' | 'download' | null = null;
   @Input() type: 'button' | 'submit' = 'button';
   @Input() form = '';
   @Input() disabled = false;

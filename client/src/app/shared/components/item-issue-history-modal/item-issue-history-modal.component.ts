@@ -6,7 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
-import { ViewCommentComponent } from 'src/app/modules/assigned-jobs/pages/view-comment/view-comment.component';
+import { ViewCommentComponent } from 'src/app/shared/components/view-comment/view-comment.component';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { PdfPreviewComponent } from '../pdf-preview/pdf-preview.component';

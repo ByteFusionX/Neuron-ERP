@@ -2,7 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { ModalLayoutComponent, ModalFooterButton } from 'src/app/shared/components/modal-layout/modal-layout.component';
+import { FormModalShellComponent } from 'src/app/shared/components/modal';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 
@@ -39,20 +39,24 @@ export interface StatusChangeResult<T extends string = string> {
 @Component({
   selector: 'app-status-change-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ModalLayoutComponent, SmartFormModule],
+  imports: [CommonModule, FormsModule, FormModalShellComponent, SmartFormModule],
   template: `
-    <app-modal-layout
+    <app-form-modal-shell
+      icon="refresh"
+      tone="violet"
       [title]="data.title || 'Update status'"
-      [subtitle]="data.subtitle || ''"
-      [onClose]="onCancel.bind(this)"
-      [footerButtons]="footerButtons"
+      contextLabel="Current status"
+      [context]="format(data.currentStatus)"
+      [contextEmptyText]="data.subtitle || ''"
+      formId="status-change-form"
+      [invalid]="submitted && !canSave"
+      [invalidText]="reasonRequired ? 'Reason is required for this status change' : 'Select the new status'"
+      [submitLabel]="data.confirmLabel || 'Update status'"
+      submitIcon="check"
+      submitShortcutVerb="update"
+      (closed)="onCancel()"
     >
-      <div class="flex flex-col gap-4 p-4">
-        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <span>Current status</span>
-          <span class="rounded-full border border-gray-200 px-2 py-0.5 text-xs font-medium text-gray-900 dark:border-erp-border-dark dark:text-gray-100">{{ format(data.currentStatus) }}</span>
-        </div>
-
+      <form id="status-change-form" class="flex flex-col gap-4" (ngSubmit)="onSave()">
         <div *ngIf="data.lockStatus" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <span>New status</span>
           <span class="rounded-full border border-gray-200 px-2 py-0.5 text-xs font-medium text-gray-900 dark:border-erp-border-dark dark:text-gray-100">{{ format(status || '') }}</span>
@@ -70,13 +74,14 @@ export interface StatusChangeResult<T extends string = string> {
         <p *ngIf="warning" class="rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-600 dark:border-erp-border-dark dark:text-gray-400">
           {{ warning }}
         </p>
-      </div>
-    </app-modal-layout>
+      </form>
+    </app-form-modal-shell>
   `,
 })
 export class StatusChangeModalComponent {
   status: string | null;
   reason = '';
+  submitted = false;
   readonly options: SfOption<string>[];
 
   constructor(
@@ -86,7 +91,11 @@ export class StatusChangeModalComponent {
     this.status = data.targetStatus && data.targetStatus !== data.currentStatus ? data.targetStatus : null;
     this.options = data.statuses
       .filter((s) => s !== data.currentStatus)
-      .map((s) => ({ label: this.format(s), value: s, disabled: data.canSelect ? !data.canSelect(data.currentStatus, s) : false }));
+      .map((s) => {
+        const disabled = data.canSelect ? !data.canSelect(data.currentStatus, s) : false;
+        // A greyed-out option says why, instead of just looking broken.
+        return { label: this.format(s), value: s, disabled, description: disabled ? `Not available from ${this.format(data.currentStatus)}` : undefined };
+      });
   }
 
   format(status: string): string {
@@ -117,14 +126,8 @@ export class StatusChangeModalComponent {
     this.dialogRef.close(null);
   }
 
-  get footerButtons(): ModalFooterButton[] {
-    return [
-      { label: 'Cancel', theme: 'cancel', onClick: () => this.onCancel() },
-      { label: this.data.confirmLabel || 'Update status', theme: 'primary', disabled: !this.canSave, onClick: () => this.onSave() },
-    ];
-  }
-
   onSave(): void {
+    this.submitted = true;
     if (!this.canSave) return;
     this.dialogRef.close({ status: this.status as string, reason: this.reason.trim() });
   }

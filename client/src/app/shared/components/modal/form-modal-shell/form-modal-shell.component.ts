@@ -42,7 +42,7 @@ const TONE_CLASSES: Record<FormModalShellTone, string> = {
           <p *ngIf="context || contextEmptyText" class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
             <ng-container *ngIf="context; else noCtx">
               {{ contextLabel }}
-              <span class="inline-flex max-w-[16rem] items-center truncate rounded-md bg-gray-100 px-1.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ context }}</span>
+              <span [title]="context" class="inline-block max-w-full break-words rounded-md bg-gray-100 px-1.5 py-0.5 font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ context }}</span>
             </ng-container>
             <ng-template #noCtx>{{ contextEmptyText }}</ng-template>
           </p>
@@ -62,14 +62,14 @@ const TONE_CLASSES: Record<FormModalShellTone, string> = {
       <footer class="flex flex-wrap items-center gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
         <ng-content select="[footerExtra]"></ng-content>
         <span *ngIf="invalid" class="text-xs text-red-600 dark:text-red-400">{{ invalidText }}</span>
-        <span *ngIf="showShortcutHint" class="ml-auto hidden text-[11px] text-gray-400 sm:inline">
+        <span *ngIf="showSubmit && showShortcutHint" class="ml-auto hidden text-[11px] text-gray-400 sm:inline">
           <kbd class="rounded border border-gray-200 bg-white px-1 font-sans dark:border-erp-border-dark dark:bg-gray-800">Ctrl</kbd>
           + <kbd class="rounded border border-gray-200 bg-white px-1 font-sans dark:border-erp-border-dark dark:bg-gray-800">Enter</kbd> to {{ submitShortcutVerb }}
         </span>
-        <div class="flex gap-2" [class.ml-auto]="!showShortcutHint" [class.max-sm:ml-auto]="showShortcutHint">
+        <div class="flex gap-2" [class.ml-auto]="!showSubmit || !showShortcutHint" [class.max-sm:ml-auto]="showSubmit && showShortcutHint">
           <button type="button" (click)="closed.emit()"
             class="rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-[13px] font-medium text-gray-700 transition hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200 dark:hover:bg-gray-800">{{ cancelLabel }}</button>
-          <button type="submit" [attr.form]="formId" [disabled]="saving"
+          <button *ngIf="showSubmit" type="submit" [attr.form]="formId" [disabled]="saving"
             class="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-[13px] font-medium text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
             <app-dp-icon *ngIf="submitIcon && !saving" [name]="submitIcon" size="w-3.5 h-3.5"></app-dp-icon>{{ saving ? savingLabel : submitLabel }}
           </button>
@@ -100,6 +100,7 @@ export class FormModalShellComponent {
   @Input() savingLabel = 'Saving...';
   @Input() submitIcon?: string = 'plus';
   @Input() saving = false;
+  @Input() showSubmit = true;
   @Input() showShortcutHint = true;
   @Input() submitShortcutVerb = 'submit';
 

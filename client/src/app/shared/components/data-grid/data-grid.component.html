@@ -3,7 +3,7 @@
   <div class="dg-card flex-1 min-w-0 bg-white dark:bg-erp-surface-dark border border-gray-100 dark:border-erp-border-dark rounded-xl overflow-hidden flex flex-col">
 
     <!-- Toolbar / bulk bar -->
-    <div class="relative shrink-0 flex items-center justify-between gap-3 px-5 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
+    <div class="relative shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 border-b border-gray-100 dark:border-erp-border-dark transition-colors"
       [ngClass]="[selectedKeys.size > 0 ? 'bg-violet-50 dark:bg-violet-950/40' : '', showTitleBlock ? 'py-4 min-h-16' : 'py-2']">
       <div *ngIf="loading && data.length" class="dg-progress" role="progressbar" aria-label="Loading"></div>
       <ng-container *ngIf="selectedKeys.size === 0; else bulkBar">
@@ -30,7 +30,7 @@
           </button>
           <span class="text-sm font-semibold text-violet-900 dark:text-violet-200 tabular-nums">{{ selectedKeys.size }} selected</span>
           <button *ngIf="selectedKeys.size < filteredData.length" type="button" (click)="selectAll()"
-            class="text-xs font-medium text-violet-700 dark:text-violet-300 hover:underline">Select all {{ filteredData.length }}</button>
+            class="text-xs font-medium text-violet-700 dark:text-violet-300 hover:underline">Select all {{ filteredData.length }}{{ serverSide && totalCount > filteredData.length ? ' on this page' : '' }}</button>
           <span class="h-5 w-px bg-violet-200 dark:bg-violet-800"></span>
           <div class="flex items-center gap-2 flex-wrap">
             <button *ngFor="let a of bulkActions" type="button" (click)="runBulkAction(a)"
@@ -49,9 +49,9 @@
         <ng-content select="[dgToolbarExtra]"></ng-content>
       </div>
 
-      <div *ngIf="selectedKeys.size === 0" class="flex items-center gap-2 shrink-0">
+      <div *ngIf="selectedKeys.size === 0" class="flex flex-wrap items-center justify-end gap-2 min-w-0">
       <!-- Search -->
-      <div class="w-56">
+      <div class="w-56 max-w-full">
         <app-sf-input type="search" clearable [placeholder]="searchPlaceholder" [attr.aria-label]="'Search ' + title"
           [ngModel]="searchTerm" (ngModelChange)="onSearch($event ?? '')"></app-sf-input>
       </div>

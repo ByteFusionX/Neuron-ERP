@@ -34,7 +34,9 @@ export class SfNumberComponent extends SfControl<number> {
 
   onInput(el: HTMLInputElement): void {
     const allowSign = this.min === null || this.min < 0;
-    let clean = el.value.replace(allowSign ? /[^0-9.-]/g : /[^0-9.]/g, '').replace(/(?!^)-/g, '').replace(/\.(?=.*\.)/g, '');
+    // A minus sign in a field that cannot go below zero (or its minimum) lands on the minimum, so "-5" is 0, not 5.
+    const negative = !allowSign && el.value.includes('-');
+    let clean = negative ? String(Math.max(this.min ?? 0, 0)) : el.value.replace(allowSign ? /[^0-9.-]/g : /[^0-9.]/g, '').replace(/(?!^)-/g, '').replace(/\.(?=.*\.)/g, '');
     if (this.decimals !== null && clean.includes('.')) {
       const [whole, fraction] = clean.split('.');
       clean = `${whole}.${fraction.slice(0, this.decimals)}`;

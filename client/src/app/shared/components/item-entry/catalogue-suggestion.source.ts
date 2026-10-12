@@ -8,6 +8,7 @@ export const toCatalogueSuggestion = (p: any): ItemSuggestion => ({
   _id: p._id,
   categoryName: p.productCategory?.categoryName || '',
   description: p.productDescription || '',
+  productName: p.productName || '',
   source: 'catalogue',
   itemCode: p.itemCode || '',
   partNo: p.partNo || '',

@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, booleanAttribute } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DetailClause } from './detail-panel.model';
 
@@ -20,10 +20,10 @@ const CLAMP_LENGTH = 220;
         <span class="mt-0.5 grid h-6 w-6 shrink-0 place-content-center rounded-full bg-gray-100 text-[11px] font-semibold tabular-nums text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ i + 1 }}</span>
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <p class="text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ c.title }}</p>
+            <p [ngClass]="large ? 'text-[13.5px]' : 'text-[13px]'" class="font-medium text-gray-900 dark:text-gray-100">{{ c.title }}</p>
             <span *ngIf="c.tag" class="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ c.tag }}</span>
           </div>
-          <p class="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-gray-600 dark:text-gray-400" [class.line-clamp-3]="isLong(c) && !expanded.has(c.id)">{{ c.body }}</p>
+          <p [ngClass]="large ? 'text-[13.5px]' : 'text-[13px]'" class="mt-1 whitespace-pre-line leading-relaxed text-gray-600 dark:text-gray-400" [class.line-clamp-3]="isLong(c) && !expanded.has(c.id)">{{ c.body }}</p>
           <button *ngIf="isLong(c)" type="button" (click)="toggle(c.id)" [attr.aria-expanded]="expanded.has(c.id)"
             class="mt-1 text-xs font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400">
             {{ expanded.has(c.id) ? 'Show less' : 'Show more' }}
@@ -41,6 +41,7 @@ const CLAMP_LENGTH = 220;
   styles: [':host{display:block}'],
 })
 export class DetailClauseListComponent {
+  @Input({ transform: booleanAttribute }) large = false;
   @Input() clauses: DetailClause[] = [];
   @Input() emptyMessage = 'No terms & conditions added yet.';
 

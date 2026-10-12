@@ -33,7 +33,7 @@ interface DetailTableLine {
       {{ title }} <span class="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ count }}</span>
     </p>
     <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm ring-1 ring-black/[0.02] dark:border-erp-border-dark dark:ring-white/[0.03]">
-      <table class="w-full border-collapse text-[13px]">
+      <table class="w-full border-collapse" [ngClass]="large ? 'text-[13.5px]' : 'text-[13px]'">
         <colgroup>
           <col *ngIf="numbered" style="width:3rem" />
           <col *ngFor="let c of columns" [style.width]="c.width || null" />
@@ -86,7 +86,7 @@ interface DetailTableLine {
                 [ngClass]="[c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap', c.emphasis ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100']"
                 class="px-3 py-2.5 align-top">
                 <ng-container [ngSwitch]="c.type">
-                  <ng-container *ngSwitchCase="'currency'">{{ line.row[c.key] | number: '1.0-0' }}</ng-container>
+                  <ng-container *ngSwitchCase="'currency'">{{ line.row[c.key] | number: '1.2-2' }}</ng-container>
                   <ng-container *ngSwitchCase="'number'">{{ line.row[c.key] | number }}</ng-container>
                   <ng-container *ngSwitchCase="'date'">{{ line.row[c.key] | date: 'dd MMM yyyy' }}</ng-container>
                   <app-detail-badge *ngSwitchCase="'badge'" [label]="line.row[c.key]" [tone]="badgeTone(c, line.row)"></app-detail-badge>
@@ -138,7 +138,7 @@ interface DetailTableLine {
             <td *ngFor="let c of columns; let first = first" [class.text-right]="isRight(c)"
               class="whitespace-nowrap border-t-2 border-gray-300 px-3 py-2.5 tabular-nums text-gray-900 dark:border-erp-border-dark dark:text-gray-100">
               <ng-container *ngIf="c.total; else label">
-                {{ c.type === 'currency' ? ((sum(c) | number: (c.totalFormat || '1.0-0')) + ' ' + currency) : (sum(c) | number: (c.totalFormat || '1.0-3')) }}
+                {{ c.type === 'currency' ? ((sum(c) | number: (c.totalFormat || '1.2-2')) + ' ' + currency) : (sum(c) | number: (c.totalFormat || '1.0-3')) }}
               </ng-container>
               <ng-template #label>{{ c.totalLabel || (first ? 'Total' : '') }}</ng-template>
             </td>
@@ -168,6 +168,8 @@ interface DetailTableLine {
   ],
 })
 export class DetailTableComponent {
+  /** Roomier type for pages where the table is the main content. */
+  @Input({ transform: booleanAttribute }) large = false;
   constructor(@Inject(LOCALE_ID) private locale: string) {}
 
   @Input() title = '';
@@ -310,14 +312,14 @@ export class DetailTableComponent {
     if (!c) return '';
     const value = line.sums[c.key];
     if (value == null) return '';
-    return formatNumber(value, this.locale, c.totalFormat || '1.0-0') + (c.type === 'currency' ? ' ' + this.currency : '');
+    return formatNumber(value, this.locale, c.totalFormat || '1.2-2') + (c.type === 'currency' ? ' ' + this.currency : '');
   }
 
   summaryValue(s: DetailSummaryRow): string {
     const n = Number(s.value);
     if (s.format === 'text' || s.format == null || Number.isNaN(n)) return String(s.value ?? '—');
     if (s.format === 'percent') return formatNumber(n, this.locale, '1.0-2') + '%';
-    if (s.format === 'currency') return formatNumber(n, this.locale, '1.0-0') + ' ' + this.currency;
+    if (s.format === 'currency') return formatNumber(n, this.locale, '1.2-2') + ' ' + this.currency;
     return formatNumber(n, this.locale, '1.0-2');
   }
 

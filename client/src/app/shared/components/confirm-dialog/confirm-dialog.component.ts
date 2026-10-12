@@ -55,7 +55,7 @@ import { CONFIRM_TONES, ConfirmConfig, ConfirmResult } from './confirm-dialog.mo
         <label *ngIf="config.reason" class="block">
           <span class="text-[13px] font-medium text-gray-700 dark:text-gray-300">{{ config.reasonLabel || 'Reason' }}<span *ngIf="config.reason === true" class="ml-0.5 text-red-500" aria-hidden="true">*</span>
             <span *ngIf="config.reason === 'optional'" class="font-normal text-gray-400 dark:text-gray-500">(optional)</span></span>
-          <textarea [(ngModel)]="reason" (blur)="reasonTouched = true" rows="3" class="cd-field mt-1 resize-none" [placeholder]="config.reason === true ? 'Required: say why, it is saved to the history' : 'Add a short note for the activity log'"></textarea>
+          <textarea [(ngModel)]="reason" [attr.maxlength]="config.reasonMaxLength || 1000" (blur)="reasonTouched = true" rows="3" class="cd-field mt-1 resize-none" [placeholder]="config.reason === true ? 'Required: say why, it is saved to the history' : 'Add a short note for the activity log'"></textarea>
           <span *ngIf="config.reason === true && reasonTouched && !reason.trim()" class="mt-1 block text-xs text-amber-600 dark:text-amber-400">A reason is required before you can continue.</span>
           <span *ngIf="config.reason === true && !reasonTouched && !reason.trim()" class="mt-1 block text-xs text-gray-500 dark:text-gray-400">{{ config.confirmLabel || 'Confirm' }} stays disabled until you enter a reason.</span>
         </label>

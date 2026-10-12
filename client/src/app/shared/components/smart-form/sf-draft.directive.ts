@@ -1,4 +1,4 @@
-import { Directive, Input, OnDestroy, OnInit, inject } from '@angular/core';
+import { Directive, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { FormGroupDirective } from '@angular/forms';
 import { Subscription, debounceTime } from 'rxjs';
 
@@ -18,6 +18,9 @@ export class SfDraftDirective implements OnInit, OnDestroy {
   @Input() sfDraftExclude: string[] = [];
   /** Lets a host that reuses one form for create and edit switch autosave off for the latter. */
   @Input() sfDraftDisabled = false;
+
+  /** Emits the restored value, so a host can rebuild what `patchValue` can't (e.g. a FormArray whose controls don't exist yet). */
+  @Output() restored = new EventEmitter<Record<string, any>>();
 
   pending: StoredDraft | null = null;
   savedAt: Date | null = null;
@@ -61,9 +64,11 @@ export class SfDraftDirective implements OnInit, OnDestroy {
 
   restore(): void {
     if (!this.pending) return;
-    this.fg.form.patchValue(this.pending.value);
+    const value = this.pending.value;
+    this.fg.form.patchValue(value);
     this.fg.form.markAsDirty();
     this.pending = null;
+    this.restored.emit(value);
   }
 
   discard(): void {

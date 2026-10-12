@@ -27,12 +27,16 @@ import { DetailTone, toneClasses } from './detail-tone';
     :host(.dpf-stacked) { flex-direction: column; align-items: stretch; gap: 0.125rem; min-height: 0;
       padding: 0; margin: 0; }
     :host(.dpf-stacked) .dpf-label { font-size: 0.75rem; }
+    :host(.dpf-large) { font-size: 0.875rem; }
+    :host(.dpf-large.dpf-stacked) .dpf-label { font-size: 0.78rem; }
   `],
 })
 export class DetailFieldComponent {
   @Input() label = '';
   @Input() icon = '';
   @HostBinding('class.dpf-stacked') @Input({ transform: booleanAttribute }) stacked = false;
+  /** Roomier type for pages where the fields are the main content. */
+  @HostBinding('class.dpf-large') @Input({ transform: booleanAttribute }) large = false;
   @HostBinding('class.dpf-no-hover') @Input({ transform: booleanAttribute }) noHover = false;
   /** Tabular figures, for ids and amounts. */
   @Input({ transform: booleanAttribute }) numeric = false;

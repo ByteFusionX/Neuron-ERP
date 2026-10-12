@@ -28,6 +28,8 @@ export interface ConfirmConfig {
   /** Show a reason box; `true` makes it required before confirming. */
   reason?: boolean | 'optional';
   reasonLabel?: string;
+  /** Longest reason accepted (default 1000 characters). */
+  reasonMaxLength?: number;
   /** User must type this exact text (e.g. a record number) to enable the confirm button. */
   typeToConfirm?: string;
   /** Radio options shown above the reason box; the picked value comes back as `choice`. */

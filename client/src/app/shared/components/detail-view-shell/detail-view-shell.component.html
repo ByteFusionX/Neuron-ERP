@@ -26,7 +26,7 @@
       </ng-container>
     </nav>
 
-    <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center justify-between gap-3" [class.mt-3]="breadcrumbs.length">
       <div class="flex min-w-0 items-center gap-3">
         <app-detail-avatar *ngIf="avatarText" [text]="avatarText" size="md"></app-detail-avatar>
         <div class="min-w-0">

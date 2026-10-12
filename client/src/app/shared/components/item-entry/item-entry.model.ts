@@ -14,6 +14,8 @@ export interface ItemSuggestion {
   _id: string;
   categoryName: string;
   description: string;
+  /** Short catalogue name; shown above the description in suggestion rows. */
+  productName?: string;
   source: 'catalogue' | 'inventory';
   itemCode?: string;
   partNo?: string;
@@ -93,6 +95,14 @@ export interface ItemEntryLineValue {
   profit?: number | null;
   unitSellingPrice?: number | null;
   availability?: string;
+  /** RFQ mode, once priced: what the supplier said about this line. */
+  paymentTerms?: string;
+  deliveryTerms?: string;
+  remarks?: string;
+  /** What the supplier will actually supply when it differs from the requested quantity. */
+  offeredQty?: number | null;
+  /** An alternative product the supplier offers instead (brand / model / part no). */
+  alternative?: string;
   supplierId?: string | { _id?: string } | null;
   uom?: string;
   /** Purchase mode only: the host's handle for mapping an edited line back to its saved record. */
@@ -111,6 +121,8 @@ export interface ItemEntryItemValue {
 export interface ItemEntryOptionValue {
   items?: ItemEntryItemValue[];
   totalDiscount?: number | null;
+  /** Anything the host wants to keep with the option (the RFQ drawer stores the option's supplier here). */
+  meta?: any;
 }
 
 export const DEFAULT_AVAILABILITY_OPTIONS: SfOption[] = [

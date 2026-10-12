@@ -89,7 +89,7 @@ export class NavBarComponent {
     this.employeeData$.subscribe((emp) => {
       if(emp){
         const { recycle, bugReports, ...settingsFlags } = emp.category.privileges.portalManagement ?? {};
-        this.showPortalMangement = Object.values(settingsFlags).some(value => value === true) || !!emp.category.privileges.roles?.view;
+        this.showPortalMangement = Object.values(settingsFlags).some(value => value === true);
         this.isSuperAdmin = emp.category.role === 'superAdmin';
         const pm = emp.category.privileges.portalManagement;
         this.canSeeRecycle = this.isSuperAdmin || !!pm?.recycle;

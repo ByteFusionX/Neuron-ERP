@@ -13,7 +13,7 @@ import { SF_STYLES, SfOption } from './sf.model';
   template: `
     <div class="relative" #wrapper>
       <div class="sf-input flex cursor-text flex-wrap items-center gap-1 !pr-8" [class.py-1]="multiple && selected.length"
-        [class.sf-disabled]="disabled" (click)="input.focus()">
+        [class.sf-disabled]="disabled" (click)="input.focus(); reopen()">
         <ng-container *ngIf="multiple">
           <span *ngFor="let o of selected" class="inline-flex items-center gap-1 rounded-md bg-violet-50 dark:bg-violet-950/40 py-0.5 pl-1.5 pr-1 text-xs text-violet-700 dark:text-violet-300">
             {{ o.label }}
@@ -97,6 +97,11 @@ export class SfComboboxComponent extends SfControl {
     if (this.open) this.positionDropdown();
   }
 
+  /** A field that kept focus after a choice gets no new focus event on click, so reopen the list here. */
+  reopen(): void {
+    if (!this.open && !this.disabled) this.onFocus();
+  }
+
   onFocus(): void {
     if (this.readonly) return;
     this.open = true;
@@ -107,8 +112,9 @@ export class SfComboboxComponent extends SfControl {
   positionDropdown(): void {
     const rect = this.wrapper.nativeElement.getBoundingClientRect();
     this.dropdownTop = rect.bottom + 4;
-    this.dropdownLeft = rect.left;
-    this.dropdownWidth = rect.width;
+    // A narrow field (e.g. a UoM cell) still gets a list wide enough to read, kept inside the viewport.
+    this.dropdownWidth = Math.max(rect.width, 200);
+    this.dropdownLeft = Math.max(8, Math.min(rect.left, window.innerWidth - this.dropdownWidth - 8));
   }
 
   get values(): any[] {

@@ -1,8 +1,9 @@
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, booleanAttribute, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, EventEmitter, HostListener, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, booleanAttribute, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 /** Open drawers, bottom to top. Lets a drawer opened over another one know it is stacked. */
 const OPEN_STACK: SfDrawerComponent[] = [];
+const ALL_DRAWERS: SfDrawerComponent[] = [];
 
 /**
  * Slide-over panel for create/edit forms. Project the form as content, header extras into [sfDrawerHeader],
@@ -78,12 +79,14 @@ export class SfDrawerComponent implements OnInit, OnChanges, OnDestroy {
   confirming = false;
 
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private cdr = inject(ChangeDetectorRef);
 
   /**
    * The app shell's content area is its own stacking context, so a drawer left in place can never rise above the
    * sidebar (z-40) and the backdrop would not dim it. Re-parent the host onto <body> to escape that context.
    */
   ngOnInit(): void {
+    ALL_DRAWERS.push(this);
     document.body.appendChild(this.host.nativeElement);
   }
 
@@ -99,14 +102,22 @@ export class SfDrawerComponent implements OnInit, OnChanges, OnDestroy {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!changes['open']) return;
-    const i = OPEN_STACK.indexOf(this);
-    if (this.open && i < 0) OPEN_STACK.push(this);
-    else if (!this.open && i >= 0) OPEN_STACK.splice(i, 1);
+    // Mutating the shared stack mid-pass flips `covered` on a drawer that was already checked (NG0100), so defer the
+    // change to a microtask and re-check every drawer afterwards.
+    Promise.resolve().then(() => {
+      const i = OPEN_STACK.indexOf(this);
+      if (this.open && i < 0) OPEN_STACK.push(this);
+      else if (!this.open && i >= 0) OPEN_STACK.splice(i, 1);
+      ALL_DRAWERS.forEach((d) => d.cdr.markForCheck());
+    });
   }
 
   ngOnDestroy(): void {
     const i = OPEN_STACK.indexOf(this);
     if (i >= 0) OPEN_STACK.splice(i, 1);
+    const j = ALL_DRAWERS.indexOf(this);
+    if (j >= 0) ALL_DRAWERS.splice(j, 1);
+    ALL_DRAWERS.forEach((d) => d.cdr.markForCheck());
     this.host.nativeElement.remove();
   }
 

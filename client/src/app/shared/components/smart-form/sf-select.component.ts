@@ -15,7 +15,7 @@ import { SF_STYLES, SfOption } from './sf.model';
       <select #sel class="sf-input appearance-none !pr-8" [id]="inputId" [disabled]="disabled || readonly"
         [ngClass]="selectedIndex < 0 ? 'text-gray-400 dark:text-gray-500' : ''" (change)="onSelect(sel.selectedIndex)" (blur)="touch()">
         <option value="" [selected]="selectedIndex < 0">{{ placeholder || 'Select…' }}</option>
-        <option *ngFor="let o of options; let i = index" class="text-gray-900 dark:text-gray-100" [selected]="i === selectedIndex" [disabled]="o.disabled">{{ o.label }}</option>
+        <option *ngFor="let o of options; let i = index" class="text-gray-900 dark:text-gray-100" [selected]="i === selectedIndex" [disabled]="o.disabled" [attr.title]="o.disabled ? o.description : null">{{ o.label }}{{ o.disabled && o.description ? ' (' + o.description.toLowerCase() + ')' : '' }}</option>
       </select>
       <svg class="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />

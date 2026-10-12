@@ -22,6 +22,7 @@ import {
   ItemSuggestion,
   ItemSuggestionSource,
 } from './item-entry.model';
+import { downloadItemsTemplate, exportItemsSheet, itemSheetColumns, readItemsSheet } from './item-entry-excel';
 import { ActiveItemEntryService } from 'src/app/core/services/active-item-entry.service';
 
 type LineFilter = 'missingPrice' |'notInCatalogue' | 'errors';
@@ -48,14 +49,18 @@ type LineFilter = 'missingPrice' |'notInCatalogue' | 'errors';
     :host { display: block; }
     /* The numeric strip is dense on purpose: seven fields per line have to fit without a horizontal scrollbar. */
     .ie-strip { display: grid; gap: 0.375rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    @media (min-width: 640px) { .ie-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (min-width: 640px) {
+      .ie-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      /* Item code and part no are the long values on an RFQ line; give them twice the room of qty / unit. */
+      .ie-strip.ie-strip-rfq { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+    }
     @media (min-width: 1400px) {
       .ie-strip { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 5.5fr) minmax(0, 6.5fr) minmax(0, 10fr) minmax(0, 9fr) minmax(0, 8.5fr) minmax(0, 9fr); }
       /* Purchase drops the margin column (no customer-facing margin for supplier lines), so it's one column short of the default strip. */
       .ie-strip.ie-strip-purchase { grid-template-columns: minmax(0, 7.5fr) minmax(0, 7.5fr) minmax(0, 5fr) minmax(0, 5fr) minmax(0, 6.5fr) minmax(0, 6.5fr) minmax(0, 10fr) minmax(0, 9fr) minmax(0, 8.5fr) minmax(0, 9fr); }
       /* RFQ asks suppliers for prices: identifiers, quantity and unit; the supplier's price only once it replies. */
-      .ie-strip.ie-strip-rfq { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .ie-strip.ie-strip-rfq.ie-strip-rfq-priced { grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr); }
+      .ie-strip.ie-strip-rfq { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+      .ie-strip.ie-strip-rfq.ie-strip-rfq-priced { grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr); }
     }
     .ie-labels { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.03em; color: #9ca3af; }
     .ie-labels > span:nth-child(n+3):nth-child(-n+7), .ie-labels > span:nth-child(n+10) { text-align: right; }
@@ -151,6 +156,18 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Output() createProductRequested = new EventEmitter<CreateProductRequest>();
   /** Deal mode: which option the user is working in. */
   @Output() optionChanged = new EventEmitter<number>();
+  /** What an option tab is called; default "Option N". The RFQ drawer names tabs after their supplier. */
+  @Input() optionLabel: ((i: number, meta: any) => string) | null = null;
+  /** Rendered next to the tabs for the selected option (RFQ drawer: export that supplier's sheet). */
+  @Input() optionExtraTemplate: TemplateRef<any> | null = null;
+  @Input() addOptionLabel = 'Add option';
+  @Input() optionRemoveLabel = 'Remove option';
+  /** Capitalised name used in the "… removed" undo message. */
+  @Input() optionNoun = 'Option';
+
+  tabLabel(i: number): string {
+    return this.optionLabel?.(i, this.optionalItems.at(i)?.get('meta')?.value) ?? `Option ${i + 1}`;
+  }
 
   selectedOption = 0;
   /** Deal mode: the quoted numbers each line was seeded with, for restoring on untick. */
@@ -195,7 +212,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    if (this.seedOptionalItems?.length) this.patchOptions(this.seedOptionalItems);
+    // A deal form mounts this twice (line table on step 1, totals-only on step 2) over one shared
+    // FormArray; the second mount must keep the ticked lines/suppliers instead of re-seeding them.
+    const alreadyFilled = this.isDeal && this.optionalItems.length > 0;
+    if (this.seedOptionalItems?.length && !alreadyFilled) this.patchOptions(this.seedOptionalItems);
     else if (!this.optionalItems.length) this.addOption();
 
     this.subs.add(this.optionalItems.valueChanges.subscribe(() => this.emitTotals()));
@@ -266,13 +286,20 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private resolveUnits(): void {
-    const missing = [...this.savedUnits].filter((v) => !this.masterUnits.some((o) => o.value === v));
+    const missing = [...this.savedUnits].filter((v) => !this.masterUnits.some((o) => String(o.value).toLowerCase() === v.toLowerCase()));
     this.resolvedUomOptions = [...missing.map((v) => ({ label: v, value: v })), ...this.masterUnits];
   }
 
-  private keepUnit(value?: string | null): void {
+  /** The master list's spelling of a unit ("NOS" -> "Nos"), so one unit never shows up in two cases. */
+  private canonicalUnit(value?: string | null): string {
     const v = (value ?? '').toString().trim();
-    if (!v || this.savedUnits.has(v)) return;
+    const match = this.masterUnits.find((o) => String(o.value).toLowerCase() === v.toLowerCase());
+    return match ? String(match.value) : v;
+  }
+
+  private keepUnit(value?: string | null): void {
+    const v = this.canonicalUnit(value);
+    if (!v || this.savedUnits.has(v) || this.masterUnits.some((o) => o.value === v)) return;
     this.savedUnits.add(v);
     this.resolveUnits();
   }
@@ -330,7 +357,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   get isRfq(): boolean { return this.mode === 'rfq'; }
   /** Flat single-list modes: no options and no optional items. */
   get isFlat(): boolean { return this.isPurchase || this.isRfq; }
-  get optionsEnabled(): boolean { return this.allowOptions && !this.isFlat; }
+  /** RFQ mode opts in through allowOptions (each tab is one supplier); purchase stays flat. */
+  get optionsEnabled(): boolean { return this.allowOptions && !this.isPurchase; }
   get optionalItemsEnabled(): boolean { return this.allowOptionalItems && !this.isFlat; }
 
   isLineLocked(i: number, j: number, k: number): boolean {
@@ -444,7 +472,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       quantity: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
       unitCost: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : [Validators.required, Validators.min(0)]],
       // A deal may sell below cost, so no negative-margin rule there.
-      profit: [null as number | null, deal ? [this.whenTicked(Validators.required)] : purchase ? [] : [Validators.required, Validators.min(0), Validators.max(99.99), this.nonNegativeProfitValidator()]],
+      profit: [null as number | null, deal ? [this.whenTicked(Validators.required), this.whenTicked(Validators.max(99.99))] : purchase ? [] : [Validators.required, Validators.min(0), Validators.max(99.99), this.nonNegativeProfitValidator()]],
       unitSellingPrice: [null as number | null, deal ? [this.whenTicked(Validators.required), Validators.min(0)] : purchase ? [Validators.min(0)] : [Validators.required, Validators.min(0)]],
       availability: ['', deal || purchase ? [] : Validators.required],
       // null, not '': the server casts this to an ObjectId and an empty string fails the cast.
@@ -462,7 +490,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       this.subs.add(group.get('dealSelected')!.valueChanges.subscribe((on) => {
         if (!on) {
           const quoted = this.originals.get(group);
-          if (quoted) this.writeDetail(group, { ...quoted, supplierId: null, dealSelected: false });
+          // Prices go back to the quoted ones, but a supplier already picked stays for when the line is ticked again.
+          if (quoted) this.writeDetail(group, { ...quoted, supplierId: group.get('supplierId')?.value ?? quoted.supplierId ?? null, dealSelected: false });
         }
         lock(!!on);
         editable.forEach((name) => group.get(name)!.updateValueAndValidity({ emitEvent: false }));
@@ -494,6 +523,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       if (this.deriving) return;
       const c = Number(cost().value) || 0;
       const p = Number(price().value) || 0;
+      // Re-emitting the price that was derived from this margin (e.g. on blur) must not rewrite the margin: 25 would drift to 25.04.
+      const m = Number(margin().value) / 100;
+      if (c && p && margin().value != null && Number.isFinite(m) && m < 1 && Math.ceil(c / (1 - m)) === p) return;
       this.deriving = true;
       margin().setValue(c && p ? Number((((p - c) / p) * 100).toFixed(2)) : null, { emitEvent: false });
       this.deriving = false;
@@ -514,6 +546,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       profit: [null as number | null],
       unitSellingPrice: [null as number | null],
       availability: [''],
+      paymentTerms: [''],
+      deliveryTerms: [''],
+      remarks: [''],
+      offeredQty: [null as number | null, [Validators.min(0)]],
+      alternative: [''],
       supplierId: [null as string | null],
       uom: [''],
       lineKey: [ItemEntryComponent.newLineKey()],
@@ -556,13 +593,21 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return discount > selling + 0.005 ? { discountExceedsTotal: true } : null;
   };
 
+  private optionGroup(items: FormArray, totalDiscount: number | null, meta: any): FormGroup {
+    return this._fb.group({
+      items,
+      totalDiscount: [totalDiscount, [Validators.min(0)]],
+      meta: [meta ?? null],
+    }, { validators: [this.discountWithinTotal] });
+  }
+
   addOption(): void {
-    this.optionalItems.push(this._fb.group({
-      items: this._fb.array([this.createItem()]),
-      totalDiscount: [null as number | null, [Validators.min(0)]],
-    }, { validators: [this.discountWithinTotal] }));
+    this.optionalItems.push(this.optionGroup(this._fb.array([this.createItem()]), null, null));
     this.selectedOption = this.optionalItems.length - 1;
     this.seedMargin(this.selectedOption, 0, 0);
+    // Deferred: the first option is added while the editor initialises, inside the host's change detection.
+    const added = this.selectedOption;
+    Promise.resolve().then(() => this.optionChanged.emit(added));
   }
 
   removeOption(i: number): void {
@@ -570,6 +615,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.removedOptions.push({ option: this.optionalItems.at(i).value, i });
     this.optionalItems.removeAt(i);
     this.selectedOption = Math.max(0, Math.min(this.selectedOption, this.optionalItems.length - 1));
+    this.optionChanged.emit(this.selectedOption);
     this.offerUndo('option');
   }
 
@@ -646,10 +692,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         if (this.autoCollapseLines != null && details.length > this.autoCollapseLines) this.collapsed.add(itemGroup);
         return itemGroup;
       });
-      this.optionalItems.push(this._fb.group({
-        items: this._fb.array(items.length ? items : [this.createItem()]),
-        totalDiscount: [option.totalDiscount ?? null, [Validators.min(0)]],
-      }, { validators: [this.discountWithinTotal] }));
+      this.optionalItems.push(this.optionGroup(this._fb.array(items.length ? items : [this.createItem()]), option.totalDiscount ?? null, option.meta));
     });
     if (!this.optionalItems.length) this.addOption();
     this.selectedOption = 0;
@@ -686,8 +729,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       profit,
       unitSellingPrice: price,
       availability: d.availability ?? '',
+      ...(this.isRfq ? { paymentTerms: d.paymentTerms ?? '', deliveryTerms: d.deliveryTerms ?? '', remarks: d.remarks ?? '', offeredQty: d.offeredQty ?? null, alternative: d.alternative ?? '' } : {}),
       supplierId: (typeof d.supplierId === 'object' ? d.supplierId?._id : d.supplierId) || null,
-      uom: d.uom ?? '',
+      uom: this.canonicalUnit(d.uom),
       ...(this.isPurchase ? { lineKey: d.lineKey ?? null } : {}),
       // An RFQ line keeps the key it was created with unless the record already has one.
       ...(this.isRfq && d.lineKey ? { lineKey: d.lineKey } : {}),
@@ -760,6 +804,111 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return added;
   }
 
+  // --- Excel import / export ---------------------------------------------------
+
+  /** Off by default: a module opts in. Shows "Import Excel" and "Template", filling lines from a sheet into the selected option. */
+  @Input() allowExcelImport = false;
+  /** Off by default: shows "Export Excel", downloading the selected option's lines. */
+  @Input() allowExcelExport = false;
+  /** File name stem for the export and template downloads. */
+  @Input() excelFileName = 'items';
+
+  @ViewChild('excelFile') excelFile?: ElementRef<HTMLInputElement>;
+  excelBusy = false;
+
+  /** Set false when the host shows its own Import/Export buttons (e.g. a drawer footer) and calls pickExcelFile / exportExcel / downloadExcelTemplate. */
+  @Input() excelToolbar = true;
+  /** Blank "supplier to fill" columns appended to the export and template, e.g. Payment Terms. Ignored on import. */
+  @Input() excelFillColumns: string[] = [];
+
+  pickExcelFile(): void {
+    this.excelFile?.nativeElement.click();
+  }
+
+  get excelEnabled(): boolean {
+    return (this.allowExcelImport || this.allowExcelExport) && !this.isDeal && !this.isPurchase && !this.itemsHidden;
+  }
+
+  private get excelColumns() {
+    return itemSheetColumns(this.mode, this.rfqPriced);
+  }
+
+  downloadExcelTemplate(): void {
+    void downloadItemsTemplate(this.excelColumns, `${this.excelFileName}-template.xlsx`, this.excelFillColumns);
+  }
+
+  async exportExcel(): Promise<void> {
+    const option = this.optionalItems.getRawValue()[this.selectedOption];
+    const rows = await exportItemsSheet(option?.items || [], this.excelColumns, `${this.excelFileName}.xlsx`, this.excelFillColumns);
+    if (!rows) this.alerts.info('Nothing to export', 'Add at least one line first.');
+  }
+
+  async onExcelFile(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.excelBusy = true;
+    try {
+      const result = await readItemsSheet(file, this.excelColumns);
+      if (!result.imported) {
+        this.alerts.warning('Nothing imported', result.skipped.slice(0, 5).join('; ') || 'No item rows were found in the sheet.');
+        return;
+      }
+      if (this.isRfq && this.rfqPriced) {
+        // The supplier's answers go onto the lines already here, matched by part no, item code or description.
+        const { matched, unmatched } = this.fillPricedLines(result.items);
+        this.optionalItems.markAsDirty();
+        const note = unmatched.length ? ` ${unmatched.length} row(s) matched no line: ${unmatched.slice(0, 3).join('; ')}${unmatched.length > 3 ? '…' : ''}` : '';
+        if (unmatched.length || !matched) this.alerts.warning('Excel imported', `${matched} line${matched === 1 ? '' : 's'} filled.${note}`);
+        else this.alerts.success('Excel imported', `${matched} line${matched === 1 ? '' : 's'} filled.`);
+        return;
+      }
+      this.addItems(result.items);
+      this.optionalItems.markAsDirty();
+      const extra = result.skipped.length ? ` ${result.skipped.length} skipped: ${result.skipped.slice(0, 3).join('; ')}${result.skipped.length > 3 ? '…' : ''}` : '';
+      const message = `${result.imported} line${result.imported === 1 ? '' : 's'} added.${extra}`;
+      if (result.skipped.length) this.alerts.warning('Excel imported', message);
+      else this.alerts.success('Excel imported', message);
+    } catch (e: any) {
+      this.alerts.error('Could not read the file', e?.message || 'Use an .xlsx file in the template format.');
+    } finally {
+      this.excelBusy = false;
+    }
+  }
+
+  /** Writes imported price, availability, terms and remarks onto the current tab's matching lines; blank cells leave the line as it is. */
+  private fillPricedLines(items: ItemEntryItemValue[]): { matched: number; unmatched: string[] } {
+    const norm = (v: unknown) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const lines: FormGroup[] = [];
+    this.itemsAt(this.selectedOption).controls.forEach((_, j) => this.detailsAt(this.selectedOption, j)?.controls.forEach((d) => lines.push(d as FormGroup)));
+    const used = new Set<FormGroup>();
+    let matched = 0;
+    const unmatched: string[] = [];
+    items.forEach((item) => (item.itemDetails || []).forEach((row) => {
+      const find = (field: 'partNo' | 'itemCode' | 'detail') => {
+        const want = norm(row[field]);
+        return want ? lines.find((l) => !used.has(l) && norm(l.get(field)?.value) === want) : undefined;
+      };
+      const line = find('partNo') || find('itemCode') || find('detail');
+      if (!line) {
+        unmatched.push(String(row.detail || row.partNo || '').slice(0, 40));
+        return;
+      }
+      used.add(line);
+      matched++;
+      const patch: Record<string, unknown> = {};
+      if (row.unitCost != null) patch['unitCost'] = row.unitCost;
+      if (row.offeredQty != null) patch['offeredQty'] = row.offeredQty;
+      (['availability', 'alternative', 'paymentTerms', 'deliveryTerms', 'remarks'] as const).forEach((k) => {
+        if (row[k]) patch[k] = row[k];
+      });
+      if (patch['availability']) this.keepAvailability(String(patch['availability']));
+      line.patchValue(patch);
+    }));
+    return { matched, unmatched };
+  }
+
   private isItemEmpty(group: FormGroup): boolean {
     if ((group.get('itemName')?.value || '').toString().trim()) return false;
     const details = group.get('itemDetails') as FormArray;
@@ -774,7 +923,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   private removedOptions: any[] = [];
 
   private offerUndo(kind: 'option' | 'item' | 'line'): void {
-    const label = kind === 'line' ? 'Line' : kind === 'item' ? 'Item' : 'Option';
+    const label = kind === 'line' ? 'Line' : kind === 'item' ? 'Item' : this.optionNoun;
     this.alerts.action({ title: `${label} removed`, onAction: () => this.undo(kind) });
   }
 
@@ -793,10 +942,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   private undo(kind: 'option' | 'item' | 'line'): void {
     if (kind === 'option' && this.removedOptions.length) {
       const { option, i } = this.removedOptions.pop();
-      this.optionalItems.insert(i, this._fb.group({
-        items: this._fb.array((option.items || []).map((item: any) => this.rebuildItem(item))),
-        totalDiscount: [option.totalDiscount ?? null, [Validators.min(0)]],
-      }, { validators: [this.discountWithinTotal] }));
+      this.optionalItems.insert(i, this.optionGroup(this._fb.array((option.items || []).map((item: any) => this.rebuildItem(item))), option.totalDiscount ?? null, option.meta));
       this.selectedOption = i;
     } else if (kind === 'item' && this.removedItems.length) {
       const { item, i, j } = this.removedItems.pop();
@@ -1085,7 +1231,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     const t = this.createTarget;
     this.createTarget = null;
     const line = t ? (this.detailsAt(t.i, t.j)?.at(t.k) as FormGroup | undefined) : undefined;
-    if (!t || !line) return;
+    if (!t || !line) {
+      // Created from a host button rather than from a line: add it as a new line.
+      if (!t) { this.addCatalogueProducts([s]); this.emitTotals(); }
+      return;
+    }
     // The typed description gives way to the catalogue's own wording.
     line.get('detail')?.setValue(s.description, { emitEvent: false });
     this.applySuggestion(t.i, t.j, t.k, s);
@@ -1288,10 +1438,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   lineSearch = '';
   lineFilter: LineFilter | null = null;
   counts: Record<LineFilter, number> = { missingPrice: 0, notInCatalogue: 0, errors: 0 };
-  readonly filterChips: { key: LineFilter; label: string }[] = [
-    { key: 'missingPrice', label: 'Missing price' },
-    { key: 'notInCatalogue', label: 'Not in products' },
-    { key: 'errors', label: 'Errors' },
+  readonly filterChips: { key: LineFilter; label: string; hint: string }[] = [
+    { key: 'missingPrice', label: 'Missing price', hint: 'Lines with no selling price yet' },
+    { key: 'notInCatalogue', label: 'Not in products', hint: 'Lines typed by hand that are not linked to a product in the catalogue' },
+    { key: 'errors', label: 'Errors', hint: 'Filled-in lines that fail validation. Blank lines are not counted until you start typing in them' },
   ];
   /** The item "Jump to" just scrolled to, highlighted briefly. */
   flashItem: AbstractControl | null = null;
@@ -1300,7 +1450,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return !!this.lineSearch.trim() || !!this.lineFilter;
   }
 
-  visibleChips(): { key: LineFilter; label: string }[] {
+  visibleChips(): { key: LineFilter; label: string; hint: string }[] {
     return this.isRfq && !this.rfqPriced ? this.filterChips.filter((c) => c.key !== 'missingPrice') : this.filterChips;
   }
 
@@ -1468,6 +1618,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     ];
     const active = fields.filter(([, v]) => filled(v));
     if (!active.length) { this.alerts.warning('Nothing to set', 'Fill in at least one field.'); return; }
+    // Same bounds the line's own margin field enforces; a margin of 100% or more has no selling price.
+    const bulkMargin = active.find(([name]) => name === 'profit');
+    if (bulkMargin && (Number(bulkMargin[1]) > 99.99 || (!this.isDeal && Number(bulkMargin[1]) < 0))) {
+      this.alerts.warning('Margin out of range', this.isDeal ? 'Margin must be below 100%.' : 'Margin must be between 0% and 99.99%.');
+      return;
+    }
     this.forSelected((line) => active.forEach(([name, v, numeric]) => {
       const c = line.get(name);
       c?.setValue(numeric ? Number(v) : v);

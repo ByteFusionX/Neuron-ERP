@@ -1,7 +1,6 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, NgClass, TitleCasePipe } from '@angular/common';
 import { Component, Inject } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { NgIconComponent } from '@ng-icons/core';
+import { FormModalShellComponent, MODAL_DATA, ModalRef } from '../modal';
 
 export interface ApprovalStatusData {
   entity: any;
@@ -11,17 +10,17 @@ export interface ApprovalStatusData {
 @Component({
   selector: 'app-approval-status',
   standalone: true,
-  imports: [CommonModule, NgIconComponent],
+  imports: [CommonModule, NgClass, TitleCasePipe, FormModalShellComponent],
   templateUrl: './approval-status.component.html',
   styleUrls: ['./approval-status.component.css']
 })
 export class ApprovalStatusComponent {
-  
+
   openAccordions: boolean[] = [];
   
   constructor(
-    public dialogRef: MatDialogRef<ApprovalStatusComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: ApprovalStatusData
+    public modalRef: ModalRef<void>,
+    @Inject(MODAL_DATA) public data: ApprovalStatusData
   ) {
     this.initializeAccordionStates();
   }
@@ -35,7 +34,27 @@ export class ApprovalStatusComponent {
   }
 
   onClose(): void {
-    this.dialogRef.close();
+    this.modalRef.close();
+  }
+
+  get title(): string {
+    return 'Workflow Status';
+  }
+
+  get subtitle(): string {
+    const count = this.getApprovalStatus().length;
+    return count ? `${count} workflow step${count === 1 ? '' : 's'} recorded` : 'No workflow activity recorded yet';
+  }
+
+  get context(): string | null {
+    const entity = this.getEntityData();
+    return entity?.purchaseNo || entity?.claimNo || entity?.referenceNo || entity?.title || null;
+  }
+
+  get contextLabel(): string {
+    if (this.data.entityType === 'purchaseRequest') return 'Purchase request';
+    if (this.data.entityType === 'claim') return 'Claim';
+    return 'Record';
   }
 
   getApprovalStatus(): any[] {
@@ -55,19 +74,19 @@ export class ApprovalStatusComponent {
 
   getStatusColor(status: string): string {
     switch (status) {
-      case 'approved': return 'text-green-600 bg-green-100';
-      case 'rejected': return 'text-red-600 bg-red-100';
-      case 'pending': return 'text-yellow-600 bg-yellow-100';
-      default: return 'text-gray-600 bg-gray-100';
+      case 'approved': return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300';
+      case 'rejected': return 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300';
+      case 'pending': return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300';
+      default: return 'border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300';
     }
   }
 
   getStatusIcon(status: string): string {
     switch (status) {
-      case 'approved': return 'heroCheckCircle';
-      case 'rejected': return 'heroXCircle';
-      case 'pending': return 'heroClock';
-      default: return 'heroQuestionMarkCircle';
+      case 'approved': return 'check';
+      case 'rejected': return 'close';
+      case 'pending': return 'schedule';
+      default: return 'help';
     }
   }
 
@@ -76,6 +95,29 @@ export class ApprovalStatusComponent {
       return approval.status || 'approved';
     }
     return 'pending';
+  }
+
+  getActor(approval: any): string {
+    if (approval.updatedBy) return `${approval.updatedBy.firstName ?? ''} ${approval.updatedBy.lastName ?? ''}`.trim();
+    if (approval.managerApproval && this.getEntityData()?.raisedBy?.reportingTo) {
+      const manager = this.getEntityData().raisedBy.reportingTo;
+      return `${manager.firstName ?? ''} ${manager.lastName ?? ''}`.trim() || 'Reporting Manager';
+    }
+    return approval.role?.categoryName || (approval.managerApproval ? 'Reporting Manager' : 'Pending approver');
+  }
+
+  getStepTitle(approval: any): string {
+    return approval.managerApproval ? 'Manager Approval' : (approval.role?.categoryName || 'Approval Step');
+  }
+
+  getStepSubtitle(approval: any, history: any[]): string {
+    const status = approval.managerApproval ? this.getManagerApprovalStatus(approval) : (approval.status || 'pending');
+    const actor = approval.updatedBy ? this.getActor(approval) : `Waiting for ${this.getActor(approval)}`;
+    const date = approval.updatedDate || approval.updatedAt;
+    const parts = [`Step ${approval.step || 1}`, status, actor];
+    if (date) parts.push(date);
+    if (!this.isPreviousStepApprovedInHistory(approval, history)) parts.push('Waiting for previous step');
+    return parts.filter(Boolean).join(' · ');
   }
 
   getManagerApprovalClasses(approval: any): string {

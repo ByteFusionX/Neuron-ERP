@@ -73,6 +73,8 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() detailTabs: DataGridDetailTab[] = [];
   @Input() detailTitle: (row: T) => string = (row) => String(row[this.rowKey] ?? '');
   @Input() detailSubtitle?: (row: T) => string;
+  /** Asked before the detail panel closes (Esc, close button); return false to keep it open. */
+  @Input() detailCloseGuard?: () => boolean | Promise<boolean>;
   /** Breadcrumb label in the detail panel's top bar; defaults to the grid title. */
   @Input() detailBreadcrumb = '';
   @Input() pageSizeOptions = [5, 15, 30, 50];
@@ -202,8 +204,12 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
       const view = this.allViews.find((v) => v.id === stored) ?? this.allViews[0];
       if (view) {
         this.applyView(view);
-        // Restored from URL/prefs rather than clicked: tell the host which view is active.
-        Promise.resolve().then(() => this.viewChange.emit(view));
+        // Restored from URL/prefs rather than clicked: tell the host which view is active. A restored view that
+        // filters/searches/sorts must also reload the data, otherwise the tab and chips describe a different list than the rows.
+        Promise.resolve().then(() => {
+          this.viewChange.emit(view);
+          if (view.filters?.length || view.searchTerm || view.sort) this.emitQuery();
+        });
       }
     }
     if (changes['viewUrlParam'] || changes['syncViewWithUrl']) {
@@ -638,10 +644,15 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     }
   }
 
-  /** Shows a search/filter state that was restored from outside (URL) without emitting a query. */
-  setQueryState(search: string, filters: Omit<DataGridFilter, 'id'>[]): void {
+  /** Shows a query state that was restored from outside (URL) without emitting a query. */
+  setQueryState(
+    search: string,
+    filters: Omit<DataGridFilter, 'id'>[],
+    sort: DataGridSortState = { key: null, direction: null },
+  ): void {
     this.searchTerm = search;
     this.filters = filters.map((f) => ({ ...f, id: this.nextId++ }));
+    this.sort = sort;
   }
 
   /** Discrete values for select-style filters (editor options, badge values). */
@@ -1002,7 +1013,10 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   closeDetail(): void {
-    this.activeRow = null;
+    const verdict = this.detailCloseGuard?.() ?? true;
+    if (verdict === true) { this.activeRow = null; return; }
+    if (verdict === false) return;
+    void verdict.then((ok) => { if (ok) this.activeRow = null; });
   }
 
   isActive(row: T): boolean {

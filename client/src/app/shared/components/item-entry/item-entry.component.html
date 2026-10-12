@@ -1,5 +1,13 @@
 <div class="flex flex-col gap-4">
 
+  <!-- Excel import / export: only when the host enables it ------------------------------- -->
+  <input *ngIf="excelEnabled" #excelFile type="file" class="hidden" accept=".xlsx" (change)="onExcelFile($event)">
+  <div *ngIf="excelEnabled && excelToolbar" class="flex flex-wrap items-center justify-end gap-1">
+    <app-action-button *ngIf="allowExcelImport" variant="tool" [disabled]="excelBusy" (click)="pickExcelFile()">Import Excel</app-action-button>
+    <app-action-button *ngIf="allowExcelImport" variant="ghost" (click)="downloadExcelTemplate()">Template</app-action-button>
+    <app-action-button *ngIf="allowExcelExport" variant="tool" (click)="exportExcel()">Export Excel</app-action-button>
+  </div>
+
   <!-- Option tabs ------------------------------------------------------------------------ -->
   <div *ngIf="!itemsHidden && ((optionsEnabled && (!isDeal || optionalItems.length > 1)) || previousJobItemsCount)"
     class="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-erp-border-dark pb-3">
@@ -11,8 +19,8 @@
             ? 'bg-violet-600 text-white'
             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
           (click)="selectOption(i)">
-          Option {{ i + 1 }}
-          <span *ngIf="!isDeal && optionalItems.length > 1" role="button" aria-label="Remove option"
+          {{ tabLabel(i) }}
+          <span *ngIf="!isDeal && optionalItems.length > 1" role="button" [attr.aria-label]="optionRemoveLabel"
             class="grid h-4 w-4 place-content-center rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/20"
             (click)="$event.stopPropagation(); removeOption(i)">
             <ng-icon name="heroXMark" class="h-3 w-3"></ng-icon>
@@ -21,8 +29,9 @@
       </div>
 
       <app-action-button *ngIf="!isDeal" variant="ghost" (click)="addOption()">
-        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add option
+        <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> {{ addOptionLabel }}
       </app-action-button>
+      <ng-container *ngIf="optionExtraTemplate" [ngTemplateOutlet]="optionExtraTemplate" [ngTemplateOutletContext]="{ $implicit: selectedOption }"></ng-container>
     </ng-container>
 
     <app-action-button *ngIf="previousJobItemsCount" class="ml-auto" variant="tool" (click)="previousJobsClicked.emit()">
@@ -31,7 +40,7 @@
     </app-action-button>
   </div>
 
-  <p *ngIf="optionsEnabled && !isDeal && !itemsHidden" class="-mt-2 text-xs text-gray-500 dark:text-gray-500">
+  <p *ngIf="optionsEnabled && !isDeal && !isRfq && !itemsHidden" class="-mt-2 text-xs text-gray-500 dark:text-gray-500">
     Totals are calculated from <span class="font-medium text-gray-700 dark:text-gray-300">Option {{ selectedOption + 1 }}</span>.
     Add more options to quote alternatives.
   </p>
@@ -51,7 +60,7 @@
               class="h-8 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-2 text-xs text-gray-900 outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400 dark:border-erp-border-dark dark:bg-gray-800/60 dark:text-gray-100" />
           </div>
           <button *ngFor="let chip of visibleChips()" type="button" (click)="toggleFilter(chip.key)" [disabled]="!counts[chip.key] && lineFilter !== chip.key"
-            class="inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:cursor-default disabled:opacity-40"
+            [attr.title]="chip.hint" class="inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors disabled:cursor-default disabled:opacity-40"
             [ngClass]="lineFilter === chip.key
               ? 'border-violet-600 bg-violet-600 text-white'
               : 'border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-gray-800'">
@@ -99,7 +108,8 @@
           <app-sf-number *ngIf="marginEnabled" class="w-24" [formControl]="bulkMarginControl" placeholder="Margin" suffix="%" [stepper]="false"></app-sf-number>
           <app-sf-combobox *ngIf="!isRfq || rfqPriced" class="w-40" [formControl]="bulkAvailabilityControl" [options]="resolvedAvailabilityOptions" placeholder="Availability"></app-sf-combobox>
           <app-sf-combobox *ngIf="!isRfq" class="w-44" [formControl]="bulkSupplierControl" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
-          <app-action-button variant="tool" (click)="bulkApply()">Set</app-action-button>
+          <!-- The fields above only fill in once applied, so say so on the button. -->
+          <app-action-button variant="primary" title="Nothing changes on the selected lines until you apply" (click)="bulkApply()">Apply to {{ selectedCount }} {{ selectedCount === 1 ? 'line' : 'lines' }}</app-action-button>
           <ng-container *ngIf="bulkExtraTemplate" [ngTemplateOutlet]="bulkExtraTemplate" [ngTemplateOutletContext]="{ $implicit: selectedLines() }"></ng-container>
 
           <div class="ml-auto flex items-center gap-1">
@@ -240,6 +250,7 @@
                         class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
                         [class.bg-violet-50]="highlightedIndex === idx" [class.dark:bg-violet-950]="highlightedIndex === idx"
                         (mousedown)="$event.preventDefault(); applySuggestion(i, j, k, s)">
+                        <span *ngIf="s.productName" class="block truncate font-medium text-gray-900 dark:text-gray-100">{{ s.productName }}</span>
                         <span class="block truncate">{{ s.description }}</span>
                         <span class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
                           <span *ngIf="s.itemCode" class="rounded bg-gray-100 px-1 py-px font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">{{ s.itemCode }}</span>
@@ -272,6 +283,14 @@
                   <span class="ie-total" title="Total (qty × supplier price)">{{ lineCost(i, j, k) | number: '1.2-2' }}</span>
                 </ng-container>
               </div>
+              <!-- what the supplier said about this line: terms and remarks -->
+              <div *ngIf="isRfq && rfqPriced" class="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                <app-sf-input formControlName="paymentTerms" placeholder="Payment terms"></app-sf-input>
+                <app-sf-input formControlName="deliveryTerms" placeholder="Delivery terms"></app-sf-input>
+                <app-sf-input formControlName="remarks" placeholder="Remarks"></app-sf-input>
+                <app-sf-number formControlName="offeredQty" placeholder="Offered qty (if different)" [stepper]="false" [min]="0"></app-sf-number>
+                <app-sf-input class="sm:col-span-2" formControlName="alternative" placeholder="Alternative product offered (brand / model / part no)"></app-sf-input>
+              </div>
 
               <div *ngIf="!isRfq" class="ie-strip" [class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="isPurchase">
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('itemCode')?.value || '—' }}</span>
@@ -289,8 +308,7 @@
                 </div>
                 <app-sf-number formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
-                <app-sf-combobox *ngIf="!isDeal && !isPurchase" formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" creatable (createOption)="addMasterOption('unit', $event, detail.get('uom'))"></app-sf-combobox>
-                <span *ngIf="isPurchase" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
+                <app-sf-combobox *ngIf="!isDeal" formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" creatable (createOption)="addMasterOption('unit', $event, detail.get('uom'))"></app-sf-combobox>
                 <app-sf-number formControlName="unitCost" placeholder="Cost" [stepper]="false" [min]="0"></app-sf-number>
                 <div *ngIf="!isPurchase" class="relative min-w-0" [ngClass]="lineMarginRing(i, j, k)">
                   <app-sf-number formControlName="profit" placeholder="Margin" suffix="%" [stepper]="false"></app-sf-number>
@@ -301,8 +319,7 @@
                   </button>
                 </div>
                 <app-sf-number formControlName="unitSellingPrice" placeholder="Price" [stepper]="false" [min]="0"></app-sf-number>
-                <span *ngIf="isPurchase" class="ie-cell truncate">{{ supplierLabel(detail.get('supplierId')?.value) }}</span>
-                <div *ngIf="!isPurchase" class="min-w-0">
+                <div class="min-w-0">
                   <app-sf-combobox formControlName="supplierId" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
                   <p *ngIf="isDeal && detail.get('supplierId')?.hasError('supplierRequired') && detail.get('supplierId')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
@@ -417,6 +434,7 @@
         [ngClass]="paletteIndex === idx ? 'bg-violet-50 dark:bg-violet-950/60' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
         (mouseenter)="paletteIndex = idx" (click)="pickFromPalette(s)">
         <div class="min-w-0 flex-1">
+          <p *ngIf="s.productName" class="truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ s.productName }}</p>
           <p class="truncate text-[13px] text-gray-900 dark:text-gray-100">{{ s.description }}</p>
           <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
             <span *ngIf="s.categoryName" class="text-gray-500">{{ s.categoryName }}</span>

@@ -9,12 +9,12 @@ export interface StatusHistoryEntry {
 
 /** Tailwind classes per tone: pill (bg/text/border), dot, solid (stepper node). */
 export const STATUS_TONE_CLASSES: Record<StatusTone, { pill: string; dot: string; solid: string; line: string }> = {
-  success:  { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', solid: 'bg-emerald-500 border-emerald-500 text-white', line: 'bg-emerald-400' },
-  danger:   { pill: 'bg-red-50 text-red-700 border-red-200',             dot: 'bg-red-500',     solid: 'bg-red-500 border-red-500 text-white',         line: 'bg-red-400' },
-  warning:  { pill: 'bg-amber-50 text-amber-700 border-amber-200',       dot: 'bg-amber-500',   solid: 'bg-amber-500 border-amber-500 text-white',     line: 'bg-amber-400' },
-  info:     { pill: 'bg-sky-50 text-sky-700 border-sky-200',             dot: 'bg-sky-500',     solid: 'bg-sky-500 border-sky-500 text-white',         line: 'bg-sky-400' },
-  progress: { pill: 'bg-violet-50 text-violet-700 border-violet-200',    dot: 'bg-violet-500',  solid: 'bg-violet-600 border-violet-600 text-white',   line: 'bg-violet-400' },
-  neutral:  { pill: 'bg-gray-100 text-gray-700 border-gray-200',         dot: 'bg-gray-400',    solid: 'bg-gray-400 border-gray-400 text-white',       line: 'bg-gray-300' },
+  success:  { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900', dot: 'bg-emerald-500', solid: 'bg-emerald-500 border-emerald-500 text-white', line: 'bg-emerald-400' },
+  danger:   { pill: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',             dot: 'bg-red-500',     solid: 'bg-red-500 border-red-500 text-white',         line: 'bg-red-400' },
+  warning:  { pill: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900',       dot: 'bg-amber-500',   solid: 'bg-amber-500 border-amber-500 text-white',     line: 'bg-amber-400' },
+  info:     { pill: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900',             dot: 'bg-sky-500',     solid: 'bg-sky-500 border-sky-500 text-white',         line: 'bg-sky-400' },
+  progress: { pill: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-900',    dot: 'bg-violet-500',  solid: 'bg-violet-600 border-violet-600 text-white',   line: 'bg-violet-400' },
+  neutral:  { pill: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',         dot: 'bg-gray-400',    solid: 'bg-gray-400 border-gray-400 text-white',       line: 'bg-gray-300' },
 };
 
 // Order matters: first match wins ("not delivered" must hit danger before "delivered" hits success).
