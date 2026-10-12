@@ -4,6 +4,7 @@ import { NgClass, NgFor, NgIf, NgStyle } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { ToastrService } from 'ngx-toastr';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog/confirm-dialog.service';
 import { Subscription, filter, take } from 'rxjs';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
@@ -43,7 +44,9 @@ type ConditionKey = 'time' | 'amount' | 'discount';
 const FEATURE_CONDITIONS: Record<string, ConditionKey[]> = {
   [WorkflowFeature.PRESALE]: ['time'],
   [WorkflowFeature.PURCHASE_APPROVAL]: ['time', 'amount'],
+  [WorkflowFeature.DEAL_SHEET]: ['time', 'amount', 'discount'],
   [WorkflowFeature.PROJECT_CLAIM]: ['time', 'amount'],
+  [WorkflowFeature.PROCUREMENT_ASSIGNMENT]: ['time'],
   [WorkflowFeature.CLAIM]: ['time', 'amount'],
 };
 
@@ -56,9 +59,20 @@ const CONDITION_INFO: Record<ConditionKey, { icon: string; title: string; text: 
 const FEATURE_LABELS: Record<WorkflowFeature, string> = {
   [WorkflowFeature.PRESALE]: 'Presale Assignment',
   [WorkflowFeature.PURCHASE_APPROVAL]: 'Purchase Approval',
-  [WorkflowFeature.PROJECT_CLAIM]: 'Project Claim',
-  [WorkflowFeature.CLAIM]: 'Claim',
+  [WorkflowFeature.DEAL_SHEET]: 'Deal Sheet Approval',
+  [WorkflowFeature.PROJECT_CLAIM]: 'Project Assignment',
+  [WorkflowFeature.PROCUREMENT_ASSIGNMENT]: 'Procurement Assignment',
+  [WorkflowFeature.CLAIM]: 'Claim Approval',
 };
+
+const WORKFLOW_FEATURE_ORDER: WorkflowFeature[] = [
+  WorkflowFeature.PRESALE,
+  WorkflowFeature.DEAL_SHEET,
+  WorkflowFeature.PURCHASE_APPROVAL,
+  WorkflowFeature.PROCUREMENT_ASSIGNMENT,
+  WorkflowFeature.PROJECT_CLAIM,
+  WorkflowFeature.CLAIM,
+];
 
 @Component({
   selector: 'app-approval-workflow',
@@ -110,8 +124,9 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
   roleMenuStyle: Record<string, string> = {};
   /** Notes shown in their own section of the Conditions tab. */
   readonly conditionNotes = [
-    { icon: 'info', text: 'Applies to new steps only. Delete a step and add it again to pick up a change.' },
+    { icon: 'info', text: 'Turning a condition on or off applies to every step. Defaults only fill steps that have no value yet.' },
     { icon: 'person_off', text: "Always on: if the requester is in the workflow, their step and every step below it are skipped, and the request goes to the next step above them. Super Admin's own requests need no approval." },
+    { icon: 'checklist', text: 'Conditions are checked together on every step, in this order: time limit, then amount, then discount. A request moves up as soon as any condition on its step is not met (timed out, over the amount, or over the discount).' },
     { icon: 'schedule', text: 'Time limits count working time only, inside the working days and hours set below.' },
   ];
   roleSearch = '';
@@ -152,7 +167,22 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
     private _workflowService: WorkflowService,
     private _employeeService: EmployeeService,
     private _toastr: ToastrService,
+    private confirm: ConfirmDialogService,
   ) {}
+
+  /** Closing the panel with unsaved route changes asks first. */
+  closeGuard = async (): Promise<boolean> => {
+    if (!this.editingFeature || !this.isDirty) return true;
+    const { confirmed } = await this.confirm.open({
+      tone: 'warning',
+      title: 'Discard changes?',
+      message: 'You have unsaved changes to this route. Closing now will lose them.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+    });
+    if (confirmed) this.cancelEdit();
+    return confirmed;
+  };
 
   get canViewDepartments(): boolean {
     return departmentPrivileges(this.privileges).view;
@@ -177,9 +207,15 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
   /** Roles not yet used in the draft — a role can only appear once per flow. Super Admin roles are listed but cannot be picked. */
   get availableRoles(): GetCategory[] {
     const used = new Set(this.draftSteps.map((s) => s.roleId));
-    // Presale steps assign jobs, so only roles holding the assign privilege can be picked.
-    const needsAssign = this.editingFeature === WorkflowFeature.PRESALE;
-    return this.categories.filter((c) => c._id && !used.has(c._id) && (this.isSuperAdminRole(c) || !needsAssign || c.privileges?.assignedJob?.assign));
+    // Presale steps assign jobs and deal sheet steps approve deals, so only roles holding that privilege can be picked.
+    return this.categories.filter((c) => c._id && !used.has(c._id) && (this.isSuperAdminRole(c) || this.holdsRequiredPrivilege(c)));
+  }
+
+  /** Privilege a role needs to act in the feature being edited (none for other features). */
+  private holdsRequiredPrivilege(category: GetCategory): boolean {
+    if (this.editingFeature === WorkflowFeature.PRESALE) return !!category.privileges?.assignedJob?.assign;
+    if (this.editingFeature === WorkflowFeature.DEAL_SHEET) return (category.privileges as any)?.dealSheet === true;
+    return true;
   }
 
   isSuperAdminRole(category: GetCategory): boolean {
@@ -245,11 +281,11 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
     return this.draftSteps.some((st) => st.hasTime);
   }
 
-  /** Presale: a role that lost the assign privilege cannot act, so its stage is off and locked. */
+  /** Presale / deal sheet: a role that lost the needed privilege cannot act, so its stage is off and locked. */
   lacksPrivilege(step: DraftStep): boolean {
-    if (this.editingFeature !== WorkflowFeature.PRESALE) return false;
+    if (this.editingFeature !== WorkflowFeature.PRESALE && this.editingFeature !== WorkflowFeature.DEAL_SHEET) return false;
     const role = this.categories.find((c) => c._id === step.roleId);
-    return !!role && role.privileges?.assignedJob?.assign !== true;
+    return !!role && !this.holdsRequiredPrivilege(role);
   }
 
   stepEnabled(step: DraftStep): boolean {
@@ -289,6 +325,12 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
     if (!this.isEditing(row)) this.startEdit(row);
     const on = !this.draftFlags[key];
     this.draftFlags = { ...this.draftFlags, [key]: on };
+    const d = this.draftDefaults;
+    for (const st of this.draftSteps) {
+      if (key === 'time') { st.hasTime = on; if (on && !st.escalationHours) st.escalationHours = d.timeLimit ?? null; }
+      if (key === 'amount') { st.hasAmount = on; if (on && !st.maxAmount) st.maxAmount = d.maxAmount ?? null; }
+      if (key === 'discount') { st.hasDiscount = on; if (on && !st.maxDiscount) st.maxDiscount = d.maxDiscount ?? null; }
+    }
   }
 
   private snapshot(): string {
@@ -439,6 +481,12 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
     const numeric = key !== 'timeUnit' && key !== 'timeoutAction';
     const parsed = numeric ? (value === null || value === '' || Number.isNaN(Number(value)) ? undefined : Number(value)) : value;
     this.draftDefaults = { ...this.draftDefaults, [key]: parsed };
+    if (parsed === undefined) return;
+    for (const st of this.draftSteps) {
+      if (key === 'timeLimit' && st.hasTime && !st.escalationHours) st.escalationHours = parsed;
+      if (key === 'maxAmount' && st.hasAmount && !st.maxAmount) st.maxAmount = parsed;
+      if (key === 'maxDiscount' && st.hasDiscount && !st.maxDiscount) st.maxDiscount = parsed;
+    }
   }
 
   setWorkHours(row: WorkflowGridRow, which: 'start' | 'end', value: string): void {
@@ -537,13 +585,10 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Claims routes are managed elsewhere; keep them out of this grid. */
-  private static readonly HIDDEN_FEATURES = new Set<WorkflowFeature>([WorkflowFeature.CLAIM, WorkflowFeature.PROJECT_CLAIM]);
-
   loadWorkflows(): void {
     this.isWorkflowLoading = true;
-    const workflows = Object.values(WorkflowFeature)
-      .filter((feature) => !ApprovalWorkflowComponent.HIDDEN_FEATURES.has(feature))
+    const workflows = WORKFLOW_FEATURE_ORDER
+      .filter((feature) => Object.values(WorkflowFeature).includes(feature))
       .map((feature) => ({ feature, workflow: null as Workflow | null }));
 
     this.subscriptions.add(

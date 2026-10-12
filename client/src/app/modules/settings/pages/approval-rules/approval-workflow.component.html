@@ -15,13 +15,14 @@
             [selectable]="false"
             [showToolbarTools]="false"
             title="Workflow"
-            subtitle="One global workflow: the bottom step acts first and Super Admin is always on top."
+            subtitle="One approval route per feature: the bottom step acts first and Super Admin is always on top."
             rowKey="_id"
             storageKey="approval-workflow"
             emptyMessage="No workflows found"
             searchPlaceholder="Search features…"
             [detailTitle]="detailTitle"
             [detailSubtitle]="detailSubtitle"
+            [detailCloseGuard]="closeGuard"
             detailBreadcrumb="Workflow"
             (rowAction)="onGridRowAction($event)">
 
@@ -128,10 +129,10 @@
                                         <span cdkDragHandle class="material-icons cursor-grab text-[18px] text-gray-300 group-hover:text-gray-500" title="Drag to reorder">drag_indicator</span>
                                         <span class="min-w-0 flex-1">
                                             <span class="block truncate text-[13px] font-medium text-gray-900 dark:text-gray-100">{{ step.roleName }}</span>
-                                            <span class="block text-[11px] text-gray-500 dark:text-gray-400">Stage {{ stageNumber(i) }}{{ step.sameStage ? ' · any one can approve' : '' }}{{ last ? ' · acts first' : '' }}{{ lacksPrivilege(step) ? ' · no assign privilege' : '' }}</span>
+                                            <span class="block text-[11px] text-gray-500 dark:text-gray-400">Stage {{ stageNumber(i) }}{{ step.sameStage ? ' · any one can approve' : '' }}{{ last ? ' · acts first' : '' }}{{ lacksPrivilege(step) ? ' · missing privilege' : '' }}</span>
                                         </span>
                                         <app-sf-switch [disabled]="lacksPrivilege(step)" [ngModel]="stepEnabled(step)" (ngModelChange)="step.enabled = $event"
-                                            [title]="lacksPrivilege(step) ? 'This role no longer has the assign privilege' : (step.enabled ? 'Switch off this stage' : 'Switch on this stage')"></app-sf-switch>
+                                            [title]="lacksPrivilege(step) ? 'This role no longer has the privilege this stage needs' : (step.enabled ? 'Switch off this stage' : 'Switch on this stage')"></app-sf-switch>
                                         <button *ngIf="!first" type="button" (click)="toggleSameStage(i)"
                                             [class]="step.sameStage ? 'bg-violet-50 text-violet-700 border-violet-300 dark:bg-violet-500/10 dark:text-violet-300' : 'text-gray-500 border-gray-200 dark:border-gray-700'"
                                             class="shrink-0 rounded-lg border px-2 py-1 text-[11px] font-medium"
@@ -259,4 +260,3 @@
     </div>
 </div>
 <!-- /Workflow -->
-
