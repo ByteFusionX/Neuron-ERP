@@ -6,6 +6,7 @@ import Product from '../models/products.model';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
 import { getEmployeeData, buildPrivilegeAccessFilter, escapeRegex } from '../common/utils/util';
+import { duplicateGroups, findSupplierDuplicates, supplierKeys } from '../common/utils/partyMatch';
 import { Server } from 'socket.io';
 import { createNotificationWithPrivileges } from './notification.controller';
 import { getNextSequence } from '../models/counter.model';
@@ -133,8 +134,18 @@ export const getSuppliers = async (req: Request, res: Response) => {
 
       // Add status filter if provided
       if (status) {
-         // Handle both single status and array of statuses
-         filter.status = Array.isArray(status) ? { $in: status } : status;
+         // Handle both single status and array of statuses. "Blocked" is not a stored status: the list
+         // shows it in the Status column for blocked suppliers, so it filters on isBlocked.
+         const statuses: string[] = Array.isArray(status) ? status : [status];
+         const stored = statuses.filter((s) => s !== 'Blocked');
+         const wantsBlocked = stored.length !== statuses.length;
+         if (wantsBlocked && stored.length) {
+            filter.$or = [{ status: { $in: stored } }, { isBlocked: true }];
+         } else if (wantsBlocked) {
+            filter.isBlocked = true;
+         } else {
+            filter.status = Array.isArray(status) ? { $in: status } : status;
+         }
       }
 
       // Add category filter if provided (now it's an ObjectId)
@@ -325,7 +336,8 @@ export const getSuppliers = async (req: Request, res: Response) => {
                updatedDate: 1,
                createdBy: "$createdByInfo",
                approvedHistory: 1,
-               rejectHistory: 1
+               rejectHistory: 1,
+               blockHistory: 1
             }
          },
       ];
@@ -450,6 +462,46 @@ export const getSupplierReportSummary = async (req: Request, res: Response) => {
    }
 };
 
+/** Suppliers that may be entered twice: same name, similar name, same IBAN, same email, same phone. */
+export const getSupplierDuplicatesReport = async (_req: Request, res: Response, next: NextFunction) => {
+   try {
+      const fields = ['_id', 'supplierName', 'supplierId', 'status'];
+      const [sameName, similarName, sameIban, sameEmail, samePhone] = await Promise.all([
+         duplicateGroups(Supplier, 'nameKey', fields),
+         duplicateGroups(Supplier, 'nameCore', fields),
+         duplicateGroups(Supplier, 'ibanKey', fields),
+         duplicateGroups(Supplier, 'emailKey', fields),
+         duplicateGroups(Supplier, 'phoneKey', fields),
+      ]);
+      const exact = new Set(sameName.map((g) => g.records.map((r: any) => String(r._id)).sort().join()));
+      return res.status(200).json({
+         sameName, sameIban, sameEmail, samePhone,
+         similarName: similarName.filter((g) => !exact.has(g.records.map((r: any) => String(r._id)).sort().join())),
+      });
+   } catch (error) {
+      console.error(error);
+      next(error);
+   }
+};
+
+/** Live check for the supplier form: `?supplierName=&email=&phone=&iban=&excludeId=`. */
+export const checkSupplierDuplicate = async (req: Request, res: Response, next: NextFunction) => {
+   try {
+      const q = req.query;
+      const matches = await findSupplierDuplicates({
+         supplierName: String(q.supplierName ?? ''),
+         email: String(q.email ?? ''),
+         phone: String(q.phone ?? ''),
+         iban: String(q.iban ?? ''),
+         excludeId: q.excludeId ? String(q.excludeId) : undefined,
+      });
+      return res.status(200).json({ matches });
+   } catch (error) {
+      console.error(error);
+      next(error);
+   }
+};
+
 export const createSupplier = async (req: Request, res: Response) => {
    try {
       const tokenData = req.user;
@@ -464,6 +516,7 @@ export const createSupplier = async (req: Request, res: Response) => {
          products,
          creditDays,
          creditValue,
+         confirmDuplicates,
       } = JSON.parse(req.body.supplier);
 
       // Validate required fields
@@ -487,15 +540,15 @@ export const createSupplier = async (req: Request, res: Response) => {
          return res.status(400).json({ success: false, message: 'Supplier name is required' });
       }
 
-      const duplicate = await Supplier.findOne({
-         isDeleted: false,
-         supplierName: { $regex: `^${escapeRegex(supplierName.trim())}$`, $options: 'i' },
-      }).select('_id');
-      if (duplicate) {
-         return res.status(409).json({
-            success: false,
-            message: 'Supplier already exists',
-         });
+      const duplicates = await findSupplierDuplicates({
+         supplierName, email: contactDetails?.email, phone: contactDetails?.phoneNumber, iban: bankDetails?.iban,
+      });
+      const hard = duplicates.find((m) => m.level === 'block');
+      if (hard) {
+         return res.status(409).json({ success: false, message: hard.reason, matches: duplicates });
+      }
+      if (duplicates.length && confirmDuplicates !== true) {
+         return res.status(409).json({ success: false, duplicateWarning: true, message: duplicates[0].reason, matches: duplicates });
       }
 
       // Handle file uploads
@@ -523,6 +576,7 @@ export const createSupplier = async (req: Request, res: Response) => {
       // Create new supplier object
       const newSupplier = new Supplier({
          supplierName: supplierName.trim(),
+         ...supplierKeys({ supplierName, contactDetails, bankDetails }),
          address: address,
          supplierType,
          category,
@@ -535,30 +589,14 @@ export const createSupplier = async (req: Request, res: Response) => {
          createdBy: new Types.ObjectId(creatorId),
          createdDate: new Date(),
          updatedDate: new Date(),
-         status: 'Pending', // Default status
+         // Approval is switched off for now: new suppliers are saved as Approved and no approval request is
+         // sent. To bring it back, save 'Pending' here and restore the SupplierApprovalRequest notification.
+         status: supplierStatus.approved,
          supplierId,
       });
 
       // Save the supplier to database
       const savedSupplier = await newSupplier.save();
-
-      const socket = req.app.get('io') as Server;
-      await createNotificationWithPrivileges(
-         {
-            type: 'SupplierApprovalRequest',
-            referenceModel: 'Supplier',
-            title: 'Supplier sent for approval',
-            message: `Supplier ${savedSupplier.supplierName} has been sent for approval`,
-            sentBy: employee?._id?.toString(),
-            referenceId: savedSupplier._id,
-            additionalData: { supplierId: savedSupplier._id.toString() }
-         },
-         {
-            privilegeKey: 'supplier',
-            checkFunction: (p) => p.supplier?.canApproveSupplier === true
-         },
-         socket
-      );
 
       // Populate the createdBy field before returning
       const populatedSupplier = await Supplier.findById(savedSupplier._id)
@@ -857,6 +895,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
          products,
          creditDays,
          creditValue,
+         confirmDuplicates,
       } = JSON.parse(req.body.supplier);
 
       // Validate required fields
@@ -881,20 +920,21 @@ export const updateSupplier = async (req: Request, res: Response) => {
          return res.status(400).json({ success: false, message: 'Supplier name is required' });
       }
 
-      const duplicate = await Supplier.findOne({
-         _id: { $ne: existingSupplier._id },
-         isDeleted: false,
-         supplierName: { $regex: `^${escapeRegex(supplierName.trim())}$`, $options: 'i' },
-      }).select('_id');
-      if (duplicate) {
-         return res.status(409).json({ success: false, message: 'Supplier already exists' });
+      const duplicates = await findSupplierDuplicates({
+         supplierName, email: contactDetails?.email, phone: contactDetails?.phoneNumber, iban: bankDetails?.iban,
+         excludeId: String(existingSupplier._id),
+      });
+      const hard = duplicates.find((m) => m.level === 'block');
+      if (hard) {
+         return res.status(409).json({ success: false, message: hard.reason, matches: duplicates });
+      }
+      if (duplicates.length && confirmDuplicates !== true) {
+         return res.status(409).json({ success: false, duplicateWarning: true, message: duplicates[0].reason, matches: duplicates });
       }
 
-      // Determine the new status: if existing is 'rejected', change to 'pending'
-      let newStatus = existingSupplier.status;
-      if (existingSupplier.status === supplierStatus.rejected) {
-         newStatus = supplierStatus.pending;
-      }
+      // Approval is switched off for now: an edit never sends a supplier back for approval, and a
+      // supplier still Pending/Rejected from before becomes Approved when it is edited.
+      const newStatus = supplierStatus.approved;
 
       const files = (req as any).files?.documents || [];
 
@@ -943,6 +983,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
          id,
          {
             supplierName: supplierName.trim(),
+            ...supplierKeys({ supplierName, contactDetails, bankDetails: bankDetails ?? existingSupplier.bankDetails }),
             address: address,
             supplierType,
             category,
@@ -1136,9 +1177,15 @@ export const blockSupplier = async (req: Request, res: Response, next: NextFunct
             return res.status(400).json({ message: 'Only approved suppliers can be blocked or unblocked' });
          }
          const isBlocked = supplier.isBlocked ? false : true;
+         const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 1000) : '';
+         if (isBlocked && !reason) {
+            return res.status(400).json({ message: 'A reason is required to block a supplier' });
+         }
+         const actor = await getEmployeeData(req.user);
+         const byName = actor ? `${actor.firstName ?? ''} ${actor.lastName ?? ''}`.trim() : '';
          await Supplier.findByIdAndUpdate(
             supplierId,
-            { isBlocked, updatedDate: new Date() },
+            { isBlocked, updatedDate: new Date(), $push: { blockHistory: { date: new Date(), blocked: isBlocked, reason, byName } } },
             { new: true },
          );
          return res.status(200).json({ isBlocked });

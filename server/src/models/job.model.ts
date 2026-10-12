@@ -11,6 +11,9 @@ interface Job extends Document {
     allocateStatus: string;
     allocateType : string;
     procurementPerson?: Types.ObjectId;
+    productDistribution?: boolean;
+    projectInstallation?: boolean;
+    amc?: boolean;
     lostReason?: string;
     lostAt?: Date;
     lostBy?: Types.ObjectId;
@@ -81,6 +84,9 @@ const jobSchema = new Schema<Job>({
         type : String,
         enum : Object.values(allocateType)
     },
+    productDistribution: { type: Boolean },
+    projectInstallation: { type: Boolean },
+    amc: { type: Boolean },
     procurementPerson: {
         type: Schema.Types.ObjectId,
         ref: 'Employee'

@@ -1,6 +1,14 @@
 import { Request, Response } from "express";
 import MasterListItemModel, { LIST_MODULE, MASTER_LISTS, MasterListName } from '../models/masterListItem.model';
 import { getEmployeeData } from "../common/utils/util";
+import Product from '../models/products.model';
+
+/** Products store units and brands as text, so these lists need a usage check and a rename cascade. */
+const PRODUCT_TEXT_FIELD: Record<string, string> = { unit: 'unitOfMeasure', brand: 'brand' };
+const productsUsing = (list: string, label: string) => {
+    const field = PRODUCT_TEXT_FIELD[list];
+    return field ? Product.countDocuments({ isDeleted: { $ne: true }, [field]: new RegExp(`^${escapeRegex(label)}$`, 'i') }) : Promise.resolve(0);
+};
 
 const validList = (list: string) => (MASTER_LISTS as readonly string[]).includes(list);
 
@@ -34,6 +42,8 @@ export const createMasterListItem = async (req: Request, res: Response) => {
         if (!validList(list)) return res.status(400).json({ success: false, message: "Invalid list" });
         const label = String(req.body.label ?? '').trim();
         if (!label) return res.status(400).json({ success: false, message: "Name is required" });
+        // Units and availability can be added from any form, so keep junk and pasted text out of the shared list.
+        if (label.length > 40) return res.status(400).json({ success: false, message: "Name must be 40 characters or fewer" });
         const value = parseValue(req.body.value);
         if (value === undefined) return res.status(400).json({ success: false, message: "Value must be a non-negative number" });
         if (await labelTaken(list, label)) return res.status(409).json({ success: false, message: "That name already exists in this list" });
@@ -53,11 +63,14 @@ export const updateMasterListItem = async (req: Request, res: Response) => {
         if (!validList(list)) return res.status(400).json({ success: false, message: "Invalid list" });
         const editor = await getEmployeeData(req.user);
         const update: Record<string, unknown> = { updatedBy: editor?._id ?? null };
+        let renamedFrom: string | null = null;
         if (req.body.label !== undefined) {
             const label = String(req.body.label).trim();
             if (!label) return res.status(400).json({ success: false, message: "Name is required" });
             if (await labelTaken(list, label, id)) return res.status(409).json({ success: false, message: "That name already exists in this list" });
             update.label = label;
+            const before = await MasterListItemModel.findOne({ _id: id, list, isDeleted: { $ne: true } }).select('label').lean();
+            if (before && before.label !== label) renamedFrom = before.label;
         }
         if (req.body.value !== undefined) {
             const value = parseValue(req.body.value);
@@ -67,6 +80,11 @@ export const updateMasterListItem = async (req: Request, res: Response) => {
         if (req.body.isActive !== undefined) update.isActive = !!req.body.isActive;
         const item = await MasterListItemModel.findOneAndUpdate({ _id: id, list, isDeleted: { $ne: true } }, update, { new: true, runValidators: true });
         if (!item) return res.status(404).json({ success: false, message: "Item not found" });
+        // Keep products pointing at the renamed unit / brand instead of orphaning them.
+        const field = PRODUCT_TEXT_FIELD[list];
+        if (renamedFrom && field) {
+            await Product.updateMany({ isDeleted: { $ne: true }, [field]: new RegExp(`^${escapeRegex(renamedFrom)}$`, 'i') }, { $set: { [field]: item.label } });
+        }
         return res.status(200).json({ success: true, data: item });
     } catch (error: any) {
         if (error?.code === 11000) return res.status(409).json({ success: false, message: "That name already exists in this list" });
@@ -82,6 +100,8 @@ export const deleteMasterListItem = async (req: Request, res: Response) => {
         const existing = await MasterListItemModel.findOne({ _id: id, list, isDeleted: { $ne: true } });
         if (!existing) return res.status(404).json({ success: false, message: "Item not found" });
         if (existing.isSystem) return res.status(400).json({ success: false, message: "Default items can't be deleted. Hide it instead." });
+        const inUse = await productsUsing(list, existing.label);
+        if (inUse) return res.status(409).json({ success: false, message: `Used by ${inUse} product${inUse === 1 ? '' : 's'}. Hide it instead of deleting.` });
         const editor = await getEmployeeData(req.user);
         existing.isDeleted = true;
         existing.isActive = false;

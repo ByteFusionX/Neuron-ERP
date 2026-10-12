@@ -75,8 +75,10 @@ const validateWorkflowSteps = (steps: any[], allowEmpty = false) => {
 const ALLOWED_CONDITIONS: Record<string, string[]> = {
     presale: ['time'],
     purchaseApproval: ['time', 'amount'],
+    dealSheet: ['time', 'amount', 'discount'],
     claim: ['time', 'amount'],
     projectClaim: ['time', 'amount'],
+    procurementAssignment: ['time'],
 };
 
 const normalizeConditionFlags = (feature: string, flags: any) => {
@@ -141,6 +143,12 @@ const presaleRolesMissingPrivilege = async (steps: any[], keep: string[] = []) =
     return roles.filter((role: any) => role.privileges?.assignedJob?.assign !== true).map((role: any) => role.categoryName);
 };
 
+/** Deal sheet stages approve deals, so every newly added role must hold the deal sheet privilege (the approve endpoint is gated on it). */
+const dealSheetRolesMissingPrivilege = async (steps: any[], keep: string[] = []) => {
+    const roles = await Category.find({ _id: { $in: steps.map(step => step.role).filter(id => !keep.includes(String(id))) } }).select('categoryName privileges.dealSheet').lean();
+    return roles.filter((role: any) => role.privileges?.dealSheet !== true).map((role: any) => role.categoryName);
+};
+
 const normalizeClock = (value: any, fallback: string) => {
     const match = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? ''));
     if (!match) return fallback;
@@ -200,6 +208,10 @@ export const createWorkflow = async (req: Request, res: Response, next: NextFunc
         if (feature === 'presale') {
             const missing = await presaleRolesMissingPrivilege(steps);
             if (missing.length) return res.status(400).json({ success: false, message: `These roles cannot assign presale jobs: ${missing.join(', ')}` });
+        }
+        if (feature === 'dealSheet') {
+            const missing = await dealSheetRolesMissingPrivilege(steps);
+            if (missing.length) return res.status(400).json({ success: false, message: `These roles cannot approve deal sheets: ${missing.join(', ')}` });
         }
         const stepValidation = validateWorkflowSteps(steps, true);
         if (!stepValidation.valid) {
@@ -373,6 +385,12 @@ export const updateWorkflow = async (req: Request, res: Response, next: NextFunc
                 const missing = await presaleRolesMissingPrivilege(source, (workflow.steps as any[]).map(step => String(step.role)));
                 if (missing.length) {
                     return res.status(400).json({ success: false, message: `These roles cannot assign presale jobs: ${missing.join(', ')}` });
+                }
+            }
+            if (targetFeature === 'dealSheet') {
+                const missing = await dealSheetRolesMissingPrivilege(source, (workflow.steps as any[]).map(step => String(step.role)));
+                if (missing.length) {
+                    return res.status(400).json({ success: false, message: `These roles cannot approve deal sheets: ${missing.join(', ')}` });
                 }
             }
             const stepValidation = validateWorkflowSteps(source, true);

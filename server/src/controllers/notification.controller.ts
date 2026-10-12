@@ -70,13 +70,25 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
 
         const privileges = (employee.category as any).privileges as Privileges;
 
-        const unReadNotificationsRaw = await Notification.find({
-            'recipients': { $elemMatch: { objectId: employee._id, status: 'unread' } }
-        })
-        .populate('referenceId')
-        .populate('recipients.objectId')
-        .populate('sentBy')
-        .sort({ 'date': -1 }); 
+        // Recipients and sender only need a display name; populating whole employee documents made this response ~770 KB.
+        // Read history is capped to the latest 50 — the panel never needs the full archive.
+        const [unReadNotificationsRaw, viewedNotificationsRaw] = await Promise.all([
+            Notification.find({
+                'recipients': { $elemMatch: { objectId: employee._id, status: 'unread' } }
+            })
+            .populate('referenceId')
+            .populate('recipients.objectId', 'firstName lastName')
+            .populate('sentBy', 'firstName lastName avatar')
+            .sort({ 'date': -1 }),
+            Notification.find({
+                'recipients': { $elemMatch: { objectId: employee._id, status: 'read' } }
+            })
+            .populate('referenceId')
+            .populate('recipients.objectId', 'firstName lastName')
+            .populate('sentBy', 'firstName lastName avatar')
+            .sort({ 'date': -1 })
+            .limit(50),
+        ]);
         
         const unReadNotifications = await Promise.all(
             unReadNotificationsRaw.map(async (notification) => {
@@ -91,14 +103,6 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                 return notification;
             })
         );
-        
-        const viewedNotificationsRaw = await Notification.find({
-            'recipients': { $elemMatch: { objectId: employee._id, status: 'read' } }
-        })
-        .populate('referenceId')
-        .populate('recipients.objectId')
-        .populate('sentBy')
-        .sort({ 'date': -1 });
         
         const viewedNotifications = await Promise.all(
             viewedNotificationsRaw.map(async (notification) => {
@@ -294,9 +298,9 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
             return { routePath: '/home/announcements' };
         
         case 'AssignedJob':
-            return { routePath: '/assigned-jobs' };
+            return { routePath: '/presales' };
         case 'ReAssignedJob':
-            return { routePath: '/assigned-jobs/reassigned' };
+            return { routePath: '/presales/reassigned' };
 
         case 'FeedbackRequest':
         case 'Enquiry':

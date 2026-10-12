@@ -4,7 +4,7 @@ import Enquiry from "../models/enquiry.model";
 import Supplier, { supplierStatus } from "../models/supplier.model";
 import { getEmployeeData, buildPrivilegeAccessFilter, getQarRates } from "../common/utils/util";
 import { uploadFileToAws } from "../common/aws-connect";
-import { nextRfqNo } from "./rfq.controller";
+import { nextRfqNo } from "../services/rfqNumber.service";
 import { getActiveReservationFilter } from "./stockEntry.controller";
 import Product from "../models/products.model";
 import StockEntry from "../models/stockEntry.model";
@@ -18,7 +18,7 @@ const LOCKED_STATUSES: string[] = [RfqStatus.Closed, RfqStatus.Cancelled];
 const QUOTE_FIELDS = [
     'supplierId', 'supplierName', 'unitPrice', 'availability', 'currency', 'leadTimeDays', 'quantity',
     'discountType', 'discountValue', 'taxPercent', 'freightCost', 'etaTerms', 'paymentTerms',
-    'validityDate', 'warrantyTerms', 'remarks'
+    'validityDate', 'warrantyTerms', 'brandOffered', 'modelOffered', 'moq', 'isAlternative', 'remarks'
 ];
 
 // --- helpers -----------------------------------------------------------------
@@ -267,6 +267,7 @@ const loadSalesRfq = async (id: string) => {
 const populateSalesRfq = (query: any) => query
     .populate({ path: 'enquiryId', populate: [{ path: 'client' }, { path: 'contact' }, { path: 'department' }, { path: 'salesPerson', select: '-password' }] })
     .populate('customerId')
+    .populate('requestedLines.partNo', 'itemCode partNo')
     .populate('quotationId', 'quoteId status')
     .populate('ownerId', '-password')
     .populate('createdBy', '-password');
@@ -597,6 +598,8 @@ export const createSalesRfqFromEnquiry = async (req: Request, res: Response, nex
             invites.push(built.invite);
         }
         if (!invites.length) return res.status(400).json({ success: false, message: 'Pick at least one supplier to ask.' });
+        // Without a "prices needed by" date the overdue and chasing logic has nothing to count from.
+        if (!req.body?.deadline) return res.status(400).json({ success: false, message: 'Say when the supplier prices are needed by.' });
 
         const created: any[] = [];
         for (const invite of invites) {
@@ -684,6 +687,7 @@ export const addSalesRfqQuote = async (req: Request, res: Response, next: NextFu
             itemName: line.itemName,
             detail: line.detail,
             quantity: line.quantity,
+            productId: line.partNo || undefined,
             selected: false,
             createdBy: employee?._id,
             createdAt: new Date(),
@@ -907,6 +911,9 @@ export const updateSalesRfqSupplier = async (req: Request, res: Response, next: 
         if (remarks !== undefined) invite.remarks = remarks;
         if (status !== undefined) {
             if (!Object.values(RfqSupplierStatus).includes(status)) return res.status(400).json({ success: false, message: "Unknown status" });
+            if (status === RfqSupplierStatus.Sent && invite.status === RfqSupplierStatus.Sent) {
+                return res.status(409).json({ success: false, message: "This RFQ is already marked as sent. Refresh to see its current state." });
+            }
             if (status === RfqSupplierStatus.Declined && !(RFQ_DECLINE_REASONS as readonly string[]).includes(declineReason)) {
                 return res.status(400).json({ success: false, message: "Pick why the supplier declined." });
             }
@@ -1008,6 +1015,7 @@ export const submitSalesRfqSupplierReply = async (req: Request, res: Response, n
                     itemName: line.itemName,
                     detail: line.detail,
                     quantity: line.quantity,
+                    productId: line.partNo || undefined,
                     selected: false,
                     createdBy: employee?._id,
                     createdAt: new Date(),
@@ -1021,9 +1029,12 @@ export const submitSalesRfqSupplierReply = async (req: Request, res: Response, n
                 quantity: row.quantity != null && row.quantity !== '' ? toNumber(row.quantity, line.quantity) : line.quantity,
                 leadTimeDays: row.leadTimeDays != null && row.leadTimeDays !== '' ? toNumber(row.leadTimeDays) : '',
                 remarks: row.remarks ?? '',
+                modelOffered: String(row.modelOffered || '').trim(),
+                isAlternative: !!String(row.modelOffered || '').trim() && !!row.isAlternative,
                 currency: row.currency || terms.currency || 'QAR',
-                paymentTerms: terms.paymentTerms ?? '',
-                etaTerms: terms.deliveryTerms ?? '',
+                // A line's own terms win over the ones given for the whole reply.
+                paymentTerms: String(row.paymentTerms || '').trim() || terms.paymentTerms || '',
+                etaTerms: String(row.deliveryTerms || '').trim() || terms.deliveryTerms || '',
                 validityDate: terms.validityDate ?? '',
                 warrantyTerms: terms.warrantyTerms ?? '',
                 discountType: row.discountType,
@@ -1180,8 +1191,14 @@ export const getEnquiryRfqComparison = async (req: Request, res: Response, next:
         const rfqs: any[] = await loadEnquiryRfqs(enquiryId).lean();
         const { rates } = await getQarRates();
 
-        const rows = groupEnquiryLines(rfqs).map((row) => {
+        const grouped = groupEnquiryLines(rfqs);
+        const productIds = [...new Set(grouped.map((r) => r.members[0].line.partNo).filter((id: any) => id && ObjectId.isValid(String(id))).map(String))];
+        const products: any[] = productIds.length ? await Product.find({ _id: { $in: productIds } }).select('itemCode partNo').lean() : [];
+        const productById = new Map(products.map((p) => [String(p._id), p]));
+
+        const rows = grouped.map((row) => {
             const first = row.members[0].line;
+            const product = productById.get(String(first.partNo));
             const cells = row.members.map(({ rfq, line }) => {
                 const quote = quoteFor(rfq, line);
                 const unit = quote && quote.availability !== RfqAvailability.Unavailable ? unitLandedCost(quote) : null;
@@ -1216,7 +1233,8 @@ export const getEnquiryRfqComparison = async (req: Request, res: Response, next:
                 detail: first.detail,
                 quantity: first.quantity,
                 uom: first.uom,
-                partNo: first.partNo,
+                partNo: product?.partNo || '',
+                itemCode: product?.itemCode || '',
                 status,
                 awardedRfqId: won?.rfqId ?? null,
                 lowestRfqId: lowest?.rfqId ?? null,
@@ -1329,6 +1347,10 @@ export const awardEnquiryRfqLines = async (req: Request, res: Response, next: Ne
             if (rfq.status !== RfqStatus.Awarded) { rfq.awardedAt = undefined; rfq.awardedBy = undefined; }
             await rfq.save();
         }
+        // Awarding is real work on the enquiry; a still-new one moves on so it can be converted to a quotation.
+        if (awards.some((a) => a?.quoteId)) {
+            await Enquiry.updateOne({ _id: enquiryId, status: { $in: ['new', 'New'] } }, { $set: { status: 'in progress' } });
+        }
         return res.status(200).json({ success: true, message: "Award saved", data: { changed: changed.size } });
     } catch (error) {
         next(error);
@@ -1337,7 +1359,8 @@ export const awardEnquiryRfqLines = async (req: Request, res: Response, next: Ne
 
 /**
  * The quotation seed for a whole enquiry: every awarded product from every supplier RFQ, grouped by
- * item name, costs brought into the enquiry's quote currency. Refused while any product is still open.
+ * item name, costs brought into the enquiry's quote currency. Refused while any product is still open,
+ * unless `partial` is set (the presale estimation takes what is awarded so far and says what was left out).
  */
 export const prepareQuotationFromEnquiryRfqs = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1348,9 +1371,10 @@ export const prepareQuotationFromEnquiryRfqs = async (req: Request, res: Respons
         if (rfqs.some((rfq) => rfq.quotationId)) return res.status(409).json({ success: false, message: "A quotation was already made from these RFQs." });
 
         const rows = groupEnquiryLines(rfqs);
+        const partial = req.query.partial === '1' || req.body?.partial === true;
         const open = rows.filter((row) => !row.members.some((m) => m.line.lineStatus === RfqLineStatus.Confirmed)
             && !row.members.every((m) => m.line.lineStatus === RfqLineStatus.Unavailable));
-        if (open.length) {
+        if (open.length && !partial) {
             return res.status(409).json({ success: false, message: `${open.length} product(s) still open. Award them or mark them unavailable first.` });
         }
 
@@ -1367,6 +1391,14 @@ export const prepareQuotationFromEnquiryRfqs = async (req: Request, res: Respons
             return Number((qar / target).toFixed(2));
         };
 
+        // The quotation lines show each product's code and part no, so look them up once.
+        const productIds = rows.flatMap((row) => row.members.map((m) => m.line.partNo)).filter((id) => id && ObjectId.isValid(String(id)));
+        const productCodes = new Map<string, { itemCode?: string; partNo?: string }>();
+        if (productIds.length) {
+            const products: any[] = await Product.find({ _id: { $in: productIds } }).select('itemCode partNo').lean();
+            products.forEach((p) => productCodes.set(String(p._id), { itemCode: p.itemCode, partNo: p.partNo }));
+        }
+
         const items = new Map<string, any>();
         let sourceRfqId: any = null;
         rows.forEach((row) => {
@@ -1379,6 +1411,8 @@ export const prepareQuotationFromEnquiryRfqs = async (req: Request, res: Respons
             if (!items.has(name)) items.set(name, { itemName: name, isOptional: false, includeInTotal: false, itemDetails: [] });
             items.get(name).itemDetails.push({
                 productId: won.line.partNo || undefined,
+                itemCode: productCodes.get(String(won.line.partNo))?.itemCode || '',
+                partNo: productCodes.get(String(won.line.partNo))?.partNo || '',
                 detail: won.line.detail,
                 quantity: won.line.quantity,
                 unitCost: costIn(quote),
@@ -1396,7 +1430,10 @@ export const prepareQuotationFromEnquiryRfqs = async (req: Request, res: Respons
                 rfqId: sourceRfqId,
                 rfqNo: rfqs.filter((rfq) => (rfq.requestedLines || []).some((l: any) => l.lineStatus === RfqLineStatus.Confirmed)).map((rfq) => rfq.rfqNo).join(', '),
                 currency,
-                warnings: unconverted.size ? [`No exchange rate for ${[...unconverted].join(', ')}; those costs were copied unconverted.`] : [],
+                warnings: [
+                    ...(unconverted.size ? [`No exchange rate for ${[...unconverted].join(', ')}; those costs were copied unconverted.`] : []),
+                    ...(open.length ? [`${open.length} product(s) are not awarded yet and were left out.`] : []),
+                ],
                 optionalItems: [{ items: Array.from(items.values()), totalDiscount: 0 }],
             }
         });
@@ -1504,6 +1541,7 @@ export const searchSalesRfqSuppliers = async (req: Request, res: Response, next:
         const match: any = { isDeleted: { $ne: true }, isBlocked: { $ne: true } };
         if (search) match.supplierName = { $regex: escapeRegex(search), $options: 'i' };
         const suppliers: any[] = await Supplier.find(match, { supplierName: 1, status: 1, 'contactDetails.email': 1 })
+            .collation({ locale: 'en', strength: 2 })
             .sort({ supplierName: 1 })
             .limit(search ? 20 : 200)
             .lean();
@@ -1724,6 +1762,61 @@ export const getRfqPriceHistory = async (req: Request, res: Response, next: Next
 };
 
 /**
+ * Supplier-product history: one row per (supplier, product) built from past quotes, newest data first.
+ * Pass `productId` to see who supplies a product, or `supplierId` to see what a supplier has quoted.
+ */
+export const getSupplierProductHistory = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { productId, supplierId } = req.query as any;
+        const match: any = { 'quotes.productId': { $ne: null }, 'quotes.availability': { $ne: RfqAvailability.Unavailable } };
+        if (productId && ObjectId.isValid(productId)) match['quotes.productId'] = new ObjectId(productId);
+        else if (!supplierId) return res.status(200).json({ success: true, data: [] });
+        if (supplierId && ObjectId.isValid(supplierId)) match['quotes.supplierId'] = new ObjectId(supplierId);
+
+        const data = await Rfq.aggregate([
+            { $match: { isDeleted: false, rfqType: RfqType.Sales } },
+            { $unwind: '$quotes' },
+            { $match: match },
+            { $sort: { 'quotes.createdAt': -1 } },
+            {
+                $group: {
+                    _id: { supplierId: '$quotes.supplierId', productId: '$quotes.productId' },
+                    supplierName: { $first: '$quotes.supplierName' },
+                    detail: { $first: '$quotes.detail' },
+                    lastPrice: { $first: '$quotes.unitPrice' },
+                    currency: { $first: '$quotes.currency' },
+                    leadTimeDays: { $first: '$quotes.leadTimeDays' },
+                    brandOffered: { $first: '$quotes.brandOffered' },
+                    moq: { $first: '$quotes.moq' },
+                    lastQuotedAt: { $first: '$quotes.createdAt' },
+                    lastRfqNo: { $first: '$rfqNo' },
+                    lowestPrice: { $min: '$quotes.unitPrice' },
+                    timesQuoted: { $sum: 1 },
+                    timesSelected: { $sum: { $cond: ['$quotes.selected', 1, 0] } },
+                },
+            },
+            {
+                $lookup: { from: 'products', localField: '_id.productId', foreignField: '_id', as: 'product' },
+            },
+            {
+                $project: {
+                    _id: 0, supplierId: '$_id.supplierId', productId: '$_id.productId',
+                    supplierName: 1, detail: 1, lastPrice: 1, currency: 1, leadTimeDays: 1, brandOffered: 1, moq: 1,
+                    lastQuotedAt: 1, lastRfqNo: 1, lowestPrice: 1, timesQuoted: 1, timesSelected: 1,
+                    partNo: { $arrayElemAt: ['$product.partNo', 0] },
+                    productName: { $arrayElemAt: ['$product.productDescription', 0] },
+                },
+            },
+            { $sort: { timesSelected: -1, lastQuotedAt: -1 } },
+            { $limit: 200 },
+        ]);
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * Stock position for each RFQ line. A line matches a catalogue product by id, part no, item code or
  * description (case-insensitive). Available = stock entries less active blocks and reservations.
  * Suppliers to ask when it is short: the product's default vendor, then the suppliers it was bought
@@ -1741,15 +1834,16 @@ export const checkSalesRfqStock = async (req: Request, res: Response, next: Next
                 $or: [
                     { _id: { $in: idTerms } },
                     { partNo: { $in: terms } },
+                    { 'aliases.value': { $in: terms } },
                     { itemCode: { $in: terms } },
                     { productDescription: { $in: terms } },
                 ],
-            }).select('partNo itemCode productDescription defaultVendor unitOfMeasure').collation({ locale: 'en', strength: 2 }).lean()
+            }).select('partNo aliases itemCode productDescription defaultVendor unitOfMeasure').collation({ locale: 'en', strength: 2 }).lean()
             : [];
 
         const byKey = new Map<string, any>();
         products.forEach((p) => {
-            [p._id?.toString(), p.partNo, p.itemCode, p.productDescription]
+            [p._id?.toString(), p.partNo, ...(p.aliases ?? []).map((a: any) => a.value), p.itemCode, p.productDescription]
                 .map((v) => String(v || '').trim().toLowerCase())
                 .filter(Boolean)
                 .forEach((k) => { if (!byKey.has(k)) byKey.set(k, p); });

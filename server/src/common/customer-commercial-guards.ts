@@ -80,7 +80,9 @@ export const getCustomerCommercialGuard = async (customerId: any, amount = 0) =>
     const warnings: string[] = [];
     const status = String(customer.status || "");
     const creditStatus = String(customer.creditStatus || "");
-    const creditLimit = Number(customer.creditLimit);
+    // An unset credit limit means "no limit", not zero.
+    const rawLimit: any = customer.creditLimit;
+    const creditLimit = rawLimit === null || rawLimit === undefined || rawLimit === "" ? NaN : Number(rawLimit);
     const value = Number(amount) || 0;
 
     if (BLOCKED_CUSTOMER_STATUSES.includes(status)) {

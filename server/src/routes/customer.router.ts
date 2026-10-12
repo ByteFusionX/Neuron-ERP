@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists, updateCustomerStatus, updateCustomerAttachments, removeCustomerAttachment } from "../controllers/customer.controller";
+import { createCustomer, getAllCustomers, getCustomerCreators, getFilteredCustomers, editCustomer, getCustomerByCustomerId, shareOrTransferCustomer, stopSharingCustomer, deleteCustomer, checkCompanyExists, checkCustomerDuplicate, getCustomerDuplicatesReport, updateCustomerStatus, updateCustomerAttachments, removeCustomerAttachment } from "../controllers/customer.controller";
 import { requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage")
 const cusRouter = Router()
@@ -9,6 +9,8 @@ cusRouter.use(requirePrivilege("customer"));
 
 cusRouter.get('/creators',getCustomerCreators)
 cusRouter.get('/checkCompanyExists', checkCompanyExists)
+cusRouter.get('/checkDuplicate', checkCustomerDuplicate)
+cusRouter.get('/duplicatesReport', getCustomerDuplicatesReport)
 cusRouter.get('/:userId',getAllCustomers)
 cusRouter.get('/view/get/:customerId', getCustomerByCustomerId)
 cusRouter.post('/', requirePrivilege("customer", "create"), createCustomer)

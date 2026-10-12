@@ -1,4 +1,5 @@
 import { Schema, Document, model, Types } from "mongoose";
+import { followUpTaskSchema } from "./followUpTask.schema";
 import { File } from "../interface/enquiry.interface";
 import FilesSchema from "./files.model";
 import { Feedback } from "aws-sdk/clients/guardduty";
@@ -24,7 +25,7 @@ interface Enquiry extends Document {
     lastFollowUpDate?: string | number | Date;
     followUpHistory: { date: Date, outcome: string, note: string, nextFollowUpDate: Date, createdBy: Types.ObjectId, createdByName: string, createdAt: Date, correctionOf?: Types.ObjectId | null, status?: 'scheduled' | 'done' | 'cancelled', dueDate?: Date, completedAt?: Date, cancelReason?: string }[];
     createdDate: Date;
-    preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string, version?: number }, estimationHistory?: any[], presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId, reminderDueAt?: Date, reminderSentAt?: Date, timeoutAction?: string, repeatReminder?: boolean, timeoutHandledAt?: Date, workflowVersion?: number }, status?: string };
+    preSale: { followUp?: { history?: any[], nextFollowUpDate?: Date, lastActivityDate?: Date, lastOutcome?: string }, presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string, version?: number }, estimationHistory?: any[], presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; rejectedRole: string }[], assignApproval?: { stepIndex: number, role: Types.ObjectId, assignedAt: Date, escalationDueAt: Date, escalatedFrom?: Types.ObjectId, reminderDueAt?: Date, reminderSentAt?: Date, timeoutAction?: string, repeatReminder?: boolean, timeoutHandledAt?: Date, workflowVersion?: number }, status?: string };
     // preSale: { presalePerson: Types.ObjectId, estimations: { optionalItems: any[], currency: string, totalDiscount: number, presaleNote: string }, presaleFiles: [], comment: string, feedback: Feedback[], newFeedbackAccess: boolean, seenbyEmployee: boolean, seenbySalesPerson: boolean, revisionComment: string[], createdDate: Date, rejectionHistory: { rejectionReason: any; rejectedBy: Types.ObjectId; }[] };
     assignedFiles: []
     status: string;
@@ -94,6 +95,11 @@ const estimationSchema = new Schema({
     // v1 is the first submission; it only moves to v2, v3... when an estimation is re-submitted after a revision.
     version: {
         type: Number
+    },
+    // The supplier RFQ the costs were filled from; the quotation made from this estimation links the enquiry's RFQs through it.
+    sourceRfqId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Rfq'
     },
 });
 
@@ -168,7 +174,16 @@ const assignApprovalSchema = new Schema({
     workflowVersion: { type: Number },
 }, { _id: false });
 
+// Chasing the estimation: one open task at a time, with next/last summary fields the presale list filters on.
+const presaleFollowUpSchema = new Schema({
+    history: { type: [followUpTaskSchema], default: [] },
+    nextFollowUpDate: { type: Date },
+    lastActivityDate: { type: Date },
+    lastOutcome: { type: String },
+}, { _id: false });
+
 const preSaleSchema = new Schema({
+    followUp: { type: presaleFollowUpSchema },
     presalePerson: {
         type: Schema.Types.ObjectId,
         ref: 'Employee',

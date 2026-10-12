@@ -16,6 +16,7 @@ import {
 import customerModel from "../models/customer.model";
 import employeeModel from "../models/employee.model";
 import mongoose from "mongoose";
+import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const ObjectId = require("mongoose").Types.ObjectId;
 
 export const getEmployees = async (
@@ -24,9 +25,14 @@ export const getEmployees = async (
   next: NextFunction,
 ) => {
   try {
+    // Anyone signed in gets the directory basics for pickers and names; the full record
+    // (approval limits, extra privileges, targets...) only goes to those who can view employees.
+    let fullAccess = false;
+    const probe: any = { status: () => probe, json: () => probe };
+    requirePrivilege("employee")(req, probe, () => { fullAccess = true; });
     const employees = await Employee.find(
       { isDeleted: { $ne: true }, isBlocked: { $ne: true } },
-      { password: 0 },
+      fullAccess ? { password: 0 } : { employeeId: 1, firstName: 1, lastName: 1, category: 1, department: 1, email: 1 },
     )
       .sort({ createdDate: -1 })
       .populate("department");
@@ -185,7 +191,7 @@ export const getEmployeesForCustomerTransfer = async (
     });
 
     if (employeeAccess?.category?.privileges?.employee?.viewReport == "none") {
-      res
+      return res
         .status(200)
         .json(
           reportedEmployee && !reportedEmployee.isBlocked
@@ -1116,8 +1122,11 @@ export const getNotificationCounts = async (
       "preSale.feedback.feedback": { $exists: false },
     });
 
+    // Same quotes the list highlights as "deal sheet update not seen yet": deleted and superseded revisions don't count.
     const quotationCount = await quotationModel.countDocuments({
       createdBy: new ObjectId(userId),
+      isDeleted: { $ne: true },
+      status: { $ne: "revised" },
       "dealData.seenedBySalsePerson": false,
     });
 

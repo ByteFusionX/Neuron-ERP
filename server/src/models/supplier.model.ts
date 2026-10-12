@@ -3,6 +3,11 @@ import { model, Schema, Types } from "mongoose";
 interface supplierSchemaInterface {
     supplierId: string;
     supplierName: string;
+    nameKey?: string;
+    nameCore?: string;
+    emailKey?: string;
+    phoneKey?: string;
+    ibanKey?: string;
     address: AddressInterface;
     supplierType: String;
     category: Types.ObjectId;
@@ -23,6 +28,7 @@ interface supplierSchemaInterface {
     }[];
     isDeleted: boolean;
     isBlocked: boolean;
+    blockHistory?: { date: Date; blocked: boolean; reason?: string; byName?: string }[];
     rejectHistory: {
         date: Date;
         reason: string;
@@ -137,6 +143,12 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
         type: String,
         required: true,
     },
+    // Derived from name, contact and bank details for duplicate checks (common/utils/partyMatch.ts).
+    nameKey: { type: String, index: true },
+    nameCore: { type: String, index: true },
+    emailKey: { type: String, index: true },
+    phoneKey: { type: String, index: true },
+    ibanKey: { type: String, index: true },
     address: {
         type: Address,
         required: true,
@@ -204,6 +216,15 @@ const supplierSchema = new Schema<supplierSchemaInterface>({
             date: { type: Date, default: Date.now },
             reason: { type: String },
             rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' }
+        }],
+        default: [],
+    },
+    blockHistory: {
+        type: [{
+            date: { type: Date, default: Date.now },
+            blocked: { type: Boolean },
+            reason: { type: String },
+            byName: { type: String }
         }],
         default: [],
     },

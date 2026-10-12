@@ -32,10 +32,14 @@ import {
     selfAssignPresaleJob,
     markAsSeenReAssingedJob,
     updateEnquiryAttachments,
+    updateEnquiryDetails,
     removeEnquiryAttachment,
     findSimilarEnquiries,
     getEnquiryReport,
     scheduleFollowUp,
+    schedulePresaleFollowUp,
+    completePresaleFollowUp,
+    cancelPresaleFollowUp,
     completeFollowUp,
     cancelFollowUp
 } from "../controllers/enquiry.controller";
@@ -74,7 +78,11 @@ equiRouter.post('/presales/report', getPresaleReport);
 equiRouter.get('/presales/tab-counts', presaleTabCounts);
 equiRouter.patch('/:enquiryId/send-to-presale', requireUnlessDenied("enquiry", "reassign", STRICT), sendToPresale);
 equiRouter.patch('/:enquiryId/convert-to-quote', ...editOwnEnquiry, convertToQuote);
+equiRouter.patch('/presales/:enquiryId/follow-up/schedule', requirePrivilege("assignedJob"), schedulePresaleFollowUp);
+equiRouter.patch('/presales/:enquiryId/follow-up/complete', requirePrivilege("assignedJob"), completePresaleFollowUp);
+equiRouter.patch('/presales/:enquiryId/follow-up/cancel', requirePrivilege("assignedJob"), cancelPresaleFollowUp);
 equiRouter.patch('/presales/:enquiryId', requirePrivilege("assignedJob", "assign", undefined, STRICT), upload.fields([{ name: 'newPresaleFile' }]), assignPresale);
+equiRouter.patch('/:enquiryId/details', requireUnlessDenied("enquiry", "edit"), requireEnquiryCreator({ editableStatusOnly: true }), updateEnquiryDetails);
 equiRouter.patch('/:enquiryId/attachments', requireUnlessDenied("enquiry", "edit"), requireEnquiryCreator({ editableStatusOnly: true }), upload.array('files'), updateEnquiryAttachments);
 equiRouter.delete('/:enquiryId/attachments/:fileName', requireUnlessDenied("enquiry", "edit"), requireEnquiryCreator({ editableStatusOnly: true }), removeEnquiryAttachment);
 equiRouter.patch('/:enquiryId/follow-up/schedule', ...editOwnEnquiry, scheduleFollowUp);

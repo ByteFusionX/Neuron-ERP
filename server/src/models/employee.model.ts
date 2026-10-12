@@ -122,6 +122,7 @@ const employeeSchema = new Schema<Employee>({
   },
   lastName: {
     type: String,
+    trim: true,
     required: true,
   },
   email: {

@@ -30,7 +30,8 @@ const empRouter = Router();
 // /get, /login, /check, and the lookup routes below are self-service or
 // cross-module lookups, not the "employee directory" report — they stay
 // ungated so any authenticated user can fetch their own profile / use them.
-empRouter.get("/", requirePrivilege("employee"), getEmployees);
+// Read-only list for any signed-in user (pickers and names on every page); writes stay gated below.
+empRouter.get("/", getEmployees);
 empRouter.get("/presale-managers", getPresaleManagers);
 empRouter.get("/presale-engineers", getPresaleEngineers);
 empRouter.get("/procurement-employees", getProcurementEmployees);

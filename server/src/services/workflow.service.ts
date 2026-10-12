@@ -16,6 +16,8 @@ const idsMatch = (left: any, right: any) => {
 };
 
 const toFiniteNumber = (value: any): number | null => {
+    // Number(null) is 0, which would read an unset limit as "may approve nothing".
+    if (value === null || value === undefined || value === '') return null;
     const numberValue = Number(value);
     return Number.isFinite(numberValue) ? numberValue : null;
 };
@@ -241,6 +243,10 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
             group.forEach(step => {
                 const timed = step.escalationHours;
                 const windowMinutes = timed ? step.escalationHours * unitMinutes(step.escalationUnit) : 0;
+                // A window set in minutes is meant as a short, real-time limit; only hour and day limits skip nights and weekends.
+                const clock = (from: Date, minutes: number) => step.escalationUnit === 'minute'
+                    ? new Date(from.getTime() + minutes * 60 * 1000)
+                    : addWorkingMinutes(from, minutes, window);
                 const action = step.timeoutAction || 'escalate';
                 approvalStatus.push({
                     status: 'pending',
@@ -251,8 +257,8 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
                     workflowVersion: workflow.version ?? 1,
                     timeoutAction: timed ? action : undefined,
                     ...(timed ? {
-                        escalationDueAt: addWorkingMinutes(now, windowMinutes, window),
-                        ...(step.reminderPercent && step.reminderEnabled !== false ? { reminderDueAt: addWorkingMinutes(now, windowMinutes * step.reminderPercent / 100, window) } : {}),
+                        escalationDueAt: clock(now, windowMinutes),
+                        ...(step.reminderPercent && step.reminderEnabled !== false ? { reminderDueAt: clock(now, windowMinutes * step.reminderPercent / 100) } : {}),
                     } : {}),
                     ...(timed && action === 'escalate' && above ? { escalationRole: above } : {}),
                 });
@@ -296,6 +302,12 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
         }) ?? (isAdmin ? currentApprovals[0] : undefined);
 
         if (!nextApproval) {
+            // A stage that ran out of time has moved up; say so instead of a bare "not authorized".
+            const escalated = currentApprovals.find(approval => approval.escalatedAt && approval.escalationRole);
+            if (escalated) {
+                const target: any = await Category.findById(escalated.escalationRole, 'categoryName').lean();
+                throw new Error(`This step passed its approval time limit and was escalated to ${target?.categoryName ?? 'the next role'}. Only they can decide it now`);
+            }
             throw new Error('You are not authorized to approve this step');
         }
 

@@ -1,4 +1,5 @@
 import { Schema, Document, model } from "mongoose";
+import { PurchaseRequestApprovalStatusSchema } from "./purchaseRequest.model";
 
 interface PurchaseOrder extends Document {
     poNo: string;
@@ -29,6 +30,8 @@ interface PurchaseOrder extends Document {
         originalname: string;
         isUploaded?: boolean;
     }[];
+    // Routed through the "purchaseApproval" workflow; empty for LPOs raised before it was wired in.
+    approvalStatus: any[];
     approvedHistory: {
         approvedBy: any;
         reason: string;
@@ -79,8 +82,12 @@ const purchaseOrderSchema = new Schema<PurchaseOrder>(
         },
         poStatus: {
             type: String,
-            enum: ["Draft", "Pending for Approval", "Approved", "Closed", "Rejected"],
+            enum: ["Pending for Approval", "Approved", "Closed", "Rejected"],
             default: "Pending for Approval",
+        },
+        approvalStatus: {
+            type: [PurchaseRequestApprovalStatusSchema as any],
+            default: []
         },
         approvedHistory: {
             type: [{

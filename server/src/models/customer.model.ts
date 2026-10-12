@@ -68,6 +68,8 @@ export interface Customer extends Document {
   normalizedPhone?: string;
   normalizedTrn?: string;
   normalizedDomain?: string;
+  nameKey?: string;
+  nameCore?: string;
   status: CustomerStatus;
   statusReason?: string;
   paymentTerms?: string;
@@ -144,6 +146,8 @@ const customerSchema = new Schema<Customer>({
   normalizedPhone: { type: String, index: true },
   normalizedTrn: { type: String, index: true },
   normalizedDomain: { type: String, index: true },
+  nameKey: { type: String, index: true },
+  nameCore: { type: String, index: true },
   status: { type: String, enum: CUSTOMER_STATUSES, default: "Active", required: true },
   statusReason: { type: String },
   // Free string: values come from the Settings → Master Data "paymentTerms" list.

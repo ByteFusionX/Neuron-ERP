@@ -1,4 +1,5 @@
 import { Schema, Document, model, Types } from "mongoose";
+import { followUpTaskSchema, FollowUpTask } from "./followUpTask.schema";
 
 interface QuoteItemDetail {
     /** The catalogue product this line was picked from. itemCode/partNo stay as saved snapshots. */
@@ -84,6 +85,8 @@ interface FollowUp {
     reminderOwner?: Types.ObjectId;
     lastActivityDate?: Date;
     note?: string;
+    lastOutcome?: string;
+    history?: FollowUpTask[];
 }
 
 interface CustomerDecision {
@@ -137,6 +140,10 @@ interface Deal {
     attachments: [];
     updatedItems: QuoteItem[];
     totalDiscount:number;
+    /** Employee who submitted the deal; they cannot approve it themselves when a workflow routes it. */
+    requestedBy?: Types.ObjectId;
+    /** Stages from the Deal Sheet approval workflow. Empty = no workflow was configured, any dealSheet approver may decide. */
+    approvalStatus?: any[];
 }
 
 interface Quotation extends Document {
@@ -183,6 +190,8 @@ interface Quotation extends Document {
     revision: number;
     revisions: QuoteRevision[];
     customerAcceptance: CustomerAcceptance;
+    releasedDealId?: string;
+    discardedDeals?: { dealId?: string; status?: string; lastComment?: string; discardedAt?: Date; discardedBy?: Types.ObjectId; reason?: string }[];
 }
 
 export enum quoteStatus {
@@ -322,7 +331,39 @@ const additionalCostSchema = new Schema<AdditionalCost>({
     }
 });
 
+const dealApprovalStatusSchema = new Schema<any>({
+    status: { type: String, required: true, enum: ['pending', 'approved', 'rejected'] },
+    role: { type: Schema.Types.ObjectId, ref: 'Category' },
+    approver: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    delegatedFrom: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    delegationId: { type: Schema.Types.ObjectId, ref: 'WorkflowDelegation' },
+    comment: { type: String, default: '' },
+    step: { type: Number, required: true },
+    managerApproval: { type: Boolean, required: true, default: false },
+    assignedAt: { type: Date },
+    escalationDueAt: { type: Date },
+    escalatedAt: { type: Date },
+    reminderDueAt: { type: Date },
+    reminderSentAt: { type: Date },
+    timeoutAction: { type: String, enum: ['escalate', 'notify', 'reject'] },
+    timeoutHandledAt: { type: Date },
+    workflowVersion: { type: Number },
+    ruleStage: { type: Boolean },
+    escalationRole: { type: Schema.Types.ObjectId, ref: 'Category' },
+    originalRole: { type: Schema.Types.ObjectId, ref: 'Category' },
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+    updatedDate: { type: Date },
+});
+
 const dealDatas = new Schema<Deal>({
+    requestedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee',
+    },
+    approvalStatus: {
+        type: [dealApprovalStatusSchema] as any,
+        default: [],
+    },
     dealId: {
         type: String,
         required: false,
@@ -524,6 +565,8 @@ const quotationSchema = new Schema<Quotation>({
         reminderOwner: { type: Schema.Types.ObjectId, ref: 'Employee' },
         lastActivityDate: { type: Date },
         note: { type: String },
+        lastOutcome: { type: String },
+        history: { type: [followUpTaskSchema], default: [] },
     },
     customerDecision: {
         decision: { type: String, enum: ['accepted', 'rejected', 'no_response'] },
@@ -616,6 +659,19 @@ const quotationSchema = new Schema<Quotation>({
         customerPoNumber: { type: String },
         acceptedByName: { type: String },
         lpoFiles: [],
+    },
+    // Set when the quote leaves Won: the deal number is kept for the next deal sheet and the old sheet's outcome stays on record.
+    releasedDealId: { type: String },
+    discardedDeals: {
+        type: [{
+            dealId: { type: String },
+            status: { type: String },
+            lastComment: { type: String },
+            discardedAt: { type: Date, default: Date.now },
+            discardedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
+            reason: { type: String },
+        }],
+        default: [],
     },
 });
 

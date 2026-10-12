@@ -15,7 +15,9 @@ import {
     getConvertibleJobs,
     mergeItemsToDealSheet,
     revokeMergedItems,
-    getApprovalsByEmployee
+    getApprovalsByEmployee,
+    getPurchaseAssignees,
+    allocatePurchaseRequest
 } from '../controllers/purchaseRequest.controller'
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
@@ -29,6 +31,8 @@ purchaseRequestRouter.get('/purchase-request/status/:id', getPurchaseRequestsByS
 purchaseRequestRouter.get('/purchase-request/job/:jobId', getPurchaseRequestsByJobId)
 purchaseRequestRouter.get('/purchase-request/generate-purchase-no', generatePurchaseNumber)
 purchaseRequestRouter.get('/purchase-request/convertible-jobs', getConvertibleJobs)
+purchaseRequestRouter.get('/purchase-request/assignees', requirePrivilege("purchase", "canAssign"), getPurchaseAssignees)
+purchaseRequestRouter.patch('/purchase-request/allocate/:id', requirePrivilege("purchase", "canAssign"), allocatePurchaseRequest)
 purchaseRequestRouter.get('/purchase-request/:id', getPurchaseRequestById)
 purchaseRequestRouter.put('/purchase-update/:id', updatePurchaseRequest)
 purchaseRequestRouter.patch('/purchase-request/status/:id', requirePrivilege("purchase", "canApprovePR"), updatePurchaseRequestStatus)

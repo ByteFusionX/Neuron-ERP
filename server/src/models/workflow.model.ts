@@ -165,7 +165,7 @@ const workflowSchema = new Schema<Workflow>({
     feature: {
         type: String,
         required: true,
-        enum: ['claim', 'projectClaim', 'purchaseApproval', 'presale']
+        enum: ['claim', 'projectClaim', 'purchaseApproval', 'presale', 'dealSheet', 'procurementAssignment']
     },
     steps: {
         type: [approvalStepSchema],

@@ -13,6 +13,56 @@ import { getNextSequence } from "../models/counter.model";
 import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
+import Employee from "../models/employee.model";
+import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
+
+// LPO approval runs on the same "purchaseApproval" workflow as the purchase request; the amount is the LPO total after discount.
+const lpoApprovalContext = (po: any) => {
+  const subTotal = (po?.items || []).reduce((sum: number, item: any) => sum + (Number(item.totalCost) || 0), 0);
+  return { amount: subTotal - (Number(po?.discount) || 0) };
+};
+
+// updateApprovalStatus wraps its errors as "Error: <message>"; strip that so the user sees the plain reason.
+const plainError = (error: any) => String(error?.message ?? error).replace(/^(Error:\s*)+/, '');
+
+const notifyLpoApprovers = async (po: any, sentBy: any, socket: Server) => {
+  const pending = (po.approvalStatus || [])
+    .filter((approval: any) => approval.status === 'pending')
+    .sort((a: any, b: any) => a.step - b.step);
+  const stage = pending.filter((approval: any) => approval.step === pending[0]?.step);
+
+  const approverIds = new Set<string>();
+  const managerIds = new Set<string>();
+  for (const approval of stage) {
+    if (approval.managerApproval && approval.approver) {
+      approverIds.add(approval.approver.toString());
+      managerIds.add(approval.approver.toString());
+    } else if (approval.role) {
+      const roleId = approval.role?._id?.toString() || approval.role.toString();
+      const holders = await Employee.find({ category: roleId, isDeleted: { $ne: true }, isBlocked: { $ne: true } }).select('_id').lean();
+      holders.forEach((holder: any) => approverIds.add(holder._id.toString()));
+    }
+  }
+  if (!approverIds.size) return;
+
+  await createNotificationWithPrivileges(
+    {
+      type: 'LpoApprovalRequest',
+      referenceModel: 'PurchaseOrder',
+      title: 'LPO awaiting your approval',
+      message: `LPO ${po.poNo} is awaiting your approval`,
+      sentBy: sentBy?.toString(),
+      referenceId: po._id,
+      additionalData: { purchaseId: po.purchaseId?.toString() }
+    },
+    {
+      privilegeKey: 'purchaseOrder',
+      checkFunction: (p, employeeId) =>
+        !!employeeId && approverIds.has(employeeId) && (managerIds.has(employeeId) || p.purchaseOrder?.canApprovePOs === true)
+    },
+    socket
+  );
+};
 
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
@@ -176,7 +226,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       poDate: poDate ? new Date(poDate) : new Date(),
       termsAndCondition: termsAndCondition || '',
       discount: discount || 0,
-      poStatus: poStatus === 'Draft' ? 'Draft' : 'Pending for Approval',
+      poStatus: 'Pending for Approval',
       createdBy: employee._id,
     };
 
@@ -193,27 +243,44 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     const rfqId = await resolvePoRfqId(purchaseId, quoteId);
     if (rfqId) purchaseOrderData.rfqId = rfqId;
 
+    // Route the LPO through the purchase approval workflow. With no workflow configured it falls back to the
+    // single-step approval; with no matching steps (limits / requester is Admin) there is nothing to approve.
+    let workflowSteps: any[] | null = null;
+    try {
+      workflowSteps = await getWorkflowSteps('purchaseApproval', employee._id.toString(), lpoApprovalContext(purchaseOrderData));
+    } catch (workflowError) {
+      console.error('Error initializing LPO workflow steps:', workflowError);
+    }
+    if (workflowSteps) {
+      purchaseOrderData.approvalStatus = workflowSteps;
+      if (workflowSteps.length === 0) purchaseOrderData.poStatus = 'Approved';
+    }
+
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
 
-    if (purchaseOrderData.poStatus !== 'Draft') {
-      const socket = req.app.get('io') as Server;
-      await createNotificationWithPrivileges(
-        {
-          type: 'LpoApprovalRequest',
-          referenceModel: 'PurchaseOrder',
-          title: 'LPO sent for approval',
-          message: `LPO ${purchaseOrder.poNo} has been sent for approval`,
-          sentBy: employee._id?.toString(),
-          referenceId: purchaseOrder._id,
-          additionalData: { purchaseId: purchaseId.toString() }
-        },
-        {
-          privilegeKey: 'purchaseOrder',
-          checkFunction: (p) => p.purchaseOrder?.canApprovePOs === true
-        },
-        socket
-      );
+    const socket = req.app.get('io') as Server;
+    if (purchaseOrder.poStatus === 'Pending for Approval') {
+      if (purchaseOrder.approvalStatus?.length) {
+        await notifyLpoApprovers(purchaseOrder, employee._id, socket);
+      } else {
+        await createNotificationWithPrivileges(
+          {
+            type: 'LpoApprovalRequest',
+            referenceModel: 'PurchaseOrder',
+            title: 'LPO sent for approval',
+            message: `LPO ${purchaseOrder.poNo} has been sent for approval`,
+            sentBy: employee._id?.toString(),
+            referenceId: purchaseOrder._id,
+            additionalData: { purchaseId: purchaseId.toString() }
+          },
+          {
+            privilegeKey: 'purchaseOrder',
+            checkFunction: (p) => p.purchaseOrder?.canApprovePOs === true
+          },
+          socket
+        );
+      }
     }
 
     return res.status(201).json({
@@ -233,64 +300,9 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
 export const updatePurchaseOrder = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid PurchaseOrder ID",
-      });
-    }
-
-    const existingOrder = await PurchaseOrder.findById(id);
-    if (!existingOrder) {
-      return res.status(404).json({
-        success: false,
-        message: "Purchase order not found",
-      });
-    }
-
-    const updateData: any = {
-      ...req.body,
-      updatedAt: new Date()
-    };
-
-    if (!updateData.currency && !existingOrder.currency) {
-      const purchaseRequestDoc = await purchaseRequest.findById(existingOrder.purchaseId);
-      if (purchaseRequestDoc && purchaseRequestDoc.currency) {
-        updateData.currency = purchaseRequestDoc.currency;
-      } else if (existingOrder.quoteId) {
-        const quotation = await Quotation.findById(existingOrder.quoteId);
-        if (quotation && quotation.currency) {
-          updateData.currency = quotation.currency;
-        }
-      } else if (existingOrder.jobId) {
-        const job = await jobModel.findById(existingOrder.jobId);
-        if (job && job.quoteId) {
-          const quotation = await Quotation.findById(job.quoteId);
-          if (quotation && quotation.currency) {
-            updateData.currency = quotation.currency;
-          }
-        }
-      }
-    }
-
-    const updatedOrder = await PurchaseOrder.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!updatedOrder) {
-      return res.status(404).json({
-        success: false,
-        message: "Purchase order not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Purchase order updated successfully",
-      data: updatedOrder,
+    return res.status(400).json({
+      success: false,
+      message: "Purchase orders cannot be edited after PR approval. Use re-issue, approval, status, or invoice actions instead.",
     });
   } catch (error: any) {
     console.error("Update PurchaseOrder error:", error);
@@ -615,6 +627,55 @@ export const getPurchaseOrderById = async (req: Request, res: Response) => {
           }
         }
       },
+
+      // Workflow steps: resolve each step's role and the employee who acted on it
+      {
+        $lookup: {
+          from: "categories",
+          localField: "approvalStatus.role",
+          foreignField: "_id",
+          as: "approvalRoles"
+        }
+      },
+      {
+        $lookup: {
+          from: "employees",
+          localField: "approvalStatus.updatedBy",
+          foreignField: "_id",
+          as: "approvalEmployees",
+          pipeline: [{ $project: { password: 0 } }]
+        }
+      },
+      {
+        $addFields: {
+          approvalStatus: {
+            $map: {
+              input: { $ifNull: ["$approvalStatus", []] },
+              as: "approval",
+              in: {
+                $mergeObjects: [
+                  "$$approval",
+                  {
+                    role: {
+                      $arrayElemAt: [
+                        { $filter: { input: "$approvalRoles", as: "r", cond: { $eq: ["$$r._id", "$$approval.role"] } } },
+                        0
+                      ]
+                    },
+                    updatedBy: {
+                      $arrayElemAt: [
+                        { $filter: { input: "$approvalEmployees", as: "e", cond: { $eq: ["$$e._id", "$$approval.updatedBy"] } } },
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      { $project: { approvalRoles: 0, approvalEmployees: 0 } },
 
       // Enrich quoteId with related documents and resolve attention contact
       {
@@ -1161,7 +1222,7 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
     }
 
     // Validate status
-    const validStatuses = ["Draft", "Pending for Approval", "Approved", "Rejected"];
+    const validStatuses = ["Pending for Approval", "Approved", "Rejected"];
     if (!poStatus || !validStatuses.includes(poStatus)) {
       return res.status(400).json({
         success: false,
@@ -1169,14 +1230,26 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
       });
     }
 
+    const setFields: any = { poStatus: poStatus, updatedAt: new Date() };
+
+    // Sending an LPO back for approval starts a fresh workflow route.
+    if (poStatus === 'Pending for Approval') {
+      const existing = await PurchaseOrder.findById(id);
+      if (existing?.createdBy) {
+        try {
+          const steps = await getWorkflowSteps('purchaseApproval', existing.createdBy.toString(), lpoApprovalContext(existing));
+          setFields.approvalStatus = steps;
+          if (steps.length === 0) setFields.poStatus = 'Approved';
+        } catch (workflowError) {
+          console.error('Error initializing LPO workflow steps:', workflowError);
+          setFields.approvalStatus = [];
+        }
+      }
+    }
+
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       id,
-      {
-        $set: {
-          poStatus: poStatus,
-          updatedAt: new Date()
-        }
-      },
+      { $set: setFields },
       {
         new: true,
         runValidators: true,
@@ -1190,7 +1263,10 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
       });
     }
 
-    if (poStatus === 'Pending for Approval') {
+    if (updatedPurchaseOrder.poStatus === 'Pending for Approval' && updatedPurchaseOrder.approvalStatus?.length) {
+      const employee = await getEmployeeData(req.user);
+      await notifyLpoApprovers(updatedPurchaseOrder, employee?._id, req.app.get('io') as Server);
+    } else if (poStatus === 'Pending for Approval' && updatedPurchaseOrder.poStatus === 'Pending for Approval') {
       const tokenData = req.user;
       const employee = await getEmployeeData(tokenData);
       const socket = req.app.get('io') as Server;
@@ -1284,12 +1360,25 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
       date: new Date()
     };
 
+    // Workflow-routed LPOs advance one stage at a time; older ones (no steps) keep the single approval.
+    let nextStatus = 'Approved';
+    let nextSteps: any[] | undefined;
+    if (purchaseOrder.approvalStatus?.length) {
+      try {
+        nextSteps = await updateApprovalStatus('approved', purchaseOrder.toObject().approvalStatus, comment || '', employee, lpoApprovalContext(purchaseOrder));
+      } catch (workflowError) {
+        return res.status(403).json({ success: false, message: plainError(workflowError) });
+      }
+      if (nextSteps.some((approval: any) => approval.status === 'pending')) nextStatus = 'Pending for Approval';
+    }
+
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       id,
       {
         $set: {
-          poStatus: 'Approved',
-          updatedAt: new Date()
+          poStatus: nextStatus,
+          updatedAt: new Date(),
+          ...(nextSteps ? { approvalStatus: nextSteps } : {})
         },
         $push: {
           approvedHistory: approvalEntry
@@ -1302,6 +1391,14 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
     ).populate('approvedHistory.approvedBy', 'firstName lastName');
 
     const socket = req.app.get('io') as Server;
+    if (nextStatus === 'Pending for Approval') {
+      if (updatedPurchaseOrder) await notifyLpoApprovers(updatedPurchaseOrder, employee._id, socket);
+      return res.status(200).json({
+        success: true,
+        message: "Approved. The LPO is now with the next approver",
+        data: updatedPurchaseOrder,
+      });
+    }
     await createNotificationWithPrivileges(
       {
         type: 'LpoApproved',
@@ -1391,12 +1488,22 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       date: new Date()
     };
 
+    let rejectedSteps: any[] | undefined;
+    if (purchaseOrder.approvalStatus?.length) {
+      try {
+        rejectedSteps = await updateApprovalStatus('rejected', purchaseOrder.toObject().approvalStatus, comment || '', employee, lpoApprovalContext(purchaseOrder));
+      } catch (workflowError) {
+        return res.status(403).json({ success: false, message: plainError(workflowError) });
+      }
+    }
+
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       id,
       {
         $set: {
           poStatus: 'Rejected',
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          ...(rejectedSteps ? { approvalStatus: rejectedSteps } : {})
         },
         $push: {
           rejectedHistory: rejectionEntry

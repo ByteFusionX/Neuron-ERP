@@ -346,6 +346,10 @@ export const updateJobStatus = async (req: Request, res: Response, next: NextFun
     try {
         const { status } = req.body;
         const { jobId } = req.params;
+        if (!ObjectId.isValid(jobId)) return res.status(400).json({ success: false, message: 'Invalid job ID' });
+        if (!Object.values(jobStatus).includes(status)) {
+            return res.status(400).json({ success: false, message: `Status must be one of: ${Object.values(jobStatus).join(', ')}` });
+        }
         const jobUpdated = await jobModel.findByIdAndUpdate(jobId, { status: status, updatedDate: Date.now() })
 
         if (jobUpdated) {
@@ -792,24 +796,17 @@ export const oneJobSheet = async (req: Request, res: Response, next: NextFunctio
 
 export const updateAllocateType = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { id, allocationType, procurementPerson } = req.body;
+        const { id } = req.body;
+        const productDistribution = req.body.productDistribution === true;
+        const projectInstallation = req.body.projectInstallation === true;
+        const amc = req.body.amc === true;
 
-        // Validate required fields
-        if (!id || !allocationType) {
-            return res.status(400).json({
-                success: false,
-                message: 'ID and allocation type are required'
-            });
+        if (!id) {
+            return res.status(400).json({ success: false, message: 'Job id is required' });
         }
-
-        // Validate if allocationType is a valid enum value
-        if (!Object.values(allocateType).includes(allocationType)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid allocation type'
-            });
+        if (!productDistribution && !projectInstallation && !amc) {
+            return res.status(400).json({ success: false, message: 'Select at least one of Product distribution, Project installation or AMC' });
         }
-
         if (!ObjectId.isValid(String(id))) {
             return res.status(400).json({ success: false, message: 'Invalid job id' });
         }
@@ -827,93 +824,38 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             });
         }
 
-        const needsProcurement = allocationType === allocateType.SupplyOnly || allocationType === allocateType.ProjectWithSupply;
-        if (needsProcurement) {
-            if (!procurementPerson || !ObjectId.isValid(String(procurementPerson))) {
-                return res.status(400).json({ success: false, message: 'A procurement person is required for this allocation type' });
-            }
-            const person = await Employee.findById(procurementPerson).select('_id').lean();
-            if (!person) {
-                return res.status(400).json({ success: false, message: 'Selected procurement person was not found' });
-            }
-        }
+        // Downstream screens still key on the legacy type, so derive it from the two scopes.
+        // AMC on its own keeps the AMC type; combined with the others, the supply/installation mix decides.
+        const derivedType = productDistribution && projectInstallation ? allocateType.ProjectWithSupply
+            : productDistribution ? allocateType.SupplyOnly
+            : projectInstallation ? allocateType.ProjectsWithOutSupply
+            : allocateType.AMC;
+        const scopeLabel = [productDistribution && 'Product distribution', projectInstallation && 'Project installation', amc && 'AMC'].filter(Boolean).join(' + ');
 
-        const updateData: any = {
-            allocateType: allocationType,
-            allocateStatus: allocateStatus.OpenToWork,
-            updatedDate: new Date()
-        };
-
-        if (needsProcurement) {
-            updateData.procurementPerson = procurementPerson;
-        } else {
-            // Types without supply have no procurement owner; drop a stale one from an earlier allocation.
-            updateData.$unset = { procurementPerson: 1 };
-        }
-
-        // Update the job with new allocationType and set allocateStatus to OpenToWork
         const updateJob = await jobModel.findByIdAndUpdate(
             { _id: id },
-            updateData,
-            {
-                new: true, // Return the updated document
-            }
+            { allocateType: derivedType, productDistribution, projectInstallation, amc, allocateStatus: allocateStatus.OpenToWork, updatedDate: new Date() },
+            { new: true }
         );
-
         if (!updateJob) {
-            return res.status(404).json({
-                success: false,
-                message: 'Job not found'
-            });
+            return res.status(404).json({ success: false, message: 'Job not found' });
         }
 
-        const allocChanges = [
-            { label: 'Allocation type', from: currentJob.allocateType || '—', to: String(allocationType) },
-            { label: 'Allocation status', from: String(currentJob.allocateStatus), to: allocateStatus.OpenToWork },
-        ];
-        if (needsProcurement) allocChanges.push({ label: 'Procurement person', from: await employeeLabel(currentJob.procurementPerson), to: await employeeLabel(procurementPerson) });
-        await logAudit(req, { entityType: 'job', entityId: updateJob._id, entityLabel: updateJob.jobId, action: 'allocated', summary: `Allocated as ${allocationType}`, changes: allocChanges });
-
-        if (needsProcurement) {
-            const socket = req.app.get('io') as Server;
-            const userData = await getEmployeeData(req.user);
-            void createNotificationWithPrivileges(
-                {
-                    type: 'JobAllocated',
-                    referenceModel: 'Job',
-                    title: 'New Job Allocated',
-                    message: `Job ${req.body.jobId || updateJob._id} has been allocated to you for procurement`,
-                    sentBy: userData?._id?.toString(),
-                    referenceId: updateJob._id,
-                    additionalData: { jobId: updateJob._id.toString() }
-                },
-                {
-                    privilegeKey: 'purchase',
-                    checkFunction: (privileges, employeeId) => {
-                        return employeeId === procurementPerson.toString() &&
-                               privileges.purchase?.viewReport !== 'none';
-                    }
-                },
-                socket
-            ).catch((err) => console.error("Job allocation notification failed:", err));
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'Allocation type updated successfully',
-            data: updateJob
+        await logAudit(req, {
+            entityType: 'job', entityId: updateJob._id, entityLabel: updateJob.jobId, action: 'allocated',
+            summary: `Allocated: ${scopeLabel}`,
+            changes: [
+                { label: 'Scope', from: currentJob.allocateType || '—', to: scopeLabel },
+                { label: 'Allocation status', from: String(currentJob.allocateStatus), to: allocateStatus.OpenToWork },
+            ],
         });
 
+        res.status(200).json({ success: true, message: 'Job allocated successfully', data: updateJob });
     } catch (error) {
         next(error);
     }
 };
 
-/**
- * Marks a job Lost and carries that through the chain: up to its quotation and enquiry, down to the open
- * purchase requests, purchase orders, delivery notes and invoices raised for it. Finished documents
- * (closed POs, delivered notes, submitted invoices) are left as they are.
- */
 export const markJobLost = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.body;
@@ -1418,6 +1360,22 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
             hasTechnical: false
         };
 
+        // Technical and delivery notes don't depend on the PR chain, so they load alongside it
+        // instead of after it (the history used to run ~15 sequential round trips to Atlas).
+        const technicalPromise = technicalModel.findOne({
+            jobId: new ObjectId(jobId)
+        })
+        .populate('assignedBy', 'firstName lastName')
+        .populate('assignedTo', 'firstName lastName')
+        .populate('materialRequest.statusHistory.changedBy', 'firstName lastName')
+        .populate('materialRequestAttachements.statusHistory.changedBy', 'firstName lastName')
+        .populate('issues.closedBy', 'firstName lastName');
+        const deliveryNotesPromise = DeliveryNote.find({
+            jobId: new ObjectId(jobId)
+        })
+        .populate('createdBy', 'firstName lastName')
+        .sort({ createdDate: 1 });
+
         const purchaseRequests = await PurchaseRequest.find({
             jobId: new ObjectId(jobId),
             isDeleted: { $ne: true }
@@ -1431,6 +1389,34 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
         .sort({ createdAt: 1 });
 
         summary.totalPRs = purchaseRequests.length;
+
+        // One query for every PR's orders and one for every order's GRNs, grouped in memory.
+        const allPurchaseOrders = purchaseRequests.length ? await PurchaseOrder.find({
+            purchaseId: { $in: purchaseRequests.map((p) => p._id) }
+        })
+        .populate('createdBy', 'firstName lastName')
+        .populate('approvedHistory.approvedBy', 'firstName lastName')
+        .populate('rejectedHistory.rejectedBy', 'firstName lastName')
+        .populate('supplierId', 'supplierName')
+        .sort({ createdAt: 1 }) : [];
+        const allGrns = allPurchaseOrders.length ? await GRN.find({
+            purchaseOrderId: { $in: allPurchaseOrders.map((p) => p._id) },
+            isDeleted: { $ne: true }
+        })
+        .populate('createdBy', 'firstName lastName')
+        .sort({ createdAt: 1 }) : [];
+        const posByPr = new Map<string, any[]>();
+        for (const po of allPurchaseOrders) {
+            const key = String(po.purchaseId);
+            if (!posByPr.has(key)) posByPr.set(key, []);
+            posByPr.get(key)!.push(po);
+        }
+        const grnsByPo = new Map<string, any[]>();
+        for (const grn of allGrns) {
+            const key = String(grn.purchaseOrderId);
+            if (!grnsByPo.has(key)) grnsByPo.set(key, []);
+            grnsByPo.get(key)!.push(grn);
+        }
 
         for (const pr of purchaseRequests) {
             if (pr.status === 'Approved') summary.approvedPRs++;
@@ -1600,14 +1586,7 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
                 }
             }
 
-            const purchaseOrders = await PurchaseOrder.find({
-                purchaseId: pr._id
-            })
-            .populate('createdBy', 'firstName lastName')
-            .populate('approvedHistory.approvedBy', 'firstName lastName')
-            .populate('rejectedHistory.rejectedBy', 'firstName lastName')
-            .populate('supplierId', 'supplierName')
-            .sort({ createdAt: 1 });
+            const purchaseOrders = posByPr.get(String(pr._id)) ?? [];
 
             summary.totalPOs += purchaseOrders.length;
 
@@ -1723,12 +1702,7 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
                     });
                 }
 
-                const grns = await GRN.find({
-                    purchaseOrderId: po._id,
-                    isDeleted: { $ne: true }
-                })
-                .populate('createdBy', 'firstName lastName')
-                .sort({ createdAt: 1 });
+                const grns = grnsByPo.get(String(po._id)) ?? [];
 
                 summary.totalGRNs += grns.length;
 
@@ -1756,14 +1730,7 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
             }
         }
 
-        const technical = await technicalModel.findOne({
-            jobId: new ObjectId(jobId)
-        })
-        .populate('assignedBy', 'firstName lastName')
-        .populate('assignedTo', 'firstName lastName')
-        .populate('materialRequest.statusHistory.changedBy', 'firstName lastName')
-        .populate('materialRequestAttachements.statusHistory.changedBy', 'firstName lastName')
-        .populate('issues.closedBy', 'firstName lastName');
+        const technical = await technicalPromise;
 
         if (technical) {
             summary.hasTechnical = true;
@@ -1866,11 +1833,7 @@ export const getJobHistory = async (req: Request, res: Response, next: NextFunct
             }
         }
 
-        const deliveryNotes = await DeliveryNote.find({
-            jobId: new ObjectId(jobId)
-        })
-        .populate('createdBy', 'firstName lastName')
-        .sort({ createdDate: 1 });
+        const deliveryNotes = await deliveryNotesPromise;
 
         summary.totalDNs = deliveryNotes.length;
         currentStatus.deliveryNote = deliveryNotes.length;

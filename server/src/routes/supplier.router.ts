@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { blockSupplier, createSupplier, deleteSupplier, getSupplierById, getSupplierList, getSupplierReportSummary, getSuppliers, previewSupplierId, updateSupplier, updateSupplierStatus } from "../controllers/supplier.controller";
+import { blockSupplier, checkSupplierDuplicate, createSupplier, getSupplierDuplicatesReport, deleteSupplier, getSupplierById, getSupplierList, getSupplierReportSummary, getSuppliers, previewSupplierId, updateSupplier, updateSupplierStatus } from "../controllers/supplier.controller";
 import { requireAnyPrivilege, requirePrivilege } from "../common/middlewares/privilege.middleware";
 const upload = require("../common/multer.storage")
 
@@ -13,6 +13,8 @@ supplierRouter.use(requirePrivilege("supplier"));
 supplierRouter.post('/', getSuppliers)
 supplierRouter.post('/report-summary', getSupplierReportSummary)
 supplierRouter.get('/preview-code', previewSupplierId)
+supplierRouter.get('/check-duplicate', checkSupplierDuplicate)
+supplierRouter.get('/duplicates-report', getSupplierDuplicatesReport)
 supplierRouter.get('/:id', getSupplierById)
 supplierRouter.post('/create', upload.fields([{ name: 'documents' }]), createSupplier)
 supplierRouter.patch('/update/:id', upload.fields([{ name: 'documents' }]), updateSupplier)

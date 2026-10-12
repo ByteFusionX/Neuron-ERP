@@ -6,6 +6,7 @@ import { getAllReportedEmployees, getEmployeeData } from "../common/utils/util";
 import employeeModel from "../models/employee.model";
 import { getNextSequence } from "../models/counter.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
+import { customerNameKeys, duplicateGroups, findCustomerDuplicates, PartyMatch } from "../common/utils/partyMatch";
 const { ObjectId } = require('mongodb')
 
 const normalizeEmail = (email?: string): string | undefined =>
@@ -203,7 +204,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
             case 'reported':
                 accessFilter = {
                     $or: [
-                        { createdBy: new ObjectId(userId) },
+                        { createdBy: { $in: reportedToUserIds } },
                         { sharedWith: { $in: [new ObjectId(userId)] } }
                     ]
                 };
@@ -212,7 +213,7 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                 reportedToUserIds.push(new ObjectId(userId));
                 accessFilter = {
                     $or: [
-                        { createdBy: new ObjectId(userId) },
+                        { createdBy: { $in: reportedToUserIds } },
                         { sharedWith: { $in: [new ObjectId(userId)] } }
                     ]
                 };
@@ -675,15 +676,69 @@ export const checkCompanyExists = async (req: Request, res: Response, next: Next
         if (!companyName) {
             return res.status(200).json({ companyExist: false })
         }
-        const filter: any = { companyName: new RegExp(`^${companyName}$`, 'i') };
-        if (excludeId) filter._id = { $ne: excludeId };
-        const companyExist = await Customer.findOne(filter)
-        return res.status(200).json({ companyExist: !!companyExist })
+        const matches = await findCustomerDuplicates({ companyName, excludeId });
+        return res.status(200).json({ companyExist: matches.some((m) => m.level === 'block' && m.field === 'name'), matches })
     } catch (error) {
         console.error(error)
         next(error)
     }
 }
+
+/** Live check for the customer form: `?companyName=&email=&phone=&trn=&excludeId=`. */
+export const checkCustomerDuplicate = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const q = req.query;
+        const matches = await findCustomerDuplicates({
+            companyName: String(q.companyName ?? ''),
+            email: String(q.email ?? ''),
+            phone: String(q.phone ?? ''),
+            trn: String(q.trn ?? ''),
+            excludeId: q.excludeId ? String(q.excludeId) : undefined,
+        });
+        return res.status(200).json({ matches });
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+}
+
+/** Customers that may be entered twice: same name, same TRN, similar name, same email, same phone. */
+export const getCustomerDuplicatesReport = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+        const fields = ['_id', 'companyName', 'clientRef', 'customerEmailId', 'contactNo', 'trn'];
+        const [sameName, sameTrn, similarName, sameEmail, samePhone] = await Promise.all([
+            duplicateGroups(Customer, 'nameKey', fields),
+            duplicateGroups(Customer, 'normalizedTrn', fields),
+            duplicateGroups(Customer, 'nameCore', fields),
+            duplicateGroups(Customer, 'normalizedEmail', fields),
+            duplicateGroups(Customer, 'normalizedPhone', fields),
+        ]);
+        // A pair already listed under "same name" is not repeated under "similar name".
+        const exact = new Set(sameName.map((g) => g.records.map((r: any) => String(r._id)).sort().join()));
+        return res.status(200).json({
+            sameName, sameTrn, sameEmail, samePhone,
+            similarName: similarName.filter((g) => !exact.has(g.records.map((r: any) => String(r._id)).sort().join())),
+        });
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+}
+
+/**
+ * Turns duplicate matches into the response the form understands, or null when the save may go ahead.
+ * Blocks are final; warnings can be overridden by resending with `confirmDuplicates: true`.
+ */
+const duplicateResponse = (matches: PartyMatch[], confirmed: boolean) => {
+    const block = matches.find((m) => m.level === 'block');
+    if (block) {
+        return block.field === 'name'
+            ? { companyExist: true, matches }
+            : { duplicateExist: true, duplicateField: block.field, matches };
+    }
+    if (matches.length && !confirmed) return { duplicateWarning: true, matches };
+    return null;
+};
 
 export const createCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -691,33 +746,18 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
         const userToken = req.user;
 
         customerData.companyName = customerData.companyName.trim();
-        const companyExist = await Customer.findOne({ companyName: new RegExp(`^${customerData.companyName}$`, 'i') })
-
-        if (companyExist) {
-            return res.status(200).json({ companyExist: true })
-        }
-
         const normalizedEmail = normalizeEmail(customerData.customerEmailId);
         const normalizedPhone = normalizePhone(customerData.contactNo);
         const normalizedTrn = normalizeTrn(customerData.trn);
         const normalizedDomain = normalizeDomain(customerData.customerEmailId);
 
-        const duplicate = await Customer.findOne({
-            $or: [
-                ...(normalizedEmail ? [{ normalizedEmail }] : []),
-                ...(normalizedPhone ? [{ normalizedPhone }] : []),
-                ...(normalizedTrn ? [{ normalizedTrn }] : []),
-            ]
-        });
-        if (duplicate) {
-            return res.status(200).json({
-                duplicateExist: true,
-                duplicateField: duplicate.normalizedTrn && duplicate.normalizedTrn === normalizedTrn ? 'trn'
-                    : duplicate.normalizedEmail && duplicate.normalizedEmail === normalizedEmail ? 'email'
-                    : 'phone',
-            })
-        }
+        const blocked = duplicateResponse(await findCustomerDuplicates({
+            companyName: customerData.companyName, email: customerData.customerEmailId, phone: customerData.contactNo, trn: customerData.trn,
+        }), customerData.confirmDuplicates === true);
+        if (blocked) return res.status(200).json(blocked);
+        delete customerData.confirmDuplicates;
 
+        Object.assign(customerData, customerNameKeys(customerData.companyName));
         customerData.normalizedEmail = normalizedEmail;
         customerData.normalizedPhone = normalizedPhone;
         customerData.normalizedTrn = normalizedTrn;
@@ -759,34 +799,17 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
 
 export const editCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { id, department, departments, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, shippingSites, sameAsBilling, customerType, trn, paymentTerms, creditLimit, creditStatus, taxExempt, currency, source } = req.body;
+        const { id, confirmDuplicates, department, departments, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, shippingSites, sameAsBilling, customerType, trn, paymentTerms, creditLimit, creditStatus, taxExempt, currency, source } = req.body;
         const companyNameTrimmed = companyName.trim();
-        const companyExist = await Customer.findOne({ companyName: new RegExp(`^${companyNameTrimmed}$`, 'i'), _id: { $ne: id } })
-        if (companyExist) {
-            return res.status(200).json({ companyExist: true })
-        }
-
         const normalizedEmail = normalizeEmail(customerEmailId);
         const normalizedPhone = normalizePhone(contactNo);
         const normalizedTrn = normalizeTrn(trn);
         const normalizedDomain = normalizeDomain(customerEmailId);
 
-        const duplicate = await Customer.findOne({
-            _id: { $ne: id },
-            $or: [
-                ...(normalizedEmail ? [{ normalizedEmail }] : []),
-                ...(normalizedPhone ? [{ normalizedPhone }] : []),
-                ...(normalizedTrn ? [{ normalizedTrn }] : []),
-            ]
-        });
-        if (duplicate) {
-            return res.status(200).json({
-                duplicateExist: true,
-                duplicateField: duplicate.normalizedTrn && duplicate.normalizedTrn === normalizedTrn ? 'trn'
-                    : duplicate.normalizedEmail && duplicate.normalizedEmail === normalizedEmail ? 'email'
-                    : 'phone',
-            })
-        }
+        const blocked = duplicateResponse(await findCustomerDuplicates({
+            companyName: companyNameTrimmed, email: customerEmailId, phone: contactNo, trn, excludeId: String(id),
+        }), confirmDuplicates === true);
+        if (blocked) return res.status(200).json(blocked);
 
         const editor = await getEmployeeData(req.user);
         const normalizedDepartments = normalizeCustomerDepartments({ department, departments });
@@ -796,6 +819,7 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
                 departments: normalizedDepartments.departments,
                 contactDetails: normalizeContactDetails(contactDetails),
                 companyName: companyName,
+                ...customerNameKeys(companyNameTrimmed),
                 customerEmailId: customerEmailId,
                 companyAddress: formatAddress(companyAddressStructured) || companyAddress,
                 companyAddressStructured: companyAddressStructured,

@@ -32,6 +32,84 @@ const purchaseApprovalContext = (purchaseRequest: any) => ({
     discountPercent: numericValue(purchaseRequest?.supplierDiscounts?.totalDiscount),
 });
 
+// "Assign purchase" holders (role flag or an unexpired individual grant); admins always can.
+const hasPurchaseFlag = (employee: any, flag: string): boolean => {
+    const role = employee?.category?.role;
+    if (role === 'superAdmin' || role === 'admin') return true;
+    if (employee?.category?.privileges?.purchase?.[flag] === true) return true;
+    const expiresAt = employee?.extraPrivilegesExpiresAt;
+    const extraExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
+    return !extraExpired && employee?.extraPrivileges?.purchase?.[flag] === true;
+};
+const canAssignPurchase = (employee: any) => hasPurchaseFlag(employee, 'canAssign');
+
+// Buyers a PR can be allocated to: everyone who can create purchases.
+export const getPurchaseAssignees = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const employees = await Employee.find({ isDeleted: { $ne: true }, isBlocked: { $ne: true } })
+            .select('firstName lastName employeeId category extraPrivileges extraPrivilegesExpiresAt')
+            .populate('category', 'categoryName role privileges')
+            .lean();
+        const assignees = employees
+            .filter((e: any) => e.category && hasPurchaseFlag(e, 'create'))
+            .map((e: any) => ({
+                _id: e._id,
+                firstName: e.firstName,
+                lastName: e.lastName,
+                employeeId: e.employeeId,
+                category: {
+                    _id: e.category?._id,
+                    categoryName: e.category?.categoryName,
+                    role: e.category?.role,
+                },
+            }));
+        return res.status(200).json({ success: true, data: assignees });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Hands a PR to a buyer; it then shows on that buyer's New tab.
+export const allocatePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        const { employeeId } = req.body ?? {};
+        if (!ObjectId.isValid(id) || !employeeId || !ObjectId.isValid(String(employeeId))) {
+            return res.status(400).json({ success: false, message: "Purchase request and employee are required" });
+        }
+
+        const actor = await getEmployeeData(req.user);
+        if (!actor) {
+            return res.status(401).json({ success: false, message: "Employee not found" });
+        }
+
+        const purchase = await PurchaseRequest.findOne({ _id: id, isDeleted: false });
+        if (!purchase) {
+            return res.status(404).json({ success: false, message: "Purchase request not found" });
+        }
+        if (![PurchaseRequestStatus.Pending, PurchaseRequestStatus.Approved].includes(purchase.status)) {
+            return res.status(400).json({ success: false, message: "Only pending or approved purchase requests can be allocated" });
+        }
+
+        const assignee: any = await Employee.findOne({ _id: employeeId, isDeleted: { $ne: true }, isBlocked: { $ne: true } })
+            .populate('category', 'role privileges')
+            .lean();
+        if (!assignee || !hasPurchaseFlag(assignee, 'create')) {
+            return res.status(400).json({ success: false, message: "Selected employee cannot be assigned purchases" });
+        }
+
+        purchase.allocatedTo = assignee._id;
+        purchase.allocatedBy = actor._id as any;
+        purchase.allocatedAt = new Date();
+        purchase.procurementPerson = assignee._id;
+        await purchase.save();
+
+        return res.status(200).json({ success: true, message: "Purchase request allocated" });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // Create a new Purchase Request
 export const createPurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -198,7 +276,7 @@ export const createPurchaseRequest = async (req: Request, res: Response, next: N
 
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus } = req.body;
+        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation } = req.body;
         const pageNumber = Number(page) || 1;
         const pageSize = Number(row) || 10;
 
@@ -217,10 +295,20 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
             : {};
 
+        // The New tab ignores the usual scope: an assigner sees every unallocated PR, a buyer sees
+        // the ones handed to them.
+        const isNewTab = allocation === 'new';
         const matchStage: any = {
             isDeleted: false,
-            ...accessFilter
+            ...(isNewTab ? {} : accessFilter)
         };
+
+        if (isNewTab) {
+            const me = new ObjectId(String(employee._id));
+            matchStage.$or = canAssignPurchase(employee)
+                ? [{ allocatedTo: me }, { allocatedTo: { $exists: false } }, { allocatedTo: null }]
+                : [{ allocatedTo: me }];
+        }
 
         if (Array.isArray(status)) {
             matchStage.status = { $in: status }

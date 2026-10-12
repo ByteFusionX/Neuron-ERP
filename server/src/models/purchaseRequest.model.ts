@@ -79,7 +79,7 @@ interface PurchaseRequestApprovalStatus {
     comment: string;
 }
 
-const PurchaseRequestApprovalStatusSchema = new Schema<PurchaseRequestApprovalStatus>({
+export const PurchaseRequestApprovalStatusSchema = new Schema<PurchaseRequestApprovalStatus>({
     status: {
         type: String,
         required: true,
@@ -200,6 +200,10 @@ interface PurchaseRequest extends Document {
     supplierId?: Types.ObjectId;
     totalLpo: Number | String;
     procurementPerson?: Types.ObjectId;
+    // Set when someone with "Assign purchase" hands the PR to a buyer from the New tab.
+    allocatedTo?: Types.ObjectId;
+    allocatedBy?: Types.ObjectId;
+    allocatedAt?: Date;
     currency?: String;
 }
 
@@ -296,6 +300,17 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     procurementPerson: {
         type: Schema.Types.ObjectId,
         ref: 'Employee'
+    },
+    allocatedTo: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    allocatedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'Employee'
+    },
+    allocatedAt: {
+        type: Date
     },
     currency: {
         type: String

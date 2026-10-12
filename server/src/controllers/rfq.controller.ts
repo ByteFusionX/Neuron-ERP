@@ -1,10 +1,10 @@
 import { NextFunction, Request, Response } from "express";
-import Rfq, { RfqStage, RfqStatus, RfqType } from "../models/rfq.model";
+import Rfq, { RfqLineStatus, RfqStage, RfqStatus, RfqType } from "../models/rfq.model";
 import PurchaseRequest from "../models/purchaseRequest.model";
 import Job from "../models/job.model";
 import Quotation from "../models/quotation.model";
 import { getEmployeeData, buildPrivilegeAccessFilter } from "../common/utils/util";
-import { getNextSequence } from "../models/counter.model";
+import { nextRfqNo } from "../services/rfqNumber.service";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -145,21 +145,6 @@ const resolveSourceSalesRfqId = async (purchase: any) => {
     return quotation?.sourceRfqId;
 };
 
-const seedRfqNoSequence = async (): Promise<number> => {
-    const latest = await Rfq.findOne().sort({ rfqNo: -1 });
-    if (!latest) return 0;
-    const lastCounter = parseInt(String(latest.rfqNo).split('-').pop() || '', 10);
-    return Number.isNaN(lastCounter) ? 0 : lastCounter;
-};
-
-export const nextRfqNo = async () => {
-    const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const nextNumber = await getNextSequence('rfqNo', seedRfqNoSequence);
-    return `NRN/RFQ-${year}-${month}-${nextNumber.toString().padStart(4, '0')}`;
-};
-
 export const syncRfqFromPurchase = async (purchase: any, employeeId: any) => {
     const requestedLines = buildRequestedLines(purchase);
     const quotes = buildQuotesFromPurchase(purchase, employeeId);
@@ -235,14 +220,14 @@ export const getRfqs = async (req: Request, res: Response, next: NextFunction) =
             ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
             : {};
 
-        // Supplier RFQs stay in the same business language; this list shows the procurement view.
-        const matchStage: any = { isDeleted: false, rfqType: { $ne: RfqType.Sales }, ...accessFilter };
+        const matchStage: any = { isDeleted: false, rfqType: RfqType.Procurement, purchaseRequestId: { $exists: true, $ne: null }, ...accessFilter };
         if (Array.isArray(status) && status.length) matchStage.status = { $in: status };
         else if (status) matchStage.status = status;
         if (search) {
             matchStage.$or = [
                 { rfqNo: { $regex: search, $options: 'i' } },
                 { purchaseNo: { $regex: search, $options: 'i' } },
+                { 'suppliers.supplierName': { $regex: search, $options: 'i' } },
             ];
         }
 
@@ -301,6 +286,85 @@ export const getRfqById = async (req: Request, res: Response, next: NextFunction
             .populate('createdBy', '-password');
         if (!rfq) return res.status(404).json({ success: false, message: "RFQ not found" });
         return res.status(200).json({ success: true, data: rfq });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const quoteSupplierKey = (quote: any) => String(quote.supplierId || quote.supplierName || "");
+
+/**
+ * Read-only comparison of a procurement RFQ in the shape the shared compare matrix uses: one column per
+ * supplier, one row per requested line. Awards are still made on the PR's supplier-offers page.
+ */
+export const getRfqComparison = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const rfq: any = await Rfq.findOne({ _id: req.params.id, isDeleted: false }).lean();
+        if (!rfq) return res.status(404).json({ success: false, message: "RFQ not found" });
+
+        const quotes: any[] = rfq.quotes || [];
+        const columns = new Map<string, any>();
+        quotes.forEach((quote) => {
+            const key = quoteSupplierKey(quote);
+            if (!columns.has(key)) columns.set(key, { _id: key, rfqNo: rfq.rfqNo, status: rfq.status, supplierName: quote.supplierName || "Supplier", quotationId: null, lineCount: 0, wonCount: 0 });
+        });
+
+        const rows = (rfq.requestedLines || []).map((line: any) => {
+            const lineQuotes = quotes.filter((quote) => quote.itemDetailKey === line.itemDetailKey);
+            const anyWon = lineQuotes.some((quote) => quote.selected);
+            const cells = Array.from(columns.values()).map((column) => {
+                const quote = lineQuotes.find((q) => quoteSupplierKey(q) === column._id);
+                if (!quote) return null;
+                const quantity = Number(quote.quantity) || Number(line.quantity) || 1;
+                const total = Number(quote.landedCost) || Number(quote.netAmount) || Number(quote.totalCost) || 0;
+                const unitLanded = total ? total / quantity : Number(quote.unitPrice) || 0;
+                const currency = quote.currency || "QAR";
+                column.lineCount++;
+                if (quote.selected) column.wonCount++;
+                return {
+                    rfqId: column._id,
+                    lineKey: line.itemDetailKey,
+                    lineStatus: quote.selected ? RfqLineStatus.Confirmed : anyWon ? RfqLineStatus.Lost : RfqLineStatus.Pending,
+                    quote: {
+                        _id: String(quote._id),
+                        unitPrice: Number(quote.unitPrice) || 0,
+                        unitLanded,
+                        unitLandedQar: currency === "QAR" ? unitLanded : null,
+                        currency,
+                        leadTimeDays: quote.leadTimeDays,
+                        availability: quote.availability,
+                        quantity,
+                        remarks: quote.remarks,
+                        selected: !!quote.selected,
+                    },
+                };
+            }).filter(Boolean) as any[];
+            const lowest = cells.filter((c) => c.quote.unitLandedQar != null).sort((a, b) => a.quote.unitLandedQar - b.quote.unitLandedQar)[0];
+            const won = cells.find((c) => c.lineStatus === RfqLineStatus.Confirmed);
+            return {
+                key: line.itemDetailKey,
+                itemName: line.itemName || "Items",
+                detail: line.detail,
+                quantity: line.quantity,
+                partNo: line.partNo,
+                status: won ? "awarded" : cells.length ? "open" : "waiting",
+                awardedRfqId: won?.rfqId ?? null,
+                lowestRfqId: lowest?.rfqId ?? null,
+                cells,
+            };
+        });
+
+        const count = (status: string) => rows.filter((row: any) => row.status === status).length;
+        return res.status(200).json({
+            success: true,
+            data: {
+                enquiry: { _id: "", enquiryId: rfq.purchaseNo },
+                rfqs: Array.from(columns.values()),
+                rows,
+                coverage: { total: rows.length, awarded: count("awarded"), unavailable: 0, open: count("open") + count("waiting") },
+                quotationId: null,
+            }
+        });
     } catch (error) {
         next(error);
     }

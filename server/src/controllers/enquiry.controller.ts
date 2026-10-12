@@ -10,6 +10,7 @@ import quotationModel, { quoteStatus } from "../models/quotation.model";
 import { uploadFileToAws, deleteFileFromAws } from "../common/aws-connect";
 import { newTrash } from '../controllers/trash.controller'
 import { getReportedEmployeesWithDepartments, widenAccessForDepartmentHead, getEmployeeData } from "../common/utils/util";
+import { cancelInBlock, completeInBlock, followUpViewFilter, readCompleteBody, readScheduleBody, scheduleInBlock } from "../services/followUpTasks.service";
 import { notifyByPrivilege } from "../services/notify.service";
 import { getNextSequence } from "../models/counter.model";
 import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
@@ -580,6 +581,49 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
     }
 };
 
+/** The enquiry's own fields (title, contact, priority...) while it is still open. Customer, department and date stay as raised. */
+export const updateEnquiryDetails = async (req: any, res: Response, next: NextFunction) => {
+    try {
+        const { enquiryId } = req.params;
+        const enquiry: any = await enquiryModel.findById(enquiryId);
+        if (!enquiry || enquiry.isDeleted) return res.status(404).json({ success: false, message: 'Enquiry not found' });
+
+        const body = req.body || {};
+        const changes: string[] = [];
+        const set = (field: string, value: any, label: string) => {
+            const before = enquiry[field] == null ? '' : String(enquiry[field]);
+            const after = value == null ? '' : String(value);
+            if (before === after) return;
+            enquiry[field] = value === '' ? undefined : value;
+            changes.push(label);
+        };
+        if (body.title !== undefined) {
+            const title = String(body.title).trim();
+            if (!title) return res.status(400).json({ success: false, message: 'Enter a title for the enquiry.' });
+            set('title', title, 'title');
+        }
+        if (body.contact !== undefined) {
+            if (!body.contact || !ObjectId.isValid(body.contact)) return res.status(400).json({ success: false, message: 'Pick a contact for the enquiry.' });
+            const customer: any = await customerModel.findById(enquiry.client).select('contactDetails._id').lean();
+            if (!(customer?.contactDetails || []).some((c: any) => String(c._id) === String(body.contact))) {
+                return res.status(400).json({ success: false, message: 'That contact does not belong to this customer.' });
+            }
+            set('contact', body.contact, 'contact');
+        }
+        if (body.priority !== undefined) set('priority', body.priority, 'priority');
+        if (body.source !== undefined) set('source', body.source || '', 'source');
+        if (body.enquiryCategory !== undefined) set('enquiryCategory', body.enquiryCategory || '', 'category');
+        if (body.requirement !== undefined) set('requirement', body.requirement, 'requirement');
+
+        if (!changes.length) return res.status(200).json({ success: true, message: 'Nothing changed', data: enquiry });
+        await enquiry.save();
+        await logEnquiryAudit(req, enquiry._id, 'details-updated', `Updated ${changes.join(', ')}`);
+        return res.status(200).json({ success: true, message: 'Enquiry updated', data: enquiry });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const updateEnquiryAttachments = async (req: any, res: Response) => {
     try {
         const { enquiryId } = req.params;
@@ -1147,7 +1191,18 @@ export const presaleTabCounts = async (req: Request, res: Response, next: NextFu
             const count = await enquiryModel.countDocuments({ ...scope, $and: [...scope.$and, ...own], ...presaleTabMatch(key as keyof typeof PRESALE_TAB_STATUSES) });
             return [key, count] as const;
         }));
-        return res.status(200).json(Object.fromEntries(entries));
+        // Follow-up tabs span every open tab, scoped like the "all" list.
+        const allOwn = access === 'assigned' ? [presaleOwnScope(scopeIds, 'all')] : [];
+        const followUpEntries = await Promise.all((['overdue', 'today', 'upcoming'] as const).map(async (view) => {
+            const count = await enquiryModel.countDocuments({
+                ...scope,
+                $and: [...scope.$and, ...allOwn],
+                ...followUpViewFilter('preSale.followUp.nextFollowUpDate', view),
+                'preSale.status': { $nin: PRESALE_FOLLOW_UP_CLOSED },
+            });
+            return [`fu${view[0].toUpperCase()}${view.slice(1)}`, count] as const;
+        }));
+        return res.status(200).json({ ...Object.fromEntries(entries), ...Object.fromEntries(followUpEntries) });
     } catch (error) {
         next(error);
     }
@@ -1251,13 +1306,81 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
     }
 };
 
+/** A presale job in these states is no longer chased: its estimation is done, cancelled or back with sales. */
+const PRESALE_FOLLOW_UP_CLOSED = ['approved', 'completed', 'cancelled', 'returned'];
+
+/** Loads a presale job for a follow-up action, replying with the error itself when the user can't take one. */
+const loadPresaleFollowUpJob = async (req: Request, res: Response): Promise<any | null> => {
+    const { enquiryId } = req.params;
+    if (!ObjectId.isValid(enquiryId)) { res.status(400).json({ success: false, message: 'Invalid enquiry id' }); return null; }
+    const enquiry: any = await enquiryModel.findOne({ _id: enquiryId, isDeleted: { $ne: true } });
+    if (!enquiry?.preSale) { res.status(404).json({ success: false, message: 'Presale job not found' }); return null; }
+
+    const { access, scopeIds } = await presaleViewScope(req);
+    if (access === 'assigned' && !canAssignPresale(req)) {
+        const mine = new Set(scopeIds.map(String));
+        const owns = mine.has(String(enquiry.preSale.presalePerson)) || (Array.isArray(enquiry.reAssigned) ? enquiry.reAssigned : [enquiry.reAssigned]).some((id: any) => id && mine.has(String(id)));
+        if (!owns) { res.status(403).json({ success: false, message: 'This presale job is not assigned to you.' }); return null; }
+    }
+    if (PRESALE_FOLLOW_UP_CLOSED.includes(String(enquiry.preSale.status)) || FOLLOW_UP_CLOSED_STATUSES.includes(String(enquiry.status || '').toLowerCase())) {
+        res.status(400).json({ success: false, message: 'This presale job is finished and cannot have follow-ups.' });
+        return null;
+    }
+    return enquiry;
+};
+
+const savePresaleFollowUp = async (res: Response, enquiry: any, block: any) => {
+    enquiry.set('preSale.followUp', block);
+    enquiry.markModified('preSale.followUp');
+    await enquiry.save({ validateModifiedOnly: true });
+    return res.status(200).json({ success: true, followUp: block });
+};
+
+export const schedulePresaleFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const body = readScheduleBody(req, res);
+        if (!body) return;
+        const enquiry = await loadPresaleFollowUpJob(req, res);
+        if (!enquiry) return;
+        return await savePresaleFollowUp(res, enquiry, scheduleInBlock(enquiry.preSale.followUp, body.dueDate, body.note, await followUpActor(req)));
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const completePresaleFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const body = readCompleteBody(req, res);
+        if (!body) return;
+        const enquiry = await loadPresaleFollowUpJob(req, res);
+        if (!enquiry) return;
+        return await savePresaleFollowUp(res, enquiry, completeInBlock(enquiry.preSale.followUp, body, await followUpActor(req)));
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const cancelPresaleFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const enquiry = await loadPresaleFollowUpJob(req, res);
+        if (!enquiry) return;
+        const block = cancelInBlock(enquiry.preSale.followUp, String(req.body.reason ?? '').trim());
+        if (!block) return res.status(400).json({ success: false, message: 'No follow-up is scheduled.' });
+        return await savePresaleFollowUp(res, enquiry, block);
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunction) => {
     try {
         let page = Number(req.query.page)
         let row = Number(req.query.row)
         let skipNum: number = (page - 1) * row;
-        let { filter, search, sortKey, sortDir } = req.query;
+        let { filter, search, sortKey, sortDir, followUp } = req.query;
         const { access, scopeIds } = await presaleViewScope(req);
+        // Overdue / Today / Upcoming / None: only jobs that are still being chased.
+        const followUpMatch = followUp ? { ...followUpViewFilter('preSale.followUp.nextFollowUpDate', followUp), 'preSale.status': { $nin: PRESALE_FOLLOW_UP_CLOSED } } : null;
         // Returned jobs are back with sales; they no longer belong on the presale worklist.
         let accessFilter: any = { ...NOT_WITH_SALES };
         // The New tab is the unassigned pool and belongs to the people who assign it; everyone else only sees their own jobs.
@@ -1319,6 +1442,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
         const sortFields: Record<string, string> = {
             enqId: 'enquiryId', customerName: 'client.companyName', description: 'title',
             assignedBy: 'salesPerson.firstName', department: 'department.departmentName', status: 'status',
+            nextFollowUp: 'preSale.followUp.nextFollowUpDate',
         };
         const sortField = typeof sortKey === 'string' ? sortFields[sortKey] : undefined;
         const sortOrder: 1 | -1 = sortDir === 'desc' ? -1 : 1;
@@ -1341,6 +1465,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
                 $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }
             },
             ...(statusFilterMatch ? [{ $match: statusFilterMatch }] : []),
+            ...(followUpMatch ? [{ $match: followUpMatch }] : []),
             ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : []),
             {
                 $group: { _id: null, total: { $sum: 1 } }
@@ -1363,6 +1488,7 @@ export const getPreSaleJobs = async (req: Request, res: Response, next: NextFunc
                 $match: { $or: [{ "preSale.presalePerson": { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }
             },
             ...(statusFilterMatch ? [{ $match: statusFilterMatch }] : []),
+            ...(followUpMatch ? [{ $match: followUpMatch }] : []),
             ...(needsJoinedSearch ? [...joinedLookups, { $match: joinedSearchFilter }] : (sortNeedsLookups ? joinedLookups : [])),
             sortStage,
             {
@@ -2078,7 +2204,7 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
 
 export const uploadEstimations = async (req: any, res: Response, next: NextFunction) => {
     try {
-        let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption } = req.body;
+        let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption, sourceRfqId } = req.body;
         const blocked = await presaleStepBlock(enquiryId, ['assigned', 'in revision', 'in review'])
             || await holderBlock(req, enquiryId);
         if (blocked) return res.status(blocked.code).json({ message: blocked.message });
@@ -2125,6 +2251,8 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
                 'preSale.revisionComment': ''
             }
         };
+        if (sourceRfqId && ObjectId.isValid(String(sourceRfqId))) update.$set['preSale.estimations.sourceRfqId'] = new ObjectId(String(sourceRfqId));
+        else update.$unset['preSale.estimations.sourceRfqId'] = '';
         if (isNewVersion) {
             const submitter = await getEmployeeData(req.user);
             update.$push = {
@@ -2627,6 +2755,7 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
 export const returnPresaleJob = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { enqId } = req.body;
+        const note = typeof req.body.note === 'string' ? req.body.note.trim() : '';
         const enquiry = await enquiryModel.findOne({ _id: enqId, isDeleted: { $ne: true } });
         if (!enquiry) {
             return res.status(404).json({ success: false, message: 'Enquiry not found' });
@@ -2640,7 +2769,7 @@ export const returnPresaleJob = async (req: Request, res: Response, next: NextFu
             { _id: enqId },
             { $set: { status: 'rejected', 'preSale.status': 'returned', 'preSale.seenbySalesPerson': false } }
         );
-        await logEnquiryAudit(req, enquiry._id, 'presale-returned', 'Rejected job returned to enquiry',
+        await logEnquiryAudit(req, enquiry._id, 'presale-returned', note ? `Rejected job returned to enquiry: ${note}` : 'Rejected job returned to enquiry',
             [{ label: 'Status', from: enquiry.status, to: 'rejected' }]);
 
         const userData = await getEmployeeData(req.user);
@@ -2650,7 +2779,7 @@ export const returnPresaleJob = async (req: Request, res: Response, next: NextFu
                 type: 'Enquiry',
                 referenceModel: 'Enquiry',
                 title: 'Presale Job Returned',
-                message: `Enquiry ${enquiry.enquiryId} was rejected by presales and returned to you`,
+                message: `Enquiry ${enquiry.enquiryId} was rejected by presales and returned to you${note ? `. Note: ${note}` : ''}`,
                 sentBy: userData?._id?.toString() || salesPerson,
                 referenceId: enquiry._id,
                 additionalData: { enquiryId: enquiry._id.toString() }

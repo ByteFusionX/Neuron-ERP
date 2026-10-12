@@ -10,6 +10,7 @@ import Category from '../models/category.model';
 import Workflow from '../models/workflow.model';
 import { resolveCurrentAssignmentStep, rejectUnassignedPresale, stageRoleIds } from './presaleAssignment.service';
 import { notify } from './notify.service';
+import { logAudit } from './audit.service';
 import { processOutbox } from './outbox.service';
 import { runExclusive } from './cronLock.service';
 import './announcementNotify.service';
@@ -173,6 +174,158 @@ const processApprovalTimeouts = async () => {
     }
 };
 
+const notifyDeal = (quote: any, recipientIds: any[], title: string, message: string, dedupeKey: string, type = 'DealSheet') =>
+    notify({
+        type,
+        referenceModel: 'Quotation',
+        title,
+        message,
+        sentBy: quote.createdBy?.toString(),
+        recipients: recipientIds,
+        referenceId: quote._id,
+        additionalData: { quotationId: quote._id.toString() },
+        dedupeKey,
+        channels: ['inapp', 'push', 'email'],
+    });
+
+const DEAL_PENDING = { isDeleted: { $ne: true }, 'dealData.status': 'pending' };
+
+/** Deal Sheet workflow: nudges the approvers of a stage that has used up its reminder share of the time limit. */
+const sendDealApprovalReminders = async () => {
+    try {
+        const now = new Date();
+        const quotes = await Quotation.find({
+            ...DEAL_PENDING,
+            'dealData.approvalStatus': { $elemMatch: { status: 'pending', reminderDueAt: { $lte: now }, reminderSentAt: null, escalatedAt: null, timeoutHandledAt: null } }
+        }).select('quoteId createdBy dealData.approvalStatus').lean();
+
+        for (const quote of quotes as any[]) {
+            for (const approval of quote.dealData.approvalStatus as any[]) {
+                if (approval.status !== 'pending' || approval.escalatedAt || approval.timeoutHandledAt || approval.reminderSentAt || !approval.reminderDueAt || approval.reminderDueAt > now) continue;
+
+                const claim = await Quotation.updateOne(
+                    { _id: quote._id, 'dealData.approvalStatus': { $elemMatch: { _id: approval._id, reminderSentAt: null } } },
+                    { $set: { 'dealData.approvalStatus.$[a].reminderSentAt': now } },
+                    { arrayFilters: [{ 'a._id': approval._id }] }
+                );
+                if (!claim.modifiedCount) continue;
+
+                const hoursLeft = Math.max(1, Math.round((new Date(approval.escalationDueAt).getTime() - now.getTime()) / 3600000));
+                const consequence = approval.timeoutAction === 'reject'
+                    ? `will be auto-rejected in about ${hoursLeft}h`
+                    : approval.timeoutAction === 'notify'
+                        ? `is due in about ${hoursLeft}h`
+                        : `escalates in about ${hoursLeft}h`;
+                try {
+                    await notifyDeal(quote, await approverIdsOf(approval), 'Approval reminder', `Deal sheet for quotation ${quote.quoteId} is waiting for your approval and ${consequence}`, `deal:${quote._id}:${approval._id}:reminder`);
+                } catch (error) {
+                    await Quotation.updateOne({ _id: quote._id }, { $set: { 'dealData.approvalStatus.$[a].reminderSentAt': null } }, { arrayFilters: [{ 'a._id': approval._id }] });
+                    throw error;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Deal approval reminder error:', error.message);
+    }
+};
+
+/** Deal Sheet workflow: stages set to notify only or auto-reject act when their time limit passes. */
+const processDealApprovalTimeouts = async () => {
+    try {
+        const now = new Date();
+        const quotes = await Quotation.find({
+            ...DEAL_PENDING,
+            'dealData.approvalStatus': { $elemMatch: { status: 'pending', timeoutAction: { $in: ['notify', 'reject'] }, escalationDueAt: { $lte: now }, timeoutHandledAt: null } }
+        }).select('quoteId createdBy dealData.approvalStatus dealData.requestedBy').lean();
+
+        for (const quote of quotes as any[]) {
+            const overdue = (quote.dealData.approvalStatus as any[]).find(approval =>
+                approval.status === 'pending' && ['notify', 'reject'].includes(approval.timeoutAction) && approval.escalationDueAt && approval.escalationDueAt <= now && !approval.timeoutHandledAt
+            );
+            if (!overdue) continue;
+
+            // Claim first so overlapping runs or other server instances cannot handle the same timeout twice
+            const claim = await Quotation.updateOne(
+                { _id: quote._id, 'dealData.approvalStatus': { $elemMatch: { _id: overdue._id, timeoutHandledAt: null } } },
+                { $set: { 'dealData.approvalStatus.$[a].timeoutHandledAt': now } },
+                { arrayFilters: [{ 'a._id': overdue._id }] }
+            );
+            if (!claim.modifiedCount) continue;
+
+            const approverIds = await approverIdsOf(overdue);
+            const requesterIds = [quote.dealData.requestedBy ?? quote.createdBy].filter(Boolean);
+            const timeoutKey = `deal:${quote._id}:${overdue._id}:timeout`;
+
+            if (overdue.timeoutAction === 'reject') {
+                const remaining = (quote.dealData.approvalStatus as any[])
+                    .map(approval => String(approval._id) === String(overdue._id)
+                        ? { ...approval, status: 'rejected', updatedDate: now, comment: 'Auto-rejected: not actioned within the time limit', timeoutHandledAt: now }
+                        : approval)
+                    .filter(approval => approval.status !== 'pending');
+                const reason = 'Auto-rejected: the approval time limit passed';
+                await Quotation.updateOne(
+                    { _id: quote._id, 'dealData.status': 'pending' },
+                    { $set: { 'dealData.status': 'rejected', 'dealData.seenedBySalsePerson': false, 'dealData.approvalStatus': remaining }, $push: { 'dealData.comments': reason } }
+                );
+                await notifyDeal(quote, [...requesterIds, ...approverIds], 'Deal sheet auto-rejected', `The deal sheet for quotation ${quote.quoteId} was auto-rejected because the approval time limit passed`, timeoutKey, 'DealSheetResponse');
+            } else {
+                await notifyDeal(quote, [...requesterIds, ...approverIds], 'Approval overdue', `The deal sheet for quotation ${quote.quoteId} has passed its approval time limit and is still waiting`, timeoutKey);
+            }
+        }
+    } catch (error) {
+        console.error('Deal approval timeout error:', error.message);
+    }
+};
+
+/** Deal Sheet workflow: a stage set to escalate hands over to the next role as soon as its time limit passes, without waiting for someone to act. */
+const processDealEscalations = async () => {
+    try {
+        const now = new Date();
+        const quotes = await Quotation.find({
+            ...DEAL_PENDING,
+            'dealData.approvalStatus': { $elemMatch: { status: 'pending', escalationDueAt: { $lte: now }, escalatedAt: null, timeoutHandledAt: null, timeoutAction: { $nin: ['notify', 'reject'] } } }
+        }).select('quoteId createdBy dealData.approvalStatus dealData.requestedBy').lean();
+
+        for (const quote of quotes as any[]) {
+            for (const approval of quote.dealData.approvalStatus as any[]) {
+                if (approval.status !== 'pending' || approval.escalatedAt || approval.timeoutHandledAt || !approval.escalationDueAt || approval.escalationDueAt > now) continue;
+                if (approval.timeoutAction && approval.timeoutAction !== 'escalate') continue;
+
+                const set: any = { 'dealData.approvalStatus.$[a].escalatedAt': now };
+                if (approval.escalationRole) {
+                    set['dealData.approvalStatus.$[a].originalRole'] = approval.role;
+                    set['dealData.approvalStatus.$[a].role'] = approval.escalationRole;
+                }
+                // Claim first: only the run that still sees escalatedAt empty escalates
+                const claim = await Quotation.updateOne(
+                    { _id: quote._id, 'dealData.status': 'pending', 'dealData.approvalStatus': { $elemMatch: { _id: approval._id, status: 'pending', escalatedAt: null } } },
+                    { $set: set },
+                    { arrayFilters: [{ 'a._id': approval._id }] }
+                );
+                if (!claim.modifiedCount) continue;
+
+                const requesterIds = [quote.dealData.requestedBy ?? quote.createdBy].filter(Boolean);
+                const nextIds = await approverIdsOf({ ...approval, role: approval.escalationRole ?? approval.role, managerApproval: false });
+                // The deal's history shows who it moved to and why, so the approver it left is not left guessing.
+                const [fromRole, toRole] = await Promise.all([
+                    Category.findById(approval.role, 'categoryName').lean(),
+                    approval.escalationRole ? Category.findById(approval.escalationRole, 'categoryName').lean() : null,
+                ]);
+                await logAudit(null, {
+                    entityType: 'quotation',
+                    entityId: quote._id,
+                    entityLabel: quote.quoteId,
+                    action: 'deal-escalated',
+                    summary: `Deal sheet ${quote.quoteId} was not approved in time and moved from ${(fromRole as any)?.categoryName ?? 'the approver'} to ${(toRole as any)?.categoryName ?? 'the next approver'}`,
+                });
+                await notifyDeal(quote, nextIds, 'Deal sheet escalated', `The deal sheet for quotation ${quote.quoteId} was not approved in time and is now waiting on your role`, `deal:${quote._id}:${approval._id}:escalated`);
+                await notifyDeal(quote, requesterIds, 'Deal sheet escalated', `The deal sheet for quotation ${quote.quoteId} passed its approval time limit and was escalated`, `deal:${quote._id}:${approval._id}:escalated-requester`);
+            }
+        }
+    } catch (error) {
+        console.error('Deal escalation error:', error.message);
+    }
+};
 
 const notifyPresaleRoles = (enquiry: any, recipientIds: any[], title: string, message: string, dedupeKey: string, type = 'AssignedJob') =>
     notify({
@@ -473,6 +626,9 @@ const startCronJob = () => {
     cron.schedule('* * * * *', () => runExclusive('tick', 5 * 60 * 1000, async () => {
         await sendApprovalReminders();
         await processApprovalTimeouts();
+        await sendDealApprovalReminders();
+        await processDealApprovalTimeouts();
+        await processDealEscalations();
         await processPresaleAssignments();
         // Hourly is plenty for a day-level due date
         if (new Date().getMinutes() === 0) {

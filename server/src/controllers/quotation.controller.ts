@@ -4,6 +4,7 @@ import { canTransitionQuoteStatus, isKnownQuoteStatus, quoteStatusRequiresReason
 import Job, { allocateStatus } from '../models/job.model';
 import Department from '../models/department.model';
 import Employee from '../models/employee.model'
+import Category from '../models/category.model'
 import Customer from '../models/customer.model';
 import ApprovalRule from '../models/approvalRule.model';
 import Enquiry from "../models/enquiry.model";
@@ -18,6 +19,7 @@ import { Server } from "socket.io";
 import { logEnquiryAudit } from "../services/enquiryAudit.service";
 import { logAudit } from "../services/audit.service";
 import { cancelOpenFollowUp } from "../services/enquiryFollowUp.service";
+import { cancelInBlock, completeInBlock, followUpActor, followUpViewFilter, readCompleteBody, readScheduleBody, scheduleInBlock } from "../services/followUpTasks.service";
 import { calculateDiscountPrice, getAdminAuthoredEmployeeIds, getAllReportedEmployees, escapeRegex, getEmployeeData, getUSDRated } from "../common/utils/util";
 const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
@@ -29,6 +31,9 @@ import Event from '../models/events.model'
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
 import { getCustomerCommercialGuard, estimateQuoteValue, normalizeTaxForCustomer } from "../common/customer-commercial-guards";
+import Workflow from '../models/workflow.model';
+import { getWorkflowSteps, updateApprovalStatus } from '../services/workflow.service';
+import { notify } from '../services/notify.service';
 
 /**
  * Marks the source enquiry as Quoted the first time a quotation leaves Draft.
@@ -138,10 +143,73 @@ const expireOverdueQuotes = async () => {
     );
 };
 
+/**
+ * Server-side rules for a quotation payload, so the API holds the same line the form does. Returns the first problem
+ * as a message, or null when the payload is acceptable. `isCreate` also constrains how a quote may start and rejects
+ * dates already in the past (an existing quote may keep an old date while it is edited).
+ */
+const MAX_QUOTE_SUBJECT = 250;
+const quotePayloadProblem = (quoteData: any, isCreate: boolean): string | null => {
+    const has = (key: string) => quoteData?.[key] !== undefined;
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+
+    if (isCreate && ![quoteStatus.Draft, quoteStatus.WorkInProgress].includes(quoteData?.status)) {
+        return 'A new quotation can only start as Draft or Work In Progress';
+    }
+    if (isCreate || has('subject')) {
+        const subject = String(quoteData?.subject ?? '').trim();
+        if (!subject) return 'Subject is required';
+        if (subject.length > MAX_QUOTE_SUBJECT) return `Subject must be ${MAX_QUOTE_SUBJECT} characters or fewer`;
+    }
+    if ((isCreate || has('currency')) && !/^[A-Z]{3}$/.test(String(quoteData?.currency ?? ''))) {
+        return 'Currency must be a 3-letter code such as QAR';
+    }
+
+    const dateOf = (value: any) => (value ? new Date(value) : null);
+    const quoteDate = dateOf(quoteData?.date);
+    const closing = dateOf(quoteData?.closingDate);
+    const validity = dateOf(quoteData?.validityDate);
+    for (const [label, value] of [['Date', quoteDate], ['Closing date', closing], ['Valid until', validity]] as const) {
+        if (value && Number.isNaN(value.getTime())) return `${label} is not a valid date`;
+    }
+    // A new Draft may be sparse; its dates are checked when it is completed.
+    const sparseDraft = isCreate && quoteData?.status === quoteStatus.Draft;
+    if (!sparseDraft && quoteDate && closing && closing < quoteDate) return 'Closing date cannot be before the quotation date';
+    if (!sparseDraft && quoteDate && validity && validity < quoteDate) return 'Valid until cannot be before the quotation date';
+    if (isCreate && quoteData?.status !== quoteStatus.Draft) {
+        if (closing && closing < startOfToday) return 'Closing date cannot be in the past';
+        if (validity && validity < startOfToday) return 'Valid until cannot be in the past';
+    }
+
+    if (has('optionalItems')) {
+        const options: any[] = Array.isArray(quoteData.optionalItems) ? quoteData.optionalItems : [];
+        if (isCreate && quoteData?.status !== quoteStatus.Draft && !quoteLines({ optionalItems: options }).length) {
+            return 'Add at least one item before creating the quotation';
+        }
+        for (const option of options) {
+            const lines = quoteLines({ optionalItems: [option] });
+            for (const { detail } of lines) {
+                if (!(Number(detail?.quantity ?? 0) >= 0)) return 'Quantity cannot be negative';
+                if (!(Number(detail?.unitCost ?? 0) >= 0)) return 'Unit cost cannot be negative';
+                if (!(Number(detail?.unitSellingPrice ?? 0) >= 0)) return 'Unit price cannot be negative';
+            }
+            const discount = Number(option?.totalDiscount ?? 0);
+            if (!(discount >= 0)) return 'Discount cannot be negative';
+            if (discount > quoteGrossSelling({ optionalItems: [option] })) return 'Discount cannot be more than the selling total';
+        }
+    }
+    return null;
+};
+
 export const saveQuotation = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const quoteData = req.body;
         const userToken = req.user;
+
+        const payloadProblem = quotePayloadProblem(quoteData, true);
+        if (payloadProblem) {
+            return res.status(400).json({ success: false, message: payloadProblem });
+        }
 
         if (quoteData.enqId) {
             const linkedEnquiry = await Enquiry.findById(quoteData.enqId, { status: 1, client: 1, contact: 1, title: 1 }).lean();
@@ -384,16 +452,19 @@ const quotationLookupStages = [
     }
 ];
 
+/** A quote in these states is no longer chased, so its open follow-up is closed and list views skip it. */
+const QUOTE_FOLLOW_UP_CLOSED: string[] = [quoteStatus.Won, quoteStatus.Lost, quoteStatus.Expired];
+
 export const getQuotations = async (req: Request, res: Response, next: NextFunction) => {
     try {
         await expireOverdueQuotes();
-        let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir } = req.body;
+        let { page, search, row, salesPerson, customer, fromDate, toDate, department, quoteStatus, dealStatus, access, userId, sortKey, sortDir, followUpView, followUpFromDate, followUpToDate } = req.body;
 
         page = Math.max(1, parseInt(page) || 1);
         row = Math.min(100, Math.max(1, parseInt(row) || 10));
         let skipNum: number = (page - 1) * row;
 
-        const sortableFields: Record<string, string> = { date: 'date', quoteId: 'quoteId', status: 'status' };
+        const sortableFields: Record<string, string> = { date: 'date', quoteId: 'quoteId', status: 'status', nextFollowUpDate: 'followUp.nextFollowUpDate' };
         const sortStage: Record<string, 1 | -1> = sortKey && sortableFields[sortKey]
             ? { [sortableFields[sortKey]]: sortDir === 'desc' ? -1 : 1, _id: -1 }
             : { _id: -1 };
@@ -403,13 +474,35 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
         let isDate = fromDate == null || toDate == null ? true : false;
         let isDepartment = department == null ? true : false;
 
+        // Search matches the quote id, the subject and the customer's company name.
+        const searchText = String(search ?? '').trim();
+        const searchRegex = { $regex: escapeRegex(searchText), $options: 'i' };
+        const searchFilter = searchText
+            ? {
+                $or: [
+                    { quoteId: searchRegex },
+                    { subject: searchRegex },
+                    { client: { $in: (await Customer.find({ companyName: searchRegex }, '_id').lean()).map((c: any) => c._id) } },
+                ],
+            }
+            : {};
+
         let matchFilters = {
             isDeleted: { $ne: true },
             status: { $ne: 'revised' },
             $and: [
                 ...(quoteStatus ? [{ status: quoteStatus }] : []),
-                ...(dealStatus ? [{ 'dealData.status': dealStatus }] : []),
-                { quoteId: { $regex: escapeRegex(String(search ?? '')), $options: 'i' } },
+                // "pending" also covers Won quotes that have no deal sheet yet (waiting to be converted).
+                ...(dealStatus === 'pending'
+                    ? [{ $or: [{ 'dealData.status': 'pending' }, { status: 'Won', 'dealData.status': { $exists: false } }] }]
+                    : dealStatus ? [{ 'dealData.status': dealStatus }] : []),
+                searchFilter,
+                // Overdue / Today / Upcoming only list quotes that are still being chased.
+                ...(followUpView ? [{ ...followUpViewFilter('followUp.nextFollowUpDate', followUpView), status: { $nin: QUOTE_FOLLOW_UP_CLOSED } }] : []),
+                ...(followUpFromDate || followUpToDate ? [{ 'followUp.nextFollowUpDate': {
+                    ...(followUpFromDate ? { $gte: new Date(followUpFromDate) } : {}),
+                    ...(followUpToDate ? { $lt: new Date(new Date(followUpToDate).getTime() + 86_400_000) } : {}),
+                } }] : []),
                 { $or: [{ createdBy: new ObjectId(salesPerson) }, { createdBy: { $exists: isSalesPerson } }] },
                 { $or: [{ client: new ObjectId(customer) }, { client: { $exists: isCustomer } }] },
                 {
@@ -484,6 +577,47 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
     }
 }
 
+/**
+ * Names for the Deal Sheet approval route, so a screen can show where the deal is waiting. Used by the single
+ * quote fetch and both deal sheet grids, so a deal opened from a list row shows the same route as one opened by link.
+ */
+const withDealStageNames = async (quotations: any[]): Promise<void> => {
+    const withStages = quotations.filter((q) => q?.dealData?.approvalStatus?.length);
+    if (!withStages.length) return;
+    const allStages: any[] = withStages.flatMap((q) => q.dealData.approvalStatus);
+    const roleIds = [...new Set(allStages.flatMap((s: any) => [s.role, s.originalRole]).filter(Boolean).map(String))];
+    const personIds = [...new Set(allStages.flatMap((s: any) => [s.updatedBy, s.approver]).filter(Boolean).map(String))];
+    const [roles, people] = await Promise.all([
+        Category.find({ _id: { $in: roleIds } }, 'categoryName').lean(),
+        Employee.find({ _id: { $in: personIds } }, 'firstName lastName').lean(),
+    ]);
+    const roleName = new Map(roles.map((r: any) => [String(r._id), r.categoryName]));
+    const personName = new Map(people.map((p: any) => [String(p._id), `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim()]));
+    withStages.forEach((q) => {
+        q.dealData.approvalStatus = [...q.dealData.approvalStatus]
+            .sort((a: any, b: any) => a.step - b.step)
+            .map((s: any) => ({
+                ...s,
+                roleName: s.managerApproval ? 'Reporting manager' : roleName.get(String(s.role)),
+                originalRoleName: s.originalRole ? roleName.get(String(s.originalRole)) : undefined,
+                updatedByName: s.updatedBy ? personName.get(String(s.updatedBy)) : undefined,
+            }));
+        // Where a pending deal is waiting right now, so a screen can show who must act and by when.
+        const pending: any[] = q.dealData.approvalStatus.filter((s: any) => s.status === 'pending');
+        const current = pending.length ? Math.min(...pending.map((s: any) => s.step)) : null;
+        const here = pending.filter((s: any) => s.step === current);
+        const due = here.map((s: any) => s.escalationDueAt).filter(Boolean).sort()[0];
+        q.dealData.waiting = here.length ? {
+            step: current,
+            roleIds: here.filter((s: any) => !s.managerApproval).map((s: any) => String(s.role?._id ?? s.role)),
+            approverIds: here.filter((s: any) => s.managerApproval).map((s: any) => String(s.approver)),
+            roleName: here.map((s: any) => s.roleName).filter(Boolean).join(' or '),
+            escalated: here.some((s: any) => !!s.escalatedAt),
+            dueAt: due ?? null,
+        } : null;
+    });
+};
+
 export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
     try {
         await expireOverdueQuotes();
@@ -536,6 +670,7 @@ export const getQuotationById = async (req: Request, res: Response, next: NextFu
         if (quotation.dealData?.approvedBy) {
             quotation.dealData.approvedBy = await Employee.findById(quotation.dealData.approvedBy, 'firstName lastName').lean();
         }
+        await withDealStageNames([quotation]);
         return res.status(200).json(quotation);
     } catch (error) {
         console.log(error)
@@ -583,14 +718,63 @@ const buildDealSearchFilter = (searchQuery: unknown, searchCriteria: unknown): R
 
 const DEAL_SORT_FIELDS: Record<string, string> = {
     date: 'dealData.savedDate',
-    dealId: 'dealData.dealId',
+    dealId: 'dealNumber',
     quoteId: 'quoteId',
     customerName: 'client.companyName',
     description: 'subject',
     salesPerson: 'createdBy.firstName',
     department: 'department.departmentName',
     paymentTerms: 'dealData.paymentTerms',
+    amount: 'dealAmount',
     dealStatus: 'dealData.status',
+};
+
+const validDealSheetFilter = {
+    'dealData.dealId': { $exists: true, $ne: '' },
+    'dealData.savedDate': { $exists: true },
+    'dealData.updatedItems.itemDetails': { $elemMatch: { dealSelected: true } },
+};
+
+const dealComputedFieldsStage = {
+    $addFields: {
+        dealNumber: {
+            $convert: {
+                input: { $arrayElemAt: [{ $split: [{ $ifNull: ['$dealData.dealId', ''] }, '-'] }, -1] },
+                to: 'int',
+                onError: 0,
+                onNull: 0,
+            },
+        },
+        dealAmount: {
+            $reduce: {
+                input: { $ifNull: ['$dealData.updatedItems', []] },
+                initialValue: 0,
+                in: {
+                    $add: [
+                        '$$value',
+                        {
+                            $reduce: {
+                                input: { $ifNull: ['$$this.itemDetails', []] },
+                                initialValue: 0,
+                                in: {
+                                    $add: [
+                                        '$$value',
+                                        {
+                                            $cond: [
+                                                { $eq: ['$$this.dealSelected', true] },
+                                                { $multiply: [{ $ifNull: ['$$this.quantity', 0] }, { $ifNull: ['$$this.unitSellingPrice', 0] }] },
+                                                0,
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                    ],
+                },
+            },
+        },
+    },
 };
 
 /** Grid column filters (applied after the lookups, like search) and the sort stage for the deal sheet grids. */
@@ -615,6 +799,17 @@ const buildDealGridQuery = (filters: unknown, sortKey: unknown, sortDir: unknown
             if (op === 'on') clauses.push({ [field]: { $gte: day, $lt: next } });
             else if (op === 'before') clauses.push({ [field]: { $lt: day } });
             else if (op === 'after') clauses.push({ [field]: { $gte: next } });
+            continue;
+        }
+        if (key === 'amount') {
+            const value = Number(raw);
+            if (Number.isNaN(value)) continue;
+            if (op === 'gt') clauses.push({ [field]: { $gt: value } });
+            else if (op === 'gte') clauses.push({ [field]: { $gte: value } });
+            else if (op === 'lt') clauses.push({ [field]: { $lt: value } });
+            else if (op === 'lte') clauses.push({ [field]: { $lte: value } });
+            else if (op === 'isNot') clauses.push({ [field]: { $ne: value } });
+            else clauses.push({ [field]: value });
             continue;
         }
         const text = escapeRegex(String(raw).trim());
@@ -647,6 +842,7 @@ const countDealSheets = async (filters: Record<string, any>, searchFilter: Recor
         { $unwind: '$department' },
         { $lookup: { from: 'employees', localField: 'createdBy', foreignField: '_id', as: 'createdBy' } },
         { $unwind: '$createdBy' },
+        dealComputedFieldsStage,
         { $match: searchFilter },
         { $count: 'total' },
     ]).exec();
@@ -664,6 +860,7 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
         let matchFilters: any = {
             isDeleted: { $ne: true },
             dealData: { $exists: true },
+            ...validDealSheetFilter,
         };
 
         if (view === 'all') {
@@ -764,6 +961,7 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
                     as: 'enqId'
                 }
             },
+            dealComputedFieldsStage,
             {
                 $match: searchFilter,
             },
@@ -886,6 +1084,7 @@ export const getDealSheet = async (req: Request, res: Response, next: NextFuncti
         ]);
 
         if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
+        await withDealStageNames(dealData);
         return res.status(200).json({ total: total, dealSheet: dealData })
 
     } catch (error) {
@@ -907,22 +1106,23 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
 
         let reportedToUserIds = await getAllReportedEmployees(userId);
         if (role == "superAdmin") {
-            matchFilters = {
-                isDeleted: { $ne: true },
-                dealData: { $exists: true },
-                'dealData.status': 'approved'
-            };
+                matchFilters = {
+                    isDeleted: { $ne: true },
+                    dealData: { $exists: true },
+                    ...validDealSheetFilter,
+                    'dealData.status': 'approved'
+                };
         } else {
             switch (access) {
                 case 'created':
                     accessFilter = { createdBy: new ObjectId(userId) };
                     break;
                 case 'reported':
-                    accessFilter = { createdBy: { $in: reportedToUserIds } };
+                    accessFilter = { createdBy: { $in: [...reportedToUserIds, ...await getAdminAuthoredEmployeeIds()] } };
                     break;
                 case 'createdAndReported':
                     reportedToUserIds.push(new ObjectId(userId));
-                    accessFilter = { createdBy: { $in: reportedToUserIds } };
+                    accessFilter = { createdBy: { $in: [...reportedToUserIds, ...await getAdminAuthoredEmployeeIds()] } };
                     break;
 
                 default:
@@ -932,8 +1132,8 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
             matchFilters = {
                 isDeleted: { $ne: true },
                 dealData: { $exists: true },
+                ...validDealSheetFilter,
                 'dealData.status': 'approved',
-                'dealData.approvedBy': new ObjectId(userId)
             };
         }
 
@@ -1013,6 +1213,7 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
                     as: 'enqId'
                 }
             },
+            dealComputedFieldsStage,
             {
                 $match: searchFilter,
             },
@@ -1135,6 +1336,7 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
         ]);
 
         if (!dealData || !total) return res.status(204).json({ err: 'No Deal data found' })
+        await withDealStageNames(dealData);
         return res.status(200).json({ total: total, dealSheet: dealData })
 
     } catch (error) {
@@ -1236,6 +1438,35 @@ const generateQuoteId = async (departmentId: string, employeeId: string, date: s
 }
 
 
+/**
+ * Update that takes a quote out of Won: the LPO, customer PO and deal sheet go, but the deal number is kept for the
+ * next deal sheet and the discarded sheet's outcome (status and last comment) is archived on the quote.
+ */
+const wonExitUpdate = (quote: any, targetStatus: string, actorId: any, reason?: string) => {
+    const dealData = quote?.dealData;
+    const comments: string[] = Array.isArray(dealData?.comments) ? dealData.comments : [];
+    return {
+        $set: {
+            status: targetStatus,
+            lpoFiles: [] as any[],
+            ...(dealData?.dealId ? { releasedDealId: String(dealData.dealId) } : {}),
+        },
+        $unset: { dealData: 1, customerAcceptance: 1 } as { [key: string]: number },
+        $push: {
+            ...(dealData ? {
+                discardedDeals: {
+                    dealId: dealData.dealId,
+                    status: dealData.status,
+                    lastComment: comments[comments.length - 1] ?? '',
+                    discardedAt: new Date(),
+                    discardedBy: actorId,
+                    reason: String(reason ?? '').trim(),
+                },
+            } : {}),
+        } as any,
+    };
+};
+
 export const updateQuoteStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { status, reason } = req.body;
@@ -1272,9 +1503,9 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         const targetStatus = status;
 
         type UpdateQuery = {
-            $set?: { status: string; lpoFiles?: any[]; lostReason?: string; lostAt?: Date; lostBy?: any; customerDecision?: any; followUp?: any };
+            $set?: { status: string; lpoFiles?: any[]; lostReason?: string; lostAt?: Date; lostBy?: any; customerDecision?: any; followUp?: any; releasedDealId?: string };
             $unset?: { [key: string]: number };
-            $push?: { editHistory: any };
+            $push?: { editHistory: any; discardedDeals?: any };
         };
 
         let updateObject: UpdateQuery = {
@@ -1282,15 +1513,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
         };
 
         if (statusCheck.status === 'Won') {
-            updateObject = {
-                $set: {
-                    status: targetStatus,
-                    lpoFiles: [] // Set to empty array
-                },
-                $unset: {
-                    dealData: 1 // Remove dealData
-                }
-            };
+            updateObject = wonExitUpdate(statusCheck, targetStatus, editorData?._id, reason);
         }
         if (targetStatus === quoteStatus.Lost) {
             updateObject.$set!.lostReason = String(reason ?? '').trim();
@@ -1309,16 +1532,25 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
                 lastActivityDate: new Date(),
             };
         }
+        if (QUOTE_FOLLOW_UP_CLOSED.includes(targetStatus)) {
+            const closed = cancelInBlock(updateObject.$set!.followUp ?? statusCheck.followUp, `Quote ${String(targetStatus).toLowerCase()}`);
+            if (closed) updateObject.$set!.followUp = closed;
+        }
 
         // Leaving Won discards the deal sheet and LPO files, so the history records what was removed.
         const discarded = statusCheck.status === quoteStatus.Won
-            ? [statusCheck.dealData?.dealId && `deal sheet ${statusCheck.dealData.dealId}`, statusCheck.lpoFiles?.length && `${statusCheck.lpoFiles.length} LPO file(s)`].filter(Boolean)
+            ? [
+                statusCheck.dealData?.dealId && `deal sheet ${statusCheck.dealData.dealId} (${statusCheck.dealData.status}${statusCheck.dealData.comments?.length ? `, last comment: ${statusCheck.dealData.comments[statusCheck.dealData.comments.length - 1]}` : ''})`,
+                statusCheck.lpoFiles?.length && `${statusCheck.lpoFiles.length} LPO file(s)`,
+                statusCheck.customerAcceptance?.customerPoNumber && `customer PO ${statusCheck.customerAcceptance.customerPoNumber}`,
+            ].filter(Boolean)
             : [];
         const historyReason = [
             String(reason ?? '').trim(),
             discarded.length ? `Removed: ${discarded.join(', ')}` : ''
         ].filter(Boolean).join(' — ');
         updateObject.$push = {
+            ...updateObject.$push,
             editHistory: {
                 editedBy: editorData?._id,
                 editedAt: new Date(),
@@ -1452,6 +1684,93 @@ const dealAdditionalCostImpact = (dealData: any): number =>
             return sum;
         }, 0);
 
+/** What the Deal Sheet workflow's amount and discount limits are measured against. */
+const dealApprovalContext = (dealData: any) => {
+    const gross = sumSelectedDealSelling(selectedDealLines(dealData?.updatedItems));
+    const customerDiscount = dealCustomerDiscount(dealData);
+    return {
+        amount: Math.max(gross - customerDiscount, 0),
+        discountPercent: gross > 0 ? (customerDiscount / gross) * 100 : 0,
+    };
+};
+
+/**
+ * Starts the Deal Sheet approval route for a submitted deal. Without a configured workflow (or when the
+ * requester needs no approval, as for Super Admin) it returns no stages and any dealSheet approver may decide.
+ */
+const buildDealApprovalStatus = async (dealData: any, requesterId: any, client?: any): Promise<any[]> => {
+    if (!requesterId || !(await Workflow.exists({ feature: 'dealSheet' }))) return [];
+    const stages = (await getWorkflowSteps('dealSheet', String(requesterId), dealApprovalContext(dealData)))
+        .map((stage: any) => ({ ...stage, role: stage.role?._id ?? stage.role }));
+    if (!stages.length) return stages;
+
+    // Approval Rules (discount, margin, payment terms, credit, deal value) name the role that must sign off a breach.
+    // The route adds a final stage for any such role it does not already contain, so the deal can actually reach them.
+    const breaches = await approvalRuleBreaches({ dealData, client }, null);
+    const present = new Set(stages.map((stage: any) => String(stage.role)));
+    let step = Math.max(...stages.map((stage: any) => stage.step));
+    for (const roleId of new Set(breaches.map((breach: any) => breach.approverRoleId).filter(Boolean))) {
+        if (present.has(roleId)) continue;
+        stages.push({ status: 'pending', role: roleId, step: ++step, managerApproval: false, assignedAt: new Date(), ruleStage: true });
+    }
+    return stages;
+};
+
+/** Rule breaches still unsatisfied once the roles that already approved a stage are counted. */
+const unmetRuleBreaches = (breaches: any[], approvalStatus: any[] = []) => {
+    const approvedRoles = new Set(
+        approvalStatus
+            .filter((a: any) => a.status === 'approved')
+            .flatMap((a: any) => [a.role?._id ?? a.role, a.originalRole?._id ?? a.originalRole])
+            .filter(Boolean)
+            .map(String)
+    );
+    return breaches.filter((breach: any) => !approvedRoles.has(breach.approverRoleId));
+};
+
+const asPlain = (items: any[] = []) => items.map((item: any) => (item?.toObject ? item.toObject() : { ...item }));
+
+/** Strips the "Error: " prefix the workflow service adds when it rewraps an error. */
+const workflowMessage = (error: any) => String(error?.message ?? error).replace(/^(Error:\s*)+/, '');
+
+const pendingDealStage = (approvalStatus: any[] = []) => {
+    const pending = approvalStatus.filter((a: any) => a.status === 'pending').sort((a: any, b: any) => a.step - b.step);
+    return pending.length ? pending.filter((a: any) => a.step === pending[0].step) : [];
+};
+
+/** Everyone who can act on the stage the deal is currently waiting at. */
+const dealStageApproverIds = async (approvalStatus: any[] = []): Promise<string[]> => {
+    const ids = new Set<string>();
+    for (const approval of pendingDealStage(approvalStatus)) {
+        if (approval.managerApproval && approval.approver) {
+            ids.add(String(approval.approver));
+            continue;
+        }
+        const role = approval.role?._id ?? approval.role;
+        if (!role) continue;
+        const members = await Employee.find({ category: role, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean();
+        members.forEach((member: any) => ids.add(String(member._id)));
+    }
+    return [...ids];
+};
+
+const notifyDealApprovers = async (quote: any, approvalStatus: any[], sentBy: any, title: string, dedupe: string) => {
+    const recipients = await dealStageApproverIds(approvalStatus);
+    if (!recipients.length) return;
+    await notify({
+        type: 'DealSheet',
+        referenceModel: 'Quotation',
+        title,
+        message: `Deal sheet for quotation ${quote.quoteId} is waiting for your approval`,
+        sentBy: sentBy?.toString(),
+        recipients,
+        referenceId: quote._id,
+        additionalData: { quotationId: quote._id.toString() },
+        dedupeKey: dedupe,
+        channels: ['inapp', 'push', 'email'],
+    });
+};
+
 const paymentTermDays = async (paymentTerms: string): Promise<number | null> => {
     const trimmedTerms = String(paymentTerms ?? '').trim();
     if (!trimmedTerms) return null;
@@ -1528,6 +1847,7 @@ const approvalRuleBreaches = async (quote: any, approver: any): Promise<any[]> =
                 threshold,
                 actual: values[rule.type],
                 approverRole: approverRoleName,
+                approverRoleId: String(rule.approverRole?._id ?? rule.approverRole ?? ''),
                 message: labels[rule.type],
             };
         });
@@ -1544,6 +1864,10 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
         delete quoteData.revisions;
         delete quoteData.createdBy;
         delete quoteData.createdByUser;
+        const payloadProblem = quotePayloadProblem(quoteData, false);
+        if (payloadProblem) {
+            return res.status(400).json({ message: payloadProblem });
+        }
         normalizeQuoteDepartments(quoteData)
         normalizeQuoteValidity(quoteData)
 
@@ -1710,6 +2034,70 @@ export const updateQuoteFollowUp = async (req: Request, res: Response, next: Nex
     }
 };
 
+/** Loads a quote for a follow-up action, replying with the error itself when it can't take one. */
+const loadQuoteForFollowUp = async (req: Request, res: Response) => {
+    const { quoteId } = req.params;
+    if (!ObjectId.isValid(quoteId)) { res.status(400).json({ success: false, message: 'Invalid quotation id' }); return null; }
+    const quote = await Quotation.findById(quoteId);
+    if (!quote || quote.isDeleted) { res.status(404).json({ success: false, message: 'Quote not found' }); return null; }
+    if (QUOTE_FOLLOW_UP_CLOSED.includes(String(quote.status))) {
+        res.status(400).json({ success: false, message: `A ${String(quote.status).toLowerCase()} quotation can't have follow-ups.` });
+        return null;
+    }
+    return quote;
+};
+
+const saveQuoteFollowUp = async (req: Request, res: Response, quote: any, block: any, summary: string) => {
+    const actor = await getEmployeeData(req.user);
+    const followUp = { ...block, reminderOwner: quote.followUp?.reminderOwner, lastActivityDate: new Date() };
+    if (!followUp.reminderOwner) delete followUp.reminderOwner;
+    const updated = await Quotation.findByIdAndUpdate(
+        quote._id,
+        { $set: { followUp }, $push: { editHistory: { editedBy: actor?._id, editedAt: new Date(), action: 'FollowUpUpdated', reason: summary } } },
+        { new: true }
+    ).select('followUp status').lean();
+    return res.status(200).json({ success: true, followUp: updated?.followUp ?? {} });
+};
+
+export const scheduleQuoteFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const body = readScheduleBody(req, res);
+        if (!body) return;
+        const quote = await loadQuoteForFollowUp(req, res);
+        if (!quote) return;
+        const block = scheduleInBlock(quote.followUp, body.dueDate, body.note, await followUpActor(req));
+        return await saveQuoteFollowUp(req, res, quote, block, body.note || `Follow-up scheduled for ${body.dueDate.toISOString().slice(0, 10)}`);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const completeQuoteFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const body = readCompleteBody(req, res);
+        if (!body) return;
+        const quote = await loadQuoteForFollowUp(req, res);
+        if (!quote) return;
+        const block = completeInBlock(quote.followUp, body, await followUpActor(req));
+        return await saveQuoteFollowUp(req, res, quote, block, `Follow-up done: ${body.outcome}`);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const cancelQuoteFollowUp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const quote = await loadQuoteForFollowUp(req, res);
+        if (!quote) return;
+        const reason = String(req.body.reason ?? '').trim();
+        const block = cancelInBlock(quote.followUp, reason);
+        if (!block) return res.status(400).json({ success: false, message: 'No follow-up is scheduled.' });
+        return await saveQuoteFollowUp(req, res, quote, block, reason ? `Follow-up cancelled: ${reason}` : 'Follow-up cancelled');
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const recordCustomerDecision = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { quoteId } = req.params;
@@ -1735,12 +2123,10 @@ export const recordCustomerDecision = async (req: Request, res: Response, next: 
                 return res.status(400).json({ message: "A deal sheet is in progress or approved, so this quote can no longer leave Won" });
             }
         }
-        if (decision === 'accepted') {
-            if (!currentRevisionWasSent(quote)) {
-                return res.status(409).json({ message: "Send the current quotation revision to the customer before marking it as accepted" });
-            }
-        }
         const now = new Date();
+        // Mail is not integrated, so a quote handed over outside the system is recorded as sent at acceptance time.
+        const implicitSend = decision === 'accepted' && !currentRevisionWasSent(quote);
+        const revision = quote.revision ?? 0;
         const customerDecision: any = {
             decision,
             decidedAt: now,
@@ -1749,16 +2135,33 @@ export const recordCustomerDecision = async (req: Request, res: Response, next: 
             competitor: String(competitor || '').trim(),
         };
         if (Number.isFinite(Number(expectedValueLost))) customerDecision.expectedValueLost = Number(expectedValueLost);
+        const wonExit = quote.status === quoteStatus.Won && nextStatus !== quoteStatus.Won
+            ? wonExitUpdate(quote, nextStatus, actor?._id, customerDecision.reason)
+            : null;
         const updated = await Quotation.findByIdAndUpdate(
             quoteId,
             {
+                ...(wonExit ? { $unset: wonExit.$unset } : {}),
                 $set: {
+                    ...(wonExit?.$set ?? {}),
                     status: nextStatus,
                     customerDecision,
                     ...(decision === 'rejected' ? { lostReason: customerDecision.reason, lostAt: now, lostBy: actor?._id } : {}),
+                    ...(implicitSend ? { currentSentRevision: revision } : {}),
                     'followUp.lastActivityDate': now,
                 },
                 $push: {
+                    ...(wonExit?.$push ?? {}),
+                    ...(implicitSend ? {
+                        sendHistory: {
+                            revision,
+                            sentAt: now,
+                            sentBy: actor?._id,
+                            recipient: 'Handed over outside the system',
+                            emailStatus: 'sent',
+                            note: 'Recorded automatically when the customer accepted',
+                        },
+                    } : {}),
                     editHistory: {
                         editedBy: actor?._id,
                         editedAt: now,
@@ -1865,6 +2268,13 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         if ((Array.isArray(costs) ? costs : []).some((c: any) => !(Number(c?.value) >= 0))) {
             return res.status(400).json({ message: "Additional costs and discounts cannot be negative" });
         }
+        {
+            const gross = sumSelectedDealSelling(selectedDealLines(items));
+            const discount = dealCustomerDiscount({ totalDiscount, additionalCosts: costs });
+            if (discount > gross) {
+                return res.status(400).json({ message: "The customer discount cannot be more than the deal value" });
+            }
+        }
 
         const dealFiles = req.files;
 
@@ -1884,9 +2294,19 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
 
         // A resubmitted (previously rejected) deal keeps its number instead of burning a new one.
-        let dealId: string = quote.dealData?.dealId || await generateDealId();
+        // A deal raised again after the quote left Won also keeps the number it released.
+        let dealId: string = quote.dealData?.dealId || quote.releasedDealId || await generateDealId();
 
         const createdDate = new Date()
+        const userData = await getEmployeeData(req.user);
+        const dealPayload = { paymentTerms, additionalCosts: costs, updatedItems: items, totalDiscount };
+        // The deal enters the Deal Sheet approval workflow here (no-op when none is configured).
+        let approvalStatus: any[];
+        try {
+            approvalStatus = await buildDealApprovalStatus(dealPayload, userData?._id, quote.client);
+        } catch (error) {
+            return res.status(400).json({ message: workflowMessage(error) });
+        }
         let updateQuoteData = {
             dealData: {
                 dealId: dealId,
@@ -1896,15 +2316,18 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
                 status: 'pending',
                 attachments: files,
                 updatedItems: items,
-                totalDiscount: totalDiscount
+                totalDiscount: totalDiscount,
+                requestedBy: userData?._id,
+                approvalStatus,
             },
         }
 
         const socket = req.app.get('io') as Server;
         const quoteUpdated = await Quotation.findByIdAndUpdate(quoteId, updateQuoteData, { new: true });
-        const userData = await getEmployeeData(req.user);
-        
-        if (quoteUpdated) {
+
+        if (quoteUpdated && approvalStatus.length) {
+            await notifyDealApprovers(quoteUpdated, approvalStatus, userData?._id, 'New Deal Sheet Pending Approval', `deal:${quoteUpdated._id}:${dealId}:${createdDate.getTime()}:submit`);
+        } else if (quoteUpdated) {
             await createNotificationWithPrivileges(
                 {
                     type: 'DealSheet',
@@ -1926,6 +2349,17 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         }
 
         if (quoteUpdated) {
+            await logAudit(req, {
+                entityType: 'quotation',
+                entityId: quoteUpdated._id,
+                entityLabel: quoteUpdated.quoteId,
+                action: quote.dealData?.status === 'rejected' ? 'deal-resubmitted' : 'deal-submitted',
+                summary: `Deal sheet ${dealId} submitted for approval`,
+                changes: [
+                    { label: 'Deal status', from: quote.dealData?.status || '', to: 'pending' },
+                    { label: 'Deal ID', to: dealId },
+                ],
+            });
             return res.status(200).json({
                 ...(quoteUpdated.toObject ? quoteUpdated.toObject() : quoteUpdated),
                 commercialWarnings: customerGuard.warnings
@@ -1938,6 +2372,52 @@ export const saveDealSheet = async (req: any, res: Response, next: NextFunction)
         next(error)
     }
 }
+
+/**
+ * Super Admin gives a pending deal a fresh approval route, e.g. after its time limit escalated it past the approver.
+ * Ticked stages get another chance; unticked stages are skipped for this deal only. Super Admin always stays on top.
+ */
+export const resetDealWorkflow = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const me = await getEmployeeData(req.user);
+        if (!/^superadmin$/i.test((me?.category as any)?.role || '')) {
+            return res.status(403).json({ message: 'Only a Super Admin can reset the deal sheet workflow' });
+        }
+        const quote = await Quotation.findById(req.body.quoteId);
+        if (!quote || quote.isDeleted || !quote.dealData) {
+            return res.status(404).json({ message: 'Deal sheet not found' });
+        }
+        if (quote.dealData.status !== 'pending') {
+            return res.status(400).json({ message: `Only a pending deal sheet can be reset (this one is ${quote.dealData.status})` });
+        }
+        const chosen: string[] | null = Array.isArray(req.body.stepRoleIds) ? req.body.stepRoleIds.map(String) : null;
+        let stages = await buildDealApprovalStatus(quote.dealData, quote.dealData.requestedBy, quote.client);
+        const adminRole = await Category.findOne({ role: /^superadmin$/i }).select('_id').lean();
+        if (chosen) {
+            stages = stages.filter((stage: any) => chosen.includes(String(stage.role)));
+            if (!stages.length && adminRole) {
+                stages = [{ status: 'pending', role: adminRole._id, step: 1, managerApproval: false, assignedAt: new Date() }];
+            }
+            // Stages are numbered in the order they act; renumber after dropping the unticked ones.
+            const order = [...new Set(stages.map((stage: any) => stage.step))].sort((a: any, b: any) => a - b);
+            stages = stages.map((stage: any) => ({ ...stage, step: order.indexOf(stage.step) + 1 }));
+        }
+        const previous = asPlain(quote.dealData.approvalStatus).filter((a: any) => a.status !== 'pending');
+        await Quotation.updateOne({ _id: quote._id }, { $set: { 'dealData.approvalStatus': [...previous, ...stages.map((s: any) => ({ ...s, step: s.step + previous.length }))], 'dealData.seenByApprover': false } });
+        await logAudit(req, {
+            entityType: 'quotation',
+            entityId: quote._id,
+            entityLabel: quote.quoteId,
+            action: 'deal-workflow-reset',
+            summary: `Deal sheet ${quote.dealData.dealId || quote.quoteId} approval workflow reset by Super Admin`,
+        });
+        const fresh = await Quotation.findById(quote._id);
+        await notifyDealApprovers(quote, asPlain(fresh?.dealData?.approvalStatus), me?._id, 'Deal Sheet awaiting your approval', `deal:${quote._id}:${quote.dealData.dealId}:reset:${Date.now()}`);
+        return res.status(200).json({ success: true, message: 'Deal sheet workflow reset' });
+    } catch (error) {
+        next(error);
+    }
+};
 
 export const approveDeal = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1967,8 +2447,42 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 missing: handoffIssues
             });
         }
+        if (String(req.body.comment ?? '').trim().length > 500) {
+            return res.status(400).json({ message: 'The note must be 500 characters or fewer' });
+        }
         const approverData = await getEmployeeData(req.user);
-        const approvalBreaches = await approvalRuleBreaches(quote, approverData);
+
+        // Deal Sheet workflow: each stage approves in turn; the job is only created when the last stage signs off.
+        let workflowStatus: any[] | null = null;
+        if ((quote.dealData.approvalStatus ?? []).some((a: any) => a.status === 'pending')) {
+            try {
+                workflowStatus = await updateApprovalStatus(
+                    'approved',
+                    asPlain(quote.dealData.approvalStatus),
+                    String(req.body.comment ?? ''),
+                    approverData,
+                    { requesterId: quote.dealData.requestedBy, ...dealApprovalContext(quote.dealData) }
+                );
+            } catch (error) {
+                return res.status(403).json({ message: workflowMessage(error) });
+            }
+            if (workflowStatus.some((a: any) => a.status === 'pending')) {
+                await Quotation.updateOne({ _id: quote._id }, { $set: { 'dealData.approvalStatus': workflowStatus, 'dealData.seenByApprover': false } });
+                await logAudit(req, {
+                    entityType: 'quotation',
+                    entityId: quote._id,
+                    entityLabel: quote.quoteId,
+                    action: 'deal-stage-approved',
+                    summary: `Deal sheet ${quote.dealData.dealId || quote.quoteId} approved at stage ${pendingDealStage(asPlain(quote.dealData.approvalStatus))[0]?.step ?? ''}, waiting for the next stage`,
+                    changes: String(req.body.comment ?? '').trim() ? [{ label: 'Comment', to: String(req.body.comment).trim() }] : undefined,
+                });
+                await notifyDealApprovers(quote, workflowStatus, approverData?._id, 'Deal Sheet awaiting your approval', `deal:${quote._id}:${quote.dealData.dealId}:${pendingDealStage(workflowStatus)[0]?.step}:stage`);
+                return res.status(200).json({ success: true, awaitingNextApproval: true, message: 'Approved at your stage. The deal sheet now waits for the next approver.' });
+            }
+        }
+
+        // Roles that already signed off a stage of the route count towards the Approval Rules too.
+        const approvalBreaches = unmetRuleBreaches(await approvalRuleBreaches(quote, approverData), workflowStatus ?? asPlain(quote.dealData.approvalStatus));
         if (approvalBreaches.length) {
             return res.status(403).json({
                 message: "Approval rule authorization is required before this deal can be approved",
@@ -1999,6 +2513,7 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 message: customerGuard.message || "Customer credit approval is required before this deal can be approved",
                 approvalRequired: customerGuard.warnings.map((warning) => ({
                     type: 'creditException',
+                    message: warning,
                     actual: warning
                 }))
             });
@@ -2018,11 +2533,22 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
             const quoteUpdate = await Quotation.updateOne(
                 { _id: jobData.quoteId },
                 {
-                    $set: { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(String(approverData?._id ?? req.body.userId)) },
+                    $set: { 'dealData.status': 'approved', 'dealData.seenedBySalsePerson': false, 'dealData.approvedBy': new ObjectId(String(approverData?._id ?? req.body.userId)), ...(workflowStatus ? { 'dealData.approvalStatus': workflowStatus } : {}) },
                     $push: { editHistory: { editedBy: approverData?._id ?? req.body.userId, editedAt: new Date(), action: 'DealApproved', reason: String(req.body.comment ?? '').trim() || undefined } }
                 }
             )
             if (quoteUpdate) {
+                await logAudit(req, {
+                    entityType: 'quotation',
+                    entityId: quote._id,
+                    entityLabel: quote.quoteId,
+                    action: 'deal-approved',
+                    summary: `Deal sheet ${quote.dealData.dealId || quote.quoteId} approved${jobId ? ` and job ${jobId} created` : ''}`,
+                    changes: [
+                        { label: 'Deal status', from: 'pending', to: 'approved' },
+                        ...(String(req.body.comment ?? '').trim() ? [{ label: 'Comment', to: String(req.body.comment).trim() }] : []),
+                    ],
+                });
                 // The job's own reservation below takes over from any hold placed when the quote was won.
                 await releaseQuoteStockHolds(quote._id, `Taken over by job ${jobId}`, approverData?._id, 'Converted');
                 const selectedLines = selectedDealLines(quote.dealData.updatedItems)
@@ -2108,10 +2634,27 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
         if (!comment) {
             return res.status(400).json({ message: 'A reason is required to reject a deal' });
         }
+        if (comment.length > 500) {
+            return res.status(400).json({ message: 'The reason must be 500 characters or fewer' });
+        }
+        const userData = await getEmployeeData(req.user);
+        // Only someone at the stage the deal is waiting on (or Super Admin) may reject it; the rejection closes the route.
+        if ((deal.dealData.approvalStatus ?? []).some((a: any) => a.status === 'pending')) {
+            try {
+                deal.dealData.approvalStatus = await updateApprovalStatus(
+                    'rejected',
+                    asPlain(deal.dealData.approvalStatus),
+                    comment,
+                    userData,
+                    { requesterId: deal.dealData.requestedBy }
+                );
+            } catch (error) {
+                return res.status(403).json({ message: workflowMessage(error) });
+            }
+        }
         deal.dealData.status = 'rejected';
         deal.dealData.seenedBySalsePerson = false
         deal.dealData.comments.push(comment);
-        const userData = await getEmployeeData(req.user);
         deal.editHistory.push({
             editedBy: userData?._id,
             editedAt: new Date(),
@@ -2119,6 +2662,17 @@ export const rejectDeal = async (req: Request, res: Response, next: NextFunction
             reason: comment,
         } as any);
         const savedDeal = await deal.save();
+        await logAudit(req, {
+            entityType: 'quotation',
+            entityId: savedDeal._id,
+            entityLabel: savedDeal.quoteId,
+            action: 'deal-rejected',
+            summary: `Deal sheet ${savedDeal.dealData?.dealId || savedDeal.quoteId} rejected`,
+            changes: [
+                { label: 'Deal status', from: 'pending', to: 'rejected' },
+                { label: 'Reason', to: comment },
+            ],
+        });
 
         const socket = req.app.get('io') as Server;
         await createNotificationWithPrivileges(
@@ -2169,6 +2723,14 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
 
         deal.dealData.status = 'pending';
         deal.dealData.seenByApprover = false;
+        // A revoked deal goes through the Deal Sheet workflow again (deals raised before the workflow existed stay as they were).
+        if (deal.dealData.requestedBy) {
+            try {
+                deal.dealData.approvalStatus = await buildDealApprovalStatus(deal.dealData, deal.dealData.requestedBy, deal.client);
+            } catch (error) {
+                return res.status(400).json({ message: workflowMessage(error) });
+            }
+        }
         const revokerData = await getEmployeeData(req.user);
         deal.editHistory.push({
             editedBy: revokerData?._id,
@@ -2176,6 +2738,17 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
             action: 'DealRevoked',
         } as any);
         await deal.save();
+        await logAudit(req, {
+            entityType: 'quotation',
+            entityId: deal._id,
+            entityLabel: deal.quoteId,
+            action: 'deal-revoked',
+            summary: `Deal sheet ${deal.dealData?.dealId || deal.quoteId} revoked`,
+            changes: [
+                { label: 'Deal status', from: 'approved', to: 'pending' },
+                ...(job?.jobId ? [{ label: 'Removed job', from: job.jobId }] : []),
+            ],
+        });
         const jobDelete = await Job.deleteOne({ quoteId: quoteId })
         if (job) {
             // The job's stock reservations die with it; leaving them Active would block that stock forever.
@@ -2810,6 +3383,9 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
                 return {
                     $or: [
                         { productDescription: tokenRegex },
+                        { productName: tokenRegex },
+                        { partNo: tokenRegex },
+                        { itemCode: tokenRegex },
                         { productCategory: { $in: matchingCategories.map((c) => c._id) } },
                     ],
                 };
@@ -2819,7 +3395,7 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
         const limitValue = Math.min(Math.max(parseInt(limit as string, 10) || 20, 1), 50);
 
         const suggestions = await Product.find(filter)
-            .select('productCategory productDescription partNo itemCode unitOfMeasure type defaultSellingPrice estimatedCost defaultVendor')
+            .select('productCategory productName productDescription partNo itemCode unitOfMeasure type defaultSellingPrice estimatedCost defaultVendor')
             .populate('productCategory', 'categoryName')
             .limit(limitValue)
             .lean();

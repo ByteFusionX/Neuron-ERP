@@ -18,6 +18,7 @@ import {
     uploadSalesRfqSupplierFiles,
     createSalesRfqFromEnquiry,
     getRfqPriceHistory,
+    getSupplierProductHistory,
     getSalesRfqDraft,
     getSalesRfqById,
     getSalesRfqs,
@@ -42,6 +43,7 @@ salesRfqRouter.use(requireAnyPrivilege("enquiry", "assignedJob", "quotation"));
 salesRfqRouter.post('/list', getSalesRfqs);
 salesRfqRouter.post('/summaries', getSalesRfqSummaries);
 salesRfqRouter.get('/price-history', getRfqPriceHistory);
+salesRfqRouter.get('/supplier-products', getSupplierProductHistory);
 salesRfqRouter.get('/supplier-options', searchSalesRfqSuppliers);
 salesRfqRouter.get('/fx-rates', getSalesRfqFxRates);
 salesRfqRouter.post('/supplier-activity', getSalesRfqSupplierActivity);

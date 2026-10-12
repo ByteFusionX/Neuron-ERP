@@ -137,6 +137,13 @@ export interface RfqQuote {
     paymentTerms?: string;
     validityDate?: Date;
     warrantyTerms?: string;
+    /** Catalogue product the line points to, copied from the requested line so price history can be queried by product. */
+    productId?: Types.ObjectId;
+    /** What the supplier actually offered, which can differ from what was asked for. */
+    brandOffered?: string;
+    modelOffered?: string;
+    moq?: number;
+    isAlternative?: boolean;
     remarks?: string;
     selected: boolean;
     createdBy?: Types.ObjectId;
@@ -310,6 +317,11 @@ const rfqQuoteSchema = new Schema<RfqQuote>({
     paymentTerms: { type: String },
     validityDate: { type: Date },
     warrantyTerms: { type: String },
+    productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+    brandOffered: { type: String, trim: true },
+    modelOffered: { type: String, trim: true },
+    moq: { type: Number, min: 0 },
+    isAlternative: { type: Boolean, default: false },
     remarks: { type: String },
     selected: { type: Boolean, default: false },
     createdBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
