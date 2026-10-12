@@ -29,6 +29,7 @@ import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid
 import {
   DataGridColumn,
   DataGridDetailTab,
+  DataGridFilter,
   DataGridQuery,
   DataGridRowAction,
   DataGridRowActionEvent,
@@ -38,6 +39,7 @@ import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailDocumentsComponent } from 'src/app/shared/components/detail-panel/detail-documents.component';
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailCommentsComponent } from 'src/app/shared/components/detail-panel/detail-comments.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import {
   DetailOverviewField,
@@ -45,14 +47,19 @@ import {
   DetailTableColumn,
   DetailDocument,
   DetailTimelineEntry,
+  DetailComment,
 } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
-import { DealDecisionService, DEAL_STATUSES } from '../../services/deal-decision.service';
+import { DealDecisionService, DEAL_STATUSES, canDecideDeal, describeDealWaiting } from '../../services/deal-decision.service';
 import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-error.util';
 import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
 import { statusLabel } from 'src/app/shared/utils/text-format.util';
+import { ModalService } from 'src/app/shared/components/modal';
+import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
+import { WorkflowService } from 'src/app/core/services/workflow.service';
+import { ApprovalStep, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 import { UpdateDealsheetComponent, UpdateDealsheetData } from '../update-dealsheet/update-dealsheet.component';
 
 /** Matches the grid's default page size so the Rows selector is never blank. */
@@ -83,6 +90,7 @@ const DEFAULT_PAGE_SIZE = 15;
     DetailTableComponent,
     DetailDocumentsComponent,
     DetailTimelineComponent,
+    DetailCommentsComponent,
     ActionButtonComponent,
   ],
 })
@@ -91,10 +99,15 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
 
   private confirm = inject(ConfirmDialogService);
   private _decision = inject(DealDecisionService);
+  private modal = inject(ModalService);
+  private _workflowService = inject(WorkflowService);
+  /** Deal Sheet workflow stages a Super Admin can give another chance when resetting a deal. */
+  private dealWorkflowSteps: ApprovalStep[] = [];
 
   isLoading = true;
   userId: string | undefined;
   isSuperAdmin = false;
+  private roleId: string | undefined;
 
   rows: Quotatation[] = [];
   total = 0;
@@ -102,7 +115,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   row = DEFAULT_PAGE_SIZE;
   searchQuery = '';
   /** Column filters and sort from the grid toolbar; sent to the server with every page request. */
-  gridFilters: { key: string; op: string; value: any }[] = [];
+  gridFilters: Omit<DataGridFilter, 'id'>[] = [];
   sortKey: string | null = null;
   sortDir: 'asc' | 'desc' | null = null;
   searchCriteria: 'all' | 'dealId' | 'customer' | 'salesperson' = 'all';
@@ -128,6 +141,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
     { id: 'documents', label: 'Documents', icon: 'eye' },
+    { id: 'comments', label: 'Comments', icon: 'chat' },
     { id: 'history', label: 'History', icon: 'clock' },
   ];
 
@@ -135,6 +149,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     { key: 'item', label: 'Item' },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
+    { key: 'sellingPrice', label: 'Selling Price', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
   ];
 
@@ -198,13 +213,31 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       this.row = params['row'] ? parseInt(params['row'], 10) || DEFAULT_PAGE_SIZE : DEFAULT_PAGE_SIZE;
       this.searchQuery = params['search'] || '';
       this.searchCriteria = params['searchCriteria'] || 'all';
-      if (this.grid) this.grid.page = this.page;
+      this.gridFilters = this.parseGridFilters(params['filters']);
+      this.sortKey = params['sortKey'] || null;
+      this.sortDir = params['sortDir'] === 'asc' || params['sortDir'] === 'desc' ? params['sortDir'] : null;
+      if (this.grid) {
+        this.grid.page = this.page;
+        this.grid.pageSize = this.row;
+        this.grid.setQueryState(this.searchQuery, this.gridFilters, {
+          key: this.sortKey,
+          direction: this.sortDir,
+        });
+      }
       this.getDeals();
     });
+
+    this.subscriptions.add(
+      this._workflowService.getWorkflows({ feature: WorkflowFeature.DEAL_SHEET }).subscribe((response) => {
+        const steps = (response?.data?.[0]?.steps ?? []).filter((st) => st.enabled !== false && !/^superadmin$/i.test((st.role as any)?.role ?? ''));
+        this.dealWorkflowSteps = [...steps].sort((a, b) => b.order - a.order);
+      }),
+    );
 
     this._employeeService.employeeData$.subscribe((employee) => {
       this.userId = employee?._id;
       this.isSuperAdmin = employee?.category.role === 'superAdmin';
+      this.roleId = (employee?.category as any)?._id;
     });
   }
 
@@ -257,10 +290,12 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         key: 'paymentTerms',
         sortable: true,
         label: 'Payment Terms',
+        width: '240px',
         valueGetter: (r) => r.dealData?.paymentTerms,
       },
       {
         key: 'amount',
+        sortable: true,
         label: 'Amount',
         valueGetter: (r) => this.formatAmount(r),
       },
@@ -294,7 +329,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         label: 'Approve',
         icon: 'check',
         quick: true,
-        hidden: (r) => r.dealData?.status !== 'pending',
+        hidden: (r) => r.dealData?.status !== 'pending' || !this.canDecide(r),
       },
       {
         id: 'reject',
@@ -302,7 +337,14 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         icon: 'close',
         variant: 'danger',
         quick: true,
-        hidden: (r) => r.dealData?.status !== 'pending',
+        hidden: (r) => r.dealData?.status !== 'pending' || !this.canDecide(r),
+      },
+      {
+        id: 'resetWorkflow',
+        label: 'Reset Workflow',
+        icon: 'refresh',
+        quick: true,
+        hidden: (r) => r.dealData?.status !== 'pending' || !this.isSuperAdmin,
       },
       {
         id: 'update',
@@ -318,6 +360,11 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         hidden: (r) => r.dealData?.status !== 'approved',
       },
     ];
+  }
+
+  /** A deal that moved up after its time limit can only be decided by the role it moved to (or a Super Admin). */
+  private canDecide(r: Quotatation): boolean {
+    return canDecideDeal(r.dealData?.waiting, { _id: this.userId, roleId: this.roleId, isSuperAdmin: this.isSuperAdmin });
   }
 
   onQueryChange(query: DataGridQuery): void {
@@ -373,6 +420,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         search: this.searchQuery || null,
         searchCriteria:
           this.searchCriteria !== 'all' ? this.searchCriteria : null,
+        filters: this.gridFilters.length ? JSON.stringify(this.gridFilters) : null,
+        sortKey: this.sortKey || null,
+        sortDir: this.sortDir || null,
       },
       replaceUrl: true,
     });
@@ -452,6 +502,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       case 'revoke':
         this.revokeDeal(row);
         break;
+      case 'resetWorkflow':
+        this.resetWorkflow(row);
+        break;
     }
   }
 
@@ -466,7 +519,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         approval: row.dealData?.status === 'pending',
         quoteData: row,
         quoteItems: selectedDealItems(row.dealData?.updatedItems),
-        priceDetails: dealSheetPriceDetails(row.dealData?.updatedItems, row.dealData?.additionalCosts),
+        priceDetails: dealSheetPriceDetails(row.dealData?.updatedItems, row.dealData?.additionalCosts, row.dealData?.totalDiscount),
         jobId: row.job?._id,
         quoteView: false,
         returnUrl: this.currentListUrl(),
@@ -494,13 +547,26 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
       this._quoteService
         .approveDeal(row._id, result.reason, this.userId)
         .subscribe({
-          next: () => {
-            this.toaster.success('Deal approved');
+          next: (res) => {
+            this.toaster.success(res.awaitingNextApproval ? (res.message || 'Approved at your stage') : 'Deal approved');
             this.getDeals(true);
           },
           error: (err) => this.toaster.error(describeApprovalGateError(err, 'Failed to approve deal')),
         });
     });
+  }
+
+  resetWorkflow(row: Quotatation): void {
+    const data: ResetWorkflowModalData = {
+      jobId: row._id!,
+      context: row.dealData?.dealId,
+      contextLabel: 'Deal sheet',
+      description: 'Tick the approval stages that get another chance on this deal sheet. Unticked stages are skipped for this deal only.',
+      stages: this.dealWorkflowSteps.map((st) => ({ id: String((st.role as any)?._id ?? st.role), label: (st.role as any)?.categoryName ?? '—' })),
+      restart: (ids) => this._quoteService.resetDealWorkflow(row._id!, ids),
+    };
+    this.modal.open<boolean>(ResetWorkflowComponent, { width: '520px', data })
+      .afterClosed().subscribe((reset) => { if (reset) this.getDeals(true); });
   }
 
   rejectDeal(row: Quotatation): void {
@@ -606,7 +672,8 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         rows.push({
           item: d.detail,
           qty: d.quantity,
-          price: d.unitSellingPrice,
+          price: d.unitCost,
+          sellingPrice: d.unitSellingPrice,
           amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0),
         });
       });
@@ -663,6 +730,17 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     return subject.asObservable();
   }
 
+  dealComments(row: Quotatation): DetailComment[] {
+    const comments = row.dealData?.comments ?? [];
+    const by = this.approverName(row) || 'Deal reviewer';
+    const date = row.dealData?.savedDate || row.date || new Date().toISOString();
+
+    return comments
+      .map((comment) => String(comment || '').trim())
+      .filter(Boolean)
+      .map((text) => ({ text, by, date }));
+  }
+
   private previewOrDownload(file: any, mode: 'view' | 'download'): void {
     this._jobService.downloadFile(file.fileName).subscribe({
       next: (event) => {
@@ -697,7 +775,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     (row.dealData?.additionalCosts ?? []).forEach((cost) => {
       if (cost.type === 'Customer Discount') total -= cost.value;
     });
-    return total;
+    return total - (Number(row.dealData?.totalDiscount) || 0);
   }
 
   private currentListUrl(): string {
@@ -709,6 +787,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
     if (this.searchCriteria !== 'all') {
       queryParams.set('searchCriteria', this.searchCriteria);
     }
+    if (this.gridFilters.length) queryParams.set('filters', JSON.stringify(this.gridFilters));
+    if (this.sortKey) queryParams.set('sortKey', this.sortKey);
+    if (this.sortDir) queryParams.set('sortDir', this.sortDir);
     const query = queryParams.toString();
     return `/deal-sheet/${segment}${query ? `?${query}` : ''}`;
   }
@@ -728,7 +809,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
   overviewSections(row: Quotatation): DetailOverviewSection[] {
     const deal: any = row.dealData;
     const enquiry = row.enqId as any;
-    const contact = (row as any).contact || enquiry?.contact;
+    const contact = (row as any).attention || (row as any).contact || enquiry?.contact;
     const latestComment = deal?.comments?.length
       ? deal.comments[deal.comments.length - 1]
       : '';
@@ -744,6 +825,9 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
             numeric: true,
           },
           { type: 'dg', key: 'dealStatus', label: 'Status', noHover: true },
+          ...(deal?.waiting
+            ? [{ type: 'field' as const, label: 'Waiting on', value: describeDealWaiting(deal.waiting), noHover: true }]
+            : []),
           {
             type: 'field',
             label: 'Quote Id',
@@ -754,9 +838,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
           {
             type: 'field',
             label: 'Contact',
-            value: contact
-              ? `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim()
-              : '—',
+            value: this.contactName(contact),
           },
           {
             type: 'field',
@@ -890,5 +972,23 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
         noHover: true,
       },
     ];
+  }
+
+  private parseGridFilters(raw: unknown): Omit<DataGridFilter, 'id'>[] {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(String(raw));
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((f) => f && typeof f.key === 'string' && typeof f.op === 'string')
+        .map((f) => ({ key: f.key, op: f.op as DataGridFilter['op'], value: f.value }));
+    } catch {
+      return [];
+    }
+  }
+
+  private contactName(contact: any): string {
+    if (!contact) return '—';
+    return `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim() || '—';
   }
 }

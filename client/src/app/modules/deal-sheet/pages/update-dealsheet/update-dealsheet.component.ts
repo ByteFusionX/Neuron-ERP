@@ -357,7 +357,8 @@ export class UpdateDealsheetComponent implements OnInit, OnChanges {
     const costs = v.costs as DealCost[];
     const sum = (type: string) => costs.filter((c) => c.type === type).reduce((s, c) => s + (Number(c.value) || 0), 0);
     this.costAdjustment = sum('Additional Cost') - sum('Supplier Discount');
-    this.discountAdjustment = sum('Customer Discount');
+    // The discount quoted to the customer is part of the deal value too, so the summary matches what is saved.
+    this.discountAdjustment = sum('Customer Discount') + (Number(option?.totalDiscount) || 0);
     this.lineCount = lines.length;
     this.selectedCount = lines.filter((l) => l.selected).length;
     this.allSelected = this.lineCount > 0 && this.selectedCount === this.lineCount;

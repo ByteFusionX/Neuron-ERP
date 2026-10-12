@@ -10,7 +10,7 @@ import {
 } from 'src/app/shared/interfaces/quotation.interface';
 import { UpdateDealsheetComponent } from '../update-dealsheet/update-dealsheet.component';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
-import { ViewCommentComponent } from '../../../assigned-jobs/pages/view-comment/view-comment.component';
+import { ViewCommentComponent } from 'src/app/shared/components/view-comment/view-comment.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
@@ -18,7 +18,7 @@ import { HttpEventType } from '@angular/common/http';
 import { switchMap, take } from 'rxjs';
 import saveAs from 'file-saver';
 import { ToastrService } from 'ngx-toastr';
-import { DealDecisionService } from '../../services/deal-decision.service';
+import { DealDecisionService, canDecideDeal, describeDealWaiting } from '../../services/deal-decision.service';
 import { describeApprovalGateError } from 'src/app/shared/utils/approval-gate-error.util';
 import { dealSheetPriceDetails, selectedDealItems } from 'src/app/shared/utils/deal-pricing.util';
 import { statusLabel } from 'src/app/shared/utils/text-format.util';
@@ -141,6 +141,8 @@ export class ViewDealsheetComponent implements OnInit {
   ) {}
 
   userId!: string;
+  private roleId: string | undefined;
+  private isSuperAdmin = false;
 
   ngOnInit(): void {
     const state = history.state as ViewDealsheetNavState;
@@ -188,6 +190,7 @@ export class ViewDealsheetComponent implements OnInit {
             priceDetails: dealSheetPriceDetails(
               quote.dealData.updatedItems,
               quote.dealData.additionalCosts,
+              quote.dealData.totalDiscount,
             ),
             quoteView: false,
           };
@@ -211,6 +214,8 @@ export class ViewDealsheetComponent implements OnInit {
     this._employeeService.employeeData$.subscribe((data) => {
       if (data?._id) {
         this.userId = data?._id;
+        this.roleId = (data?.category as any)?._id;
+        this.isSuperAdmin = data?.category?.role === 'superAdmin';
         this.markQuotationSeenIfCreator();
       }
     });
@@ -434,6 +439,48 @@ export class ViewDealsheetComponent implements OnInit {
       : '';
   }
 
+  /** A deal that moved up after its time limit can only be decided by the role it moved to (or a Super Admin). */
+  get canDecide(): boolean {
+    return canDecideDeal(this.data?.quoteData?.dealData?.waiting, { _id: this.userId, roleId: this.roleId, isSuperAdmin: this.isSuperAdmin });
+  }
+
+  get waitingText(): string {
+    const deal = this.data?.quoteData?.dealData;
+    return deal?.status === 'pending' ? describeDealWaiting(deal.waiting) : '';
+  }
+
+  /** Deal Sheet approval route, in the order the stages act. */
+  get approvalStages(): any[] {
+    const stages: any[] = this.data?.quoteData?.dealData?.approvalStatus ?? [];
+    return stages.filter(stage => stage?.roleName);
+  }
+
+  /** Step number of the stage the deal is currently waiting at (null once nothing is pending). */
+  get currentStageStep(): number | null {
+    const pending = this.approvalStages.filter(stage => stage.status === 'pending').map(stage => stage.step);
+    return pending.length ? Math.min(...pending) : null;
+  }
+
+  stageTone(stage: any): DetailTone {
+    if (stage.status === 'approved') return 'good';
+    if (stage.status === 'rejected') return 'bad';
+    return stage.step === this.currentStageStep ? 'warn' : 'neutral';
+  }
+
+  stageLabel(stage: any): string {
+    if (stage.status === 'pending') return stage.step === this.currentStageStep ? 'Waiting' : 'Queued';
+    return stage.status === 'approved' ? 'Approved' : 'Rejected';
+  }
+
+  get reviewComment(): string {
+    const comments = this.data?.quoteData?.dealData?.comments || [];
+    return comments.length ? String(comments[comments.length - 1] || '').trim() : '';
+  }
+
+  get hasReviewComment(): boolean {
+    return !!this.reviewComment;
+  }
+
   get metricItems(): DetailMetric[] {
     return [
       { label: 'Selling price', value: this.formatNumber(this.data.priceDetails.totalSellingPrice) },
@@ -543,7 +590,7 @@ export class ViewDealsheetComponent implements OnInit {
 
   openReview() {
     this._dialog.open(ViewCommentComponent, {
-      data: { comment: this.data.quoteData.dealData.comments[0] },
+      data: { comment: this.reviewComment || 'No comment recorded.' },
       width: '500px',
     });
   }
@@ -560,7 +607,7 @@ export class ViewDealsheetComponent implements OnInit {
             next: (res) => {
               this.isApproving = false;
               if (res.success) {
-                this.toast.success('Deal approved');
+                this.toast.success(res.awaitingNextApproval ? (res.message || 'Approved at your stage') : 'Deal approved');
                 this.router.navigate([this.returnUrl]);
               }
             },

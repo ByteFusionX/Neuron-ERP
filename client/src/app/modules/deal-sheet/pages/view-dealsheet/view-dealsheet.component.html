@@ -25,10 +25,10 @@
         </ng-container>
         <ng-container footerRight>
             <app-action-button variant="secondary" (click)="onClose()">Close</app-action-button>
-            <app-action-button variant="primary" *ngIf="data.approval && viewMode === 'deal'" [disabled]="isRejecting" (click)="onReject()">
+            <app-action-button variant="primary" *ngIf="data.approval && canDecide && viewMode === 'deal'" [disabled]="isRejecting" (click)="onReject()">
                 {{ isRejecting ? 'Rejecting...' : 'Reject' }}
             </app-action-button>
-            <app-action-button variant="primary" *ngIf="data.approval && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
+            <app-action-button variant="primary" *ngIf="data.approval && canDecide && viewMode === 'deal'" [disabled]="isApproving" (click)="onApprove()">
                 {{ isApproving ? 'Approving...' : 'Approve' }}
             </app-action-button>
             <app-action-button variant="primary" *ngIf="data.quoteView && data.quoteData.dealData.status === 'rejected' && viewMode === 'deal'" (click)="onUpdate()" icon="edit">Edit Deal</app-action-button>
@@ -39,9 +39,31 @@
                 <app-detail-field label="Status">
                     <app-detail-badge [label]="statusText(data.quoteData.dealData.status || 'pending')" [tone]="statusTone(data.quoteData.dealData.status)"></app-detail-badge>
                 </app-detail-field>
+                <app-detail-field label="Waiting on" *ngIf="waitingText">{{ waitingText }}</app-detail-field>
                 <app-detail-field label="Saved date">{{ data.quoteData.dealData.savedDate | date: 'dd MMM yyyy' }}</app-detail-field>
                 <app-detail-field label="Payment terms">{{ data.quoteData.dealData.paymentTerms || 'N/A' }}</app-detail-field>
                 <app-detail-field label="Approved by" *ngIf="approverName">{{ approverName }}</app-detail-field>
+                <div *ngIf="hasReviewComment" class="pt-2">
+                    <app-action-button variant="outline" (click)="openReview()" icon="view">View comment</app-action-button>
+                </div>
+            </app-detail-section>
+
+            <app-detail-section title="Approval stages" *ngIf="approvalStages.length">
+                <app-detail-field *ngFor="let stage of approvalStages" [label]="'Stage ' + stage.step">
+                    <div class="flex flex-col items-end gap-1 text-right">
+                        <span>
+                            {{ stage.roleName }}
+                            <span *ngIf="stage.originalRoleName" class="text-xs opacity-70">(escalated from {{ stage.originalRoleName }})</span>
+                        </span>
+                        <app-detail-badge [label]="stageLabel(stage)" [tone]="stageTone(stage)"></app-detail-badge>
+                        <span *ngIf="stage.updatedByName" class="text-xs opacity-70">{{ stage.updatedByName }}</span>
+                        <span *ngIf="stage.status === 'pending' && stage.escalationDueAt" class="text-xs opacity-70">Due {{ stage.escalationDueAt | date: 'dd MMM, HH:mm' }}</span>
+                    </div>
+                </app-detail-field>
+            </app-detail-section>
+
+            <app-detail-section title="Approval stages" *ngIf="!approvalStages.length && data.quoteData.dealData.status === 'pending'">
+                <app-detail-field label="Route">No approval workflow applies to this deal, so any deal sheet approver can decide. Add a Deal Sheet workflow in Settings → Approvals to route it by role.</app-detail-field>
             </app-detail-section>
 
             <app-detail-section title="Quotation">

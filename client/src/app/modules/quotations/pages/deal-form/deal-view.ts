@@ -1,4 +1,4 @@
-import { DetailMetric, DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailMetric, DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { DetailTone } from 'src/app/shared/components/detail-panel/detail-tone';
 import { DealCost, DealLine, dealTotals, marginFromPrice } from 'src/app/shared/utils/deal-pricing.util';
 
@@ -17,12 +17,6 @@ export interface DealViewFormat {
   date: (v: unknown) => string | null;
 }
 
-export const DEAL_COST_COLUMNS: DetailTableColumn[] = [
-  { key: 'name', label: 'Description' },
-  { key: 'type', label: 'Type' },
-  { key: 'value', label: 'Amount', type: 'currency' },
-];
-
 export const DEAL_STATUS_TONES: Record<string, DetailTone> = { pending: 'warn', approved: 'good', rejected: 'bad', revoked: 'bad' };
 
 export function hasDeal(quote: { dealData?: unknown } | null | undefined): boolean {
@@ -40,7 +34,7 @@ export function buildDealView(quote: { dealData?: any; currency?: string }, fmt:
   }));
 
   const costs: DealCost[] = deal.additionalCosts ?? [];
-  const totals = dealTotals(lines, costs);
+  const totals = dealTotals(lines, costs, deal.totalDiscount);
   const profitTone: DetailTone = totals.profit < 0 ? 'bad' : 'good';
   const metrics: DetailMetric[] = [
     { label: 'Selling price', value: money(totals.sellingPrice) },

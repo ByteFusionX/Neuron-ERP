@@ -35,7 +35,11 @@ export function priceFromMargin(unitCost: number, marginPct: number): number | n
   return Math.ceil(Number((num(unitCost) / (1 - margin)).toFixed(2)));
 }
 
-export function dealTotals(lines: DealLine[], costs: DealCost[]): DealTotals {
+/**
+ * `totalDiscount` is the discount the customer was quoted (carried onto the deal from the quote); it comes off the
+ * selling price exactly like a Customer Discount cost, which is how the server values the deal.
+ */
+export function dealTotals(lines: DealLine[], costs: DealCost[], totalDiscount = 0): DealTotals {
   let sellingPrice = 0;
   let totalCost = 0;
   for (const l of lines) {
@@ -49,6 +53,7 @@ export function dealTotals(lines: DealLine[], costs: DealCost[]): DealTotals {
     else if (c.type === 'Additional Cost') totalCost += v;
     else if (c.type === 'Supplier Discount') totalCost -= v;
   }
+  sellingPrice -= num(totalDiscount);
   const profit = sellingPrice - totalCost;
   return { sellingPrice, totalCost, profit, marginPct: sellingPrice ? (profit / sellingPrice) * 100 : 0 };
 }
@@ -72,6 +77,7 @@ export interface DealPriceDetails {
 export function dealSheetPriceDetails(
   items: { itemDetails?: { dealSelected?: boolean; quantity?: number; unitCost?: number; unitSellingPrice?: number }[] }[] | undefined,
   additionalCosts: { type?: string; value?: number }[] | undefined,
+  totalDiscount = 0,
 ): DealPriceDetails {
   const details: DealPriceDetails = { totalSellingPrice: 0, totalCost: 0, profit: 0, perc: 0 };
   for (const item of items ?? []) {
@@ -88,6 +94,7 @@ export function dealSheetPriceDetails(
     else if (cost.type === 'Supplier Discount') details.totalCost -= value;
     else details.totalCost += value;
   }
+  details.totalSellingPrice -= num(totalDiscount);
   details.profit = details.totalSellingPrice - details.totalCost;
   details.perc = details.totalSellingPrice ? (details.profit / details.totalSellingPrice) * 100 : 0;
   return details;

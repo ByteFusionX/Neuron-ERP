@@ -12,7 +12,7 @@ import {
   QuoteItemDetail,
 } from 'src/app/shared/interfaces/quotation.interface';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
-import { ViewCommentComponent } from '../../../assigned-jobs/pages/view-comment/view-comment.component';
+import { ViewCommentComponent } from 'src/app/shared/components/view-comment/view-comment.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { NotificationService } from 'src/app/core/services/notification.service';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
@@ -257,9 +257,14 @@ export class ApproveDealComponent implements OnInit {
     });
   }
 
+  get reviewComment(): string {
+    const comments = this.data?.quoteData?.dealData?.comments || [];
+    return comments.length ? String(comments[comments.length - 1] || '').trim() : '';
+  }
+
   openReview() {
     this._dialog.open(ViewCommentComponent, {
-      data: { comment: this.data.quoteData.dealData.comments[0] },
+      data: { comment: this.reviewComment || 'No comment recorded.' },
       width: '500px',
     });
   }

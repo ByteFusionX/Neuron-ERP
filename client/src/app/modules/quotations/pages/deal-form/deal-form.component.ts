@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NgClass, NgFor, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
+import { ToastrService } from 'ngx-toastr';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { dealData, Quotatation } from 'src/app/shared/interfaces/quotation.interface';
@@ -30,6 +31,7 @@ export class DealFormComponent implements OnInit, OnChanges {
   private fb = inject(FormBuilder);
   private quoteService = inject(QuotationService);
   private supplierService = inject(SupplierService);
+  private toastr = inject(ToastrService);
 
   /** Last quotation shown. Kept after `quotation` is cleared so the panel content survives the slide-out. */
   q: Quotatation | null = null;
@@ -60,6 +62,7 @@ export class DealFormComponent implements OnInit, OnChanges {
   costAdjustment = 0;
   discountAdjustment = 0;
   selectedCount = 0;
+  lineTotal = 0;
   lineCount = 0;
   allSelected = false;
   /** Blocks "Next". */
@@ -103,7 +106,7 @@ export class DealFormComponent implements OnInit, OnChanges {
   get issues(): string[] { return this.step === 1 ? this.lineIssues : this.termIssues; }
 
   private buildForm(): void {
-    // The quoted numbers are the starting point. Suppliers are chosen here, so none are carried over;
+    // The quoted numbers are the starting point. Suppliers awarded in an RFQ are carried over, others are chosen here;
     // optional items the customer did not include never reach the deal.
     this.seed = this.q!.optionalItems.map((option) => ({
       totalDiscount: option.totalDiscount,
@@ -121,14 +124,17 @@ export class DealFormComponent implements OnInit, OnChanges {
             profit: d.profit,
             unitSellingPrice: d.unitSellingPrice,
             availability: d.availability,
-            supplierId: null,
+            // The supplier awarded in the RFQ is kept as the starting point; it can still be changed here.
+            supplierId: ((d as any).supplierId?._id ?? (d as any).supplierId) || null,
             uom: d.uom,
+            dealSelected: true,
           })),
         })),
     }));
 
     this.form = this.fb.group({
-      paymentTerms: ['', Validators.required],
+      // Starts from the terms already agreed on the quote; the approver sees exactly what is typed here.
+      paymentTerms: [String(this.q!.paymentTerms ?? '').slice(0, 200), Validators.required],
       optionalItems: this.fb.array([]),
       costs: this.fb.array([]),
       attachments: [[] as File[]],
@@ -229,7 +235,9 @@ export class DealFormComponent implements OnInit, OnChanges {
     const costs = v.costs as DealCost[];
     const sum = (type: string) => costs.filter((c) => c.type === type).reduce((s, c) => s + (Number(c.value) || 0), 0);
     this.costAdjustment = sum('Additional Cost') - sum('Supplier Discount');
-    this.discountAdjustment = sum('Customer Discount');
+    // The discount quoted to the customer is part of the deal value too, so the summary matches what is saved.
+    this.discountAdjustment = sum('Customer Discount') + (Number(option?.totalDiscount) || 0);
+    this.lineTotal = lines.filter((l) => l.selected).reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitSellingPrice) || 0), 0);
     this.lineCount = lines.length;
     this.selectedCount = lines.filter((l) => l.selected).length;
     this.allSelected = this.lineCount > 0 && this.selectedCount === this.lineCount;
@@ -247,13 +255,16 @@ export class DealFormComponent implements OnInit, OnChanges {
     const termIssues: string[] = [];
     if (!String(v.paymentTerms ?? '').trim()) termIssues.push('Enter the payment terms');
     if (this.costs.invalid) termIssues.push('Complete the adjustment rows');
+    if (this.discountAdjustment > this.lineTotal + Math.max(this.costAdjustment, 0)) termIssues.push('Discounts cannot be more than the deal total');
     this.termIssues = termIssues;
   }
 
   next(): void {
-    this.form.markAllAsTouched();
+    // Only the lines are being checked here; the terms on step 2 should not show "required" before anyone has seen them.
+    this.optionalItems.markAllAsTouched();
     this.recompute();
     if (!this.lineIssues.length) this.step = 2;
+    else this.toastr.warning(this.lineIssues[0]);
   }
 
   back(): void { this.step = 1; }
@@ -261,7 +272,9 @@ export class DealFormComponent implements OnInit, OnChanges {
   onSubmit(): void {
     this.form.markAllAsTouched();
     this.recompute();
-    if (this.lineIssues.length || this.termIssues.length || this.saving || !this.q?._id) return;
+    const blocking = [...this.lineIssues, ...this.termIssues];
+    if (blocking.length && !this.saving) this.toastr.warning(blocking[0]);
+    if (blocking.length || this.saving || !this.q?._id) return;
     this.saving = true;
     this.quoteService.saveDealSheet(this.buildFormData() as unknown as dealData, this.q._id).subscribe({
       next: (res) => {

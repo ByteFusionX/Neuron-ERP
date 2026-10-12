@@ -3,6 +3,7 @@
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Deal Sheets"
+        subtitle="Track pending, approved, rejected and revoked deals"
         rowKey="_id"
         [serverSide]="true"
         [totalCount]="total"
@@ -63,6 +64,12 @@
                         [documents]="dealDocuments(row)"
                         (open)="onDealDocPreview(row, $event)"
                         (download)="onDealDocDownload(row, $event)"></app-detail-documents>
+                </ng-container>
+
+                <ng-container *ngSwitchCase="'comments'">
+                    <app-detail-comments
+                        [comments]="dealComments(row)"
+                        emptyMessage="No deal comments recorded yet."></app-detail-comments>
                 </ng-container>
 
                 <ng-container *ngSwitchCase="'history'">
