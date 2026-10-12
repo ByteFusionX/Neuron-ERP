@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, Subject, filter } from 'rxjs';
 import { Filters, Metric, ProfitPerMonth, RevenuePerPerson, SalesConversion } from 'src/app/shared/interfaces/dasbhoard.interface';
 import { RangeTarget } from 'src/app/shared/interfaces/employee.interface';
+import { DashboardPreferences, SalesDashboard, SalesDashboardFilters } from 'src/app/shared/interfaces/sales-dashboard.interface';
 
 import { environment } from 'src/environments/environment';
 
@@ -41,6 +42,22 @@ export class DashboardService {
     reAssignedpresaleConvesion$ = this.reAssignedpresalesConvesionSubject.asObservable();
 
     constructor(private http: HttpClient) { }
+
+    getSalesDashboard(filters: SalesDashboardFilters): Observable<SalesDashboard> {
+        return this.http.post<SalesDashboard>(`${this.apiUrl}/dashboard/sales`, filters);
+    }
+
+    getDashboardPreferences(dashboard: string): Observable<DashboardPreferences> {
+        return this.http.get<DashboardPreferences>(`${this.apiUrl}/dashboard/preferences/${dashboard}`);
+    }
+
+    saveDashboardPreferences(dashboard: string, prefs: DashboardPreferences): Observable<DashboardPreferences> {
+        return this.http.put<DashboardPreferences>(`${this.apiUrl}/dashboard/preferences/${dashboard}`, prefs);
+    }
+
+    resetDashboardPreferences(dashboard: string): Observable<DashboardPreferences> {
+        return this.http.delete<DashboardPreferences>(`${this.apiUrl}/dashboard/preferences/${dashboard}`);
+    }
 
     getDashboardMetrics(filters: Filters): Observable<Metric[]> {
         return this.http.post<Metric[]>(`${this.apiUrl}/dashboard/metrics`, { filters })

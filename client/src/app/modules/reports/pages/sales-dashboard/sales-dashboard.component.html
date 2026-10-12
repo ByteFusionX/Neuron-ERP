@@ -1,3 +1,500 @@
-<div class="p-6">
-  <h1 class="text-xl font-semibold">Sales Dashboard</h1>
+<div class="sd">
+  <!-- Header -->
+  <header class="sd-head">
+    <div class="min-w-0">
+      <div class="flex flex-wrap items-center gap-2">
+        <h1 class="sd-title">Sales dashboard</h1>
+        <span *ngIf="data" class="sd-chip" title="What you can see is set by your report access and who reports to you">
+          <ng-icon name="heroUserGroup" class="h-3.5 w-3.5"></ng-icon>{{ data.scope.label }}
+        </span>
+      </div>
+      <p class="sd-sub">
+        <ng-container *ngIf="data">{{ periodLabel }} · compared with {{ prevLabel }}</ng-container>
+        <ng-container *ngIf="!data">{{ loading ? 'Loading…' : 'No data' }}</ng-container>
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="sd-seg" role="group" aria-label="Currency">
+        <button type="button" [class.on]="currency === 'QAR'" (click)="setCurrency('QAR')">QAR</button>
+        <button type="button" [class.on]="currency === 'USD'" (click)="setCurrency('USD')">USD</button>
+      </div>
+      <button type="button" class="sd-btn" (click)="customizing = true" [disabled]="!data" title="Choose sections, their order and your default view">
+        <ng-icon name="heroAdjustmentsHorizontal" class="h-4 w-4"></ng-icon>Customize
+        <span *ngIf="hiddenCount" class="sd-btn-badge">{{ hiddenCount }} hidden</span>
+      </button>
+      <button type="button" class="sd-icon-btn" (click)="refresh()" [disabled]="loading" title="Refresh">
+        <ng-icon name="heroArrowPath" class="h-4 w-4" [class.animate-spin]="loading"></ng-icon>
+      </button>
+    </div>
+    <span *ngIf="loading" class="sd-progress" role="progressbar" aria-label="Updating"></span>
+  </header>
+
+  <!-- Filter bar -->
+  <section class="sd-filters">
+    <div class="sd-presets">
+      <button *ngFor="let p of presets" type="button" [class.on]="preset === p.key" (click)="applyPreset(p.key)">{{ p.label }}</button>
+    </div>
+    <div class="sd-filter-fields">
+      <ng-container *ngIf="preset === 'custom'">
+        <app-sf-date class="sd-date" [(ngModel)]="from" (ngModelChange)="onCustomDate()" displayFormat="dd/MM/yy"></app-sf-date>
+        <span class="text-xs text-gray-400">to</span>
+        <app-sf-date class="sd-date" [(ngModel)]="to" (ngModelChange)="onCustomDate()" displayFormat="dd/MM/yy"></app-sf-date>
+      </ng-container>
+      <app-sf-combobox *ngIf="data?.scope?.canPickPerson" class="sd-combo" [(ngModel)]="salesPerson" (ngModelChange)="refresh()"
+        [options]="data?.options?.people || []" placeholder="All salespeople"></app-sf-combobox>
+      <app-sf-combobox class="sd-combo" [(ngModel)]="customer" (ngModelChange)="refresh()"
+        [options]="data?.options?.customers || []" placeholder="All customers"></app-sf-combobox>
+      <button *ngIf="hasNarrowing" type="button" class="sd-link" (click)="clearNarrowing()">Clear</button>
+    </div>
+    <p *ngIf="dateError" class="sd-date-error" role="alert">{{ dateError }}</p>
+  </section>
+
+  <div *ngIf="error" class="sd-error">
+    <ng-icon name="heroExclamationCircle" class="h-5 w-5 shrink-0"></ng-icon>
+    <span>{{ error }}</span>
+    <button type="button" class="sd-link ml-auto" (click)="refresh()">Try again</button>
+  </div>
+
+  <!-- Skeleton -->
+  <ng-container *ngIf="!data && loading">
+    <div class="sd-grid-kpi">
+      <div class="sd-skel h-44 sd-hero-span"></div>
+      <div *ngFor="let i of [1,2,3,4,5,6]" class="sd-skel h-[6.5rem]"></div>
+    </div>
+    <div class="mt-4 grid gap-4 lg:grid-cols-5">
+      <div class="sd-skel h-80 lg:col-span-3"></div>
+      <div class="sd-skel h-80 lg:col-span-2"></div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="data">
+    <div class="sd-body" [class.sd-dim]="loading">
+
+      <!-- Sections in the user's order; widths are packed into 12-column rows by buildLayout() -->
+      <div class="sd-layout">
+      <div *ngFor="let s of layout; trackBy: trackKey" class="sd-slot" [style.--span]="s.span" [ngSwitch]="s.key">
+
+      <!-- KPI strip: one hero (won revenue) + the supporting tiles the user kept -->
+      <section *ngSwitchCase="'kpis'" class="sd-grid-kpi" [class.sd-hero-only]="!visibleKpis.length" [style.--kpi-cols]="2 + Math.ceil(visibleKpis.length / 2)">
+        <article class="sd-hero sd-hero-span" *ngIf="hero">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="sd-hero-label">Won revenue</p>
+              <p class="sd-hero-value">{{ hero.value }} <span>{{ currency }}</span></p>
+              <p class="sd-hero-meta">
+                {{ hero.count }} {{ hero.count === 1 ? 'deal' : 'deals' }} closed
+                <span *ngIf="hero.delta" class="sd-hero-delta" [ngClass]="hero.delta.tone">
+                  <ng-icon [name]="hero.delta.tone === 'down' ? 'heroArrowDown' : 'heroArrowUp'" *ngIf="hero.delta.tone !== 'flat'" class="h-3 w-3"></ng-icon>
+                  {{ hero.delta.text }}
+                </span>
+              </p>
+            </div>
+            <span class="sd-hero-icon"><ng-icon name="heroBanknotes" class="h-5 w-5"></ng-icon></span>
+          </div>
+          <div class="sd-spark" *ngIf="spark">
+            <apx-chart [series]="spark.series" [chart]="spark.chart" [stroke]="spark.stroke" [fill]="spark.fill" [tooltip]="spark.tooltip" [colors]="spark.colors"></apx-chart>
+          </div>
+          <p class="sd-hero-foot">Compared period: {{ hero.prev }} · monthly trend</p>
+        </article>
+
+        <article *ngFor="let k of visibleKpis; trackBy: trackKey" class="sd-kpi" [title]="k.hint">
+          <div class="flex items-center justify-between">
+            <span class="sd-kpi-label">{{ k.label }}</span>
+            <span class="sd-kpi-icon"><ng-icon [name]="k.icon" class="h-4 w-4"></ng-icon></span>
+          </div>
+          <p class="sd-kpi-value">{{ k.value }}<span *ngIf="k.unit"> {{ k.unit }}</span></p>
+          <div class="flex items-center justify-between gap-2">
+            <span class="sd-kpi-sub">{{ k.sub }}</span>
+            <span *ngIf="k.delta" class="sd-delta" [ngClass]="k.delta.tone">{{ k.delta.text }}</span>
+          </div>
+        </article>
+      </section>
+
+        <article *ngSwitchCase="'funnel'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Conversion funnel</h2>
+              <p>Enquiries created in the period and how far each got. Counts here can differ from Won revenue above, which counts quotes by the date they were won.</p>
+            </div>
+          </header>
+          <div class="sd-funnel">
+            <div *ngFor="let s of data.funnel; let i = index; trackBy: trackKey" class="sd-funnel-row">
+              <div class="sd-funnel-label">
+                <span>{{ s.label }}</span>
+                <span *ngIf="i > 0 && stepRate(i)" class="sd-funnel-rate">{{ stepRate(i) }}</span>
+              </div>
+              <div class="sd-funnel-track">
+                <div class="sd-funnel-bar" [style.width.%]="funnelWidth(s.count)" [style.--i]="i">
+                  <span class="sd-funnel-count">{{ s.count }}</span>
+                </div>
+              </div>
+              <span class="sd-funnel-value">{{ funnelValueShown(i) ? money(s.value) : '' }}</span>
+            </div>
+          </div>
+          <div *ngIf="leak" class="sd-insight">
+            <ng-icon name="heroArrowTrendingUp" class="h-4 w-4 shrink-0 rotate-90"></ng-icon>
+            <span>Biggest drop is <strong>{{ leak.from }} → {{ leak.to }}</strong>: {{ leak.lost }} of them stopped there ({{ leak.drop }}% fall-off).</span>
+          </div>
+          <p *ngIf="!data.funnel[0].count" class="sd-empty">No enquiries were created in this period.</p>
+        </article>
+
+        <article *ngSwitchCase="'attention'" class="sd-card flex flex-col">
+          <header class="sd-card-head">
+            <div>
+              <h2>Needs attention <span class="sd-count" [class.zero]="!attentionTotal">{{ attentionTotal }}</span></h2>
+              <p>Live right now, not limited to the period</p>
+            </div>
+          </header>
+          <div class="sd-attn">
+            <div *ngFor="let g of attentionGroups; trackBy: trackKey" class="sd-attn-group" [class.open]="openGroup === g.key">
+              <button type="button" class="sd-attn-head" (click)="toggleGroup(g.key)" [attr.aria-expanded]="openGroup === g.key">
+                <span class="sd-attn-icon" [ngClass]="g.tone"><ng-icon [name]="g.icon" class="h-4 w-4"></ng-icon></span>
+                <span class="min-w-0 flex-1 text-left">
+                  <span class="sd-attn-label">{{ g.label }}</span>
+                  <span class="sd-attn-hint">{{ g.hint }}</span>
+                </span>
+                <span class="sd-attn-num" [ngClass]="g.tone">{{ g.count }}</span>
+                <ng-icon name="heroChevronDown" class="sd-attn-chev h-4 w-4"></ng-icon>
+              </button>
+              <div *ngIf="openGroup === g.key" class="sd-attn-items">
+                <a *ngFor="let it of g.items" class="sd-attn-item" [routerLink]="it.link" [queryParams]="it.query || null">
+                  <span class="min-w-0 flex-1">
+                    <span class="sd-attn-ref">{{ it.ref }}</span>
+                    <span class="sd-attn-title">{{ it.customer }}<ng-container *ngIf="it.title"> · {{ it.title }}</ng-container></span>
+                    <span class="sd-attn-meta">{{ it.owner }}<ng-container *ngIf="it.note"> · {{ it.note }}</ng-container></span>
+                  </span>
+                  <span class="text-right shrink-0">
+                    <span *ngIf="it.value" class="sd-attn-value">{{ money(it.value) }}</span>
+                    <span class="sd-attn-age">{{ ageText(it.date, g.key) }}</span>
+                  </span>
+                </a>
+                <a *ngIf="g.count > g.items.length" class="sd-attn-more" [routerLink]="g.viewAll.link" [queryParams]="g.viewAll.query || null">
+                  View all {{ g.count }} →
+                </a>
+              </div>
+            </div>
+            <div *ngIf="!attentionGroups.length" class="sd-allclear">
+              <span class="sd-allclear-icon"><ng-icon name="heroCheckCircle" class="h-6 w-6"></ng-icon></span>
+              <p class="font-medium">All clear</p>
+              <p class="text-xs">Nothing is stuck right now.</p>
+            </div>
+          </div>
+          <p *ngIf="attentionGroups.length && quietGroups.length" class="sd-quiet">
+            <ng-icon name="heroCheck" class="h-3.5 w-3.5"></ng-icon>
+            {{ quietGroups.length }} other check{{ quietGroups.length === 1 ? '' : 's' }} clear
+          </p>
+        </article>
+
+        <article *ngSwitchCase="'trend'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Monthly trend</h2>
+              <p>Quoted and won value per month ({{ currency }}), with win rate</p>
+            </div>
+          </header>
+          <apx-chart *ngIf="trendChart" [series]="trendChart.series" [chart]="trendChart.chart" [xaxis]="trendChart.xaxis" [yaxis]="trendChart.yaxis"
+            [stroke]="trendChart.stroke" [fill]="trendChart.fill" [grid]="trendChart.grid" [legend]="trendChart.legend" [tooltip]="trendChart.tooltip"
+            [dataLabels]="trendChart.dataLabels" [plotOptions]="trendChart.plotOptions" [colors]="trendChart.colors"></apx-chart>
+        </article>
+
+        <article *ngSwitchCase="'people'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Salespeople</h2>
+              <p>Period results, plus what each person has open now<ng-container *ngIf="data.scope.canPickPerson"> · click a row to focus</ng-container></p>
+            </div>
+            <div class="sd-seg sm">
+              <button type="button" [class.on]="peopleSort === 'wonValue'" (click)="peopleSort = 'wonValue'">Won</button>
+              <button type="button" [class.on]="peopleSort === 'pipeline'" (click)="peopleSort = 'pipeline'">Pipeline</button>
+              <button type="button" [class.on]="peopleSort === 'winRate'" (click)="peopleSort = 'winRate'">Win rate</button>
+              <button type="button" [class.on]="peopleSort === 'quotes'" (click)="peopleSort = 'quotes'">Activity</button>
+            </div>
+          </header>
+          <div class="overflow-x-auto">
+            <table class="sd-table">
+              <thead>
+                <tr>
+                  <th>Salesperson</th>
+                  <th class="num">Enq.</th>
+                  <th class="num">Quotes</th>
+                  <th>Won</th>
+                  <th class="num">Win rate</th>
+                  <th class="num">Pipeline</th>
+                  <th class="num" title="Customer discount on quotes created in the period, as % of list price">Discount</th>
+                  <th class="num" title="Average days from enquiry to quote sent">TAT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let p of sortedPeople; trackBy: trackKey" [class.clickable]="data.scope.canPickPerson" [class.focused]="salesPerson === p.id" (click)="focusPerson(p.id)">
+                  <td>
+                    <div class="flex items-center gap-2.5">
+                      <span class="sd-avatar" [ngClass]="avatarTone(p.name)">{{ initials(p.name) }}</span>
+                      <span class="font-medium truncate">{{ p.name }}</span>
+                    </div>
+                  </td>
+                  <td class="num">{{ p.enquiries }}</td>
+                  <td class="num">{{ p.quotes }}</td>
+                  <td class="min-w-[9rem]">
+                    <div class="flex items-center gap-2">
+                      <div class="sd-minibar"><span [style.width.%]="(p.wonValue / peopleMaxWon) * 100"></span></div>
+                      <span class="tabular-nums text-xs font-semibold whitespace-nowrap">{{ money(p.wonValue) }}</span>
+                    </div>
+                    <span class="text-[11px] text-gray-400">{{ p.won }} won · {{ p.lost }} lost</span>
+                  </td>
+                  <td class="num"><span class="sd-pill" [ngClass]="winTone(p.winRate)">{{ pct(p.winRate) }}</span></td>
+                  <td class="num">{{ money(p.pipeline) }}<span class="block text-[11px] text-gray-400">{{ p.pipelineCount }} open</span></td>
+                  <td class="num" [title]="p.discounted + ' of ' + p.quotes + ' quotes discounted'">
+                    <span class="sd-pill" [ngClass]="discountTone(p.discountPct)">{{ pct(p.discountPct) }}</span>
+                    <span *ngIf="p.discount" class="block text-[11px] text-gray-400">{{ money(p.discount) }}</span>
+                  </td>
+                  <td class="num">{{ daysText(p.turnaround) }}<span *ngIf="p.turnaround != null" class="text-gray-400">d</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <p *ngIf="!data.people.length" class="sd-empty">No sales activity in this period.</p>
+          </div>
+        </article>
+
+        <article *ngSwitchCase="'aging'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Pipeline age</h2>
+              <p>Open quotes by days since they were sent</p>
+            </div>
+          </header>
+          <p *ngIf="peopleEmpty" class="sd-empty">No open quotes are waiting on a customer.</p>
+          <div class="sd-aging" *ngIf="!peopleEmpty">
+            <div *ngFor="let a of data.aging; let i = index" class="sd-aging-row">
+              <span class="sd-aging-label">{{ a.label }}</span>
+              <div class="sd-aging-track"><span [style.width.%]="(a.value / agingMax) * 100" [attr.data-band]="i"></span></div>
+              <span class="sd-aging-val">{{ money(a.value) }}<small>{{ a.count }}</small></span>
+            </div>
+          </div>
+          <p class="sd-note">Quotes older than 30 days rarely close; chase them or mark them lost so the pipeline stays honest.</p>
+        </article>
+
+        <article *ngSwitchCase="'customers'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Top customers</h2>
+              <p>Won in the period and open pipeline · click to focus</p>
+            </div>
+            <div class="sd-legend"><span class="won"></span>Won <span class="pipe"></span>Pipeline</div>
+          </header>
+          <div *ngIf="data.concentration.risk !== 'none'" class="sd-conc" [attr.data-risk]="data.concentration.risk">
+            <ng-icon [name]="data.concentration.risk === 'low' ? 'heroCheckCircle' : 'heroExclamationTriangle'" class="h-4 w-4 shrink-0"></ng-icon>
+            <p>
+              <strong>{{ data.concentration.risk === 'high' ? 'High' : data.concentration.risk === 'medium' ? 'Moderate' : 'Low' }} concentration.</strong>
+              {{ data.concentration.top1Name }} is {{ pct(data.concentration.top1Share) }} of won revenue;
+              the top {{ data.concentration.wonCustomers < 5 ? data.concentration.wonCustomers : 5 }} make {{ pct(data.concentration.top5Share) }}.
+            </p>
+          </div>
+          <div class="sd-cust sd-cust-scroll">
+            <button *ngFor="let c of data.customers; trackBy: trackKey" type="button" class="sd-cust-row" [class.focused]="customer === c.id" (click)="focusCustomer(c.id)">
+              <span class="sd-cust-name">{{ c.name }}</span>
+              <span class="sd-cust-bar">
+                <span class="won" [style.width.%]="(c.wonValue / customersMax) * 100"></span>
+                <span class="pipe" [style.width.%]="(c.pipeline / customersMax) * 100"></span>
+              </span>
+              <span class="sd-cust-val">{{ money(c.wonValue + c.pipeline) }}<small *ngIf="c.share" title="Share of won revenue">{{ pct(c.share) }} of won</small></span>
+              <span class="sd-pill" [ngClass]="winTone(c.winRate)" title="Win rate: {{ c.won }} won · {{ c.lost }} lost">{{ pct(c.winRate) }}</span>
+            </button>
+            <p *ngIf="!data.customers.length" class="sd-empty">No customer activity in this period.</p>
+          </div>
+        </article>
+
+        <article *ngSwitchCase="'lost'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Why we lose</h2>
+              <p>{{ lostTotal }} quote{{ lostTotal === 1 ? '' : 's' }} lost in the period, by reason</p>
+            </div>
+          </header>
+          <div class="sd-lost">
+            <div *ngFor="let r of data.lostReasons" class="sd-lost-row">
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="sd-lost-reason">{{ r.reason }}</span>
+                <span class="sd-lost-val">{{ money(r.value) }} <small>· {{ r.count }}</small></span>
+              </div>
+              <div class="sd-lost-track"><span [style.width.%]="(r.value / lostMax) * 100"></span></div>
+              <p *ngIf="r.competitors.length" class="sd-lost-comp">Went to {{ r.competitors.join(', ') }}</p>
+            </div>
+            <div *ngIf="!data.lostReasons.length" class="sd-allclear">
+              <span class="sd-allclear-icon"><ng-icon name="heroCheckCircle" class="h-6 w-6"></ng-icon></span>
+              <p class="font-medium">No losses in this period</p>
+            </div>
+          </div>
+        </article>
+
+        <article *ngSwitchCase="'margin'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Margin</h2>
+              <p>Selling price after discount less line cost, on quotes won in the period</p>
+            </div>
+            <div class="sd-margin-head">
+              <span class="sd-margin-big" [ngClass]="marginTone(data.margin.marginPct)">{{ pct(data.margin.marginPct) }}</span>
+              <span class="text-xs text-gray-500">{{ money(data.margin.margin) }} {{ currency }} on {{ money(data.margin.value) }}</span>
+            </div>
+          </header>
+          <p *ngIf="data.margin.missingCost" class="sd-note mt-0 mb-3">{{ plural(data.margin.missingCost, 'won quote') }} {{ data.margin.missingCost === 1 ? 'has' : 'have' }} no cost entered and show 100% margin.</p>
+          <div class="grid gap-6 lg:grid-cols-2">
+            <div>
+              <h3 class="sd-sub">By product</h3>
+              <div class="overflow-x-auto">
+                <table class="sd-table">
+                  <thead>
+                    <tr><th>Product</th><th class="num">Sold</th><th class="num">Margin</th><th class="num">%</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let p of data.margin.products">
+                      <td><span class="font-medium">{{ p.name }}</span><span class="block text-[11px] text-gray-400">{{ plural(p.quotes, 'quote') }}</span></td>
+                      <td class="num">{{ money(p.value) }}</td>
+                      <td class="num">{{ money(p.margin) }}</td>
+                      <td class="num"><span class="sd-pill" [ngClass]="marginTone(p.marginPct)">{{ pct(p.marginPct) }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p *ngIf="!data.margin.products.length" class="sd-empty">Nothing won in this period.</p>
+              </div>
+            </div>
+            <div>
+              <h3 class="sd-sub">Low-margin orders <span class="text-gray-400 font-normal">· under {{ data.margin.threshold }}%, won or still open · {{ data.margin.lowCount }}</span></h3>
+              <div class="sd-low-list">
+                <a *ngFor="let q of data.margin.low" [routerLink]="q.link" class="sd-low-row">
+                  <div class="min-w-0">
+                    <span class="font-medium">{{ q.ref }}</span>
+                    <span class="block truncate text-[11px] text-gray-500">{{ q.customer }} · {{ q.owner }} · {{ q.status }}</span>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <span class="sd-pill" [ngClass]="marginTone(q.marginPct)">{{ pct(q.marginPct) }}</span>
+                    <span class="block text-[11px] text-gray-500 tabular-nums">{{ money(q.margin) }} on {{ money(q.value) }}</span>
+                  </div>
+                </a>
+                <div *ngIf="!data.margin.low.length" class="sd-allclear">
+                  <span class="sd-allclear-icon"><ng-icon name="heroCheckCircle" class="h-6 w-6"></ng-icon></span>
+                  <p class="font-medium">No low-margin orders</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article *ngSwitchCase="'sizes'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Win rate by deal size</h2>
+              <p>Are we winning the small deals and losing the big ones? ({{ currency === 'USD' ? 'bands in QAR' : 'QAR' }})</p>
+            </div>
+          </header>
+          <div class="sd-sizes">
+            <div *ngFor="let s of data.dealSizes" class="sd-size">
+              <div class="sd-size-col">
+                <span class="sd-size-fill" [ngClass]="winTone(s.winRate)" [style.height.%]="s.winRate ?? 0"></span>
+              </div>
+              <span class="sd-size-rate">{{ pct(s.winRate) }}</span>
+              <span class="sd-size-label">{{ s.label }}</span>
+              <span class="sd-size-meta">{{ s.won }}W · {{ s.lost }}L</span>
+            </div>
+          </div>
+        </article>
+
+        <article *ngSwitchCase="'sources'" class="sd-card">
+          <header class="sd-card-head">
+            <div>
+              <h2>Where enquiries come from</h2>
+              <p>Enquiries in the period by source, and how many were quoted and won</p>
+            </div>
+          </header>
+          <div class="sd-src">
+            <div *ngFor="let s of data.sources" class="sd-src-row">
+              <span class="sd-src-label">{{ s.label }}</span>
+              <div class="sd-src-track">
+                <span class="all" [style.width.%]="(s.enquiries / sourcesMax) * 100"></span>
+                <span class="quoted" [style.width.%]="(s.quoted / sourcesMax) * 100"></span>
+                <span class="won" [style.width.%]="(s.won / sourcesMax) * 100"></span>
+              </div>
+              <span class="sd-src-val">{{ s.enquiries }}<small>{{ s.quoted }}q · {{ s.won }}w</small></span>
+            </div>
+            <p *ngIf="!data.sources.length" class="sd-empty">No enquiries in this period.</p>
+          </div>
+          <div class="sd-legend mt-3"><span class="all"></span>Enquiries <span class="quoted"></span>Quoted <span class="won"></span>Won</div>
+        </article>
+      </div>
+      </div>
+
+      <div *ngIf="!layout.length" class="sd-card sd-allhidden">
+        <p class="font-medium">Every section is hidden</p>
+        <button type="button" class="sd-link" (click)="customizing = true">Customize the dashboard</button>
+      </div>
+
+      <p class="sd-foot">
+        Counts use the created date; won and lost values use the date the quote was decided.
+        <ng-container *ngIf="currency === 'USD'">USD at {{ data.usdToQar | number:'1.2-4' }} QAR.</ng-container>
+        Updated {{ data.generatedAt | date:'shortTime' }}.
+      </p>
+    </div>
+  </ng-container>
+
+  <!-- Customize drawer -->
+  <ng-container *ngIf="customizing && data">
+    <div class="sd-drawer-backdrop" (click)="customizing = false"></div>
+    <aside class="sd-drawer" role="dialog" aria-label="Customize dashboard" (keydown.escape)="customizing = false">
+      <header class="sd-drawer-head">
+        <div>
+          <h2>Customize dashboard</h2>
+          <p>Saved to your account, so it follows you to any device.</p>
+        </div>
+        <button type="button" class="sd-icon-btn" (click)="customizing = false" title="Close"><ng-icon name="heroXMark" class="h-4 w-4"></ng-icon></button>
+      </header>
+
+      <div class="sd-drawer-body">
+        <section>
+          <h3>Sections</h3>
+          <p class="sd-drawer-hint">Drag to reorder, or use the arrows. Untick to hide.</p>
+          <ul class="sd-sec-list" cdkDropList (cdkDropListDropped)="dropSection($event)">
+            <li *ngFor="let s of orderedSections; let i = index; let first = first; let last = last" cdkDrag class="sd-sec" [class.off]="isHidden(s.key)">
+              <span cdkDragHandle class="sd-sec-grip" title="Drag to reorder"><ng-icon name="heroBars3" class="h-4 w-4"></ng-icon></span>
+              <label class="sd-sec-label">
+                <input type="checkbox" [checked]="!isHidden(s.key)" (change)="toggleSection(s.key)" />
+                <span>{{ s.label }}</span>
+              </label>
+              <button type="button" class="sd-sec-move" [disabled]="first" (click)="moveSection(i, -1)" [attr.aria-label]="'Move ' + s.label + ' up'"><ng-icon name="heroChevronUp" class="h-3.5 w-3.5"></ng-icon></button>
+              <button type="button" class="sd-sec-move" [disabled]="last" (click)="moveSection(i, 1)" [attr.aria-label]="'Move ' + s.label + ' down'"><ng-icon name="heroChevronDown" class="h-3.5 w-3.5"></ng-icon></button>
+            </li>
+          </ul>
+        </section>
+
+        <section [class.sd-muted-sec]="isHidden('kpis')">
+          <h3>Headline tiles</h3>
+          <p class="sd-drawer-hint">Won revenue always shows. Pick the tiles beside it.</p>
+          <div class="sd-kpi-picks">
+            <label *ngFor="let k of kpiOptions" class="sd-kpi-pick" [class.on]="!isKpiHidden(k.key)">
+              <input type="checkbox" [checked]="!isKpiHidden(k.key)" (change)="toggleKpi(k.key)" [disabled]="isHidden('kpis')" />{{ k.label }}
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <h3>Opening view</h3>
+          <p class="sd-drawer-hint">What the page shows when you open it without a shared link.</p>
+          <div class="sd-default">
+            <span *ngIf="hasSavedDefault"><strong>Saved:</strong> {{ savedDefaultText }}</span>
+            <span *ngIf="!hasSavedDefault" class="sd-faint">Not set: opens on This month, all salespeople and customers.</span>
+          </div>
+          <div class="mt-2 flex flex-wrap items-center gap-3">
+            <button type="button" class="sd-btn" (click)="saveCurrentAsDefault()">Use current view</button>
+            <button *ngIf="hasSavedDefault" type="button" class="sd-link" (click)="clearDefault()">Clear</button>
+          </div>
+          <p *ngIf="preset === 'custom'" class="sd-drawer-hint mt-2">Custom date ranges aren't saved; the page will open on This month.</p>
+        </section>
+      </div>
+
+      <footer class="sd-drawer-foot">
+        <button type="button" class="sd-link inline-flex items-center gap-1" (click)="resetLayout()"><ng-icon name="heroArrowUturnLeft" class="h-3.5 w-3.5"></ng-icon>Reset layout</button>
+        <button type="button" class="sd-btn primary" (click)="customizing = false">Done</button>
+      </footer>
+    </aside>
+  </ng-container>
 </div>
