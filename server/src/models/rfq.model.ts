@@ -119,7 +119,8 @@ export interface RfqQuote {
     detail: string;
     quantity: number;
     unitPrice?: number;
-    availability?: RfqAvailability;
+    /** A label from the Availability master list, or RfqAvailability.Unavailable. */
+    availability?: string;
     currency?: string;
     /** QAR per one unit of `currency`, captured when the price was entered; comparisons convert with it. */
     exchangeRate?: number;
@@ -300,7 +301,8 @@ const rfqQuoteSchema = new Schema<RfqQuote>({
         min: 0,
         required: function (this: RfqQuote) { return this.availability !== RfqAvailability.Unavailable; }
     },
-    availability: { type: String, enum: Object.values(RfqAvailability), default: RfqAvailability.Available },
+    // Free text from the Availability master list; only "Unavailable" has meaning of its own.
+    availability: { type: String, trim: true, default: RfqAvailability.Available },
     currency: { type: String, default: 'QAR' },
     exchangeRate: { type: Number, min: 0 },
     leadTimeDays: { type: Number, min: 0 },

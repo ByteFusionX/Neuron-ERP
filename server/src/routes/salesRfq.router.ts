@@ -17,6 +17,11 @@ import {
     updateSalesRfqSupplier,
     uploadSalesRfqSupplierFiles,
     createSalesRfqFromEnquiry,
+    createPurchaseRfqs,
+    getPurchaseRfqs,
+    getPurchaseRfqComparison,
+    awardPurchaseRfqLines,
+    importPurchaseSalesRfqs,
     getRfqPriceHistory,
     getSupplierProductHistory,
     getSalesRfqDraft,
@@ -38,7 +43,8 @@ const upload = require("../common/multer.storage");
 // Both sales (enquiry) and presale (assignedJob) people work on it.
 const salesRfqRouter = Router();
 
-salesRfqRouter.use(requireAnyPrivilege("enquiry", "assignedJob", "quotation"));
+// Buyers raise supplier RFQs from a purchase request, so the purchase module may use them too.
+salesRfqRouter.use(requireAnyPrivilege("enquiry", "assignedJob", "quotation", "purchase"));
 
 salesRfqRouter.post('/list', getSalesRfqs);
 salesRfqRouter.post('/summaries', getSalesRfqSummaries);
@@ -53,6 +59,11 @@ salesRfqRouter.post('/from-enquiry/:enquiryId', createSalesRfqFromEnquiry);
 salesRfqRouter.get('/enquiry/:enquiryId/compare', getEnquiryRfqComparison);
 salesRfqRouter.put('/enquiry/:enquiryId/award', awardEnquiryRfqLines);
 salesRfqRouter.post('/enquiry/:enquiryId/prepare-quotation', prepareQuotationFromEnquiryRfqs);
+salesRfqRouter.get('/purchase/:purchaseId', getPurchaseRfqs);
+salesRfqRouter.post('/from-purchase/:purchaseId', createPurchaseRfqs);
+salesRfqRouter.get('/purchase/:purchaseId/compare', getPurchaseRfqComparison);
+salesRfqRouter.put('/purchase/:purchaseId/award', awardPurchaseRfqLines);
+salesRfqRouter.post('/purchase/:purchaseId/import-sales', importPurchaseSalesRfqs);
 salesRfqRouter.get('/:id', getSalesRfqById);
 salesRfqRouter.put('/:id', updateSalesRfq);
 salesRfqRouter.post('/:id/cancel', cancelSalesRfq);

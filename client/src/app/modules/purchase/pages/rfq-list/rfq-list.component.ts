@@ -1,4 +1,5 @@
 import { CommonModule, DatePipe } from '@angular/common';
+import { InitiateLpoComponent } from 'src/app/modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { Component, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, Subscription } from 'rxjs';
@@ -30,7 +31,7 @@ const RFQ_BADGE_CLASSES: Record<string, string> = {
 
 @Component({
   selector: 'app-rfq-list',
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ActionButtonComponent, RfqCompareTabComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ActionButtonComponent, InitiateLpoComponent, RfqCompareTabComponent],
   providers: [DatePipe],
   templateUrl: './rfq-list.component.html',
   styleUrl: './rfq-list.component.css',
@@ -212,7 +213,7 @@ export class RfqListComponent {
 
   onRowAction(event: DataGridRowActionEvent<any>): void {
     if (event.action.id === 'manageOffers') this.openSupplierOffers(event.row);
-    if (event.action.id === 'initiatePo') this.router.navigate(['/purchase/initiate-lpo', event.row.purchaseRequestId?._id || event.row.purchaseRequestId]);
+    if (event.action.id === 'initiatePo') this.openInitiateLpo(event.row.purchaseRequestId?._id || event.row.purchaseRequestId);
   }
 
   openSupplierOffers(row: any, event?: Event): void {
@@ -288,5 +289,15 @@ export class RfqListComponent {
         ],
       },
     ];
+  }
+  /** Initiate LPO opens as a slide-over on top of the list. */
+  initiateLpoPurchaseId: string | null = null;
+
+  openInitiateLpo(purchaseId: string): void {
+    this.initiateLpoPurchaseId = purchaseId;
+  }
+
+  onInitiateLpoClosed(): void {
+    this.initiateLpoPurchaseId = null;
   }
 }

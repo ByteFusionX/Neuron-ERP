@@ -75,3 +75,5 @@
 
 <app-create-purchase *ngIf="editDrawerOpen" [drawer]="true" [editPurchaseId]="editDrawerPurchaseId" [sourceLocked]="true"
     (saved)="onEditDrawerSaved()" (closed)="onEditDrawerClosed()"></app-create-purchase>
+
+<app-initiate-lpo *ngIf="initiateLpoPurchaseId" [purchaseIdInput]="initiateLpoPurchaseId" (closed)="onInitiateLpoClosed()"></app-initiate-lpo>

@@ -31,28 +31,14 @@ export class PurchaseService {
     fromDate?: string;
     toDate?: string;
     search?: string;
+    sortKey?: string;
+    sortDir?: 'asc' | 'desc';
     sourceType?: string;
     poProgress?: 'ready' | 'remaining' | 'completed';
     rfqStatus?: 'not-started' | 'quoted' | 'awarded';
     allocation?: 'new';
   }): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-requests`, params, { context: context() });
-  }
-
-  getPurchaseAssignees(): Observable<any> {
-    return this.http.get<any>(`${this.api}/purchase/purchase-request/assignees`, { context: context() });
-  }
-
-  allocatePurchase(purchaseId: string, employeeId: string): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/allocate/${purchaseId}`, { employeeId }, { context: context() });
-  }
-
-  rejectAllocation(purchaseId: string, reason: string): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/reject-allocation/${purchaseId}`, { reason }, { context: context() });
-  }
-
-  resetAllocation(purchaseId: string): Observable<any> {
-    return this.http.patch<any>(`${this.api}/purchase/purchase-request/reset-allocation/${purchaseId}`, {}, { context: context() });
   }
 
   getRfqComparison(rfqId: string): Observable<any> {
@@ -68,10 +54,6 @@ export class PurchaseService {
     return this.http.post<any>(`${this.api}/purchase/rfq`, params, { context: context() });
   }
 
-  createRfqFromPurchase(purchaseId: string): Observable<any> {
-    return this.http.post<any>(`${this.api}/purchase/rfq/from-purchase/${purchaseId}`, {}, { context: context() });
-  }
-
   createPurchase(purchaseData: PurchaseData): Observable<any> {
     return this.http.post<any>(`${this.api}/purchase/purchase-request`, purchaseData)
   }
@@ -82,6 +64,11 @@ export class PurchaseService {
 
   updatePurchaseStatus(purchaseId: string, status: 'approved' | 'rejected', comment?: string): Observable<any> {
     return this.http.patch<any>(`${this.api}/purchase/purchase-request/status/${purchaseId}`, { status, comment }, { context: context() });
+  }
+
+  /** Super Admin restarts a pending PR's approval route; `stepRoleIds` are the stages that get another chance. */
+  resetPurchaseWorkflow(purchaseId: string, stepRoleIds: string[]): Observable<{ success: true; message: string }> {
+    return this.http.post<{ success: true; message: string }>(`${this.api}/purchase/purchase-request/reset-workflow/${purchaseId}`, { stepRoleIds }, { context: context() });
   }
 
   getApprovalsByEmployee(filters?: any): Observable<any> {

@@ -65,13 +65,16 @@ interface ChaseOpenItem {
           </li>
         </ul>
       </ng-container>
-      <div *ngIf="chaseable" class="flex flex-wrap gap-1.5">
-        <app-action-button *ngIf="inv.status === 'Not Sent'" variant="outline" (click)="markSent()">Mark sent</app-action-button>
-        <ng-container *ngIf="inv.status === 'Sent'">
-          <app-action-button variant="outline" (click)="logFollowUp()">{{ followUps.open ? 'Mark done' : 'Log follow-up' }}</app-action-button>
-          <app-action-button variant="outline" (click)="scheduleFollowUp()">{{ followUps.open ? 'Reschedule' : 'Schedule' }}</app-action-button>
+      <div class="flex flex-wrap gap-1.5">
+        <ng-container *ngIf="chaseable">
+          <app-action-button *ngIf="inv.status === 'Not Sent'" variant="outline" (click)="markSent()">Mark sent</app-action-button>
+          <ng-container *ngIf="inv.status === 'Sent'">
+            <app-action-button variant="outline" (click)="logFollowUp()">{{ followUps.open ? 'Mark done' : 'Log follow-up' }}</app-action-button>
+            <app-action-button variant="outline" (click)="scheduleFollowUp()">{{ followUps.open ? 'Reschedule' : 'Schedule' }}</app-action-button>
+          </ng-container>
+          <app-action-button *ngIf="inv.status === 'Not Sent' || inv.status === 'Sent'" variant="outline" (click)="decline()">Declined</app-action-button>
         </ng-container>
-        <app-action-button *ngIf="inv.status === 'Not Sent' || inv.status === 'Sent'" variant="outline" (click)="decline()">Declined</app-action-button>
+        <app-action-button *ngIf="rfq.status !== 'Cancelled'" variant="outline" (click)="exportSheet.emit()">Export</app-action-button>
       </div>
     </div>
   `,
@@ -82,6 +85,8 @@ export class RfqChaseComponent {
   @Input() allowed = true;
   /** Fires after any change, so the host re-reads its RFQ list. */
   @Output() changed = new EventEmitter<void>();
+  /** The host builds the request sheet (Excel) for this RFQ. */
+  @Output() exportSheet = new EventEmitter<void>();
 
   private salesRfqService = inject(SalesRfqService);
   private confirm = inject(ConfirmDialogService);

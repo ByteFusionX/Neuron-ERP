@@ -1,5 +1,5 @@
 <app-sf-drawer [title]="isEdit ? (rfq?.rfqNo || 'Supplier RFQ') : 'New supplier RFQ'"
-    [subtitle]="isEdit ? 'Update the lines and enter the prices this supplier gave' : 'Find each product, check stock, and ask suppliers only for what is missing'"
+    [subtitle]="isEdit ? 'Update the lines and enter the prices this supplier gave' : purchaseId ? 'Pick the supplier for these products. Add more supplier tabs to ask others for the same products' : 'Find each product, check stock, and ask suppliers only for what is missing'"
     width="min(1320px, 97vw)" [open]="open" [dirty]="dirty" (closed)="onDrawerClosed()">
 
   <div *ngIf="loading" class="text-sm text-gray-500">Loading…</div>
@@ -8,41 +8,60 @@
   <ng-container *ngIf="!loading && !loadError && seed">
     <!-- header banner: the enquiry, the supplier (edit) and the terms asked for -->
     <section class="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-erp-border-dark dark:bg-erp-surface-dark">
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <div class="min-w-0">
-          <p class="text-xs uppercase tracking-wide text-gray-400">Enquiry</p>
-          <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ enquiry?.enquiryId || '-' }}</p>
+      <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+        <div class="w-48">
+          <div class="text-xs text-gray-500 dark:text-gray-400">{{ purchase ? 'Purchase request' : 'Enquiry' }}</div>
+          <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ purchase?.purchaseNo || enquiry?.enquiryId || '-' }}</div>
         </div>
-        <div class="min-w-0">
-          <p class="text-xs uppercase tracking-wide text-gray-400">Customer</p>
-          <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{{ enquiry?.client?.companyName || rfq?.customerId?.companyName || '-' }}</p>
+        <div *ngIf="!purchase" class="w-64">
+          <div class="text-xs text-gray-500 dark:text-gray-400">Customer</div>
+          <div class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{{ enquiry?.client?.companyName || rfq?.customerId?.companyName || '-' }}</div>
         </div>
-        <div *ngIf="!isEdit" class="min-w-0 flex-1">
-          <p class="text-xs uppercase tracking-wide text-gray-400">Enquiry title</p>
-          <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100" [title]="enquiry?.title || ''">{{ enquiry?.title || '-' }}</p>
+        <div *ngIf="!isEdit && !purchase" class="min-w-[12rem] flex-1">
+          <div class="text-xs text-gray-500 dark:text-gray-400">Enquiry title</div>
+          <div class="truncate text-sm text-gray-900 dark:text-gray-100">{{ enquiry?.title || '-' }}</div>
         </div>
         <!-- edit: one supplier per RFQ, read-only here — swapping supplier would drop its prices/replies -->
-        <div *ngIf="isEdit" class="min-w-0 flex-1">
-          <p class="text-xs uppercase tracking-wide text-gray-400">Supplier</p>
-          <p class="truncate text-sm font-semibold text-gray-900 dark:text-gray-100" [title]="invite?.supplierName">
+        <div *ngIf="isEdit" class="min-w-[12rem] flex-1">
+          <div class="text-xs text-gray-500 dark:text-gray-400">Supplier</div>
+          <div class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
             {{ invite?.supplierName || '-' }}
-            <span *ngIf="invite?.isSupplierApproved === false" class="ml-1 text-xs font-normal text-amber-700 dark:text-amber-300">Pending approval</span>
-            <span *ngIf="invite?.contactEmail" class="ml-1 text-xs font-normal text-gray-500 dark:text-gray-400">{{ invite?.contactEmail }}</span>
-          </p>
+            <span *ngIf="invite?.isSupplierApproved === false" class="ml-1 text-xs font-normal text-amber-600 dark:text-amber-400">Pending approval</span>
+          </div>
         </div>
         <div class="ml-auto flex shrink-0 items-center gap-2 text-xs">
           <ng-container *ngIf="!isEdit">
             <span *ngIf="coveredCount && !stockLoading" class="rounded-lg bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">{{ coveredCount }} in stock</span>
           </ng-container>
           <span *ngIf="isEdit" class="rounded-lg bg-violet-50 px-2.5 py-1 font-medium text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">{{ statusLabel }}</span>
+          <button type="button" (click)="bannerOpen = !bannerOpen" [attr.aria-expanded]="bannerOpen"
+            [title]="bannerOpen ? 'Collapse details' : 'Expand details'"
+            class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 font-medium text-gray-600 hover:bg-gray-50 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-gray-800">
+            {{ bannerOpen ? 'Collapse' : 'Details' }}
+            <svg class="h-3.5 w-3.5 transition-transform" [class.rotate-180]="bannerOpen" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+          </button>
         </div>
       </div>
+      <ng-container *ngIf="bannerOpen">
       <p *ngIf="fromPresale" class="mt-2 text-xs text-sky-700 dark:text-sky-300">Lines were copied from the presale estimation. Adjust them if needed.</p>
       <p *ngIf="locked" class="mt-2 text-xs text-red-600 dark:text-red-400">This RFQ is {{ rfq?.status?.toLowerCase() }} and can no longer be changed.</p>
       <p *ngIf="isEdit && !invite" class="mt-2 text-xs text-amber-700 dark:text-amber-300">No supplier on this RFQ — prices cannot be entered. Raise a new RFQ with a supplier.</p>
 
+      <!-- the current supplier's master details -->
+      <div *ngIf="bannerSupplier as sup" class="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-gray-100 pt-3 text-sm dark:border-erp-border-dark sm:grid-cols-3 lg:grid-cols-6">
+        <h4 class="col-span-full text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Supplier details</h4>
+        <div><div class="text-xs text-gray-500 dark:text-gray-400">Supplier code</div><div class="truncate text-gray-900 dark:text-gray-100">{{ sup.code || '-' }}</div></div>
+        <div><div class="text-xs text-gray-500 dark:text-gray-400">Contact</div><div class="truncate text-gray-900 dark:text-gray-100">{{ sup.contactName || '-' }}</div></div>
+        <div><div class="text-xs text-gray-500 dark:text-gray-400">Phone</div><div class="truncate text-gray-900 dark:text-gray-100">{{ sup.contactPhone || '-' }}</div></div>
+        <div><div class="text-xs text-gray-500 dark:text-gray-400">Email</div><div class="truncate text-gray-900 dark:text-gray-100">{{ sup.contactEmail || sup.companyEmail || '-' }}</div></div>
+        <div><div class="text-xs text-gray-500 dark:text-gray-400">Credit days</div><div class="text-gray-900 dark:text-gray-100">{{ sup.creditDays != null ? sup.creditDays : '-' }}</div></div>
+        <div><div class="text-xs text-gray-500 dark:text-gray-400">Credit limit</div><div class="text-gray-900 dark:text-gray-100">{{ sup.creditLimit != null ? (sup.creditLimit | number: '1.0-2') : '-' }}</div></div>
+        <div *ngIf="sup.address" class="col-span-2 sm:col-span-3 lg:col-span-6"><div class="text-xs text-gray-500 dark:text-gray-400">Address</div><div class="text-gray-900 dark:text-gray-100">{{ sup.address }}</div></div>
+      </div>
+
       <!-- terms, deadline, notes -->
-      <div class="mt-3 grid grid-cols-1 gap-3 border-t border-gray-100 pt-3 text-sm dark:border-erp-border-dark sm:grid-cols-3">
+      <div class="mt-3 grid grid-cols-1 gap-3 border-t border-gray-100 pt-3 text-sm dark:border-erp-border-dark sm:grid-cols-3" [attr.inert]="locked ? '' : null" [class.opacity-70]="locked">
+        <h4 class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:col-span-3">Quote terms</h4>
         <app-sf-field label="Prices by" [hint]="isEdit ? '' : 'Required'">
           <app-sf-date typeable displayFormat="dd/MM/yyyy" [min]="minDate" [(ngModel)]="deadline" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }"></app-sf-date>
         </app-sf-field>
@@ -52,17 +71,14 @@
         <app-sf-field label="Currency">
           <app-sf-select [(ngModel)]="terms.currency" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" [options]="currencySfOptions"></app-sf-select>
         </app-sf-field>
-        <app-sf-field label="Payment">
+        <app-sf-field label="Payment terms">
           <app-sf-input [(ngModel)]="terms.paymentTerms" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" placeholder="e.g. 30 days credit"></app-sf-input>
         </app-sf-field>
-        <app-sf-field label="Delivery">
+        <app-sf-field label="ETA terms">
           <app-sf-input [(ngModel)]="terms.deliveryTerms" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" placeholder="e.g. within 2 weeks of PO"></app-sf-input>
         </app-sf-field>
         <app-sf-field label="Deliver to">
           <app-sf-input [(ngModel)]="terms.deliveryLocation" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" placeholder="e.g. Our store, Doha"></app-sf-input>
-        </app-sf-field>
-        <app-sf-field *ngIf="isEdit" label="Warranty">
-          <app-sf-input [(ngModel)]="terms.warrantyTerms" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }" placeholder="e.g. 12 months"></app-sf-input>
         </app-sf-field>
         <app-sf-field *ngIf="isEdit" label="Valid until">
           <app-sf-date typeable displayFormat="dd/MM/yyyy" [(ngModel)]="terms.validityDate" (ngModelChange)="dirty = true" [ngModelOptions]="{ standalone: true }"></app-sf-date>
@@ -87,28 +103,27 @@
           </div>
         </div>
       </div>
+      </ng-container>
     </section>
 
     <!-- ===== lines: the shared item editor ===== -->
-    <section class="min-w-0" [formGroup]="form">
-        <app-item-entry mode="rfq" [paletteTargetLabel]="open && !locked ? 'Supplier RFQ' : null" [optionalItems]="optionalItems" [seedOptionalItems]="seed" [rfqPriced]="isEdit"
+    <section class="min-w-0" [formGroup]="form" [attr.inert]="locked ? '' : null" [class.opacity-70]="locked">
+        <app-item-entry mode="rfq" [paletteTargetLabel]="open && !locked ? 'Supplier RFQ' : null" [optionalItems]="optionalItems" [seedOptionalItems]="seed" [rfqPriced]="isEdit" [rfqAskPrice]="!isEdit"
           [suggestionSource]="catalogue" [suggestionScopeIds]="[]" [showTotalsBar]="false" [currency]="terms.currency || 'QAR'"
-          [availabilityOptions]="availabilityOptions" [lineExtraTemplate]="lineExtra" [allowOptions]="!isEdit" [optionLabel]="optionLabel"
+          [extraAvailabilityOptions]="unavailableOption" [lineExtraTemplate]="lineExtra" [allowOptions]="!isEdit" [optionLabel]="optionLabel"
           addOptionLabel="Add RFQ" optionRemoveLabel="Remove RFQ" optionNoun="Supplier" [optionExtraTemplate]="isEdit ? null : optionExtra" (optionChanged)="onOptionChanged($event)"
-          [allowExcelImport]="!locked" [allowExcelExport]="true" [excelToolbar]="false" [excelFillColumns]="excelFillColumns" excelFileName="supplier-rfq-items"
+          [allowExcelImport]="!locked" [allowExcelExport]="true" [excelToolbar]="false" [excelMeta]="excelMeta" (excelMetaImported)="onExcelMeta($event)" excelFileName="supplier-rfq-items"
           (createProductRequested)="openCreateProduct($event)"></app-item-entry>
       </section>
   </ng-container>
 
   <ng-container sfDrawerFooter>
     <div class="mr-auto flex items-center gap-2">
-      <app-action-button *ngIf="!isEdit" variant="secondary" [disabled]="!enquiry" (click)="openAddProduct()">+ Add product</app-action-button>
-      <app-action-button *ngIf="!isEdit" variant="secondary" [disabled]="!enquiry" (click)="supplierFormOpen = true">+ New supplier</app-action-button>
-      <app-action-button *ngIf="!locked" variant="secondary" [disabled]="!!itemEntry?.excelBusy" (click)="itemEntry?.pickExcelFile()" title="Fill the lines from an Excel sheet">Import Excel</app-action-button>
-      <app-action-button variant="secondary" (click)="itemEntry?.downloadExcelTemplate()" title="Empty sheet with the expected columns">Template</app-action-button>
-      <app-action-button variant="secondary" icon="download" (click)="itemEntry?.exportExcel()" title="Export the current supplier tab's lines, with blank columns for the supplier to fill">Export Excel</app-action-button>
-      <app-action-button *ngIf="isEdit" variant="secondary" [disabled]="!rfq || !invite" (click)="downloadSheet()">Download request sheet</app-action-button>
-      <app-action-button *ngIf="isEdit && !locked" variant="secondary" [disabled]="!rfq || saving" (click)="cancelRfq()">Withdraw RFQ</app-action-button>
+      <app-action-button *ngIf="!isEdit && !purchase" variant="secondary" [disabled]="!enquiry" (click)="openAddProduct()">+ Add product</app-action-button>
+      <app-action-button *ngIf="!isEdit" variant="secondary" [disabled]="!enquiry && !purchase" (click)="openSupplierForm()">+ New supplier</app-action-button>
+      <app-action-button *ngIf="!locked" variant="secondary" icon="upload" [disabled]="!!itemEntry?.excelBusy" (click)="itemEntry?.pickExcelFile()" title="Fill the lines from an Excel sheet, e.g. a previous RFQ's export">Import Excel</app-action-button>
+      <app-action-button variant="secondary" icon="download" (click)="itemEntry?.exportExcel()" title="Export this tab's details and lines to Excel; fill it in and import it back">Export Excel</app-action-button>
+      <app-action-button *ngIf="isEdit && !locked" variant="secondary" icon="withdraw" [disabled]="!rfq || saving" (click)="cancelRfq()">Withdraw RFQ</app-action-button>
     </div>
     <app-action-button variant="secondary" (click)="cancel()">Cancel</app-action-button>
     <app-action-button variant="primary" [disabled]="saving || loading || !!loadError || !seed || locked" (click)="submit()">
@@ -142,9 +157,42 @@
 
 <!-- on the tab row, after "Add supplier": this tab's supplier, its sheet, and the stock recheck -->
 <ng-template #optionExtra let-index>
-  <div class="relative ml-auto w-60">
-    <app-sf-combobox [options]="supplierChoices" [ngModel]="activeSupplier?.supplierId || null" (ngModelChange)="pickSupplierById($event)" [ngModelOptions]="{ standalone: true }"
-      (focusin)="onSupplierFocus()" placeholder="Select supplier…" aria-label="Select supplier"></app-sf-combobox>
+  <div class="relative ml-auto flex items-center gap-2">
+    <button type="button" (click)="toggleSplit()" [disabled]="!splitChoices.length" title="Pick item groups and raise a new supplier tab holding just those"
+      class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100">
+      <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/></svg>
+      New tab from groups
+    </button>
+    <div class="w-60">
+      <app-sf-combobox [options]="supplierChoices" [ngModel]="activeSupplier?.supplierId || null" (ngModelChange)="pickSupplierById($event)" [ngModelOptions]="{ standalone: true }"
+        (focusin)="onSupplierFocus()" placeholder="Select supplier…" aria-label="Select supplier"></app-sf-combobox>
+    </div>
+
+    <div *ngIf="splitOpen" class="absolute right-0 top-full z-30 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-3 text-xs shadow-lg dark:border-gray-700 dark:bg-gray-900">
+      <div class="mb-2 flex items-center justify-between">
+        <span class="font-semibold text-gray-700 dark:text-gray-200">Item groups for a new supplier tab</span>
+        <button type="button" class="text-sky-700 hover:underline dark:text-sky-300" (click)="toggleSplitAll()">{{ splitGroups.size === splitChoices.length ? 'Clear' : 'Select all' }}</button>
+      </div>
+      <div class="max-h-48 space-y-1 overflow-y-auto">
+        <label *ngFor="let g of splitChoices; trackBy: trackSplit" class="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-gray-50 dark:hover:bg-gray-800">
+          <input type="checkbox" [checked]="splitGroups.has(g.index)" (change)="toggleSplitGroup(g.index)">
+          <span class="min-w-0 flex-1 truncate">{{ g.name }}</span>
+          <span class="text-gray-400">{{ g.lines }} line{{ g.lines === 1 ? '' : 's' }}</span>
+        </label>
+      </div>
+      <div class="mt-3 flex items-center gap-2">
+        <div class="min-w-0 flex-1">
+          <app-sf-combobox [options]="supplierChoices" [ngModel]="splitSupplierId" (ngModelChange)="splitSupplierId = $event" [ngModelOptions]="{ standalone: true }"
+            (focusin)="onSupplierFocus()" placeholder="Supplier (optional)…" aria-label="Supplier for the new tab"></app-sf-combobox>
+        </div>
+        <button type="button" (click)="openSplitSupplierForm()" class="shrink-0 rounded-md px-2 py-1 font-medium text-sky-700 hover:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-950/40">+ New</button>
+      </div>
+      <div class="mt-3 flex justify-end gap-2">
+        <button type="button" (click)="toggleSplit()" class="rounded-md px-2 py-1 font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800">Cancel</button>
+        <button type="button" [disabled]="!splitGroups.size" (click)="createSplitTab()"
+          class="rounded-md bg-sky-600 px-3 py-1 font-medium text-white hover:bg-sky-700 disabled:opacity-40">Create tab</button>
+      </div>
+    </div>
   </div>
 </ng-template>
 

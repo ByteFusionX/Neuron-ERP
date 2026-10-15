@@ -4,16 +4,14 @@ import PurchaseRequest from '../models/purchaseRequest.model'
 import jobModel, { allocateStatus } from "../models/job.model";
 import supplierModel from "../models/supplier.model";
 import Quotation from "../models/quotation.model";
-import { getEmployeeData, calculateDiscountPricePipe, calculateCostPricePipe, getUSDRated, buildPrivilegeAccessFilter } from "../common/utils/util";
-import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
+import { getEmployeeData, calculateDiscountPricePipe, calculateCostPricePipe, getUSDRated, buildPrivilegeAccessFilter, escapeRegex } from "../common/utils/util";
+import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../services/workflow.service";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { getNextSequence } from "../models/counter.model";
 import technicalModel from "../models/technical.model";
 import Employee from "../models/employee.model";
-import { syncRfqFromPurchase } from "./rfq.controller";
-import { buildAssignmentChain, resolveCurrentAssignmentStep, assignmentHeldChecker, stageRoleIds } from "../services/presaleAssignment.service";
-import { notify } from "../services/notify.service";
+import { syncPurchaseFromRfqs, importSalesRfqsIntoPurchase } from "./salesRfq.controller";
 const mongoose = require('mongoose');
 const { ObjectId } = mongoose.Types;
 
@@ -22,6 +20,28 @@ const normalizePartNumberValue = (value: any) => {
     const candidate = typeof value === 'object' && value !== null ? value._id || value.id || value.value : value;
     if (!candidate || !ObjectId.isValid(candidate)) return undefined;
     return new ObjectId(candidate);
+};
+
+
+// Columns the PR grid can sort by, mapped to the field they sort on in the list pipeline.
+const PURCHASE_SORT_FIELDS: Record<string, string> = {
+    date: 'sortDate',
+    customerName: 'customerId.companyName',
+    purchaseNo: 'purchaseNo',
+    jobId: 'jobId.jobId',
+    totalLpo: 'totalLpo',
+    selectedPrQuantity: 'selectedPrQuantity',
+    issuedPoQuantity: 'issuedPoQuantity',
+    remainingPoQuantity: 'remainingPoQuantity',
+    createdBy: 'createdBy.firstName',
+    supplier: 'supplierId.supplierName',
+    procurementPerson: 'procurementPerson.firstName',
+    status: 'overallStatus',
+};
+const buildPurchaseSort = (sortKey: any, sortDir: any, fallbackField: string): Record<string, 1 | -1> => {
+    const field = typeof sortKey === 'string' ? PURCHASE_SORT_FIELDS[sortKey] : undefined;
+    if (!field) return { [fallbackField]: -1, _id: -1 };
+    return { [field]: sortDir === 'asc' ? 1 : -1, _id: -1 };
 };
 
 const numericValue = (value: any): number | null => {
@@ -34,255 +54,43 @@ const purchaseApprovalContext = (purchaseRequest: any) => ({
     discountPercent: numericValue(purchaseRequest?.supplierDiscounts?.totalDiscount),
 });
 
-// "Assign purchase" holders (role flag or an unexpired individual grant); admins always can.
-const hasPurchaseFlag = (employee: any, flag: string): boolean => {
-    const role = employee?.category?.role;
-    if (role === 'superAdmin' || role === 'admin') return true;
-    if (employee?.category?.privileges?.purchase?.[flag] === true) return true;
-    const expiresAt = employee?.extraPrivilegesExpiresAt;
-    const extraExpired = !!expiresAt && new Date(expiresAt).getTime() <= Date.now();
-    return !extraExpired && employee?.extraPrivileges?.purchase?.[flag] === true;
-};
-const canAssignPurchase = (employee: any) => hasPurchaseFlag(employee, 'canAssign');
+/**
+ * The New tab: jobs allocated to the signed-in buyer for product distribution that have no purchase request yet.
+ * No purchase exists until the buyer creates it, so these are jobs shaped like PR rows for the grid.
+ */
+const getNewTabJobs = async (employeeId: any, isSuperAdmin: boolean, searchText: string, pageNumber: number, pageSize: number) => {
+    const withPr: any[] = await PurchaseRequest.distinct('jobId', { isDeleted: false, jobId: { $exists: true, $ne: null } });
+    const jobs: any[] = await jobModel.find({
+        isDeleted: { $ne: true },
+        productDistribution: true,
+        allocateStatus: allocateStatus.OpenToWork,
+        // A super admin oversees every buyer's allocated jobs; everyone else sees only their own.
+        ...(isSuperAdmin ? { procurementPerson: { $exists: true, $ne: null } } : { procurementPerson: new ObjectId(String(employeeId)) }),
+        _id: { $nin: withPr },
+    }).populate({ path: 'quoteId', select: 'client currency', populate: { path: 'client', select: 'companyName' } })
+        .populate('procurementPerson', 'firstName lastName')
+        .populate('allocatedBy', 'firstName lastName')
+        .sort({ updatedDate: -1, _id: -1 })
+        .lean();
 
-// Buyers a PR can be allocated to: holders of the purchase "create" privilege.
-export const getPurchaseAssignees = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const employees = await Employee.find({ isDeleted: { $ne: true }, isBlocked: { $ne: true } })
-            .select('firstName lastName employeeId category extraPrivileges extraPrivilegesExpiresAt')
-            .populate('category', 'categoryName role privileges')
-            .lean();
-        const assignees = employees
-            .filter((e: any) => e.category && hasPurchaseFlag(e, 'create'))
-            .map((e: any) => ({
-                _id: e._id,
-                firstName: e.firstName,
-                lastName: e.lastName,
-                employeeId: e.employeeId,
-                category: {
-                    _id: e.category?._id,
-                    categoryName: e.category?.categoryName,
-                    role: e.category?.role,
-                },
-            }));
-        return res.status(200).json({ success: true, data: assignees });
-    } catch (error) {
-        next(error);
-    }
-};
-
-// Hands a PR to a buyer; it then shows on that buyer's New tab.
-export const allocatePurchaseRequest = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { id } = req.params;
-        const { employeeId } = req.body ?? {};
-        if (!ObjectId.isValid(id) || !employeeId || !ObjectId.isValid(String(employeeId))) {
-            return res.status(400).json({ success: false, message: "Purchase request and employee are required" });
-        }
-
-        const actor = await getEmployeeData(req.user);
-        if (!actor) {
-            return res.status(401).json({ success: false, message: "Employee not found" });
-        }
-
-        const purchase = await PurchaseRequest.findOne({ _id: id, isDeleted: false });
-        if (!purchase) {
-            return res.status(404).json({ success: false, message: "Purchase request not found" });
-        }
-        if (![PurchaseRequestStatus.Pending, PurchaseRequestStatus.Approved].includes(purchase.status)) {
-            return res.status(400).json({ success: false, message: "Only pending or approved purchase requests can be allocated" });
-        }
-
-        const assignee: any = await Employee.findOne({ _id: employeeId, isDeleted: { $ne: true }, isBlocked: { $ne: true } })
-            .populate('category', 'role privileges')
-            .lean();
-        if (!assignee || !hasPurchaseFlag(assignee, 'create')) {
-            return res.status(400).json({ success: false, message: "Selected employee cannot be assigned purchases" });
-        }
-
-        // A buyer holds the PR until they reject it; only then can it be handed to someone else.
-        if (purchase.allocatedTo) {
-            return res.status(400).json({ success: false, message: "Purchase request is already allocated. The assigned buyer must reject it before it can be reallocated" });
-        }
-
-        // While the assignment ladder is running only the role holding the current stage (or an admin) may allocate.
-        const chain: any = purchase.allocationApproval;
-        if (chain && !/^(superadmin|admin)$/i.test((actor.category as any)?.role ?? '')) {
-            const resolved: any = await resolveCurrentAssignmentStep(chain, new Date(), 'procurement');
-            const myRole = String((actor.category as any)?._id ?? actor.category);
-            if (!stageRoleIds(resolved ?? chain).includes(myRole)) {
-                return res.status(403).json({ success: false, message: "This purchase request is waiting on another role in the assignment workflow" });
-            }
-        }
-
-        purchase.allocatedTo = assignee._id;
-        purchase.allocationApproval = undefined;
-        purchase.allocatedBy = actor._id as any;
-        purchase.allocatedAt = new Date();
-        purchase.procurementPerson = assignee._id;
-        await purchase.save();
-
-        // Keep the job's procurement person in step with the buyer.
-        if (purchase.jobId) {
-            await jobModel.updateOne({ _id: purchase.jobId }, { procurementPerson: assignee._id, updatedDate: new Date() });
-        }
-
-        const buyerId = assignee._id.toString();
-        void createNotificationWithPrivileges(
-            {
-                type: 'PurchaseRequestAllocated',
-                referenceModel: 'PurchaseRequest',
-                title: 'Purchase request assigned to you',
-                message: `Purchase request ${(purchase as any).purchaseNo ?? ''} has been assigned to you.`.replace('  ', ' '),
-                sentBy: actor._id?.toString(),
-                referenceId: purchase._id,
-            },
-            {
-                privilegeKey: 'purchase',
-                checkFunction: (_privileges, employeeId) => employeeId === buyerId,
-            },
-            req.app.get('io') as Server
-        ).catch((err) => console.error('PR allocation notification failed:', err));
-
-        return res.status(200).json({ success: true, message: "Purchase request allocated" });
-    } catch (error) {
-        next(error);
-    }
-};
-
-// The assigned buyer hands the PR back to whoever assigned it, who can then reallocate it.
-export const rejectPurchaseAllocation = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { id } = req.params;
-        const reason = String(req.body?.reason ?? '').trim();
-        if (!ObjectId.isValid(id)) {
-            return res.status(400).json({ success: false, message: "Purchase request is required" });
-        }
-        if (!reason) {
-            return res.status(400).json({ success: false, message: "A reason is required to reject the allocation" });
-        }
-
-        const actor = await getEmployeeData(req.user);
-        if (!actor) {
-            return res.status(401).json({ success: false, message: "Employee not found" });
-        }
-
-        const purchase = await PurchaseRequest.findOne({ _id: id, isDeleted: false });
-        if (!purchase) {
-            return res.status(404).json({ success: false, message: "Purchase request not found" });
-        }
-        if (!purchase.allocatedTo || purchase.allocatedTo.toString() !== actor._id?.toString()) {
-            return res.status(403).json({ success: false, message: "Only the assigned buyer can reject this allocation" });
-        }
-
-        const assignerId = purchase.allocatedBy?.toString();
-        const previousBuyer = purchase.allocatedTo;
-
-        purchase.allocationRejections = [
-            ...(purchase.allocationRejections ?? []),
-            { rejectedBy: actor._id as any, reason, rejectedAt: new Date() },
-        ];
-        purchase.allocatedTo = undefined;
-        purchase.allocatedAt = undefined;
-        if (purchase.procurementPerson?.toString() === previousBuyer.toString()) {
-            purchase.procurementPerson = undefined;
-        }
-        await purchase.save();
-
-        if (purchase.jobId) {
-            await jobModel.updateOne(
-                { _id: purchase.jobId, procurementPerson: previousBuyer },
-                { $unset: { procurementPerson: 1 }, updatedDate: new Date() }
-            );
-        }
-
-        if (assignerId) {
-            void createNotificationWithPrivileges(
-                {
-                    type: 'PurchaseAllocationRejected',
-                    referenceModel: 'PurchaseRequest',
-                    title: 'Purchase allocation rejected',
-                    message: `Purchase request ${(purchase as any).purchaseNo ?? ''} was rejected by the assigned buyer. Reason: ${reason}`,
-                    sentBy: actor._id?.toString(),
-                    referenceId: purchase._id,
-                },
-                {
-                    privilegeKey: 'purchase',
-                    checkFunction: (_privileges, employeeId) => employeeId === assignerId,
-                },
-                req.app.get('io') as Server
-            ).catch((err) => console.error('PR allocation rejection notification failed:', err));
-        }
-
-        return res.status(200).json({ success: true, message: "Allocation rejected" });
-    } catch (error) {
-        next(error);
-    }
-};
-
-// Once the assignment ladder has run out of roles (nobody below acted and it reached the admin stage),
-// a super admin can restart it from the first stage. Allocating directly is the other way out.
-export const resetPurchaseAllocation = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { id } = req.params;
-        if (!ObjectId.isValid(id)) {
-            return res.status(400).json({ success: false, message: "Purchase request is required" });
-        }
-
-        const actor = await getEmployeeData(req.user);
-        if (!actor) {
-            return res.status(401).json({ success: false, message: "Employee not found" });
-        }
-        if (!/^superadmin$/i.test((actor.category as any)?.role ?? '')) {
-            return res.status(403).json({ success: false, message: "Only a super admin can reset the assignment workflow" });
-        }
-
-        const purchase = await PurchaseRequest.findOne({ _id: id, isDeleted: false });
-        if (!purchase) {
-            return res.status(404).json({ success: false, message: "Purchase request not found" });
-        }
-        if (purchase.allocatedTo) {
-            return res.status(400).json({ success: false, message: "This purchase request is already allocated" });
-        }
-        const held = await assignmentHeldChecker('procurement');
-        if (!held(purchase.allocationApproval)) {
-            return res.status(400).json({ success: false, message: "The assignment workflow has not reached its final stage yet" });
-        }
-
-        const previous: any = purchase.allocationApproval;
-        const chain = await buildAssignmentChain([], 'procurement');
-        if (!chain) {
-            return res.status(400).json({ success: false, message: "No assignment workflow is configured" });
-        }
-        purchase.allocationApproval = { ...chain, restartCount: (previous?.restartCount ?? 0) + 1 };
-        purchase.updatedBy = actor._id as any;
-        purchase.updatedAt = new Date();
-        await purchase.save();
-
-        void notifyAllocationStage(purchase, purchase.allocationApproval, 'Purchase assignment restarted', `Purchase request ${purchase.purchaseNo} needs a buyer and is waiting on your role`, 'restart', actor._id?.toString())
-            .catch((err) => console.error('PR assignment reset notification failed:', err));
-
-        return res.status(200).json({ success: true, message: "Assignment workflow reset" });
-    } catch (error) {
-        next(error);
-    }
-};
-
-const notifyAllocationStage = async (purchase: any, chain: any, title: string, message: string, suffix: string, sentBy?: string) => {
-    const recipients = (await Employee.find({ category: { $in: stageRoleIds(chain) }, isBlocked: { $ne: true }, isDeleted: { $ne: true } }).select('_id').lean()).map((e: any) => e._id);
-    if (!recipients.length) return;
-    await notify({
-        type: 'PurchaseAllocationRequest',
-        referenceModel: 'PurchaseRequest',
-        title,
-        message,
-        sentBy,
-        recipients,
-        referenceId: purchase._id,
-        additionalData: { purchaseId: purchase._id.toString() },
-        dedupeKey: `pr-alloc:${purchase._id}:${chain.restartCount ?? 0}:${suffix}`,
-        channels: ['inapp', 'push', 'email'],
-    });
+    const needle = searchText.toLowerCase();
+    const rows = jobs
+        .map((job) => ({
+            _id: job._id,
+            status: 'New',
+            overallStatus: 'new',
+            items: [],
+            jobId: job,
+            customerId: job.quoteId?.client,
+            currency: job.quoteId?.currency,
+            procurementPerson: job.procurementPerson,
+            allocatedBy: job.allocatedBy,
+            allocatedAt: job.allocatedAt,
+            createdAt: job.updatedDate ?? job.createdDate,
+            sourceType: 'job',
+        }))
+        .filter((row) => !needle || String(row.jobId?.jobId ?? '').toLowerCase().includes(needle) || String(row.customerId?.companyName ?? '').toLowerCase().includes(needle));
+    return { data: rows.slice((pageNumber - 1) * pageSize, pageNumber * pageSize), total: rows.length };
 };
 
 // Create a new Purchase Request
@@ -317,6 +125,8 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         } = req.body;
 
         const isManual = sourceType === 'manual';
+        // A job's PR has no Draft status: one saved before submitting is In Progress, on the buyer's New tab.
+        const isDraft = status === PurchaseRequestStatus.Drafted || (!isManual && (status === PurchaseRequestStatus.New || status === PurchaseRequestStatus.InProgress));
 
         if (!purchaseNo || !status || (!isManual && (!jobId || !dealSheetId))) {
             return res.status(400).json({
@@ -324,6 +134,18 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
                 message: "Missing required fields",
                 status: 400
             });
+        }
+
+        // A request that goes for approval must actually ask for something (drafts may still be incomplete).
+        if (!isDraft) {
+            const details = (Array.isArray(req.body.items) ? req.body.items : []).flatMap((item: any) => Array.isArray(item?.itemDetails) ? item.itemDetails : []);
+            const valid = details.filter((d: any) => String(d?.detail ?? '').trim() && Number(d?.quantity) > 0 && Number(d?.unitCost) >= 0);
+            if (!valid.length) {
+                return res.status(400).json({ success: false, message: "Add at least one item with a description and a quantity before submitting", status: 400 });
+            }
+            if (details.some((d: any) => Number(d?.quantity) < 0 || Number(d?.unitCost) < 0)) {
+                return res.status(400).json({ success: false, message: "Quantities and costs cannot be negative", status: 400 });
+            }
         }
 
         let job;
@@ -346,13 +168,18 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
             }
         }
 
-        const requestData = {...req.body, createdBy: employee._id};
+        const requestData: any = {...req.body, createdBy: employee._id};
+
         if (currency) {
             requestData.currency = currency;
         }
 
         if (job && !requestData.procurementPerson && job.procurementPerson) {
             requestData.procurementPerson = job.procurementPerson;
+        }
+        if (job && job.allocatedBy) {
+            requestData.allocatedBy = job.allocatedBy;
+            requestData.allocatedAt = job.allocatedAt;
         }
 
         if (requestData.items && Array.isArray(requestData.items)) {
@@ -391,7 +218,7 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
             });
         }
 
-        if (status && status !== PurchaseRequestStatus.Drafted) {
+        if (status && !isDraft) {
             try {
                 const approvalStatus = await getWorkflowSteps('purchaseApproval', employee._id.toString(), purchaseApprovalContext(requestData));
                 requestData.approvalStatus = approvalStatus;
@@ -406,7 +233,13 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
         const savedPurchaseRequest = await newPurchaseRequest.save();
 
         if (!isManual) {
-            await jobModel.updateOne({ _id: jobId }, { $set: { status: `Purchase ${savedPurchaseRequest.status !== 'Drafted' ? 'Requested' : savedPurchaseRequest.status}` } })
+            // Supplier prices already gathered on the enquiry's sales RFQs carry over, so the buyer starts from them.
+            try {
+                await importSalesRfqsIntoPurchase(savedPurchaseRequest, employee);
+            } catch (error) {
+                console.error('Could not bring sales RFQs into the purchase request:', error);
+            }
+            await jobModel.updateOne({ _id: jobId }, { $set: { status: `Purchase ${!isDraft ? 'Requested' : 'Drafted'}` } })
 
             await jobModel.findByIdAndUpdate(jobId, {
                 $set: {
@@ -418,7 +251,7 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
 
         console.log(savedPurchaseRequest.status);
 
-        if (savedPurchaseRequest.status && savedPurchaseRequest.status !== PurchaseRequestStatus.Drafted) {
+        if (savedPurchaseRequest.status && !isDraft) {
             const socket = req.app.get('io') as Server;
             await createNotificationWithPrivileges(
                 {
@@ -451,9 +284,11 @@ export const createPurchaseRequest =async (req: Request, res: Response, next: Ne
 
 export const getPurchaseRequests = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation } = req.body;
-        const pageNumber = Number(page) || 1;
-        const pageSize = Number(row) || 10;
+        let { page, row, status, fromDate, toDate, companyName, purchaseNo, jobId, firstName, sourceType, poProgress, rfqStatus, allocation, search, sortKey, sortDir } = req.body;
+        const pageNumber = Math.max(1, Math.floor(Number(page)) || 1);
+        const pageSize = Math.min(10000, Math.max(1, Math.floor(Number(row)) || 10));
+        // The grid's search box sends `search`: it matches the PR number, supplier, customer or job id.
+        const searchText = typeof search === 'string' ? search.trim() : '';
 
         const tokenData = req.user;
         const employee = await getEmployeeData(tokenData);
@@ -470,20 +305,19 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             ? await buildPrivilegeAccessFilter(employee._id, privileges.purchase.viewReport, 'createdBy')
             : {};
 
-        // The New tab ignores the usual scope: an assigner sees every unallocated PR, a buyer sees
-        // the ones handed to them.
-        const isNewTab = allocation === 'new';
+        // The New tab lists the buyer's allocated jobs that have no PR yet, not purchase requests.
+        if (allocation === 'new') {
+            return res.status(200).json({
+                success: true,
+                purchase: await getNewTabJobs(employee._id, String(employee.category?.role).toLowerCase() === 'superadmin', searchText, pageNumber, pageSize),
+                status: 200
+            });
+        }
+
         const matchStage: any = {
             isDeleted: false,
-            ...(isNewTab ? {} : accessFilter)
+            ...accessFilter
         };
-
-        if (isNewTab) {
-            const me = new ObjectId(String(employee._id));
-            matchStage.$or = canAssignPurchase(employee)
-                ? [{ allocatedTo: me }, { allocatedTo: { $exists: false } }, { allocatedTo: null }]
-                : [{ allocatedTo: me }];
-        }
 
         if (Array.isArray(status)) {
             matchStage.status = { $in: status }
@@ -492,7 +326,7 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
         }
 
         if (purchaseNo) {
-            matchStage.purchaseNo = { $regex: purchaseNo, $options: 'i' }
+            matchStage.purchaseNo = { $regex: escapeRegex(String(purchaseNo)), $options: 'i' }
         }
 
         if (firstName) {
@@ -590,6 +424,17 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 }
             },
             { $unwind: { path: '$procurementPerson', preserveNullAndEmptyArrays: true } },
+            // Names for the detail panel's assignment history.
+            {
+                $lookup: {
+                    from: 'employees',
+                    localField: 'allocatedBy',
+                    foreignField: '_id',
+                    as: 'allocatedBy',
+                    pipeline: [{ $project: { firstName: 1, lastName: 1 } }]
+                }
+            },
+            { $unwind: { path: '$allocatedBy', preserveNullAndEmptyArrays: true } },
             {
                 $addFields: {
                     mrRequest: {
@@ -688,8 +533,8 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 $addFields: {
                     overallStatus: {
                         $cond: {
-                            if: { $eq: ["$status", "Drafted"] },
-                            then: "drafted",
+                            if: { $in: ["$status", ["Drafted", "New", "In Progress"]] },
+                            then: { $toLower: "$status" },
                             else: {
                                 $let: {
                                     vars: {
@@ -936,8 +781,12 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
             // Match for nested fields (requires the earlier $lookup/$unwind of customerId/jobId)
             {
                 $match: {
-                    ...(companyName && { "customerId.companyName": { $regex: companyName, $options: 'i' } }),
-                    ...(jobId && { "jobId.jobId": { $regex: jobId, $options: 'i' } })
+                    ...(companyName && { "customerId.companyName": { $regex: escapeRegex(String(companyName)), $options: 'i' } }),
+                    ...(jobId && { "jobId.jobId": { $regex: escapeRegex(String(jobId)), $options: 'i' } }),
+                    ...(searchText && {
+                        $or: ['purchaseNo', 'supplierId.supplierName', 'customerId.companyName', 'jobId.jobId']
+                            .map((field) => ({ [field]: { $regex: escapeRegex(searchText), $options: 'i' } }))
+                    })
                 }
             },
             {
@@ -993,7 +842,10 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                     }
                 }
             }] : []),
-            { $sort: { [sortField]: -1 } },
+            // Rows without an approved date (new / pending PRs) fall back to their created date so they sort with
+            // the rest instead of sinking to the last page; the grid's Date column shows the same value.
+            { $addFields: { sortDate: { $ifNull: ['$approvedDate', '$createdAt'] } } },
+            { $sort: buildPurchaseSort(sortKey, sortDir, shouldSortByApprovedDate ? 'sortDate' : 'createdAt') },
             {
                 $facet: {
                     metadata: [{ $count: 'total' }],
@@ -1010,14 +862,6 @@ export const getPurchaseRequests = async (req: Request, res: Response, next: Nex
                 }
             }
         ]);
-
-        // Flag PRs the assignment ladder has run out on, so a super admin can allocate or restart them.
-        if (isNewTab && purchases[0]?.data?.length) {
-            const held = await assignmentHeldChecker('procurement');
-            for (const row of purchases[0].data) {
-                row.allocationHeld = !row.allocatedTo && held(row.allocationApproval);
-            }
-        }
 
         return res.status(200).json({
             success: true,
@@ -1410,14 +1254,13 @@ export const updatePurchaseItems = async (req: Request, res: Response, next: Nex
             { new: true, runValidators: true }
         );
 
-        if (updatedPurchaseRequest && updatedPurchaseRequest.status === 'Approved') {
-            await syncRfqFromPurchase(updatedPurchaseRequest, employee._id);
-        }
+        // Prices come from the supplier RFQs: whatever the form sent for an RFQ-priced line is replaced by them.
+        const syncedPurchaseRequest = updatedPurchaseRequest ? await syncPurchaseFromRfqs(id) : null;
 
         return res.status(200).json({
             success: true,
             message: "Purchase items updated successfully",
-            data: updatedPurchaseRequest,
+            data: syncedPurchaseRequest || updatedPurchaseRequest,
             status: 200
         });
     } catch (error) {
@@ -1489,14 +1332,12 @@ export const updatePurchaseSupplierOffers = async (req: Request, res: Response, 
             { new: true, runValidators: true }
         );
 
-        if (updatedPurchaseRequest && updatedPurchaseRequest.status === 'Approved') {
-            await syncRfqFromPurchase(updatedPurchaseRequest, employee._id);
-        }
+        const syncedPurchaseRequest = updatedPurchaseRequest ? await syncPurchaseFromRfqs(id) : null;
 
         return res.status(200).json({
             success: true,
             message: "Purchase supplier offers updated successfully",
-            data: updatedPurchaseRequest,
+            data: syncedPurchaseRequest || updatedPurchaseRequest,
             status: 200
         });
     } catch (error) {
@@ -2430,7 +2271,8 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
         }
 
         const privileges = employee.category?.privileges;
-        if (status === 'approved' && !privileges?.purchase?.canApprovePR) {
+        const isSuperAdmin = /^superadmin$/i.test(employee.category?.role ?? '');
+        if (status === 'approved' && !isSuperAdmin && !privileges?.purchase?.canApprovePR) {
             return res.status(403).json({
                 success: false,
                 message: "You do not have permission to approve purchase requisitions",
@@ -2464,7 +2306,7 @@ export const updatePurchaseRequestStatus = async (req: Request, res: Response, n
             }
 
         const createdById = (purchaseRequest.createdBy as any)?._id || purchaseRequest.createdBy;
-        if (createdById?.toString() === employee._id?.toString()) {
+        if (!/^superadmin$/i.test((employee as any).category?.role ?? '') && createdById?.toString() === employee._id?.toString()) {
             return res.status(403).json({
                 success: false,
                 message: "You cannot approve or reject a purchase request that you created",
@@ -2707,7 +2549,7 @@ export const getApprovalsByEmployee = async (req: Request, res: Response, next: 
             {
                 $match: {
                     isDeleted: false,
-                    status: { $ne: PurchaseRequestStatus.Drafted }
+                    status: { $nin: [PurchaseRequestStatus.Drafted, PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress] }
                 }
             },
             {
@@ -2933,33 +2775,46 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
             }
         }
 
-        const isStatusChangingFromDraft = existingPurchaseRequest.status === PurchaseRequestStatus.Drafted && 
+        const isStatusChangingFromDraft = (existingPurchaseRequest.status === PurchaseRequestStatus.Drafted || existingPurchaseRequest.status === PurchaseRequestStatus.New || existingPurchaseRequest.status === PurchaseRequestStatus.InProgress) && 
                                           updateData.status && 
-                                          updateData.status !== PurchaseRequestStatus.Drafted;
+                                          updateData.status !== PurchaseRequestStatus.Drafted &&
+                                          updateData.status !== PurchaseRequestStatus.New &&
+                                          updateData.status !== PurchaseRequestStatus.InProgress;
 
 
         const isStatusChangingFromRejected = existingPurchaseRequest.status === PurchaseRequestStatus.Rejected && 
                                             updateData.status && 
                                             updateData.status === PurchaseRequestStatus.Pending;
 
-        if (isStatusChangingFromDraft) {
-            try {
-                const approvalStatus = await getWorkflowSteps('purchaseApproval', existingPurchaseRequest.createdBy.toString());
-                updateData.approvalStatus = approvalStatus;
-            } catch (error) {
-                console.error('Error initializing workflow steps:', error);
+        // A request goes for approval only once every product has an awarded supplier offer.
+        if (isStatusChangingFromDraft || isStatusChangingFromRejected) {
+            await syncPurchaseFromRfqs(id);
+            const lines: any[] = (Array.isArray(updateData.items) ? updateData.items : (await PurchaseRequest.findById(id).lean() as any)?.items || [])
+                .flatMap((item: any) => item.itemDetails || [])
+                .filter((detail: any) => Number(detail.quantity) > 0);
+            const open = lines.filter((detail: any) => !(detail.comparisons || []).some((c: any) => c.selected));
+            if (!lines.length || open.length) {
+                return res.status(400).json({
+                    success: false,
+                    message: !lines.length ? "Add at least one product before sending for approval" : `${open.length} product(s) have no awarded supplier offer. Raise an RFQ and award every product first.`,
+                    status: 400
+                });
             }
         }
 
-        if (isStatusChangingFromRejected) {
-            const rejectedIndex = existingPurchaseRequest.approvalStatus.findIndex((status: any) => status.status === 'rejected');
-            if (rejectedIndex !== -1) {
-                try {
-                    const newApprovalStatus = await getWorkflowSteps('purchaseApproval', existingPurchaseRequest.createdBy.toString());
-                    updateData.approvalStatus = newApprovalStatus;
-                } catch (error) {
-                    console.error('Error initializing workflow steps for resubmission:', error);
-                }
+        // Sending a PR for approval starts a fresh route on the Purchase Approval workflow, checked against the saved amount.
+        if (isStatusChangingFromDraft || isStatusChangingFromRejected) {
+            try {
+                const approvalStatus = await getWorkflowSteps(
+                    'purchaseApproval',
+                    existingPurchaseRequest.createdBy.toString(),
+                    purchaseApprovalContext({ ...existingPurchaseRequest.toObject(), ...updateData })
+                );
+                updateData.approvalStatus = approvalStatus;
+                // Workflow conditions don't match this request, so no approval is required.
+                if (approvalStatus.length === 0) updateData.status = PurchaseRequestStatus.Approved;
+            } catch (error) {
+                console.error('Error initializing workflow steps:', error);
             }
         }
 
@@ -3016,6 +2871,9 @@ export const updatePurchaseRequest = async (req: Request, res: Response, next: N
                 status: 404
             });
         }
+
+        // The form's copy of the prices can be stale; the RFQs are the truth, also once the request is with approvers.
+        await syncPurchaseFromRfqs(id, true);
 
         if (updateData.status === PurchaseRequestStatus.Pending) {
             await jobModel.findByIdAndUpdate(existingPurchaseRequest.jobId, {
@@ -3344,6 +3202,33 @@ export const getConvertibleJobs = async (req: Request, res: Response, next: Next
             success: true,
             jobs: jobs
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+
+/** Super Admin gives a pending purchase request a fresh approval route. Unticked stages are skipped for this request only. */
+export const resetPurchaseWorkflow = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const me = await getEmployeeData(req.user);
+        if (!/^superadmin$/i.test((me?.category as any)?.role || '')) {
+            return res.status(403).json({ message: 'Only a Super Admin can reset the purchase approval workflow' });
+        }
+        const purchaseRequest = await PurchaseRequest.findById(req.params.id);
+        if (!purchaseRequest || purchaseRequest.isDeleted) {
+            return res.status(404).json({ message: 'Purchase request not found' });
+        }
+        if (purchaseRequest.status !== PurchaseRequestStatus.Pending) {
+            return res.status(400).json({ message: `Only a pending purchase request can be reset (this one is ${purchaseRequest.status})` });
+        }
+        const chosen: string[] | null = Array.isArray(req.body.stepRoleIds) ? req.body.stepRoleIds.map(String) : null;
+        const route = await rebuildPendingRoute('purchaseApproval', String(purchaseRequest.createdBy), purchaseApprovalContext(purchaseRequest), purchaseRequest.approvalStatus as any[], chosen);
+        purchaseRequest.approvalStatus = route as any;
+        purchaseRequest.updatedBy = me._id;
+        purchaseRequest.updatedAt = new Date();
+        await purchaseRequest.save();
+        return res.status(200).json({ success: true, message: 'Purchase approval workflow reset' });
     } catch (error) {
         next(error);
     }

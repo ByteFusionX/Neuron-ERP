@@ -1,6 +1,7 @@
 export type SalesRfqStatus = 'Draft' | 'Open' | 'Quoted' | 'Awarded' | 'Closed' | 'Cancelled';
 export type SalesRfqLineStatus = 'Pending' | 'Confirmed' | 'Unavailable' | 'Lost';
-export type SalesRfqAvailability = 'Available' | 'Limited' | 'Unavailable';
+/** A label from the Availability master list (e.g. "Ex-Stock", "2-3 Weeks"), or 'Unavailable' when the supplier cannot supply. */
+export type SalesRfqAvailability = string;
 
 /** Sales-facing labels for the shared RFQ statuses. */
 export const SALES_RFQ_STATUS_LABELS: Record<string, string> = {
@@ -81,6 +82,8 @@ export interface SalesRfqComparison {
   rfqs: SalesRfqCompareColumn[];
   rows: SalesRfqCompareRow[];
   coverage: { total: number; awarded: number; unavailable: number; open: number };
+  /** Purchase request: products no supplier has been asked about yet (they are not in `rows`). */
+  unasked?: { itemDetailKey: string; itemName: string; detail: string; quantity: number; uom?: string; itemCode?: string }[];
   quotationId: string | null;
 }
 
@@ -233,6 +236,17 @@ export interface SalesRfqSupplierOption {
   supplierName: string;
   contactEmail?: string;
   isSupplierApproved: boolean;
+  /** This supplier already holds a live RFQ for the enquiry (its number in `askedRfqNo`). */
+  alreadyAsked?: boolean;
+  askedRfqNo?: string;
+  /** Details from the supplier master, shown in the drawer banner. */
+  code?: string;
+  contactName?: string;
+  contactPhone?: string;
+  companyEmail?: string;
+  address?: string;
+  creditDays?: number | null;
+  creditLimit?: number | null;
 }
 
 export interface SalesRfqReplyPrice {
@@ -296,6 +310,14 @@ export interface SalesRfq {
   updatedAt?: string;
 }
 
+/** Products of an enquiry settled across its supplier RFQs; `open` is what still needs an award. */
+export interface SalesRfqAwardCoverage {
+  total: number;
+  awarded: number;
+  unavailable: number;
+  open: number;
+}
+
 export interface SalesRfqSummary {
   _id: string;
   rfqNo: string;
@@ -304,4 +326,27 @@ export interface SalesRfqSummary {
   requestedLines: { lineStatus?: SalesRfqLineStatus }[];
   suppliers?: { status: SalesRfqSupplierStatus }[];
   deadline?: string;
+}
+
+/** A line of a purchase request as the RFQ drawer lists it; `itemDetailKey` is the saved line's id. */
+export interface PurchaseRfqLine {
+  itemDetailKey: string;
+  itemName: string;
+  detail: string;
+  quantity: number;
+  uom?: string;
+  partNo?: string;
+  itemCode?: string;
+  estimatedUnitCost?: number;
+  /** Supplier the line is awarded to, when it is. */
+  awardedSupplier?: string;
+}
+
+/** A supplier RFQ raised from a purchase request (same shape as a sales RFQ, tied to the request instead of an enquiry). */
+export type PurchaseRfq = Omit<SalesRfq, 'rfqType' | 'enquiryId'> & { rfqType: 'Procurement'; purchaseRequestId: string; purchaseNo?: string };
+
+export interface PurchaseRfqData {
+  purchase: { _id: string; purchaseNo: string; status: string; editable: boolean; currency: string; hasJob?: boolean };
+  lines: PurchaseRfqLine[];
+  rfqs: PurchaseRfq[];
 }

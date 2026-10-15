@@ -1,19 +1,11 @@
-import * as ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
-import {
-  SalesRfq,
-  SalesRfqAvailability,
-  SalesRfqLine,
-  SalesRfqReplyPrice,
-  SalesRfqSupplier,
-  SalesRfqTerms,
-} from 'src/app/shared/interfaces/sales-rfq.interface';
+import { SalesRfq, SalesRfqLine, SalesRfqSupplier, SalesRfqTerms } from 'src/app/shared/interfaces/sales-rfq.interface';
+import { ItemSheetMeta, exportItemsSheet, itemSheetColumns } from 'src/app/shared/components/item-entry/item-entry-excel';
+import { ItemEntryItemValue, ItemEntryLineValue } from 'src/app/shared/components/item-entry/item-entry.model';
 
 /**
  * Supplier request sheets. Sending happens outside the system, so each supplier gets a sheet with
- * only its lines: an Excel file it can fill in and send back (re-imported with `readReplySheet`),
- * or a printable page for PDF. Column A of the Excel file carries hidden tags (`LINE:<key>`,
- * `TERM:<field>`) so the import does not depend on the supplier keeping the layout intact.
+ * only its lines: the Excel file is the same one the RFQ drawer exports and imports (details on top,
+ * lines below), or a printable page for PDF.
  */
 
 const REPLY_TERMS: { field: keyof SalesRfqTerms; label: string }[] = [
@@ -23,8 +15,6 @@ const REPLY_TERMS: { field: keyof SalesRfqTerms; label: string }[] = [
   { field: 'validityDate', label: 'Quote valid until (dd/mm/yyyy)' },
   { field: 'warrantyTerms', label: 'Warranty' },
 ];
-
-const AVAILABILITY: SalesRfqAvailability[] = ['Available', 'Limited', 'Unavailable'];
 
 export function linesForSupplier(rfq: SalesRfq, supplier: SalesRfqSupplier): SalesRfqLine[] {
   const keys = new Set(supplier.lineKeys || []);
@@ -54,99 +44,15 @@ function requestedTermsRows(rfq: SalesRfq): [string, string][] {
 
 // --- Excel ---------------------------------------------------------------------
 
-export async function downloadRequestSheet(rfq: SalesRfq, supplier: SalesRfqSupplier): Promise<void> {
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('RFQ');
-  ws.columns = [
-    { key: 'tag', width: 4, hidden: true },
-    { key: 'no', width: 6 },
-    { key: 'item', width: 24 },
-    { key: 'detail', width: 48 },
-    { key: 'qty', width: 8 },
-    { key: 'uom', width: 8 },
-    { key: 'price', width: 14 },
-    { key: 'avail', width: 14 },
-    { key: 'lead', width: 12 },
-    { key: 'remarks', width: 30 },
-  ];
-
-  const title = ws.addRow(['', 'Request for Quotation']);
-  title.font = { bold: true, size: 14 };
-  const info: [string, string][] = [
-    ['RFQ no.', rfq.rfqNo],
-    ['Supplier', supplier.supplierName],
-    ['Prices needed by', fmtDate(rfq.deadline) || '-'],
-    ...requestedTermsRows(rfq),
-  ];
-  info.forEach(([label, value]) => {
-    const row = ws.addRow(['', label, value]);
-    row.getCell(2).font = { bold: true };
-  });
-  if (rfq.notes) ws.addRow(['', 'Notes', rfq.notes]).getCell(2).font = { bold: true };
-
-  ws.addRow([]);
-  ws.addRow(['', 'Your terms (please fill in)']).font = { bold: true, color: { argb: 'FF1D4ED8' } };
-  REPLY_TERMS.forEach(({ field, label }) => {
-    const row = ws.addRow([`TERM:${field}`, label, '']);
-    row.getCell(2).font = { bold: true };
-    const cell = row.getCell(3);
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
-    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCA8A04' } } };
-    if (field === 'currency') cell.value = rfq.requestedTerms?.currency || 'QAR';
-  });
-
-  ws.addRow([]);
-  const header = ws.addRow(['', '#', 'Item', 'Description / specification', 'Qty', 'UOM', 'Unit price', 'Availability', 'Lead time (days)', 'Remarks']);
-  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  header.eachCell((cell, col) => {
-    if (col > 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
-  });
-
-  linesForSupplier(rfq, supplier).forEach((line, i) => {
-    const row = ws.addRow([`LINE:${line.itemDetailKey}`, i + 1, line.itemName, line.detail, line.quantity, line.uom || '', null, 'Available', null, '']);
-    row.getCell(4).alignment = { wrapText: true, vertical: 'top' };
-    [7, 8, 9, 10].forEach((col) => {
-      row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
-    });
-    row.getCell(7).numFmt = '#,##0.00';
-    row.getCell(8).dataValidation = { type: 'list', allowBlank: true, formulae: [`"${AVAILABILITY.join(',')}"`] };
-  });
-
-  const buffer = await wb.xlsx.writeBuffer();
-  saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${fileBase(rfq, supplier)}.xlsx`);
+/** dd/mm/yyyy for the sheet's date cells. */
+function sheetDate(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '' : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-/** Every price row and the reply terms; a row without a price and not "Unavailable" is left blank. */
-export interface ReplySheet {
-  terms: SalesRfqTerms;
-  prices: SalesRfqReplyPrice[];
-  /** Tagged rows whose line no longer exists on the RFQ. */
-  unknownLines: number;
-}
-
-function cellText(value: ExcelJS.CellValue): string {
-  if (value == null) return '';
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  if (typeof value === 'object') {
-    const v: any = value;
-    if (v.result !== undefined) return cellText(v.result);
-    if (v.richText) return v.richText.map((r: any) => r.text).join('');
-    if (v.text !== undefined) return String(v.text);
-  }
-  return String(value).trim();
-}
-
-function cellNumber(value: ExcelJS.CellValue): number | null {
-  const text = cellText(value).replace(/,/g, '');
-  if (!text) return null;
-  const n = Number(text.replace(/[^0-9.\-]/g, ''));
-  return Number.isFinite(n) ? n : null;
-}
-
-/** dd/mm/yyyy, yyyy-mm-dd or an Excel date cell → yyyy-mm-dd. */
-function parseDate(value: ExcelJS.CellValue): string | undefined {
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  const text = cellText(value);
+/** dd/mm/yyyy or yyyy-mm-dd → yyyy-mm-dd. */
+function parseSheetDate(text: string): string | undefined {
   if (!text) return undefined;
   const dmy = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
   if (dmy) {
@@ -157,44 +63,106 @@ function parseDate(value: ExcelJS.CellValue): string | undefined {
   return isNaN(d.getTime()) ? undefined : d.toISOString().slice(0, 10);
 }
 
-export async function readReplySheet(file: File, rfq: SalesRfq): Promise<ReplySheet> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await file.arrayBuffer());
-  const ws = wb.worksheets[0];
-  if (!ws) throw new Error('The file has no sheet.');
-  const known = new Set((rfq.requestedLines || []).map((line) => line.itemDetailKey));
-  const result: ReplySheet = { terms: {}, prices: [], unknownLines: 0 };
-  let tagged = false;
+/** What the sheet carries above the lines: reference details (ignored on import) then the RFQ's own fields (filled back in on import). */
+export interface RfqSheetDetails {
+  rfqNo?: string;
+  enquiryNo?: string;
+  customer?: string;
+  supplierName?: string;
+  supplierCode?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  deadline?: string | null;
+  requiredBy?: string | null;
+  terms?: SalesRfqTerms;
+  /** Valid-until is a supplier answer, so only RFQs being priced carry it. */
+  withValidity?: boolean;
+  notes?: string;
+}
 
-  ws.eachRow((row) => {
-    const tag = cellText(row.getCell(1).value);
-    if (tag.startsWith('TERM:')) {
-      tagged = true;
-      const field = tag.slice(5) as keyof SalesRfqTerms;
-      const value = field === 'validityDate' ? parseDate(row.getCell(3).value) : cellText(row.getCell(3).value);
-      if (value) (result.terms as any)[field] = value;
-    } else if (tag.startsWith('LINE:')) {
-      tagged = true;
-      const key = tag.slice(5);
-      if (!known.has(key)) {
-        result.unknownLines++;
-        return;
-      }
-      const availText = cellText(row.getCell(8).value).toLowerCase();
-      const availability = (AVAILABILITY.find((a) => a.toLowerCase() === availText) || 'Available') as SalesRfqAvailability;
-      const unitPrice = cellNumber(row.getCell(7).value);
-      if (unitPrice == null && availability !== 'Unavailable') return;
-      result.prices.push({
-        itemDetailKey: key,
-        unitPrice: availability === 'Unavailable' ? null : unitPrice,
-        availability,
-        leadTimeDays: cellNumber(row.getCell(9).value),
-        remarks: cellText(row.getCell(10).value) || undefined,
-      });
-    }
+export function rfqSheetMeta(d: RfqSheetDetails): ItemSheetMeta[] {
+  const info: [string, string | undefined][] = [
+    ['RFQ no.', d.rfqNo],
+    ['Enquiry', d.enquiryNo],
+    ['Customer', d.customer],
+    ['Supplier', d.supplierName],
+    ['Supplier code', d.supplierCode],
+    ['Contact', d.contactName],
+    ['Phone', d.contactPhone],
+    ['Email', d.contactEmail],
+  ];
+  const t = d.terms || {};
+  const own: [string, string][] = [
+    ['Prices by', sheetDate(d.deadline)],
+    ['Goods needed by', sheetDate(d.requiredBy)],
+    ['Currency', t.currency || ''],
+    ['Payment terms', t.paymentTerms || ''],
+    ['ETA terms', t.deliveryTerms || ''],
+    ['Deliver to', t.deliveryLocation || ''],
+    ...(d.withValidity ? [['Valid until', sheetDate(t.validityDate)] as [string, string]] : []),
+    ['Notes', d.notes || ''],
+  ];
+  return [
+    ...info.filter(([, v]) => !!v).map(([label, value]) => ({ label, value: value as string })),
+    ...own.map(([label, value]) => ({ label, value })),
+  ];
+}
+
+/** The RFQ fields found in an imported sheet's details; blank or missing ones are left out so they do not overwrite the form. */
+export function readRfqSheetMeta(meta: Record<string, string>): { deadline?: string; requiredBy?: string; notes?: string; terms: SalesRfqTerms } {
+  const text = (label: string) => (meta[label.toLowerCase()] || '').trim();
+  const out: { deadline?: string; requiredBy?: string; notes?: string; terms: SalesRfqTerms } = { terms: {} };
+  const deadline = parseSheetDate(text('Prices by'));
+  if (deadline) out.deadline = deadline;
+  const requiredBy = parseSheetDate(text('Goods needed by'));
+  if (requiredBy) out.requiredBy = requiredBy;
+  const validity = parseSheetDate(text('Valid until'));
+  if (validity) out.terms.validityDate = validity;
+  const fields: [keyof SalesRfqTerms, string][] = [['currency', 'Currency'], ['paymentTerms', 'Payment terms'], ['deliveryTerms', 'ETA terms'], ['deliveryLocation', 'Deliver to']];
+  fields.forEach(([field, label]) => {
+    const value = text(label);
+    if (value) out.terms[field] = field === 'currency' ? value.toUpperCase() : value;
   });
-  if (!tagged) throw new Error('This is not a request sheet downloaded from this RFQ.');
-  return result;
+  if (text('Notes')) out.notes = text('Notes');
+  return out;
+}
+
+/** The same Excel as the RFQ drawer's Export, for an RFQ already saved: this supplier's lines, with any price it quoted. */
+export async function downloadRequestSheet(rfq: SalesRfq, supplier: SalesRfqSupplier): Promise<void> {
+  const enquiry: any = rfq.enquiryId && typeof rfq.enquiryId === 'object' ? rfq.enquiryId : {};
+  const customer: any = rfq.customerId && typeof rfq.customerId === 'object' ? rfq.customerId : {};
+  const groups = new Map<string, ItemEntryItemValue>();
+  linesForSupplier(rfq, supplier).forEach((line) => {
+    // The server populates the product on each line; an unlinked line has none.
+    const raw: any = line.partNo;
+    const product = raw && typeof raw === 'object' ? raw : null;
+    const quote = (rfq.quotes || []).find((q) => q.inviteId === supplier._id && q.itemDetailKey === line.itemDetailKey);
+    const group = groups.get(line.itemName) ?? { itemName: line.itemName, itemDetails: [] };
+    group.itemDetails!.push({
+      itemCode: product?.itemCode || '',
+      partNo: product?.partNo || '',
+      detail: line.detail,
+      quantity: line.quantity,
+      uom: line.uom || '',
+      unitCost: quote?.unitPrice ?? null,
+      availability: quote?.availability || '',
+    } as ItemEntryLineValue);
+    groups.set(line.itemName, group);
+  });
+  const meta = rfqSheetMeta({
+    rfqNo: rfq.rfqNo,
+    enquiryNo: enquiry.enquiryId,
+    customer: customer.companyName || enquiry.client?.companyName,
+    supplierName: supplier.supplierName,
+    contactEmail: supplier.contactEmail,
+    deadline: rfq.deadline,
+    requiredBy: rfq.requiredBy,
+    terms: { ...(rfq.requestedTerms || {}), ...(supplier.replyTerms?.validityDate ? { validityDate: supplier.replyTerms.validityDate } : {}) },
+    withValidity: true,
+    notes: rfq.notes,
+  });
+  await exportItemsSheet([...groups.values()], itemSheetColumns('rfq', true), `${fileBase(rfq, supplier)}.xlsx`, meta);
 }
 
 // --- printable sheet (Save as PDF from the print dialog) ------------------------
@@ -227,8 +195,8 @@ export function printRequestSheet(rfq: SalesRfq, supplier: SalesRfqSupplier): bo
 <table class="info">${info.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
 ${rfq.notes ? `<p class="note">${esc(rfq.notes)}</p>` : ''}
 <table class="lines"><thead><tr><th>#</th><th>Item</th><th>Description / specification</th><th class="num">Qty</th><th>UOM</th>
-<th class="fill">Unit price</th><th class="fill">Availability</th><th class="fill">Lead time</th><th class="fill">Remarks</th></tr></thead><tbody>
-${lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.itemName)}</td><td>${esc(l.detail)}</td><td class="num">${esc(l.quantity)}</td><td>${esc(l.uom || '')}</td><td></td><td></td><td></td><td></td></tr>`).join('')}
+<th class="fill">Unit price</th><th class="fill">Availability</th></tr></thead><tbody>
+${lines.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.itemName)}</td><td>${esc(l.detail)}</td><td class="num">${esc(l.quantity)}</td><td>${esc(l.uom || '')}</td><td></td><td></td></tr>`).join('')}
 </tbody></table>
 <table class="terms">${REPLY_TERMS.map((t) => `<tr><td>${esc(t.label.replace(' (dd/mm/yyyy)', ''))}</td><td></td></tr>`).join('')}</table>
 <script>window.onload=function(){window.print();}</script>

@@ -11,6 +11,9 @@ import { ToastrService } from 'ngx-toastr';
 import { Subscription } from 'rxjs';
 import { MrDetails, QuoteItem, QuoteItemDetails, ProductPartNumber } from 'src/app/shared/interfaces/purchase.interface';
 import { ProductService, PartNumberOption } from 'src/app/core/services/product/product.service';
+import { PrCompareDrawerComponent } from '../pr-compare-drawer/pr-compare-drawer.component';
+import { PrRfqDrawerComponent } from '../pr-rfq-drawer/pr-rfq-drawer.component';
+import { SalesRfqCreateDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-create-drawer/sales-rfq-create-drawer.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
@@ -45,6 +48,9 @@ interface PartNumberDropdownOption {
     ActionButtonComponent,
     DetailBadgeComponent,
     PrFormComponent,
+    PrCompareDrawerComponent,
+    PrRfqDrawerComponent,
+    SalesRfqCreateDrawerComponent,
   ],
   templateUrl: './create-purchase.component.html',
   styleUrl: './create-purchase.component.css',
@@ -136,7 +142,8 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         unitCost: d.unitCost ?? null,
         unitSellingPrice: d.unitSellingPrice ?? null,
         availability: d.availability || '',
-        supplierId: d.supplierId || null,
+        // A reopened draft/PR keeps the supplier on the selected comparison when the line itself has none.
+        supplierId: d.supplierId?._id || d.supplierId || (d.comparisons || []).find((c: any) => c.selected)?.supplierId || d.comparisons?.[0]?.supplierId || null,
         uom: d.uom || '',
         lineKey: this.lineKeyOf(i, j, d),
       })),
@@ -161,15 +168,22 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     return key ? this.originalsByKey().get(key) : undefined;
   }
 
-  /** Job PR lines stay structurally protected by the saved record, but commercial fields can change here. */
-  lineLocked = (i: number, j: number, k: number): boolean => {
-    return false;
+  /** A line awarded to a supplier is read-only: its cost is the awarded price. Re-awarding goes through the RFQ button. */
+  lineLocked = (i: number, j: number, k: number): boolean =>
+    this.isAwardedLine(this.originalAt(i, j, k));
+
+  /** For the item form's "Not awarded" filter: the line's saved copy says whether a supplier won it. */
+  lineAwarded = (line: any): boolean => {
+    const saved = line?.lineKey ? this.originalsByKey().get(line.lineKey) : undefined;
+    return !!saved && this.isAwardedLine(saved);
   };
+
+  private isAwardedLine(detail: any): boolean {
+    return !!detail && (detail.comparisons || []).some((c: any) => c.selected);
+  }
 
   lineBadge = (i: number, j: number, k: number): string | null =>
     this.originalAt(i, j, k)?.fromMrRequest ? 'MR' : null;
-
-  addRfqLabel = () => 'Add RFQ';
 
   private lineHasContent(d: any): boolean {
     return !!(d?.detail || '').toString().trim() || d?.quantity != null || d?.unitCost != null;
@@ -195,7 +209,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     (this.entryItems.getRawValue()?.[0]?.items || []).forEach((item: any) => {
       const details = (item.itemDetails || []).filter((d: any) => this.lineHasContent(d)).map((d: any) => {
         const { lineKey, profit, ...fields } = d;
-        if (!(fields.detail || '').toString().trim() || !(+fields.quantity > 0) || !(+fields.unitCost > 0)) invalid = true;
+        if (!(fields.detail || '').toString().trim() || !(+fields.quantity > 0)) invalid = true;
         const original = lineKey ? byKey.get(lineKey) : undefined;
         return {
           ...(original ?? { isNewlyAdded: true, merged: false, comparisons: [] }),
@@ -268,7 +282,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       jobIdControl?.clearValidators();
       dealSheetIdControl?.clearValidators();
       customerIdControl?.clearValidators();
-      supplierIdControl?.setValidators([Validators.required]);
+      supplierIdControl?.clearValidators();
       this.loadCurrentEmployeeName();
     } else {
       jobIdControl?.setValidators([Validators.required]);
@@ -409,14 +423,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const total = this.calculateTotalLpo();
     const money = `${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${this.currency()}`.trim();
     const status = v.status || (this.isEditing ? '' : 'New');
-    const tones: Record<string, DetailViewBadge['tone']> = { Pending: 'warn', Approved: 'good', Rejected: 'bad', Drafted: 'neutral', New: 'info' };
+    const tones: Record<string, DetailViewBadge['tone']> = { Pending: 'warn', Approved: 'good', Rejected: 'bad', Drafted: 'neutral', New: 'info', 'In Progress': 'info' };
 
     this.badges.set([
       ...(status ? [{ label: status, tone: tones[status] ?? 'neutral' }] : []),
       ...(this.isJobLess ? [{ label: 'General purchase', tone: 'info' as const }] : []),
     ]);
     this.headerSubtitle.set(this.isJobLess
-      ? (this.suppliersList().find((s) => s._id === v.supplierId)?.supplierName || 'No supplier selected')
+      ? (this.suppliersList().find((s) => s._id === v.supplierId)?.supplierName || 'Supplier chosen through RFQs')
       : (v.customer || 'No job selected'));
     this.stats.set(this.isJobLess
       ? [
@@ -465,7 +479,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
               jobIdControl?.clearValidators();
               dealSheetIdControl?.clearValidators();
               customerIdControl?.clearValidators();
-              supplierIdControl?.setValidators([Validators.required]);
+              supplierIdControl?.clearValidators();
               jobIdControl?.updateValueAndValidity();
               dealSheetIdControl?.updateValueAndValidity();
               customerIdControl?.updateValueAndValidity();
@@ -475,9 +489,9 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             this.purchaseForm.patchValue({
               customerId: purchase.customerId?._id || purchase.customerId,
               supplierId: purchase.supplierId?._id || purchase.supplierId || '',
-              salesManager: `${purchase.createdBy?.firstName || ''} ${purchase.createdBy?.lastName || ''}`.trim(),
+              salesManager: `${(purchase.quoteCreatedBy ?? purchase.createdBy)?.firstName || ''} ${(purchase.quoteCreatedBy ?? purchase.createdBy)?.lastName || ''}`.trim(),
               purchaseNo: purchase.purchaseNo,
-              jobId: purchase.jobId?.jobId || purchase.jobId,
+              jobId: purchase.jobId?.jobId || '',
               dealSheetId: purchase.jobId?.quoteId?.dealData?.dealId || purchase.dealSheetId,
               customer: purchase.customerId?.companyName || purchase.customer,
               status: purchase.status,
@@ -503,11 +517,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
               this.patchSupplierDiscounts(purchase.supplierDiscounts);
             }
 
-            if (purchase.jobId?._id) {
-              this.jobService.getOneJob(purchase.jobId._id).subscribe({
+            const purchaseJobId = purchase.jobId?._id || purchase.jobId;
+            if (purchaseJobId) {
+              this.jobService.getOneJob(purchaseJobId).subscribe({
                 next: (jobRes) => {
                   if (jobRes && jobRes.length > 0) {
                     this.selectedJobSheet = jobRes[0];
+                    this.purchaseForm.get('jobId')?.setValue(jobRes[0].jobId || '');
+                    this.refreshHeader();
                   }
                 },
                 error: (error) => {
@@ -525,14 +542,50 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     );
   }
 
+  /** Stops an empty or half-filled request from being sent for approval. Returns true when it can go. */
+  private canSubmitForApproval(): boolean {
+    // The reactive form still carries a stale items array, so its overall validity is not a reliable gate; check the fields that matter.
+    this.purchaseForm.get('supplierId')?.markAsTouched();
+    this.purchaseForm.get('job')?.markAsTouched();
+    if (!this.isJobLess && !(this.purchaseForm.get('job')?.value || this.purchaseForm.get('jobId')?.value)) {
+      this.toaster.error('Select a job before submitting');
+      return false;
+    }
+    const lines = this.itemsList().flatMap((item: any) => item.itemDetails || []);
+    if (!lines.some((d: any) => String(d.detail || '').trim() && Number(d.quantity) > 0)) {
+      this.toaster.error('Add at least one item with a description and a quantity before submitting');
+      return false;
+    }
+    if (lines.some((d: any) => Number(d.quantity) < 0 || Number(d.unitCost) < 0)) {
+      this.toaster.error('Quantities and costs cannot be negative');
+      return false;
+    }
+    return true;
+  }
+
   onSubmit(): void {
     if (!this.syncEntryToList()) return;
+    if (!this.canSubmitForApproval()) return;
+    if (!this.allAwarded) {
+      this.toaster.error('Award every product in Compare & award before sending for approval');
+      return;
+    }
     this.purchaseForm.get('status')?.setValue('Pending')
     if (this.isEditing) {
       this.onEditSubmits()
     } else {
       this.sendToService()
     }
+  }
+
+  /** A job's PR has no Draft status; saved-but-unsubmitted is In Progress. General purchases keep Drafted. */
+  private get draftStatus(): 'In Progress' | 'Drafted' {
+    return this.isJobLess ? 'Drafted' : 'In Progress';
+  }
+
+  /** Save is offered on a new request and on one still being prepared, never on a submitted or rejected one. */
+  get canSaveDraft(): boolean {
+    return !this.isEditing || ['New', 'In Progress', 'Drafted'].includes(this.purchaseForm.get('status')?.value);
   }
 
   onDraftClicks() {
@@ -546,7 +599,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   createPurchaseDraft(): void {
     const formValue = this.getFormValueForSave();
-    formValue.status = 'Drafted';
+    formValue.status = this.draftStatus;
 
     this.subscriptions.add(
       this.purchaseService.createPurchaseDraft(formValue).subscribe({
@@ -567,7 +620,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
 
   updatePurchaseDraft(): void {
     const formValue = this.getFormValueForSave();
-    formValue.status = 'Drafted';
+    formValue.status = this.draftStatus;
 
     this.subscriptions.add(
       this.purchaseService.updatePurchase(this.purchaseId!, formValue).subscribe({
@@ -601,7 +654,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       this.purchaseService.createPurchase(formValue).subscribe({
         next: (res) => {
           if (res.success) {
-            this.toaster.success('Purchase uploaded successfully');
+            this.toaster.success('Purchase request submitted for approval');
             this.backToList();
           }
         },
@@ -714,7 +767,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       customerId: job?.clientDetails?._id,
       salesManager: `${job?.salesPersonDetails?.[0]?.firstName || ''} ${job?.salesPersonDetails?.[0]?.lastName || ''}`.trim(),
       dealSheetId: job?.quotation?.dealData?.dealId,
-      jobId: job._id,
+      jobId: job.jobId,
       job: job._id
     })
 
@@ -851,7 +904,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       }
 
       const formValue = this.getFormValueForSave();
-      formValue.status = 'Drafted';
+      formValue.status = this.draftStatus;
 
       this.purchaseService.createPurchaseDraft(formValue).subscribe({
         next: (res) => {
@@ -877,6 +930,95 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     const year = now.getFullYear().toString().slice(-2);
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     return `NRN/PR-${year}-${month}-${this.prSequence}`;
+  }
+
+  compareOpen = false;
+  rfqOpen = false;
+  /** The supplier RFQ form (shared with enquiries), the saved line ids it was opened for, and the supplier picked in the selection bar. */
+  rfqCreateOpen = false;
+  rfqLineKeys: string[] = [];
+  rfqSupplier: { supplierId: string; supplierName: string; isSupplierApproved: boolean } | null = null;
+
+  /** Every product line has an awarded supplier offer; only then can the request go for approval. */
+  get allAwarded(): boolean {
+    const lines = this.itemsList().flatMap((item: any) => item.itemDetails || []).filter((d: any) => Number(d.quantity) > 0);
+    return lines.length > 0 && lines.every((d: any) => this.isAwardedLine(d));
+  }
+
+  /** Saves unsaved edits (and the draft itself) so the RFQs can point at saved lines, then runs `next`. */
+  private whenSaved(next: (purchaseId: string) => void): void {
+    if (!this.isJobLess && !this.selectedJobSheet) {
+      this.warningMessage('Please select any job from given list');
+      return;
+    }
+    const proceed = () => this.ensurePurchaseId().then(next).catch(() => {});
+    if (!this.entryItems.dirty) {
+      proceed();
+      return;
+    }
+    const items = this.collectEntryItems();
+    if (!items) return;
+    this.itemsList.set(items);
+    this.updateTotalLpo();
+    this.entryItems.markAsPristine();
+    this.saveItemsToBackend(items, (ok) => { if (ok) proceed(); });
+  }
+
+  private detailTextAt(p: { i: number; j: number; k: number }): string {
+    const items = this.entryItems.at(p.i)?.get('items') as FormArray | null;
+    const details = items?.at(p.j)?.get('itemDetails') as FormArray | null;
+    return (details?.at(p.k)?.get('detail')?.value || '').toString().trim();
+  }
+
+  /** Ticked lines in the item form: save them, then raise an RFQ for them through the shared supplier RFQ form. */
+  onRfqForSelection(event: { positions: { i: number; j: number; k: number }[]; supplierId: string | null }): void {
+    // Read before saving: a save reloads the lines and moves the form's positions.
+    const wanted = event.positions.map((p) => ({ j: p.j, text: this.detailTextAt(p) })).filter((w) => w.text);
+    if (!wanted.length) {
+      this.warningMessage('Tick lines that have a product description first.');
+      return;
+    }
+    this.whenSaved(() => {
+      const used = new Set<string>();
+      const keys: string[] = [];
+      wanted.forEach((w) => {
+        const hit = (this.itemsList()[w.j]?.itemDetails || []).find((d: any) => d._id && !used.has(d._id) && (d.detail || '').toString().trim() === w.text);
+        if (hit) { used.add(hit._id); keys.push(hit._id); }
+      });
+      if (!keys.length) {
+        this.warningMessage('The ticked lines could not be found after saving. Try again.');
+        return;
+      }
+      const supplier = event.supplierId ? this.supplierOptions().find((o) => o.value === event.supplierId) : null;
+      this.openRfqForm(keys, supplier ? { supplierId: String(supplier.value), supplierName: supplier.label, isSupplierApproved: true } : null);
+    });
+  }
+
+  /** From the RFQ list or the comparison: raise an RFQ for these saved line ids. */
+  onRfqForKeys(keys: string[]): void {
+    this.openRfqForm(keys, null);
+  }
+
+  private openRfqForm(keys: string[], supplier: { supplierId: string; supplierName: string; isSupplierApproved: boolean } | null): void {
+    this.rfqLineKeys = keys;
+    this.rfqSupplier = supplier;
+    this.rfqCreateOpen = true;
+  }
+
+  onRfqClicks(): void {
+    this.whenSaved(() => { this.rfqOpen = true; });
+  }
+
+  onCompareClicks() {
+    this.whenSaved(() => { this.compareOpen = true; });
+  }
+
+  onCompareFromRfq(): void {
+    this.compareOpen = true;
+  }
+
+  onAwardsChanged() {
+    this.loadPurchaseData();
   }
 
   onSupplierClicks() {
@@ -936,37 +1078,6 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
         }
       });
     }).catch(() => {});
-  }
-
-  onAddRfqForLine(): void {
-    if (!this.purchaseId && !this.selectedJobSheet && !this.isJobLess) {
-      this.warningMessage('Please select any job from given list');
-      return;
-    }
-
-    const openRfq = (purchaseId: string) => {
-      this.purchaseService.createRfqFromPurchase(purchaseId).subscribe({
-        next: () => {
-          this.toaster.success('RFQ created successfully');
-          this.router.navigate(['/purchase/rfq']);
-        },
-        error: (error) => {
-          this.toaster.error(error?.error?.message || 'Failed to create RFQ');
-          console.error('Error creating RFQ:', error);
-        }
-      });
-    };
-
-    const run = () => this.ensurePurchaseId().then(openRfq).catch(() => {});
-    if (this.entryItems.dirty) {
-      const items = this.collectEntryItems();
-      if (!items) return;
-      this.itemsList.set(items);
-      this.updateTotalLpo();
-      this.entryItems.markAsPristine();
-      this.saveItemsToBackend(items);
-    }
-    run();
   }
 
   deelSheets(requestedJobId?: string | null) {
@@ -1057,7 +1168,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
     itemsArray.push(this.createQuoteItemGroup());
   }
 
-  saveItemsToBackend(updatedItemsList: any[]): void {
+  saveItemsToBackend(updatedItemsList: any[], done?: (ok: boolean) => void): void {
     // Convert part number IDs to objects first, then clean for backend
     const itemsWithPartNos = this.convertPartNoIdsToObjects(updatedItemsList);
     const itemsToSave = this.cleanItemsForBackend(itemsWithPartNos);
@@ -1071,6 +1182,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
       } else if (res.success) {
         this.toaster.success('Item saved successfully');
       }
+      done?.(!!res.success);
     };
     
     if (this.purchaseId) {
@@ -1080,6 +1192,7 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
           error: (error) => {
             console.error('Error saving item:', error);
             this.toaster.error('Failed to save item');
+            done?.(false);
           }
         })
       );
@@ -1092,12 +1205,14 @@ export class CreatePurchaseComponent implements OnInit, AfterViewInit, OnDestroy
             error: (error) => {
               console.error('Error saving item:', error);
               this.toaster.error('Failed to save item');
+              done?.(false);
             }
           })
         );
       }).catch((error) => {
         console.error('Error creating draft:', error);
         this.toaster.error('Failed to create draft purchase');
+        done?.(false);
       });
     } else {
       console.warn('Cannot save items: no purchaseId and no selectedJobSheet');

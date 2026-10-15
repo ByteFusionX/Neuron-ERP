@@ -13,7 +13,7 @@
       </p>
     }
     <app-rfq-compare-matrix [data]="d" [locked]="locked" [busy]="busy()"
-      (award)="onAward($event)" (awardGroup)="onAwardGroup($event)" (openRfq)="openRfq.emit($event)"></app-rfq-compare-matrix>
+      (award)="onAward($event)" (awardGroup)="onAwardGroup($event)" (awardSupplier)="onAwardSupplier($event)" (openRfq)="openRfq.emit($event)"></app-rfq-compare-matrix>
   }
 
   <ng-container sfDrawerFooter>

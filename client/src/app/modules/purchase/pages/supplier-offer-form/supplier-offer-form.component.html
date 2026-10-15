@@ -29,7 +29,7 @@
         <app-sf-number formControlName="quantity" placeholder="0"></app-sf-number>
       </app-sf-field>
       <app-sf-field label="Unit price" [control]="f['unitPrice']">
-        <app-sf-number formControlName="unitPrice" placeholder="0.00" [stepper]="false"></app-sf-number>
+        <app-sf-number formControlName="unitPrice" placeholder="0.00" [stepper]="false" [min]="0"></app-sf-number>
       </app-sf-field>
       <app-sf-field label="Gross amount" hint="Quantity x unit price">
         <div class="flex h-9 items-center justify-end rounded-lg bg-gray-50 px-3 text-[13px] font-semibold tabular-nums text-gray-900 ring-1 ring-inset ring-gray-200 dark:bg-white/5 dark:text-gray-100 dark:ring-erp-border-dark">
@@ -44,13 +44,13 @@
         ]"></app-sf-select>
       </app-sf-field>
       <app-sf-field label="Discount">
-        <app-sf-number formControlName="discountValue" placeholder="0" [stepper]="false"></app-sf-number>
+        <app-sf-number formControlName="discountValue" placeholder="0" [stepper]="false" [min]="0"></app-sf-number>
       </app-sf-field>
       <app-sf-field label="Tax / VAT %">
-        <app-sf-number formControlName="taxPercent" placeholder="0" [stepper]="false"></app-sf-number>
+        <app-sf-number formControlName="taxPercent" placeholder="0" [stepper]="false" [min]="0" [max]="100"></app-sf-number>
       </app-sf-field>
       <app-sf-field label="Freight / delivery">
-        <app-sf-number formControlName="freightCost" placeholder="0.00" [stepper]="false"></app-sf-number>
+        <app-sf-number formControlName="freightCost" placeholder="0.00" [stepper]="false" [min]="0"></app-sf-number>
       </app-sf-field>
       <app-sf-field label="Net amount">
         <div class="flex h-9 items-center justify-end rounded-lg bg-gray-50 px-3 text-[13px] font-semibold tabular-nums text-gray-900 ring-1 ring-inset ring-gray-200 dark:bg-white/5 dark:text-gray-100 dark:ring-erp-border-dark">

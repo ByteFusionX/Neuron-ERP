@@ -33,20 +33,26 @@ export class PrFormComponent {
   @Input({ required: true }) liveTotalLpo!: () => number;
   @Input({ required: true }) currency!: () => string;
 
+  /** A general purchase has no supplier field: it is whoever wins the RFQs. */
+  supplierName(): string {
+    const id = this.purchaseForm.get('supplierId')?.value;
+    return id ? (this.supplierOptions().find((o) => o.value === id)?.label ?? '') : '';
+  }
+
   @Input() isEditing = false;
   @Input() sourceLocked = false;
   @Input() isJobLess = false;
   @Input() selectedJobSheet: unknown;
   @Input() lineLocked: (i: number, j: number, k: number) => boolean = () => false;
+  @Input() lineAwarded: (line: any) => boolean = () => true;
   @Input() lineBadge: (i: number, j: number, k: number) => string | null = () => null;
 
   @Output() jobLessChange = new EventEmitter<boolean>();
   @Output() jobSelected = new EventEmitter<string>();
   @Output() materialRequestsClicked = new EventEmitter<void>();
-  @Output() addRfqClicked = new EventEmitter<void>();
+  /** Ticked lines to ask a supplier about, with the supplier picked in the selection bar if any. */
+  @Output() rfqRequested = new EventEmitter<{ positions: { i: number; j: number; k: number }[]; supplierId: string | null }>();
   @Output() createProductRequested = new EventEmitter<void>();
-
-  addRfqLabel = () => 'Add RFQ';
 
   get f() {
     return this.purchaseForm.controls;

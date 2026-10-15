@@ -83,6 +83,20 @@ export class SalesRfqCompareDrawerComponent implements OnChanges {
     if (confirmed) this.save(event.awards);
   }
 
+  async onAwardSupplier(event: { column: { supplierName: string }; awards: RfqCompareAward[]; skipped: number }): Promise<void> {
+    const n = event.awards.length;
+    const { confirmed } = await this.confirm.open({
+      tone: 'approve',
+      title: `Award all to ${event.column.supplierName}?`,
+      message: `${n} open product${n === 1 ? '' : 's'} go to ${event.column.supplierName}.`
+        + (event.skipped ? ` ${event.skipped} open product${event.skipped === 1 ? '' : 's'} they can't supply stay open.` : ''),
+      consequence: 'The same products on the other suppliers\' RFQs are marked not selected. You can undo any of them until the quotation is made.',
+      confirmLabel: 'Award all',
+      cancelLabel: 'Cancel',
+    });
+    if (confirmed) this.save(event.awards);
+  }
+
   private save(awards: RfqCompareAward[], reason?: string): void {
     if (!this.enquiryId) return;
     const body: SalesRfqEnquiryAward[] = awards.map((a) => ({ rfqId: a.cell.rfqId, lineKey: a.cell.lineKey, quoteId: a.quoteId, reason }));

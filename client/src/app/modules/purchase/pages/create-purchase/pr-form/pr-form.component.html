@@ -18,7 +18,7 @@
 
     <div class="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-5">
       <ng-container *ngIf="!isJobLess">
-        <app-sf-field *ngIf="!isEditing" label="Job" required class="sm:col-span-2">
+        <app-sf-field *ngIf="!isEditing && !sourceLocked" label="Job" required class="sm:col-span-2">
           <app-sf-combobox
             [options]="jobOptions()"
             placeholder="Search job ID"
@@ -27,7 +27,7 @@
             [ngModelOptions]="{ standalone: true }"
           ></app-sf-combobox>
         </app-sf-field>
-        <div *ngIf="isEditing" class="pr-meta">
+        <div *ngIf="isEditing || sourceLocked" class="pr-meta">
           <p class="pr-meta-label">Job ID</p>
           <p class="pr-meta-value">{{ f['jobId'].value || '-' }}</p>
         </div>
@@ -44,7 +44,7 @@
           <p class="pr-meta-value">{{ f['customer'].value || '-' }}</p>
         </div>
         <div class="pr-meta">
-          <p class="pr-meta-label">Sales manager</p>
+          <p class="pr-meta-label">Sales person</p>
           <p class="pr-meta-value">{{ f['salesManager'].value || '-' }}</p>
         </div>
       </ng-container>
@@ -58,9 +58,10 @@
           <p class="pr-meta-label">Created by</p>
           <p class="pr-meta-value">{{ f['salesManager'].value || '-' }}</p>
         </div>
-        <app-sf-field label="Supplier" required class="sm:col-span-2">
-          <app-sf-combobox formControlName="supplierId" [options]="supplierOptions()" placeholder="Search supplier"></app-sf-combobox>
-        </app-sf-field>
+        <div class="pr-meta sm:col-span-2">
+          <p class="pr-meta-label">Supplier</p>
+          <p class="pr-meta-value">{{ supplierName() || 'Chosen through RFQs' }}</p>
+        </div>
       </ng-container>
 
       <div class="pr-meta">
@@ -85,6 +86,7 @@
   <ng-container *ngIf="selectedJobSheet || isJobLess; else noJob">
     <app-item-entry
       mode="purchase"
+      [quoteLayout]="true"
       paletteTargetLabel="Purchase request"
       [optionalItems]="entryItems"
       [seedOptionalItems]="entrySeed()"
@@ -92,14 +94,20 @@
       [showTotalsBar]="false"
       [supplierOptions]="supplierOptions()"
       [allowCreateProduct]="true"
-      [showCompareButton]="true"
-      [compareLabel]="addRfqLabel"
+      [bulkSelect]="true"
+      [bulkExtraTemplate]="bulkRfq"
       [lineLocked]="lineLocked"
+      [lineAwarded]="lineAwarded"
       [lineBadge]="lineBadge"
-      (compareClicked)="addRfqClicked.emit()"
       (createProductRequested)="createProductRequested.emit()"
     ></app-item-entry>
   </ng-container>
+
+  <!-- In the selection bar: ask a supplier for a price on the ticked lines (the supplier box in the bar picks who). -->
+  <ng-template #bulkRfq let-positions="positions" let-entry="entry">
+    <app-action-button variant="tool" title="Create an RFQ for the ticked lines. Pick the supplier in the box first, or choose it in the form"
+      (click)="rfqRequested.emit({ positions, supplierId: entry.takeBulkSupplier() }); entry.clearSelection()">Create RFQ</app-action-button>
+  </ng-template>
 
   <ng-template #noJob>
     <div class="pr-empty-state">Select a job to load its items.</div>

@@ -12,11 +12,12 @@
         [columns]="columns"
         [loading]="isLoading"
         [pageSize]="row"
-        searchPlaceholder="Search by PR No"
+        searchPlaceholder="Search PR no, customer, job or supplier"
         emptyMessage="No purchase requests found"
-        createLabel="Create PR"
         [rowActions]="rowActions"
         [views]="views"
+        [initialViewId]="activeViewId"
+        [syncViewWithUrl]="false"
         storageKey="purchase-request-list"
         [detailLoading]="detailLoading"
         [detailTabs]="detailTabs"
@@ -24,8 +25,7 @@
         [detailSubtitle]="prSubtitle"
         (queryChange)="onQueryChange($event)"
         (rowOpen)="onRowOpen()"
-        (rowAction)="onRowAction($event)"
-        (create)="onCreatePr()">
+        (rowAction)="onRowAction($event)">
 
         <ng-template #detailMetaTemplate let-row>
             <div class="pr-meta">
@@ -48,7 +48,8 @@
 
         <!-- right: permanent, every tab (filled) -->
         <ng-template #detailFooterTemplate let-row>
-            <app-action-button variant="primary" (click)="onEditPr(row, $event)" icon="edit">Edit</app-action-button>
+            <app-action-button *ngIf="canEdit(row)" variant="primary" (click)="onEditPr(row, $event)" icon="edit">Edit</app-action-button>
+            <app-action-button *ngIf="canCreateFromJob(row)" variant="primary" (click)="onCreatePrForJob(row, $event)" icon="plus">Create PR</app-action-button>
             <app-action-button variant="primary" (click)="openFullPurchase(row, $event)" icon="view">Open full purchase</app-action-button>
         </ng-template>
 
@@ -62,8 +63,8 @@
                     <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows(row)" showTotals [currency]="row.currency"></app-detail-table>
                 </ng-container>
 
-                <ng-container *ngSwitchCase="'history'">
-                    <app-detail-timeline [entries]="historyEntries(row)" emptyMessage="No approval history yet."></app-detail-timeline>
+                <ng-container *ngSwitchCase="'approval'">
+                    <app-approval-journey [stages]="approvalJourney(row)" orientation="vertical" [rejectionNote]="null"></app-approval-journey>
                 </ng-container>
             </ng-container>
         </ng-template>
@@ -71,9 +72,11 @@
 </div>
 
 <!-- Mounted only while open, so each opening starts a fresh form. -->
-<app-create-purchase *ngIf="createDrawerOpen" [drawer]="true" [withoutJob]="false" [sourceLocked]="true"
+<app-create-purchase *ngIf="createDrawerOpen" [drawer]="true" [withoutJob]="false" [sourceLocked]="true" [initialJobId]="createDrawerJobId"
     (saved)="onCreateDrawerSaved()" (closed)="onCreateDrawerClosed()"></app-create-purchase>
 
 <!-- Mounted only while open, so each opening starts from a fresh load of that PR. -->
 <app-create-purchase *ngIf="editDrawerOpen" [drawer]="true" [editPurchaseId]="editDrawerPurchaseId" [sourceLocked]="true"
     (saved)="onEditDrawerSaved()" (closed)="onEditDrawerClosed()"></app-create-purchase>
+
+<app-initiate-lpo *ngIf="initiateLpoPurchaseId" [purchaseIdInput]="initiateLpoPurchaseId" (issued)="onInitiateLpoIssued()" (closed)="onInitiateLpoClosed()"></app-initiate-lpo>

@@ -161,6 +161,8 @@ type PurchaseRequestItem = Omit<Item, 'itemDetails'> & {
 };
 
 export enum PurchaseRequestStatus {
+    New = 'New',
+    InProgress = 'In Progress',
     Drafted = 'Drafted',
     Pending = 'Pending',
     ReadyToProcessLPO = 'ReadyToProcessLPO',
@@ -200,31 +202,12 @@ interface PurchaseRequest extends Document {
     supplierId?: Types.ObjectId;
     totalLpo: Number | String;
     procurementPerson?: Types.ObjectId;
-    // Set when someone with "Assign purchase" hands the PR to a buyer from the New tab.
+    // The buyer picked when the job was allocated; the PR shows on their New tab.
     allocatedTo?: Types.ObjectId;
     allocatedBy?: Types.ObjectId;
     allocatedAt?: Date;
-    allocationApproval?: any;
-    allocationRejections?: { rejectedBy: Types.ObjectId; reason?: string; rejectedAt: Date }[];
     currency?: String;
 }
-
-const allocationApprovalSchema = new Schema({
-    stepIndex: { type: Number, default: 0 },
-    restartCount: { type: Number, default: 0 },
-    disabledRoles: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
-    role: { type: Schema.Types.ObjectId, ref: 'Category' },
-    roles: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
-    assignedAt: { type: Date },
-    escalationDueAt: { type: Date },
-    escalatedFrom: { type: Schema.Types.ObjectId, ref: 'Category' },
-    reminderDueAt: { type: Date },
-    reminderSentAt: { type: Date },
-    timeoutAction: { type: String, enum: ['escalate', 'notify', 'reject'], default: 'escalate' },
-    repeatReminder: { type: Boolean, default: true },
-    timeoutHandledAt: { type: Date },
-    workflowVersion: { type: Number },
-}, { _id: false });
 
 const purchaseRequestSchema = new Schema<PurchaseRequest>({
     jobId: {
@@ -331,13 +314,6 @@ const purchaseRequestSchema = new Schema<PurchaseRequest>({
     allocatedAt: {
         type: Date
     },
-    // Escalation ladder while the PR waits for a buyer (procurementAssignment workflow); cleared once allocated.
-    allocationApproval: { type: allocationApprovalSchema },
-    allocationRejections: [{
-        rejectedBy: { type: Schema.Types.ObjectId, ref: 'Employee' },
-        reason: { type: String, default: '' },
-        rejectedAt: { type: Date, default: Date.now }
-    }],
     currency: {
         type: String
     }

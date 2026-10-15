@@ -1,0 +1,170 @@
+<app-sf-drawer [title]="'Supplier RFQs' + (data()?.purchase?.purchaseNo ? ' · ' + data()?.purchase?.purchaseNo : '')"
+    subtitle="RFQs raised for this request. Enter what each supplier replies, then compare and award each product"
+    width="min(1100px, 96vw)" [open]="open" (closed)="closed.emit()">
+
+  @if (loading()) { <p class="text-sm text-gray-500">Loading…</p> }
+  @if (loadError(); as error) {
+    <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{{ error }}</div>
+  }
+
+  @if (data(); as d) {
+    <div class="space-y-5">
+      @if (!d.purchase.editable) {
+        <p class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          This request is {{ d.purchase.status }}, so RFQs and awards can no longer change.
+        </p>
+      }
+
+      <!-- Products -->
+      <section class="rounded-xl border border-gray-200 dark:border-erp-border-dark">
+        <header class="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-erp-border-dark">
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Products</h3>
+          <span class="flex items-center gap-3">
+            <span class="text-xs text-gray-500">{{ awardedCount }} of {{ d.lines.length }} awarded</span>
+            @if (d.purchase.editable && d.purchase.hasJob) {
+              <app-action-button variant="tool" [disabled]="busy()" (click)="importFromEnquiry()">Bring in enquiry prices</app-action-button>
+            }
+          </span>
+        </header>
+        <ul class="divide-y divide-gray-100 dark:divide-erp-border-dark">
+          @for (line of d.lines; track line.itemDetailKey) {
+            <li class="flex items-start gap-3 px-4 py-2">
+              @if (d.purchase.editable) {
+                <input type="checkbox" class="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 accent-violet-600"
+                  [checked]="pickedLines.has(line.itemDetailKey)" (change)="toggleLine(line.itemDetailKey)" [attr.aria-label]="'Ask suppliers about ' + line.detail" />
+              }
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[13px] text-gray-900 dark:text-gray-100" [title]="line.detail">{{ lineLabel(line) }}</p>
+                <p class="text-xs text-gray-500">{{ line.itemName }} · Qty {{ line.quantity }}{{ line.uom ? ' ' + line.uom : '' }}</p>
+              </div>
+              @if (line.awardedSupplier) {
+                <span class="shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Awarded · {{ line.awardedSupplier }}</span>
+              } @else {
+                <span class="shrink-0 rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">Not awarded</span>
+              }
+            </li>
+          }
+        </ul>
+
+        @if (d.purchase.editable) {
+          <div class="flex flex-wrap items-center gap-3 border-t border-gray-100 px-4 py-3 dark:border-erp-border-dark">
+            <p class="min-w-0 flex-1 text-xs text-gray-500">Tick the products to ask about, then create the RFQ. You pick the supplier there, and can add more suppliers for the same products.</p>
+            <app-action-button variant="primary" [disabled]="!canCreate()" (click)="startCreate()">
+              Create RFQ{{ pickedLines.size ? ' for ' + pickedLines.size + (pickedLines.size === 1 ? ' product' : ' products') : '' }}
+            </app-action-button>
+          </div>
+        }
+      </section>
+
+      <!-- RFQs -->
+      <section class="space-y-3">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">RFQs ({{ d.rfqs.length }})</h3>
+        @if (!d.rfqs.length) {
+          <p class="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-erp-border-dark">
+            No supplier has been asked yet. Tick the products and create the RFQ.
+          </p>
+        }
+        @for (rfq of d.rfqs; track rfq._id) {
+          @let invite = rfq.suppliers?.[0];
+          <article class="rounded-xl border border-gray-200 dark:border-erp-border-dark">
+            <header class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+              <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ rfq.rfqNo }}</span>
+              <span class="text-sm text-gray-700 dark:text-gray-300">{{ invite?.supplierName }}</span>
+              @if (invite) {
+                <span class="rounded-md px-2 py-0.5 text-xs font-medium" [class]="statusClass(invite.status)">{{ invite.status }}</span>
+              }
+              @if (rfq.deadline) { <span class="text-xs text-gray-500">Needed by {{ rfq.deadline | date: 'dd MMM yyyy' }}</span> }
+              @if (invite?.sentVia) { <span class="text-xs text-gray-500">Sent via {{ invite?.sentVia }}</span> }
+              @if (invite?.status === 'Declined' && invite?.declineReason) { <span class="text-xs text-red-600">{{ invite?.declineReason }}</span> }
+
+              @if (d.purchase.editable && invite) {
+                <div class="ml-auto flex flex-wrap items-center gap-1.5">
+                  @if (invite.status === 'Not Sent') {
+                    <app-action-button variant="secondary" [disabled]="busy()" (click)="markSent(rfq)">Mark sent</app-action-button>
+                  }
+                  @if (invite.status !== 'Declined') {
+                    <app-action-button variant="tool" [disabled]="busy()" (click)="replyFor === rfq._id ? closeReply() : openReply(rfq)">
+                      {{ replyFor === rfq._id ? 'Close prices' : (invite.status === 'Replied' ? 'Edit prices' : 'Enter prices') }}
+                    </app-action-button>
+                  }
+                  @if (invite.status === 'Sent') {
+                    <app-action-button variant="ghost" [disabled]="busy()" (click)="decline(rfq)">Declined</app-action-button>
+                  }
+                  <app-action-button variant="ghost" [disabled]="busy()" (click)="withdraw(rfq)">Withdraw</app-action-button>
+                </div>
+              }
+            </header>
+
+            <ul class="divide-y divide-gray-100 border-t border-gray-100 dark:divide-erp-border-dark dark:border-erp-border-dark">
+              @for (row of rfqLines(rfq); track row.line.itemDetailKey) {
+                <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 text-[13px]">
+                  <span class="min-w-0 flex-1 truncate text-gray-800 dark:text-gray-200" [title]="row.line.detail">{{ lineLabel(row.line) }}</span>
+                  <span class="text-xs text-gray-500">Qty {{ row.line.quantity }}</span>
+                  @if (row.quote) {
+                    @if (row.quote.availability === 'Unavailable') {
+                      <span class="text-xs text-red-600">Unavailable</span>
+                    } @else {
+                      <span class="tabular-nums text-gray-900 dark:text-gray-100">{{ row.quote.unitPrice | number: '1.2-2' }} {{ row.quote.currency }}</span>
+                      @if (row.quote.leadTimeDays != null) { <span class="text-xs text-gray-500">{{ row.quote.leadTimeDays }} days</span> }
+                    }
+                    @if (row.quote.selected) {
+                      <span class="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Awarded</span>
+                    }
+                  } @else {
+                    <span class="text-xs text-gray-400">No price yet</span>
+                  }
+                </li>
+              }
+            </ul>
+
+            @if (replyFor === rfq._id && draft; as dr) {
+              <div class="space-y-3 border-t border-gray-100 bg-gray-50/60 px-4 py-3 dark:border-erp-border-dark dark:bg-gray-900/30">
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <app-sf-field label="Currency">
+                    <app-sf-select [options]="currencyOptions" [(ngModel)]="dr.currency" [ngModelOptions]="{ standalone: true }"></app-sf-select>
+                  </app-sf-field>
+                  <app-sf-field label="Payment terms" optional>
+                    <app-sf-input [(ngModel)]="dr.paymentTerms" [ngModelOptions]="{ standalone: true }" placeholder="e.g. 30 days credit"></app-sf-input>
+                  </app-sf-field>
+                  <app-sf-field label="Delivery terms" optional>
+                    <app-sf-input [(ngModel)]="dr.deliveryTerms" [ngModelOptions]="{ standalone: true }" placeholder="e.g. Ex-works"></app-sf-input>
+                  </app-sf-field>
+                </div>
+                <div class="space-y-2">
+                  @for (row of rfqLines(rfq); track row.line.itemDetailKey) {
+                    <div class="grid items-start gap-2 sm:grid-cols-[1fr_120px_110px_auto] ">
+                      <p class="truncate pt-2 text-[13px] text-gray-800 dark:text-gray-200" [title]="row.line.detail">{{ lineLabel(row.line) }} <span class="text-xs text-gray-500">× {{ row.line.quantity }}</span></p>
+                      <app-sf-number [(ngModel)]="dr.rows[row.line.itemDetailKey].unitPrice" [ngModelOptions]="{ standalone: true }"
+                        placeholder="Unit price" [stepper]="false" [min]="0" [decimals]="2" [disabled]="dr.rows[row.line.itemDetailKey].unavailable"></app-sf-number>
+                      <app-sf-number [(ngModel)]="dr.rows[row.line.itemDetailKey].leadTimeDays" [ngModelOptions]="{ standalone: true }"
+                        placeholder="Days" suffix="days" [stepper]="false" [min]="0" [disabled]="dr.rows[row.line.itemDetailKey].unavailable"></app-sf-number>
+                      <label class="flex items-center gap-1.5 pt-2 text-xs text-gray-600 dark:text-gray-300">
+                        <input type="checkbox" class="h-4 w-4 rounded border-gray-300 accent-violet-600" [(ngModel)]="dr.rows[row.line.itemDetailKey].unavailable" [ngModelOptions]="{ standalone: true }" />
+                        Unavailable
+                      </label>
+                    </div>
+                  }
+                </div>
+                <div class="flex justify-end gap-2">
+                  <app-action-button variant="secondary" (click)="closeReply()">Cancel</app-action-button>
+                  <app-action-button variant="primary" [disabled]="busy()" (click)="saveReply(rfq)">Save prices</app-action-button>
+                </div>
+              </div>
+            }
+          </article>
+        }
+      </section>
+    </div>
+  }
+
+  <ng-container sfDrawerFooter>
+    @if (data(); as d) {
+      <p class="mr-auto text-xs text-gray-500">
+        @if (d.lines.length && awardedCount === d.lines.length) { Every product is awarded. You can send the request for approval. }
+        @else { Award every product to send the request for approval }
+      </p>
+    }
+    <app-action-button variant="secondary" (click)="closed.emit()">Close</app-action-button>
+    <app-action-button variant="primary" [disabled]="!data()?.rfqs?.length" (click)="compare.emit()">Compare &amp; award</app-action-button>
+  </ng-container>
+</app-sf-drawer>

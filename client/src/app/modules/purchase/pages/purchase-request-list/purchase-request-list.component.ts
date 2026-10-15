@@ -1,3 +1,4 @@
+import { InitiateLpoComponent } from 'src/app/modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { Component, ViewChild, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -5,8 +6,9 @@ import { ToastrService } from 'ngx-toastr';
 import { forkJoin, Subscription } from 'rxjs';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
-import { ModalService } from 'src/app/shared/components/modal';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-journey/approval-journey.component';
+import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
 import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
 import {
   DataGridBreadcrumb,
@@ -19,32 +21,38 @@ import {
 } from 'src/app/shared/components/data-grid/data-grid.model';
 import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
-import { DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { CreatePurchaseComponent } from '../create-purchase/create-purchase.component';
-import { FormPromptService } from 'src/app/shared/components/form-prompt-modal/form-prompt.service';
-import { AllocatePurchaseModalComponent, AllocatePurchaseResult } from '../allocate-purchase-modal/allocate-purchase-modal.component';
+import { ModalService } from 'src/app/shared/components/modal';
+import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
+import { WorkflowService } from 'src/app/core/services/workflow.service';
+import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 
 type SourceType = 'job' | 'manual';
 
 const ALL_STATUSES = ['Pending', 'Drafted', 'Rejected', 'Approved'];
-const DRAFT_STATUSES = ['Drafted'];
 const PENDING_STATUSES = ['Pending'];
 const APPROVED_STATUSES = ['Approved'];
-// "Open to work": submitted requests that can be handed to a buyer.
-const NEW_STATUSES = ['Pending', 'Approved'];
+// A job allocated to a buyer starts as New; once the buyer saves the PR it is In Progress, then Pending, then Approved.
+const NEW_STATUSES = ['New'];
+const IN_PROGRESS_STATUSES = ['In Progress'];
+const REJECTED_STATUSES = ['Rejected'];
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900 dark:border-emerald-900',
   Pending: 'bg-amber-50 text-amber-700 ring-amber-200 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900 dark:border-amber-900',
+  New: 'bg-sky-50 text-sky-700 ring-sky-200 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900 dark:border-sky-900',
+  'In Progress': 'bg-indigo-50 text-indigo-700 ring-indigo-200 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900 dark:border-indigo-900',
   Drafted: 'bg-gray-100 text-gray-700 ring-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:border-gray-700',
   Rejected: 'bg-red-50 text-red-700 ring-red-200 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900 dark:border-red-900',
 };
 
+const PR_VIEW_IDS = ['new', 'inProgress', 'rejected', 'all', 'pending', 'readyToPo', 'remainingPo', 'completed'];
+
 @Component({
   selector: 'app-purchase-request-list',
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ActionButtonComponent, CreatePurchaseComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, ApprovalJourneyComponent, ActionButtonComponent, InitiateLpoComponent, CreatePurchaseComponent],
   providers: [DatePipe],
   templateUrl: './purchase-request-list.component.html',
   styleUrl: './purchase-request-list.component.css',
@@ -56,17 +64,19 @@ export class PurchaseRequestListComponent {
   private route = inject(ActivatedRoute);
   private purchaseService = inject(PurchaseService);
   private notificationService = inject(ToastrService);
-  private modal = inject(ModalService);
   private datePipe = inject(DatePipe);
   private employeeService = inject(EmployeeService);
-  private formPrompt = inject(FormPromptService);
+  private confirmDialog = inject(ConfirmDialogService);
+  private modal = inject(ModalService);
+  private workflowService = inject(WorkflowService);
+  private prWorkflowSteps: { id: string; label: string }[] = [];
   private subscriptions = new Subscription();
 
   detailLoading = false;
   detailTabs: DataGridDetailTab[] = [
     { id: 'overview', label: 'Details', icon: 'info' },
     { id: 'items', label: 'Items', icon: 'card' },
-    { id: 'history', label: 'History', icon: 'activity' },
+    { id: 'approval', label: 'Approval', icon: 'activity' },
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
@@ -81,25 +91,26 @@ export class PurchaseRequestListComponent {
   isLoading = false;
 
   breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR' }];
-  /** Shown to everyone; the New tab is added in `views` for assigners, or for buyers who were allocated something. */
-  private readonly newView: DataGridView<any> = { id: 'new', label: 'New' };
+  /** Jobs allocated to the signed-in buyer, waiting for their PR; the tab shows only while there are some. */
+  private readonly newView: DataGridView<any> = { id: 'new', label: 'New', hidePill: true };
   private baseViews: DataGridView<any>[] = [
-    { id: 'all', label: 'All' },
-    { id: 'draft', label: 'Draft' },
+    { id: 'all', label: 'All', hidePill: true },
+    { id: 'inProgress', label: 'In Progress' },
     { id: 'pending', label: 'Pending' },
     { id: 'readyToPo', label: 'Ready to PO' },
     { id: 'remainingPo', label: 'Remaining PO' },
     { id: 'completed', label: 'Completed' },
+    { id: 'rejected', label: 'Rejected' },
   ];
   views: DataGridView<any>[] = this.baseViews;
-  canAssign = false;
   isSuperAdmin = false;
+  canApprovePR = false;
   myId = '';
   private newCount = 0;
   columns: DataGridColumn<any>[] = [];
   rowActions: DataGridRowAction<any>[] = [];
 
-  private activeViewId = 'all';
+  activeViewId = 'all';
 
   page = 1;
   row = 15;
@@ -108,26 +119,42 @@ export class PurchaseRequestListComponent {
   sortDir: 'asc' | 'desc' | null = null;
 
   ngOnInit(): void {
+    const initialView = this.route.snapshot.queryParamMap.get('view') ?? '';
+    this.activeViewId = PR_VIEW_IDS.includes(initialView) ? initialView : 'all';
     this.buildColumns();
     this.buildRowActions();
 
     this.subscriptions.add(
+      this.workflowService.getWorkflows({ feature: WorkflowFeature.PURCHASE_APPROVAL }).subscribe((response) => {
+        const steps = (response?.data?.[0]?.steps ?? []).filter((st: any) => st.enabled !== false && !/^superadmin$/i.test(st.role?.role ?? ''));
+        this.prWorkflowSteps = [...steps].sort((a: any, b: any) => b.order - a.order)
+          .map((st: any) => ({ id: String(st.role?._id ?? st.role), label: st.role?.categoryName ?? '—' }));
+      })
+    );
+
+    this.subscriptions.add(
       this.employeeService.employeeData$.subscribe((data: any) => {
         const role = data?.category?.role;
-        this.myId = data?._id ?? '';
         this.isSuperAdmin = /^superadmin$/i.test(role ?? '');
-        this.canAssign = role === 'superAdmin' || role === 'admin'
-          || data?.category?.privileges?.purchase?.canAssign === true
-          || data?.extraPrivileges?.purchase?.canAssign === true;
+        this.myId = data?._id ?? '';
+        this.canApprovePR = this.isSuperAdmin
+          || data?.category?.privileges?.purchase?.canApprovePR === true
+          || data?.extraPrivileges?.purchase?.canApprovePR === true;
         this.refreshViews();
       })
     );
 
     this.route.queryParams.subscribe((params) => {
       this.page = params['page'] ? parseInt(params['page'], 10) : 1;
-      this.row = params['row'] ? parseInt(params['row'], 10) : 10;
+      const rowParam = parseInt(params['row'], 10);
+      this.row = [5, 15, 30, 50].includes(rowParam) ? rowParam : 15;
       this.searchQuery = params['search'] || '';
-      if (this.grid) this.grid.page = this.page;
+      // The URL is the single source for the tab, so a deep link loads that tab's rows (not "All" under a highlighted tab).
+      this.activeViewId = PR_VIEW_IDS.includes(params['view']) ? params['view'] : 'all';
+      if (this.grid) {
+        this.grid.page = this.page;
+        this.grid.activeViewId = this.activeViewId;
+      }
 
       this.getPurchases();
     });
@@ -140,11 +167,11 @@ export class PurchaseRequestListComponent {
   private buildColumns(): void {
     this.columns = [
       { key: 'date', label: 'Date', type: 'date', sortable: true, width: '120px', valueGetter: (r) => r.approvedDate || r.createdAt },
-      { key: 'customerName', label: 'Customer Name', valueGetter: (r) => r.customerId?.companyName },
-      { key: 'purchaseNo', label: 'PR NO' },
-      { key: 'jobId', label: 'Job ID', valueGetter: (r) => r.jobId?.jobId },
+      { key: 'customerName', label: 'Customer Name', sortable: true, valueGetter: (r) => r.customerId?.companyName },
+      { key: 'purchaseNo', label: 'PR NO', sortable: true },
+      { key: 'jobId', label: 'Job ID', sortable: true, valueGetter: (r) => r.jobId?.jobId },
       {
-        key: 'totalLpo', label: 'LPO Value',
+        key: 'totalLpo', label: 'LPO Value', sortable: true,
         valueGetter: (r) => {
           const value = typeof r.totalLpo === 'number' ? r.totalLpo : parseFloat(r.totalLpo) || 0;
           const formatted = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -160,45 +187,79 @@ export class PurchaseRequestListComponent {
         key: 'procurementPerson', label: 'Procurement Person',
         valueGetter: (r) => r.procurementPerson?.firstName ? `${r.procurementPerson.firstName} ${r.procurementPerson.lastName}` : '-',
       },
+      { key: 'allocatedBy', label: 'Allocated By', valueGetter: (r) => r.allocatedBy?.firstName ? `${r.allocatedBy.firstName} ${r.allocatedBy.lastName}` : '-' },
       {
-        key: 'status', label: 'Status', type: 'badge',
-        valueGetter: (r) => r.status === 'Drafted' ? 'Drafted' : (r.overallStatus || r.status || 'Pending'),
+        key: 'status', label: 'Status', type: 'badge', sortable: true,
+        valueGetter: (r) => {
+          if (r.status === 'Drafted' || r.status === 'New' || r.status === 'In Progress' || r.status === 'Rejected') return r.status;
+          const v = String(r.overallStatus || r.status || 'Pending');
+          return v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
+        },
         badgeClasses: STATUS_BADGE_CLASSES,
       },
     ];
   }
 
+  /** Approved on the PR itself and no approval stage still waiting (the stage list reports lower-case statuses). */
+  private isFullyApproved(r: any): boolean {
+    return r.status === 'Approved' && String(r.overallStatus || 'approved').toLowerCase() === 'approved';
+  }
+
+  private isMine(r: any): boolean {
+    return !!this.myId && String(r.allocatedTo?._id ?? r.allocatedTo ?? '') === this.myId;
+  }
+
+  /** Drafts and rejected requests go back to be fixed. */
+  canEdit(r: any): boolean {
+    return r.status === 'Drafted' || r.status === 'In Progress' || r.status === 'Rejected' || (r.status === 'New' && this.hasItems(r));
+  }
+
+  /** Every product line has an awarded supplier offer (done in Compare & award). */
+  private allAwarded(r: any): boolean {
+    const lines = (r.items ?? []).flatMap((item: any) => item.itemDetails ?? []).filter((d: any) => Number(d.quantity) > 0);
+    return lines.length > 0 && lines.every((d: any) => (d.comparisons ?? []).some((c: any) => c.selected));
+  }
+
+  private hasItems(r: any): boolean {
+    return Array.isArray(r.items) && r.items.length > 0;
+  }
+
+  private jobIdOf(r: any): string | null {
+    return r.jobId?._id ?? (typeof r.jobId === 'string' ? r.jobId : null);
+  }
+
+  /** A New request is an allocated job with no PR yet; its buyer creates the PR from it. */
+  canCreateFromJob(r: any): boolean {
+    return r.status === 'New' && !this.hasItems(r) && !!this.jobIdOf(r) && (this.activeViewId === 'new' || this.isMine(r) || this.isSuperAdmin);
+  }
+
+  // Each action shows only where it applies, so a row never lists buttons it cannot use.
   private buildRowActions(): void {
     this.rowActions = [
-      { id: 'viewApprovalStatus', label: 'View Approval Status', icon: 'eye', quick: true },
-      { id: 'edit', label: 'Edit', icon: 'pencil', quick: true },
+      { id: 'edit', label: 'Edit', icon: 'pencil', quick: true, hidden: (r) => !this.canEdit(r) },
+      { id: 'createPr', label: 'Create PR', icon: 'plus', quick: true, hidden: (r) => !this.canCreateFromJob(r) },
+      { id: 'sendApproval', label: 'Send for approval', icon: 'send', quick: true, hidden: (r) => r.status !== 'In Progress' || !this.allAwarded(r) },
       {
         id: 'initiateLpo', label: 'Initiate LPO', icon: 'send', quick: true,
-        hidden: (r) => (r.overallStatus || r.status) !== 'Approved',
+        hidden: (r) => !this.isFullyApproved(r),
       },
       {
-        id: 'allocate', label: 'Allocate', icon: 'user-round-check', quick: true,
-        hidden: (r) => !this.canAssign || !!r.allocatedTo || !NEW_STATUSES.includes(r.overallStatus === 'approved' ? 'Approved' : r.status),
+        id: 'approve', label: 'Approve', icon: 'check', quick: true,
+        hidden: (r) => !this.canDecide(r),
       },
       {
-        id: 'rejectAllocation', label: 'Reject Allocation', icon: 'close', quick: true,
-        hidden: (r) => !this.myId || (r.allocatedTo?._id ?? r.allocatedTo) !== this.myId,
+        id: 'reject', label: 'Reject', icon: 'close',
+        hidden: (r) => !this.canDecide(r),
       },
-      {
-        id: 'resetAllocation', label: 'Reset Workflow', icon: 'refresh', quick: true,
-        hidden: (r) => !this.isSuperAdmin || !r.allocationHeld,
-      },
-      {
-        id: 'createRfq', label: 'Create RFQ', icon: 'card', quick: true,
-        hidden: (r) => (r.overallStatus || r.status) !== 'Approved',
-      },
+      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.status !== 'Pending' || !this.isSuperAdmin },
     ];
   }
 
   private statusesForView(viewId: string): string[] {
     switch (viewId) {
       case 'new': return NEW_STATUSES;
-      case 'draft': return DRAFT_STATUSES;
+      case 'inProgress': return IN_PROGRESS_STATUSES;
+      case 'rejected': return REJECTED_STATUSES;
       case 'pending': return PENDING_STATUSES;
       case 'readyToPo':
       case 'remainingPo':
@@ -206,6 +267,10 @@ export class PurchaseRequestListComponent {
         return APPROVED_STATUSES;
       default: return ALL_STATUSES;
     }
+  }
+
+  private allocationForView(viewId: string): 'new' | undefined {
+    return viewId === 'new' ? viewId : undefined;
   }
 
   private poProgressForView(viewId: string): 'ready' | 'remaining' | 'completed' | undefined {
@@ -240,9 +305,11 @@ export class PurchaseRequestListComponent {
       row: this.row,
       status: this.statusesForView(this.activeViewId),
       search: this.searchQuery || undefined,
+      sortKey: this.sortKey || undefined,
+      sortDir: this.sortDir || undefined,
       sourceType: this.sourceTypeForView(this.activeViewId),
       poProgress: this.poProgressForView(this.activeViewId),
-      allocation: this.activeViewId === 'new' ? ('new' as const) : undefined,
+      allocation: this.allocationForView(this.activeViewId),
     };
 
     this.subscriptions.add(
@@ -264,7 +331,7 @@ export class PurchaseRequestListComponent {
   }
 
   private loadViewCounts(): void {
-    // The New count is always fetched so a buyer with allocations gets the tab even without the privilege.
+    // The New count is always fetched so a buyer with allocated jobs gets the tab.
     const countViews = [...this.baseViews, this.newView];
     const requests = countViews.reduce((acc, view) => {
       acc[view.id] = this.purchaseService.getPurchases({
@@ -274,7 +341,7 @@ export class PurchaseRequestListComponent {
         search: this.searchQuery || undefined,
         sourceType: this.sourceTypeForView(view.id),
         poProgress: this.poProgressForView(view.id),
-        allocation: view.id === 'new' ? ('new' as const) : undefined,
+        allocation: this.allocationForView(view.id),
       });
       return acc;
     }, {} as Record<string, ReturnType<PurchaseService['getPurchases']>>);
@@ -295,14 +362,17 @@ export class PurchaseRequestListComponent {
   }
 
   private refreshViews(): void {
-    const showNew = this.canAssign || this.newCount > 0;
-    this.views = showNew ? [{ ...this.newView, count: this.newCount }, ...this.baseViews] : this.baseViews;
+    const showNew = true;
+    this.views = [
+      ...(showNew ? [{ ...this.newView, count: this.newCount }] : []),
+      ...this.baseViews,
+    ];
   }
 
   updateUrlParams(): void {
     const queryParams: any = {
       page: this.page !== 1 ? this.page : null,
-      row: this.row !== 10 ? this.row : null,
+      row: this.row !== 15 ? this.row : null,
       search: this.searchQuery || null,
       view: this.activeViewId && this.activeViewId !== 'all' ? this.activeViewId : null,
     };
@@ -318,94 +388,103 @@ export class PurchaseRequestListComponent {
   onRowAction(event: DataGridRowActionEvent<any>): void {
     const { action, row } = event;
     switch (action.id) {
-      case 'viewApprovalStatus':
-        this.viewApprovalStatus(row);
-        break;
       case 'initiateLpo':
-        this.router.navigate(['/purchase/initiate-lpo', row._id]);
+        this.openInitiateLpo(row._id);
         break;
       case 'edit':
         this.onEditPr(row);
         break;
-      case 'createRfq':
-        this.createRfq(row);
+      case 'sendApproval':
+        void this.sendForApproval(row);
         break;
-      case 'allocate':
-        this.allocate(row);
+      case 'approve':
+        void this.decide(row, 'approved');
         break;
-      case 'rejectAllocation':
-        void this.rejectAllocation(row);
+      case 'reject':
+        void this.decide(row, 'rejected');
         break;
-      case 'resetAllocation':
-        this.resetAllocation(row);
+      case 'createPr':
+        this.onCreatePrForJob(row);
+        break;
+      case 'resetWorkflow':
+        this.resetWorkflow(row);
         break;
     }
   }
 
-  allocate(row: any): void {
-    if (!this.canAssign) {
-      this.notificationService.warning('You do not have permission to assign purchases');
+  /** A pending PR can be decided by someone allowed to approve, except the person who raised it. */
+  private canDecide(r: any): boolean {
+    if (r.status !== 'Pending' || !this.canApprovePR) return false;
+    if (this.isSuperAdmin) return true;
+    const creator = r.createdBy?._id ?? r.createdBy;
+    return !(creator && creator === this.myId);
+  }
+
+  resetWorkflow(row: any): void {
+    const data: ResetWorkflowModalData = {
+      jobId: row._id,
+      context: row.purchaseNo,
+      contextLabel: 'Purchase request',
+      description: 'Tick the approval stages that get another chance on this purchase request. Unticked stages are skipped for this request only.',
+      stages: this.prWorkflowSteps,
+      restart: (ids) => this.purchaseService.resetPurchaseWorkflow(row._id, ids),
+    };
+    this.modal.open<boolean>(ResetWorkflowComponent, { width: '520px', data })
+      .afterClosed().subscribe((reset) => { if (reset) this.getPurchases(); });
+  }
+
+  /** Moves a saved In Progress PR to Pending without opening the drawer. */
+  async sendForApproval(row: any): Promise<void> {
+    if (!this.hasItems(row)) {
+      this.notificationService.error('Add at least one item before sending for approval');
       return;
     }
-    this.modal
-      .open<AllocatePurchaseResult>(AllocatePurchaseModalComponent, { width: '520px', data: { purchaseNo: row.purchaseNo } })
-      .afterClosed()
-      .subscribe((result) => {
-        if (!result?.employeeId) return;
-        this.subscriptions.add(
-          this.purchaseService.allocatePurchase(row._id, result.employeeId).subscribe({
-            next: () => {
-              this.notificationService.success('Purchase request allocated');
-              this.getPurchases();
-            },
-            error: (error) => this.notificationService.error(error?.error?.message || 'Failed to allocate purchase request'),
-          })
-        );
-      });
-  }
-
-  async rejectAllocation(row: any): Promise<void> {
-    const answer = await this.formPrompt.prompt({
-      title: 'Reject allocation',
-      message: `Send ${row.purchaseNo} back to the person who assigned it.`,
-      confirmLabel: 'Reject',
-      fields: [{ key: 'reason', label: 'Reason', type: 'textarea', required: true }],
+    if (!this.allAwarded(row)) {
+      this.notificationService.error('Award every product in Compare & award before sending for approval');
+      return;
+    }
+    const { confirmed } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Send for approval',
+      message: 'This purchase request will move to Pending for approval.',
+      details: [{ label: 'PR No', value: row.purchaseNo || '-' }],
+      confirmLabel: 'Send',
     });
-    if (!answer) return;
+    if (!confirmed) return;
     this.subscriptions.add(
-      this.purchaseService.rejectAllocation(row._id, answer['reason']).subscribe({
+      this.purchaseService.updatePurchase(row._id, { status: 'Pending' } as any).subscribe({
         next: () => {
-          this.notificationService.success('Allocation rejected');
+          this.notificationService.success('Sent for approval');
           this.getPurchases();
         },
-        error: (error) => this.notificationService.error(error?.error?.message || 'Failed to reject allocation'),
+        error: (error) => this.notificationService.error(error?.error?.message || 'Failed to send for approval'),
       })
     );
   }
 
-  resetAllocation(row: any): void {
+  async decide(row: any, status: 'approved' | 'rejected'): Promise<void> {
+    const approve = status === 'approved';
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: approve ? 'approve' : 'reject',
+      title: approve ? 'Approve purchase request' : 'Reject purchase request',
+      message: approve ? 'Your approval moves this purchase request on.' : 'This purchase request will be sent back to its creator.',
+      details: [{ label: 'PR No', value: row.purchaseNo || '-' }],
+      confirmLabel: approve ? 'Approve' : 'Reject',
+      reason: approve ? 'optional' : true,
+      reasonLabel: approve ? 'Approval comment' : 'Rejection reason',
+    });
+    if (!confirmed) return;
+    if (!approve && !reason?.trim()) {
+      this.notificationService.error('Rejection reason is required');
+      return;
+    }
     this.subscriptions.add(
-      this.purchaseService.resetAllocation(row._id).subscribe({
+      this.purchaseService.updatePurchaseStatus(row._id, status, reason ?? '').subscribe({
         next: () => {
-          this.notificationService.success('Assignment workflow reset');
+          this.notificationService.success(approve ? 'Purchase approved successfully' : 'Purchase rejected successfully');
           this.getPurchases();
         },
-        error: (error) => this.notificationService.error(error?.error?.message || 'Failed to reset the workflow'),
-      })
-    );
-  }
-
-  createRfq(row: any): void {
-    this.subscriptions.add(
-      this.purchaseService.createRfqFromPurchase(row._id).subscribe({
-        next: () => {
-          this.notificationService.success('RFQ created successfully');
-          this.router.navigate(['/purchase/rfq']);
-        },
-        error: (error) => {
-          this.notificationService.error(error?.error?.message || 'Failed to create RFQ');
-          console.error('Error creating RFQ:', error);
-        },
+        error: (error) => this.notificationService.error(error?.error?.message || `Failed to ${approve ? 'approve' : 'reject'} purchase`),
       })
     );
   }
@@ -439,18 +518,41 @@ export class PurchaseRequestListComponent {
     return rows;
   }
 
-  historyEntries(row: any): DetailTimelineEntry[] {
-    const approvalStatus: any[] = row?.approvalStatus ?? [];
-    return approvalStatus.map((approval) => {
-      const by = approval.updatedBy ? `${approval.updatedBy.firstName} ${approval.updatedBy.lastName}` : 'Pending';
-      const when = approval.updatedAt ? this.datePipe.transform(approval.updatedAt, 'dd MMM yyyy, h:mm a') : '';
-      const tone = approval.status === 'approved' ? 'good' : approval.status === 'rejected' ? 'bad' : 'neutral';
-      return {
-        text: `Step ${approval.step} ${approval.status || 'pending'}`,
-        meta: [by, when].filter(Boolean).join(' · '),
-        tone,
-      } as DetailTimelineEntry;
+  /** The PR's life as one vertical journey: created, allocated, drafted, then each approval step. */
+  approvalJourney(row: any): ApprovalJourneyStage[] {
+    const name = (p: any) => (p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() : '');
+    const when = (d: any) => (d ? this.datePipe.transform(d, 'dd MMM yyyy, h:mm a') ?? '' : '');
+    const join = (...parts: any[]) => parts.filter(Boolean).join(' · ');
+    const stages: ApprovalJourneyStage[] = [];
+    const add = (variant: ApprovalJourneyStage['variant'], icon: string, title: string, subtitle?: string) =>
+      stages.push({ key: `pr-${stages.length}`, variant, icon, title, subtitle: subtitle || undefined });
+
+    add('done', 'check_circle', 'Purchase request created', join(name(row.createdBy), when(row.createdAt)));
+
+    if (row.allocatedTo && row.allocatedAt) {
+      add('done', 'check_circle', `Allocated to ${name(row.procurementPerson) || 'buyer'}`, join(row.allocatedBy ? `By ${name(row.allocatedBy)}` : '', when(row.allocatedAt)));
+    }
+
+    if (row.status === 'New') {
+      add('current', 'schedule', 'Waiting for the buyer to create the purchase request');
+    } else if (row.status === 'In Progress' || row.status === 'Drafted') {
+      add('current', 'schedule', 'Being prepared by the buyer');
+    }
+
+    (row.approvalStatus ?? []).forEach((approval: any, i: number, all: any[]) => {
+      const status = approval.status || 'pending';
+      const firstPending = status === 'pending' && all.findIndex((a) => (a.status || 'pending') === 'pending') === i;
+      const title = approval.managerApproval ? 'Manager approval' : (approval.role?.categoryName || `Approval step ${approval.step}`);
+      add(
+        status === 'approved' ? 'done' : status === 'rejected' ? 'rejected' : firstPending ? 'current' : 'stage',
+        status === 'approved' ? 'check_circle' : status === 'rejected' ? 'close' : 'schedule',
+        title,
+        approval.updatedBy
+          ? join(`${status === 'approved' ? 'Approved' : 'Rejected'} by ${name(approval.updatedBy)}`, when(approval.updatedDate || approval.updatedAt))
+          : 'Waiting for approval',
+      );
     });
+    return stages;
   }
 
   overviewSections(row: any): DetailOverviewSection[] {
@@ -479,26 +581,17 @@ export class PurchaseRequestListComponent {
     ];
   }
 
-  viewApprovalStatus(purchase: any): void {
-    if (!purchase) {
-      this.notificationService.error('Purchase data is missing');
-      return;
-    }
-    try {
-      const dialogData: ApprovalStatusData = { entity: purchase, entityType: 'purchaseRequest' };
-      this.modal.open<void, ApprovalStatusData>(ApprovalStatusComponent, { width: '800px', data: dialogData });
-    } catch (error) {
-      console.error('Error opening approval status dialog:', error);
-      this.notificationService.error('Failed to open approval status');
-    }
-  }
-
   // --- Create PR drawer ---------------------------------------------------------
 
   /** Mounted only while open, so each opening starts the form fresh. */
   createDrawerOpen = false;
 
-  onCreatePr(): void {
+  /** Drawer opened from a New row: the job is preselected, so the buyer only fills in the items. */
+  createDrawerJobId: string | null = null;
+
+  onCreatePrForJob(row: any, event?: Event): void {
+    event?.stopPropagation();
+    this.createDrawerJobId = this.jobIdOf(row);
     this.createDrawerOpen = true;
   }
 
@@ -508,6 +601,7 @@ export class PurchaseRequestListComponent {
 
   onCreateDrawerClosed(): void {
     this.createDrawerOpen = false;
+    this.createDrawerJobId = null;
   }
 
   // --- Edit PR drawer -------------------------------------------------------------
@@ -529,5 +623,20 @@ export class PurchaseRequestListComponent {
   onEditDrawerClosed(): void {
     this.editDrawerOpen = false;
     this.editDrawerPurchaseId = null;
+  }
+  /** Initiate LPO opens as a slide-over on top of the list. */
+  initiateLpoPurchaseId: string | null = null;
+
+  openInitiateLpo(purchaseId: string): void {
+    this.initiateLpoPurchaseId = purchaseId;
+  }
+
+  onInitiateLpoClosed(): void {
+    this.initiateLpoPurchaseId = null;
+  }
+
+  /** An LPO went out, so the PR may have moved to Remaining PO or Completed. */
+  onInitiateLpoIssued(): void {
+    this.getPurchases();
   }
 }

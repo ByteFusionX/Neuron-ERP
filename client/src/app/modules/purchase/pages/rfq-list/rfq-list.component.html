@@ -71,3 +71,5 @@
         </ng-template>
     </app-data-grid>
 </div>
+
+<app-initiate-lpo *ngIf="initiateLpoPurchaseId" [purchaseIdInput]="initiateLpoPurchaseId" (closed)="onInitiateLpoClosed()"></app-initiate-lpo>

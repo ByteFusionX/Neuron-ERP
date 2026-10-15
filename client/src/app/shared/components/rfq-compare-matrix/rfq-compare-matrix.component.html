@@ -1,129 +1,224 @@
 @let d = data();
+@let s = stats();
 
-<!-- coverage: how much of the enquiry is settled -->
-<section class="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-erp-border-dark dark:bg-erp-surface-dark">
-  <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-    <div class="min-w-0 flex-1">
-      <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-        {{ d.coverage.awarded }} of {{ d.coverage.total }} product{{ d.coverage.total === 1 ? '' : 's' }} awarded
-        @if (d.coverage.unavailable) { <span class="font-normal text-gray-500">· {{ d.coverage.unavailable }} unavailable</span> }
-      </p>
-      <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-        <div class="h-full rounded-full transition-all"
-          [ngClass]="d.coverage.open ? 'bg-sky-500' : 'bg-emerald-500'" [style.width.%]="coveragePct()"></div>
-      </div>
-      <p class="mt-1.5 text-xs" [ngClass]="d.coverage.open ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'">
-        @if (d.coverage.open) { {{ d.coverage.open }} product{{ d.coverage.open === 1 ? '' : 's' }} still need a supplier }
-        @else { Every product is settled }
-      </p>
+<!-- summary: how much of the enquiry is settled -->
+<section class="mb-4 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 pt-4">
+    <div class="flex items-baseline gap-2">
+      <span class="text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ s.awarded }}<span class="text-base font-medium text-gray-400 dark:text-gray-500">/{{ s.total }}</span></span>
+      <span class="text-sm text-gray-500 dark:text-gray-400">product{{ s.total === 1 ? '' : 's' }} awarded</span>
+      <span class="ml-1 rounded-lg px-2 py-0.5 text-xs font-medium"
+        [ngClass]="d.coverage.open ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'">
+        @if (d.coverage.open) { {{ d.coverage.open }} still need a supplier } @else { All settled }
+      </span>
     </div>
-    <div class="flex shrink-0 rounded-lg border border-gray-200 p-0.5 text-xs dark:border-erp-border-dark" role="tablist" aria-label="Show products">
-      @for (f of [['all', 'All'], ['open', 'Open'], ['awarded', 'Awarded']]; track f[0]) {
-        <button type="button" role="tab" [attr.aria-selected]="filter() === f[0]" (click)="filter.set($any(f[0]))"
-          class="rounded-md px-2.5 py-1 font-medium"
-          [ngClass]="filter() === f[0] ? 'bg-violet-600 text-white' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'">{{ f[1] }}</button>
+    <div class="ml-auto flex shrink-0 rounded-lg bg-gray-100 p-0.5 text-xs dark:bg-gray-900" role="tablist" aria-label="Show products">
+      @for (f of filterTabs(); track f.key) {
+        <button type="button" role="tab" [attr.aria-selected]="filter() === f.key" (click)="filter.set(f.key)"
+          class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition-colors"
+          [ngClass]="filter() === f.key ? 'bg-white text-gray-900 shadow-sm dark:bg-erp-surface-dark dark:text-gray-100' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'">
+          {{ f.label }}
+          <span class="rounded px-1 text-[10px] tabular-nums"
+            [ngClass]="filter() === f.key ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300' : 'bg-gray-200/70 text-gray-500 dark:bg-gray-800 dark:text-gray-400'">{{ f.count }}</span>
+        </button>
       }
     </div>
+  </div>
+
+  <div class="mt-4 grid grid-cols-2 border-t border-gray-100 dark:border-erp-border-dark sm:grid-cols-4">
+    @for (seg of segments(); track seg.key) {
+      <div class="border-gray-100 px-4 py-2.5 dark:border-erp-border-dark [&:not(:last-child)]:border-r">
+        <div class="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+          <span class="h-1.5 w-1.5 rounded-full" [ngClass]="seg.dot"></span>{{ seg.label }}
+        </div>
+        <div class="mt-0.5 flex items-baseline gap-1.5">
+          <span class="text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ seg.count }}</span>
+          <span class="truncate text-[11px] text-gray-400 dark:text-gray-500">{{ seg.hint }}</span>
+        </div>
+      </div>
+    }
   </div>
 </section>
 
 @if (!d.rfqs.length) {
-  <p class="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-erp-border-dark">No supplier RFQs to compare yet.</p>
+  <div class="flex flex-col items-center rounded-xl border border-dashed border-gray-300 px-4 py-10 text-center dark:border-erp-border-dark">
+    <svg class="h-8 w-8 text-gray-300 dark:text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5h18M3 12h18M3 16.5h18M9 4.5v15"/></svg>
+    <p class="mt-2 text-sm text-gray-500">No supplier RFQs to compare yet.</p>
+  </div>
 } @else {
-  <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-erp-border-dark" [class.opacity-60]="busy()">
+  <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white transition-opacity dark:border-erp-border-dark dark:bg-erp-surface-dark" [class.opacity-60]="busy()">
     <table class="min-w-full border-separate border-spacing-0 text-sm">
       <thead>
-        <tr class="bg-gray-50 dark:bg-gray-900/60">
-          <th scope="col" class="sticky left-0 z-10 min-w-[16rem] border-b border-r border-gray-200 bg-gray-50 px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:border-erp-border-dark dark:bg-gray-900">Product</th>
+        <tr>
+          <th scope="col" class="sticky left-0 z-20 min-w-[17rem] border-b border-r border-gray-200 bg-white px-4 py-3 text-left align-bottom font-normal dark:border-erp-border-dark dark:bg-erp-surface-dark">
+            <span class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Product</span>
+            <span class="text-[11px] text-gray-400 dark:text-gray-500">{{ d.rfqs.length }} supplier{{ d.rfqs.length === 1 ? '' : 's' }} compared</span>
+          </th>
           @for (col of d.rfqs; track col._id) {
-            <th scope="col" class="min-w-[11rem] border-b border-gray-200 px-3 py-2.5 text-left align-top font-normal dark:border-erp-border-dark">
-              <button type="button" (click)="openRfq.emit(col._id)" class="block max-w-[14rem] truncate text-[13px] font-semibold text-gray-900 hover:text-violet-700 dark:text-gray-100 dark:hover:text-violet-300" [title]="col.supplierName">{{ col.supplierName }}</button>
-              <span class="mt-0.5 flex items-center gap-1.5 text-[11px] text-gray-400">
-                {{ col.rfqNo }}
-                <span class="rounded-full border px-1.5 py-px text-[10px] font-medium ring-1 ring-inset" [ngClass]="statusClasses(col)">{{ statusLabel(col) }}</span>
-              </span>
-              <span class="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">Won {{ col.wonCount }}/{{ col.lineCount }}</span>
+            <th scope="col" class="min-w-[13rem] border-b border-gray-200 p-2 text-left align-top font-normal dark:border-erp-border-dark">
+              <div class="rounded-lg border border-gray-100 bg-gray-50/70 p-2.5 dark:border-erp-border-dark dark:bg-gray-900/40">
+                <div class="flex items-start gap-2.5">
+                  <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-[11px] font-semibold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300" aria-hidden="true">{{ initials(col.supplierName) }}</span>
+                  <div class="min-w-0 flex-1">
+                    <button type="button" (click)="openRfq.emit(col._id)" [title]="'Open ' + col.rfqNo + ' · ' + col.supplierName"
+                      class="block max-w-full truncate text-[13px] font-semibold text-gray-900 hover:text-violet-700 dark:text-gray-100 dark:hover:text-violet-300">{{ col.supplierName }}</button>
+                    <span class="block truncate text-[11px] text-gray-400 dark:text-gray-500">{{ col.rfqNo }}</span>
+                  </div>
+                </div>
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <span class="rounded-full border px-1.5 py-px text-[10px] font-medium ring-1 ring-inset" [ngClass]="statusClasses(col)">{{ statusLabel(col) }}</span>
+                  <span class="text-[11px] tabular-nums text-gray-500 dark:text-gray-400">Won <span class="font-semibold text-gray-800 dark:text-gray-200">{{ col.wonCount }}</span>/{{ col.lineCount }}</span>
+                </div>
+                @if (!locked()) {
+                  @let sa = supplierAwards(col);
+                  @if (sa.awards.length) {
+                    <button type="button" [disabled]="busy()" (click)="onAwardSupplier(col)"
+                      class="mt-2 w-full rounded-md bg-violet-600 px-2 py-1.5 text-[11px] font-medium text-white shadow-sm transition-colors hover:bg-violet-700 disabled:opacity-50"
+                      [title]="'Award ' + sa.awards.length + ' open product(s) to ' + col.supplierName">
+                      Award all {{ sa.awards.length }} to this supplier
+                    </button>
+                    @if (sa.skipped) {
+                      <span class="mt-1 block text-center text-[10px] text-gray-400 dark:text-gray-500">{{ sa.skipped }} open can't be supplied</span>
+                    }
+                  }
+                }
+              </div>
             </th>
           }
         </tr>
       </thead>
       <tbody>
         @for (group of groups(); track group.name) {
-          <tr class="bg-gray-50/70 dark:bg-gray-900/30">
-            <th scope="rowgroup" class="sticky left-0 z-10 border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left dark:border-erp-border-dark dark:bg-gray-900">
-              <span class="text-[12px] font-semibold text-gray-800 dark:text-gray-200">{{ group.name }}</span>
-              <span class="ml-1.5 text-[11px] font-normal text-gray-500">{{ group.awarded }}/{{ groupTotals().get(group.name) }} awarded</span>
+          @let folded = collapsed().has(group.name);
+          @let total = groupTotals().get(group.name) || 0;
+          <tr>
+            <th scope="rowgroup" class="sticky left-0 z-10 border-b border-r border-gray-200 bg-gray-50 px-2 py-1.5 text-left font-normal dark:border-erp-border-dark dark:bg-gray-900">
+              <button type="button" (click)="toggleGroup(group.name)" [attr.aria-expanded]="!folded"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-gray-100 dark:hover:bg-gray-800">
+                <svg class="h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform" [class.-rotate-90]="folded" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+                <span class="truncate text-[12px] font-semibold text-gray-800 dark:text-gray-200">{{ group.name }}</span>
+                <span class="ml-auto shrink-0 rounded-md bg-white px-1.5 py-px text-[10px] font-medium tabular-nums text-gray-500 ring-1 ring-inset ring-gray-200 dark:bg-erp-surface-dark dark:text-gray-400 dark:ring-gray-700">{{ group.awarded }}/{{ total }} awarded</span>
+              </button>
             </th>
             @for (col of d.rfqs; track col._id) {
-              <td class="border-b border-gray-200 px-3 py-2 dark:border-erp-border-dark">
+              <td class="border-b border-gray-200 bg-gray-50 px-2 py-1.5 dark:border-erp-border-dark dark:bg-gray-900">
                 @if (!locked() && groupAwards(group, col).length > 1) {
                   <button type="button" [disabled]="busy()" (click)="onAwardGroup(group, col)"
-                    class="whitespace-nowrap rounded-md border border-violet-200 px-2 py-0.5 text-[11px] font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50 dark:border-violet-900 dark:text-violet-300 dark:hover:bg-violet-950/40"
-                    [title]="'Award every open ' + group.name + ' product to ' + col.supplierName">Award group</button>
+                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:text-violet-300 dark:hover:bg-violet-950/40"
+                    [title]="'Award every open ' + group.name + ' product to ' + col.supplierName">
+                    <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/></svg>
+                    Award group
+                  </button>
                 }
               </td>
             }
           </tr>
-          @for (row of group.rows; track row.key) {
-            @let badge = rowBadge(row);
-            <tr>
-              <th scope="row" class="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-3 py-2.5 text-left align-top font-normal dark:border-erp-border-dark dark:bg-erp-surface-dark">
-                <span class="block text-[13px] text-gray-900 dark:text-gray-100">{{ row.detail }}</span>
-                @if (row.itemCode || row.partNo) {
-                  <span class="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-gray-500">
-                    @if (row.itemCode) { <span class="font-medium">{{ row.itemCode }}</span> }
+          @if (!folded) {
+            @for (row of group.rows; track row.key) {
+              @let badge = rowBadge(row);
+              <tr class="group/row">
+                <th scope="row" class="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-4 py-3 text-left align-top font-normal dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                  <span class="absolute inset-y-3 left-0 w-0.5 rounded-r-full" [ngClass]="badge.dot" aria-hidden="true"></span>
+                  <span class="block text-[13px] font-medium leading-snug text-gray-900 dark:text-gray-100">{{ row.detail }}</span>
+                  <span class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                    @if (row.itemCode) { <span class="rounded bg-gray-100 px-1.5 py-px font-mono text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ row.itemCode }}</span> }
                     @if (row.partNo) { <span>P/N {{ row.partNo }}</span> }
+                    <span class="tabular-nums">· {{ row.quantity }} {{ row.uom || '' }}</span>
                   </span>
-                }
-                <span class="mt-0.5 block text-[11px] text-gray-500">Qty {{ row.quantity }} {{ row.uom || '' }}</span>
-                <span class="mt-1 inline-block max-w-full truncate rounded-full px-2 py-px text-[11px] font-medium" [ngClass]="badge.classes" [title]="badge.label">{{ badge.label }}</span>
-              </th>
-              @for (col of d.rfqs; track col._id) {
-                @let cell = cellFor(row, col);
-                <td class="border-b border-gray-200 px-3 py-2.5 align-top dark:border-erp-border-dark"
-                  [ngClass]="cell?.lineStatus === 'Confirmed' ? 'bg-emerald-50/70 dark:bg-emerald-950/20' : cell?.lineStatus === 'Lost' ? 'bg-gray-50/70 dark:bg-gray-900/30' : ''">
-                  @if (!cell) {
-                    <span class="text-xs text-gray-300 dark:text-gray-600" title="This supplier was not asked for this product">Not asked</span>
-                  } @else if (cell.lineStatus === 'Unavailable' || cell.quote?.availability === 'Unavailable') {
-                    <span class="text-xs text-gray-500">Unavailable</span>
-                  } @else if (!cell.quote) {
-                    <span class="text-xs text-amber-600 dark:text-amber-400">No price yet</span>
-                  } @else {
-                    <span class="block text-[13px] font-semibold tabular-nums"
-                      [ngClass]="cell.lineStatus === 'Lost' ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100'">
-                      {{ cell.quote.currency }} {{ (cell.quote.unitLanded ?? cell.quote.unitPrice) | number: '1.2-2' }}
-                    </span>
-                    @if (cell.quote.currency !== 'QAR' && cell.quote.unitLandedQar != null) {
-                      <span class="block text-[11px] text-gray-500 tabular-nums">≈ QAR {{ cell.quote.unitLandedQar | number: '1.2-2' }}</span>
-                    }
-                    <span class="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-gray-500">
-                      @if (cell.quote.leadTimeDays != null) { <span>{{ cell.quote.leadTimeDays }}d lead</span> }
-                      @if (cell.quote.availability === 'Limited') { <span class="text-amber-600 dark:text-amber-400">Limited</span> }
-                      @if (row.lowestRfqId === col._id) { <span class="font-medium text-emerald-600 dark:text-emerald-400">Lowest</span> }
-                    </span>
-                    @if (cell.lineStatus === 'Confirmed') {
-                      <span class="mt-1.5 flex items-center gap-2">
-                        <span class="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">✓ Awarded</span>
-                        @if (!locked()) {
-                          <button type="button" [disabled]="busy()" (click)="onReopen(row, cell)"
-                            class="text-[11px] text-gray-500 underline-offset-2 hover:underline disabled:opacity-50">Undo</button>
+                  <span class="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium" [ngClass]="badge.classes" [title]="badge.label">
+                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" [ngClass]="badge.dot"></span>
+                    <span class="truncate">{{ badge.label }}</span>
+                  </span>
+                </th>
+                @for (col of d.rfqs; track col._id) {
+                  @let cell = cellFor(row, col);
+                  <td class="border-b border-gray-200 p-2 align-top dark:border-erp-border-dark">
+                    @if (!cell) {
+                      <div class="flex min-h-[5rem] items-center justify-center rounded-lg border border-dashed border-gray-200 text-[11px] text-gray-400 dark:border-gray-800 dark:text-gray-600"
+                        title="This supplier was not asked for this product">Not asked</div>
+                    } @else if (cell.lineStatus === 'Unavailable' || cell.quote?.availability === 'Unavailable') {
+                      <div class="flex min-h-[5rem] flex-col items-center justify-center gap-1 rounded-lg bg-gray-50 text-[11px] text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M5.6 5.6l12.8 12.8"/></svg>
+                        Can't supply
+                      </div>
+                    } @else if (!cell.quote) {
+                      <div class="flex min-h-[5rem] flex-col items-center justify-center gap-1 rounded-lg border border-amber-200/70 bg-amber-50/60 text-[11px] font-medium text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>
+                        Awaiting price
+                      </div>
+                    } @else {
+                      @let won = cell.lineStatus === 'Confirmed';
+                      @let lost = cell.lineStatus === 'Lost';
+                      @let best = isBest(row, col);
+                      @let delta = deltaPct(row, cell);
+                      <div class="flex min-h-[5rem] flex-col rounded-lg border p-2.5 transition-colors"
+                        [ngClass]="won ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-300 dark:border-emerald-800 dark:bg-emerald-950/30 dark:ring-emerald-800'
+                          : lost ? 'border-gray-100 bg-gray-50/60 opacity-60 dark:border-gray-800 dark:bg-gray-900/30'
+                          : best ? 'border-emerald-200 dark:border-emerald-900/70'
+                          : 'border-gray-200 hover:border-violet-300 dark:border-gray-800 dark:hover:border-violet-800'">
+                        <div class="flex items-start justify-between gap-2">
+                          <div class="min-w-0">
+                            <span class="block tabular-nums leading-tight" [ngClass]="lost ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100'">
+                              <span class="text-[10px] font-medium text-gray-400 dark:text-gray-500">{{ cell.quote.currency }}</span>
+                              <span class="ml-0.5 text-[15px] font-semibold">{{ (cell.quote.unitLanded ?? cell.quote.unitPrice) | number: '1.2-2' }}</span>
+                            </span>
+                            @if (cell.quote.currency !== 'QAR' && cell.quote.unitLandedQar != null) {
+                              <span class="block text-[10px] tabular-nums text-gray-500 dark:text-gray-400">≈ QAR {{ cell.quote.unitLandedQar | number: '1.2-2' }}</span>
+                            }
+                          </div>
+                          @if (best) {
+                            <span class="inline-flex shrink-0 items-center gap-0.5 rounded-md bg-emerald-100 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" title="Lowest price on this product">
+                              <svg class="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m0 0l-6-6m6 6l6-6"/></svg>
+                              Best
+                            </span>
+                          } @else if (delta != null && delta > 0) {
+                            <span class="shrink-0 rounded-md bg-gray-100 px-1.5 py-px text-[10px] font-medium tabular-nums text-gray-500 dark:bg-gray-800 dark:text-gray-400" title="Above the lowest price">+{{ delta | number: '1.0-1' }}%</span>
+                          }
+                        </div>
+
+                        @if (cell.quote.leadTimeDays != null || (cell.quote.availability && cell.quote.availability !== 'Available')) {
+                          <div class="mt-1.5 flex flex-wrap gap-1">
+                            @if (cell.quote.availability && cell.quote.availability !== 'Available') {
+                              <span class="rounded bg-sky-50 px-1.5 py-px text-[10px] font-medium text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">{{ cell.quote.availability }}</span>
+                            }
+                            @if (cell.quote.leadTimeDays != null) {
+                              <span class="rounded bg-gray-100 px-1.5 py-px text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ cell.quote.leadTimeDays }}d lead</span>
+                            }
+                          </div>
                         }
-                      </span>
-                      @if (cell.awardReason) { <span class="mt-0.5 block text-[11px] italic text-gray-500" [title]="cell.awardReason">“{{ cell.awardReason }}”</span> }
-                    } @else if (!locked() && canAward(row, cell)) {
-                      <button type="button" [disabled]="busy()" (click)="onAward(row, cell)"
-                        class="mt-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium disabled:opacity-50"
-                        [ngClass]="row.status === 'awarded' ? 'border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-gray-800' : 'bg-violet-600 text-white hover:bg-violet-700'">
-                        {{ row.status === 'awarded' ? 'Switch here' : 'Award' }}
-                      </button>
+
+                        <div class="mt-auto pt-2">
+                          @if (won) {
+                            <div class="flex items-center justify-between gap-2">
+                              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/></svg>
+                                Awarded
+                              </span>
+                              @if (!locked()) {
+                                <button type="button" [disabled]="busy()" (click)="onReopen(row, cell)"
+                                  class="rounded px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-white hover:text-gray-800 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-200">Undo</button>
+                              }
+                            </div>
+                            @if (cell.awardReason) { <span class="mt-1 block truncate text-[11px] italic text-gray-500 dark:text-gray-400" [title]="cell.awardReason">“{{ cell.awardReason }}”</span> }
+                          } @else if (!locked() && canAward(row, cell)) {
+                            <button type="button" [disabled]="busy()" (click)="onAward(row, cell)"
+                              class="w-full rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50"
+                              [ngClass]="row.status === 'awarded'
+                                ? 'border border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-violet-800 dark:hover:text-violet-300'
+                                : 'bg-violet-600 text-white shadow-sm hover:bg-violet-700'">
+                              {{ row.status === 'awarded' ? 'Switch here' : 'Award' }}
+                            </button>
+                          }
+                        </div>
+                      </div>
                     }
-                  }
-                </td>
-              }
-            </tr>
+                  </td>
+                }
+              </tr>
+            }
           }
         } @empty {
-          <tr><td [attr.colspan]="d.rfqs.length + 1" class="px-3 py-6 text-center text-sm text-gray-500">No products match this filter.</td></tr>
+          <tr><td [attr.colspan]="d.rfqs.length + 1" class="px-3 py-10 text-center text-sm text-gray-500">No products match this filter.</td></tr>
         }
       </tbody>
     </table>

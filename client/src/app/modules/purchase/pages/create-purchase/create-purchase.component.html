@@ -12,11 +12,11 @@
     [tabParam]="''"
   >
     <ng-container footerLeft>
-      <app-action-button variant="outline" *ngIf="!isEditing" (click)="onDraftClicks()">Save as draft</app-action-button>
+      <app-action-button variant="outline" *ngIf="canSaveDraft" (click)="onDraftClicks()">{{ isJobLess ? 'Save as draft' : 'Save' }}</app-action-button>
     </ng-container>
     <ng-container footerRight>
       <app-action-button (click)="onDiscardClicks()">Discard</app-action-button>
-      <app-action-button variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
+      <app-action-button *ngIf="allAwarded" variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
     </ng-container>
 
     <div tabBody>
@@ -36,12 +36,13 @@
         [sourceLocked]="sourceLocked"
         [isJobLess]="isJobLess"
         [selectedJobSheet]="selectedJobSheet"
+        [lineAwarded]="lineAwarded"
         [lineLocked]="lineLocked"
         [lineBadge]="lineBadge"
         (jobLessChange)="toggleJobLess($event)"
         (jobSelected)="onJobSelected($event)"
         (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-        (addRfqClicked)="onAddRfqForLine()"
+        (rfqRequested)="onRfqForSelection($event)"
         (createProductRequested)="onCreatePartNumber()"
       ></app-pr-form>
     </div>
@@ -71,12 +72,13 @@
     [sourceLocked]="sourceLocked"
     [isJobLess]="isJobLess"
     [selectedJobSheet]="selectedJobSheet"
-    [lineLocked]="lineLocked"
+    [lineAwarded]="lineAwarded"
+        [lineLocked]="lineLocked"
     [lineBadge]="lineBadge"
     (jobLessChange)="toggleJobLess($event)"
     (jobSelected)="onJobSelected($event)"
     (materialRequestsClicked)="onGetMaterialRequestsClicks()"
-    (addRfqClicked)="onAddRfqForLine()"
+    (rfqRequested)="onRfqForSelection($event)"
     (createProductRequested)="onCreatePartNumber()"
   ></app-pr-form>
 
@@ -85,13 +87,24 @@
       <span *ngIf="purchaseId && !isEditing" class="text-xs text-gray-400 dark:text-gray-500">Draft {{ f['purchaseNo'].value }} saved</span>
       <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onMrRequestClicks()">MR request</app-action-button>
       <app-action-button *ngIf="!isJobLess" variant="secondary" (click)="onSupplierClicks()">Supplier discount</app-action-button>
+      <app-action-button variant="secondary" (click)="onRfqClicks()">Supplier RFQs</app-action-button>
+      <app-action-button variant="secondary" (click)="onCompareClicks()">Compare &amp; award</app-action-button>
       <app-action-button *ngIf="purchaseId" variant="secondary" (click)="onFinalDasdboardClicks()">Final dashboard</app-action-button>
     </div>
     <app-action-button variant="secondary" (click)="prDrawer.requestClose()">Cancel</app-action-button>
-    <app-action-button *ngIf="!isEditing" variant="tool" (click)="onDraftClicks()">Save as draft</app-action-button>
-    <app-action-button variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
+    <app-action-button *ngIf="!isEditing" variant="tool" (click)="onDraftClicks()">{{ isJobLess ? 'Save as draft' : 'Save' }}</app-action-button>
+    <app-action-button *ngIf="allAwarded" variant="primary" (click)="onSubmit()">Submit for approval</app-action-button>
   </ng-container>
 </app-sf-drawer>
+
+<app-pr-rfq-drawer #rfqList [open]="rfqOpen" [purchaseId]="purchaseId"
+  (changed)="onAwardsChanged()" (compare)="onCompareFromRfq()" (create)="onRfqForKeys($event)" (closed)="rfqOpen = false"></app-pr-rfq-drawer>
+
+<app-pr-compare-drawer #compareList [open]="compareOpen" [purchaseId]="purchaseId" (changed)="onAwardsChanged()" (createRfq)="onRfqForKeys($event)" (closed)="compareOpen = false"></app-pr-compare-drawer>
+
+<!-- The same supplier RFQ form used on enquiries, filled with the picked lines of this request. -->
+<app-sales-rfq-create-drawer [open]="rfqCreateOpen" [purchaseId]="purchaseId" [purchaseLineKeys]="rfqLineKeys" [purchaseSupplier]="rfqSupplier"
+  (saved)="onAwardsChanged(); rfqOpen && rfqList.load(); compareOpen && compareList.load()" (closed)="rfqCreateOpen = false"></app-sales-rfq-create-drawer>
 
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
 

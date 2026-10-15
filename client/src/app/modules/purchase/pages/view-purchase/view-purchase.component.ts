@@ -7,6 +7,7 @@ import { PurchaseService } from 'src/app/core/services/purchase/purchase.service
 import { FileService } from 'src/app/core/services/file.service';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
 import { StatusHistoryModalComponent } from 'src/app/shared/components/status-history-modal/status-history-modal.component';
+import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.util';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
@@ -36,6 +37,7 @@ const STATUS_TONES: Record<string, DetailTone> = {
   Approved: 'good',
   Rejected: 'bad',
   Drafted: 'neutral',
+  'In Progress': 'info',
 };
 
 @Component({
@@ -68,6 +70,7 @@ export class ViewPurchaseComponent {
   purchaseId!: string;
   suppliersList = signal<any[]>([])
   canApprovePR = false;
+  isSuperAdmin = false;
   currentEmployeeId: string | null = null;
 
   // view model — rebuilt by buildView() whenever the purchase or supplier list changes
@@ -110,9 +113,10 @@ export class ViewPurchaseComponent {
 
     this.employeeService.employeeData$.subscribe((data) => {
       this.currentEmployeeId = data?._id || null;
-      if (data?.category?.privileges) {
-        this.canApprovePR = data.category.privileges.purchase?.canApprovePR || false;
-      }
+      this.isSuperAdmin = /^superadmin$/i.test(data?.category?.role ?? '');
+      this.canApprovePR = this.isSuperAdmin
+        || data?.category?.privileges?.purchase?.canApprovePR === true
+        || (data as any)?.extraPrivileges?.purchase?.canApprovePR === true;
     });
   }
 
@@ -122,7 +126,7 @@ export class ViewPurchaseComponent {
   }
 
   canApproveOrReject(): boolean {
-    return this.canApprovePR && !this.isOwnRequest();
+    return this.canApprovePR && (this.isSuperAdmin || !this.isOwnRequest());
   }
 
   loadPurchase() {
@@ -174,8 +178,7 @@ export class ViewPurchaseComponent {
 
     this.breadcrumbs = [{ label: 'Home', link: '/' }, { label: 'Purchase' }, { label: 'PR', link: '/purchase/pr' }, { label: p.purchaseNo }];
     this.badges = p.status ? [{ label: p.status, tone: STATUS_TONES[p.status] ?? 'neutral' }] : [];
-    if (manual) this.badges.push({ label: 'General purchase', tone: 'info' });
-    this.subtitle = manual ? (p.supplierId?.supplierName || '') : (p.customerId?.companyName || '');
+    this.subtitle = manual ? ['General purchase', p.supplierId?.supplierName].filter(Boolean).join(' · ') : (p.customerId?.companyName || '');
 
     this.stats = manual
       ? [{ label: 'Total LPO value', value: this.money(p.totalLpo) }]
@@ -183,7 +186,7 @@ export class ViewPurchaseComponent {
           { label: 'LPO value', value: this.money(p.lpoValue) },
           { label: 'Cost as per PR', value: this.money(prCost) },
           { label: 'Cost as per deal sheet', value: this.money(p.totalDealCost) },
-          { label: 'Profit margin', value: this.money(profit), danger: profit < 0 },
+          { label: 'Profit', value: this.money(profit), danger: profit < 0 },
           { label: 'Difference in profit', value: this.money(diff), danger: diff < 0 },
         ];
 
@@ -213,7 +216,7 @@ export class ViewPurchaseComponent {
 
     this.itemColumns = [
       { key: 'item', label: 'Item', type: 'stack', subKey: 'partNo' },
-      ...(manual || !p.jobId?._id ? [] : [{ key: 'tag', label: '', type: 'badge', badgeTones: { New: 'info', Merged: 'good' } } as DetailTableColumn]),
+      ...(manual || !p.jobId?._id ? [] : [{ key: 'tag', label: '' } as DetailTableColumn]),
       { key: 'qty', label: 'Qty', type: 'number', align: 'right' },
       { key: 'unitCost', label: 'Unit cost', type: 'currency' },
       { key: 'totalCost', label: 'Total cost', type: 'currency', total: true, emphasis: true },
@@ -245,21 +248,12 @@ export class ViewPurchaseComponent {
           { label: 'Total discount received', value: this.money(p.totalDiscountReceived), tone: p.totalDiscountReceived ? 'good' : undefined },
           { label: 'Total cost as per PR', value: this.money(prCost) },
           { label: 'Total cost as per deal sheet', value: this.money(p.totalDealCost) },
-          { label: 'Profit margin', value: this.money(profit), tone: profit < 0 ? 'bad' : 'good' },
+          { label: 'Profit', value: this.money(profit), tone: profit < 0 ? 'bad' : 'good' },
           { label: 'Deal profit', value: this.money(p.dealProfit) },
           { label: 'Difference in profit', value: this.money(diff), tone: diff < 0 ? 'bad' : diff > 0 ? 'good' : undefined },
         ];
 
-    this.historyEntries = (p.approvalStatus ?? []).map((approval: any) => {
-      const by = approval.updatedBy ? this.fullName(approval.updatedBy) : 'Pending';
-      const when = approval.updatedAt ? this.datePipe.transform(approval.updatedAt, 'dd MMM yyyy, h:mm a') : '';
-      const tone = approval.status === 'approved' ? 'good' : approval.status === 'rejected' ? 'bad' : 'neutral';
-      return {
-        text: `Step ${approval.step} ${approval.status || 'pending'}`,
-        meta: [by, when].filter(Boolean).join(' · '),
-        tone,
-      } as DetailTimelineEntry;
-    });
+    this.historyEntries = buildApprovalTimeline(p.approvalStatus);
   }
 
   /**
@@ -403,13 +397,19 @@ export class ViewPurchaseComponent {
     });
   }
 
+  /** True when other approval stages are still waiting after the one this person is about to decide. */
+  private moreStagesAfterMe(): boolean {
+    const pending = ((this.purchase as any)?.approvalStatus ?? []).filter((a: any) => a.status === 'pending');
+    return pending.length > 1 && !this.isSuperAdmin;
+  }
+
   async onApprove(): Promise<void> {
     if (!this.purchase?._id || !this.canApproveOrReject()) return;
 
     const { confirmed, reason } = await this.confirmDialog.open({
       tone: 'approve',
       title: 'Approve purchase request',
-      message: 'This purchase request will be approved and move on to LPO.',
+      message: this.moreStagesAfterMe() ? 'Your approval moves this purchase request on to the next approval stage.' : 'This purchase request will be approved and move on to LPO.',
       details: [
         { label: 'PR No', value: this.purchase.purchaseNo || '-' },
         { label: 'LPO value', value: this.money(this.isManual ? (this.purchase as any).totalLpo : (this.purchase as any).lpoValue) },

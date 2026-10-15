@@ -1,4 +1,5 @@
 import { CommonModule, DatePipe } from '@angular/common';
+import { InitiateLpoComponent } from 'src/app/modules/purchase-order/pages/initiate-lpo/initiate-lpo.component';
 import { Component, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
@@ -36,7 +37,7 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 
 @Component({
   selector: 'app-general-purchase-list',
-  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ActionButtonComponent, CreatePurchaseComponent],
+  imports: [CommonModule, DataGridComponent, DetailOverviewComponent, DetailTableComponent, DetailTimelineComponent, ActionButtonComponent, InitiateLpoComponent, CreatePurchaseComponent],
   providers: [DatePipe],
   templateUrl: './general-purchase-list.component.html',
   styleUrl: './general-purchase-list.component.css',
@@ -90,7 +91,7 @@ export class GeneralPurchaseListComponent {
 
     this.route.queryParams.subscribe((params) => {
       this.page = params['page'] ? parseInt(params['page'], 10) : 1;
-      this.row = params['row'] ? parseInt(params['row'], 10) : 10;
+      this.row = [5, 15, 30, 50].includes(parseInt(params['row'], 10)) ? parseInt(params['row'], 10) : 15;
       this.searchQuery = params['search'] || '';
       this.activeViewId = params['view'] || 'all';
       if (this.grid) this.grid.page = this.page;
@@ -213,7 +214,7 @@ export class GeneralPurchaseListComponent {
       relativeTo: this.route,
       queryParams: {
         page: this.page !== 1 ? this.page : null,
-        row: this.row !== 10 ? this.row : null,
+        row: this.row !== 15 ? this.row : null,
         search: this.searchQuery || null,
         view: this.activeViewId !== 'all' ? this.activeViewId : null,
       },
@@ -226,7 +227,7 @@ export class GeneralPurchaseListComponent {
     const { action, row } = event;
     if (action.id === 'viewApprovalStatus') this.viewApprovalStatus(row);
     if (action.id === 'edit') this.onEditPurchase(row);
-    if (action.id === 'initiateLpo') this.router.navigate(['/purchase/initiate-lpo', row._id]);
+    if (action.id === 'initiateLpo') this.openInitiateLpo(row._id);
   }
 
   onRowOpen(): void {
@@ -337,5 +338,15 @@ export class GeneralPurchaseListComponent {
   onEditDrawerClosed(): void {
     this.editDrawerOpen = false;
     this.editDrawerPurchaseId = null;
+  }
+  /** Initiate LPO opens as a slide-over on top of the list. */
+  initiateLpoPurchaseId: string | null = null;
+
+  openInitiateLpo(purchaseId: string): void {
+    this.initiateLpoPurchaseId = purchaseId;
+  }
+
+  onInitiateLpoClosed(): void {
+    this.initiateLpoPurchaseId = null;
   }
 }

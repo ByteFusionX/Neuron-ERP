@@ -38,12 +38,12 @@ export class SupplierOfferFormComponent implements OnInit {
   comparisonForm: FormGroup = this.fb.group({
     supplierName: [''],
     supplierId: ['', Validators.required],
-    quantity: [null, Validators.required],
-    unitPrice: [null, Validators.required],
+    quantity: [null, [Validators.required, Validators.min(0.0001)]],
+    unitPrice: [null, [Validators.required, Validators.min(0)]],
     discountType: ['amount'],
-    discountValue: [0],
-    taxPercent: [0],
-    freightCost: [0],
+    discountValue: [0, [Validators.min(0)]],
+    taxPercent: [0, [Validators.min(0), Validators.max(100)]],
+    freightCost: [0, [Validators.min(0)]],
     etaTerms: ['', Validators.required],
     paymentTerms: ['', Validators.required],
     validityDate: [''],
@@ -134,9 +134,21 @@ export class SupplierOfferFormComponent implements OnInit {
     }, { emitEvent: false });
   }
 
+  /** Discount may not exceed what it is taken from (100% or the gross amount). */
+  private discountTooHigh(): boolean {
+    const v = this.comparisonForm.value;
+    const gross = (Number(v.quantity) || 0) * (Number(v.unitPrice) || 0);
+    const discount = Number(v.discountValue) || 0;
+    return v.discountType === 'percent' ? discount > 100 : discount > gross;
+  }
+
   onSubmit() {
     if (this.comparisonForm.invalid) {
       this.comparisonForm.markAllAsTouched();
+      return;
+    }
+    if (this.discountTooHigh()) {
+      this.toaster.error('The discount cannot be more than the offer amount');
       return;
     }
     const supplierId = this.comparisonForm.value.supplierId;

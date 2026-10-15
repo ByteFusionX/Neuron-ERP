@@ -2,7 +2,7 @@ import { DatePipe, DecimalPipe, NgFor, NgIf } from '@angular/common';
 import { Component, DestroyRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
-import { Subject, Subscription, catchError, debounceTime, distinctUntilChanged, forkJoin, map, of, switchMap } from 'rxjs';
+import { Subject, Subscription, catchError, debounceTime, distinctUntilChanged, forkJoin, map, of, switchMap, tap } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
@@ -19,9 +19,9 @@ import {
 import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/supplier-form-drawer/supplier-form-drawer.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 import { isPastDate, isValidEmail } from 'src/app/shared/utils/form-validation.util';
-import { downloadRequestSheet } from '../../sales-rfq-sheets';
+import { ItemSheetMeta } from 'src/app/shared/components/item-entry/item-entry-excel';
+import { readRfqSheetMeta, rfqSheetMeta } from '../../sales-rfq-sheets';
 import { RfqPreset } from 'src/app/core/services/palette-handoff.service';
-import { ProductService } from 'src/app/core/services/product/product.service';
 import {
   salesRfqStatusLabel,
   SalesRfq,
@@ -32,6 +32,7 @@ import {
   SalesRfqSupplierActivity,
   SalesRfqSupplierOption,
   SalesRfqTerms,
+  PurchaseRfqData,
 } from 'src/app/shared/interfaces/sales-rfq.interface';
 
 /** The supplier of one editor tab (kept in the option's `meta`). Each tab becomes its own RFQ with only that tab's lines. */
@@ -58,7 +59,8 @@ interface FlatLine {
 
 type SuggestedSupplier = SalesRfqStockCheck['suppliers'][number];
 
-const AVAILABILITY_OPTIONS: SfOption[] = (['Available', 'Limited', 'Unavailable'] as SalesRfqAvailability[]).map((a) => ({ label: a, value: a }));
+/** The choices come from the Availability master list; "Unavailable" is added because it drives the RFQ's own logic. */
+const UNAVAILABLE_OPTION: SfOption[] = [{ label: 'Unavailable', value: 'Unavailable' }];
 
 /**
  * Supplier RFQ drawer, opened from the enquiry's RFQs tab.
@@ -87,6 +89,12 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   @Input() rfqId: string | null = null;
   /** Create mode: products and a supplier picked in the command palette, added on top of the enquiry's lines. */
   @Input() preset: RfqPreset | null = null;
+  /** Create mode for a purchase request: the lines picked on it are asked of suppliers instead of an enquiry's. */
+  @Input() purchaseId: string | null = null;
+  /** Purchase mode: saved line ids to ask about (all lines when empty). */
+  @Input() purchaseLineKeys: string[] = [];
+  /** Purchase mode: the supplier chosen in the selection banner, placed on the first tab. */
+  @Input() purchaseSupplier: { supplierId: string; supplierName: string; contactEmail?: string; isSupplierApproved?: boolean } | null = null;
   /** Emits once RFQs are created or the edited one is saved. */
   @Output() saved = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
@@ -95,7 +103,6 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   @ViewChild(SfDrawerComponent) drawer?: SfDrawerComponent;
 
   private salesRfqService = inject(SalesRfqService);
-  private productService = inject(ProductService);
   private toaster = inject(ToastrService);
   private confirm = inject(ConfirmDialogService);
   private destroyRef = inject(DestroyRef);
@@ -103,13 +110,16 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   readonly catalogue = inject(CatalogueSuggestionSource);
 
   readonly currencySfOptions: SfOption[] = ['QAR', 'USD', 'EUR', 'AED', 'SAR', 'GBP'].map((c) => ({ label: c, value: c }));
-  readonly availabilityOptions = AVAILABILITY_OPTIONS;
+  readonly unavailableOption = UNAVAILABLE_OPTION;
 
   form: FormGroup = this.fb.group({ optionalItems: this.fb.array([]) });
   /** What the item editor starts from; it is mounted only once this is set. */
   seed: ItemEntryOptionValue[] | null = null;
 
   enquiry: any = null;
+  /** Purchase mode: the request the lines belong to, and the saved line ids RFQs may point at. */
+  purchase: PurchaseRfqData['purchase'] | null = null;
+  private purchaseKeys = new Set<string>();
   fromPresale = false;
   /** Edit mode: the RFQ and its one supplier. */
   rfq: SalesRfq | null = null;
@@ -141,7 +151,19 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
 
   supplierSearch = '';
   supplierOptions: SalesRfqSupplierOption[] = [];
+  /** Suppliers that already hold a live RFQ for this enquiry (id → RFQ no.); they cannot be asked again here. */
+  asked: Record<string, string> = {};
+  /** Item-group picker: raises a new supplier tab holding only the groups ticked. */
+  splitOpen = false;
+  splitGroups = new Set<number>();
+  splitSupplierId: string | null = null;
+  /** The supplier form was opened from the split picker, so the new supplier lands there instead of on a tab. */
+  private splitNewSupplier = false;
   private supplierSearch$ = new Subject<string>();
+  /** Master details of the suppliers seen so far, keyed by supplier id; the banner shows the current tab's. */
+  supplierInfo: Record<string, SalesRfqSupplierOption> = {};
+  /** The details banner can fold down to its header row. */
+  bannerOpen = true;
   supplierFormOpen = false;
   productFormOpen = false;
   productPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
@@ -154,7 +176,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
       .pipe(
         debounceTime(250),
         distinctUntilChanged(),
-        switchMap((term) => this.salesRfqService.supplierOptions(term).pipe(catchError(() => of({ success: false, data: [] as SalesRfqSupplierOption[] })))),
+        switchMap((term) => this.fetchSupplierOptions(term).pipe(catchError(() => of({ success: false, data: [] as SalesRfqSupplierOption[] })))),
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe((res) => (this.supplierOptions = res.data || []));
@@ -216,6 +238,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   private load(): void {
     this.reset();
     if (this.rfqId) this.loadRfq(this.rfqId);
+    else if (this.purchaseId) this.loadPurchaseDraft(this.purchaseId);
     else if (this.enquiryId) this.loadDraft(this.enquiryId);
     else this.loadError = 'No enquiry selected.';
   }
@@ -231,10 +254,42 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         this.mountLines(this.toSeed([...(data.lines || []), ...presetLines]));
         this.applyPresetSupplier();
         this.loading = false;
+        // Learn which suppliers already hold an RFQ for this enquiry before the first pick.
+        this.fetchSupplierOptions('').subscribe({ next: (r) => (this.supplierOptions = r.data || []), error: () => {} });
       },
       error: (err) => {
         this.loading = false;
         this.loadError = err?.error?.message || 'Could not load the enquiry.';
+      },
+    });
+  }
+
+  /** Purchase request: the picked lines (or all of them) become the lines to ask suppliers about. */
+  private loadPurchaseDraft(purchaseId: string): void {
+    this.loading = true;
+    this.salesRfqService.forPurchase(purchaseId).subscribe({
+      next: (res) => {
+        const data = res.data;
+        this.purchase = data.purchase;
+        const wanted = new Set(this.purchaseLineKeys);
+        const lines = data.lines.filter((l) => !wanted.size || wanted.has(l.itemDetailKey));
+        this.purchaseKeys = new Set(data.lines.map((l) => l.itemDetailKey));
+        this.mountLines(this.toSeed(lines.map((l) => ({
+          itemDetailKey: l.itemDetailKey,
+          itemName: l.itemName,
+          detail: l.detail,
+          quantity: l.quantity,
+          partNo: l.partNo as any,
+          uom: l.uom,
+          productItemCode: l.itemCode,
+        }))));
+        this.applyPresetSupplier();
+        this.loading = false;
+        this.fetchSupplierOptions('').subscribe({ next: (r) => (this.supplierOptions = r.data || []), error: () => {} });
+      },
+      error: (err) => {
+        this.loading = false;
+        this.loadError = err?.error?.message || 'Could not load the purchase request.';
       },
     });
   }
@@ -258,6 +313,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     this.rfq = rfq;
     this.enquiry = rfq.enquiryId;
     this.invite = rfq.suppliers?.[0] ?? null;
+    if (this.invite?.supplierId) this.loadSupplierInfo(this.invite.supplierId);
     this.terms = { currency: 'QAR', ...(rfq.requestedTerms || {}) };
     this.deadline = rfq.deadline ? rfq.deadline.slice(0, 10) : null;
     this.requiredBy = rfq.requiredBy ? rfq.requiredBy.slice(0, 10) : null;
@@ -277,11 +333,6 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         productPartNo: product?.partNo,
         unitCost: quote?.unitPrice ?? null,
         availability: quote?.availability ?? '',
-        paymentTerms: quote?.paymentTerms ?? '',
-        deliveryTerms: quote?.etaTerms ?? '',
-        remarks: quote?.remarks ?? '',
-        offeredQty: quote && quote.quantity !== line.quantity ? quote.quantity : null,
-        alternative: quote?.isAlternative ? quote.modelOffered ?? '' : '',
       };
     });
     this.mountLines(this.toSeed(lines));
@@ -304,7 +355,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
 
   /** The palette's supplier becomes the first tab's supplier. */
   private applyPresetSupplier(): void {
-    const supplier = this.preset?.supplier;
+    const supplier = this.purchaseSupplier ?? this.preset?.supplier;
     if (!supplier) return;
     // The editor builds its tabs on first render; the supplier waits for them.
     setTimeout(() => {
@@ -314,7 +365,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   }
 
   /** Groups flat RFQ lines under their item names, the shape the item editor works in. */
-  private toSeed(lines: (SalesRfqLineInput & { unitCost?: number | null; availability?: string; paymentTerms?: string; deliveryTerms?: string; remarks?: string; offeredQty?: number | null; alternative?: string; productItemCode?: string; productPartNo?: string })[]): ItemEntryOptionValue[] {
+  private toSeed(lines: (SalesRfqLineInput & { unitCost?: number | null; availability?: string; productItemCode?: string; productPartNo?: string })[]): ItemEntryOptionValue[] {
     const items = new Map<string, ItemEntryItemValue>();
     lines.forEach((line) => {
       const name = line.itemName?.trim() || 'Items';
@@ -328,11 +379,6 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         uom: line.uom || '',
         unitCost: line.unitCost ?? null,
         availability: line.availability || '',
-        paymentTerms: line.paymentTerms || '',
-        deliveryTerms: line.deliveryTerms || '',
-        remarks: line.remarks || '',
-        offeredQty: line.offeredQty ?? null,
-        alternative: line.alternative || '',
         lineKey: line.itemDetailKey || ItemEntryComponent.newLineKey(),
       });
     });
@@ -372,6 +418,8 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     this.formSub?.unsubscribe();
     this.seed = null;
     this.enquiry = null;
+    this.purchase = null;
+    this.purchaseKeys = new Set<string>();
     this.fromPresale = false;
     this.rfq = null;
     this.invite = null;
@@ -386,6 +434,12 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     this.stock = {};
     this.supplierSearch = '';
     this.supplierOptions = [];
+    this.supplierInfo = {};
+    this.asked = {};
+    this.splitOpen = false;
+    this.splitGroups = new Set<number>();
+    this.splitSupplierId = null;
+    this.splitNewSupplier = false;
   }
 
   // --- lines -------------------------------------------------------------------
@@ -472,7 +526,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   }
 
   suggestedSuppliers(line: FormGroup): SuggestedSupplier[] {
-    return (this.stockFor(line)?.suppliers || []).filter((sug) => !this.suppliers.some((d) => d.supplierId === sug.supplierId));
+    return (this.stockFor(line)?.suppliers || []).filter((sug) => !this.suppliers.some((d) => d.supplierId === sug.supplierId) && !this.asked[sug.supplierId]);
   }
 
   /** Past-supplier row: ask that supplier again (unless already on a tab). */
@@ -481,7 +535,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   }
 
   isAskedPast(row: any): boolean {
-    return this.suppliers.some((s) => s.supplierId === row.supplierId);
+    return this.suppliers.some((s) => s.supplierId === row.supplierId) || !!this.asked[row.supplierId];
   }
 
   askSuggested(line: FormGroup, sug: SuggestedSupplier): void {
@@ -521,16 +575,36 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     this.supplierSearch$.next(term.trim());
   }
 
+  /** Supplier list for the picker; in create mode it also records which suppliers the enquiry already asked. */
+  private fetchSupplierOptions(term: string) {
+    return this.salesRfqService.supplierOptions(term, undefined, this.isEdit ? undefined : this.enquiryId || undefined).pipe(
+      tap((res) => (res.data || []).forEach((o) => {
+        if (o.alreadyAsked) this.asked[o.supplierId] = o.askedRfqNo || 'an RFQ';
+      })),
+    );
+  }
+
+  private choicesKey = '';
+  private choicesCache: SfOption[] = [];
+
+  /** Memoised: a fresh array every change detection would re-render the dropdown rows and swallow clicks. */
   get supplierChoices(): SfOption[] {
-    const choices = this.supplierOptions.map((o) => ({
-      label: o.supplierName,
-      value: o.supplierId,
-      description: [!o.isSupplierApproved ? 'pending' : '', this.isPicked(o) ? 'open tab' : ''].filter(Boolean).join(' · ') || undefined,
-    }));
     const current = this.activeSupplier;
+    const key = JSON.stringify([this.supplierOptions.map((o) => [o.supplierId, o.supplierName, o.isSupplierApproved, this.isPicked(o), this.asked[o.supplierId]]), current?.supplierId, current?.supplierName]);
+    if (key === this.choicesKey) return this.choicesCache;
+    const choices: SfOption[] = this.supplierOptions.map((o) => {
+      const taken = !!this.asked[o.supplierId] && o.supplierId !== current?.supplierId;
+      return {
+        label: o.supplierName,
+        value: o.supplierId,
+        disabled: taken,
+        description: [!o.isSupplierApproved ? 'pending' : '', this.isPicked(o) ? 'open tab' : '', taken ? `already asked · ${this.asked[o.supplierId]}` : ''].filter(Boolean).join(' · ') || undefined,
+      };
+    });
     // Keep the tab's own supplier selectable/visible even if the loaded list does not include it.
     if (current && !choices.some((c) => c.value === current.supplierId)) choices.unshift({ label: current.supplierName, value: current.supplierId, description: undefined });
-    return choices;
+    this.choicesKey = key;
+    return (this.choicesCache = choices);
   }
 
   pickSupplierById(id: string | null): void {
@@ -540,7 +614,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
 
   onSupplierFocus(): void {
     if (this.supplierOptions.length) return;
-    this.salesRfqService.supplierOptions(this.supplierSearch.trim()).subscribe({
+    this.fetchSupplierOptions(this.supplierSearch.trim()).subscribe({
       next: (res) => (this.supplierOptions = res.data || []),
       error: () => (this.supplierOptions = []),
     });
@@ -570,7 +644,26 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     return this.suppliers.some((s) => s.supplierId === option.supplierId);
   }
 
+  /** The supplier whose details the banner shows: the RFQ's own (edit) or the current tab's (create). */
+  get bannerSupplier(): SalesRfqSupplierOption | null {
+    const id = this.isEdit ? this.invite?.supplierId : this.activeSupplier?.supplierId;
+    return (id && this.supplierInfo[id]) || null;
+  }
+
+  /** Fetches a supplier's master details once; the banner fills from them. */
+  private loadSupplierInfo(id: string): void {
+    if (this.supplierInfo[id]) return;
+    this.salesRfqService.supplierOptions('', id).subscribe({
+      next: (res) => {
+        const s = res.data?.find((o) => o.supplierId === id);
+        if (s) this.supplierInfo = { ...this.supplierInfo, [id]: s };
+      },
+      error: () => {},
+    });
+  }
+
   private setMeta(index: number, meta: Omit<DraftSupplier, 'option'> | null): void {
+    if (meta?.supplierId) this.loadSupplierInfo(meta.supplierId);
     this.optionalItems.at(index)?.get('meta')?.setValue(meta);
     this.activity$.next();
     this.dirty = true;
@@ -579,6 +672,10 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   /** Picks a supplier for the current tab; if that tab already has one, the pick gets a new tab of its own. */
   pickSupplier(option: SalesRfqSupplierOption): void {
     this.supplierSearch = '';
+    if (this.asked[option.supplierId]) {
+      this.toaster.warning(`${option.supplierName} already has ${this.asked[option.supplierId]} for this enquiry. Open that RFQ instead, or withdraw it first.`, 'Supplier already asked');
+      return;
+    }
     const have = this.suppliers.find((s) => s.supplierId === option.supplierId);
     if (have) {
       if (have.option !== this.activeOption) this.itemEntry?.selectOption(have.option);
@@ -602,32 +699,123 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   }
 
   /** A new supplier tab starts with the same products and quantities as the tab it was added from; prices stay blank. */
-  private copyLinesFrom(from: number): void {
+  private copyLinesFrom(from: number, groups?: Set<number>): void {
     const items = (this.optionalItems.at(from)?.get('items') as FormArray | null)?.getRawValue() ?? [];
     const copied = items
+      .filter((_: any, i: number) => !groups || groups.has(i))
       .map((item: any) => ({
         itemName: item.itemName,
         itemDetails: (item.itemDetails || [])
           .filter((d: any) => d.detail || d.productId)
           .map((d: any) => ({
             productId: d.productId, itemCode: d.itemCode, partNo: d.partNo, detail: d.detail,
-            quantity: d.quantity, uom: d.uom, lineKey: ItemEntryComponent.newLineKey(),
+            quantity: d.quantity, uom: d.uom,
+            // A purchase line keeps its saved id on every supplier tab: that id is how the request finds each supplier's price.
+            lineKey: this.purchaseId ? d.lineKey : ItemEntryComponent.newLineKey(),
           })),
       }))
       .filter((item: any) => item.itemDetails.length);
     if (!copied.length) return;
     this.itemEntry?.addItems(copied);
-    this.toaster.info('Lines copied from the previous supplier. Remove any this supplier should not quote.');
+    if (!groups) this.toaster.info('Lines copied from the previous supplier. Remove any this supplier should not quote.');
   }
 
-  /** A supplier registered from here is picked straight away; its approval is skipped for now. */
+  // --- split: a new supplier tab for chosen item groups --------------------------
+
+  /** Item groups of the tab being worked on that have at least one filled line. */
+  get splitChoices(): { index: number; name: string; lines: number }[] {
+    const items = (this.optionalItems.at(this.activeOption)?.get('items') as FormArray | null)?.getRawValue() ?? [];
+    return items
+      .map((item: any, index: number) => ({
+        index,
+        name: String(item.itemName || '').trim() || `Group ${index + 1}`,
+        lines: (item.itemDetails || []).filter((d: any) => d.detail || d.productId).length,
+      }))
+      .filter((g: { lines: number }) => g.lines > 0);
+  }
+
+  /** `splitChoices` is rebuilt on every change detection; tracking by group keeps the checkboxes from being re-created under the click. */
+  readonly trackSplit = (_: number, g: { index: number }): number => g.index;
+
+  toggleSplit(): void {
+    this.splitOpen = !this.splitOpen;
+    this.splitGroups = new Set<number>();
+    this.splitSupplierId = null;
+  }
+
+  toggleSplitGroup(index: number): void {
+    const next = new Set(this.splitGroups);
+    if (next.has(index)) next.delete(index);
+    else next.add(index);
+    this.splitGroups = next;
+  }
+
+  /** Every group ticked, or all cleared when they already are. */
+  toggleSplitAll(): void {
+    const all = this.splitChoices.map((g) => g.index);
+    this.splitGroups = this.splitGroups.size === all.length ? new Set<number>() : new Set(all);
+  }
+
+  openSupplierForm(): void {
+    this.splitNewSupplier = false;
+    this.supplierFormOpen = true;
+  }
+
+  openSplitSupplierForm(): void {
+    this.splitNewSupplier = true;
+    this.supplierFormOpen = true;
+  }
+
+  /** Raises a new tab with copies of the ticked groups, and gives it the chosen supplier if one is set. */
+  createSplitTab(): void {
+    if (!this.splitGroups.size || !this.itemEntry) return;
+    const chosen = this.supplierOptions.find((o) => o.supplierId === this.splitSupplierId);
+    if (chosen && this.asked[chosen.supplierId]) {
+      this.toaster.warning(`${chosen.supplierName} already has ${this.asked[chosen.supplierId]} for this enquiry.`, 'Supplier already asked');
+      return;
+    }
+    const existing = chosen && this.suppliers.find((s) => s.supplierId === chosen.supplierId);
+    if (existing) {
+      this.toaster.warning(`${chosen!.supplierName} already has a tab. Pick another supplier, or copy the groups there by hand.`, 'Supplier already on a tab');
+      return;
+    }
+    const from = this.activeOption;
+    const groups = this.splitGroups;
+    this.itemEntry.addOption();
+    const target = this.optionalItems.length - 1;
+    this.activeOption = target;
+    this.copyLinesFrom(from, groups);
+    if (chosen) {
+      this.setMeta(target, { supplierId: chosen.supplierId, supplierName: chosen.supplierName, contactEmail: chosen.contactEmail, isSupplierApproved: chosen.isSupplierApproved });
+    }
+    this.dirty = true;
+    this.splitOpen = false;
+    this.splitGroups = new Set<number>();
+    this.splitSupplierId = null;
+    this.toaster.info(`${groups.size} item group${groups.size === 1 ? '' : 's'} copied to a new supplier tab.`);
+  }
+
+  /** A supplier registered from here is picked straight away; new suppliers are saved as approved. */
   onSupplierCreated(supplier: any): void {
     if (!supplier?._id) return;
+    if (this.splitNewSupplier) {
+      // Opened from the split picker: the supplier waits there for the new tab instead of taking over the current one.
+      this.splitNewSupplier = false;
+      const option = {
+        supplierId: supplier._id,
+        supplierName: supplier.supplierName,
+        contactEmail: supplier.contactDetails?.email,
+        isSupplierApproved: true,
+      } as unknown as SalesRfqSupplierOption;
+      this.supplierOptions = [option, ...this.supplierOptions.filter((o) => o.supplierId !== option.supplierId)];
+      this.splitSupplierId = option.supplierId;
+      return;
+    }
     this.pickSupplier({
       supplierId: supplier._id,
       supplierName: supplier.supplierName,
       contactEmail: supplier.contactDetails?.email,
-      isSupplierApproved: false,
+      isSupplierApproved: true,
     } as unknown as SalesRfqSupplierOption);
   }
 
@@ -645,7 +833,8 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
 
   /** Lines a tab sends to its supplier: filled lines that stock does not already cover. */
   private keysFor(option: number): string[] {
-    return this.filledLines.filter((l) => l.option === option && !this.isCovered(l.group)).map((l) => l.key);
+    // A purchase request is asked in full: its quantities already take stock into account.
+    return this.filledLines.filter((l) => l.option === option && (!!this.purchaseId || !this.isCovered(l.group))).map((l) => l.key);
   }
 
   assignedCount(supplier: DraftSupplier): number {
@@ -672,35 +861,37 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
     return this.filledLines.filter((l) => this.isCovered(l.group)).length;
   }
 
-  /** Blank columns on the exported sheet for the supplier to complete. Once the RFQ is being priced they are real columns of the editor, so none are added. */
-  get excelFillColumns(): string[] {
-    return this.isEdit ? [] : ['Unit Price', 'Availability', 'Payment Terms', 'Delivery Terms', 'Remarks'];
-  }
-
-  /** Excel request sheet for one tab's supplier, built from what is on screen (before the RFQ exists). */
-  async exportOption(index: number): Promise<void> {
-    const supplier = this.suppliers.find((s) => s.option === index);
-    if (!supplier) {
-      this.toaster.warning('Pick the supplier for this tab first.', 'No supplier');
-      return;
-    }
-    const keys = this.keysFor(index);
-    if (!keys.length) {
-      this.toaster.warning('This tab has no lines to send.', 'Nothing to export');
-      return;
-    }
-    const rfq = {
-      rfqNo: `${this.enquiry?.enquiryId || 'RFQ'}-draft`,
-      deadline: this.deadline || undefined,
+  /** Details written above the lines of the Excel export, as currently entered in the banner. */
+  readonly excelMeta = (): ItemSheetMeta[] => {
+    const sup = this.bannerSupplier;
+    return rfqSheetMeta({
+      rfqNo: this.rfq?.rfqNo,
+      enquiryNo: this.purchase?.purchaseNo ?? this.enquiry?.enquiryId,
+      customer: this.enquiry?.client?.companyName || this.rfq?.customerId?.companyName,
+      supplierName: (this.isEdit ? this.invite?.supplierName : this.activeSupplier?.supplierName) || undefined,
+      supplierCode: sup?.code,
+      contactName: sup?.contactName,
+      contactPhone: sup?.contactPhone,
+      contactEmail: sup?.contactEmail || sup?.companyEmail,
+      deadline: this.deadline,
+      requiredBy: this.requiredBy,
+      terms: this.terms,
+      withValidity: this.isEdit,
       notes: this.notes,
-      requestedTerms: this.terms,
-      requestedLines: this.buildLines(true).filter((l) => keys.includes(l.itemDetailKey!)),
-    } as unknown as SalesRfq;
-    try {
-      await downloadRequestSheet(rfq, { supplierName: supplier.supplierName, lineKeys: keys } as unknown as SalesRfqSupplier);
-    } catch {
-      this.toaster.error('Could not build the request sheet.');
-    }
+    });
+  };
+
+  /** An imported sheet's details fill the banner fields; blank cells leave what is entered. */
+  onExcelMeta(meta: Record<string, string>): void {
+    const read = readRfqSheetMeta(meta);
+    if (read.deadline) this.deadline = read.deadline;
+    if (read.requiredBy) this.requiredBy = read.requiredBy;
+    if (read.notes) this.notes = read.notes;
+    const { currency, ...rest } = read.terms;
+    if (currency && this.currencySfOptions.some((o) => o.value === currency)) this.terms.currency = currency;
+    if (!this.isEdit) delete rest.validityDate;
+    this.terms = { ...this.terms, ...rest };
+    this.dirty = true;
   }
 
   // --- save --------------------------------------------------------------------
@@ -762,58 +953,69 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
   submit(): void {
     if (this.saving || this.locked) return;
     if (!this.linesValid()) return;
-    this.saving = true;
-    this.createNewItems().subscribe((ok) => {
-      this.saving = false;
-      if (!ok) return;
-      if (this.isEdit) this.saveEdit();
-      else this.create();
-    });
+    if (this.purchaseId && !this.isEdit) {
+      this.createForPurchase();
+      return;
+    }
+    if (!this.linesLinked()) return;
+    if (this.isEdit) this.saveEdit();
+    else this.create();
   }
 
-  /**
-   * Lines typed in without a catalogue product become Pending products, so the item exists once and can be
-   * reviewed, instead of staying free text on the RFQ. A part number that is already in the catalogue is reused.
-   */
-  private createNewItems() {
-    const fresh = this.filledLines.filter((l) => !l.productId);
-    if (!fresh.length) return of(true);
-    return forkJoin(fresh.map((l) => this.productService.quickCreateProduct({
-      productName: l.itemName || undefined,
-      productDescription: l.detail || l.itemName,
-      unitOfMeasure: l.uom || undefined,
-    }).pipe(
-      map((res) => { l.group.patchValue({ productId: res.product?._id }); return true; }),
-      catchError((err) => { this.toaster.error(err?.error?.message || `Could not add "${l.itemName || l.detail}" to the catalogue.`); return of(false); }),
-    ))).pipe(map((results) => results.every(Boolean)));
+  /** An RFQ line must point at a catalogue product; free-text lines are refused instead of being added to the catalogue. */
+  private linesLinked(): boolean {
+    const all = this.flatLines;
+    const at = all.findIndex((l) => (l.detail || l.itemName) && !l.productId);
+    if (at < 0) return true;
+    this.toaster.warning(
+      `Line ${at + 1}${all[at].itemName ? ` (${all[at].itemName})` : ''} is not linked to a product in the catalogue. Pick it from the catalogue, or create the product first.`,
+      'Not in catalogue',
+    );
+    return false;
   }
 
-  private create(): void {
-    if (!this.enquiryId) return;
-    const suppliers = this.suppliers
-      .map((s) => ({ supplierId: s.supplierId, contactEmail: s.contactEmail, lineKeys: this.keysFor(s.option) }))
-      .filter((s) => s.lineKeys.length);
+  /** Checks the supplier tabs, dates and terms before RFQs are raised; returns the suppliers to send, or null after warning. */
+  private validatedSuppliers(): { supplierId: string; contactEmail?: string; lineKeys: string[]; option: number }[] | null {
+    const all = this.suppliers.map((s) => ({ supplierId: s.supplierId, supplierName: s.supplierName, contactEmail: s.contactEmail, lineKeys: this.keysFor(s.option), option: s.option }));
+    const empty = all.filter((s) => !s.lineKeys.length);
+    // A supplier tab with nothing to price used to be dropped silently, so only some of the RFQs were raised.
+    if (empty.length && empty.length < all.length) {
+      this.toaster.warning(
+        `${empty.map((s) => s.supplierName).join(', ')} has no lines to price (empty tab, or every line is already in stock). Add lines to that tab or remove it, then save again.`,
+        'Supplier tab without lines',
+      );
+      return null;
+    }
+    const suppliers = all.filter((s) => s.lineKeys.length).map(({ supplierId, contactEmail, lineKeys, option }) => ({ supplierId, contactEmail, lineKeys, option }));
     if (!suppliers.length) {
       this.toaster.warning(this.suppliers.length ? 'The picked suppliers have no lines to price.' : 'Pick at least one supplier to ask for prices.', 'No supplier');
-      return;
+      return null;
     }
     const badEmail = this.suppliers.find((s) => !isValidEmail(s.contactEmail));
     if (badEmail) {
       this.toaster.warning(`"${badEmail.contactEmail}" is not a valid email address for ${badEmail.supplierName}.`, 'Contact email');
-      return;
+      return null;
     }
     if (!this.deadline) {
       this.toaster.warning('Say when you need the supplier prices by.', 'Prices by');
-      return;
+      return null;
     }
     if (isPastDate(this.deadline)) {
       this.toaster.warning('"Prices needed by" is already in the past. Pick today or a later date.', 'Deadline');
-      return;
+      return null;
     }
     if (this.deadline && this.requiredBy && this.requiredBy < this.deadline) {
-      this.toaster.warning('The customer needs the goods before the suppliers\' prices are due. Check both dates.', 'Dates');
-      return;
+      this.toaster.warning('The goods are needed before the supplier prices are due. Check both dates.', 'Dates');
+      return null;
     }
+    return suppliers;
+  }
+
+  private create(): void {
+    if (!this.enquiryId) return;
+    const picked = this.validatedSuppliers();
+    if (!picked) return;
+    const suppliers = picked.map(({ supplierId, contactEmail, lineKeys }) => ({ supplierId, contactEmail, lineKeys }));
     const unassigned = this.unassignedCount;
     this.saving = true;
     this.salesRfqService
@@ -835,6 +1037,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
               + (unassigned ? ` ${unassigned} line(s) were not sent to any supplier.` : ''),
             'Created'
           );
+          this.savePricesEnteredOnCreate(created, picked);
           this.closed.emit();
           this.saved.emit();
         },
@@ -843,6 +1046,75 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
           this.toaster.error(err?.error?.message || 'Could not create the RFQ.');
         },
       });
+  }
+
+  /** Saves the picked lines of a purchase request as supplier RFQs; they show in the request's RFQ list straight away. */
+  private createForPurchase(): void {
+    if (!this.purchaseId) return;
+    const stray = this.filledLines.find((l) => !this.purchaseKeys.has(l.key));
+    if (stray) {
+      this.toaster.warning('Only products already on the purchase request can be asked about. Add the new product to the request first.', 'Not on the request');
+      return;
+    }
+    const picked = this.validatedSuppliers();
+    if (!picked) return;
+    const suppliers = picked.map(({ supplierId, contactEmail, lineKeys }) => ({ supplierId, contactEmail, lineKeys }));
+    // A line shared by several supplier tabs is asked at one quantity; the first tab's quantity wins.
+    const quantities = new Map<string, number>();
+    this.buildLines(false).forEach((l) => { if (l.itemDetailKey && !quantities.has(l.itemDetailKey)) quantities.set(l.itemDetailKey, l.quantity); });
+    this.saving = true;
+    this.salesRfqService
+      .createFromPurchase(this.purchaseId, {
+        suppliers,
+        lines: Array.from(quantities, ([itemDetailKey, quantity]) => ({ itemDetailKey, quantity })),
+        requestedTerms: this.terms,
+        deadline: this.deadline!,
+        requiredBy: this.requiredBy || null,
+        notes: this.notes,
+      })
+      .subscribe({
+        next: (res) => {
+          this.saving = false;
+          this.dirty = false;
+          const created = res.data || [];
+          this.toaster.success(created.map((r) => `${r.rfqNo} (${r.supplierName})${r.merged ? ' updated' : ''}`).join(', '), `${created.length} RFQ${created.length === 1 ? '' : 's'} saved`);
+          this.savePricesEnteredOnCreate(created, picked);
+          this.closed.emit();
+          this.saved.emit();
+        },
+        error: (err) => {
+          this.saving = false;
+          this.toaster.error(err?.error?.message || 'Could not create the RFQ.');
+        },
+      });
+  }
+
+  /** A unit price or availability typed while raising the RFQ is saved onto the new RFQ as the supplier's reply. */
+  private savePricesEnteredOnCreate(created: { _id: string; rfqNo: string; supplierId: string; inviteId: string }[], picked: { supplierId: string; lineKeys: string[]; option: number }[]): void {
+    created.forEach((rfq) => {
+      const invite = rfq.inviteId ? { _id: rfq.inviteId } : null;
+      const tab = picked.find((s) => String(s.supplierId) === rfq.supplierId);
+      const keys = new Set(tab?.lineKeys ?? []);
+      const prices = this.filledLines
+        .filter((l) => keys.has(l.key) && l.option === tab?.option)
+        .map((l) => {
+          const v = l.group.getRawValue();
+          const unavailable = v.availability === 'Unavailable';
+          const hasPrice = v.unitCost != null && v.unitCost !== '';
+          if (!invite || (!hasPrice && !v.availability)) return null;
+          return {
+            itemDetailKey: l.key,
+            unitPrice: unavailable || !hasPrice ? null : Number(v.unitCost),
+            availability: (v.availability || undefined) as SalesRfqAvailability | undefined,
+            quantity: l.quantity,
+          };
+        })
+        .filter((p): p is NonNullable<typeof p> => !!p);
+      if (!prices.length) return;
+      this.salesRfqService.submitReply(rfq._id, invite!._id, { terms: this.terms, prices }).subscribe({
+        error: () => this.toaster.warning(`${rfq.rfqNo} was raised, but the prices entered could not be saved. Open it to enter them again.`, 'Prices'),
+      });
+    });
   }
 
   /** Saves lines and terms, then the supplier's prices; the supplier itself never changes here. */
@@ -865,12 +1137,7 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         itemDetailKey: l.key,
         unitPrice: unavailable || v.unitCost == null || v.unitCost === '' ? null : Number(v.unitCost),
         availability: (v.availability || undefined) as SalesRfqAvailability | undefined,
-        quantity: v.offeredQty != null && v.offeredQty !== '' && Number(v.offeredQty) > 0 ? Number(v.offeredQty) : l.quantity,
-        modelOffered: String(v.alternative || '').trim() || undefined,
-        isAlternative: !!String(v.alternative || '').trim(),
-        paymentTerms: String(v.paymentTerms || '').trim() || undefined,
-        deliveryTerms: String(v.deliveryTerms || '').trim() || undefined,
-        remarks: String(v.remarks || '').trim() || undefined,
+        quantity: l.quantity,
       };
     });
     this.salesRfqService
@@ -920,12 +1187,5 @@ export class SalesRfqCreateDrawerComponent implements OnChanges {
         this.toaster.error(err?.error?.message || 'Could not cancel the RFQ.');
       },
     });
-  }
-
-  /** The supplier's request sheet (Excel) with only its lines, to send outside the system. */
-  downloadSheet(): void {
-    if (this.rfq && this.invite) {
-      downloadRequestSheet(this.rfq, this.invite).catch(() => this.toaster.error('Could not build the request sheet.'));
-    }
   }
 }

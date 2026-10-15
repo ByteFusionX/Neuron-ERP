@@ -44,13 +44,44 @@ export class RfqCompareMatrixComponent {
   readonly award = output<RfqCompareAward>();
   /** Award every still-open product of a group to one supplier column. */
   readonly awardGroup = output<{ group: string; column: SalesRfqCompareColumn; awards: RfqCompareAward[] }>();
+  /** Award every still-open product this supplier priced, across all groups. */
+  readonly awardSupplier = output<{ column: SalesRfqCompareColumn; awards: RfqCompareAward[]; skipped: number }>();
   readonly openRfq = output<string>();
 
   readonly filter = signal<RowFilter>('all');
+  /** Item groups folded away by the user. */
+  readonly collapsed = signal<ReadonlySet<string>>(new Set());
 
   readonly coveragePct = computed(() => {
     const c = this.data().coverage;
     return c.total ? Math.round(((c.awarded + c.unavailable) / c.total) * 100) : 0;
+  });
+
+  /** Row counts per status, for the summary tiles and the segmented bar. */
+  readonly stats = computed(() => {
+    const s = { total: 0, awarded: 0, open: 0, waiting: 0, unavailable: 0 };
+    this.data().rows.forEach((r) => { s.total++; s[r.status]++; });
+    return s;
+  });
+
+  readonly segments = computed(() => {
+    const s = this.stats();
+    const pct = (n: number) => (s.total ? (n / s.total) * 100 : 0);
+    return [
+      { key: 'awarded', label: 'Awarded', hint: 'Supplier picked', count: s.awarded, pct: pct(s.awarded), dot: 'bg-emerald-500' },
+      { key: 'open', label: 'Ready to award', hint: 'Priced, not picked', count: s.open, pct: pct(s.open), dot: 'bg-sky-500' },
+      { key: 'waiting', label: 'Waiting', hint: 'No price yet', count: s.waiting, pct: pct(s.waiting), dot: 'bg-amber-500' },
+      { key: 'unavailable', label: 'Unavailable', hint: 'No supplier can supply', count: s.unavailable, pct: pct(s.unavailable), dot: 'bg-gray-400' },
+    ];
+  });
+
+  readonly filterTabs = computed(() => {
+    const s = this.stats();
+    return [
+      { key: 'all' as RowFilter, label: 'All', count: s.total },
+      { key: 'open' as RowFilter, label: 'Open', count: s.open + s.waiting },
+      { key: 'awarded' as RowFilter, label: 'Awarded', count: s.awarded },
+    ];
   });
 
   readonly groups = computed<RowGroup[]>(() => {
@@ -94,6 +125,24 @@ export class RfqCompareMatrixComponent {
     return awards;
   }
 
+  /** Every open product this supplier can take, plus how many open ones it cannot. */
+  supplierAwards(column: SalesRfqCompareColumn): { awards: RfqCompareAward[]; skipped: number } {
+    const awards: RfqCompareAward[] = [];
+    let skipped = 0;
+    for (const row of this.data().rows) {
+      if (row.status === 'awarded' || row.status === 'unavailable') continue;
+      const cell = this.cellFor(row, column);
+      if (cell && this.canAward(row, cell)) awards.push({ row, cell, quoteId: cell.quote!._id });
+      else skipped++;
+    }
+    return { awards, skipped };
+  }
+
+  onAwardSupplier(column: SalesRfqCompareColumn): void {
+    const { awards, skipped } = this.supplierAwards(column);
+    if (awards.length) this.awardSupplier.emit({ column, awards, skipped });
+  }
+
   onAwardGroup(group: RowGroup, column: SalesRfqCompareColumn): void {
     const awards = this.groupAwards(group, column);
     if (awards.length) this.awardGroup.emit({ group: group.name, column, awards });
@@ -119,12 +168,51 @@ export class RfqCompareMatrixComponent {
     return SALES_RFQ_BADGE_CLASSES[this.statusLabel(column)] || SALES_RFQ_BADGE_CLASSES['Draft'];
   }
 
-  rowBadge(row: SalesRfqCompareRow): { label: string; classes: string } {
+  rowBadge(row: SalesRfqCompareRow): { label: string; classes: string; dot: string } {
     switch (row.status) {
-      case 'awarded': return { label: `Won by ${this.supplierFor(row.awardedRfqId)}`, classes: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' };
-      case 'unavailable': return { label: 'Unavailable everywhere', classes: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' };
-      case 'waiting': return { label: 'Waiting for prices', classes: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' };
-      default: return { label: 'Open', classes: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300' };
+      case 'awarded': return { label: `Won by ${this.supplierFor(row.awardedRfqId)}`, classes: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300', dot: 'bg-emerald-500' };
+      case 'unavailable': return { label: 'Unavailable everywhere', classes: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400', dot: 'bg-gray-400' };
+      case 'waiting': return { label: 'Waiting for prices', classes: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300', dot: 'bg-amber-500' };
+      default: return { label: 'Ready to award', classes: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300', dot: 'bg-sky-500' };
     }
+  }
+
+  toggleGroup(name: string): void {
+    this.collapsed.update((set) => {
+      const next = new Set(set);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  }
+
+  initials(name: string): string {
+    const words = (name || '?').trim().split(/\s+/).filter(Boolean);
+    return ((words[0]?.[0] || '?') + (words[1]?.[0] || '')).toUpperCase();
+  }
+
+  /** Comparable unit price in QAR, or null when it cannot be converted. */
+  private priceQar(cell: SalesRfqCompareCell | undefined): number | null {
+    const q = cell?.quote;
+    if (!q) return null;
+    if (q.unitLandedQar != null) return q.unitLandedQar;
+    return q.currency === 'QAR' ? (q.unitLanded ?? q.unitPrice ?? null) : null;
+  }
+
+  private pricedCount(row: SalesRfqCompareRow): number {
+    return row.cells.filter((c) => c.quote && c.quote.availability !== 'Unavailable' && c.lineStatus !== 'Unavailable').length;
+  }
+
+  /** Lowest price on a line that more than one supplier priced. */
+  isBest(row: SalesRfqCompareRow, column: SalesRfqCompareColumn): boolean {
+    return row.lowestRfqId === column._id && this.pricedCount(row) > 1;
+  }
+
+  /** How far this price sits above the line's lowest, in percent. */
+  deltaPct(row: SalesRfqCompareRow, cell: SalesRfqCompareCell): number | null {
+    if (!row.lowestRfqId || row.lowestRfqId === cell.rfqId) return null;
+    const low = this.priceQar(row.cells.find((c) => c.rfqId === row.lowestRfqId));
+    const mine = this.priceQar(cell);
+    if (low == null || mine == null || low <= 0) return null;
+    return ((mine - low) / low) * 100;
   }
 }

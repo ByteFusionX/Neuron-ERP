@@ -1,0 +1,54 @@
+<app-sf-drawer [title]="'Compare & award' + (data()?.enquiry?.enquiryId ? ' · ' + data()?.enquiry?.enquiryId : '')"
+    subtitle="Award each product to one supplier before sending the request for approval"
+    width="min(1320px, 97vw)" [open]="open" (closed)="closed.emit()">
+
+  @if (loading()) { <p class="text-sm text-gray-500">Loading…</p> }
+  @if (loadError(); as error) {
+    <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{{ error }}</div>
+  }
+  @if (data(); as d) {
+    @if (locked) {
+      <p class="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+        {{ readOnly ? 'For reference only. Awards are made on the purchase request.' : 'This request is with the approvers, so the awards are final.' }}
+      </p>
+    }
+    @if (d.unasked?.length) {
+      <section class="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20">
+        <header class="flex flex-wrap items-center gap-3 px-4 py-3">
+          <div class="min-w-0 flex-1">
+            <h3 class="text-sm font-semibold text-amber-900 dark:text-amber-200">{{ d.unasked!.length }} product{{ d.unasked!.length === 1 ? '' : 's' }} not sent to any supplier yet</h3>
+            <p class="text-xs text-amber-800/80 dark:text-amber-300/80">They cannot be awarded, so the request cannot go for approval until a supplier is asked and awarded.</p>
+          </div>
+          @if (!locked) {
+            <app-action-button variant="primary" (click)="createRfq.emit(unaskedKeys)">Create RFQ for {{ d.unasked!.length === 1 ? 'this product' : 'these products' }}</app-action-button>
+          }
+        </header>
+        <ul class="divide-y divide-amber-100 border-t border-amber-100 dark:divide-amber-900/40 dark:border-amber-900/40">
+          @for (u of d.unasked!; track u.itemDetailKey) {
+            <li class="flex items-center gap-3 px-4 py-1.5 text-[13px]">
+              <span class="min-w-0 flex-1 truncate text-gray-900 dark:text-gray-100" [title]="u.detail">{{ u.detail }}</span>
+              <span class="text-xs text-gray-500">{{ u.itemName }} · Qty {{ u.quantity }}{{ u.uom ? ' ' + u.uom : '' }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+    @if (!d.rows.length) {
+      <p class="text-sm text-gray-500">No supplier has been asked for a price yet. Select products in the request, pick a supplier and create the RFQ, then compare the prices here.</p>
+    } @else {
+      <app-rfq-compare-matrix [data]="d" [locked]="locked" [busy]="busy()"
+        (award)="onAward($event)" (awardGroup)="onAwardGroup($event)" (awardSupplier)="onAwardSupplier($event)"></app-rfq-compare-matrix>
+    }
+  }
+
+  <ng-container sfDrawerFooter>
+    @if (data(); as d) {
+      <p class="mr-auto text-xs text-gray-500">
+        @if (readOnly) { Awarded suppliers are the ones the LPOs are issued to. }
+        @else if (allAwarded) { Every product is awarded. You can send the request for approval. }
+        @else { Award every product to send the request for approval }
+      </p>
+    }
+    <app-action-button variant="primary" (click)="closed.emit()">Done</app-action-button>
+  </ng-container>
+</app-sf-drawer>

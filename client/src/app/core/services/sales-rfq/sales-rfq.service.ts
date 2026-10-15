@@ -9,9 +9,11 @@ import {
   SalesRfqEnquiryAward,
   SalesRfqFxRates,
   SalesRfqLineInput,
+  PurchaseRfqData,
   SalesRfqQuoteInput,
   SalesRfqStockCheck,
   SalesRfqReplyPrice,
+  SalesRfqAwardCoverage,
   SalesRfqSummary,
   SalesRfqSupplierActivity,
   SalesRfqSupplierInput,
@@ -35,8 +37,8 @@ export class SalesRfqService {
     return this.http.post<any>(`${this.api}/list`, params, { context: context() });
   }
 
-  summaries(enquiryIds: string[]): Observable<{ success: boolean; data: SalesRfqSummary[] }> {
-    return this.http.post<{ success: boolean; data: SalesRfqSummary[] }>(`${this.api}/summaries`, { enquiryIds }, { context: context() });
+  summaries(enquiryIds: string[]): Observable<{ success: boolean; data: SalesRfqSummary[]; coverage?: Record<string, SalesRfqAwardCoverage> }> {
+    return this.http.post<{ success: boolean; data: SalesRfqSummary[]; coverage?: Record<string, SalesRfqAwardCoverage> }>(`${this.api}/summaries`, { enquiryIds }, { context: context() });
   }
 
   draft(enquiryId: string): Observable<any> {
@@ -48,8 +50,33 @@ export class SalesRfqService {
   }
 
   /** Raises one RFQ per supplier, each with only the lines that supplier is asked to price. */
-  createFromEnquiry(enquiryId: string, body: { lines: SalesRfqLineInput[]; suppliers: SalesRfqSupplierInput[]; requestedTerms?: SalesRfqTerms; deadline?: string | null; requiredBy?: string | null; notes?: string }): Observable<{ success: boolean; data: { _id: string; rfqNo: string; supplierName: string }[] }> {
-    return this.http.post<{ success: boolean; data: { _id: string; rfqNo: string; supplierName: string }[] }>(`${this.api}/from-enquiry/${enquiryId}`, body, { context: context() });
+  createFromEnquiry(enquiryId: string, body: { lines: SalesRfqLineInput[]; suppliers: SalesRfqSupplierInput[]; requestedTerms?: SalesRfqTerms; deadline?: string | null; requiredBy?: string | null; notes?: string }): Observable<{ success: boolean; data: { _id: string; rfqNo: string; supplierName: string; supplierId: string; inviteId: string }[] }> {
+    return this.http.post<{ success: boolean; data: { _id: string; rfqNo: string; supplierName: string; supplierId: string; inviteId: string }[] }>(`${this.api}/from-enquiry/${enquiryId}`, body, { context: context() });
+  }
+
+  /** The purchase request's lines and every supplier RFQ raised for it. */
+  forPurchase(purchaseId: string): Observable<{ success: boolean; data: PurchaseRfqData }> {
+    return this.http.get<{ success: boolean; data: PurchaseRfqData }>(`${this.api}/purchase/${purchaseId}`, { context: context() });
+  }
+
+  /** Asks suppliers to price lines of a purchase request; a supplier that already has an RFQ on it gets the lines added to it. */
+  createFromPurchase(purchaseId: string, body: { suppliers: SalesRfqSupplierInput[]; lines?: { itemDetailKey: string; quantity: number }[]; requestedTerms?: SalesRfqTerms; deadline: string; requiredBy?: string | null; notes?: string }): Observable<{ success: boolean; message?: string; data: { _id: string; rfqNo: string; supplierName: string; supplierId: string; inviteId: string; merged: boolean }[] }> {
+    return this.http.post<{ success: boolean; message?: string; data: { _id: string; rfqNo: string; supplierName: string; supplierId: string; inviteId: string; merged: boolean }[] }>(`${this.api}/from-purchase/${purchaseId}`, body, { context: context() });
+  }
+
+  /** Brings the enquiry's sales RFQ supplier prices into a job's purchase request. */
+  importSalesRfqs(purchaseId: string): Observable<{ success: boolean; message?: string; data: { created: number; skipped: number; unmatched: number } }> {
+    return this.http.post<{ success: boolean; message?: string; data: { created: number; skipped: number; unmatched: number } }>(`${this.api}/purchase/${purchaseId}/import-sales`, {}, { context: context() });
+  }
+
+  /** Every supplier RFQ of a purchase request side by side: one row per product, one column per supplier. */
+  comparePurchase(purchaseId: string): Observable<{ success: boolean; data: SalesRfqComparison }> {
+    return this.http.get<{ success: boolean; data: SalesRfqComparison }>(`${this.api}/purchase/${purchaseId}/compare`, { context: context() });
+  }
+
+  /** Awards products across the request's RFQs; a null quoteId reopens the product everywhere. */
+  awardPurchase(purchaseId: string, awards: SalesRfqEnquiryAward[]): Observable<{ success: boolean; message?: string }> {
+    return this.http.put<{ success: boolean; message?: string }>(`${this.api}/purchase/${purchaseId}/award`, { awards }, { context: context() });
   }
 
   getById(id: string): Observable<{ success: boolean; data: SalesRfq }> {
@@ -133,8 +160,8 @@ export class SalesRfqService {
     return this.http.post<any>(`${this.api}/${id}/prepare-quotation`, {}, { context: context() });
   }
 
-  supplierOptions(search: string): Observable<{ success: boolean; data: SalesRfqSupplierOption[] }> {
-    const query = new URLSearchParams({ search }).toString();
+  supplierOptions(search: string, id?: string, enquiryId?: string): Observable<{ success: boolean; data: SalesRfqSupplierOption[] }> {
+    const query = new URLSearchParams({ search, ...(id ? { id } : {}), ...(enquiryId ? { enquiryId } : {}) }).toString();
     return this.http.get<{ success: boolean; data: SalesRfqSupplierOption[] }>(`${this.api}/supplier-options?${query}`, { context: context() });
   }
 
