@@ -59,8 +59,7 @@
               <app-action-button variant="outline" (click)="onLogFollowUp(row)">Mark done</app-action-button>
             </ng-container>
             <ng-template #scheduleOnly>
-              <app-action-button variant="outline" (click)="onLogFollowUp(row)">Log a follow-up</app-action-button>
-              <app-action-button variant="outline" icon="plus" (click)="onScheduleFollowUp(row)">Schedule follow-up</app-action-button>
+              <app-action-button variant="outline" icon="plus" (click)="onLogFollowUp(row)">Add follow-up</app-action-button>
             </ng-template>
           </ng-container>
         </ng-container>
@@ -70,16 +69,14 @@
             Add Document
           </app-action-button>
         </ng-container>
-        <ng-container *ngSwitchCase="'supplierRfqs'">
-          <app-action-button *ngIf="(rfqListFor(row) | async)?.length && !isPresaleLocked(row)" variant="outline" (click)="openCompare(row)">Compare &amp; award</app-action-button>
-          <app-action-button *ngIf="canRequestPrices(row)" variant="outline" icon="plus" (click)="openCreateRfq(row)">Create RFQ</app-action-button>
-        </ng-container>
       </ng-container>
     </ng-template>
 
     <!-- right: permanent, every tab (filled) -->
     <ng-template #detailFooterTemplate let-row>
-      <app-action-button *ngIf="canConvertToQuote(row)" variant="primary" (click)="convertToQuote(row)">Convert to Quote</app-action-button>
+      <ng-container *ngIf="canConvertToQuote(row)">
+        <app-action-button variant="primary" (click)="convertToQuote(row)">Convert to Quote</app-action-button>
+      </ng-container>
     </ng-template>
 
     <ng-template #detailTemplate let-row let-tab="tab">
@@ -146,40 +143,6 @@
           (previewFile)="onPreviewEventFile($event.file)"
           (deleteFile)="onDeleteEventFile(row, $event.item, $event.file)">
         </app-detail-task-list>
-        <div *ngSwitchCase="'supplierRfqs'" class="space-y-2.5">
-          <div *ngIf="isPresaleLocked(row)"
-            class="rounded-lg border border-dashed border-amber-300 bg-amber-50/60 px-3.5 py-2.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
-            Presale is working on this enquiry — RFQs are locked here until it comes back to Sales.
-          </div>
-          <div *ngFor="let rfq of (rfqListFor(row) | async) ?? []"
-            class="rounded-lg border border-gray-200 bg-white p-3.5 dark:border-erp-border-dark dark:bg-erp-surface-dark"
-            [ngClass]="isPresaleLocked(row) ? 'opacity-80' : 'cursor-pointer hover:border-gray-300 dark:hover:border-gray-600'"
-            role="button" tabindex="0" [attr.aria-label]="'Open ' + rfq.rfqNo + ' · ' + rfqSupplierName(rfq)"
-            (click)="openRfq(rfq, row)" (keydown.enter)="openRfq(rfq, row)" (keydown.space)="$event.preventDefault(); openRfq(rfq, row)">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <p class="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100" [title]="rfqSupplierName(rfq)">{{ rfqSupplierName(rfq) }}</p>
-                <p class="mt-0.5 text-[11px] text-gray-400">{{ rfq.rfqNo }}</p>
-              </div>
-              <span class="shrink-0 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset"
-                [ngClass]="rfqStatusClasses(rfq.status, !!rfq.quotationId)">{{ rfqStatusLabel(rfq.status, !!rfq.quotationId) }}</span>
-            </div>
-            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
-              <span>{{ rfq.requestedLines.length }} product{{ rfq.requestedLines.length === 1 ? '' : 's' }}</span>
-              <span *ngIf="rfqWonCount(rfq)" class="font-medium text-emerald-700 dark:text-emerald-400">Won {{ rfqWonCount(rfq) }}/{{ rfq.requestedLines.length }}</span>
-              <span *ngIf="rfqLostCount(rfq)" class="text-gray-500">{{ rfqLostCount(rfq) }} to other suppliers</span>
-              <span>Expected: <span class="font-medium" [ngClass]="rfqOverdue(rfq) ? 'text-red-600 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'">{{ rfq.deadline ? (rfq.deadline | date: 'dd MMM yyyy') : '—' }}</span>
-                <ng-container *ngIf="rfqOverdue(rfq)"> · overdue</ng-container></span>
-            </div>
-            <app-rfq-chase [rfq]="rfq" [allowed]="!isPresaleLocked(row)" (changed)="refreshRfqList(row)"></app-rfq-chase>
-          </div>
-          <div *ngIf="!(rfqListFor(row) | async)?.length && rfqLoaded.has(row._id)"
-            class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-erp-border-dark">
-            <app-dp-icon name="scale" size="w-6 h-6" class="text-gray-400"></app-dp-icon>
-            <p class="text-[13px] text-gray-500 dark:text-gray-400">No supplier RFQs raised for this enquiry yet.</p>
-            <p *ngIf="canRequestPrices(row)" class="text-xs text-gray-400">Use “Create RFQ” below to ask suppliers for prices.</p>
-          </div>
-        </div>
         <ng-container *ngSwitchCase="'progress'">
           <app-approval-journey *ngIf="presaleProgress(row).length; else notSent"
             [stages]="presaleProgress(row)" orientation="vertical" [rejectionNote]="null"></app-approval-journey>
@@ -204,12 +167,8 @@
 
   <app-enquiry-form-drawer class="contents" [open]="formOpen" [enquiry]="editTarget" (saved)="onEnquiryCreated($event)" (updated)="onEnquiryUpdated()" (closed)="onFormClosed()"></app-enquiry-form-drawer>
 
+  <app-quote-form-drawer class="contents" [open]="quoteFormOpen" mode="create" [enquiry]="quoteSource" (saved)="onQuoteCreated()" (closed)="onQuoteFormClosed()"></app-quote-form-drawer>
+
   <app-enquiry-estimation-view class="contents" [open]="!!estimationTarget" [enquiry]="estimationTarget?.enquiry" [readOnly]="!!estimationTarget && isReturnedFromPresales(estimationTarget.enquiry)" (seen)="onEstimationSeen()" (revised)="onEstimationRevised()" (closed)="estimationTarget = null"></app-enquiry-estimation-view>
 
-  <app-sales-rfq-create-drawer class="contents" [open]="!!rfqDrawer" [enquiryId]="rfqDrawer?.enquiryId ?? null" [rfqId]="rfqDrawer?.rfqId ?? null" [preset]="rfqPreset"
-    (saved)="onRfqSaved()" (closed)="rfqDrawer = null; rfqPreset = null"></app-sales-rfq-create-drawer>
-
-  <app-sales-rfq-compare-drawer class="contents" [open]="!!compareEnquiry" [enquiryId]="compareEnquiry?._id ?? null"
-    (changed)="onRfqSaved()" (openRfq)="onCompareOpenRfq($event)" (prepared)="onCompareQuotationPrepared($event)"
-    (closed)="compareEnquiry = null"></app-sales-rfq-compare-drawer>
 </div>

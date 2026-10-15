@@ -29,15 +29,8 @@
 
         <!-- Step 1 — items -->
         <div [hidden]="step !== 1">
-            <div class="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-violet-200 bg-violet-50/60 px-3.5 py-2.5 dark:border-violet-900 dark:bg-violet-950/20">
-                <p class="min-w-0 flex-1 text-[13px] text-violet-900 dark:text-violet-200">
-                    <ng-container *ngIf="rfqImportedFrom; else rfqHint">Filled from <strong>{{ rfqImportedFrom }}</strong>. Set the selling prices, then save.</ng-container>
-                    <ng-template #rfqHint>Already asked suppliers for prices? Fill the items from the products you awarded on the RFQs.</ng-template>
-                </p>
-                <app-action-button variant="secondary" [disabled]="rfqImporting" (click)="importFromRfqs()">{{ rfqImporting ? 'Filling…' : 'Fill from RFQ awards' }}</app-action-button>
-            </div>
             <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Estimation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
-                [seedOptionalItems]="seedOptionalItems" [currency]="form.controls.currency.value || 'QAR'"
+                [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="form.controls.currency.value || 'QAR'"
                 (totals)="onItemTotals($event)" (createProductRequested)="openCreateProduct($event)"></app-item-entry>
         </div>
 

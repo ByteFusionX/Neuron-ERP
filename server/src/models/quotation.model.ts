@@ -121,7 +121,6 @@ interface QuoteRevision {
         termsAndCondition: string;
         paymentTerms?: string;
         deliveryTerms?: string;
-        warranty?: string;
         deliveryLocation?: string;
         validityDate?: Date;
     };
@@ -161,7 +160,6 @@ interface Quotation extends Document {
     termsAndCondition: string;
     paymentTerms: string;
     deliveryTerms: string;
-    warranty: string;
     deliveryLocation: string;
     validityDate: Date;
     expiryReminderDate: Date;
@@ -510,10 +508,6 @@ const quotationSchema = new Schema<Quotation>({
         required: false,
     },
     deliveryTerms: {
-        type: String,
-        required: false,
-    },
-    warranty: {
         type: String,
         required: false,
     },

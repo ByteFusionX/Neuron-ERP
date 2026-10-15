@@ -11,7 +11,6 @@ import { EmployeeService } from 'src/app/core/services/employee/employee.service
 import { HttpEventType } from '@angular/common/http';
 import { AskFeedbackComponent } from '../ask-feedback/ask-feedback.component';
 import { ReplyFeedbackComponent } from '../reply-feedback/reply-feedback.component';
-import { RfqChaseComponent } from 'src/app/shared/components/rfq-chase/rfq-chase.component';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { GiveFeedbackComponent, GiveFeedbackResult } from '../give-feedback/give-feedback.component';
 import { ModalService } from 'src/app/shared/components/modal';
@@ -32,17 +31,11 @@ import { DetailDocument, DetailOverviewSection, DetailTaskItem, DetailTimelineEn
 import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
-import { NgIcon } from '@ng-icons/core';
 import { WorkflowService } from 'src/app/core/services/workflow.service';
 import { WorkingWindow, addWorkingMinutes, workingWindowOf } from 'src/app/shared/utils/working-time';
 import { ApprovalStep, WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 import { ApprovalJourneyComponent } from 'src/app/shared/components/approval-journey/approval-journey.component';
 import { ApprovalJourneyStage } from 'src/app/shared/components/approval-journey/approval-journey.model';
-import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
-import { SALES_RFQ_BADGE_CLASSES, SalesRfq, SalesRfqSummary, salesRfqStatusLabel } from 'src/app/shared/interfaces/sales-rfq.interface';
-import { SalesRfqCreateDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-create-drawer/sales-rfq-create-drawer.component';
-import { SalesRfqCompareDrawerComponent } from 'src/app/modules/sales-rfq/pages/sales-rfq-compare-drawer/sales-rfq-compare-drawer.component';
-import { downloadRequestSheet } from 'src/app/modules/sales-rfq/sales-rfq-sheets';
 
 const LIMIT_UNIT_MS: Record<string, number> = { minute: 60_000, hour: 3_600_000, day: 86_400_000 };
 const LIMIT_UNIT_SHORT: Record<string, string> = { minute: 'm', hour: 'h', day: 'd' };
@@ -57,7 +50,7 @@ import { ViewToggleComponent } from 'src/app/shared/components/view-toggle/view-
   selector: 'app-presales-list',
   templateUrl: './presales-list.component.html',
   styleUrls: ['./presales-list.component.css'],
-  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe, NgIcon, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTimelineComponent, ApprovalJourneyComponent, ViewEstimationComponent, EstimationFormDrawerComponent, ActionButtonComponent, RfqChaseComponent, SalesRfqCreateDrawerComponent, SalesRfqCompareDrawerComponent, FollowUpPanelComponent]
+  imports: [ViewToggleComponent, RouterLink, NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, AsyncPipe, DatePipe, DataGridComponent, DetailOverviewComponent, DetailDocumentsComponent, DetailTaskListComponent, DetailTimelineComponent, ApprovalJourneyComponent, ViewEstimationComponent, EstimationFormDrawerComponent, ActionButtonComponent, FollowUpPanelComponent]
 })
 export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('grid') grid!: DataGridComponent<any>;
@@ -70,7 +63,6 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     { id: 'followups', label: 'Follow-ups', icon: 'clock' },
     { id: 'events', label: 'Events', icon: 'calendar' },
     { id: 'feedback', label: 'Feedback', icon: 'chat' },
-    { id: 'supplierRfqs', label: "RFQ's", icon: 'scale' },
     { id: 'progress', label: 'Progress', icon: 'account_tree' },
     { id: 'history', label: 'History', icon: 'history' },
     { id: 'documents', label: 'Documents', icon: 'files' },
@@ -117,7 +109,6 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   private confirm = inject(ConfirmDialogService);
   private modal = inject(ModalService);
   private _auditLog = inject(AuditLogService);
-  private salesRfqService = inject(SalesRfqService);
 
   constructor(
     private _enquiryService: EnquiryService,
@@ -431,16 +422,6 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
         id: 'send', label: 'Send to Enquiry', icon: 'send', quick: true,
         hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate,
       },
-      // One entry for both cases (no RFQ yet / RFQ raised): the tab shows existing RFQs and the Create button.
-      // Hover button only until the estimation is uploaded; after that it stays in the actions menu.
-      {
-        id: 'rfq', label: "Supplier RFQ's", icon: 'scale', quick: true,
-        hidden: (r) => !!r.preSale?.estimations || !this.hasRfqAccess(r),
-      },
-      {
-        id: 'rfqMenu', label: "Supplier RFQ's", icon: 'scale',
-        hidden: (r) => !r.preSale?.estimations || !this.hasRfqAccess(r),
-      },
     ];
   }
 
@@ -465,15 +446,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'viewEstimation': this.onViewEstimation(row.preSale?.estimations, row._id, row.preSale?.estimationHistory, row); break;
       case 'reject': this.onRejectJob(row); break;
       case 'send': this.onSendClicked(row); break;
-      case 'rfq':
-      case 'rfqMenu': this.openRfqTab(row); break;
     }
-  }
-
-  /** Row action shortcut: jump straight to the Supplier RFQ's detail tab instead of opening on overview. */
-  private openRfqTab(row: any): void {
-    this.grid.openRow(row);
-    this.grid.activeTab = 'supplierRfqs';
   }
 
   getJobsData() {
@@ -493,7 +466,6 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
             this.total = data.total;
             this.isLoading = false;
             this.loadTabCounts();
-            this.loadRfqSummaries(this.rows);
           },
           error: () => {
             this.isLoading = false;
@@ -538,7 +510,8 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       width: '520px',
       data: { context: row.enquiryId || row._id, mode: 'complete', plannedFor: open?.due || null },
     }).afterClosed().subscribe((result) => {
-      if (result?.mode === 'complete') {
+      if (result?.mode === 'schedule') this.saveFollowUp(row, this._enquiryService.schedulePresaleFollowUp(row._id, { dueDate: result.dueDate, note: result.note }), 'Follow-up scheduled');
+      else if (result?.mode === 'complete') {
         this.saveFollowUp(row, this._enquiryService.completePresaleFollowUp(row._id, {
           date: result.date, outcome: result.outcome, note: result.note, nextFollowUpDate: result.nextFollowUpDate,
         }), 'Follow-up logged');
@@ -821,7 +794,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!subject) {
       subject = new BehaviorSubject<Events[]>([]);
       this.eventsCache.set(id, subject);
-      this._eventsService.fetchEvents(id).subscribe((events: Events[]) => subject!.next(events || []));
+      this._eventsService.fetchEvents(id, 'Presale').subscribe((events: Events[]) => subject!.next(events || []));
     }
     return subject.asObservable();
   }
@@ -838,6 +811,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   onAddEvent(row: any): void {
     this._eventActions.create({
       from: 'Enquiry',
+      stage: 'Presale',
       collectionId: row._id as string,
       context: row.enquiryId || (row._id as string),
     }).subscribe((created) => {
@@ -875,144 +849,6 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       this.updateEvents(row, (evs) => evs.map((e) =>
         e._id === item.id ? { ...e, eventFiles: (e.eventFiles || []).filter((f: any) => f.fileName !== file.id) } : e));
     });
-  }
-
-  // ---- Supplier RFQs: same RFQ the enquiry carries, so sales sees it again once this job is sent back -----
-
-  /** Latest live supplier RFQ per enquiry id on the current page, for the row badge. */
-  private rfqByEnquiry = new Map<string, SalesRfqSummary>();
-  /** All supplier RFQs raised against the enquiry (there can be several: re-quotes, split by item, etc.). */
-  private rfqListCache = new Map<string, BehaviorSubject<SalesRfq[]>>();
-
-  private loadRfqSummaries(rows: any[]): void {
-    const ids = (rows || []).map((r) => r._id).filter((id): id is string => !!id);
-    if (!ids.length) return;
-    this.salesRfqService.summaries(ids).subscribe({
-      next: (res) => {
-        this.rfqByEnquiry.clear();
-        (res.data || []).forEach((rfq) => {
-          const key = String(rfq.enquiryId);
-          if (!this.rfqByEnquiry.has(key)) this.rfqByEnquiry.set(key, rfq);
-        });
-      },
-      error: () => this.rfqByEnquiry.clear(),
-    });
-  }
-
-  rfqFor(row: any): SalesRfqSummary | undefined {
-    return row?._id ? this.rfqByEnquiry.get(row._id) : undefined;
-  }
-
-  /** Every supplier RFQ raised against this enquiry, newest first — an enquiry can have more than one. */
-  rfqListFor(row: any): Observable<SalesRfq[]> {
-    let subject = this.rfqListCache.get(row._id);
-    if (!subject) {
-      subject = new BehaviorSubject<SalesRfq[]>([]);
-      this.rfqListCache.set(row._id, subject);
-      this.salesRfqService.list({ enquiryId: row._id, row: 50 }).subscribe({
-        next: (res) => subject!.next(res?.rfqs?.data || []),
-        error: () => this.rfqListCache.delete(row._id),
-      });
-    }
-    return subject.asObservable();
-  }
-
-  /** Drops the cached RFQ list so the next render re-reads it after a new one is created. */
-  refreshRfqList(row?: any): void {
-    if (row) this.rfqListCache.delete(row._id);
-    else this.rfqListCache.clear();
-  }
-
-  rfqStatusLabel(status: string, hasQuotation = true): string {
-    return salesRfqStatusLabel(status, hasQuotation);
-  }
-
-  rfqStatusClasses(status: string, hasQuotation = true): string {
-    return SALES_RFQ_BADGE_CLASSES[this.rfqStatusLabel(status, hasQuotation)] || SALES_RFQ_BADGE_CLASSES['Draft'];
-  }
-
-  rfqWonCount(rfq: SalesRfq): number {
-    return (rfq?.requestedLines || []).filter((l) => l.lineStatus === 'Confirmed').length;
-  }
-
-  rfqLostCount(rfq: SalesRfq): number {
-    return (rfq?.requestedLines || []).filter((l) => l.lineStatus === 'Lost').length;
-  }
-
-  /** Each RFQ is raised for one supplier; older ones may list several. */
-  rfqSupplierName(rfq: SalesRfq): string {
-    const names = (rfq?.suppliers || []).map((s) => s.supplierName);
-    return names.filter(Boolean).join(', ') || '—';
-  }
-
-  rfqOverdue(rfq: SalesRfq): boolean {
-    if (!rfq?.deadline || ['Closed', 'Cancelled'].includes(rfq.status)) return false;
-    if ((rfq.suppliers || []).every((s) => s.status === 'Replied' || s.status === 'Declined')) return false;
-    const end = new Date(rfq.deadline);
-    return end.getTime() < Date.now();
-  }
-
-  /** While this job is with presale (assigned/in review/in revision), the same RFQ the enquiry carries
-   * belongs to presale — the person who sent it has their own locked view on the enquiry side. Outside
-   * that window (completed/cancelled/rejected/returned), presale must not create or edit it either. */
-  /** True once every product on the active supplier RFQ has been confirmed, marked unavailable, or lost — nothing
-   * left to chase before quoting. No RFQ at all also counts as ready, since raising one is optional. */
-  rfqReadyToQuote(row: any): boolean {
-    const rfq = this.rfqFor(row);
-    if (!rfq || rfq.status === 'Cancelled') return true;
-    return (rfq.requestedLines || []).every((l) => !!l.lineStatus && l.lineStatus !== 'Pending');
-  }
-
-  /** Can raise RFQs on this job, or there are already RFQs to look at. */
-  hasRfqAccess(row: any): boolean {
-    return this.canRequestPrices(row) || !!this.rfqFor(row);
-  }
-
-  canRequestPrices(row: any): boolean {
-    return this.rowStage(row) === 'assigned' && ['assigned', 'in review', 'in revision'].includes(row?.preSale?.status ?? 'assigned');
-  }
-
-  rfqDrawer: { enquiryId: string | null; rfqId: string | null } | null = null;
-
-  openCreateRfq(row: any): void {
-    if (!this.canRequestPrices(row)) return;
-    this.rfqDrawer = { enquiryId: row._id ?? null, rfqId: null };
-  }
-
-  openRfq(rfq: SalesRfq): void {
-    this.rfqDrawer = { enquiryId: null, rfqId: rfq._id };
-  }
-
-  /** Request sheet (Excel) for this RFQ's supplier, to attach to a manually sent email — doesn't open the drawer. */
-  exportRfqSheet(rfq: SalesRfq, event: Event): void {
-    event.stopPropagation();
-    const supplier = rfq.suppliers?.[0];
-    if (!supplier) return;
-    downloadRequestSheet(rfq, supplier).catch(() => this.toast.warning('Could not build the request sheet.'));
-  }
-
-  onRfqSaved(): void {
-    this.refreshRfqList();
-    this.loadRfqSummaries(this.rows);
-  }
-
-  /** The enquiry's supplier RFQs side by side, to award each product. */
-  compareEnquiry: any | null = null;
-
-  openCompare(row: any): void {
-    this.compareEnquiry = row;
-  }
-
-  /** Opening one RFQ from the comparison swaps the drawers; closing it does not bring the comparison back. */
-  onCompareOpenRfq(rfqId: string): void {
-    this.compareEnquiry = null;
-    this.rfqDrawer = { enquiryId: null, rfqId };
-  }
-
-  /** Awarding and preparing the quotation happens from Sales once the job is back with them — presale only compares. */
-  onCompareQuotationPrepared(): void {
-    this.compareEnquiry = null;
-    this.toast.warning('Send this job back to the enquiry first — the quotation is prepared from Sales.');
   }
 
   // ---- Documents tab: presale files + estimation ------------------------------------------
@@ -1311,10 +1147,6 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     if (this.hasPendingFeedbackRequest(row)) {
       this.toast.warning('A feedback request is still awaiting a response. Please wait before sending this job back to enquiry.');
-      return;
-    }
-    if (!this.rfqReadyToQuote(row)) {
-      this.toast.warning('The supplier RFQ is still in progress. Please confirm pricing for all requested products before sending this job back.');
       return;
     }
     const { confirmed } = await this.confirm.open({

@@ -712,7 +712,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     this.isPreviewing = true;
     const quoteData = this.quoteData!;
     this.quotationService
-      .generatePDF(quoteData, true)
+      .generatePDF(quoteData)
       .then((pdf) => {
         pdf.getBlob((blob: Blob) => {
           const url = window.URL.createObjectURL(blob);
@@ -1396,7 +1396,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
         facts: keep([
           { label: 'Payment terms', value: q.paymentTerms || '' },
           { label: 'Delivery terms', value: q.deliveryTerms || '' },
-          { label: 'Warranty', value: q.warranty || '' },
           { label: 'Delivery location', value: q.deliveryLocation || '' },
         ]),
       },
@@ -1415,7 +1414,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
     // The next module in the flow: where the quote stands on its way to a deal sheet.
     this.dealFacts = keep([
-      { label: 'Current step', value: handover.stage, pill: true, tone: handover.tone },
+      { label: 'Current step', value: handover.stage, tone: handover.tone },
       { label: 'Next action', value: handover.next },
       { label: 'Customer LPO', value: q.lpoFiles?.length ? `${q.lpoFiles.length} file(s) uploaded` : q.status === QuoteStatus.Won ? 'Not uploaded' : '' },
       { label: 'Customer PO', value: q.customerAcceptance?.customerPoNumber || '' },

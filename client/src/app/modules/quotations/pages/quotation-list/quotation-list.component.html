@@ -72,8 +72,7 @@
                     <app-action-button variant="outline" (click)="onLogFollowUp(row)">Mark done</app-action-button>
                 </ng-container>
                 <ng-template #scheduleOnly>
-                    <app-action-button variant="outline" (click)="onLogFollowUp(row)">Log a follow-up</app-action-button>
-                    <app-action-button variant="outline" icon="plus" (click)="onScheduleFollowUp(row)">Schedule follow-up</app-action-button>
+                    <app-action-button variant="outline" icon="plus" (click)="onLogFollowUp(row)">Add follow-up</app-action-button>
                 </ng-template>
             </ng-container>
             <app-action-button *ngIf="tab === 'events'" variant="outline" icon="plus" (click)="onAddEvent(row)">Add event</app-action-button>

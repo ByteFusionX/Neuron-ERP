@@ -28,8 +28,8 @@ function needsReason(current: S, target: S): boolean {
 
 /** Quotation rules for the shared `app-status-change-modal`. */
 export function quoteStatusModalData(currentStatus: S, targetStatus?: S): StatusChangeModalData<S> {
-  // Only the moves this quote can actually make are offered; unreachable ones are hidden, not greyed out.
-  const statuses = Object.values(S).filter((s) => s !== S.Expired && canSelectQuoteStatus(currentStatus, s));
+  // Every status is listed; the ones this quote can't move to are shown disabled.
+  const statuses = Object.values(S).filter((s) => s !== S.Expired);
   const reopening = currentStatus === S.Won || currentStatus === S.Lost;
   return {
     currentStatus,
@@ -37,7 +37,7 @@ export function quoteStatusModalData(currentStatus: S, targetStatus?: S): Status
     statuses,
     canSelect: canSelectQuoteStatus,
     // Marking Won asks for the acceptance note, so it is never a one-click change.
-    requireReasonFor: statuses.filter((s) => s === S.Won || needsReason(currentStatus, s)),
+    requireReasonFor: statuses.filter((s) => canSelectQuoteStatus(currentStatus, s) && (s === S.Won || needsReason(currentStatus, s))),
     reasonLabels: {
       [S.Won]: { label: 'How the customer accepted', placeholder: 'e.g. Accepted by email on 12 Oct, PO to follow' },
       [S.Lost]: { label: 'Reason for losing', placeholder: 'Why did we lose this quote?' },

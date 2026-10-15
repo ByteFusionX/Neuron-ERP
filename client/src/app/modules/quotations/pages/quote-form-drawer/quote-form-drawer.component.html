@@ -31,10 +31,8 @@
     <div *ngIf="sourceEnquiry" class="mb-5 flex flex-wrap items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
         <ng-icon name="heroInformationCircle" class="mt-0.5 h-4 w-4 shrink-0"></ng-icon>
         <span class="min-w-0">
-            Prefilled from enquiry <span class="font-medium">{{ sourceEnquiry.enquiryId || sourceEnquiry.title }}</span><ng-container *ngIf="$any(sourceEnquiry).rfqSeed">
-            with supplier costs from <span class="font-medium">{{ $any(sourceEnquiry).rfqSeed.rfqNo }}</span>; set the selling prices in Items</ng-container>.
-            Review the details below — saving as a draft leaves the enquiry at its current status,
-            creating the quotation marks it <span class="font-medium">Quoted</span>.
+            Prefilled from enquiry <span class="font-medium">{{ sourceEnquiry.enquiryId || sourceEnquiry.title }}</span>.
+            Review the details below — saving the quotation marks the enquiry <span class="font-medium">Quoted</span>.
         </span>
     </div>
 
@@ -108,7 +106,7 @@
              subscriptions, and re-creating it over an existing FormArray would leave them unwired. -->
         <div [hidden]="step !== 2">
             <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Quotation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
-                [seedOptionalItems]="seedOptionalItems" [currency]="quoteForm.controls.currency.value || 'QAR'"
+                [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="quoteForm.controls.currency.value || 'QAR'"
                 [previousJobItemsCount]="previousJobItemsCount"
                 (totals)="onItemTotals($event)" (previousJobsClicked)="openPreviousJobsModal()"
                 (createProductRequested)="openCreateProduct($event)"></app-item-entry>
@@ -116,55 +114,35 @@
 
         <!-- Step 3 — notes & terms --------------------------------------------------------- -->
         <ng-container *ngIf="step === 3">
-            <app-sf-section title="Commercial Terms" columns="2"
-                description="Keep the key quote terms structured so they can be searched, reported and printed consistently.">
+            <app-sf-section title="Terms" columns="2">
                 <app-sf-field label="Payment Terms" [control]="quoteForm.controls.paymentTerms">
                     <app-sf-input formControlName="paymentTerms" placeholder="e.g. 50% advance, 50% on delivery"></app-sf-input>
                 </app-sf-field>
                 <app-sf-field label="Delivery Terms" [control]="quoteForm.controls.deliveryTerms">
                     <app-sf-input formControlName="deliveryTerms" placeholder="e.g. 4-6 weeks from LPO"></app-sf-input>
                 </app-sf-field>
-                <app-sf-field label="Warranty" [control]="quoteForm.controls.warranty">
-                    <app-sf-input formControlName="warranty" placeholder="e.g. 12 months from delivery"></app-sf-input>
-                </app-sf-field>
                 <app-sf-field label="Delivery Location" [control]="quoteForm.controls.deliveryLocation">
                     <app-sf-input formControlName="deliveryLocation" placeholder="e.g. customer site / warehouse"></app-sf-input>
                 </app-sf-field>
             </app-sf-section>
 
-            <app-sf-section title="Customer Note"
-                description="Pick a saved note to start from, then edit it — what you type here is what the customer sees.">
+            <app-sf-section title="Customer Note" columns="1">
                 <app-sf-field label="Insert a saved note">
                     <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="customerNoteOptions"
                         [placeholder]="customerNoteOptions.length ? 'Choose a template…' : 'No saved notes yet'" (ngModelChange)="applyNoteTemplate('customerNote', $event)"></app-sf-select>
                 </app-sf-field>
                 <app-sf-field label="Customer Note" [control]="quoteForm.controls.customerNote">
-                    <app-sf-textarea formControlName="customerNote" [rows]="6" placeholder="Note shown on the quotation"></app-sf-textarea>
+                    <app-sf-textarea formControlName="customerNote" [rows]="5" bullets placeholder="Note shown on the quotation"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
 
-            <app-sf-section title="Terms & Conditions"
-                description="Same here — the template is a starting point, not a fixed choice.">
+            <app-sf-section title="Terms & Conditions" columns="1">
                 <app-sf-field label="Insert saved terms">
                     <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="termsOptions"
                         [placeholder]="termsOptions.length ? 'Choose a template…' : 'No saved terms yet'" (ngModelChange)="applyNoteTemplate('termsAndCondition', $event)"></app-sf-select>
                 </app-sf-field>
                 <app-sf-field label="Terms and Conditions" [control]="quoteForm.controls.termsAndCondition">
-                    <app-sf-textarea formControlName="termsAndCondition" [rows]="8" placeholder="Terms shown on the quotation"></app-sf-textarea>
-                </app-sf-field>
-            </app-sf-section>
-
-            <app-sf-section title="Summary" columns="3">
-                <app-sf-field label="Total cost">
-                    <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ itemTotals.totalCost | number: '1.2-2' }}</p>
-                </app-sf-field>
-                <app-sf-field label="Margin">
-                    <p class="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{{ itemTotals.totalProfit | number: '1.1-1' }}%</p>
-                </app-sf-field>
-                <app-sf-field label="Final total">
-                    <p class="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                        {{ (itemTotals.sellingPrice - itemTotals.discount) | number: '1.2-2' }} {{ quoteForm.controls.currency.value }}
-                    </p>
+                    <app-sf-textarea formControlName="termsAndCondition" [rows]="7" bullets placeholder="Terms shown on the quotation"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
         </ng-container>
@@ -172,22 +150,27 @@
 
     <ng-container sfDrawerFooter>
 
-        <div *ngIf="step === 2" class="mr-auto flex flex-wrap items-center gap-2">
-            <app-action-button variant="secondary" (click)="itemEntry.addItemAndJump()">
-                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
+        <div class="mr-auto flex flex-wrap items-center gap-2">
+            <app-action-button variant="secondary" (click)="createSupplierOpen = true">
+                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create supplier
             </app-action-button>
-            <app-action-button *ngIf="itemEntry.optionalItemsEnabled" variant="secondary" (click)="itemEntry.addItemAndJump(true)">
-                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
+            <app-action-button variant="secondary" (click)="createProductPrefill = null; createProductOpen = true">
+                <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Create product
             </app-action-button>
+            <ng-container *ngIf="step === 2">
+                <app-action-button variant="secondary" (click)="itemEntry.addItemAndJump()">
+                    <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add item
+                </app-action-button>
+                <app-action-button *ngIf="itemEntry.optionalItemsEnabled" variant="secondary" (click)="itemEntry.addItemAndJump(true)">
+                    <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add optional item
+                </app-action-button>
+            </ng-container>
         </div>
         <span *ngIf="stepAttempted && !isStepValid(step)" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
         <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>
 
-        <app-action-button *ngIf="!isEdit" variant="tool" [disabled]="savingDraft || saving" (click)="saveAsDraft()">
-            {{ savingDraft ? 'Saving…' : 'Save as Draft' }}
-        </app-action-button>
         <!-- Editing already has the data, so saving is offered on every step rather than only the last. -->
         <app-action-button *ngIf="isEdit && step < 3" variant="tool" [disabled]="saving" (click)="submit()">
             {{ saving ? 'Saving…' : 'Save Changes' }}
@@ -196,10 +179,12 @@
         <app-action-button *ngIf="step < 3" variant="primary" (click)="nextStep()">
             Next: {{ steps[step].label }}
         </app-action-button>
-        <app-action-button *ngIf="step === 3" variant="primary" type="submit" form="quote-form" [disabled]="saving || savingDraft">
+        <app-action-button *ngIf="step === 3" variant="primary" type="submit" form="quote-form" [disabled]="saving">
             {{ saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Quote') }}
         </app-action-button>
     </ng-container>
 </app-sf-drawer>
+
+<app-supplier-form-drawer [open]="createSupplierOpen" mode="create" (closed)="createSupplierOpen = false"></app-supplier-form-drawer>
 
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>

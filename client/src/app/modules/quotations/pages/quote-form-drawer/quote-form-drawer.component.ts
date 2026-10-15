@@ -23,6 +23,7 @@ import { ActionButtonComponent } from 'src/app/shared/components/action-button/a
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
 import { PreviousJobsModalComponent } from 'src/app/shared/components/previous-jobs-modal/previous-jobs-modal.component';
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryTotals } from 'src/app/shared/components/item-entry';
+import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/supplier-form-drawer/supplier-form-drawer.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
 
 /** Statuses before the quote has gone to the customer. Mirrors the server, which only revises past these. */
@@ -38,7 +39,7 @@ const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress
   standalone: true,
   templateUrl: './quote-form-drawer.component.html',
   providers: [DatePipe, CatalogueSuggestionSource, { provide: ITEM_SUGGESTION_SOURCE, useExisting: CatalogueSuggestionSource }],
-  imports: [ProductFormDrawerComponent, NgIf, NgFor, NgClass, NgIcon, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
+  imports: [ProductFormDrawerComponent, SupplierFormDrawerComponent,NgIf, NgFor, NgClass, NgIcon, DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
 })
 export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -55,7 +56,6 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   @ViewChild(SfDraftDirective) draft?: SfDraftDirective;
 
   saving = false;
-  savingDraft = false;
   step: 1 | 2 | 3 = 1;
   readonly steps = [
     { n: 1 as const, label: 'Details', hint: 'Customer and quote details' },
@@ -88,6 +88,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   accountingManagerOptions: SfOption[] = [];
 
   private fb = inject(FormBuilder);
+  private catalogue = inject(CatalogueSuggestionSource);
+  private _catalogueInit = (this.catalogue.includePending = true);
   private dialog = inject(MatDialog);
   private toaster = inject(ToastrService);
   private datePipe = inject(DatePipe);
@@ -125,11 +127,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     termsAndCondition: ['', Validators.required],
     paymentTerms: [''],
     deliveryTerms: [''],
-    warranty: [''],
     deliveryLocation: [''],
     enqId: [null as string | null],
-    // Set when the quote is raised from a sales RFQ; the server links the RFQ back and closes it.
-    sourceRfqId: [null as string | null],
   });
   /** Step 1 and step 3 own these; step 2 owns `optionalItems`. */
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
@@ -300,27 +299,21 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   // --- seeding ---------------------------------------------------------------
 
   private seedFromEnquiry(enquiry: getEnquiry): void {
-    // A sales RFQ hand-off carries the confirmed supplier costs; they win over the presale estimate.
-    const rfqSeed = (enquiry as any).rfqSeed as { rfqId: string; currency?: string; optionalItems?: any[] } | undefined;
     this.sourceEnquiry = enquiry;
     this.seeding = true;
     this.quoteForm.patchValue({
       client: (enquiry.client as any)?._id ?? null,
       attention: (enquiry.contact as any)?._id ?? null,
       subject: enquiry.title ?? '',
-      currency: rfqSeed?.currency ?? enquiry.preSale?.estimations?.currency ?? 'QAR',
+      currency: enquiry.preSale?.estimations?.currency ?? 'QAR',
       enqId: enquiry._id ?? null,
-      // An estimation filled from RFQs keeps that link, so saving the quote still closes the enquiry's RFQs.
-      sourceRfqId: rfqSeed?.rfqId ?? (enquiry.preSale?.estimations as any)?.sourceRfqId ?? null,
     });
     this.setDepartments([
       (enquiry.department as unknown as getDepartment)?._id ?? (enquiry.department as unknown as string),
     ]);
-    this.seedOptionalItems = rfqSeed?.optionalItems?.length
-      ? rfqSeed.optionalItems
-      : enquiry.preSale?.estimations?.optionalItems?.length
-        ? enquiry.preSale.estimations.optionalItems
-        : null;
+    this.seedOptionalItems = enquiry.preSale?.estimations?.optionalItems?.length
+      ? enquiry.preSale.estimations.optionalItems
+      : null;
     this.quoteForm.markAsDirty();
     this.seeding = false;
   }
@@ -347,7 +340,6 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       termsAndCondition: text(q.termsAndCondition),
       paymentTerms: q.paymentTerms ?? '',
       deliveryTerms: q.deliveryTerms ?? '',
-      warranty: q.warranty ?? '',
       deliveryLocation: q.deliveryLocation ?? '',
     });
     this.setDepartments(departments);
@@ -384,7 +376,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     this.quoteForm.reset({
       client: null, attention: null, date: this.todayIso(), department: null, departments: [], subject: '',
       currency: 'QAR', quoteCompany: null, closingDate: '', validityDate: '', customerNote: '', termsAndCondition: '',
-      paymentTerms: '', deliveryTerms: '', warranty: '', deliveryLocation: '', enqId: null, sourceRfqId: null, accountingManager: null,
+      paymentTerms: '', deliveryTerms: '', deliveryLocation: '', enqId: null, accountingManager: null,
     });
     this.applyDefaultNotes();
     this.step = 1;
@@ -437,6 +429,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
         if (!this.isStepValid(s as 1 | 2 | 3)) {
           this.markStepTouched(s as 1 | 2 | 3);
           this.step = s as 1 | 2 | 3;
+          if (s === 2) setTimeout(() => this.itemEntry?.revealInvalid());
           return;
         }
       }
@@ -455,6 +448,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   }
 
   createProductOpen = false;
+  createSupplierOpen = false;
   createProductPrefill: { productSegment?: string; productCategoryName?: string; productDescription?: string } | null = null;
 
   openCreateProduct({ itemName, detail, scopeIds }: CreateProductRequest): void {
@@ -530,7 +524,6 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       termsAndCondition: v.termsAndCondition,
       paymentTerms: v.paymentTerms,
       deliveryTerms: v.deliveryTerms,
-      warranty: v.warranty,
       deliveryLocation: v.deliveryLocation,
       optionalItems: JSON.parse(JSON.stringify(v.optionalItems ?? [])),
     };
@@ -549,7 +542,6 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     });
 
     if (v.enqId) payload.enqId = v.enqId;
-    if (v.sourceRfqId && !this.isEdit) payload.sourceRfqId = v.sourceRfqId;
     if (note) {
       payload.saveNote = note;
       if (this.isEdit) payload.editReason = note;
@@ -557,39 +549,17 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     return payload;
   }
 
-  /** Create mode: whatever has been filled in so far is kept as a Draft. */
-  saveAsDraft(): void {
-    if (!this.isStepValid(1)) {
-      this.markStepTouched(1);
-      this.step = 1;
-      this.toaster.warning('Fill in the customer and quote details first.', 'Incomplete');
-      return;
-    }
-
-    this.savingDraft = true;
-    // Read before resetWizard() clears it.
-    const fromEnquiry = !!this.sourceEnquiry;
-    this.quoteService.saveQuotation(this.buildPayload(QuoteStatus.Draft)).subscribe({
-      next: () => {
-        this.savingDraft = false;
-        this.finish();
-        this.toaster.success(
-          fromEnquiry
-            ? 'Saved as a draft. Continue it from the quotation list.'
-            : 'Quotation saved as a draft.',
-          'Saved'
-        );
-      },
-      error: () => (this.savingDraft = false),
-    });
-  }
-
   /** Final action: creates as Work In Progress, or saves the edit, each with a required note. */
   submit(): void {
     if (this.quoteForm.invalid) {
       this.quoteForm.markAllAsTouched();
       const firstIncomplete = ([1, 2, 3] as const).find((s) => !this.isStepValid(s));
-      if (firstIncomplete) this.step = firstIncomplete;
+      if (firstIncomplete) {
+        this.step = firstIncomplete;
+        const label = ({ 1: 'Details', 2: 'Items', 3: 'Notes & Terms' } as const)[firstIncomplete];
+        this.toaster.warning(`Step ${firstIncomplete} (${label}) has fields that still need filling. They are highlighted.`, 'Incomplete');
+        if (firstIncomplete === 2) setTimeout(() => this.itemEntry?.revealInvalid());
+      }
       this.stepAttempted = true;
       return;
     }

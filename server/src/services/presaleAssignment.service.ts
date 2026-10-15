@@ -12,16 +12,14 @@ const UNIT_MINUTES: Record<string, number> = { minute: 1, hour: 60, day: 24 * 60
  * The assignment ladder: the bottom row of the workflow acts first and the job climbs towards
  * order 1. Admin is pinned on top automatically, so the ladder always ends with someone who can decide.
  */
-export type AssignmentKind = 'presale' | 'procurement';
+export type AssignmentKind = 'presale';
 
-/** Which workflow feature drives each ladder, and which privilege lets a role act on it. */
-const canActOn = (kind: AssignmentKind, role: any) => kind === 'procurement'
-    ? role?.privileges?.purchase?.canAssign === true
-    : role?.privileges?.assignedJob?.assign === true;
+/** A role can act on the ladder only while it holds the assign privilege. */
+const canActOn = (_kind: AssignmentKind, role: any) => role?.privileges?.assignedJob?.assign === true;
 
 const getPresaleWorkflow = async (disabledRoles: any[] = [], kind: AssignmentKind = 'presale') => {
     const skipped = new Set(disabledRoles.map(id => String((id as any)?._id ?? id)));
-    const workflow = await Workflow.findOne({ feature: kind === 'procurement' ? 'procurementAssignment' : 'presale' }).populate('steps.role');
+    const workflow = await Workflow.findOne({ feature: 'presale' }).populate('steps.role');
     if (!workflow) return null;
 
     // A role that lost the assign privilege can no longer act, so its step is skipped until the privilege returns.

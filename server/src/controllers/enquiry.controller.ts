@@ -426,7 +426,7 @@ export const sendToPresale = async (req: any, res: Response, next: NextFunction)
 };
 
 // Statuses an enquiry can be converted to a quote from. 'in progress' and 'estimated' are current values; the rest are legacy.
-const CONVERTIBLE_TO_QUOTE_STATUSES = ['in progress', 'estimated', 'Work In Progress', 'Ready for Quotation'];
+const CONVERTIBLE_TO_QUOTE_STATUSES = ['new', 'in progress', 'estimated', 'work in progress', 'ready for quotation'];
 
 /** Hands an enquiry over to quotations. From here on the quotation owns the process; its outcome never changes the enquiry. */
 export const convertToQuote = async (req: any, res: Response, next: NextFunction) => {
@@ -436,8 +436,8 @@ export const convertToQuote = async (req: any, res: Response, next: NextFunction
         if (!enquiry) {
             return res.status(404).json({ success: false, message: 'Enquiry not found' });
         }
-        if (!CONVERTIBLE_TO_QUOTE_STATUSES.includes(enquiry.status)) {
-            return res.status(400).json({ success: false, message: 'Only in progress or estimated enquiries can be converted to a quote' });
+        if (!CONVERTIBLE_TO_QUOTE_STATUSES.includes(String(enquiry.status || '').toLowerCase())) {
+            return res.status(400).json({ success: false, message: 'Only new, in progress or estimated enquiries can be converted to a quote' });
         }
         if (!enquiry.client || !enquiry.contact || !String(enquiry.title || '').trim()) {
             return res.status(400).json({ success: false, message: 'Customer, contact and requirement summary are required before quotation' });
@@ -743,9 +743,22 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
         let skipNum: number = (page - 1) * row;
 
         // Lost/Quoted are stored lowercase by the newer write path but Title Case in older records.
+        // Each current status also matches the old values it replaced, so old enquiries still turn up under it.
+        const LEGACY_STATUS_GROUPS: Record<string, string[]> = {
+            'new': ['New', 'new', 'In Review', 'in review'],
+            'in progress': ['Work In Progress', 'work in progress', 'in progress', 'In Progress'],
+            'in presales': ['in presales', 'Sent to Presales', 'Assigned To Presale Manager', 'Assigned To Presale Engineer', 'Assigned To Presales'],
+            'estimated': ['estimated', 'Estimated', 'Ready for Quotation', 'ready for quotation'],
+            'revision': ['revision', 'Revision'],
+            'rejected': ['rejected', 'Rejected', 'Rejected by Presale Engineer', 'Rejected by Presale Manager'],
+            'quoted': ['Quoted', 'quoted'],
+            'lost': ['Lost', 'lost'],
+        };
         const statusVariants = (value: any): any[] => {
             const v = typeof value === 'string' ? value : '';
-            return [value, ...(['Lost', 'Quoted', 'lost', 'quoted'].includes(v) ? [v.charAt(0).toUpperCase() + v.slice(1), v.toLowerCase()] : [])];
+            const key = v.toLowerCase();
+            const group = Object.values(LEGACY_STATUS_GROUPS).find(g => g.some(s => s.toLowerCase() === key));
+            return group ?? [value];
         };
         let isSalesPerson = salesPerson == null ? true : false;
         let isCustomer = customer == null ? true : false;
@@ -862,7 +875,8 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             ? { status: { $in: ['Quoted', 'quoted'] } }
             : lostView ? { status: { $in: ['Lost', 'lost'] } }
             : presalesView ? presalesMatch
-            : { status: { $nin: hiddenStatuses } };
+            // Picking a status in the filter is explicit, so Quoted must be reachable from any tab.
+            : { status: { $nin: status ? ['Sended by Presale Engineer'] : hiddenStatuses } };
 
         const enquiryTotal: { total: number }[] = await enquiryModel.aggregate([
             { $match: listFilters },
@@ -2204,7 +2218,7 @@ export const reviseQuoteEstimation = async (req: any, res: Response, next: NextF
 
 export const uploadEstimations = async (req: any, res: Response, next: NextFunction) => {
     try {
-        let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption, sourceRfqId } = req.body;
+        let { optionalItems, enquiryId, currency, totalDiscount, preSaleNote, selectedOption } = req.body;
         const blocked = await presaleStepBlock(enquiryId, ['assigned', 'in revision', 'in review'])
             || await holderBlock(req, enquiryId);
         if (blocked) return res.status(blocked.code).json({ message: blocked.message });
@@ -2251,8 +2265,6 @@ export const uploadEstimations = async (req: any, res: Response, next: NextFunct
                 'preSale.revisionComment': ''
             }
         };
-        if (sourceRfqId && ObjectId.isValid(String(sourceRfqId))) update.$set['preSale.estimations.sourceRfqId'] = new ObjectId(String(sourceRfqId));
-        else update.$unset['preSale.estimations.sourceRfqId'] = '';
         if (isNewVersion) {
             const submitter = await getEmployeeData(req.user);
             update.$push = {

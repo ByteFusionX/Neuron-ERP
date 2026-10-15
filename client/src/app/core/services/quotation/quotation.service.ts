@@ -1,12 +1,13 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
 import { FilterQuote, QuoteStatus, getQuotation, Quotatation, quotatationForm, getQuotatation, nextQuoteData, dealData, FilterDeal, getDealSheet, ReportDetails, ReportFilter, QuoteRevisionsResponse, QuoteFollowUp } from 'src/app/shared/interfaces/quotation.interface';
 import { environment } from 'src/environments/environment';
 
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
+import { QuotationTemplateSettings, SystemSettingService } from '../system-setting.service';
 
 // Methods below flagged with context() are called only from components that already
 // show their own error toast on failure, so requests opt out of the interceptor's global toast.
@@ -27,7 +28,7 @@ export interface QuoteStockHold {
 export class QuotationService {
 
   api: string = environment.api
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient, private systemSettings: SystemSettingService) { }
 
   saveQuotation(quotationDetails: Quotatation): Observable<Quotatation> {
     return this.http.post<Quotatation>(`${this.api}/quotation`, quotationDetails)
@@ -61,8 +62,10 @@ export class QuotationService {
     return this.http.post<{ quoteId: string }>(`${this.api}/quotation/nextQuoteId`, quoteData)
   }
 
-  getProductSuggestions(params: { search: string; departments?: string[]; category?: string; includePending?: boolean }): Observable<{ success: boolean; message: string; data: any[] }> {
+  getProductSuggestions(params: { search: string; departments?: string[]; category?: string; includePending?: boolean; lean?: boolean; skip?: number; limit?: number }): Observable<{ success: boolean; message: string; data: any[] }> {
     let httpParams: any = { search: params.search || '' };
+    if (params.skip) httpParams.skip = String(params.skip);
+    if (params.limit) httpParams.limit = String(params.limit);
     if (params.departments?.length) {
       httpParams.departments = params.departments.join(',');
     }
@@ -70,6 +73,7 @@ export class QuotationService {
       httpParams.category = params.category.trim();
     }
     if (params.includePending) httpParams.includePending = 'true';
+    if (params.lean) httpParams.lean = 'true';
     return this.http.get<{ success: boolean; message: string; data: any[] }>(`${this.api}/quotation/product-suggestions`, { params: httpParams })
   }
 
@@ -188,7 +192,25 @@ export class QuotationService {
     });
   }
 
-  async generatePDF(quoteData: getQuotatation, includeStamp: boolean) {
+  async generatePDF(quoteData: getQuotatation, includeStamp?: boolean, template?: QuotationTemplateSettings) {
+    if (!template) {
+      try {
+        template = (await firstValueFrom(this.systemSettings.getDocuments())).data.quotation;
+      } catch {
+        // Keep quotation output available when settings cannot be loaded.
+      }
+    }
+    const templateSettings: QuotationTemplateSettings = {
+      title: template?.title || 'COMMERCIAL PROPOSAL',
+      primaryColor: template?.primaryColor || '#1E3964',
+      openingText: template?.openingText || 'Reference to your query on the above subject, we are pleased to enclose herewith our OFFER for your perusal and due consideration.',
+      showOpening: template?.showOpening !== false,
+      showCommercialTerms: template?.showCommercialTerms !== false,
+      showTerms: template?.showTerms !== false,
+      showNotes: template?.showNotes !== false,
+      includeStampByDefault: template?.includeStampByDefault !== false,
+    };
+    const shouldIncludeStamp = includeStamp ?? templateSettings.includeStampByDefault;
     pdfMake.vfs = pdfFonts.vfs;
     
     (pdfMake as any).fonts = {
@@ -415,7 +437,7 @@ export class QuotationService {
         ...(quoteData.quoteCompany == 'Neuron Security System'
           ? [
             { text: 'Respected Sir/ Ma’am,', style: 'text' },
-            { text: 'Reference to your query on the above subject, we are pleased to enclose herewith our OFFER for your perusal and due consideration.', style: 'text' },
+            ...(templateSettings.showOpening ? [{ text: templateSettings.openingText, style: 'text' }] : []),
             { text: 'Thanking you for your co-operation and assuring you of our commitment to always providing professional support and services.', style: 'text' },
             { text: 'Statement of Confidentiality', style: 'orangeHeading' },
             { text: 'Copyright: © 2020 Neuron Security System.', style: 'italicText' },
@@ -438,8 +460,8 @@ export class QuotationService {
               {
                 style: 'mainHead',
                 "border": [false, false, false, false],
-                "fillColor": "#1E3964",
-                "text": "COMMERCIAL PROPOSAL",
+                "fillColor": templateSettings.primaryColor,
+                "text": templateSettings.title,
                 "alignment": "center",
                 "margin": [0, 3, 0, 3]
               }]
@@ -455,49 +477,53 @@ export class QuotationService {
             widths: [78.66, '*', 43.24, '*', 73.60, 'auto'],
             body: [
               [{ style: 'tableHead', text: 'Company:', alignment: 'left' }, { style: 'tableHead', text: quoteData.client.companyName, alignment: 'left', colSpan: 4 }, {}, {}, {}, { text: ['Total Pages : 0', { pageReference: 'lastPage' }], alignment: 'left', style: 'pageNumber' }],
-              [{ style: 'tableHead', text: 'Attention:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.attention.courtesyTitle + ' ' + quoteData.attention.firstName + ' ' + quoteData.attention.lastName}`, alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Date:', alignment: 'left' }, { style: 'tableHead', text: new Date(quoteData.date).toLocaleDateString('en-GB'), alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Attention:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.attention.courtesyTitle + ' ' + quoteData.attention.firstName + ' ' + quoteData.attention.lastName}`, alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Date:', alignment: 'left' }, { style: 'tableHead', text: quoteData.date ? new Date(quoteData.date).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ rowSpan: 2, style: 'vCentertableHead', text: 'Address:', alignment: 'left' }, { rowSpan: 2, style: 'vCentertableHead', text: quoteData.client.companyAddress, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'stableHead', text: 'Client Ref:', alignment: 'left' }, { style: 'stableHead', text: quoteData.client.clientRef || '-', alignment: 'left' }],
               ['', '', '', '', { style: 'stableHead', text: 'Closing Date:', alignment: 'left' }, { style: 'stableHead', text: quoteData.closingDate ? new Date(quoteData.closingDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Client Tel:', alignment: 'left' }, { style: 'tableHead', text: `+974 ${quoteData.attention.phoneNo}`, alignment: 'left' }, { style: 'tableHead', text: 'FAX:', alignment: 'center' }, { style: 'tableHead', text: '+974', alignment: 'left' }, { style: 'tableHead', text: 'Salesperson:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.createdBy.firstName + ' ' + quoteData.createdBy.lastName}`, alignment: 'left' }],
               [{ style: 'tableHead', text: 'Subject:', alignment: 'left' }, { style: 'tableHead', text: quoteData.subject, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Quote Ref:', alignment: 'left' }, { style: 'quoteId', text: quoteData.quoteId, alignment: 'left' }],
               [{ style: 'tableHead', text: 'Payment Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.paymentTerms || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'tableHead', text: quoteData.validityDate ? new Date(quoteData.validityDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
               [{ style: 'tableHead', text: 'Delivery Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryTerms || '-', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
-              [{ style: 'tableHead', text: 'Warranty:', alignment: 'left' }, { style: 'tableHead', text: quoteData.warranty || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Delivery Location:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryLocation || '-', alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Delivery Location:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryLocation || '-', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
             ]
           }
         },
-        ...(quoteData.quoteCompany !== 'Neuron Security System'
+        ...(quoteData.quoteCompany !== 'Neuron Security System' && templateSettings.showOpening
           ? [
             { text: 'Respected Sir/ Ma’am,', style: 'text' },
-            { text: 'Reference to your query on the above subject, we are pleased to enclose herewith our OFFER for your perusal and due consideration.', style: 'text' },
+            { text: templateSettings.openingText, style: 'text' },
             { text: 'Thanking you for your co-operation and assuring you of our commitment to always providing professional support and services.', style: 'text', margin: [0, 10, 0, 15] },
           ]
           : []),
         ...tables,
-        ...(quoteData.paymentTerms || quoteData.deliveryTerms || quoteData.warranty || quoteData.deliveryLocation || quoteData.validityDate ? [
+        ...(templateSettings.showCommercialTerms && (quoteData.paymentTerms || quoteData.deliveryTerms || quoteData.deliveryLocation || quoteData.validityDate) ? [
           { text: 'COMMERCIAL TERMS', style: 'subHeading' },
           {
             ul: [
               ...(quoteData.paymentTerms ? [`Payment Terms: ${quoteData.paymentTerms}`] : []),
               ...(quoteData.deliveryTerms ? [`Delivery Terms: ${quoteData.deliveryTerms}`] : []),
-              ...(quoteData.warranty ? [`Warranty: ${quoteData.warranty}`] : []),
               ...(quoteData.deliveryLocation ? [`Delivery Location: ${quoteData.deliveryLocation}`] : []),
               ...(quoteData.validityDate ? [`Valid Until: ${new Date(quoteData.validityDate).toLocaleDateString('en-GB')}`] : []),
             ],
             style: 'text'
           }
         ] : []),
-        { text: 'TERMS & CONDITIONS', style: 'subHeading' },
-        { text: quoteData.termsAndCondition, style: 'text' },
-        { text: 'Notes', style: 'subHeading' },
-        { text: quoteData.customerNote, style: 'text' }, {
+        ...(templateSettings.showTerms ? [
+          { text: 'TERMS & CONDITIONS', style: 'subHeading' },
+          { text: quoteData.termsAndCondition, style: 'text' },
+        ] : []),
+        ...(templateSettings.showNotes ? [
+          { text: 'Notes', style: 'subHeading' },
+          { text: quoteData.customerNote, style: 'text' },
+        ] : []),
+        {
           columns: [
             {
               text: [
                 { text: 'Thanking you\nFor ', style: 'footerText' },
                 { text: quoteData.quoteCompany == "Neuron Security System" ? 'Neuron Security System W.L.L' : 'Neuron Technologies W.L.L', style: 'footerBoldText', id: 'lastPage' }]
             },
-            ...(includeStamp ? [{
+            ...(shouldIncludeStamp ? [{
               image: await this.getBase64ImageFromURL(
                 "../../assets/images/stamp.jpg"
               ),
@@ -569,7 +595,7 @@ export class QuotationService {
           fontSize: 12,
           alignment: 'center',
           margin: [0, 10],
-          fillColor: "#1E4E79",
+          fillColor: templateSettings.primaryColor,
           color: 'white',
           bold: true
         },
@@ -578,7 +604,7 @@ export class QuotationService {
           fontSize: 12,
           alignment: 'center',
           margin: [0, 5],
-          fillColor: "#1E4E79",
+          fillColor: templateSettings.primaryColor,
           color: 'white'
         },
         itemRow: {

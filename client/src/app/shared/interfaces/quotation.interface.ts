@@ -53,7 +53,6 @@ export interface QuoteRevisionSnapshot {
     termsAndCondition: string;
     paymentTerms?: string;
     deliveryTerms?: string;
-    warranty?: string;
     deliveryLocation?: string;
     validityDate?: string;
 }
@@ -108,7 +107,6 @@ export interface Quotatation {
     termsAndCondition: DefaultAndText;
     paymentTerms?: string;
     deliveryTerms?: string;
-    warranty?: string;
     deliveryLocation?: string;
     validityDate?: string;
     expiryReminderDate?: string;
@@ -162,7 +160,6 @@ export interface getQuotatation {
     termsAndCondition: DefaultAndText;
     paymentTerms?: string;
     deliveryTerms?: string;
-    warranty?: string;
     deliveryLocation?: string;
     validityDate?: string;
     expiryReminderDate?: string;
@@ -230,7 +227,6 @@ export interface quotatationForm {
     termsAndCondition: DefaultAndText;
     paymentTerms?: string;
     deliveryTerms?: string;
-    warranty?: string;
     deliveryLocation?: string;
     validityDate?: string;
     createdBy: string | getEmployee | undefined;

@@ -8,8 +8,6 @@ import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
-import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
-import { SalesRfqService } from 'src/app/core/services/sales-rfq/sales-rfq.service';
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryOptionValue, ItemEntryTotals } from 'src/app/shared/components/item-entry';
 
 /**
@@ -56,15 +54,11 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
   ];
 
   private fb = inject(FormBuilder);
+  private catalogue = inject(CatalogueSuggestionSource);
+  private _catalogueInit = (this.catalogue.includePending = true);
   private toast = inject(ToastrService);
   private _enquiryService = inject(EnquiryService);
-  private confirm = inject(ConfirmDialogService);
-  private rfqService = inject(SalesRfqService);
 
-  /** The supplier RFQ the items were filled from; saved with the estimation so the quotation can close the RFQs. */
-  sourceRfqId: string | null = null;
-  rfqImportedFrom = '';
-  rfqImporting = false;
 
   form = this.fb.group({
     currency: ['QAR', Validators.required],
@@ -119,15 +113,12 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
       presaleNote: estimation.presaleNote ?? '',
     });
     this.seedOptionalItems = JSON.parse(JSON.stringify(estimation.optionalItems ?? []));
-    this.sourceRfqId = estimation.sourceRfqId ?? null;
     this.form.markAsPristine();
     this.form.markAsUntouched();
   }
 
   private resetWizard(): void {
     this.seedOptionalItems = null;
-    this.sourceRfqId = null;
-    this.rfqImportedFrom = '';
     this.itemEntry ? this.itemEntry.reset() : this.optionalItems.clear();
     this.form.reset({ currency: 'QAR', totalDiscount: '0', presaleNote: '' });
     this.step = 1;
@@ -164,51 +155,6 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
 
   previousStep(): void {
     if (this.step > 1) this.step = 1;
-  }
-
-  private hasEnteredItems(): boolean {
-    return (this.optionalItems.value as any[]).some((option) =>
-      (option.items || []).some((item: any) => (item.itemDetails || []).some((detail: any) => String(detail.detail || '').trim())));
-  }
-
-  /** Fills the items from the products awarded on the enquiry's supplier RFQs: supplier, cost and lead time come across, selling prices stay for the presale engineer. */
-  async importFromRfqs(): Promise<void> {
-    if (!this.enqId || this.rfqImporting) return;
-    if (this.hasEnteredItems()) {
-      const { confirmed } = await this.confirm.open({
-        tone: 'warning',
-        title: 'Replace the items?',
-        message: 'The items on this estimation will be replaced by the products awarded on the supplier RFQs.',
-        confirmLabel: 'Replace',
-        cancelLabel: 'Keep mine',
-      });
-      if (!confirmed) return;
-    }
-    this.rfqImporting = true;
-    this.rfqService.prepareEnquiryQuotation(this.enqId, true).subscribe({
-      next: (res) => {
-        this.rfqImporting = false;
-        const data = res?.data;
-        if (!data?.optionalItems?.length) {
-          this.toast.info('No awarded RFQ products to fill from yet.');
-          return;
-        }
-        if (data.currency && !this.currencyOptions.some((option) => option.value === data.currency)) {
-          this.currencyOptions = [...this.currencyOptions, { label: data.currency, value: data.currency }];
-        }
-        if (data.currency) this.form.controls.currency.setValue(data.currency);
-        this.sourceRfqId = data.rfqId ?? null;
-        this.rfqImportedFrom = data.rfqNo || '';
-        this.seedOptionalItems = JSON.parse(JSON.stringify(data.optionalItems));
-        this.form.markAsDirty();
-        (data.warnings || []).forEach((warning: string) => this.toast.warning(warning));
-        this.toast.success(`Items filled from ${data.rfqNo || 'the RFQs'}. Set the selling prices.`);
-      },
-      error: (err) => {
-        this.rfqImporting = false;
-        this.toast.error(err?.error?.message || 'Could not fill from the RFQs.');
-      },
-    });
   }
 
   onItemTotals(totals: ItemEntryTotals): void {
@@ -248,7 +194,6 @@ export class EstimationFormDrawerComponent implements OnChanges, OnDestroy {
       currency: v.currency,
       preSaleNote: v.presaleNote,
       totalDiscount: v.totalDiscount,
-      sourceRfqId: this.sourceRfqId,
     };
 
     this._enquiryService.uploadEstimations(postBody).subscribe({

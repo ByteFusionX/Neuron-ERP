@@ -8,6 +8,7 @@ import { dealData, Quotatation } from 'src/app/shared/interfaces/quotation.inter
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ItemEntryComponent, ItemEntryOptionValue } from 'src/app/shared/components/item-entry';
 import { SfDrawerComponent, SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
+import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/supplier-form-drawer/supplier-form-drawer.component';
 import { DealCost } from 'src/app/shared/utils/deal-pricing.util';
 
 export type CostType = 'Additional Cost' | 'Supplier Discount' | 'Customer Discount';
@@ -20,7 +21,7 @@ export type CostType = 'Additional Cost' | 'Supplier Discount' | 'Customer Disco
 @Component({
   selector: 'app-deal-form',
   templateUrl: './deal-form.component.html',
-  imports: [NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent],
+  imports: [NgIf, NgFor, NgClass, NgSwitch, NgSwitchCase, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, ItemEntryComponent, SupplierFormDrawerComponent],
 })
 export class DealFormComponent implements OnInit, OnChanges {
   @Input() quotation: Quotatation | null = null;
@@ -71,7 +72,13 @@ export class DealFormComponent implements OnInit, OnChanges {
   termIssues: string[] = [];
   private recomputeQueued = false;
 
+  supplierFormOpen = false;
+
   ngOnInit(): void {
+    this.loadSuppliers();
+  }
+
+  private loadSuppliers(): void {
     this.supplierService.supplierList().subscribe({
       next: (res) => {
         const list: any[] = res.data || res;
@@ -82,6 +89,11 @@ export class DealFormComponent implements OnInit, OnChanges {
       },
       error: (err) => console.error('Error loading suppliers:', err),
     });
+  }
+
+  onSupplierCreated(supplier: any): void {
+    this.loadSuppliers();
+    if (supplier?._id) this.bulkSupplier = supplier._id;
   }
 
   ngOnChanges(changes: SimpleChanges): void {

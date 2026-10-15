@@ -408,7 +408,7 @@ export class QuotationListComponent implements AfterViewInit {
         hidden: (r) => this.isCreatorOnlyView(r) || r.status === 'Expired' || this.isStatusLocked(r),
       },
       {
-        id: 'editQuote', label: 'Edit Quote', icon: 'pencil',
+        id: 'editQuote', label: 'Edit Quote', icon: 'pencil', quick: true,
         hidden: (r) => this.isCreatorOnlyView(r) || this.isEditLocked(r),
       },
       {
@@ -1079,7 +1079,8 @@ export class QuotationListComponent implements AfterViewInit {
       width: '520px',
       data: { context: row.quoteId || row._id, mode: 'complete', plannedFor: open?.due || null },
     }).afterClosed().subscribe((result) => {
-      if (result?.mode === 'complete') {
+      if (result?.mode === 'schedule') this.saveFollowUp(row, this._quoteService.scheduleQuoteFollowUp(row._id as string, { dueDate: result.dueDate, note: result.note }), 'Follow-up scheduled');
+      else if (result?.mode === 'complete') {
         this.saveFollowUp(row, this._quoteService.completeQuoteFollowUp(row._id as string, {
           date: result.date, outcome: result.outcome, note: result.note, nextFollowUpDate: result.nextFollowUpDate,
         }), 'Follow-up logged');
@@ -1169,10 +1170,6 @@ export class QuotationListComponent implements AfterViewInit {
 
   formatAmount(quoteData: Quotatation): string {
     return `${this.numberFormat.transform(this.calculateDiscoutPrice(quoteData))} ${quoteData.currency}`;
-  }
-
-  onEventClicks(enquiryId: string) {
-    this._dialog.open(EventsListComponent, { data: { collectionId: enquiryId, from: 'Quotation' }, width: '500px' });
   }
 
   departmentNames(element: { department?: getDepartment; departments?: getDepartment[] }): string {
@@ -1294,7 +1291,7 @@ export class QuotationListComponent implements AfterViewInit {
         title: 'Handover',
         columns: '2',
         fields: [
-          { type: 'field', label: 'Current step', value: handover.stage, pill: true, tone: handover.tone, noHover: true },
+          { type: 'field', label: 'Current step', value: handover.stage, tone: handover.tone, noHover: true },
           { type: 'field', label: 'Next action', value: handover.next, noHover: true },
           { type: 'field', label: 'LPO status', value: row.lpoFiles?.length ? `${row.lpoFiles.length} file(s) uploaded` : 'Not uploaded', noHover: true },
           { type: 'field', label: 'Deal sheet', value: row.dealData?.dealId || 'Not created', noHover: true },

@@ -10,10 +10,8 @@ import ApprovalRule from '../models/approvalRule.model';
 import Enquiry from "../models/enquiry.model";
 import Product from "../models/products.model";
 import ProductCategory from "../models/productCategory.model";
-import StockEntry from "../models/stockEntry.model";
-import StockBlock from "../models/stockBlock.model";
-import StockReservation from "../models/stockReservation.model";
 import StockMovement from "../models/stockMovement.model";
+import { getAvailability, getLastReceiptCosts, release as releaseStock, reserve as reserveStock } from "../services/stock.service";
 import Warehouse from "../models/warehouse.model";
 import { Server } from "socket.io";
 import { logEnquiryAudit } from "../services/enquiryAudit.service";
@@ -25,7 +23,6 @@ const { ObjectId } = require('mongodb');
 import { newTrash } from '../controllers/trash.controller'
 import { removeFile } from '../common/utils/util'
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
-import { linkSalesRfqToQuotation } from './salesRfq.controller';
 import { releaseQuoteStockHolds } from './quoteStockHold.controller';
 import Event from '../models/events.model'
 import { createNotificationWithPrivileges } from "./notification.controller";
@@ -266,8 +263,6 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         const quote = new Quotation(quoteData)
 
         const saveQuote = await (await quote.save()).populate('department')
-
-        if (quoteData.sourceRfqId) await linkSalesRfqToQuotation(quoteData.sourceRfqId, saveQuote._id, createdBy._id);
 
         if (quoteData.enqId) {
             const enquiry = await Enquiry.findById(quoteData.enqId);
@@ -1584,7 +1579,7 @@ export const updateQuoteStatus = async (req: Request, res: Response, next: NextF
 
 /** Statuses before the quote has gone to the customer: edits there don't create revisions. */
 const UNSENT_QUOTE_STATUSES: string[] = [quoteStatus.Draft, quoteStatus.WorkInProgress, quoteStatus.ReadyForSubmission];
-const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'paymentTerms', 'deliveryTerms', 'warranty', 'deliveryLocation', 'validityDate', 'currency'];
+const REVISION_FIELDS = ['optionalItems', 'customerNote', 'termsAndCondition', 'paymentTerms', 'deliveryTerms', 'deliveryLocation', 'validityDate', 'currency'];
 
 const selectedDealLines = (items: any[]): any[] => (Array.isArray(items) ? items : [])
     .flatMap((item: any) => Array.isArray(item?.itemDetails) ? item.itemDetails : [])
@@ -1932,7 +1927,6 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
                     termsAndCondition: existingQuote.termsAndCondition,
                     paymentTerms: existingQuote.paymentTerms,
                     deliveryTerms: existingQuote.deliveryTerms,
-                    warranty: existingQuote.warranty,
                     deliveryLocation: existingQuote.deliveryLocation,
                     validityDate: existingQuote.validityDate || existingQuote.closingDate,
                 },
@@ -2553,36 +2547,22 @@ export const approveDeal = async (req: Request, res: Response, next: NextFunctio
                 await releaseQuoteStockHolds(quote._id, `Taken over by job ${jobId}`, approverData?._id, 'Converted');
                 const selectedLines = selectedDealLines(quote.dealData.updatedItems)
                     .filter((line: any) => hasReferenceValue(line?.partNo) && isPositiveNumber(line?.quantity));
-                const expiresAt = quote.validityDate ? new Date(quote.validityDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                // A job's reservation has no expiry: it holds the stock until a delivery takes it, or the job is lost or revoked.
                 for (const line of selectedLines) {
                     const productId = typeof line.partNo === 'object' ? line.partNo._id : line.partNo;
-                    const reservation = await StockReservation.create({
-                        product: productId,
-                        quote: quote._id,
-                        job: saveJob._id,
-                        customer: quote.client,
-                        sourceType: 'Deal',
-                        sourceRef: saveJob._id,
-                        quantity: Number(line.quantity),
-                        reservedFrom: new Date(),
-                        expiresAt,
-                        status: 'Active',
-                        createdBy: approverData?._id,
-                        createdDate: new Date(),
-                        updatedDate: new Date(),
-                        isDeleted: { $ne: true },
-                    });
-                    await StockMovement.create({
-                        product: reservation.product,
-                        movementType: 'Reservation',
-                        reservedQuantity: reservation.quantity,
-                        referenceType: 'Job',
-                        referenceId: saveJob._id,
-                        remarks: `Reserved on deal approval for job ${jobId}`,
-                        movementDate: new Date(),
-                        createdBy: approverData?._id,
-                        createdDate: new Date(),
-                    });
+                    try {
+                        await reserveStock({
+                            product: productId,
+                            quantity: Number(line.quantity),
+                            sourceType: 'Deal',
+                            quote: quote._id,
+                            job: saveJob._id,
+                            customer: quote.client,
+                            createdBy: approverData?._id,
+                        });
+                    } catch (reserveError) {
+                        console.error('Could not reserve stock for deal line:', reserveError);
+                    }
                 }
 
                 const socket = req.app.get('io') as Server;
@@ -2752,24 +2732,7 @@ export const revokeDeal = async (req: Request, res: Response, next: NextFunction
         const jobDelete = await Job.deleteOne({ quoteId: quoteId })
         if (job) {
             // The job's stock reservations die with it; leaving them Active would block that stock forever.
-            const reservations: any[] = await StockReservation.find({ job: job._id, status: 'Active' }).lean();
-            for (const reservation of reservations) {
-                await StockReservation.updateOne(
-                    { _id: reservation._id, status: 'Active' },
-                    { $set: { status: 'Released', releaseReason: 'Deal revoked', releasedAt: new Date(), releasedBy: revokerData?._id, updatedDate: new Date() } }
-                );
-                await StockMovement.create({
-                    product: reservation.product,
-                    movementType: 'Release',
-                    reservedQuantity: reservation.quantity,
-                    referenceType: 'Job',
-                    referenceId: job._id,
-                    remarks: 'Deal revoked - job removed',
-                    movementDate: new Date(),
-                    createdBy: revokerData?._id,
-                    createdDate: new Date(),
-                });
-            }
+            await releaseStock({ job: job._id }, 'Deal revoked', revokerData?._id);
         }
 
         if (jobDelete.deletedCount) {
@@ -3354,7 +3317,9 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
 }
 export const getProductSuggestions = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { search = '', departments = '', limit = '20', category = '', includePending = '' } = req.query;
+        const { search = '', departments = '', limit = '20', skip = '0', category = '', includePending = '', lean = '' } = req.query;
+        // `lean` keeps the list to catalogue fields plus a cheap availability figure: no warehouse breakdown, last stock entry or quotation history.
+        const isLean = lean === 'true';
         // Supplier RFQs work with products still awaiting approval (product approval is skipped there for now).
         const hidden = includePending === 'true' ? ['Draft'] : ['Draft', 'Pending'];
         const filter: any = { isDeleted: { $ne: true }, approvalStatus: { $nin: hidden } };
@@ -3394,78 +3359,29 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
 
         const limitValue = Math.min(Math.max(parseInt(limit as string, 10) || 20, 1), 50);
 
+        // Callers page through long result sets with `skip`; the _id order keeps pages from overlapping.
+        // Newest first: with a fixed page size, oldest-first would bury recently added products behind the legacy ones.
+        const skipValue = Math.max(parseInt(skip as string, 10) || 0, 0);
+
         const suggestions = await Product.find(filter)
-            .select('productCategory productName productDescription partNo itemCode unitOfMeasure type defaultSellingPrice estimatedCost defaultVendor')
+            .select('productCategory productName productDescription partNo itemCode unitOfMeasure type defaultSellingPrice estimatedCost defaultVendor leadTimeDays')
             .populate('productCategory', 'categoryName')
+            .sort({ _id: -1 })
+            .skip(skipValue)
             .limit(limitValue)
             .lean();
 
         const productIds = suggestions.map((product: any) => product._id);
-        const stockEntries = productIds.length ? await StockEntry.find({
-            partNo: { $in: productIds },
-            isDeleted: { $ne: true },
-        }).select('_id partNo targetWarehouse quantity isQuarantined dateOfPurchase supplierName supplierLpoNo').lean() : [];
-
-        const activeBlocks = stockEntries.length ? await StockBlock.find({
-            stockEntryId: { $in: stockEntries.map((entry: any) => entry._id) },
-            isDeleted: { $ne: true },
-            toDate: { $gte: new Date() },
-        }).select('stockEntryId quantity').lean() : [];
-
-        const blockedByEntryId = new Map<string, number>();
-        activeBlocks.forEach((block: any) => {
-            const entryId = block.stockEntryId?.toString();
-            if (entryId) {
-                blockedByEntryId.set(entryId, (blockedByEntryId.get(entryId) || 0) + (block.quantity || 0));
-            }
-        });
-
-        const warehouseIds = [...new Set(stockEntries.map((entry: any) => entry.targetWarehouse?.toString()).filter(Boolean))];
-        const warehouses = warehouseIds.length ? await Warehouse.find({ _id: { $in: warehouseIds } }).select('wareHouseName').lean() : [];
+        const availability = await getAvailability(productIds);
+        const lastReceipts = isLean ? new Map() : await getLastReceiptCosts(productIds);
+        const warehouseRows: any[] = (isLean || !productIds.length) ? [] : await StockMovement.aggregate([
+            { $match: { isDeleted: { $ne: true }, product: { $in: productIds }, stockStatus: { $ne: 'Quarantine' }, warehouse: { $exists: true } } },
+            { $group: { _id: { product: '$product', warehouse: '$warehouse' }, quantity: { $sum: { $subtract: ['$quantityIn', '$quantityOut'] } } } },
+        ]);
+        const warehouses = warehouseRows.length ? await Warehouse.find({ _id: { $in: [...new Set(warehouseRows.map((row) => String(row._id.warehouse)))] } }).select('wareHouseName').lean() : [];
         const warehouseById = new Map(warehouses.map((warehouse: any) => [warehouse._id.toString(), warehouse.wareHouseName]));
 
-        type ProductStockSnapshot = {
-            onHandQuantity: number;
-            blockedQuantity: number;
-            warehouseQuantity: Map<string, number>;
-            lastEntry?: any;
-        };
-        const emptyStock = (): ProductStockSnapshot => ({ onHandQuantity: 0, blockedQuantity: 0, warehouseQuantity: new Map<string, number>() });
-        const stockByProduct = new Map<string, ProductStockSnapshot>();
-        const quarantinedByProduct = new Map<string, number>();
-        stockEntries.forEach((entry: any) => {
-            const productId = entry.partNo?.toString();
-            if (!productId) return;
-            const current = stockByProduct.get(productId) || emptyStock();
-            if (entry.isQuarantined) {
-                quarantinedByProduct.set(productId, (quarantinedByProduct.get(productId) || 0) + (entry.quantity || 0));
-            } else {
-                current.onHandQuantity += entry.quantity || 0;
-                current.blockedQuantity += blockedByEntryId.get(entry._id.toString()) || 0;
-                const warehouseId = entry.targetWarehouse?.toString();
-                if (warehouseId) current.warehouseQuantity.set(warehouseId, (current.warehouseQuantity.get(warehouseId) || 0) + (entry.quantity || 0));
-                if (!current.lastEntry || new Date(entry.dateOfPurchase).getTime() > new Date(current.lastEntry.dateOfPurchase).getTime()) {
-                    current.lastEntry = entry;
-                }
-            }
-            stockByProduct.set(productId, current);
-        });
-
-        const reservations = productIds.length ? await StockReservation.aggregate([
-            {
-                $match: {
-                    product: { $in: productIds },
-                    isDeleted: { $ne: true },
-                    status: 'Active',
-                    expiresAt: { $gte: new Date() },
-                },
-            },
-            { $group: { _id: '$product', quantity: { $sum: '$quantity' } } },
-        ]) : [];
-        const reservationByProduct = new Map<string, number>();
-        reservations.forEach((reservation: any) => reservationByProduct.set(reservation._id.toString(), reservation.quantity || 0));
-
-        const recentUsage = productIds.length ? await Quotation.aggregate([
+        const recentUsage = (productIds.length && !isLean) ? await Quotation.aggregate([
             { $match: { isDeleted: { $ne: true }, 'optionalItems.items.itemDetails.productId': { $in: productIds } } },
             { $unwind: '$optionalItems' },
             { $unwind: '$optionalItems.items' },
@@ -3521,38 +3437,46 @@ export const getProductSuggestions = async (req: Request, res: Response, next: N
         const usageByProduct = new Map(recentUsage.map((usage: any) => [usage._id.toString(), usage]));
 
         const suggestionsWithAvailability = suggestions.map((product: any) => {
-            const stock = stockByProduct.get(product._id.toString()) || emptyStock();
-            const reservationQuantity = reservationByProduct.get(product._id.toString()) || 0;
-            const reservedQuantity = stock.blockedQuantity + reservationQuantity;
-            const availableQuantity = Math.max(0, stock.onHandQuantity - reservedQuantity);
-            const usage = usageByProduct.get(product._id.toString());
+            const productId = product._id.toString();
+            const stock = availability.get(productId) || { onHand: 0, reserved: 0, available: 0, quarantined: 0 };
+            const usage = usageByProduct.get(productId);
+            const stockStatus = product.type && product.type !== 'Stock'
+                ? 'Non-stock'
+                : stock.available > 0
+                    ? 'In stock'
+                    : stock.onHand > 0
+                        ? 'Reserved / blocked'
+                        : 'Not in stock';
+            if (isLean) {
+                return {
+                    ...product,
+                    onHandQuantity: stock.onHand,
+                    availableQuantity: stock.available,
+                    stockStatus,
+                };
+            }
+            const lastReceipt = lastReceipts.get(productId);
             return {
                 ...product,
-                onHandQuantity: stock.onHandQuantity,
-                blockedQuantity: stock.blockedQuantity,
-                reservationQuantity,
-                reservedQuantity,
-                quarantinedQuantity: quarantinedByProduct.get(product._id.toString()) || 0,
-                availableQuantity,
-                stockStatus: product.type && product.type !== 'Stock'
-                    ? 'Non-stock'
-                    : availableQuantity > 0
-                        ? 'In stock'
-                        : stock.onHandQuantity > 0
-                            ? 'Reserved / blocked'
-                            : 'Not in stock',
-                warehouseAvailability: [...(stock.warehouseQuantity || new Map()).entries()]
-                    .map(([warehouseId, quantity]) => ({
-                        warehouseId,
-                        warehouseName: warehouseById.get(warehouseId) || 'Warehouse',
-                        quantity,
+                onHandQuantity: stock.onHand,
+                blockedQuantity: 0,
+                reservationQuantity: stock.reserved,
+                reservedQuantity: stock.reserved,
+                quarantinedQuantity: stock.quarantined,
+                availableQuantity: stock.available,
+                stockStatus,
+                warehouseAvailability: warehouseRows
+                    .filter((row) => String(row._id.product) === productId && row.quantity > 0)
+                    .map((row) => ({
+                        warehouseId: String(row._id.warehouse),
+                        warehouseName: warehouseById.get(String(row._id.warehouse)) || 'Warehouse',
+                        quantity: row.quantity,
                     }))
-                    .filter((warehouse) => warehouse.quantity > 0)
-                    .sort((a, b) => b.quantity - a.quantity)
+                    .sort((x, y) => y.quantity - x.quantity)
                     .slice(0, 5),
-                lastStockEntry: stock.lastEntry ? {
-                    dateOfPurchase: stock.lastEntry.dateOfPurchase,
-                    supplierLpoNo: stock.lastEntry.supplierLpoNo || '',
+                lastStockEntry: lastReceipt ? {
+                    dateOfPurchase: lastReceipt.date,
+                    supplierLpoNo: lastReceipt.lpoNo || '',
                 } : null,
                 salesHistory: {
                     quotedCount: usage?.quoteCount || 0,
@@ -3605,7 +3529,7 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
     try {
         const { quoteId } = req.params;
         const quote = await Quotation.findById(quoteId)
-            .select('+revisions revision subject currency optionalItems customerNote termsAndCondition paymentTerms deliveryTerms warranty deliveryLocation validityDate closingDate createdBy')
+            .select('+revisions revision subject currency optionalItems customerNote termsAndCondition paymentTerms deliveryTerms deliveryLocation validityDate closingDate createdBy')
             .lean();
 
         if (!quote) {
@@ -3647,7 +3571,6 @@ export const getQuoteRevisions = async (req: Request, res: Response, next: NextF
                         termsAndCondition: quote.termsAndCondition,
                         paymentTerms: quote.paymentTerms,
                         deliveryTerms: quote.deliveryTerms,
-                        warranty: quote.warranty,
                         deliveryLocation: quote.deliveryLocation,
                         validityDate: quote.validityDate || quote.closingDate,
                     },

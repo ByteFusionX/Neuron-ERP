@@ -122,6 +122,7 @@
     </div>
 
     <ng-container sfDrawerFooter>
+        <app-action-button variant="tool" class="mr-auto" (click)="supplierFormOpen = true">+ Add supplier</app-action-button>
         <app-action-button variant="secondary" (click)="drawer?.requestClose()">Cancel</app-action-button>
         <app-action-button *ngIf="step === 2" variant="secondary" (click)="back()">Back</app-action-button>
         <app-action-button *ngIf="step === 1" variant="primary" [disabled]="!!lineIssues.length" (click)="next()">Next</app-action-button>
@@ -130,3 +131,6 @@
         </app-action-button>
     </ng-container>
 </app-sf-drawer>
+
+<app-supplier-form-drawer [open]="supplierFormOpen" mode="create" (closed)="supplierFormOpen = false"
+    (saved)="onSupplierCreated($event)"></app-supplier-form-drawer>
