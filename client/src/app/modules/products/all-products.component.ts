@@ -25,9 +25,6 @@ import { StatusTone } from 'src/app/shared/components/status-indicator/status-to
 import { AuditLogService } from 'src/app/core/services/audit-log.service';
 import { toTimelineEntries } from 'src/app/shared/utils/audit-timeline.util';
 import { ProductFormDrawerComponent } from './pages/product-form-drawer/product-form-drawer.component';
-import { ModalService } from 'src/app/shared/components/modal';
-import { ProductImportComponent } from './modals/product-import/product-import.component';
-import { DuplicatesReportComponent } from './modals/duplicates-report/duplicates-report.component';
 
 @Component({
   selector: 'app-all-products',
@@ -51,7 +48,6 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
   private router = inject(Router);
   private auditLog = inject(AuditLogService);
   private employeeService = inject(EmployeeService);
-  private modal = inject(ModalService);
   private subscriptions = new Subscription();
 
   isLoading = true;
@@ -156,7 +152,7 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
       { key: 'itemCode', label: 'Item Code', sortable: true, width: '120px' },
       { key: 'partNo', label: 'Part No', sortable: true },
       { key: 'productName', label: 'Product Name', sortable: true },
-      { key: 'productDescription', label: 'Description' },
+      { key: 'productDescription', label: 'Description', visible: false },
       {
         key: 'type', label: 'Type', type: 'badge', sortable: true,
         editorOptions: PRODUCT_TYPES.map((t) => ({ label: t, value: t })),
@@ -168,13 +164,9 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       { key: 'productCategory', label: 'Category', valueGetter: (r) => r.productCategory?.categoryName },
       { key: 'productSegment', label: 'Department', valueGetter: (r) => r.productSegment?.departmentName },
-      { key: 'warehouse', label: 'Warehouse', valueGetter: (r) => r.warehouse?.wareHouseName },
+      { key: 'warehouse', label: 'Warehouse', visible: false, valueGetter: (r) => r.warehouse?.wareHouseName },
       { key: 'brand', label: 'Brand' },
-      { key: 'parentModel', label: 'Model / Family' },
-      { key: 'source', label: 'Source', width: '100px' },
-      { key: 'approvalStatus', label: 'Review', width: '110px', valueGetter: (r) => r.approvalStatus ?? 'Approved' },
       { key: 'unitOfMeasure', label: 'UOM', width: '90px' },
-      { key: 'defaultSellingPrice', label: 'Selling Price', type: 'number' },
       {
         key: 'isActive', label: 'Status', type: 'badge', width: '100px',
         valueGetter: (r) => (r.isActive ? 'Active' : 'Inactive'),
@@ -184,7 +176,7 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
           Inactive: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
         },
       },
-      { key: 'createdBy', label: 'Created By', valueGetter: (r) => this.ownerName(r) },
+      { key: 'createdBy', label: 'Created By', visible: false, valueGetter: (r) => this.ownerName(r) },
     ];
   }
 
@@ -384,16 +376,6 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  openImport(): void {
-    this.modal.open<any, void>(ProductImportComponent, { width: '640px' }).afterClosed().subscribe((imported) => {
-      if (imported) this.getProducts();
-    });
-  }
-
-  openDuplicatesReport(): void {
-    this.modal.open<any, void>(DuplicatesReportComponent, { width: '720px' });
-  }
-
   onBulkAction({ action, rows }: DataGridBulkActionEvent<Product>, grid: DataGridComponent<Product>): void {
     if (action.id === 'delete') void this.deleteProducts(rows, grid);
   }
@@ -436,13 +418,14 @@ export class AllProductsComponent implements OnInit, AfterViewInit, OnDestroy {
           { type: 'field', label: 'Item Code', value: row.itemCode, numeric: true, noHover: true },
           { type: 'field', label: 'Part No', value: row.partNo, noHover: true },
           { type: 'field', label: 'Product Name', value: row.productName, noHover: true },
+          { type: 'field', label: 'Nick Name', value: row.nickName, noHover: true },
           { type: 'dg', key: 'type' },
           { type: 'field', label: 'Category', value: row.productCategory?.categoryName, noHover: true },
           { type: 'field', label: 'Department', value: row.productSegment?.departmentName, noHover: true },
           { type: 'field', label: 'Warehouse', value: row.warehouse?.wareHouseName, noHover: true },
           { type: 'field', label: 'Brand', value: row.brand, noHover: true },
           { type: 'field', label: 'Unit of Measure', value: row.unitOfMeasure, noHover: true },
-          { type: 'field', label: 'Model / Family', value: row.parentModel, noHover: true },
+          { type: 'field', label: 'Model / Series', value: row.parentModel, noHover: true },
           { type: 'field', label: 'Source', value: row.source ?? 'Manual', noHover: true },
           { type: 'field', label: 'Review', value: row.approvalStatus ?? 'Approved', noHover: true },
           { type: 'field', label: 'Generic item', value: row.isGeneric ? 'Yes' : '', noHover: true },

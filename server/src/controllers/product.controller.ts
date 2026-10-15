@@ -10,7 +10,7 @@ import Employee from "../models/employee.model";
 import Quotation from "../models/quotation.model";
 import Rfq from "../models/rfq.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
-import StockEntry from "../models/stockEntry.model";
+import StockMovement from "../models/stockMovement.model";
 import Item from "../models/item.model";
 import { logAudit } from "../services/audit.service";
 import { cleanAliases, derivedKeys, findDuplicates, normalizePartNo, brandKeyOf } from "../common/utils/productMatch";
@@ -204,7 +204,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
 
         const blank = (v: unknown) => typeof v !== 'string' || !v.trim();
         const isGeneric = data.isGeneric === true;
-        if ((!isGeneric && (blank(data.partNo) || blank(data.brand))) || blank(data.itemCode) || blank(data.productDescription) || !data.productCategory || !data.productSegment || !data.warehouse) {
+        if ((!isGeneric && (blank(data.partNo) || blank(data.brand))) || blank(data.itemCode) || blank(data.productDescription) || !data.productCategory || !data.productSegment) {
             return res.status(400).json({ message: "Missing required fields" });
         }
         const partNo = typeof data.partNo === 'string' ? data.partNo.trim() : '';
@@ -219,7 +219,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         if (moneyError) return res.status(400).json({ message: moneyError });
 
         // Ensure refs are valid ObjectIds
-        const refIds = [data.productCategory, data.productSegment, data.warehouse];
+        const refIds = [data.productCategory, data.productSegment, ...(data.warehouse ? [data.warehouse] : [])];
         if (!refIds.every((id: string) => ObjectId.isValid(id))) {
             return res.status(400).json({ message: "Invalid reference id(s) provided" });
         }
@@ -247,7 +247,7 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
         const [categoryExist, segmentExist, warehouseExist] = await Promise.all([
             ProductCategory.findById(data.productCategory),
             Department.findById(data.productSegment),
-            Warehouse.findById(data.warehouse)
+            data.warehouse ? Warehouse.findById(data.warehouse) : Promise.resolve(true)
         ]);
         if (!categoryExist || !segmentExist || !warehouseExist) {
             return res.status(400).json({ message: "Invalid references provided" });
@@ -264,13 +264,14 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
             aliases,
             source: data.source ?? 'Manual',
             parentModel: typeof data.parentModel === 'string' && data.parentModel.trim() ? data.parentModel.trim() : undefined,
+            nickName: typeof data.nickName === 'string' && data.nickName.trim() ? data.nickName.trim() : undefined,
             isGeneric,
             itemCode,
             productName: data.productName?.trim(),
             productDescription: data.productDescription.trim(),
             productCategory: data.productCategory,
             productSegment: data.productSegment,
-            warehouse: data.warehouse,
+            warehouse: data.warehouse || undefined,
             brand,
             type: data.type,
             unitOfMeasure: data.unitOfMeasure?.trim(),
@@ -426,6 +427,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
                 { 'aliases.value': regex },
                 ...normalizedSearchClauses(searchTerm),
                 { parentModel: regex },
+                { nickName: regex },
                 { itemCode: regex },
                 { productName: regex },
                 { productDescription: regex },
@@ -645,6 +647,7 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
                     ...(keysChanged || current.partNoNormalized === undefined ? derivedKeys(nextPartNo, nextBrand) : {}),
                     ...(aliasList !== undefined ? { aliases: aliasList } : {}),
                     ...(data.parentModel !== undefined ? { parentModel: String(data.parentModel ?? '').trim() } : {}),
+                    ...(data.nickName !== undefined ? { nickName: String(data.nickName ?? '').trim() } : {}),
                     ...(data.isGeneric !== undefined ? { isGeneric: nextGeneric } : {}),
                     ...(data.itemCode ? { itemCode: data.itemCode.trim() } : {}),
                     ...(data.productDescription?.trim() ? { productDescription: data.productDescription.trim() } : {}),
@@ -701,7 +704,6 @@ export const approveProduct = async (req: Request, res: Response, next: NextFunc
                 !pending.isGeneric && !pending.brand && 'brand',
                 !pending.productCategory && 'category',
                 !pending.productSegment && 'department',
-                !pending.warehouse && 'warehouse',
             ].filter(Boolean);
             if (missing.length) return res.status(409).json({ message: `Complete the ${missing.join(', ')} before approving this product.` });
             const duplicates = await findDuplicates({ partNo: pending.partNo, brand: pending.brand, aliases: pending.aliases, excludeId: id });
@@ -757,10 +759,10 @@ export const deleteProduct = async (req: Request, res: Response, next: NextFunct
             Quotation.countDocuments({ ...live, 'itemDetails.productId': id }),
             Rfq.countDocuments({ ...live, 'requestedLines.partNo': id }),
             PurchaseOrder.countDocuments({ ...live, 'items.partNo': id }),
-            StockEntry.countDocuments({ ...live, partNo: id }),
+            StockMovement.countDocuments({ ...live, product: id }),
             Item.countDocuments({ partNo: id }),
         ]);
-        const used = ([[quotes, 'quotation'], [rfqs, 'RFQ'], [orders, 'purchase order'], [stock, 'stock entry'], [items, 'inventory item']] as [number, string][])
+        const used = ([[quotes, 'quotation'], [rfqs, 'RFQ'], [orders, 'purchase order'], [stock, 'stock movement'], [items, 'inventory item']] as [number, string][])
             .filter(([n]) => n > 0)
             .map(([n, label]) => `${n} ${label}${n === 1 ? '' : 's'}`);
         if (used.length) {
@@ -789,6 +791,7 @@ export const getProductPartNumbers = async (req: Request, res: Response, next: N
                 { 'aliases.value': regex },
                 ...normalizedSearchClauses(String(search)),
                 { parentModel: regex },
+                { nickName: regex },
                 { itemCode: regex },
                 { productName: regex },
                 { productDescription: regex },

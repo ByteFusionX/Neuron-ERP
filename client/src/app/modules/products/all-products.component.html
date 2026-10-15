@@ -3,6 +3,7 @@
         class="flex-1 min-h-0"
         [fillHeight]="true"
         title="Products"
+        subtitle="Master catalogue of stock, non-stock and service items"
         [breadcrumbs]="breadcrumbs"
         rowKey="_id"
         [serverSide]="true"
@@ -29,11 +30,6 @@
         (rowAction)="onRowAction($event)"
         (bulkAction)="onBulkAction($event, grid)"
         (create)="onCreateProduct()">
-
-        <div dgToolbarExtra class="flex items-center gap-2">
-            <button type="button" (click)="openImport()" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200">Import</button>
-            <button type="button" (click)="openDuplicatesReport()" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200">Duplicates</button>
-        </div>
 
         <ng-template #detailAsideTemplate let-row>
             <app-status-pill [status]="row.isActive ? 'Active' : 'Inactive'" [toneMap]="activeTones"></app-status-pill>

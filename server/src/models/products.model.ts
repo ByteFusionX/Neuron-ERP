@@ -29,6 +29,8 @@ interface Product {
     source?: ProductSource;
     /** Groups size / voltage variants under one model. */
     parentModel?: string;
+    /** Short user-friendly name or code used to find the product quickly. */
+    nickName?: string;
     /** Services and generic items: brand and part number are optional. */
     isGeneric?: boolean;
     itemCode: string;
@@ -105,6 +107,11 @@ const productSchema = new Schema<Product>({
         trim: true,
         index: true,
     },
+    nickName: {
+        type: String,
+        trim: true,
+        index: true,
+    },
     isGeneric: {
         type: Boolean,
         default: false,
@@ -133,7 +140,6 @@ const productSchema = new Schema<Product>({
     warehouse: {
         type: Schema.Types.ObjectId,
         ref: 'Warehouse',
-        required: function (this: any) { return this.approvalStatus !== 'Pending'; },
     },
     brand: {
         type: String,

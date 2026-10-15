@@ -72,7 +72,6 @@ export interface Privileges {
     viewReport: string;
     create: boolean;
     canApprovePR: boolean;
-    canAssign?: boolean;
   };
   purchaseOrder: {
     viewReport: string;
@@ -156,6 +155,7 @@ export interface Privileges {
     customerType: boolean;
     numbering: boolean;
     masterData: boolean;
+    documentation?: boolean;
     approvalRules: boolean;
     notifications: boolean;
     audit: boolean;

@@ -64,6 +64,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   productForm = this.fb.group({
     isGeneric: [false],
     parentModel: [''],
+    nickName: ['', [Validators.maxLength(100)]],
     aliases: this.fb.array<FormGroup<{ value: FormControl<string | null>; type: FormControl<string | null> }>>([]),
     partNo: ['', [Validators.required, notBlank, Validators.maxLength(100)]],
     itemCode: [{ value: '', disabled: true }],
@@ -72,7 +73,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     type: ['' as string, Validators.required],
     productSegment: ['', Validators.required],
     productCategory: ['', Validators.required],
-    warehouse: ['', Validators.required],
+    warehouse: [''],
     brand: ['', [Validators.required, notBlank]],
     unitOfMeasure: [''],
     isActive: [true],
@@ -226,10 +227,14 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       isActive: product.isActive ?? true,
       isGeneric: product.isGeneric ?? false,
       parentModel: product.parentModel || '',
+      nickName: product.nickName || '',
     });
     this.seedAliases(product.aliases);
     this.duplicateMatches = [];
     this.productForm.controls.itemCode.disable();
+    // Identity fields are locked once the product exists.
+    this.productForm.controls.partNo.disable();
+    this.productForm.controls.isGeneric.disable();
     this.productForm.markAsPristine();
   }
 
@@ -253,8 +258,10 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     this.productForm.reset({
       partNo: '', itemCode: '', productName: '', productDescription: '', type: '',
       productSegment: '', productCategory: '', warehouse: '', brand: '', unitOfMeasure: '',
-      isActive: true, isGeneric: false, parentModel: '',
+      isActive: true, isGeneric: false, parentModel: '', nickName: '',
     });
+    this.productForm.controls.partNo.enable({ emitEvent: false });
+    this.productForm.controls.isGeneric.enable({ emitEvent: false });
     this.aliasRows.clear();
     this.duplicateMatches = [];
   }
@@ -277,6 +284,17 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
         this.toastr.success('Brand created successfully');
         this.brandOptions = [...this.brandOptions, { label: brand.label, value: brand.label }];
         this.productForm.patchValue({ brand: brand.label });
+      });
+  }
+
+  createUnit(): void {
+    this.openQuickAdd('Unit of Measure', (name) => this.masterList.createItem('unit', { label: name, value: null }))
+      .subscribe((res) => {
+        const unit = res?.data;
+        if (!unit) return;
+        this.toastr.success('Unit created successfully');
+        this.unitOptions = [...this.unitOptions, { label: unit.label, value: unit.label }];
+        this.productForm.patchValue({ unitOfMeasure: unit.label });
       });
   }
 
@@ -329,6 +347,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
       isActive: raw.isActive ?? true,
       isGeneric: raw.isGeneric ?? false,
       parentModel: raw.parentModel ?? '',
+      nickName: (raw.nickName ?? '').trim(),
       aliases: (raw.aliases ?? []).filter((a) => (a.value ?? '').trim()).map((a) => ({ value: (a.value ?? '').trim(), type: (a.type ?? 'Superseded') as ProductAliasType })),
     };
 

@@ -4,6 +4,9 @@
     <form id="product-form" [formGroup]="productForm" (ngSubmit)="submit()" novalidate>
 
         <app-sf-section title="Identification" columns="2">
+            <app-sf-field full label="Generic item" [control]="productForm.controls.isGeneric">
+                <app-sf-checkbox formControlName="isGeneric" label="Service or generic item (no brand or part no)"></app-sf-checkbox>
+            </app-sf-field>
             <app-sf-field label="Item Code" [control]="productForm.controls.itemCode">
                 <app-sf-input formControlName="itemCode" placeholder="Generated after you pick a department"></app-sf-input>
             </app-sf-field>
@@ -14,7 +17,8 @@
                 <app-sf-input formControlName="productName" placeholder="Product / service name"></app-sf-input>
             </app-sf-field>
             <app-sf-field label="Brand" [control]="productForm.controls.brand">
-                <app-sf-select formControlName="brand" [options]="brandOptions" placeholder="Select brand"></app-sf-select>
+                <app-sf-combobox formControlName="brand" [options]="brandOptions" placeholder="Select brand"
+                    footerLabel="Add brand" (footerAction)="createBrand()"></app-sf-combobox>
             </app-sf-field>
             @if (duplicateMatches.length) {
                 <div class="col-span-2 rounded-md border px-3 py-2 text-sm"
@@ -33,38 +37,46 @@
             </app-sf-field>
         </app-sf-section>
 
-        <app-sf-section title="Other part numbers" columns="1">
-            <p class="text-xs text-gray-500">Supplier SKUs, customer references and replaced part numbers. Searching any of them finds this product.</p>
-            <div formArrayName="aliases" class="space-y-2">
+        <app-sf-section title="Additional Part Numbers" columns="1">
+            <div formArrayName="aliases" class="flex flex-col gap-3">
                 @for (row of aliasRows.controls; track row; let i = $index) {
-                    <div [formGroupName]="i" class="flex items-center gap-2">
-                        <app-sf-select formControlName="type" [options]="aliasTypeOptions" class="w-44"></app-sf-select>
-                        <app-sf-input formControlName="value" placeholder="Number"></app-sf-input>
-                        <app-action-button variant="tool" (click)="removeAlias(i)">Remove</app-action-button>
+                    <div [formGroupName]="i" class="flex items-start gap-2">
+                        <div class="flex-1">
+                            <app-sf-input formControlName="value" placeholder="Part number"></app-sf-input>
+                        </div>
+                        <div class="w-44">
+                            <app-sf-combobox formControlName="type" [options]="aliasTypeOptions" placeholder="Type"></app-sf-combobox>
+                        </div>
+                        <app-action-button variant="secondary" type="button" (click)="removeAlias(i)">Remove</app-action-button>
                     </div>
                 }
+                <div>
+                    <app-action-button variant="secondary" type="button" (click)="addAlias()">+ Add part number</app-action-button>
+                </div>
             </div>
-            <app-action-button variant="tool" (click)="addAlias()">+ Add part number</app-action-button>
         </app-sf-section>
 
         <app-sf-section title="Classification" columns="2">
-            <app-sf-field label="Model / Family" [control]="productForm.controls.parentModel">
-                <app-sf-input formControlName="parentModel" placeholder="Groups size or voltage variants"></app-sf-input>
-            </app-sf-field>
-            <app-sf-field label="Generic item" [control]="productForm.controls.isGeneric">
-                <app-sf-checkbox formControlName="isGeneric" label="Service or generic item (no brand or part no)"></app-sf-checkbox>
+            <app-sf-field label="Model / Series" [control]="productForm.controls.parentModel">
+                <app-sf-input formControlName="parentModel" placeholder="Model / series"></app-sf-input>
             </app-sf-field>
             <app-sf-field label="Department" [control]="productForm.controls.productSegment">
-                <app-sf-select formControlName="productSegment" [options]="segmentOptions" placeholder="Select department"></app-sf-select>
+                <app-sf-combobox formControlName="productSegment" [options]="segmentOptions" placeholder="Select department"></app-sf-combobox>
             </app-sf-field>
             <app-sf-field label="Category" [control]="productForm.controls.productCategory">
-                <app-sf-select formControlName="productCategory" [options]="categoryOptions" placeholder="Select category"></app-sf-select>
+                <app-sf-combobox formControlName="productCategory" [options]="categoryOptions" placeholder="Select category"
+                    footerLabel="Add category" (footerAction)="createCategory()"></app-sf-combobox>
             </app-sf-field>
             <app-sf-field label="Warehouse" [control]="productForm.controls.warehouse">
-                <app-sf-select formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"></app-sf-select>
+                <app-sf-combobox formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"
+                    footerLabel="Add warehouse" (footerAction)="createWarehouse()"></app-sf-combobox>
             </app-sf-field>
             <app-sf-field label="Unit of Measure" [control]="productForm.controls.unitOfMeasure">
-                <app-sf-select formControlName="unitOfMeasure" [options]="unitOptions" placeholder="Select unit"></app-sf-select>
+                <app-sf-combobox formControlName="unitOfMeasure" [options]="unitOptions" placeholder="Select unit"
+                    footerLabel="Add unit" (footerAction)="createUnit()"></app-sf-combobox>
+            </app-sf-field>
+            <app-sf-field label="Nick Name" [control]="productForm.controls.nickName">
+                <app-sf-input formControlName="nickName" placeholder="Short name or code your team uses"></app-sf-input>
             </app-sf-field>
         </app-sf-section>
 
@@ -76,9 +88,6 @@
     </form>
 
     <ng-container sfDrawerFooter>
-        <app-action-button variant="tool" (click)="createCategory()">+ Create Category</app-action-button>
-        <app-action-button variant="tool" (click)="createBrand()">+ Create Brand</app-action-button>
-        <app-action-button variant="tool" (click)="createWarehouse()">+ Create Warehouse</app-action-button>
         <span class="mr-auto"></span>
         <app-action-button variant="secondary" (click)="drawer.requestClose()">Cancel</app-action-button>
         <app-action-button variant="primary" type="submit" form="product-form" [disabled]="saving">

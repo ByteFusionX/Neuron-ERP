@@ -70,6 +70,7 @@ export interface Product {
   aliases?: ProductAlias[];
   source?: 'Manual' | 'RFQ' | 'Import';
   parentModel?: string;
+  nickName?: string;
   isGeneric?: boolean;
   itemCode: string;
   productName?: string;
