@@ -40,6 +40,16 @@ interface Employee extends Document {
   extraPrivileges?: Record<string, any>;
   // When set, the individual grants stop applying after this date. Unset = no expiry.
   extraPrivilegesExpiresAt?: Date | null;
+  // Self-service profile fields (edited by the employee from /profile).
+  photo?: string;
+  preferences?: {
+    defaultLandingPage?: string;
+    dateFormat?: string;
+    timezone?: string;
+    language?: string;
+  };
+  lastLoginAt?: Date;
+  passwordChangedAt?: Date;
 }
 
 interface EmploymentHistory {
@@ -240,6 +250,15 @@ const employeeSchema = new Schema<Employee>({
     required: false,
     default: null,
   },
+  photo: { type: String, required: false },
+  preferences: {
+    defaultLandingPage: { type: String, required: false },
+    dateFormat: { type: String, required: false },
+    timezone: { type: String, required: false },
+    language: { type: String, required: false },
+  },
+  lastLoginAt: { type: Date, required: false },
+  passwordChangedAt: { type: Date, required: false },
 });
 
 employeeSchema.index({ firstName: 1, lastName: 1 })

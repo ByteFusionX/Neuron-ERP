@@ -36,9 +36,9 @@ export class TransferProcurementPersonComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.employeeService.getProcurementEmployees().subscribe({
-      next: (employees) => {
-        this.employeeOptions = employees.map((employee) => ({
+    this.employeeService.getPurchaseBuyers().subscribe({
+      next: (res) => {
+        this.employeeOptions = (res?.data ?? []).map((employee) => ({
           value: employee._id || '',
           label: `${employee.firstName} ${employee.lastName}`,
           disabled: employee._id === this.currentId,

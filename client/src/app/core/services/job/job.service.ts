@@ -68,7 +68,7 @@ export class JobService {
     return this.http.get<getJob[]>(`${this.apiUrl}/job/jobIdDatas/${jobId}`)
   }
 
-  updateAllocateType(data: { id: string, jobId: string, productDistribution: boolean, projectInstallation: boolean, amc: boolean }): Observable<any> {
+  updateAllocateType(data: { id: string, jobId: string, productDistribution: boolean, projectInstallation: boolean, amc: boolean, procurementPersonId?: string }): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/job/updateAllocateType`, data)
   }
 

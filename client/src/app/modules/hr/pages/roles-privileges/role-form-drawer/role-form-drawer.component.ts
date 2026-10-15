@@ -214,7 +214,7 @@ export class RoleFormDrawerComponent implements OnChanges {
     {
       key: 'purchase', label: 'Purchase', abbr: 'PR', description: 'Purchase requisitions', master: 'purchaseChecked', group: 'purchase',
       scopes: [scope('purchase.viewReport')],
-      flags: [{ path: 'purchase.create', label: 'Create purchases' }, { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' }, { path: 'purchase.canAssign', label: 'Assign purchase' }],
+      flags: [{ path: 'purchase.create', label: 'Create purchases' }, { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' }],
     },
     {
       key: 'purchaseOrder', label: 'Purchase Orders', abbr: 'PO', description: 'LPOs and purchase orders', master: 'purchaseOrderChecked', group: 'purchaseOrder',
@@ -315,6 +315,13 @@ export class RoleFormDrawerComponent implements OnChanges {
         { path: 'portalManagement.masterDataEdit', label: 'Master data (edit)' },
         { path: 'portalManagement.notesAndTerms', label: 'Customer notes and T&C (create / edit / delete)' },
         { path: 'portalManagement.customerType', label: 'Customer type (create / edit)' },
+      ],
+    },
+    {
+      key: 'documentation', label: 'Document', abbr: 'DC', description: 'Quotation, PO, GRN and invoice document controls',
+      scopes: [],
+      flags: [
+        { path: 'portalManagement.documentation', label: 'Document (view)' },
       ],
     },
     {
@@ -444,7 +451,6 @@ export class RoleFormDrawerComponent implements OnChanges {
         viewReport: 'none',
         create: [false],
         canApprovePR: [false],
-        canAssign: [false],
       }),
       purchaseOrder: this._fb.group({
         viewReport: 'none',
@@ -515,6 +521,7 @@ export class RoleFormDrawerComponent implements OnChanges {
         customerType: [false],
         numbering: [false],
         masterData: [false],
+        documentation: [false],
         approvalRules: [false],
         notifications: [false],
         audit: [false],
@@ -813,9 +820,9 @@ export class RoleFormDrawerComponent implements OnChanges {
       }
     } else if (formControlName === 'purchase') {
       if (checked) {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canApprovePR: false, canAssign: false } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'all', canApprovePR: false } } });
       } else {
-        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false, canAssign: false } } });
+        this.categoryForm.patchValue({ privileges: { [formControlName]: { viewReport: 'none', canApprovePR: false } } });
       }
     } else if (formControlName === 'grn') {
       if (checked) {

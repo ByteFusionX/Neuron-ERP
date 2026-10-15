@@ -2,8 +2,8 @@ import { JobListComponent } from './job-list.component';
 import { allocateStatus } from 'src/app/shared/interfaces/job.interface';
 
 /** Row-action rules are pure functions of the privileges and the row, so they run without the grid or services. */
-const ctx = (flags: Partial<Record<'canAllocateJobs' | 'canConvertToPurchase' | 'canTransferProcurementPerson', boolean>>) => {
-  const c: any = { canAllocateJobs: false, canConvertToPurchase: false, canTransferProcurementPerson: false, ...flags };
+const ctx = (flags: Partial<Record<'canAllocateJobs' | 'canTransferProcurementPerson', boolean>>) => {
+  const c: any = { canAllocateJobs: false, canTransferProcurementPerson: false, ...flags };
   c.hasSupply = (r: any) => (JobListComponent.prototype as any).hasSupply.call(c, r);
   return c;
 };
@@ -27,13 +27,5 @@ describe('JobListComponent row rules', () => {
     const c = ctx({ canTransferProcurementPerson: true });
     expect(proto.canTransfer.call(c, { allocateType: 'AMC', allocateStatus: allocateStatus.OpenToWork })).toBeFalse();
     expect(proto.canTransfer.call(c, { allocateType: 'Supply Only', allocateStatus: allocateStatus.Completed })).toBeFalse();
-  });
-
-  it('converts to purchase only for supply jobs without a purchase request', () => {
-    const c = ctx({ canConvertToPurchase: true });
-    const open = allocateStatus.OpenToWork;
-    expect(proto.canConvert.call(c, { allocateType: 'Project With Supply', allocateStatus: open })).toBeTrue();
-    expect(proto.canConvert.call(c, { allocateType: 'AMC', allocateStatus: open })).toBeFalse();
-    expect(proto.canConvert.call(c, { allocateType: 'Supply Only', allocateStatus: open, hasPurchaseRequest: true })).toBeFalse();
   });
 });

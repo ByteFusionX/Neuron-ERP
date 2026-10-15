@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express"
 import jobModel, { allocateStatus, allocateType, jobStatus } from "../models/job.model"
 import Employee from '../models/employee.model';
+import { buildGridFilterMatch, buildGridSort, GridFieldMap } from "../common/utils/grid-query";
 import { newTrash } from '../controllers/trash.controller';
 import { calculateDiscountPrice, calculateDiscountPricePipe, getAllReportedEmployees, getUSDRated, getEmployeeData, escapeRegex } from "../common/utils/util";
 import technicalModel from '../models/technical.model';
@@ -17,6 +18,8 @@ import GRN from '../models/grn.model';
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import { logAudit } from "../services/audit.service";
+import { findPurchaseBuyer } from '../services/purchaseBuyer.service';
+import { release as releaseStock, reverseByReference } from '../services/stock.service';
 
 const employeeLabel = async (id: unknown): Promise<string> => {
     if (!id) return '—';
@@ -811,6 +814,19 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             return res.status(400).json({ success: false, message: 'Invalid job id' });
         }
 
+        // Product distribution hands the purchase work to one buyer, picked at allocation.
+        let buyer: any = null;
+        if (productDistribution) {
+            const buyerId = String(req.body.procurementPersonId ?? '');
+            if (!buyerId || !ObjectId.isValid(buyerId)) {
+                return res.status(400).json({ success: false, message: 'Select the person who will handle the purchase' });
+            }
+            buyer = await findPurchaseBuyer(buyerId);
+            if (!buyer) {
+                return res.status(400).json({ success: false, message: 'Selected person cannot be assigned purchases' });
+            }
+        }
+
         const currentJob = await jobModel.findOne({ _id: id, isDeleted: { $ne: true } });
         if (!currentJob) {
             return res.status(404).json({ success: false, message: 'Job not found' });
@@ -832,9 +848,14 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             : allocateType.AMC;
         const scopeLabel = [productDistribution && 'Product distribution', projectInstallation && 'Project installation', amc && 'AMC'].filter(Boolean).join(' + ');
 
+        const allocator = await getEmployeeData(req.user);
         const updateJob = await jobModel.findByIdAndUpdate(
             { _id: id },
-            { allocateType: derivedType, productDistribution, projectInstallation, amc, allocateStatus: allocateStatus.OpenToWork, updatedDate: new Date() },
+            {
+                ...(allocator ? { allocatedBy: allocator._id } : {}), allocatedAt: new Date(),
+                allocateType: derivedType, productDistribution, projectInstallation, amc, allocateStatus: allocateStatus.OpenToWork, updatedDate: new Date(),
+                ...(buyer ? { procurementPerson: buyer._id } : {}),
+            },
             { new: true }
         );
         if (!updateJob) {
@@ -850,22 +871,22 @@ export const updateAllocateType = async (req: Request, res: Response, next: Next
             ],
         });
 
-        // Hand off to purchase: everyone who can assign purchases is told the job is ready for a buyer.
-        if (currentJob.allocateStatus === allocateStatus.Pending) {
-            const actor = await getEmployeeData(req.user);
+        // Hand off to purchase: the job waits on the buyer's New tab until they create its PR.
+        if (buyer) {
+            const actor = allocator;
+            const buyerId = buyer._id.toString();
             void createNotificationWithPrivileges(
                 {
-                    type: 'JobAllocatedForPurchase',
+                    type: 'PurchaseRequestAllocated',
                     referenceModel: 'Job',
-                    title: 'Job allocated - assign a buyer',
-                    message: `Job ${updateJob.jobId} has been allocated (${scopeLabel}). Assign a buyer for its purchase.`,
+                    title: 'Job allocated to you for purchase',
+                    message: `Job ${updateJob.jobId} has been allocated to you. Create its purchase request.`,
                     sentBy: actor?._id?.toString(),
                     referenceId: updateJob._id,
-                    additionalData: { jobId: updateJob._id.toString() },
                 },
                 {
                     privilegeKey: 'purchase',
-                    checkFunction: (privileges) => privileges.purchase?.canAssign === true,
+                    checkFunction: (_privileges, employeeId) => employeeId === buyerId,
                 },
                 req.app.get('io') as Server
             ).catch((err) => console.error('Job allocation notification failed:', err));
@@ -926,9 +947,17 @@ export const markJobLost = async (req: Request, res: Response, next: NextFunctio
             }
         }
 
+        // The job's stock goes back: its reservation is released, and a delivery note posted but not yet
+        // completed (Ready for Dispatch) returns what it took out.
+        await releaseStock({ job: job._id }, `Job ${job.jobId} marked lost`, actor?._id);
+        const postedDns = await DeliveryNote.find({ jobId: job._id, status: 'Ready for Dispatch' }).select('_id dnNo').lean();
+        for (const dn of postedDns) {
+            await reverseByReference('DeliveryNote', dn._id, actor?._id, `Job ${job.jobId} marked lost`);
+        }
+
         // Down the chain: only documents that are still open.
         const [prs, pos, dns, invoices] = await Promise.all([
-            PurchaseRequest.updateMany({ jobId: job._id, status: { $in: [PurchaseRequestStatus.Drafted, PurchaseRequestStatus.Pending, PurchaseRequestStatus.ReadyToProcessLPO, PurchaseRequestStatus.Approved] } }, { $set: { status: PurchaseRequestStatus.OnHoldCancelled } }),
+            PurchaseRequest.updateMany({ jobId: job._id, status: { $in: [PurchaseRequestStatus.New, PurchaseRequestStatus.InProgress, PurchaseRequestStatus.Drafted, PurchaseRequestStatus.Pending, PurchaseRequestStatus.ReadyToProcessLPO, PurchaseRequestStatus.Approved] } }, { $set: { status: PurchaseRequestStatus.OnHoldCancelled } }),
             PurchaseOrder.updateMany({ jobId: job._id, poStatus: { $in: ['Draft', 'Pending for Approval', 'Approved'] } }, { $set: { poStatus: 'Rejected' } }),
             DeliveryNote.updateMany({ jobId: job._id, status: { $in: ['Draft', 'Ready for Dispatch'] } }, { $set: { status: 'Cancelled' } }),
             Invoice.updateMany({ jobId: job._id, status: { $in: ['Pending to submit', 'PI Submitted', 'Partial invoicing', 'Hold'] } }, { $set: { status: 'Cancelled' } }),
@@ -993,15 +1022,15 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
         if (existingJob.isDeleted) {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
-        if (existingJob.allocateStatus !== allocateStatus.OpenToWork && existingJob.allocateStatus !== allocateStatus.WorkInProgress) {
-            return res.status(409).json({ success: false, message: 'Procurement can only be transferred once the job is allocated and before it is completed' });
+        if (existingJob.allocateStatus !== allocateStatus.OpenToWork) {
+            return res.status(409).json({ success: false, message: 'Procurement can only be transferred while the job is Open To Work' });
         }
         if (existingJob.procurementPerson?.toString() === String(procurementPersonId)) {
             return res.status(400).json({ success: false, message: 'That employee is already the procurement person for this job' });
         }
-        const newPerson = await Employee.findById(procurementPersonId).select('_id').lean();
+        const newPerson = await findPurchaseBuyer(String(procurementPersonId));
         if (!newPerson) {
-            return res.status(400).json({ success: false, message: 'Selected employee was not found' });
+            return res.status(400).json({ success: false, message: 'Selected employee cannot be assigned purchase work' });
         }
 
         const existingPurchaseRequest = await PurchaseRequest.findOne({
@@ -1019,6 +1048,7 @@ export const transferProcurementPerson = async (req: Request, res: Response, nex
             { _id: jobId },
             {
                 procurementPerson: procurementPersonId,
+                allocatedBy: employee._id, allocatedAt: new Date(),
                 updatedDate: new Date()
             },
             {
@@ -1149,10 +1179,22 @@ export const getDropdownListForTechnical = async (req: Request, res: Response, n
     }
 }
 
+const OPEN_TO_WORK_GRID_FIELDS: GridFieldMap = {
+    jobId: { path: 'jobId' },
+    customer: { path: 'clientDetails.companyName' },
+    description: { path: 'quotation.subject' },
+    salesPerson: { path: 'salesPersonName' },
+    department: { path: 'departmentName' },
+    quotation: { path: 'quotation.quoteId' },
+    dealSheet: { path: 'quotation.dealData.dealId' },
+    allocateType: { path: 'allocateType' },
+};
+
 export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { jobId, companyName, subject, salesPersonDetails, departmentDetails, quoteId, dealId, page = 1, row = 10 } = req.body;
+        const { jobId, companyName, subject, salesPersonDetails, departmentDetails, quoteId, dealId, search, filters, sortKey, sortDir, page = 1, row = 10 } = req.body;
         const allocateTypeFilter = req.body.allocateType
+        const searchRegex = { $regex: String(search ?? '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
         
         const tokenData = req.user;
         const employee = await getEmployeeData(tokenData);
@@ -1228,6 +1270,14 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
                 }
             },
             {
+                $addFields: {
+                    salesPersonName: {
+                        $trim: { input: { $concat: [{ $ifNull: [{ $arrayElemAt: ['$salesPersonDetails.firstName', 0] }, ''] }, ' ', { $ifNull: [{ $arrayElemAt: ['$salesPersonDetails.lastName', 0] }, ''] }] } }
+                    },
+                    departmentName: { $arrayElemAt: ['$departmentDetails.departmentName', 0] }
+                }
+            },
+            {
                 $match: {
                     ...matchFilters,
                     ...(companyName && { 'clientDetails.companyName': { $regex: companyName, $options: 'i' } }),
@@ -1235,16 +1285,26 @@ export const getUnassignedProjectAndAMCJobs = async (req: Request, res: Response
                     ...(salesPersonDetails && { 'salesPersonDetails._id': new ObjectId(salesPersonDetails) }),
                     ...(departmentDetails && { 'departmentDetails._id': new ObjectId(departmentDetails) }),
                     ...(quoteId && { 'quotation.quoteId': { $regex: quoteId, $options: 'i' } }),
-                    ...(dealId && { 'quotation.dealData.dealId': { $regex: dealId, $options: 'i' } })
+                    ...(dealId && { 'quotation.dealData.dealId': { $regex: dealId, $options: 'i' } }),
+                    ...(typeof search === 'string' && search.trim() && {
+                        $or: [
+                            { jobId: searchRegex },
+                            { 'clientDetails.companyName': searchRegex },
+                            { 'quotation.subject': searchRegex },
+                            { 'quotation.quoteId': searchRegex }
+                        ]
+                    })
                 }
-            },
-            {
-                $sort: { updatedDate: -1 }
             }
         ];
 
+        const gridMatch = buildGridFilterMatch(filters, OPEN_TO_WORK_GRID_FIELDS);
+        if (gridMatch) pipeline.push({ $match: gridMatch });
+
         const countPipeline = [...pipeline];
         countPipeline.push({ $count: "total" });
+
+        pipeline.push({ $sort: buildGridSort(sortKey, sortDir, OPEN_TO_WORK_GRID_FIELDS, { updatedDate: -1 }) });
 
         const totalResult = await jobModel.aggregate(countPipeline);
         const total = totalResult.length > 0 ? totalResult[0].total : 0;
@@ -1333,6 +1393,8 @@ export const checkAndUpdateJobCompletionStatus = async (jobId: string) => {
                 updatedDate: new Date()
             }
         });
+        // Anything still reserved for a finished job is free again.
+        await releaseStock({ job: job._id }, `Job ${job.jobId} completed`);
         await logAudit(undefined, { entityType: 'job', entityId: job._id, entityLabel: job.jobId, action: 'completed', summary: 'Job completed automatically — all purchase orders closed, invoiced and delivered', changes: [{ label: 'Allocation status', from: String(job.allocateStatus), to: allocateStatus.Completed }] });
     } catch (error) {
         console.error('Error checking job completion status:', error);

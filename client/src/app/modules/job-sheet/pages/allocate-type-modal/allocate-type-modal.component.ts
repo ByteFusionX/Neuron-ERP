@@ -1,9 +1,11 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
-import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { SfOption } from 'src/app/shared/components/smart-form/sf.model';
 
 export enum allocateType {
   SupplyOnly = 'Supply Only',
@@ -18,9 +20,10 @@ export interface AllocateTypeResult {
   productDistribution: boolean;
   projectInstallation: boolean;
   amc: boolean;
+  procurementPersonId?: string;
 }
 
-/** Picks what a pending job covers: product distribution, project installation, AMC, or any mix. Closes with the choice, or undefined on cancel. */
+/** Picks what a pending job covers: product distribution, project installation, AMC, or any mix. Product distribution also needs the buyer who will handle its purchase. Closes with the choice, or undefined on cancel. */
 @Component({
   selector: 'app-allocate-type-modal',
   standalone: true,
@@ -60,13 +63,21 @@ export interface AllocateTypeResult {
             </div>
           </app-sf-field>
         </app-sf-section>
+        @if (form.controls.productDistribution.value) {
+          <app-sf-section title="Purchase" columns="1">
+            <app-sf-field label="Assign to" hint="Handles the purchase request for this job." [control]="form.controls.procurementPerson">
+              <app-sf-combobox formControlName="procurementPerson" [options]="buyerOptions" placeholder="Select person"></app-sf-combobox>
+            </app-sf-field>
+          </app-sf-section>
+        }
       </form>
     </app-form-modal-shell>
   `,
   styles: [':host{display:block}'],
 })
-export class AllocateTypeModalComponent {
+export class AllocateTypeModalComponent implements OnInit {
   private fb = inject(FormBuilder);
+  private employeeService = inject(EmployeeService);
   private dialogRef = inject<ModalRef<AllocateTypeResult>>(ModalRef);
   data = inject(MODAL_DATA, { optional: true }) as getJob | null;
 
@@ -77,11 +88,33 @@ export class AllocateTypeModalComponent {
   ];
 
   submitted = false;
+  buyerOptions: SfOption[] = [];
   form = this.fb.nonNullable.group({
     productDistribution: false,
     projectInstallation: false,
     amc: false,
+    procurementPerson: [''],
   }, { validators: (g) => (g.value.productDistribution || g.value.projectInstallation || g.value.amc ? null : { scopeRequired: true }) });
+
+  ngOnInit(): void {
+    this.employeeService.getPurchaseBuyers().subscribe({
+      next: (res) => {
+        this.buyerOptions = (res?.data ?? []).map((e: any) => ({
+          value: e._id,
+          label: `${e.firstName} ${e.lastName}`,
+          description: [e.employeeId, e.category?.categoryName].filter(Boolean).join(' · '),
+        }));
+      },
+      error: (error) => console.error('Error loading buyers:', error),
+    });
+    // A buyer is only needed while product distribution is ticked.
+    this.form.controls.productDistribution.valueChanges.subscribe((on) => {
+      const control = this.form.controls.procurementPerson;
+      control.setValidators(on ? [Validators.required] : []);
+      if (!on) control.setValue('');
+      control.updateValueAndValidity();
+    });
+  }
 
   toggle(key: 'productDistribution' | 'projectInstallation' | 'amc'): void {
     const control = this.form.controls[key];
@@ -100,7 +133,10 @@ export class AllocateTypeModalComponent {
       this.form.markAllAsTouched();
       return;
     }
-    const { productDistribution, projectInstallation, amc } = this.form.getRawValue();
-    this.dialogRef.close({ id: this.data._id, jobId: this.data.jobId, productDistribution, projectInstallation, amc });
+    const { productDistribution, projectInstallation, amc, procurementPerson } = this.form.getRawValue();
+    this.dialogRef.close({
+      id: this.data._id, jobId: this.data.jobId, productDistribution, projectInstallation, amc,
+      ...(productDistribution ? { procurementPersonId: procurementPerson } : {}),
+    });
   }
 }

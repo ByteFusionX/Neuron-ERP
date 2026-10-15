@@ -15,6 +15,61 @@ export interface getEmployee {
   reportingTo: string | null | undefined;
   targets: Target[];
   isBlocked?: boolean;
+  preferences?: EmployeePreferences;
+}
+
+export interface EmployeePreferences {
+  defaultLandingPage?: string;
+  dateFormat?: string;
+  timezone?: string;
+  language?: string;
+}
+
+/** The signed-in user's own profile, from GET /employee/me/profile. */
+export interface MyProfile {
+  _id: string;
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  contactNo: number | string;
+  dob: string;
+  photo: string | null;
+  employment: {
+    designation: string;
+    department: string | null;
+    reportingTo: { name: string; designation: string } | null;
+    dateOfJoining: string;
+    contractType: string | null;
+    contractStart: string | null;
+    contractEnd: string | null;
+    probationEnd: string | null;
+    approvalLimit: { maxAmount: number | null; maxDiscountPercent: number | null } | null;
+    isTechnician: boolean;
+    isDriver: boolean;
+    isProjectManager: boolean;
+  };
+  role: string | null;
+  access: {
+    privileges: Record<string, any>;
+    extraPrivileges: Record<string, any>;
+    extraPrivilegesExpiresAt: string | null;
+    extraPrivilegesExpired: boolean;
+  };
+  targets: Target[];
+  preferences: EmployeePreferences;
+  security: {
+    lastLoginAt: string | null;
+    passwordChangedAt: string | null;
+    microsoftLinked: boolean;
+  };
+}
+
+export interface UpdateMyProfile {
+  firstName?: string;
+  lastName?: string;
+  contactNo?: string | number;
+  preferences?: EmployeePreferences;
 }
 
 export interface getEmployeeDetails {
@@ -229,7 +284,6 @@ export interface Privileges {
     viewReport: string;
     create: boolean;
     canApprovePR: boolean;
-    canAssign?: boolean;
   };
   purchaseOrder: {
     viewReport: string;
@@ -307,6 +361,7 @@ export interface Privileges {
     customerType: boolean;
     numbering: boolean;
     masterData: boolean;
+    documentation?: boolean;
     approvalRules: boolean;
     notifications: boolean;
     audit: boolean;

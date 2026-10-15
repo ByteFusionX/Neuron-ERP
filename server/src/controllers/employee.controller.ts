@@ -3,6 +3,7 @@ import Employee from "../models/employee.model";
 import * as bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import announcementModel from "../models/announcement.model";
+import { activeForUser } from "../common/utils/announcementVisibility";
 import enquiryModel from "../models/enquiry.model";
 import quotationModel from "../models/quotation.model";
 import categoryModel, { UserRole } from "../models/category.model";
@@ -16,6 +17,7 @@ import {
 import customerModel from "../models/customer.model";
 import employeeModel from "../models/employee.model";
 import mongoose from "mongoose";
+import { listPurchaseBuyers } from "../services/purchaseBuyer.service";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const ObjectId = require("mongoose").Types.ObjectId;
 
@@ -151,6 +153,19 @@ export const getProcurementEmployees = async (
       return res.status(200).json(employees);
     }
     return res.status(204).json();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Buyers a job's purchase work can be allocated to: holders of the purchase "create" privilege, never a super admin.
+export const getPurchaseBuyers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    return res.status(200).json({ success: true, data: await listPurchaseBuyers() });
   } catch (error) {
     next(error);
   }
@@ -854,37 +869,6 @@ export const updateTarget = async (
   }
 };
 
-export const changePasswordOfEmployee = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
-  try {
-    const { oldPassword, newPassword, userId } = req.body;
-    const user = await Employee.findById(userId).select('+password');
-    if (!user) {
-      return res.status(404).json({ message: 'Employee not found' });
-    }
-    bcrypt.compare(oldPassword, user.password, async (err, result) => {
-      if (err) {
-        return next(err);
-      }
-      if (result) {
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await Employee.findByIdAndUpdate(user._id, {
-          $set: { password: hashedPassword },
-        });
-        return res.status(200).json({ passwordChanged: true });
-      } else {
-        return res.status(502).json({ passwordChanged: false });
-      }
-    });
-  } catch (error) {
-    console.log(error);
-    next(error);
-  }
-};
-
 const generateEmployeeId = async () => {
   try {
     const lastEmployee = await Employee.findOne(
@@ -942,6 +926,7 @@ export const login = async (
 
     const payload = { id: employee._id, employeeId: employee.employeeId };
     const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+    await Employee.updateOne({ _id: employee._id }, { $set: { lastLoginAt: new Date() } });
 
     const employeeData = await Employee.findById(employee._id, {
       password: 0,
@@ -994,6 +979,7 @@ export const loginWithMicrosoft = async (
 
     const payload = { id: employee._id, employeeId: employee.employeeId };
     const token = jwt.sign(payload, process.env.JWT_SECRET as string);
+    await Employee.updateOne({ _id: employee._id }, { $set: { lastLoginAt: new Date() } });
 
     const employeeData = await Employee.findById(employee._id, {
       password: 0,
@@ -1085,11 +1071,11 @@ export const getNotificationCounts = async (
     const userCategoryId = employee.category;
 
     // Updated announcement count query
+    // Live announcements for this user that they have not read yet (viewedBy holds string ids)
     const announcementCount = await announcementModel.countDocuments({
-      viewedBy: { $ne: new ObjectId(userId) },
-      $or: [
-        { category: { $in: ["all"] } },
-        { category: { $in: [userCategoryId] } },
+      $and: [
+        activeForUser(String(userId), String(userCategoryId?._id || userCategoryId)),
+        { viewedBy: { $ne: String(userId) } },
       ],
     });
 

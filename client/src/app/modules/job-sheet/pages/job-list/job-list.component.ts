@@ -101,8 +101,8 @@ export class JobListComponent {
 
   isLoading = true;
   isFiltered = false;
+  isSuperAdmin = false;
   canAllocateJobs = false;
-  canConvertToPurchase = false;
   canTransferProcurementPerson = false;
 
   total = 0;
@@ -177,9 +177,9 @@ export class JobListComponent {
   private checkPrivileges(): void {
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((data) => {
-        this.canAllocateJobs = data?.category?.privileges?.jobSheet?.allocateJobs || false;
-        this.canConvertToPurchase = data?.category?.privileges?.purchase?.create || false;
-        this.canTransferProcurementPerson = data?.category?.privileges?.jobSheet?.transferProcurementPerson || false;
+        this.isSuperAdmin = data?.category?.role === 'superAdmin';
+        this.canAllocateJobs = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.allocateJobs || false;
+        this.canTransferProcurementPerson = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.transferProcurementPerson || false;
       })
     );
   }
@@ -211,6 +211,10 @@ export class JobListComponent {
       {
         id: 'allocate', label: 'Allocate', icon: 'refresh', quick: true,
         hidden: (r) => !this.canAllocate(r),
+      },
+      {
+        id: 'reallocate', label: 'Reallocate', icon: 'refresh', quick: true,
+        hidden: (r) => !this.canTransfer(r),
       },
       {
         id: 'lost', label: 'Mark as lost', icon: 'trash', variant: 'danger',
@@ -359,6 +363,9 @@ export class JobListComponent {
       case 'allocate':
         this.openAllocateTypeSelecter(row);
         break;
+      case 'reallocate':
+        this.onTransferProcurementPerson(row);
+        break;
       case 'lost':
         this.onMarkLost(row);
         break;
@@ -436,11 +443,7 @@ export class JobListComponent {
   canTransfer(row: getJob): boolean {
     // Supply jobs have a procurement owner to hand over, or to assign when allocation left it blank.
     return this.canTransferProcurementPerson && (!!row.procurementPerson || this.hasSupply(row)) &&
-      (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
-  }
-
-  onConvertToPurchase(row: getJob): void {
-    this._router.navigate(['/purchase/create'], { queryParams: { jobId: row.jobId } });
+      row.allocateStatus === allocateStatus.OpenToWork;
   }
 
   private hasSupply(row: getJob): boolean {
@@ -449,12 +452,6 @@ export class JobListComponent {
 
   transferLabel(row: getJob): string {
     return row.procurementPerson ? 'Transfer Procurement' : 'Assign Procurement';
-  }
-
-  canConvert(row: getJob): boolean {
-    // The purchase page only accepts jobs that include supply; AMC / Projects Without Supply would be rejected there.
-    return this.canConvertToPurchase && this.hasSupply(row) && !row.hasPurchaseRequest &&
-      (row.allocateStatus === allocateStatus.OpenToWork || row.allocateStatus === allocateStatus.WorkInProgress);
   }
 
   // ---- Details tab -----------------------------------------------------------------------

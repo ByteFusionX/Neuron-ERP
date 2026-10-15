@@ -1,7 +1,7 @@
 import { HttpClient, HttpContext, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap, tap } from 'rxjs';
-import { ApprovalLimit, CreateEmployee, FilterEmployee, GetCategory, Responsibility, getEmployee, getEmployeeByID, Target } from 'src/app/shared/interfaces/employee.interface';
+import { ApprovalLimit, CreateEmployee, FilterEmployee, GetCategory, Responsibility, getEmployee, getEmployeeByID, MyProfile, Target, UpdateMyProfile } from 'src/app/shared/interfaces/employee.interface';
 import { login } from 'src/app/shared/interfaces/login';
 import { environment } from 'src/environments/environment';
 import { jwtDecode } from "jwt-decode";
@@ -37,6 +37,11 @@ export class EmployeeService {
     return this.http.get<getEmployee[]>(`${this.api}/employee/procurement-employees`, { context: context() })
   }
 
+  /** Buyers a job's purchase work can be allocated to: purchase creators, never a super admin. */
+  getPurchaseBuyers(): Observable<{ success: boolean, data: getEmployee[] }> {
+    return this.http.get<{ success: boolean, data: getEmployee[] }>(`${this.api}/employee/purchase-buyers`, { context: context() })
+  }
+
   getEmployees(filterData: FilterEmployee): Observable<{ total: number, employees: getEmployee[] }> {
     return this.http.post<{ total: number, employees: getEmployee[] }>(`${this.api}/employee/get`, filterData)
   }
@@ -59,8 +64,28 @@ export class EmployeeService {
     return this.http.post<getEmployee>(`${this.api}/employee`, employeeData)
   }
 
-  changePasswordOfEmployee(passwords: object) {
-    return this.http.patch(`${this.api}/employee/changePassword`, passwords)
+  /** The signed-in user's own profile (populated employment, access, targets, preferences, security). */
+  getMyProfile(): Observable<MyProfile> {
+    return this.http.get<MyProfile>(`${this.api}/employee/me/profile`)
+  }
+
+  /** Self-service edit of name, phone and preferences; the server always acts on the authenticated user. */
+  updateMyProfile(data: UpdateMyProfile): Observable<Pick<MyProfile, 'firstName' | 'lastName' | 'contactNo' | 'preferences'>> {
+    return this.http.patch<Pick<MyProfile, 'firstName' | 'lastName' | 'contactNo' | 'preferences'>>(`${this.api}/employee/me`, data, { context: context() })
+  }
+
+  changeMyPassword(passwords: { oldPassword: string, newPassword: string }): Observable<{ passwordChanged: boolean }> {
+    return this.http.patch<{ passwordChanged: boolean }>(`${this.api}/employee/me/password`, passwords, { context: context() })
+  }
+
+  uploadMyPhoto(photo: File): Observable<{ success: boolean, photo: string }> {
+    const formData = new FormData();
+    formData.append('photo', photo);
+    return this.http.patch<{ success: boolean, photo: string }>(`${this.api}/employee/me/photo`, formData, { context: context() })
+  }
+
+  removeMyPhoto(): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(`${this.api}/employee/me/photo`, { context: context() })
   }
 
   editEmployees(employeeData: CreateEmployee): Observable<getEmployee> {

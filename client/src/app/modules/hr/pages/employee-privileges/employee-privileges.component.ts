@@ -75,7 +75,6 @@ const PRIVILEGE_MODULES: PrivilegeModule[] = [
   { key: 'purchase', label: 'Purchase', flags: [
     { path: 'purchase.create', label: 'Create purchases' },
     { path: 'purchase.canApprovePR', label: 'Approve purchase requisitions' },
-    { path: 'purchase.canAssign', label: 'Assign purchase' },
   ]},
   { key: 'purchaseOrder', label: 'Purchase Orders', flags: [
     { path: 'purchaseOrder.canInitiateLPO', label: 'Initiate LPO and issue PO' },

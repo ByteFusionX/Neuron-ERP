@@ -32,7 +32,7 @@ export const requirePrivilege = (moduleKey: string, action?: string, legacyKey?:
     }
 
     const role = employee.category?.role;
-    if (role === "superAdmin" || (role === "admin" && !options.strictAdmin)) {
+    if (/^superadmin$/i.test(role ?? "") || (role === "admin" && !options.strictAdmin)) {
       return next();
     }
 
@@ -114,7 +114,7 @@ export const requireUnlessDenied = (moduleKey: string, action: string, options: 
       return res.status(401).json({ message: "Unauthorized" });
     }
     const role = employee.category?.role;
-    if (role === "superAdmin" || (role === "admin" && !options.strictAdmin)) {
+    if (/^superadmin$/i.test(role ?? "") || (role === "admin" && !options.strictAdmin)) {
       return next();
     }
     if (role === "admin") {

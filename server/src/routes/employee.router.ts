@@ -17,14 +17,23 @@ import {
   getPresaleEngineers,
   getPresaleManagers,
   getProcurementEmployees,
+  getPurchaseBuyers,
   blockEmployee,
   setEmployeeApprovalLimit,
   setEmployeeExtraPrivilege,
   setEmployeeExtraPrivilegeExpiry,
   setEmployeeMicrosoftId,
 } from "../controllers/employee.controller";
+import {
+  getMyProfile,
+  updateMyProfile,
+  changeMyPassword,
+  uploadMyPhoto,
+  removeMyPhoto,
+} from "../controllers/employeeSelf.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 import passport from "passport";
+const upload = require("../common/multer.storage");
 const empRouter = Router();
 
 // /get, /login, /check, and the lookup routes below are self-service or
@@ -35,6 +44,15 @@ empRouter.get("/", getEmployees);
 empRouter.get("/presale-managers", getPresaleManagers);
 empRouter.get("/presale-engineers", getPresaleEngineers);
 empRouter.get("/procurement-employees", getProcurementEmployees);
+empRouter.get("/purchase-buyers", getPurchaseBuyers);
+
+// Self-service: every route acts on the authenticated user (req.employee), never on an id from the client,
+// so none needs a privilege gate.
+empRouter.get("/me/profile", getMyProfile);
+empRouter.patch("/me", updateMyProfile);
+empRouter.patch("/me/password", changeMyPassword);
+empRouter.patch("/me/photo", upload.single("photo"), uploadMyPhoto);
+empRouter.delete("/me/photo", removeMyPhoto);
 
 empRouter.get("/check", isEmployeePresent);
 empRouter.get(
@@ -44,7 +62,6 @@ empRouter.get(
 );
 empRouter.post("/get", requirePrivilege("employee"), getFilteredEmployees);
 empRouter.post("/", requirePrivilege("employee", "create"), createEmployee);
-empRouter.patch("/changePasswordOfEmployee");
 empRouter.patch("/edit", requirePrivilege("employee", "edit", "employee.create"), editEmployee);
 empRouter.patch(
   "/setTarget/:employeeId",
