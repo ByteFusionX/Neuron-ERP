@@ -14,6 +14,8 @@ export interface MasterRow {
   _id: string;
   tab: string;
   name: string;
+  /** Shown in the Type column when the section's tabs hold more than one kind of entry. */
+  type?: string;
   createdBy: string;
   createdAt: string;
   status: string;
@@ -35,6 +37,8 @@ export interface MasterTab {
   valueLabel?: string;
   /** Show Hide/Unhide (Visible/Hidden) instead of Activate/Deactivate (Active/Inactive). */
   hideStyle?: boolean;
+  /** Adds a Type column to the grid (rows set `type`). */
+  typeColumn?: boolean;
   /** Backed by another API: the host supplies rows and the add/edit/delete flows (resolve true when data changed). */
   custom?: {
     load: () => Observable<MasterCustomRow[]>;
@@ -161,6 +165,13 @@ export class MasterDataGridComponent implements OnInit {
   detailSubtitle = (row: MasterRow): string => this.tabs?.find((t) => t.id === row.tab)?.title ?? '';
 
   ngOnInit(): void {
+    if (this.tabs.some((t) => t.typeColumn)) {
+      this.columns = [
+        this.columns[0],
+        { key: 'type', label: 'Type', sortable: true, width: '180px', valueGetter: (r) => r.type || '—' },
+        ...this.columns.slice(1),
+      ];
+    }
     this.views = this.tabs.map((t) => ({ id: t.id, label: t.label, predicate: (r: MasterRow) => r.tab === t.id }));
     this.activeTabId = this.tabs[0]?.id ?? '';
     let pending = this.tabs.length;

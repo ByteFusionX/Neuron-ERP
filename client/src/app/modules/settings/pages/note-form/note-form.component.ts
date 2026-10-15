@@ -1,10 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
-import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
-import { DetailPanelIconComponent } from 'src/app/shared/components/detail-panel/detail-panel-icon.component';
+import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { SmartFormModule } from 'src/app/shared/components/smart-form';
 
 @Component({
@@ -13,12 +11,10 @@ import { SmartFormModule } from 'src/app/shared/components/smart-form';
     CommonModule,
     ReactiveFormsModule,
     SmartFormModule,
-    DetailPanelIconComponent,
-    ActionButtonComponent
+    FormModalShellComponent
 ],
     templateUrl: './note-form.component.html',
-    styleUrls: ['./note-form.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush
+    styles: [':host{display:block}']
 })
 export class NoteFormComponent {
     isSaving: boolean = false;
@@ -28,13 +24,34 @@ export class NoteFormComponent {
     subtitle!: string;
     createButton: boolean = true;
 
-    constructor(
-        public dialogRef: MatDialogRef<NoteFormComponent>,
-        @Inject(MAT_DIALOG_DATA) public data: any,
-        private _profileService: ProfileService
-    ) { }
+    submitted = false;
+    dialogRef = inject<ModalRef<any>>(ModalRef);
+    data = inject(MODAL_DATA, { optional: true }) as any ?? {};
+    private _profileService = inject(ProfileService);
+
+    /** Set when the grid opens the form with a choice of note types (create only). */
+    typeOptions: { label: string; value: string }[] = [];
+    type = new FormControl('');
+
+    private static readonly CREATORS: Record<string, string> = {
+        customerNotes: 'createCustomerNote',
+        termsAndConditions: 'createTermsAndCondition',
+        placeOfDelivery: 'createPlaceOfDelivery',
+        shippingTerms: 'createShippingTerms',
+        purchaseTermsNotes: 'createPurchaseTermsNote',
+    };
 
     ngOnInit() {
+        if (this.data.types?.length) {
+            this.typeOptions = this.data.types.map((t: { key: string; label: string }) => ({ label: t.label, value: t.key }));
+            this.type.setValue(this.data.typeKey ?? this.typeOptions[0].value);
+            const edit = !!this.data.noteId;
+            this.createButton = !edit;
+            this.title = edit ? `Edit ${this.data.typeLabel ?? 'note'}` : 'Add note';
+            this.subtitle = edit ? 'Update this entry.' : 'Choose where it is used, then enter the text.';
+            if (edit) this.note.setValue(this.data.note);
+            return;
+        }
         const action = this.data.action;
         switch (action) {
             case 'editCustomerNote':
@@ -86,15 +103,33 @@ export class NoteFormComponent {
     }
 
     onSubmit() {
+        this.submitted = true;
         if (!this.note.value?.trim()) {
             this.note.setErrors({ required: true });
             this.note.markAsTouched();
             return;
         }
+        if (this.data.types?.length) {
+            // Master data hosts the save so it goes through the master-list API.
+            this.dialogRef.close({ key: this.type.value, note: this.note.value!.trim() });
+            return;
+        }
         this.isSaving = true;
         const note = { note: this.note.value! };
-        const action = this.data.action;
-        if (action == 'createCustomerNote') {
+        const action = this.data.types?.length
+            ? NoteFormComponent.CREATORS[this.type.value ?? ''] ?? this.data.action
+            : this.data.action;
+        if (action == 'createPurchaseTermsNote') {
+            this._profileService.createPurchaseTermsNote(note).subscribe({
+                next: (res) => {
+                    this.dialogRef.close(res);
+                    this.isSaving = false;
+                },
+                error: () => {
+                    this.isSaving = false;
+                }
+            })
+        } else if (action == 'createCustomerNote') {
             this._profileService.createCustomerNote(note).subscribe({
                 next: (res) => {
                     this.dialogRef.close(res);
@@ -138,16 +173,24 @@ export class NoteFormComponent {
     }
 
     onUpdate() {
+        this.submitted = true;
         if (!this.note.value?.trim()) {
             this.note.setErrors({ required: true });
             this.note.markAsTouched();
+            return;
+        }
+        if (this.data.types?.length) {
+            this.dialogRef.close({ key: this.type.value, note: this.note.value!.trim() });
             return;
         }
         this.isSaving = true;
         const action = this.data.action;
 
         let noteType = 'customerNote'
-        if (action == 'editTermsAndCondition') {
+        if (this.data.types?.length) {
+            const key = this.type.value ?? '';
+            noteType = key === 'customerNotes' ? 'customerNote' : key;
+        } else if (action == 'editTermsAndCondition') {
             noteType = 'termsAndConditions'
         } else if (action == 'editPlaceOfDelivery') {
             noteType = 'placeOfDelivery'

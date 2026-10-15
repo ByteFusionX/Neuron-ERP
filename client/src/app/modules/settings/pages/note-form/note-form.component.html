@@ -1,26 +1,15 @@
-<div class="flex max-h-[90vh] flex-col bg-white text-gray-900 dark:bg-erp-surface-dark dark:text-gray-100">
-    <header class="flex items-start gap-3 border-b border-gray-100 px-6 py-4 dark:border-erp-border-dark">
-        <span class="grid h-9 w-9 shrink-0 place-content-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-inset ring-violet-100 dark:bg-violet-950/40 dark:text-violet-400 dark:ring-violet-900">
-            <app-dp-icon name="files" size="w-5 h-5"></app-dp-icon>
-        </span>
-        <div class="min-w-0 flex-1">
-            <h2 class="text-base font-semibold leading-6">{{ title }}</h2>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ subtitle }}</p>
-        </div>
-        <button type="button" (click)="onCloseClicked()" aria-label="Close"
-            class="grid h-8 w-8 place-content-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">
-            <app-dp-icon name="close" size="w-4 h-4"></app-dp-icon>
-        </button>
-    </header>
-
-    <form id="note-form" (ngSubmit)="createButton ? onSubmit() : onUpdate()" novalidate class="grid gap-4 overflow-y-auto px-6 py-5">
-        <app-sf-field label="Note" [control]="note" [messages]="{ required: 'Please enter some text' }">
-            <app-sf-textarea [formControl]="note" [rows]="6" placeholder="Enter your text here..."></app-sf-textarea>
+<app-form-modal-shell
+    icon="files" tone="violet" [title]="title" [contextEmptyText]="subtitle"
+    formId="note-form" [invalid]="submitted && !!note.invalid"
+    [submitLabel]="createButton ? 'Create' : 'Update'" [saving]="isSaving" submitShortcutVerb="save"
+    (closed)="onCloseClicked()">
+    <form id="note-form" (submit)="$event.preventDefault(); createButton ? onSubmit() : onUpdate()" novalidate class="grid gap-4">
+        <app-sf-field *ngIf="typeOptions.length && createButton" label="Type" [control]="type">
+            <app-sf-select [formControl]="type" [options]="typeOptions"></app-sf-select>
         </app-sf-field>
+        <app-sf-field label="Note" [control]="note" [messages]="{ required: 'Please enter some text' }">
+            <app-sf-textarea [formControl]="note" [rows]="6" bullets placeholder="Enter your text here..."></app-sf-textarea>
+        </app-sf-field>
+        <p class="-mt-2 text-[11px] text-gray-500 dark:text-gray-400">Press Enter to start a new bullet point; Enter on an empty bullet ends the list.</p>
     </form>
-
-    <footer class="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-6 py-3 dark:border-erp-border-dark dark:bg-black/20">
-        <app-action-button variant="secondary" (click)="onCloseClicked()">Cancel</app-action-button>
-        <app-action-button variant="primary" type="submit" form="note-form" [disabled]="isSaving">{{ createButton ? 'Create' : 'Update' }}</app-action-button>
-    </footer>
-</div>
+</app-form-modal-shell>

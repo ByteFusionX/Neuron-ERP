@@ -1,95 +1,98 @@
-<div class="w-full p-8 space-y-5">
-    <!-- Profile summary -->
-    <div class="bg-white rounded-xl shadow-sm p-6 flex items-center gap-5"
-        *ngIf="employeeData$ | async as employeeData; else profileBlock">
-        <div class="w-20 h-20 shrink-0 rounded-full bg-orange-200 flex items-center justify-center overflow-hidden">
-            <p class="text-2xl font-semibold text-orange-500">{{ employeeData.firstName[0].toUpperCase()
-                }}{{ employeeData.lastName[0].toUpperCase() }}</p>
+<div class="w-full p-6">
+    @if (loadFailed) {
+        <div class="panel p-5 flex items-center justify-between gap-4 max-w-xl">
+            <p class="muted text-sm">Could not load your profile.</p>
+            <button type="button" (click)="load()" class="btn">Retry</button>
         </div>
-        <div>
-            <p class="text-black font-semibold text-base">{{employeeData.firstName}} {{employeeData.lastName}}</p>
-            <p class="text-gray-500 text-sm">{{employeeData.category.role | titlecase}}</p>
-            <p class="text-gray-500 text-sm" *ngIf="companyDetails?.address as address">{{address.city}}, {{address.country}}</p>
-        </div>
-    </div>
-    <ng-template #profileBlock>
-        <div class="bg-white rounded-xl shadow-sm p-6">
+    } @else if (!profile) {
+        <div class="panel p-5">
             <app-skelton-loading [lineLength]="1"></app-skelton-loading>
         </div>
-    </ng-template>
+    } @else {
+        <div class="space-y-4">
+            <app-profile-header [profile]="profile" [tabs]="tabs" [tenure]="tenure" [initials]="initials"
+                [responsibilities]="responsibilities" [completeness]="completeness" [uploadingPhoto]="uploadingPhoto"
+                [(activeTab)]="activeTab" (photoSelected)="onPhotoSelected($event)" (photoRemoved)="onPhotoRemoved()" />
 
-    <!-- Personal Information -->
-    <div class="bg-white rounded-xl shadow-sm p-6" *ngIf="employeeData$ | async as employeeData">
-        <div class="border-b pb-3 mb-5">
-            <p class="text-black font-semibold text-base">Personal Information</p>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-6">
-            <div>
-                <p class="text-gray-400 text-xs mb-1">First Name</p>
-                <p class="text-gray-800 text-sm">{{employeeData.firstName}}</p>
-            </div>
-            <div>
-                <p class="text-gray-400 text-xs mb-1">Last Name</p>
-                <p class="text-gray-800 text-sm">{{employeeData.lastName}}</p>
-            </div>
-            <div>
-                <p class="text-gray-400 text-xs mb-1">Date of Birth</p>
-                <p class="text-gray-800 text-sm">{{employeeData.dob | date:'dd-MM-yyyy'}}</p>
-            </div>
-            <div>
-                <p class="text-gray-400 text-xs mb-1">Email Address</p>
-                <p class="text-gray-800 text-sm">{{employeeData.email}}</p>
-            </div>
-            <div>
-                <p class="text-gray-400 text-xs mb-1">Phone Number</p>
-                <p class="text-gray-800 text-sm">{{employeeData.contactNo}}</p>
-            </div>
-            <div>
-                <p class="text-gray-400 text-xs mb-1">User Role</p>
-                <p class="text-gray-800 text-sm">{{employeeData.category.role | titlecase}}</p>
-            </div>
-        </div>
-    </div>
+            <main class="min-w-0 space-y-4">
+                <!-- Metrics strip -->
+                <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div class="panel p-5">
+                        <p class="eyebrow">Tenure</p>
+                        <p class="metric-value mt-2 gradient-text">{{ tenure ?? '-' }}</p>
+                        <p class="muted text-xs mt-1">Since {{ profile.employment.dateOfJoining ? (profile.employment.dateOfJoining | date:'MMM yyyy') : '-' }}</p>
+                    </div>
+                    <div class="panel p-5">
+                        <p class="eyebrow">Modules</p>
+                        <p class="metric-value mt-2">{{ isAdmin ? 'All' : accessRows.length }}</p>
+                        <p class="muted text-xs mt-1">{{ extraRows.length ? '+' + extraRows.length + ' individual grant(s)' : 'From your role' }}</p>
+                    </div>
+                    <div class="panel p-5">
+                        <p class="eyebrow">Targets</p>
+                        <p class="metric-value mt-2">{{ profile.targets.length }}</p>
+                        <p class="muted text-xs mt-1">{{ profile.targets.length ? 'Year(s) on record' : 'None set' }}</p>
+                    </div>
+                    <div class="panel p-5">
+                        <p class="eyebrow">Last sign-in</p>
+                        <p class="metric-value mt-2">{{ profile.security.lastLoginAt ? (profile.security.lastLoginAt | date:'dd MMM') : '-' }}</p>
+                        <p class="muted text-xs mt-1">{{ profile.security.lastLoginAt ? (profile.security.lastLoginAt | date:'HH:mm') : 'Not recorded yet' }}</p>
+                    </div>
+                </div>
 
-    <!-- Notification preferences -->
-    <div class="bg-white rounded-xl shadow-sm p-6 flex items-center justify-between gap-4">
-        <div>
-            <p class="text-black font-semibold text-base">Notifications</p>
-            <p class="text-gray-500 text-sm">Choose which notifications reach you in the app, by push and by email.</p>
-        </div>
-        <a routerLink="/profile/notifications"
-            class="shrink-0 bg-violet-700 hover:bg-violet-600 text-white font-medium py-1.5 px-4 rounded text-sm">
-            Manage
-        </a>
-    </div>
+                @if (activeTab === 'overview') {
+                    <div class="grid grid-cols-1 2xl:grid-cols-5 gap-5 fade-in">
+                        <app-profile-details-form class="2xl:col-span-3" [profile]="profile" [form]="detailsForm"
+                            [saving]="savingDetails" (save)="saveDetails()" />
+                        <app-profile-employment class="2xl:col-span-2" [profile]="profile" />
+                        <app-profile-targets class="2xl:col-span-5" [targets]="profile.targets" />
+                    </div>
+                }
 
-    <!-- Address -->
-    <div class="bg-white rounded-xl shadow-sm p-6" *ngIf="companyDetails; else noCompanyDetails">
-        <div class="border-b pb-3 mb-5">
-            <p class="text-black font-semibold text-base">Address</p>
+                @if (activeTab === 'access') {
+                    <app-profile-access class="block fade-in" [profile]="profile" [isAdmin]="isAdmin"
+                        [accessRows]="accessRows" [extraRows]="extraRows" />
+                }
+
+                @if (activeTab === 'preferences') {
+                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-5 fade-in">
+                        <app-profile-preferences-form class="xl:col-span-2" [form]="prefsForm" [saving]="savingPrefs" (save)="savePreferences()" />
+                        <div class="panel p-5 flex flex-col justify-between gap-5 opacity-60 cursor-not-allowed select-none" aria-disabled="true">
+                            <span class="meta-icon !w-10 !h-10 !rounded-lg">
+                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M14.86 17.08a23.85 23.85 0 0 0 5.45-1.31A8.97 8.97 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.97 8.97 0 0 1-2.31 6.02c1.73.64 3.56 1.09 5.45 1.31m5.72 0a24.26 24.26 0 0 1-5.72 0m5.72 0a3 3 0 1 1-5.72 0"/></svg>
+                            </span>
+                            <div>
+                                <h3 class="section-title">Notifications</h3>
+                                <p class="muted text-xs mt-1">Choose what reaches you in the app, by push and by email.</p>
+                                <p class="faint text-sm font-semibold mt-4">Manage notifications · Unavailable</p>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (activeTab === 'security') {
+                    <div class="space-y-4 fade-in">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="panel p-5">
+                            <p class="eyebrow">Last sign-in</p>
+                            <p class="text-sm font-semibold mt-2">{{profile.security.lastLoginAt ? (profile.security.lastLoginAt | date:'dd MMM yyyy, HH:mm') : 'Not recorded yet'}}</p>
+                        </div>
+                        <div class="panel p-5">
+                            <p class="eyebrow">Password changed</p>
+                            <p class="text-sm font-semibold mt-2">{{profile.security.passwordChangedAt ? (profile.security.passwordChangedAt | date:'dd MMM yyyy, HH:mm') : 'Not recorded'}}</p>
+                        </div>
+                        <div class="panel p-5">
+                            <p class="eyebrow">Microsoft account</p>
+                            <p class="mt-2">
+                                @if (profile.security.microsoftLinked) { <span class="pill pill-ok"><span class="dot"></span>Linked</span> }
+                                @else { <span class="pill pill-neutral"><span class="dot"></span>Not linked</span> }
+                            </p>
+                        </div>
+                    </div>
+                        <app-profile-password-form [form]="passwordForm" [saving]="savingPassword" [(open)]="showPasswordForm" (save)="changePassword()" />
+                        <p class="faint text-xs">Session listing and sign-out-everywhere arrive with the move to Microsoft Azure AD.</p>
+                    </div>
+                }
+            </main>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-6">
-            <div>
-                <p class="text-gray-400 text-xs mb-1">Country</p>
-                <p class="text-gray-800 text-sm">{{companyDetails.address.country}}</p>
-            </div>
-            <div>
-                <p class="text-gray-400 text-xs mb-1">City</p>
-                <p class="text-gray-800 text-sm">{{companyDetails.address.city}}</p>
-            </div>
-            <div>
-                <p class="text-gray-400 text-xs mb-1">Area / Street</p>
-                <p class="text-gray-800 text-sm">{{companyDetails.address.area}}, {{companyDetails.address.street}}</p>
-            </div>
-        </div>
-    </div>
-    <ng-template #noCompanyDetails>
-        <div class="bg-white rounded-xl shadow-sm p-10 flex flex-col items-center justify-center gap-2">
-            <p class="text-gray-500">No Company Details available.</p>
-            <button class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-1.5 px-4 rounded text-sm"
-                (click)="updateCompanyDetails()">
-                + Add Company Details
-            </button>
-        </div>
-    </ng-template>
+    }
 </div>

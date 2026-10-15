@@ -3,6 +3,7 @@ import { Privileges } from 'src/app/shared/interfaces/employee.interface';
 export type SettingsSectionId =
   | 'company-profile'
   | 'master-data'
+  | 'documentation'
   | 'approval-rules'
   | 'numbering'
   | 'notifications'
@@ -55,10 +56,20 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     children: [
       { path: 'product', label: 'Product Data' },
       { path: 'customer', label: 'Customer Data' },
+      { path: 'supplier', label: 'Supplier Data' },
       { path: 'notes-terms', label: 'Notes & Terms' },
     ],
     keywords: ['lists', 'lookup', 'unit', 'uom', 'availability', 'note', 'terms', 'conditions', 'quotation'],
     canView: ({ privileges }) => !!privileges?.portalManagement?.masterData,
+  },
+  {
+    id: 'documentation',
+    label: 'Document',
+    description: 'Document template controls for quotation, PO, GRN, delivery note and invoice outputs.',
+    icon: 'heroDocumentText',
+    group: 'Company',
+    keywords: ['document', 'documentation', 'template', 'quotation', 'quote', 'po', 'lpo', 'grn', 'delivery note', 'invoice', 'pdf'],
+    canView: ({ privileges, isSuperAdmin }) => !!isSuperAdmin || !!privileges?.portalManagement?.documentation,
   },
   {
     id: 'approval-rules',

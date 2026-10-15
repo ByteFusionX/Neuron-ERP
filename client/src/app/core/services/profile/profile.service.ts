@@ -159,6 +159,10 @@ export class ProfileService {
     return this.http.post<Notes>(`${this.api}/note/placeOfDelivery`, note)
   }
 
+  createPurchaseTermsNote(note: NotePost): Observable<Notes> {
+    return this.http.post<Notes>(`${this.api}/note/purchaseTermsNotes`, note)
+  }
+
   createShippingTerms(note: NotePost): Observable<Notes> {
     return this.http.post<Notes>(`${this.api}/note/shippingTerms`, note)
   }

@@ -1,0 +1,75 @@
+/* Utility classes shared by the profile components. Colours come from the --pf-* tokens
+   set on the profile-info host, which inherit into every child component. */
+.panel {
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  @apply rounded-xl;
+}
+
+.tile {
+  background: var(--pf-surface-2);
+  border: 1px solid var(--pf-border);
+  @apply rounded-lg;
+}
+
+.muted { color: var(--pf-muted); }
+.faint { color: var(--pf-faint); }
+.accent { color: var(--pf-accent-text); }
+.hairline { border-color: var(--pf-border); }
+
+.eyebrow {
+  color: var(--pf-muted);
+  @apply text-[11px] font-medium;
+}
+
+.section-title {
+  @apply text-xs font-bold uppercase tracking-wider;
+}
+
+.meta-icon {
+  background: var(--pf-accent-soft);
+  color: var(--pf-accent-text);
+  @apply w-8 h-8 rounded-lg flex items-center justify-center shrink-0;
+}
+
+.btn {
+  background: var(--pf-accent);
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-semibold text-white transition hover:brightness-110;
+}
+
+.btn:disabled {
+  @apply opacity-40 cursor-not-allowed hover:brightness-100;
+}
+
+.btn-ghost {
+  color: var(--pf-text);
+  background: var(--pf-surface-2);
+  border: 1px solid var(--pf-border);
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-medium transition;
+}
+
+.btn-ghost:hover { border-color: var(--pf-accent); color: var(--pf-accent-text); }
+
+.pill {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium;
+}
+
+.pill-accent { background: var(--pf-accent-soft); color: var(--pf-accent-text); }
+.pill-ok { background: var(--pf-ok-soft); color: var(--pf-ok); }
+.pill-warn { background: var(--pf-warn-soft); color: var(--pf-warn); }
+.pill-neutral { background: var(--pf-surface-2); color: var(--pf-muted); border: 1px solid var(--pf-border); }
+
+.dot { @apply w-1.5 h-1.5 rounded-full; background: currentColor; }
+
+.empty {
+  color: var(--pf-muted);
+  border: 1px dashed var(--pf-border);
+  @apply rounded-lg py-8 text-center text-sm;
+}
+
+.fade-in { animation: pf-fade 0.25s ease-out; }
+
+@keyframes pf-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}

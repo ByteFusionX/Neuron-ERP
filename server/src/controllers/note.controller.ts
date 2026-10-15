@@ -9,6 +9,7 @@ const NOTE_LISTS: Record<string, MasterListName> = {
     termsAndConditions: 'termsAndConditions',
     placeOfDelivery: 'placeOfDelivery',
     shippingTerms: 'shippingTerms',
+    purchaseTermsNotes: 'purchaseTermsNotes',
 };
 
 const buildNotes = async () => {
@@ -40,6 +41,7 @@ export const createCustomerNote = createNote('customerNotes');
 export const createTermsAndCondition = createNote('termsAndConditions');
 export const createPlaceOfDelivery = createNote('placeOfDelivery');
 export const createShippingTerms = createNote('shippingTerms');
+export const createPurchaseTermsNote = createNote('purchaseTermsNotes');
 
 export const updateNote = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -50,6 +52,7 @@ export const updateNote = async (req: Request, res: Response, next: NextFunction
         const list = noteType === 'customerNote' ? 'customerNote'
             : noteType === 'placeOfDelivery' ? 'placeOfDelivery'
             : noteType === 'shippingTerms' ? 'shippingTerms'
+            : noteType === 'purchaseTermsNotes' ? 'purchaseTermsNotes'
             : 'termsAndConditions';
         const editor = await getEmployeeData(req.user);
         const updated = await MasterListItemModel.findOneAndUpdate(

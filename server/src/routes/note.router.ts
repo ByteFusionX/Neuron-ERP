@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getNote, updateNote, createCustomerNote, createTermsAndCondition, createPlaceOfDelivery, createShippingTerms, deleteNote } from "../controllers/note.controller";
+import { getNote, updateNote, createCustomerNote, createTermsAndCondition, createPlaceOfDelivery, createShippingTerms, createPurchaseTermsNote, deleteNote } from "../controllers/note.controller";
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 const noteRouter = Router()
 
@@ -15,6 +15,7 @@ noteRouter.post('/customerNote', manageNotes, createCustomerNote)
 noteRouter.post('/termsCondition', manageNotes, createTermsAndCondition)
 noteRouter.post('/placeOfDelivery', manageNotes, createPlaceOfDelivery)
 noteRouter.post('/shippingTerms', manageNotes, createShippingTerms)
+noteRouter.post('/purchaseTermsNotes', manageNotes, createPurchaseTermsNote)
 
 
 export default noteRouter

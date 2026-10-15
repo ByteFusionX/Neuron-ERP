@@ -1,0 +1,89 @@
+.document-settings-grid {
+  min-height: 34rem;
+  flex: 1 1 auto;
+}
+
+.document-preview-shell {
+  height: calc(100vh - 10rem);
+  min-height: 34rem;
+  display: flex;
+  min-width: 0;
+}
+
+.document-pdf-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.template-editor {
+  width: 20rem;
+  flex: 0 0 20rem;
+  overflow-y: auto;
+  border-right: 1px solid #e5e7eb;
+  background: #fff;
+  padding: 1.25rem;
+}
+
+.editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.editor-heading h3 { margin: 0; color: #111827; font-size: 1rem; font-weight: 650; }
+.editor-heading p { margin: .25rem 0 0; color: #6b7280; font-size: .75rem; }
+.editor-close { border: 0; background: transparent; color: #6b7280; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.editor-field { display: grid; gap: .4rem; margin-bottom: 1rem; color: #374151; font-size: .75rem; font-weight: 600; }
+.editor-field input[type="text"], .editor-field textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; padding: .55rem .65rem; color: #111827; font: inherit; font-weight: 400; }
+.editor-field textarea { resize: vertical; line-height: 1.4; }
+.color-control { display: grid; grid-template-columns: 2.5rem 1fr; gap: .5rem; }
+.color-control input[type="color"] { width: 2.5rem; height: 2.25rem; border: 1px solid #d1d5db; border-radius: 6px; padding: .15rem; background: #fff; }
+.editor-options { display: grid; gap: .7rem; border-top: 1px solid #e5e7eb; padding-top: 1rem; }
+.editor-options label { display: flex; align-items: center; gap: .55rem; color: #374151; font-size: .8rem; }
+.editor-options input { width: 1rem; height: 1rem; }
+.editor-message { margin: 1rem 0 0; color: #475569; font-size: .75rem; }
+.editor-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+.button-primary, .button-secondary { border-radius: 6px; padding: .55rem .75rem; font-size: .78rem; font-weight: 600; cursor: pointer; }
+.button-primary { border: 1px solid #1e4e79; background: #1e4e79; color: #fff; }
+.button-primary:disabled { cursor: default; opacity: .55; }
+.button-secondary { border: 1px solid #d1d5db; background: #fff; color: #374151; }
+
+.panel-pdf-viewer {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.preview-state {
+  display: grid;
+  min-height: 18rem;
+  place-items: center;
+  color: #475569;
+  font-size: 0.875rem;
+}
+
+.preview-state-error {
+  color: #b91c1c;
+}
+
+:host-context(.dark) .document-pdf-preview {
+  background: #0f172a;
+}
+
+:host-context(.dark) .template-editor { border-color: #334155; background: #111827; }
+:host-context(.dark) .editor-heading h3, :host-context(.dark) .editor-field, :host-context(.dark) .editor-options label { color: #e5e7eb; }
+:host-context(.dark) .editor-heading p, :host-context(.dark) .editor-close { color: #9ca3af; }
+:host-context(.dark) .editor-field input[type="text"], :host-context(.dark) .editor-field textarea { border-color: #475569; background: #1f2937; color: #f9fafb; }
+:host-context(.dark) .editor-options { border-color: #334155; }
+
+@media (max-width: 900px) {
+  .document-preview-shell.is-customizing { flex-direction: column; overflow-y: auto; }
+  .template-editor { width: 100%; flex-basis: auto; border-right: 0; border-bottom: 1px solid #e5e7eb; }
+  .document-preview-shell.is-customizing .document-pdf-preview { min-height: 30rem; }
+}
+
+:host-context(.dark) .preview-state {
+  color: #cbd5e1;
+}
+
+:host-context(.dark) .preview-state-error {
+  color: #fca5a5;
+}

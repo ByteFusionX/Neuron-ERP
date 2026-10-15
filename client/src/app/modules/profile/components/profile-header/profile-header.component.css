@@ -1,0 +1,67 @@
+:host { display: block; }
+
+/* Cover: violet gradient with soft orbs and a dot grid */
+.cover {
+  background: linear-gradient(120deg, #6d28d9 0%, #7c3aed 45%, #a78bfa 100%);
+  @apply relative h-32 overflow-hidden;
+}
+
+:host-context(.dark) .cover {
+  background: linear-gradient(120deg, #2e1065 0%, #4c1d95 50%, #6d28d9 100%);
+}
+
+.cover-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px);
+  background-size: 14px 14px;
+  mask-image: linear-gradient(to left, #000 10%, transparent 75%);
+  -webkit-mask-image: linear-gradient(to left, #000 10%, transparent 75%);
+  @apply absolute inset-0;
+}
+
+.cover-orb {
+  filter: blur(40px);
+  @apply absolute rounded-full;
+}
+
+.cover-orb-a { background: rgba(244, 114, 182, 0.45); @apply w-56 h-56 -top-24 right-24; }
+.cover-orb-b { background: rgba(96, 165, 250, 0.35); @apply w-48 h-48 -bottom-28 right-[-2rem]; }
+
+.pill-glass { @apply bg-white/15 text-white backdrop-blur border border-white/20; }
+
+.avatar-ring {
+  background: var(--pf-surface);
+  position: relative;
+  @apply rounded-full p-[2px];
+}
+
+.avatar-inner {
+  background: var(--pf-surface);
+  @apply rounded-full p-[3px];
+}
+
+.meta-row {
+  @apply flex items-center gap-3 text-sm min-w-0;
+}
+
+.ring-track { stroke: var(--pf-border); }
+.ring-bar { stroke: url(#pfRingGrad); transition: stroke-dashoffset 0.6s ease; }
+
+/* Underline tabs docked to the bottom of the header card */
+.tabbar {
+  background: var(--pf-surface-2);
+  border-top: 1px solid var(--pf-border);
+  @apply flex gap-1 px-3 overflow-x-auto;
+}
+
+.tab-btn {
+  color: var(--pf-muted);
+  border-bottom: 2px solid transparent;
+  @apply flex items-center gap-2 px-3 py-2.5 -mb-px text-[13px] font-medium whitespace-nowrap transition-colors;
+}
+
+.tab-btn:hover { color: var(--pf-text); }
+
+.tab-btn.active {
+  color: var(--pf-accent-text);
+  border-bottom-color: var(--pf-accent);
+}

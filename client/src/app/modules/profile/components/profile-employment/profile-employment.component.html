@@ -1,0 +1,54 @@
+@let p = profile();
+<div class="panel p-5">
+    <div class="flex items-start justify-between gap-4 mb-6">
+        <div>
+            <h3 class="section-title">Employment</h3>
+            <p class="muted text-xs mt-1">Managed by HR.</p>
+        </div>
+        @if (p.employment.contractType) {
+            <span class="pill pill-accent">{{p.employment.contractType | titlecase}}</span>
+        }
+    </div>
+    <ol class="relative ml-2 border-l-2 hairline space-y-5">
+        <li class="pl-5 relative">
+            <span class="absolute -left-[7px] top-1 w-3 h-3 rounded-full" style="background: var(--pf-accent)"></span>
+            <p class="text-sm font-medium">Joined</p>
+            <p class="muted text-xs">{{p.employment.dateOfJoining ? (p.employment.dateOfJoining | date:'dd MMM yyyy') : 'Not recorded'}}</p>
+        </li>
+        @if (p.employment.contractStart) {
+            <li class="pl-5 relative">
+                <span class="absolute -left-[7px] top-1 w-3 h-3 rounded-full" style="background: var(--pf-accent-2)"></span>
+                <p class="text-sm font-medium">Contract started</p>
+                <p class="muted text-xs">{{p.employment.contractStart | date:'dd MMM yyyy'}}</p>
+            </li>
+        }
+        @if (p.employment.probationEnd) {
+            <li class="pl-5 relative">
+                <span class="absolute -left-[7px] top-1 w-3 h-3 rounded-full" style="background: var(--pf-warn)"></span>
+                <p class="text-sm font-medium">Probation ends</p>
+                <p class="muted text-xs">{{p.employment.probationEnd | date:'dd MMM yyyy'}}</p>
+            </li>
+        }
+        @if (p.employment.contractEnd) {
+            <li class="pl-5 relative">
+                <span class="absolute -left-[7px] top-1 w-3 h-3 rounded-full" style="background: var(--pf-faint)"></span>
+                <p class="text-sm font-medium">Contract ends</p>
+                <p class="muted text-xs">{{p.employment.contractEnd | date:'dd MMM yyyy'}}</p>
+            </li>
+        }
+    </ol>
+    <div class="grid grid-cols-2 gap-3 mt-6">
+        <div class="tile p-4">
+            <p class="eyebrow">Approval limit</p>
+            <p class="text-base font-semibold mt-1.5">
+                @if (p.employment.approvalLimit?.maxAmount != null) { {{p.employment.approvalLimit!.maxAmount | number}} } @else { Role default }
+            </p>
+        </div>
+        <div class="tile p-4">
+            <p class="eyebrow">Max discount</p>
+            <p class="text-base font-semibold mt-1.5">
+                @if (p.employment.approvalLimit?.maxDiscountPercent != null) { {{p.employment.approvalLimit!.maxDiscountPercent}}% } @else { Role default }
+            </p>
+        </div>
+    </div>
+</div>

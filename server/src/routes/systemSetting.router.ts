@@ -3,7 +3,7 @@ import { getSystemSetting, saveSystemSetting } from "../controllers/systemSettin
 import { requirePrivilege } from "../common/middlewares/privilege.middleware";
 
 // Each system-setting key maps to its own Settings flag.
-const SETTING_FLAGS: Record<string, string> = { notifications: "notificationsEdit", audit: "auditEdit" };
+const SETTING_FLAGS: Record<string, string> = { notifications: "notificationsEdit", audit: "auditEdit", documents: "documentation" };
 const requireSettingPrivilege = (req: any, res: any, next: any) =>
     requirePrivilege("portalManagement", SETTING_FLAGS[req.params.key] ?? "__none__")(req, res, next);
 

@@ -1,0 +1,4 @@
+/* Slim admin notice: flat card with an accent edge */
+.admin-banner {
+  border-left: 3px solid var(--pf-accent);
+}

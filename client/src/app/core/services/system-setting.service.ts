@@ -20,6 +20,21 @@ export interface AuditSettings {
   retentionDays: number | null;
 }
 
+export interface QuotationTemplateSettings {
+  title: string;
+  primaryColor: string;
+  openingText: string;
+  showOpening: boolean;
+  showCommercialTerms: boolean;
+  showTerms: boolean;
+  showNotes: boolean;
+  includeStampByDefault: boolean;
+}
+
+export interface DocumentSettings {
+  quotation: QuotationTemplateSettings;
+}
+
 type Result<T> = { success: boolean; data: T };
 
 @Injectable({ providedIn: 'root' })
@@ -42,5 +57,13 @@ export class SystemSettingService {
 
   saveAudit(body: AuditSettings): Observable<Result<AuditSettings>> {
     return this.http.put<Result<AuditSettings>>(`${this.api}/system-setting/audit`, body);
+  }
+
+  getDocuments(): Observable<Result<DocumentSettings>> {
+    return this.http.get<Result<DocumentSettings>>(`${this.api}/system-setting/documents`);
+  }
+
+  saveDocuments(body: DocumentSettings): Observable<Result<DocumentSettings>> {
+    return this.http.put<Result<DocumentSettings>>(`${this.api}/system-setting/documents`, body);
   }
 }

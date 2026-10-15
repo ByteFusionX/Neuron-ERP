@@ -1,0 +1,83 @@
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid
+    class="document-settings-grid"
+    title="Documents"
+    subtitle="Manage document settings for quotation, PO, GRN, delivery note and invoice outputs"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="id"
+    [data]="documents"
+    [columns]="columns"
+    [rowActions]="rowActions"
+    searchPlaceholder="Search documents"
+    emptyMessage="No documents found"
+    storageKey="settings-document-list"
+    [detailTitle]="title"
+    [detailSubtitle]="subtitle"
+    detailPanelWidth="min(1400px, 96vw)"
+    (rowOpen)="openPreview($event)"
+    (rowAction)="onRowAction($event)">
+
+    <ng-template #detailTemplate let-row>
+      <section class="document-preview-shell" [class.is-customizing]="customize && row.id === 'quotation'">
+        <aside *ngIf="customize && row.id === 'quotation'" class="template-editor" aria-label="Customize quotation template">
+          <div class="editor-heading">
+            <div>
+              <h3>Customize quotation</h3>
+              <p>Changes apply to future quotation PDFs.</p>
+            </div>
+            <button type="button" class="editor-close" title="Close customization" (click)="customize = false">&times;</button>
+          </div>
+
+          <label class="editor-field">
+            <span>Document title</span>
+            <input type="text" maxlength="80" [(ngModel)]="quotationTemplate.title" (change)="refreshPreview()">
+          </label>
+
+          <label class="editor-field">
+            <span>Brand color</span>
+            <span class="color-control">
+              <input type="color" [(ngModel)]="quotationTemplate.primaryColor" (change)="refreshPreview()">
+              <input type="text" maxlength="7" [(ngModel)]="quotationTemplate.primaryColor" (change)="refreshPreview()">
+            </span>
+          </label>
+
+          <label class="editor-field">
+            <span>Opening text</span>
+            <textarea rows="5" maxlength="1000" [(ngModel)]="quotationTemplate.openingText" (change)="refreshPreview()"></textarea>
+          </label>
+
+          <div class="editor-options">
+            <label><input type="checkbox" [(ngModel)]="quotationTemplate.showOpening" (change)="refreshPreview()"> Opening message</label>
+            <label><input type="checkbox" [(ngModel)]="quotationTemplate.showCommercialTerms" (change)="refreshPreview()"> Commercial terms</label>
+            <label><input type="checkbox" [(ngModel)]="quotationTemplate.showTerms" (change)="refreshPreview()"> Terms &amp; conditions</label>
+            <label><input type="checkbox" [(ngModel)]="quotationTemplate.showNotes" (change)="refreshPreview()"> Notes</label>
+            <label><input type="checkbox" [(ngModel)]="quotationTemplate.includeStampByDefault" (change)="refreshPreview()"> Company stamp by default</label>
+          </div>
+
+          <p *ngIf="saveMessage" class="editor-message" role="status">{{ saveMessage }}</p>
+          <div class="editor-actions">
+            <button type="button" class="button-secondary" (click)="resetTemplate()">Reset</button>
+            <button type="button" class="button-primary" [disabled]="saving || settingsLoading" (click)="saveTemplate()">
+              {{ saving ? 'Saving...' : 'Save template' }}
+            </button>
+          </div>
+        </aside>
+
+        <div class="document-pdf-preview" [attr.aria-label]="row.documentName + ' PDF preview'">
+        <div *ngIf="previewLoading" class="preview-state" role="status">
+          Generating PDF preview...
+        </div>
+        <div *ngIf="previewError" class="preview-state preview-state-error" role="alert">
+          {{ previewError }}
+        </div>
+        <ngx-extended-pdf-viewer
+          *ngIf="previewUrl && !previewLoading"
+          class="panel-pdf-viewer"
+          [src]="previewUrl"
+          [height]="'100%'">
+        </ngx-extended-pdf-viewer>
+        </div>
+      </section>
+    </ng-template>
+  </app-data-grid>
+</div>

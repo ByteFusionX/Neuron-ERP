@@ -1,17 +1,52 @@
-td,th{
-  text-align: center;
+/* Theme tokens. The app toggles a `dark` class on <html> (ThemeService), so the
+   dark set is applied through :host-context rather than Tailwind's dark: variant,
+   which doesn't survive Angular's style encapsulation inside @apply. */
+:host {
+  --pf-bg: #fafafa;
+  --pf-surface: #ffffff;
+  --pf-surface-2: #f9fafb;
+  --pf-border: #f3f4f6;
+  --pf-input-border: #e5e7eb;
+  --pf-text: #111827;
+  --pf-muted: #6b7280;
+  --pf-faint: #9ca3af;
+  --pf-accent: #7c3aed;
+  --pf-accent-2: #7c3aed;
+  --pf-accent-soft: #f5f3ff;
+  --pf-accent-text: #6d28d9;
+  --pf-ok: #047857;
+  --pf-ok-soft: #ecfdf5;
+  --pf-warn: #b45309;
+  --pf-warn-soft: #fffbeb;
+  --pf-danger: #dc2626;
+  --pf-shadow: none;
+  --pf-glow: transparent;
+  display: block;
+  min-height: 100%;
+  background: var(--pf-bg);
+  color: var(--pf-text);
 }
 
-.example::-webkit-scrollbar {
-    width: 8px;
-    background-color: #f3f4f6;
+:host-context(.dark) {
+  --pf-bg: #1a1a1a;
+  --pf-surface: #111111;
+  --pf-surface-2: #1a1a1a;
+  --pf-border: #262626;
+  --pf-input-border: #2e2e2e;
+  --pf-text: #ededed;
+  --pf-muted: #a1a1a1;
+  --pf-faint: #737373;
+  --pf-accent: #8b5cf6;
+  --pf-accent-2: #8b5cf6;
+  --pf-accent-soft: rgba(139, 92, 246, 0.14);
+  --pf-accent-text: #c4b5fd;
+  --pf-ok: #34d399;
+  --pf-ok-soft: rgba(52, 211, 153, 0.12);
+  --pf-warn: #fbbf24;
+  --pf-warn-soft: rgba(251, 191, 36, 0.12);
+  --pf-danger: #f87171;
 }
 
-.example::-webkit-scrollbar-track {
-    background: #f3f4f6;
-}
 
-.example::-webkit-scrollbar-thumb {
-    background: #d1d5db;
-    border-radius: 5px;
-  }
+.metric-value { @apply text-base font-semibold; }
+.gradient-text { color: var(--pf-text); }

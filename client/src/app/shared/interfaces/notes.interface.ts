@@ -20,4 +20,6 @@ export interface Notes {
     customerNotes: Note[];
     termsAndConditions: Note[];
     placeOfDelivery: Note[];
+    shippingTerms: Note[];
+    purchaseTermsNotes: Note[];
 }

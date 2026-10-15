@@ -9,6 +9,7 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { Privileges } from 'src/app/shared/interfaces/employee.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { ModalService } from 'src/app/shared/components/modal';
 import { NoteFormComponent } from '../note-form/note-form.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
 import { SkeltonLoadingComponent } from '../../../../shared/components/skelton-loading/skelton-loading.component';
@@ -50,6 +51,7 @@ export class NotesTermsSettingsComponent implements OnInit, OnDestroy {
 
   private subscriptions = new Subscription();
   private confirm = inject(ConfirmDialogService);
+  private modal = inject(ModalService);
 
   notesFor(key: string): any[] {
     return this.cstcDataSource.data[0]?.[key] ?? [];
@@ -84,8 +86,8 @@ export class NotesTermsSettingsComponent implements OnInit, OnDestroy {
   }
 
   onNoteForm(action: string, note?: string, noteId?: string) {
-    const dialogRef = this.dialog.open(NoteFormComponent, {
-      width: '560px', maxWidth: '95vw',
+    const dialogRef = this.modal.open(NoteFormComponent, {
+      width: '560px',
       data: { action, note, noteId }
     });
     dialogRef.afterClosed().subscribe(data => {

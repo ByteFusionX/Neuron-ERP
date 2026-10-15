@@ -1,0 +1,31 @@
+<form class="panel p-5" [formGroup]="form()" (ngSubmit)="submit()">
+    <div class="flex items-start justify-between gap-4 mb-6">
+        <div>
+            <h3 class="section-title">Personal details</h3>
+            <p class="muted text-xs mt-1">Your name and phone number are editable.</p>
+        </div>
+        <button type="submit" [disabled]="form().pristine || saving()" class="btn">
+            {{ saving() ? 'Saving…' : 'Save' }}
+        </button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+        <app-sf-field label="First name" [control]="form().controls['firstName']">
+            <app-sf-input formControlName="firstName" placeholder="First name" />
+        </app-sf-field>
+        <app-sf-field label="Last name" [control]="form().controls['lastName']">
+            <app-sf-input formControlName="lastName" placeholder="Last name" />
+        </app-sf-field>
+        <app-sf-field label="Phone number" [control]="form().controls['contactNo']" [messages]="{ pattern: 'Enter a valid phone number' }">
+            <app-sf-input formControlName="contactNo" type="tel" placeholder="Phone number" />
+        </app-sf-field>
+        <app-sf-field label="Email">
+            <app-sf-input [formControl]="email" readonly />
+        </app-sf-field>
+        <app-sf-field label="Date of birth">
+            <app-sf-input [formControl]="dob" readonly />
+        </app-sf-field>
+        <app-sf-field label="Employee ID">
+            <app-sf-input [formControl]="employeeId" readonly />
+        </app-sf-field>
+    </div>
+</form>

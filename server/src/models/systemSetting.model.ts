@@ -1,6 +1,6 @@
 import { model, Schema } from "mongoose";
 
-export const SYSTEM_SETTING_KEYS = ['notifications', 'audit'] as const;
+export const SYSTEM_SETTING_KEYS = ['notifications', 'audit', 'documents'] as const;
 export type SystemSettingKey = typeof SYSTEM_SETTING_KEYS[number];
 
 interface SystemSetting {

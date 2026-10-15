@@ -23,9 +23,21 @@ const AUDIT_AREAS = {
     approvals: true,
 } as const;
 
+const QUOTATION_TEMPLATE = {
+    title: 'COMMERCIAL PROPOSAL',
+    primaryColor: '#1E3964',
+    openingText: 'Reference to your query on the above subject, we are pleased to enclose herewith our OFFER for your perusal and due consideration.',
+    showOpening: true,
+    showCommercialTerms: true,
+    showTerms: true,
+    showNotes: true,
+    includeStampByDefault: true,
+} as const;
+
 const DEFAULTS: Record<SystemSettingKey, Record<string, any>> = {
     notifications: { events: NOTIFICATION_EVENTS },
     audit: { areas: AUDIT_AREAS, retentionDays: null },
+    documents: { quotation: QUOTATION_TEMPLATE },
 };
 
 const withDefaults = (key: SystemSettingKey, saved?: Record<string, any> | null): Record<string, any> => {
@@ -45,6 +57,9 @@ const withDefaults = (key: SystemSettingKey, saved?: Record<string, any> | null)
             },
             retentionDays: saved?.retentionDays ?? null,
         };
+    }
+    if (key === 'documents') {
+        return { quotation: { ...QUOTATION_TEMPLATE, ...(saved?.quotation ?? {}) } };
     }
     return { ...(DEFAULTS[key] as Record<string, any>), ...(saved ?? {}) };
 };
@@ -77,6 +92,30 @@ const sanitizers: Record<SystemSettingKey, (body: any) => { value?: Record<strin
         const retentionDays = toDays(body?.retentionDays, 30, 3650);
         if (retentionDays === undefined) return { error: "Retention must be a whole number of days from 30 to 3650, or empty to keep history forever" };
         return { value: { areas, retentionDays } };
+    },
+    documents: (body) => {
+        const input = body?.quotation ?? {};
+        const text = (value: unknown, fallback: string, max: number) => {
+            const cleaned = typeof value === 'string' ? value.trim() : '';
+            return (cleaned || fallback).slice(0, max);
+        };
+        const primaryColor = typeof input.primaryColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(input.primaryColor)
+            ? input.primaryColor.toUpperCase()
+            : QUOTATION_TEMPLATE.primaryColor;
+        return {
+            value: {
+                quotation: {
+                    title: text(input.title, QUOTATION_TEMPLATE.title, 80),
+                    primaryColor,
+                    openingText: text(input.openingText, QUOTATION_TEMPLATE.openingText, 1000),
+                    showOpening: input.showOpening !== false,
+                    showCommercialTerms: input.showCommercialTerms !== false,
+                    showTerms: input.showTerms !== false,
+                    showNotes: input.showNotes !== false,
+                    includeStampByDefault: input.includeStampByDefault !== false,
+                },
+            },
+        };
     },
 };
 

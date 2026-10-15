@@ -1,0 +1,24 @@
+<form class="panel p-5" [formGroup]="form()" (ngSubmit)="save.emit()">
+    <div class="flex items-start justify-between gap-4 mb-6">
+        <div>
+            <h3 class="section-title">Preferences</h3>
+            <p class="muted text-xs mt-1">The landing page applies at your next sign-in. Screens adopt date format and timezone as they are updated.</p>
+        </div>
+        <button type="submit" [disabled]="readOnly() || form().pristine || saving()" class="btn">
+            {{ saving() ? 'Saving…' : 'Save' }}
+        </button>
+    </div>
+    <div class="space-y-4">
+        <app-sf-field label="Landing page after sign-in" optional>
+            <app-sf-select formControlName="defaultLandingPage" [options]="landingPages" placeholder="Home (default)" />
+        </app-sf-field>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <app-sf-field label="Date format" optional>
+                <app-sf-select formControlName="dateFormat" [options]="dateFormats" placeholder="Default" />
+            </app-sf-field>
+            <app-sf-field label="Timezone" optional>
+                <app-sf-combobox formControlName="timezone" [options]="timezones" placeholder="Default" clearable />
+            </app-sf-field>
+        </div>
+    </div>
+</form>
