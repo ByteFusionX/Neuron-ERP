@@ -1,20 +1,30 @@
-<data-table
-        [data]="tableData"
-        [columns]="tableColumns"
-        [title]="'Request for Approvals'"
-        [isLoading]="isLoading"
-        [totalItems]="totalItems"
-        [isEmpty]="isEmpty"
-        [tableId]="'claims-approval-requests'"
-        (actionClick)="onActionClick($event)"
-        (filterChange)="onFilterChange($event)"
-        (paginationChange)="onPaginationChange($event)">
-
-        <ng-template #sideColumn>
-        <app-btn theme="secondary-outline" (buttonClick)="onRefreshClaims()">
-                <ng-icon name="heroArrowPath"></ng-icon>
-                   Refresh
-                </app-btn>
-                  
-        </ng-template>
-</data-table>
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Request for Approvals"
+    subtitle="Review and action expense claims waiting for your approval"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="totalItems"
+    [data]="tableData"
+    [columns]="tableColumns"
+    [loading]="isLoading"
+    [pageSize]="paginationService.paginationState().row"
+    [selectable]="false"
+    [showDetailPanel]="false"
+    searchPlaceholder="Search approval requests"
+    emptyMessage="No approval requests found"
+    [rowActions]="rowActions"
+    [tallRows]="true"
+    [syncViewWithUrl]="false"
+    storageKey="claims-approval-requests"
+    exportable
+    exportFileName="claims-approval-requests.xlsx"
+    (queryChange)="onQueryChange($event)"
+    (rowOpen)="onViewDetails($event)"
+    (rowAction)="onRowAction($event)"
+    (exportRequest)="onExportRequest()">
+  </app-data-grid>
+</div>

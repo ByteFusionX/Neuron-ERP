@@ -1,40 +1,47 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, ViewChild, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 
-import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ClaimService } from 'src/app/core/services/claim.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import {
+  DataGridBreadcrumb,
+  DataGridColumn,
+  DataGridFilter,
+  DataGridQuery,
+  DataGridRowAction,
+  DataGridRowActionEvent,
+} from 'src/app/shared/components/data-grid/data-grid.model';
 import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
-import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { AttachementsDialogComponent } from 'src/app/shared/components/attachements-dialog/attachements-dialog.component';
 import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
-import { NgIconComponent } from '@ng-icons/core';
 
 @Component({
   selector: 'app-request-for-approvals',
   standalone: true,
   imports: [
     CommonModule,
-    TableComponent,
-    ButtonComponent,
-    NgIconComponent
+    DataGridComponent
   ],
   templateUrl: './request-for-approvals.component.html',
   styleUrls: ['./request-for-approvals.component.css'],
   providers: [PaginationService]
 })
 export class RequestForApprovalsComponent implements OnInit {
+  @ViewChild('grid') grid!: DataGridComponent<any>;
 
   tableData: any[] = [];
-  tableColumns: TableColumn[] = [];
+  tableColumns: DataGridColumn<any>[] = [];
+  rowActions: DataGridRowAction<any>[] = [];
+  breadcrumbs: DataGridBreadcrumb[] = [
+    { label: 'Home', link: '/' },
+    { label: 'Claims' }
+  ];
   isLoading = false;
-  isEmpty = false;
   totalItems = 0;
   currentFilters: any = {};
 
@@ -43,12 +50,13 @@ export class RequestForApprovalsComponent implements OnInit {
   private _dialog = inject(MatDialog);
   private _router = inject(Router);
   private _toaster = inject(ToastrService);
-  private _paginationService = inject(PaginationService);
+  paginationService = inject(PaginationService);
   canApprove = false;
 
   ngOnInit(): void {
     this.checkPrivileges();
     this.setupTableColumns();
+    this.setupRowActions();
     this.loadApprovalRequests();
   }
 
@@ -64,119 +72,75 @@ export class RequestForApprovalsComponent implements OnInit {
   setupTableColumns(): void {
     this.tableColumns = [
       {
-        key: 'slNo',
-        label: 'Sl No',
-        type: 'text',
-        cellRenderer: (item: any) => {
-          const currentState = this._paginationService.paginationState();
-          const index = this.tableData.indexOf(item);
-          return (currentState.page - 1) * currentState.row + index + 1;
-        }
-      },
-      {
         key: 'reason',
         label: 'Reason',
         type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search reason...'
+        sortable: true,
+        locked: true
       },
       {
         key: 'amount',
         label: 'Amount',
-        type: 'text',
-        cellRenderer: (item: any) => `${item.amount?.toLocaleString() || 0} QAR`
+        type: 'currency',
+        currencyCode: 'QAR',
+        align: 'right',
+        sortable: true,
+        aggregate: 'sum'
       },
       {
         key: 'raisedDate',
         label: 'Raised Date',
         type: 'date',
-        filterable: true,
-        filterType: 'date',
-        filterPlaceholder: 'Search date...',
+        sortable: true
       },
       {
         key: 'raisedBy.firstName',
         label: 'Raised By',
         type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search raised by...',
-        cellRenderer: (item: any) => `${item.raisedBy?.firstName || ''} ${item.raisedBy?.lastName || ''}`
+        valueGetter: (item: any) => `${item.raisedBy?.firstName || ''} ${item.raisedBy?.lastName || ''}`.trim() || '-'
       },
       {
         key: 'jobId',
         label: 'Job Id',
-        type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search job id...',
-        clickable: true,
-        clickableValue: (item: any) => {
-          return item.job;
-        },
-        clickFunction: (item: any) => {
-          if (item.job) {
-            console.log(item.job);
-          } else {
-            this._toaster.error('Job not found');
-          }
-        },
+        type: 'text'
       },
       {
         key: 'attachements',
         label: 'Attachments',
-        type: 'action',
-        actions: [
-          {
-            icon: 'heroPaperClip',
-            tooltip: 'View Documents',
-            action: 'viewDocuments',
-            buttonClass: 'w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center',
-            condition: (item: any) => item.attachements?.length > 0
-          }
-        ]
+        type: 'text',
+        align: 'center',
+        valueGetter: (item: any) => item.attachements?.length ? `${item.attachements.length} file${item.attachements.length === 1 ? '' : 's'}` : '-'
       },
       {
         key: 'overallStatus',
         label: 'Status',
-        type: 'status',
-        filterable: true,
-        filterType: 'select',
-        filterPlaceholder: 'Search status...',
+        type: 'badge',
         filterOptions: [
           { label: 'Pending', value: 'pending' },
           { label: 'Approved', value: 'approved' },
           { label: 'Rejected', value: 'rejected' }
-        ]
-      },
-      {
-        key: 'actions',
-        label: 'Actions',
-        type: 'action',
-        actions: [
-          { icon: 'heroListBullet', tooltip: 'View Approval Status', action: 'viewDetails' },
-          { 
-            icon: 'heroCheckCircle', 
-            tooltip: 'Approve', 
-            action: 'approve',
-            condition: () => this.canApprove
-          },
-          { 
-            icon: 'heroXCircle', 
-            tooltip: 'Reject', 
-            action: 'reject',
-            condition: () => this.canApprove
-          },
-
-        ]
+        ],
+        badgeClasses: {
+          pending: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          approved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          rejected: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+        }
       }
+    ];
+  }
+
+  setupRowActions(): void {
+    this.rowActions = [
+      { id: 'viewDetails', label: 'View Approval Status', icon: 'list', quick: true },
+      { id: 'viewDocuments', label: 'View Documents', icon: 'files', hidden: (item) => !item.attachements?.length },
+      { id: 'approve', label: 'Approve', icon: 'check', hidden: () => !this.canApprove },
+      { id: 'reject', label: 'Reject', icon: 'close', variant: 'danger', hidden: () => !this.canApprove }
     ];
   }
 
   loadApprovalRequests(filters?: any): void {
     this.isLoading = true;
-    const currentState = this._paginationService.paginationState();
+    const currentState = this.paginationService.paginationState();
 
     const filterParams: any = {
       page: currentState.page,
@@ -189,58 +153,65 @@ export class RequestForApprovalsComponent implements OnInit {
         if (res && res.data) {
           this.tableData = res.data || [];
           this.totalItems = res.total;
-          this.isEmpty = this.tableData.length === 0;
+          this.paginationService.updatePaginationState({
+            page: currentState.page,
+            row: currentState.row,
+            total: this.totalItems
+          });
           this.isLoading = false;
         } else {
           this.isLoading = false;
-          this.isEmpty = true;
           this.tableData = [];
           this.totalItems = 0;
         }
       },
       error: () => {
         this.isLoading = false;
-        this.isEmpty = true;
         this._toaster.error('Failed to load approval requests');
       }
     });
   }
 
-  onFilterChange(filters: TableFilter[]): void {
-    this.isLoading = true;
-    const currentState = this._paginationService.paginationState();
-    this._paginationService.updatePaginationState({
-      page: 1,
-      row: currentState.row,
-      total: currentState.total
+  onQueryChange(query: DataGridQuery): void {
+    this.paginationService.updatePaginationState({
+      page: query.page,
+      row: query.pageSize,
+      total: this.paginationService.paginationState().total
     });
 
-    const filterParams: Partial<any> = filters.reduce((acc, filter) => {
-      switch (filter.type) {
-        case 'text':
-          acc[filter.column] = filter.value;
-          break;
-      }
-      return acc;
-    }, {} as Partial<any>);
-
+    const filterParams: any = {};
+    if (query.search) filterParams.reason = query.search;
+    query.filters.forEach((filter) => this.applyGridFilter(filterParams, filter));
     this.currentFilters = filterParams;
     this.loadApprovalRequests(filterParams);
   }
 
-  onActionClick(event: { action: string; item: any }): void {
-    switch (event.action) {
+  private applyGridFilter(params: any, filter: DataGridFilter): void {
+    if (filter.key === 'raisedDate') {
+      if (filter.op === 'before') params.toDate = filter.value;
+      if (filter.op === 'after' || filter.op === 'on') params.fromDate = filter.value;
+      return;
+    }
+    if (filter.key === 'raisedBy.firstName') {
+      params.firstName = filter.value;
+      return;
+    }
+    params[filter.key] = filter.value;
+  }
+
+  onRowAction(event: DataGridRowActionEvent<any>): void {
+    switch (event.action.id) {
       case 'viewDetails':
-        this.onViewDetails(event.item);
+        this.onViewDetails(event.row);
         break;
       case 'approve':
-        this.onApproveClaim(event.item);
+        this.onApproveClaim(event.row);
         break;
       case 'reject':
-        this.onRejectClaim(event.item);
+        this.onRejectClaim(event.row);
         break;
       case 'viewDocuments':
-        this.onViewDocuments(event.item);
+        this.onViewDocuments(event.row);
         break;
     }
   }
@@ -323,12 +294,12 @@ export class RequestForApprovalsComponent implements OnInit {
     });
   }
 
-  onPaginationChange(event: { page: number, row: number }): void {
-    this.loadApprovalRequests(this.currentFilters);
-  }
-
-  onRefreshClaims(): void {
-    this.loadApprovalRequests(this.currentFilters);
+  onExportRequest(): void {
+    const total = this.totalItems || this.tableData.length;
+    this._claimService.getApprovalsByEmployee({ ...this.currentFilters, page: 1, row: total }).subscribe({
+      next: (res) => this.grid?.exportToExcel(res?.data || []),
+      error: () => this._toaster.error('Failed to export approval requests')
+    });
   }
 
   onBackToClaims(): void {

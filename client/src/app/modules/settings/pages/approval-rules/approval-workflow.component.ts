@@ -44,9 +44,9 @@ type ConditionKey = 'time' | 'amount' | 'discount';
 const FEATURE_CONDITIONS: Record<string, ConditionKey[]> = {
   [WorkflowFeature.PRESALE]: ['time'],
   [WorkflowFeature.PURCHASE_APPROVAL]: ['time', 'amount'],
+  [WorkflowFeature.PO_APPROVAL]: ['time', 'amount'],
   [WorkflowFeature.DEAL_SHEET]: ['time', 'amount', 'discount'],
   [WorkflowFeature.PROJECT_CLAIM]: ['time', 'amount'],
-  [WorkflowFeature.PROCUREMENT_ASSIGNMENT]: ['time'],
   [WorkflowFeature.CLAIM]: ['time', 'amount'],
 };
 
@@ -59,9 +59,9 @@ const CONDITION_INFO: Record<ConditionKey, { icon: string; title: string; text: 
 const FEATURE_LABELS: Record<WorkflowFeature, string> = {
   [WorkflowFeature.PRESALE]: 'Presale Assignment',
   [WorkflowFeature.PURCHASE_APPROVAL]: 'Purchase Approval',
+  [WorkflowFeature.PO_APPROVAL]: 'PO Approval',
   [WorkflowFeature.DEAL_SHEET]: 'Deal Sheet Approval',
   [WorkflowFeature.PROJECT_CLAIM]: 'Project Assignment',
-  [WorkflowFeature.PROCUREMENT_ASSIGNMENT]: 'Procurement Assignment',
   [WorkflowFeature.CLAIM]: 'Claim Approval',
 };
 
@@ -69,7 +69,7 @@ const WORKFLOW_FEATURE_ORDER: WorkflowFeature[] = [
   WorkflowFeature.PRESALE,
   WorkflowFeature.DEAL_SHEET,
   WorkflowFeature.PURCHASE_APPROVAL,
-  WorkflowFeature.PROCUREMENT_ASSIGNMENT,
+  WorkflowFeature.PO_APPROVAL,
   WorkflowFeature.PROJECT_CLAIM,
   WorkflowFeature.CLAIM,
 ];
@@ -158,7 +158,7 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
   ];
 
   rowActions: DataGridRowAction<WorkflowGridRow>[] = [
-    { id: 'configure', label: 'New Step', icon: 'edit', quick: true, panel: true, hidden: () => !this.canEdit },
+    { id: 'configure', label: 'New Step', icon: 'plus', quick: true, panel: true, hidden: () => !this.canEdit },
   ];
 
   private subscriptions = new Subscription();

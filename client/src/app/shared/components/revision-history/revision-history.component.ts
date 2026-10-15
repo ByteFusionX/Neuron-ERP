@@ -59,7 +59,6 @@ const FIELD_LABELS: Record<keyof QuoteRevisionSnapshot, string> = {
   termsAndCondition: 'Terms & conditions',
   paymentTerms: 'Payment terms',
   deliveryTerms: 'Delivery terms',
-  warranty: 'Warranty',
   deliveryLocation: 'Delivery location',
   validityDate: 'Validity date',
 };

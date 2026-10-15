@@ -152,20 +152,41 @@ const workflowConditionsMatch = (workflow: any, context?: ApprovalContext) => {
     return workflow.conditions.every((condition: any) => conditionMatches(condition, context));
 };
 
+const PURCHASE_FLOW_FEATURES = ['purchaseApproval', 'poApproval'];
+
 export const getWorkflowSteps = async (workflowFeature: string, employeeId: string, context?: ApprovalContext) => {
     try {
-        const workflow = await Workflow.findOne({ feature: workflowFeature }).populate('steps.role');
+        let workflow: any = await Workflow.findOne({ feature: workflowFeature }).populate('steps.role');
+
+        // Purchase and PO approval always run on the workflow: until one is saved, Admin decides alone.
+        if (!workflow && PURCHASE_FLOW_FEATURES.includes(workflowFeature)) {
+            workflow = { feature: workflowFeature, steps: [], version: 1, needsManagerApproval: false };
+        }
 
         // Admin is pinned on top of every workflow, so a workflow without other steps still routes to Admin.
         if (!workflow) {
             throw new Error(`No workflow configured for ${workflowFeature} claims`);
         }
 
+        const employeeData = await Employee.findOne({ _id: employeeId }).populate('reportingTo');
+
         if (!workflowConditionsMatch(workflow, context)) {
+            // PR / PO never skip approval: with no matching route, Admin decides alone (even when Admin raised it).
+            if (PURCHASE_FLOW_FEATURES.includes(workflowFeature)) {
+                const skippedAdminRole = await Category.findOne({ role: /^superadmin$/i }).select('_id').lean();
+                if (skippedAdminRole) {
+                    return [{
+                        status: 'pending',
+                        role: skippedAdminRole._id,
+                        step: 1,
+                        managerApproval: false,
+                        assignedAt: new Date(),
+                        workflowVersion: workflow.version ?? 1,
+                    }];
+                }
+            }
             return [];
         }
-
-        const employeeData = await Employee.findOne({ _id: employeeId }).populate('reportingTo');
         const isReportingToExist = employeeData.reportingTo && employeeData.reportingTo !== null;
         
         let approvalStatus = [];
@@ -199,6 +220,17 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
         // Requester already holds the stage's role -> skip it (always on), but never leave the route without an approver.
         // Requester is Admin: nobody above them, so nothing to approve.
         if (requesterRole && adminRole && idsMatch(adminRole._id, requesterRole) && !approvalStatus.length) {
+            // PR / PO: every other stage is skipped and Admin approves their own request, with no limits.
+            if (PURCHASE_FLOW_FEATURES.includes(workflowFeature)) {
+                return [{
+                    status: 'pending',
+                    role: adminRole._id,
+                    step: 1,
+                    managerApproval: false,
+                    assignedAt: now,
+                    workflowVersion: workflow.version ?? 1,
+                }];
+            }
             return [];
         }
 
@@ -271,6 +303,26 @@ export const getWorkflowSteps = async (workflowFeature: string, employeeId: stri
     }
 }
 
+/**
+ * Super Admin restarts a pending request's route: the route is rebuilt from the current workflow, unticked stages are
+ * dropped for this request only, and already-decided steps stay as history. Admin alone decides if nothing is ticked.
+ */
+export const rebuildPendingRoute = async (workflowFeature: string, requesterId: string, context: ApprovalContext, existing: any[], chosen: string[] | null) => {
+    let stages: any[] = await getWorkflowSteps(workflowFeature, requesterId, context);
+    const adminRole: any = await Category.findOne({ role: /^superadmin$/i }).select('_id').lean();
+    if (chosen) {
+        stages = stages.filter(stage => chosen.includes(String(stage.role?._id ?? stage.role)));
+        if (!stages.length && adminRole) {
+            stages = [{ status: 'pending', role: adminRole._id, step: 1, managerApproval: false, assignedAt: new Date() }];
+        }
+        const order = [...new Set(stages.map(stage => stage.step))].sort((a: any, b: any) => a - b);
+        stages = stages.map(stage => ({ ...stage, step: order.indexOf(stage.step) + 1 }));
+    }
+    if (!stages.length) throw new Error('No approval route could be built for this request');
+    const previous = (existing ?? []).map((a: any) => a?.toObject?.() ?? a).filter((a: any) => a.status !== 'pending');
+    return [...previous, ...stages.map(stage => ({ ...stage, step: stage.step + previous.length }))];
+};
+
 export const updateApprovalStatus = async (status: string, approvalStatus: any, comment: string, employee: any, context?: ApprovalContext) => {
     try {
         approvalStatus = escalateApprovalStatus(approvalStatus);
@@ -283,15 +335,16 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
             throw new Error('No pending approvals found');
         }
 
-        if (context?.requesterId && idsMatch(context.requesterId, employee._id)) {
+        // Admin sits on top of every workflow with no limits: they can act on whatever step is current.
+        const isAdmin = /^superadmin$/i.test(employee?.category?.role ?? '');
+
+        // Everyone but Admin is barred from deciding their own request.
+        if (!isAdmin && context?.requesterId && idsMatch(context.requesterId, employee._id)) {
             throw new Error('You cannot approve or reject a request that you raised');
         }
 
         const currentStep = pendingStatuses[0].step;
         const currentApprovals = pendingStatuses.filter(approval => approval.step === currentStep);
-
-        // Admin sits on top of every workflow with no limits: they can act on whatever step is current.
-        const isAdmin = /^superadmin$/i.test(employee?.category?.role ?? '');
 
         const nextApproval = currentApprovals.find(approval => {
             if (approval.managerApproval) {
@@ -355,15 +408,42 @@ export const updateApprovalStatus = async (status: string, approvalStatus: any, 
             );
         }
 
+        if (status === 'approved') startNextStageClock(approvalStatus);
+
         return approvalStatus;
     } catch (error) {
         throw new Error(error);
     }
 }
 
+/**
+ * The time limits of every stage are stored when the request is submitted, but a stage only starts waiting once the
+ * stage before it has decided. When a stage is approved, the next one's window (and reminder) restart from that moment.
+ */
+const startNextStageClock = (approvalStatus: any[], now = new Date()) => {
+    const pending = approvalStatus.filter(approval => approval.status === 'pending');
+    if (!pending.length) return;
+    const nextStep = Math.min(...pending.map(approval => approval.step ?? 0));
+    pending.filter(approval => (approval.step ?? 0) === nextStep && !approval.escalatedAt).forEach(approval => {
+        if (!approval.escalationDueAt || !approval.assignedAt) return;
+        const assigned = new Date(approval.assignedAt).getTime();
+        const window = Math.max(new Date(approval.escalationDueAt).getTime() - assigned, 0);
+        const reminder = approval.reminderDueAt ? Math.max(new Date(approval.reminderDueAt).getTime() - assigned, 0) : null;
+        approval.assignedAt = now;
+        approval.escalationDueAt = new Date(now.getTime() + window);
+        if (reminder !== null) {
+            approval.reminderDueAt = new Date(now.getTime() + reminder);
+            approval.reminderSentAt = null;
+        }
+    });
+};
+
 export const escalateApprovalStatus = (approvalStatus: any[], now = new Date()) => {
+    // Only the stage waiting right now can time out; later stages have not been handed to anyone yet.
+    const pendingSteps = approvalStatus.filter(approval => approval.status === 'pending').map(approval => approval.step ?? 0);
+    const currentStep = pendingSteps.length ? Math.min(...pendingSteps) : null;
     return approvalStatus.map(approval => {
-        if (approval.status !== 'pending' || approval.escalatedAt || !approval.escalationDueAt) {
+        if (approval.status !== 'pending' || approval.escalatedAt || !approval.escalationDueAt || (currentStep !== null && (approval.step ?? 0) > currentStep)) {
             return approval;
         }
 
@@ -376,8 +456,9 @@ export const escalateApprovalStatus = (approvalStatus: any[], now = new Date()) 
             return approval;
         }
 
-        const escalatedApproval = {
-            ...approval,
+        // Spreading a Mongoose subdocument drops its fields (status, role, ...), so work on a plain copy.
+        const escalatedApproval: any = {
+            ...(typeof approval.toObject === 'function' ? approval.toObject() : approval),
             escalatedAt: now,
         };
 

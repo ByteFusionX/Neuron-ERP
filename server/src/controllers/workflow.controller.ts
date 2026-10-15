@@ -75,10 +75,10 @@ const validateWorkflowSteps = (steps: any[], allowEmpty = false) => {
 const ALLOWED_CONDITIONS: Record<string, string[]> = {
     presale: ['time'],
     purchaseApproval: ['time', 'amount'],
+    poApproval: ['time', 'amount'],
     dealSheet: ['time', 'amount', 'discount'],
     claim: ['time', 'amount'],
     projectClaim: ['time', 'amount'],
-    procurementAssignment: ['time'],
 };
 
 const normalizeConditionFlags = (feature: string, flags: any) => {

@@ -1,3 +1,4 @@
+import PurchaseRequest from "../models/purchaseRequest.model";
 import Workflow from "../models/workflow.model";
 import Enquiry from "../models/enquiry.model";
 import Category from "../models/category.model";
@@ -75,5 +76,20 @@ const restartWaitingPresaleJobs = async () => {
             { _id: enquiry._id },
             { $set: { 'preSale.assignApproval': { ...chain, restartCount: (enquiry.preSale as any)?.assignApproval?.restartCount ?? 0 } } }
         );
+    }
+};
+
+/**
+ * Job purchase requests have no Draft status (a saved-but-unsubmitted one is In Progress), and no PR exists until the
+ * buyer creates it: the empty New placeholders from the earlier design are removed (the job shows on the New tab instead).
+ * General (job-less) purchases keep Drafted. Safe to run on every start: nothing is left to convert after the first.
+ */
+export const migrateJobDraftsToNew = async () => {
+    try {
+        const jobFilter = { sourceType: { $ne: 'manual' }, jobId: { $exists: true, $ne: null } };
+        await PurchaseRequest.updateMany({ ...jobFilter, status: 'New', isDeleted: false, 'items.0': { $exists: false } }, { $set: { isDeleted: true } });
+        await PurchaseRequest.updateMany({ ...jobFilter, status: { $in: ['Drafted', 'New'] } }, { $set: { status: 'In Progress' } });
+    } catch (error) {
+        console.error('Failed to migrate job purchase drafts:', error);
     }
 };
