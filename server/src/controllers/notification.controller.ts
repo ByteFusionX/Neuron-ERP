@@ -159,6 +159,8 @@ export const getAllNotifications = async (req: Request, res: Response, next: Nex
                         return privileges.purchaseOrder?.canInitiateLPO === true;
                     case 'PurchaseRejected':
                         return privileges.purchase?.viewReport !== 'none';
+                    case 'PurchaseRequestAllocated':
+                        return privileges.purchase?.viewReport !== 'none' || privileges.purchase?.create === true;
                     case 'LpoApprovalRequest':
                         return privileges.purchaseOrder?.canApprovePOs === true;
                     case 'LpoApproved':
@@ -228,6 +230,44 @@ export const markAsReadByTypes = async (req: Request, res: Response, next: NextF
         const result = await Notification.updateMany(
             { type: { $in: types }, recipients: { $elemMatch: { objectId: recipientId, status: { $ne: "read" } } } },
             { $set: { "recipients.$.status": "read" } }
+        );
+        return res.status(200).json({ success: true, modifiedCount: result.modifiedCount });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/** Hides a notification for the current user only; 'archived' rows are left out of both panel lists. */
+export const dismissNotification = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { notificationId } = req.body;
+        const userData = await getEmployeeData(req.user);
+        if (!notificationId || !userData?._id) {
+            return res.status(400).json({ success: false, message: 'notificationId is required' });
+        }
+        const result = await Notification.updateOne(
+            { _id: notificationId, "recipients.objectId": userData._id },
+            { $set: { "recipients.$.status": "archived" } }
+        );
+        if (!result.matchedCount) {
+            return res.status(404).json({ success: false, message: 'Notification not found' });
+        }
+        return res.status(200).json({ success: true });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const markAllAsRead = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userData = await getEmployeeData(req.user);
+        if (!userData?._id) {
+            return res.status(400).json({ success: false, message: 'Employee not found' });
+        }
+        const result = await Notification.updateMany(
+            { recipients: { $elemMatch: { objectId: userData._id, status: 'unread' } } },
+            { $set: { "recipients.$[me].status": "read" } },
+            { arrayFilters: [{ "me.objectId": userData._id, "me.status": "unread" }] }
         );
         return res.status(200).json({ success: true, modifiedCount: result.modifiedCount });
     } catch (error) {
@@ -403,6 +443,10 @@ export const getRoutePath = (notificationType: string, referenceId: any, additio
                 routeData: { purchaseId }
             };
         }
+
+        case 'PurchaseRequestAllocated':
+            // The job waits on the buyer's PR list (New tab); no purchase exists yet.
+            return { routePath: '/purchase/pr' };
 
         case 'PurchaseRejected': {
             const purchaseId = additionalData?.purchaseId || referenceId?._id?.toString() || referenceId?.toString();

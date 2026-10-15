@@ -93,7 +93,10 @@ export class NotificationService {
 
         switch (type) {
             case 'Announcement':
-                return { routePath: '/announcements' };
+                return {
+                    routePath: '/announcements',
+                    routeData: { id: additionalData?.announcementId || referenceId?._id?.toString() || referenceId?.toString() },
+                };
             
             case 'AssignedJob':
                 return { routePath: '/presales' };
@@ -308,6 +311,26 @@ export class NotificationService {
         );
     }
 
+    /** Marks every unread notification read, updating local state first so badges clear at once. */
+    markAllAsRead(): Observable<any> {
+        const current = this.textNotificationsSubject.value;
+        this.textNotificationsSubject.next({ viewed: [...current.unviewed, ...current.viewed], unviewed: [] });
+        this.markedUnreadIdsSubject.next(new Set());
+        this.persistMarkedUnreadIds(new Set());
+        return this.http.patch(`${this.api}/notification/mark-all-as-read`, {});
+    }
+
+    /** Hides a notification for this user (server status 'archived'). */
+    dismiss(notificationId: string): Observable<any> {
+        const current = this.textNotificationsSubject.value;
+        this.textNotificationsSubject.next({
+            viewed: current.viewed.filter(n => n._id !== notificationId),
+            unviewed: current.unviewed.filter(n => n._id !== notificationId),
+        });
+        this.clearMarkedUnread(notificationId);
+        return this.http.patch(`${this.api}/notification/dismiss`, { notificationId });
+    }
+
     // Some notification types deep-link to a page outside their sidebar list route
     // (e.g. PurchaseApprovalRequest opens /purchase/view-purchase/:id), so a plain
     // routePath-prefix match against calculateRoutePath() never fires when the user
@@ -381,6 +404,9 @@ export class NotificationService {
         if (routePath === '/quotations/view' && routeData) {
             const quoteId = routeData?._id?.toString?.() ?? routeData?.toString?.();
             return { commands: [routePath, quoteId] };
+        }
+        if (routePath === '/announcements' && routeData?.id) {
+            return { commands: [routePath], extras: { queryParams: { id: routeData.id } } };
         }
         if (routePath === '/enquiry' && routeData?.enquiryId) {
             return {

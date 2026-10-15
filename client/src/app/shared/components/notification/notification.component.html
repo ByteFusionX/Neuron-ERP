@@ -1,158 +1,77 @@
-<div class="w-full min-w-96">
-  <!-- Header Section -->
-  <div class="flex items-center justify-between p-4 border-b">
-    <div class="flex items-center">
-      <ng-icon name="heroBellSolid" class="text-lg"></ng-icon>
-      <ng-container *ngIf="activeTab === 'all'; else unreadHeaderCount">
-        <ng-container *ngIf="(notifications$ | async) as notifications">
-          <span class="ml-2 text-sm font-semibold">
-            {{ notifications.unviewed.length }} New Notifications
+<div role="dialog" aria-label="Notifications"
+  class="flex max-h-[min(560px,calc(100vh-5rem))] w-[min(400px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-erp-border bg-erp-surface shadow-xl dark:border-erp-border-dark dark:bg-erp-surface-dark"
+  *ngIf="sections$ | async as s">
+
+  <!-- Header -->
+  <header class="flex items-center gap-2 border-b border-gray-100 px-4 py-3 dark:border-erp-border-dark">
+    <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h2>
+    <span *ngIf="s.unreadCount" class="rounded-full bg-violet-600 px-1.5 text-[10px] font-semibold leading-4 text-white">{{ s.unreadCount }} new</span>
+    <app-action-menu class="ms-auto" label="Notification settings" icon="heroCog6Tooth" [items]="menuItems(s.unreadCount, (pushSubscribed$ | async) ?? false)"
+      (selected)="onMenu($event)"></app-action-menu>
+  </header>
+
+  <div class="border-b border-gray-100 px-4 py-2 dark:border-erp-border-dark">
+    <app-detail-filter-chips [options]="tabs" [value]="activeTab" (valueChange)="activeTab = $any($event)"></app-detail-filter-chips>
+  </div>
+
+  <!-- List -->
+  <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <ng-container *ngFor="let section of (activeTab === 'All' ? s.all : s.unread)">
+      <p class="sticky top-0 z-10 bg-erp-surface/95 px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide backdrop-blur dark:bg-erp-surface-dark/95"
+        [ngClass]="section.label === 'Needs action' ? warnText : 'text-gray-400 dark:text-gray-500'">
+        {{ section.label }}
+      </p>
+
+      <div *ngFor="let n of section.items; trackBy: trackById" role="button" tabindex="0"
+        (click)="open(n)" (keydown.enter)="open(n)"
+        class="group relative flex cursor-pointer gap-3 border-b border-gray-100 px-4 py-3 transition hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50 dark:border-erp-border-dark dark:hover:bg-gray-800/60 dark:focus-visible:bg-gray-800/60">
+
+        <!-- Avatar with type badge -->
+        <div class="relative mt-0.5 h-7 w-7 shrink-0">
+          <app-detail-avatar *ngIf="initials(n); else sysAvatar" [text]="initials(n)" size="sm"></app-detail-avatar>
+          <ng-template #sysAvatar>
+            <span class="grid h-7 w-7 place-content-center rounded-full bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              <ng-icon [name]="meta(n.type).icon" class="text-sm"></ng-icon>
+            </span>
+          </ng-template>
+          <span *ngIf="initials(n)" class="absolute -bottom-1 -right-1 grid h-3.5 w-3.5 place-content-center rounded-full text-white ring-2 ring-erp-surface dark:ring-erp-surface-dark"
+            [ngClass]="dotClass(meta(n.type).tone)">
+            <ng-icon [name]="meta(n.type).icon" class="text-[8px]"></ng-icon>
           </span>
-        </ng-container>
-      </ng-container>
-      <ng-template #unreadHeaderCount>
-        <span class="ml-2 text-sm font-semibold">
-          {{ (unreadNotifications$ | async)?.length || 0 }} Unread Notifications
-        </span>
-      </ng-template>
-    </div>
-    <div class="flex items-center gap-3">
-      <button *ngIf="pushSupported" type="button"
-        class="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition disabled:opacity-50"
-        [class.bg-blue-50]="(pushSubscribed$ | async)"
-        [class.text-blue-700]="(pushSubscribed$ | async)"
-        [class.border-blue-300]="(pushSubscribed$ | async)"
-        [class.text-gray-500]="!(pushSubscribed$ | async)"
-        [class.border-gray-300]="!(pushSubscribed$ | async)"
-        [disabled]="pushToggleBusy"
-        [matTooltip]="(pushSubscribed$ | async) ? 'Disable push notifications' : 'Enable push notifications'"
-        matTooltipPosition="above"
-        (click)="onTogglePush()">
-        <ng-icon [name]="(pushSubscribed$ | async) ? 'heroBellAlert' : 'heroBell'" class="text-sm"></ng-icon>
-        {{ (pushSubscribed$ | async) ? 'Notifications On' : 'Enable Notifications' }}
-      </button>
-      <ng-icon name="heroXMark" class="cursor-pointer text-lg hover:text-red-500" (click)="onClose()"></ng-icon>
-    </div>
-  </div>
+        </div>
 
-  <!-- Topbar with Toggle Buttons -->
-  <div class="flex justify-center border-b">
-    <button
-      class="w-full sm:w-1/2 text-sm font-semibold p-2 hover:bg-gray-100"
-      [class.bg-gray-200]="activeTab === 'all'" (click)="activeTab = 'all'">
-      All
-    </button>
-    <button class="w-full sm:w-1/2 text-sm font-semibold p-2 hover:bg-gray-100"
-      [class.bg-gray-200]="activeTab === 'unread'" (click)="activeTab = 'unread'">
-      Unread
-    </button>
-  </div>
+        <!-- Body -->
+        <div class="min-w-0 flex-1 pe-6">
+          <p class="truncate text-xs text-gray-500 dark:text-gray-400">
+            <span class="font-medium text-gray-700 dark:text-gray-300">{{ actor(n) }}</span>
+            · {{ n.date | relativeTime }}
+          </p>
+          <p class="line-clamp-1 text-[13px] text-gray-900 dark:text-gray-100" [class.font-semibold]="n.isUnread">{{ n.title }}</p>
+          <p *ngIf="n.message" class="mt-0.5 line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ n.message }}</p>
 
-  <!-- Notification item template, reused by both tabs -->
-  <ng-template #notificationItem let-notification="notification">
-    <div
-      (click)="onNotificationClick(notification)"
-      class="flex items-center bg-white hover:bg-gray-50 transition duration-200 border-b px-4 py-2.5 rounded-lg cursor-pointer"
-      [class.bg-orange-50]="notification.isUnread">
-      <div [ngClass]="{
-        'bg-blue-100': notification.type === 'Event' && !isMarkedUnread(notification._id)
-      }" class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-white">
-
-        <ng-icon [name]="getIconName(notification.referenceId?.event, !isMarkedUnread(notification._id))"
-          class="text-base"
-          [class.text-blue-600]="!isMarkedUnread(notification._id)"
-          [class.text-orange-500]="isMarkedUnread(notification._id)">
-        </ng-icon>
-      </div>
-
-      <!-- Notification Content -->
-      <div class="ml-3 w-full">
-        <div class="flex justify-between items-center gap-2 relative">
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="text-sm" [class.font-semibold]="notification.isUnread" [class.text-gray-800]="notification.isUnread" [class.font-medium]="!notification.isUnread" [class.text-gray-600]="!notification.isUnread">
-                {{ notification.title }}
-              </h3>
-              <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 whitespace-nowrap">
-                {{ formatType(notification.type) }}
-              </span>
-              <span *ngIf="notification.type === 'Event' && notification.referenceId?.event"
-                class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                {{ notification.referenceId.event }}
-              </span>
-            </div>
-            <p class="text-xs text-gray-600 mt-1 break-words whitespace-normal max-w-sm leading-relaxed">{{ notification.message }}</p>
-            <p class="text-xs text-gray-500 mt-2 flex items-center gap-2">
-              <span *ngIf="notification.sentBy?.avatar"
-                class="flex-shrink-0 w-5 h-5 rounded-full overflow-hidden">
-                <img [src]="notification.sentBy.avatar" alt="{{ notification.sentBy.firstName }}" />
-              </span>
-              <span>{{ notification.sentBy ? 'Assigned by: ' + (notification.sentBy.firstName || '') + ' ' + (notification.sentBy.lastName || '') : 'System notification' }}
-                <span *ngIf="notification.type === 'Event' && notification.referenceId?.collectionId"
-                  class="px-2 py-1 bg-gray-200 text-gray-800 rounded text-xs font-medium">
-                  {{ notification.referenceId.collectionId.enquiryId }}
-                </span>
-              </span>
-            </p>
-
-            <!-- Event Date -->
-            <p *ngIf="notification.type === 'Event'" class="text-xs text-green-600 font-medium mt-2">
-              Event Date: {{ notification.referenceId.date | date : "EEEE yyyy-MM-dd hh:mm a" }}
-            </p>
+          <div *ngIf="eventDate(n) || readableEnquiryId(n)" class="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <app-detail-badge *ngIf="eventDate(n)" tone="info" [label]="(eventDate(n) | date: 'EEE, d MMM · h:mm a') ?? ''"></app-detail-badge>
+            <app-detail-badge *ngIf="readableEnquiryId(n)" tone="neutral" [label]="readableEnquiryId(n) ?? ''"></app-detail-badge>
           </div>
+        </div>
 
-          <!-- Notification Actions -->
-          <div class="flex flex-col items-end gap-2 h-full justify-between">
-            <button type="button"
-              class="p-1 text-orange-500 hover:text-orange-600"
-              [matTooltip]="isMarkedUnread(notification._id) ? 'Move back to all' : 'Mark as unread'"
-              matTooltipPosition="above"
-              (click)="onMarkAsUnread(notification._id, $event)">
-              <ng-icon [name]="isMarkedUnread(notification._id) ? 'heroBellSolid' : 'heroBell'" class="text-base"></ng-icon>
-            </button>
-          </div>
-
-          <!-- Notification Date (positioned at the bottom-right) -->
-          <p class="text-xs text-gray-400 absolute bottom-0 right-0 mt-auto">{{ notification.date | relativeTime
-            }}</p>
+        <!-- Unread dot / hover actions -->
+        <span *ngIf="n.isUnread" class="absolute right-4 top-4 h-2 w-2 rounded-full bg-violet-600 group-hover:hidden group-focus-within:hidden" aria-label="Unread"></span>
+        <div class="absolute right-2 top-2 hidden items-center rounded-lg border border-erp-border bg-erp-surface shadow-sm group-hover:flex group-focus-within:flex dark:border-erp-border-dark dark:bg-erp-surface-dark">
+          <app-dp-icon-button [icon]="n.isUnread ? 'check' : 'mail'" [label]="n.isUnread ? 'Mark as read' : 'Mark as unread'"
+            size="w-3.5 h-3.5" (click)="toggleRead(n, $event)"></app-dp-icon-button>
+          <app-dp-icon-button icon="close" label="Dismiss" size="w-3.5 h-3.5" (click)="dismiss(n, $event)"></app-dp-icon-button>
         </div>
       </div>
+    </ng-container>
+
+    <!-- Empty state -->
+    <div *ngIf="!(activeTab === 'All' ? s.all : s.unread).length" class="px-6 py-10 text-center">
+      <ng-icon name="heroInbox" class="text-2xl text-gray-300"></ng-icon>
+      <p class="mt-2 text-xs font-medium text-gray-700 dark:text-gray-300">You're all caught up</p>
+      <p class="mt-0.5 text-xs text-gray-500">
+        {{ activeTab === 'Unread' ? 'No unread notifications.' : 'New notifications will show up here.' }}
+      </p>
     </div>
-  </ng-template>
-
-  <!-- Notifications Content -->
-  <div>
-    <!-- All Notifications -->
-    <ng-container *ngIf="activeTab === 'all'">
-      <h2 class="text-sm font-semibold text-gray-700 px-4 py-2 border-b">All Notifications</h2>
-      <ng-container *ngIf="(allNotifications$ | async) as notifications">
-        <ng-container *ngIf="notifications.length > 0; else noAll">
-          <div *ngFor="let notification of notifications">
-            <ng-container *ngTemplateOutlet="notificationItem; context: { notification: notification }"></ng-container>
-          </div>
-        </ng-container>
-        <ng-template #noAll>
-          <p class="text-gray-500 text-center mt-4">No notifications.</p>
-        </ng-template>
-      </ng-container>
-    </ng-container>
-
-    <!-- Unread Notifications -->
-    <ng-container *ngIf="activeTab === 'unread'">
-      <h2 class="text-sm font-semibold text-gray-700 px-4 py-2 border-b">Unread Notifications<br>
-        <span class="text-xs text-gray-400 font-light">Stays here until marked as read</span>
-      </h2>
-      <ng-container *ngIf="(unreadNotifications$ | async) as notifications">
-        <ng-container *ngIf="notifications.length > 0; else noUnread">
-          <div *ngFor="let notification of notifications">
-            <ng-container *ngTemplateOutlet="notificationItem; context: { notification: notification }"></ng-container>
-          </div>
-        </ng-container>
-        <ng-template #noUnread>
-          <p class="text-gray-500 text-center mt-4">No unread notifications.</p>
-        </ng-template>
-      </ng-container>
-    </ng-container>
-
   </div>
 </div>

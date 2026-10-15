@@ -45,6 +45,7 @@ const notificationSchema = new Schema<Notification>({
             'PurchaseProcurementNotice',
             'PurchaseApproved',
             'PurchaseRejected',
+            'PurchaseRequestAllocated',
             'LpoApprovalRequest',
             'LpoApproved',
             'LpoRejected',
