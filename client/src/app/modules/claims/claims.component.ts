@@ -1,19 +1,24 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, ViewChild, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { ToastrService } from 'ngx-toastr';
 
-import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
 import { PaginationService } from 'src/app/core/services/pagination.service';
 import { ClaimService } from 'src/app/core/services/claim.service';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import {
+  DataGridBreadcrumb,
+  DataGridColumn,
+  DataGridFilter,
+  DataGridQuery,
+  DataGridRowAction,
+  DataGridRowActionEvent,
+} from 'src/app/shared/components/data-grid/data-grid.model';
 
 import { ClaimFormComponent } from './claim-form/claim-form.component';
 import { ApprovalStatusComponent, ApprovalStatusData } from 'src/app/shared/components/approval-status/approval-status.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { NgIconComponent } from '@ng-icons/core';
 import { AttachementsDialogComponent } from 'src/app/shared/components/attachements-dialog/attachements-dialog.component';
 
 @Component({
@@ -21,30 +26,32 @@ import { AttachementsDialogComponent } from 'src/app/shared/components/attacheme
   standalone: true,
   imports: [
     CommonModule,
-    TableComponent,
-    ButtonComponent,
-    NgIconComponent
+    DataGridComponent
   ],
   templateUrl: './claims.component.html',
   styleUrls: ['./claims.component.css'],
   providers: [PaginationService]
 })
 export class ClaimsComponent implements OnInit {
+  @ViewChild('grid') grid!: DataGridComponent<any>;
 
   claimType: 'normal' | 'project' = 'normal';
   tableData: any[] = [];
-  tableColumns: TableColumn[] = [];
+  tableColumns: DataGridColumn<any>[] = [];
+  rowActions: DataGridRowAction<any>[] = [];
+  breadcrumbs: DataGridBreadcrumb[] = [
+    { label: 'Home', link: '/' },
+    { label: 'Claims' }
+  ];
   isLoading = false;
-  isEmpty = false;
   totalItems = 0;
   currentFilters: any = {};
 
   private _claimService = inject(ClaimService);
   private _dialog = inject(MatDialog);
   private _route = inject(ActivatedRoute);
-  private _router = inject(Router);
   private _toaster = inject(ToastrService);
-  private _paginationService = inject(PaginationService);
+  paginationService = inject(PaginationService);
 
   ngOnInit(): void {
     this._route.params.subscribe(params => {
@@ -55,72 +62,46 @@ export class ClaimsComponent implements OnInit {
     });
 
     this.setupTableColumns();
+    this.setupRowActions();
     this.loadClaims(this.currentFilters);
   }
 
   setupTableColumns(): void {
     this.tableColumns = [
       {
-        key: 'slNo',
-        label: 'Sl No',
-        type: 'text',
-        cellRenderer: (item: any) => {
-          const currentState = this._paginationService.paginationState();
-          const index = this.tableData.indexOf(item);
-          return (currentState.page - 1) * currentState.row + index + 1;
-        }
-      },
-      {
         key: 'reason',
         label: 'Reason',
         type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search reason...'
+        sortable: true,
+        locked: true
       },
       {
         key: 'amount',
         label: 'Amount',
-        type: 'text',
-        cellRenderer: (item: any) => `${item.amount?.toLocaleString() || 0} QAR`
+        type: 'currency',
+        currencyCode: 'QAR',
+        align: 'right',
+        sortable: true,
+        aggregate: 'sum'
       },
       {
         key: 'raisedDate',
         label: 'Raised Date',
         type: 'date',
-        filterable: true,
-        filterType: 'date',
-        filterPlaceholder: 'Search date...',
+        sortable: true
       },
       {
         key: 'raisedBy.firstName',
         label: 'Raised By',
         type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search raised by...',
-        cellRenderer: (item: any) => `${item.raisedBy?.firstName || ''} ${item.raisedBy?.lastName || ''}`
+        valueGetter: (item: any) => `${item.raisedBy?.firstName || ''} ${item.raisedBy?.lastName || ''}`.trim() || '-'
       }
     ];
     if(this.claimType == 'normal'){
       this.tableColumns.push({
         key: 'jobId',
         label: 'Job Id',
-        type: 'text',
-        filterable: true,
-        filterType: 'text',
-        filterPlaceholder: 'Search job id...',
-        clickable: true,
-        clickableValue: (item: any) => {
-          return item.job;
-        },
-        clickFunction: (item: any) => {
-          if(item.job){
-            console.log(item.job);
-          }else{
-            this._toaster.error('Job not found');
-          }
-        },
+        type: 'text'
       });
     }
 
@@ -128,63 +109,51 @@ export class ClaimsComponent implements OnInit {
       {
         key: 'attachements',
         label: 'Attachments',
-        type: 'action',
-        actions: [
-          {
-            icon: 'heroPaperClip',
-            tooltip: 'View Documents',
-            action: 'viewDocuments',
-            buttonClass: 'w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center',
-            condition: (item: any) => item.attachements?.length > 0
-          }
-        ]
+        type: 'text',
+        align: 'center',
+        valueGetter: (item: any) => item.attachements?.length ? `${item.attachements.length} file${item.attachements.length === 1 ? '' : 's'}` : '-'
       },
       {
         key: 'overallStatus',
         label: 'Status',
-        type: 'status',
-        filterable: true,
-        filterType: 'select',
-        filterPlaceholder: 'Search status...',
+        type: 'badge',
         filterOptions: [
           { label: 'Pending', value: 'pending' },
           { label: 'Approved', value: 'approved' },
           { label: 'Rejected', value: 'rejected' }
         ],
+        badgeClasses: {
+          pending: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          approved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+          rejected: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+        }
       },
       {
         key: 'paymentStatus',
         label: 'Payment Status',
-        type: 'status',
-        cellRenderer: (item: any) => item.paymentStatus || 'Pending'
-      },
-      {
-        key: 'actions',
-        label: 'Actions',
-        type: 'action',
-        actions: [
-          { icon: 'heroListBullet', tooltip: 'View Approval Status', action: 'viewApprovalStatus' },
-          {
-            icon: 'heroPaperAirplane',
-            tooltip: 'Resubmit Claim',
-            action: 'resubmitClaim',
-            condition: (item: any) => item.approvalStatus?.some((status: any) => status.status === 'rejected')
-          },
-          {
-            icon: 'heroBanknotes',
-            tooltip: 'Mark as Paid',
-            action: 'markAsPaid',
-            condition: (item: any) => item.overallStatus === 'approved' && item.paymentStatus !== 'Paid'
-          },
-          { icon: 'heroTrash', tooltip: 'Delete Claim', action: 'deleteClaim' }
-        ]
+        type: 'badge',
+        valueGetter: (item: any) => item.paymentStatus || 'Pending',
+        badgeClasses: {
+          Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          Paid: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+        }
       }
     );
   }
 
+  setupRowActions(): void {
+    this.rowActions = [
+      { id: 'viewApprovalStatus', label: 'View Approval Status', icon: 'list', quick: true },
+      { id: 'viewDocuments', label: 'View Documents', icon: 'files', hidden: (item) => !item.attachements?.length },
+      { id: 'resubmitClaim', label: 'Resubmit Claim', icon: 'send', hidden: (item) => !item.approvalStatus?.some((status: any) => status.status === 'rejected') },
+      { id: 'markAsPaid', label: 'Mark as Paid', icon: 'banknote', hidden: (item) => item.overallStatus !== 'approved' || item.paymentStatus === 'Paid' },
+      { id: 'deleteClaim', label: 'Delete Claim', icon: 'trash', variant: 'danger', divider: true }
+    ];
+  }
+
   loadClaims(filters?: any): void {
     this.isLoading = true;
-    const currentState = this._paginationService.paginationState();
+    const currentState = this.paginationService.paginationState();
 
     const filterParams: any = {
       page: currentState.page,
@@ -198,73 +167,70 @@ export class ClaimsComponent implements OnInit {
         if(res && res.data){
           this.tableData = res.data || [];
           this.totalItems = res.total;
-          this.isEmpty = this.tableData.length === 0;
+          this.paginationService.updatePaginationState({
+            page: currentState.page,
+            row: currentState.row,
+            total: this.totalItems
+          });
           this.isLoading = false;
         }else{
           this.isLoading = false;
-          this.isEmpty = true;
           this.tableData = [];
           this.totalItems = 0;
         }
       },
       error: (error: any) => {
         this.isLoading = false;
-        this.isEmpty = true;
         this._toaster.error('Failed to load claims');
       }
     });
   }
 
-  onFilterChange(filters: TableFilter[]): void {
-    this.isLoading = true;
-    const currentState = this._paginationService.paginationState();
-    this._paginationService.updatePaginationState({
-      page: 1,
-      row: currentState.row,
-      total: currentState.total
+  onQueryChange(query: DataGridQuery): void {
+    this.paginationService.updatePaginationState({
+      page: query.page,
+      row: query.pageSize,
+      total: this.paginationService.paginationState().total
     });
 
-    const filterParams: Partial<any> = filters.reduce((acc, filter) => {
-      switch (filter.type) {
-        case 'text':
-          acc[filter.column] = filter.value;
-          break;
-        case 'date':
-          if (filter.column === 'raisedDate') {
-            acc['fromDate'] = filter.value[0];
-            acc['toDate'] = filter.value[1];
-          }
-          break;
-        case 'select':
-          acc[filter.column] = filter.value;
-          break;
-      }
-      return acc;
-    }, {} as Partial<any>);
+    const filterParams: any = {};
+    if (query.search) filterParams.reason = query.search;
+    query.filters.forEach((filter) => this.applyGridFilter(filterParams, filter));
+    if (this.currentFilters['technicalId']) filterParams.technicalId = this.currentFilters['technicalId'];
 
-    const includesTechnicalId = {technicalId: this.currentFilters['technicalId']};
-
-    this.currentFilters = {...filterParams, ...includesTechnicalId};
-
+    this.currentFilters = filterParams;
     this.loadClaims(this.currentFilters);
   }
 
-  onActionClick(event: { action: string; item: any }): void {
-    switch (event.action) {
+  private applyGridFilter(params: any, filter: DataGridFilter): void {
+    if (filter.key === 'raisedDate') {
+      if (filter.op === 'before') params.toDate = filter.value;
+      if (filter.op === 'after' || filter.op === 'on') params.fromDate = filter.value;
+      return;
+    }
+    if (filter.key === 'raisedBy.firstName') {
+      params.firstName = filter.value;
+      return;
+    }
+    params[filter.key] = filter.value;
+  }
+
+  onRowAction(event: DataGridRowActionEvent<any>): void {
+    switch (event.action.id) {
       case 'viewApprovalStatus':
-        this.onViewApprovalStatus(event.item);
+        this.onViewApprovalStatus(event.row);
         break;
       case 'resubmitClaim':
-        this.onResubmitClaim(event.item);
+        this.onResubmitClaim(event.row);
         break;
       case 'deleteClaim':
-        this.onDeleteClaim(event.item);
+        this.onDeleteClaim(event.row);
         break;
       case 'viewDocuments':
-        this.onViewDocuments(event.item);
+        this.onViewDocuments(event.row);
         break;
       case 'markAsPaid':
-        this.onMarkAsPaid(event.item);
+        this.onMarkAsPaid(event.row);
         break;
     }
   }
@@ -401,16 +367,12 @@ export class ClaimsComponent implements OnInit {
     });
   }
 
-  onRequestForApprovals(): void {
-    this._router.navigate(['/claims/request-for-approvals']);
-  }
-
-  onPaginationChange(event: { page: number, row: number }): void {
-    this.loadClaims(this.currentFilters);
-  }
-
-  onRefreshClaims(): void {
-    this.loadClaims(this.currentFilters);
+  onExportRequest(): void {
+    const total = this.totalItems || this.tableData.length;
+    this._claimService.getClaims({ ...this.currentFilters, page: 1, row: total }).subscribe({
+      next: (res) => this.grid?.exportToExcel(res?.data || []),
+      error: () => this._toaster.error('Failed to export claims')
+    });
   }
 
   get pageTitle(): string {

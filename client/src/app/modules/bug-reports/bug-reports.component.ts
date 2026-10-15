@@ -1,20 +1,36 @@
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { AfterViewInit, Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, MatTableDataSource } from '@angular/material/table';
-import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
-import { MatTooltip } from '@angular/material/tooltip';
-import { NgIcon } from '@ng-icons/core';
 import { Socket } from 'ngx-socket-io';
 import { Subscription, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
-import { environment } from 'src/environments/environment';
 import { ToastrService } from 'ngx-toastr';
-import { SkeltonLoadingComponent } from '../../shared/components/skelton-loading/skelton-loading.component';
+import { environment } from 'src/environments/environment';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import { DataGridFieldComponent } from 'src/app/shared/components/data-grid/data-grid-field.component';
+import {
+  DataGridBreadcrumb,
+  DataGridCellEditEvent,
+  DataGridColumn,
+  DataGridDetailTab,
+  DataGridRowAction,
+  DataGridRowActionEvent,
+} from 'src/app/shared/components/data-grid/data-grid.model';
+import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/detail-overview.component';
+import { DetailOverviewSection } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { StatusPillComponent } from 'src/app/shared/components/status-indicator/status-pill.component';
+import { StatusTone } from 'src/app/shared/components/status-indicator/status-tone';
 
 const IN_PROGRESS_STATUSES = ['analyzing', 'implementing'];
 const SAFETY_POLL_INTERVAL_MS = 15000;
+
+interface BugReportPerson {
+  firstName: string;
+  lastName: string;
+  email: string;
+  employeeId?: string;
+}
 
 interface BugReportListItem {
   _id: string;
@@ -28,19 +44,27 @@ interface BugReportListItem {
   networkErrors: unknown[];
   actionTrail: unknown[];
   createdAt: string;
-  reporterId: { firstName: string; lastName: string; email: string } | null;
-  reportingTo: { firstName: string; lastName: string; email: string; employeeId: string } | null;
+  reporterId: BugReportPerson | null;
+  reportingTo: BugReportPerson | null;
 }
 
 @Component({
   selector: 'app-bug-reports',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatTable, MatColumnDef, MatHeaderCellDef, MatCellDef, MatCell, MatHeaderRowDef, MatHeaderRow, MatRowDef, MatRow, MatTooltip, MatPaginatorModule, NgIcon, SkeltonLoadingComponent],
+  imports: [
+    CommonModule,
+    DataGridComponent,
+    DataGridFieldComponent,
+    DetailOverviewComponent,
+    ActionButtonComponent,
+    StatusPillComponent,
+  ],
   templateUrl: './bug-reports.component.html',
   styleUrl: './bug-reports.component.css',
 })
-export class BugReportsComponent implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild(MatPaginator) paginator!: MatPaginator;
+export class BugReportsComponent implements OnInit, OnDestroy {
+  @ViewChild('grid') grid?: DataGridComponent<BugReportListItem>;
+
   private readonly http = inject(HttpClient);
   private readonly api = environment.api;
   private readonly toastr = inject(ToastrService);
@@ -48,20 +72,68 @@ export class BugReportsComponent implements OnInit, AfterViewInit, OnDestroy {
   private notificationSub?: Subscription;
   private pollSub?: Subscription;
 
-  isLoading = true;
-  isEmpty = false;
+  readonly breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Bug Reports' }];
+  readonly detailTabs: DataGridDetailTab[] = [
+    { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'diagnostics', label: 'Diagnostics', icon: 'files' },
+  ];
+  readonly statusOptions = ['new', 'analyzing', 'implementing', 'fix-ready', 'approved', 'rejected', 'resolved', 'failed'];
+  readonly statusToneMap: Record<string, StatusTone> = {
+    new: 'info',
+    analyzing: 'progress',
+    implementing: 'progress',
+    'fix-ready': 'warning',
+    approved: 'success',
+    rejected: 'danger',
+    resolved: 'success',
+    failed: 'danger',
+  };
 
-  dataSource = new MatTableDataSource<BugReportListItem>();
-  displayedColumns: string[] = ['reporter', 'reportingTo', 'description', 'route', 'status', 'screenshots', 'consoleErrors', 'networkErrors', 'createdAt', 'actions'];
-  statusOptions: string[] = ['new', 'analyzing', 'implementing', 'fix-ready', 'approved', 'rejected', 'resolved', 'failed'];
+  data: BugReportListItem[] = [];
+  isLoading = true;
+  loadError = false;
+
+  readonly columns: DataGridColumn<BugReportListItem>[] = [
+    { key: 'reporter', label: 'Reported By', valueGetter: (row) => this.personName(row.reporterId), locked: true },
+    { key: 'reportingTo', label: 'Reporting To', valueGetter: (row) => this.personName(row.reportingTo, 'Unassigned') },
+    { key: 'description', label: 'Description', width: '320px' },
+    { key: 'route', label: 'Route' },
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'badge',
+      editable: true,
+      editor: 'select',
+      editorOptions: this.statusOptions.map((status) => ({ label: this.statusLabel(status), value: status })),
+      badgeLabel: (status) => this.statusLabel(status),
+      badgeClasses: {
+        new: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+        analyzing: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+        implementing: 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
+        'fix-ready': 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+        approved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+        rejected: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+        resolved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+        failed: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+      },
+    },
+    { key: 'screenshots', label: 'Screenshots', type: 'number', align: 'center', valueGetter: (row) => row.screenshotUrls?.length ?? 0 },
+    { key: 'consoleErrors', label: 'Console Errors', type: 'number', align: 'center', valueGetter: (row) => row.consoleLog?.length ?? 0 },
+    { key: 'networkErrors', label: 'Network Errors', type: 'number', align: 'center', valueGetter: (row) => row.networkErrors?.length ?? 0 },
+    { key: 'createdAt', label: 'Reported On', type: 'date', sortable: true },
+  ];
+
+  readonly rowActions: DataGridRowAction<BugReportListItem>[] = [
+    { id: 'screenshots', label: 'View Screenshots', icon: 'eye', quick: true, hidden: (row) => !row.screenshotUrls?.length },
+    { id: 'resolve', label: 'Mark as Resolved', icon: 'check', quick: true, hidden: (row) => row.status === 'resolved' },
+  ];
+
+  readonly detailTitle = (row: BugReportListItem) => row.description;
+  readonly detailSubtitle = (row: BugReportListItem) => row.route || 'Route not captured';
 
   ngOnInit(): void {
     this.fetchBugReports();
     this.listenForLiveUpdates();
-  }
-
-  ngAfterViewInit(): void {
-    this.dataSource.paginator = this.paginator;
   }
 
   ngOnDestroy(): void {
@@ -71,44 +143,38 @@ export class BugReportsComponent implements OnInit, AfterViewInit, OnDestroy {
 
   fetchBugReports(): void {
     this.isLoading = true;
+    this.loadError = false;
     this.http.get<BugReportListItem[]>(`${this.api}/bug-reports`).subscribe({
       next: (data) => {
-        this.dataSource.data = data;
-        this.isEmpty = data.length === 0;
+        this.data = data;
         this.isLoading = false;
         this.syncSafetyPolling();
       },
       error: () => {
-        this.isEmpty = true;
+        this.data = [];
+        this.loadError = true;
         this.isLoading = false;
       },
     });
   }
 
-  // Primary live-update path: as soon as a BugReport-related notification comes in
-  // over the socket (assigned / resolved), refresh so status/spinners reflect it instantly.
   private listenForLiveUpdates(): void {
     this.notificationSub = this.socket.fromEvent('recieveNotifications').subscribe({
       next: (notification: any) => {
-        if (notification?.referenceModel === 'BugReport') {
-          this.fetchBugReports();
-        }
+        if (notification?.referenceModel === 'BugReport') this.fetchBugReports();
       },
     });
   }
 
-  // Safety net: notifications only reach the reporter/assignee, so anyone else watching
-  // this table (e.g. an admin browsing the list) still needs the "Analyzing..." spinner
-  // to stop once processing finishes. Poll only while something is actually in progress.
   private syncSafetyPolling(): void {
-    const hasInProgress = this.dataSource.data.some((r) => IN_PROGRESS_STATUSES.includes(r.status));
+    const hasInProgress = this.data.some((report) => IN_PROGRESS_STATUSES.includes(report.status));
 
     if (hasInProgress && !this.pollSub) {
       this.pollSub = timer(SAFETY_POLL_INTERVAL_MS, SAFETY_POLL_INTERVAL_MS)
         .pipe(switchMap(() => this.http.get<BugReportListItem[]>(`${this.api}/bug-reports`)))
         .subscribe((data) => {
-          this.dataSource.data = data;
-          if (!data.some((r) => IN_PROGRESS_STATUSES.includes(r.status))) {
+          this.data = data;
+          if (!data.some((report) => IN_PROGRESS_STATUSES.includes(report.status))) {
             this.pollSub?.unsubscribe();
             this.pollSub = undefined;
           }
@@ -119,25 +185,57 @@ export class BugReportsComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  onCellEdit(event: DataGridCellEditEvent<BugReportListItem>): void {
+    if (event.column.key === 'status') this.changeStatus(event.row, event.newValue, event.oldValue);
+  }
+
+  onRowAction({ action, row }: DataGridRowActionEvent<BugReportListItem>): void {
+    if (action.id === 'screenshots') this.openScreenshot(row.screenshotUrls[0]);
+    if (action.id === 'resolve') this.changeStatus(row, 'resolved', row.status);
+  }
+
   openScreenshot(url: string): void {
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  markAsResolved(element: BugReportListItem): void {
-    this.changeStatus(element, 'resolved');
-  }
-
-  changeStatus(element: BugReportListItem, status: string): void {
-    const previousStatus = element.status;
-    this.http.patch<BugReportListItem>(`${this.api}/bug-reports/${element._id}/status`, { status }).subscribe({
+  changeStatus(report: BugReportListItem, status: string, previousStatus = report.status): void {
+    this.http.patch<BugReportListItem>(`${this.api}/bug-reports/${report._id}/status`, { status }).subscribe({
       next: (updated) => {
-        element.status = updated.status;
-        this.toastr.success(status === 'resolved' ? 'Bug report marked as resolved. Reporter notified.' : 'Bug report status updated.');
+        report.status = updated.status;
+        this.data = [...this.data];
+        this.grid?.notify(status === 'resolved' ? 'Bug report marked as resolved' : 'Bug report status updated', 'success');
+        this.syncSafetyPolling();
       },
       error: () => {
-        element.status = previousStatus;
+        report.status = previousStatus;
+        this.data = [...this.data];
         this.toastr.error('Failed to update bug report status.');
       },
     });
+  }
+
+  overviewSections(row: BugReportListItem): DetailOverviewSection[] {
+    return [{
+      title: 'Report information',
+      columns: '2',
+      fields: [
+        { type: 'field', label: 'Reported by', value: this.personName(row.reporterId) },
+        { type: 'field', label: 'Reporting to', value: this.personName(row.reportingTo, 'Unassigned') },
+        { type: 'field', label: 'Reporter email', value: row.reporterId?.email || '—' },
+        { type: 'field', label: 'Route', value: row.route || '—' },
+        { type: 'field', label: 'Viewport', value: row.viewport || '—' },
+        { type: 'field', label: 'Reported on', value: new Date(row.createdAt).toLocaleString() },
+        { type: 'field', label: 'Description', value: row.description || '—', stacked: true },
+      ],
+    }];
+  }
+
+  personName(person: BugReportPerson | null, fallback = '—'): string {
+    if (!person) return fallback;
+    return [person.firstName, person.lastName].filter(Boolean).join(' ') || fallback;
+  }
+
+  statusLabel(status: string): string {
+    return status.replace(/[_-]+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
   }
 }

@@ -1,25 +1,32 @@
-<data-table
-        [data]="tableData"
-        [columns]="tableColumns"
-        [title]="pageTitle"
-        [isLoading]="isLoading"
-        [totalItems]="totalItems"
-        [isEmpty]="isEmpty"
-        [tableId]="'expenses-' + claimType"
-        (rowClick)="onViewApprovalStatus($event)"
-        (actionClick)="onActionClick($event)"
-        (filterChange)="onFilterChange($event)"
-        (paginationChange)="onPaginationChange($event)">
-
-  <ng-template #sideColumn>
-    <app-btn theme="secondary-outline" (buttonClick)="onRefreshClaims()">
-      <ng-icon name="heroArrowPath"></ng-icon>
-        Refresh
-    </app-btn>
-
-    <app-btn theme="primary" (buttonClick)="onCreateClaim()">
-      <ng-icon name="heroPlus"></ng-icon>
-        Create Expense
-    </app-btn>
-  </ng-template>
-</data-table>
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    [title]="pageTitle"
+    subtitle="Track employee expense claims and payment status"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="totalItems"
+    [data]="tableData"
+    [columns]="tableColumns"
+    [loading]="isLoading"
+    [pageSize]="paginationService.paginationState().row"
+    [selectable]="false"
+    [showDetailPanel]="false"
+    searchPlaceholder="Search expenses"
+    emptyMessage="No expenses found"
+    createLabel="Create Expense"
+    [rowActions]="rowActions"
+    [tallRows]="true"
+    [syncViewWithUrl]="false"
+    [storageKey]="'claims-expenses-' + claimType"
+    exportable
+    exportFileName="claims-expenses.xlsx"
+    (queryChange)="onQueryChange($event)"
+    (rowOpen)="onViewApprovalStatus($event)"
+    (rowAction)="onRowAction($event)"
+    (exportRequest)="onExportRequest()"
+    (create)="onCreateClaim()">
+  </app-data-grid>
+</div>

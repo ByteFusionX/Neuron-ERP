@@ -1,19 +1,19 @@
-<app-modal-layout
-  title="Report a Bug"
-  [onClose]="onCancel.bind(this)"
-  [footerButtons]="[
-    { label: 'Cancel', onClick: onCancel.bind(this), theme: 'cancel' },
-    {
-      label: 'Submit',
-      onClick: onSubmit.bind(this),
-      theme: 'primary',
-      loading: isSubmitting,
-      disabled: isInitializing || reportForm.invalid,
-    },
-  ]"
-  contentClass="p-6"
+<app-form-modal-shell
+  icon="info"
+  tone="rose"
+  title="Report a bug"
+  contextEmptyText="Describe the problem and attach anything that helps us reproduce it."
+  formId="bug-report-form"
+  [invalid]="reportForm.invalid && reportForm.touched"
+  invalidText="Describe what went wrong before submitting"
+  submitLabel="Submit report"
+  savingLabel="Submitting..."
+  submitIcon="check"
+  submitShortcutVerb="submit"
+  [saving]="isSubmitting || isInitializing"
+  (closed)="onCancel()"
 >
-  <div *ngIf="isInitializing" class="space-y-4 animate-pulse">
+  <div *ngIf="isInitializing" class="animate-pulse space-y-4" aria-label="Preparing bug report">
     <div>
       <div class="h-3.5 w-32 bg-gray-200 rounded mb-2"></div>
       <div class="h-20 w-full bg-gray-200 rounded-md"></div>
@@ -32,57 +32,43 @@
     <div class="h-10 w-full bg-gray-200 rounded-md"></div>
   </div>
 
-  <form [formGroup]="reportForm" *ngIf="!isInitializing">
-    <div class="space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">What went wrong? <span class="text-red-500">*</span></label>
-        <textarea
-          formControlName="description"
-          rows="4"
-          class="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-600"
-          placeholder="Describe what you were doing and what happened..."
-        ></textarea>
-        <p
-          *ngIf="reportForm.get('description')?.invalid && reportForm.get('description')?.touched"
-          class="text-xs text-red-500 mt-1"
-        >
-          A description is required.
-        </p>
-      </div>
+  <form id="bug-report-form" [formGroup]="reportForm" (ngSubmit)="onSubmit()" *ngIf="!isInitializing" novalidate>
+    <div class="space-y-5">
+      <app-sf-section title="Report details" columns="1">
+        <app-sf-field label="What went wrong?" [control]="reportForm.controls['description']"
+          [messages]="{ required: 'A description is required' }">
+          <app-sf-textarea formControlName="description" [rows]="5" autoresize
+            placeholder="Describe what you were doing, what you expected, and what happened..."></app-sf-textarea>
+        </app-sf-field>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Reporting To</label>
-        <select
-          formControlName="reportingTo"
-          class="w-full border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-600"
-        >
-          <option [ngValue]="null">Unassigned</option>
-          <option *ngFor="let emp of employees" [ngValue]="emp._id">
-            {{ emp.firstName }} {{ emp.lastName }} ({{ emp.designation }})
-          </option>
-        </select>
-      </div>
+        <app-sf-field label="Reporting to" optional hint="Optional">
+          <app-sf-combobox formControlName="reportingTo" [options]="employeeOptions"
+            placeholder="Unassigned" searchable></app-sf-combobox>
+        </app-sf-field>
+      </app-sf-section>
 
+      <app-sf-section title="Evidence" columns="1">
       <div>
         <div class="flex items-center justify-between mb-2">
-          <label class="block text-sm font-medium text-gray-700">Screenshots</label>
+          <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Screenshots</span>
           <button
             type="button"
             (click)="onAddScreenshot()"
             [disabled]="isCapturing"
-            class="text-xs text-violet-700 hover:underline disabled:opacity-50"
+            class="text-xs font-medium text-violet-700 transition hover:text-violet-800 disabled:opacity-50 dark:text-violet-400"
           >
             {{ isCapturing ? 'Capturing...' : '+ Add another screenshot' }}
           </button>
         </div>
 
         <div class="flex flex-wrap gap-3">
-          <div *ngFor="let shot of screenshots" class="relative w-24 h-24 border border-gray-200 rounded-md overflow-hidden">
-            <img [src]="shot.dataUrl" class="w-full h-full object-cover" alt="Screenshot" />
+          <div *ngFor="let shot of screenshots" class="relative h-24 w-24 overflow-hidden rounded-lg border border-gray-200 dark:border-erp-border-dark">
+            <img [src]="shot.dataUrl" class="h-full w-full object-cover" alt="Attached bug screenshot" />
             <button
               type="button"
               (click)="onRemoveScreenshot(shot.id)"
-              class="absolute top-0.5 right-0.5 w-5 h-5 flex items-center justify-center rounded-full bg-black/60 text-white text-xs hover:bg-black/80"
+              class="absolute right-1 top-1 grid h-6 w-6 place-content-center rounded-md bg-black/65 text-sm text-white transition hover:bg-black/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
+              aria-label="Remove screenshot"
               title="Remove screenshot"
             >
               &times;
@@ -96,33 +82,35 @@
           </div>
 
           <label
-            class="w-24 h-24 flex flex-col items-center justify-center gap-1 border border-dashed border-gray-300 rounded-md text-gray-500 text-xs cursor-pointer hover:bg-gray-50"
+            class="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-xs font-medium text-gray-500 transition hover:border-violet-300 hover:bg-violet-50/50 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-400 dark:hover:bg-violet-950/20 dark:hover:text-violet-300"
           >
-            <ng-icon name="heroPlus" class="text-lg"></ng-icon>
+            <span class="text-lg leading-none" aria-hidden="true">+</span>
             Upload
             <input type="file" accept="image/*" class="hidden" (change)="onManualUpload($event)" />
           </label>
         </div>
-        <p class="text-xs text-gray-400 mt-1">
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
           Upload manually if a screenshot renders broken or blank.
         </p>
       </div>
+      </app-sf-section>
 
-      <div class="border border-gray-200 rounded-md">
+      <div class="rounded-lg border border-gray-200 dark:border-erp-border-dark">
         <button
           type="button"
           (click)="toggleTechnicalDetails()"
-          class="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600"
+          class="flex w-full items-center justify-between px-3 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800/60"
+          [attr.aria-expanded]="showTechnicalDetails"
         >
           <span>Technical details</span>
-          <ng-icon [name]="showTechnicalDetails ? 'heroChevronUp' : 'heroChevronDown'"></ng-icon>
+          <span class="text-xs text-gray-400" aria-hidden="true">{{ showTechnicalDetails ? '▲' : '▼' }}</span>
         </button>
-        <div *ngIf="showTechnicalDetails" class="px-3 pb-3 text-xs text-gray-500 space-y-1 border-t border-gray-100 pt-2">
-          <p>Route: <span class="font-mono">{{ route }}</span></p>
-          <p>Console errors captured: {{ consoleErrorCount }}</p>
+        <div *ngIf="showTechnicalDetails" class="space-y-1 border-t border-gray-100 px-3 pb-3 pt-2 text-xs text-gray-500 dark:border-erp-border-dark dark:text-gray-400">
+          <p>Route: <span class="break-all font-mono">{{ route }}</span></p>
+          <p>Console entries captured: {{ consoleErrorCount }}</p>
           <p>Network errors captured: {{ networkErrorCount }}</p>
         </div>
       </div>
     </div>
   </form>
-</app-modal-layout>
+</app-form-modal-shell>

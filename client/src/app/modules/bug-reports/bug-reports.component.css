@@ -1,0 +1,100 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.report-meta {
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+}
+
+.report-meta + .report-meta {
+  border-left: 1px solid #e5e7eb;
+}
+
+.report-meta-label {
+  color: #6b7280;
+  font-size: 0.6875rem;
+}
+
+.report-meta-value {
+  margin-top: 0.125rem;
+  overflow: hidden;
+  color: #111827;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostic-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.diagnostic-summary div,
+.diagnostic-block {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #fff;
+  padding: 0.875rem;
+}
+
+.diagnostic-summary span,
+.diagnostic-block h4 {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.diagnostic-summary strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: #111827;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.diagnostic-block p,
+.diagnostic-block pre {
+  margin-top: 0.5rem;
+  color: #374151;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+:host-context(html.dark) .report-meta + .report-meta,
+:host-context(html.dark) .diagnostic-summary div,
+:host-context(html.dark) .diagnostic-block {
+  border-color: #262626;
+}
+
+:host-context(html.dark) .report-meta-label,
+:host-context(html.dark) .diagnostic-summary span,
+:host-context(html.dark) .diagnostic-block h4 {
+  color: #a1a1aa;
+}
+
+:host-context(html.dark) .report-meta-value,
+:host-context(html.dark) .diagnostic-summary strong {
+  color: #ededed;
+}
+
+:host-context(html.dark) .diagnostic-summary div,
+:host-context(html.dark) .diagnostic-block {
+  background: #171717;
+}
+
+:host-context(html.dark) .diagnostic-block p,
+:host-context(html.dark) .diagnostic-block pre {
+  color: #d4d4d8;
+}
+
+@media (min-width: 640px) {
+  .diagnostic-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

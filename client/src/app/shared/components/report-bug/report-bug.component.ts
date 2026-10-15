@@ -7,9 +7,8 @@ import { Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { firstValueFrom } from 'rxjs';
 import { environment } from 'src/environments/environment';
-import { ButtonComponent } from '../button/button.component';
-import { IconsModule } from 'src/app/lib/icons/icons.module';
-import { ModalLayoutComponent } from '../modal-layout/modal-layout.component';
+import { FormModalShellComponent } from '../modal';
+import { SfOption, SmartFormModule } from '../smart-form';
 import { DiagnosticsBufferService } from 'src/app/core/diagnostics/diagnostics-buffer.service';
 import { ActionTrailService } from 'src/app/core/diagnostics/action-trail.service';
 import { BugReportStateSnapshotService } from 'src/app/core/diagnostics/bug-report-state-snapshot.service';
@@ -46,7 +45,7 @@ export interface BugReportPayload {
 @Component({
   selector: 'app-report-bug',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, ButtonComponent, IconsModule, ModalLayoutComponent],
+  imports: [CommonModule, ReactiveFormsModule, SmartFormModule, FormModalShellComponent],
   templateUrl: './report-bug.component.html',
   styleUrl: './report-bug.component.css',
 })
@@ -79,6 +78,7 @@ export class ReportBugComponent implements OnInit {
   networkErrorCount = 0;
   route = '';
   employees: getEmployee[] = [];
+  employeeOptions: SfOption<string>[] = [];
 
   constructor(public dialogRef: MatDialogRef<ReportBugComponent>) {}
 
@@ -86,6 +86,11 @@ export class ReportBugComponent implements OnInit {
     this.route = this.router.url;
     this.refreshCounts();
     this.loadEmployees();
+    // The nav bar captures before opening this dialog; only capture here if that didn't produce one.
+    if (this.screenshotService.getScreenshots().length) {
+      this.isInitializing = false;
+      return;
+    }
     this.captureAutoScreenshot().finally(() => { this.isInitializing = false; });
   }
 
@@ -93,6 +98,13 @@ export class ReportBugComponent implements OnInit {
     this.employeeService.getAllEmployees().subscribe({
       next: (employees) => {
         this.employees = employees;
+        this.employeeOptions = employees
+          .filter((employee): employee is getEmployee & { _id: string } => !!employee._id)
+          .map((employee) => ({
+            label: `${employee.firstName} ${employee.lastName}`.trim(),
+            value: employee._id,
+            description: employee.designation || undefined,
+          }));
         const defaultAssignee = employees.find((e) => e.employeeId === DEFAULT_REPORTING_TO_EMPLOYEE_ID);
         if (defaultAssignee?._id) {
           this.reportForm.patchValue({ reportingTo: defaultAssignee._id });
@@ -100,6 +112,7 @@ export class ReportBugComponent implements OnInit {
       },
       error: () => {
         this.employees = [];
+        this.employeeOptions = [];
       },
     });
   }

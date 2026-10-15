@@ -1,122 +1,88 @@
-<div class="bg-white m-6">
-    <div class="text-lg font-medium p-4 border-b border-b-gray-300 px-8">
-        <div class="flex flex-col md:flex-row items-center justify-between md:items-end gap-3">
-            <h3 class="font-semibold">Bug Reports</h3>
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <div *ngIf="loadError" role="alert"
+    class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+    <span>Could not load bug reports. Check your connection and try again.</span>
+    <button type="button" class="font-medium underline hover:no-underline" (click)="fetchBugReports()">Try again</button>
+  </div>
+
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Bug Reports"
+    subtitle="Review reported issues, diagnostics and resolution progress"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [data]="data"
+    [columns]="columns"
+    [loading]="isLoading"
+    [selectable]="false"
+    searchPlaceholder="Search bug reports"
+    emptyMessage="No bug reports found"
+    [rowActions]="rowActions"
+    storageKey="bug-report-list"
+    exportable
+    exportFileName="bug-reports.xlsx"
+    [detailTabs]="detailTabs"
+    [detailTitle]="detailTitle"
+    [detailSubtitle]="detailSubtitle"
+    (cellEdit)="onCellEdit($event)"
+    (rowAction)="onRowAction($event)">
+
+    <ng-template #detailAsideTemplate let-row>
+      <app-status-pill [status]="row.status" [toneMap]="statusToneMap" [label]="statusLabel(row.status)"></app-status-pill>
+    </ng-template>
+
+    <ng-template #detailMetaTemplate let-row>
+      <div class="report-meta"><p class="report-meta-label">Reported by</p><p class="report-meta-value">{{ personName(row.reporterId) }}</p></div>
+      <div class="report-meta"><p class="report-meta-label">Assigned to</p><p class="report-meta-value">{{ personName(row.reportingTo, 'Unassigned') }}</p></div>
+      <div class="report-meta"><p class="report-meta-label">Route</p><p class="report-meta-value">{{ row.route || '—' }}</p></div>
+      <div class="report-meta"><p class="report-meta-label">Reported</p><p class="report-meta-value">{{ row.createdAt | date: 'dd MMM yyyy' }}</p></div>
+    </ng-template>
+
+    <ng-template #detailFooterLeftTemplate let-row>
+      <app-action-button *ngFor="let url of row.screenshotUrls; let index = index" variant="outline" icon="view"
+        (click)="openScreenshot(url)">Screenshot {{ index + 1 }}</app-action-button>
+    </ng-template>
+
+    <ng-template #detailFooterTemplate let-row>
+      <app-action-button *ngIf="row.status !== 'resolved'" variant="primary" (click)="changeStatus(row, 'resolved')">
+        Mark as Resolved
+      </app-action-button>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <div *ngSwitchCase="'overview'" class="space-y-4">
+          <app-dg-field [grid]="grid" [row]="row" key="status" label="Status" icon="flag" stacked></app-dg-field>
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
         </div>
-    </div>
 
-    <app-skelton-loading *ngIf="isLoading && !isEmpty" [lineLength]="4"></app-skelton-loading>
-    <div class="m-8 overflow-y-auto overflow-x-auto">
-        <section class="mat-elevation-z8 h-fit max-h-[64vh] overflow-auto" tabindex="0">
-            <table mat-table *ngIf="!isLoading || isEmpty" [dataSource]="dataSource" class="rounded-lg table-fixed">
-                <ng-container matColumnDef="reporter">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Reported By </th>
-                    <td mat-cell *matCellDef="let element">
-                        {{element.reporterId?.firstName}} {{element.reporterId?.lastName}}
-                    </td>
-                </ng-container>
+        <div *ngSwitchCase="'diagnostics'" class="space-y-4">
+          <section class="diagnostic-summary">
+            <div><span>Console errors</span><strong>{{ row.consoleLog?.length || 0 }}</strong></div>
+            <div><span>Network errors</span><strong>{{ row.networkErrors?.length || 0 }}</strong></div>
+            <div><span>Actions captured</span><strong>{{ row.actionTrail?.length || 0 }}</strong></div>
+            <div><span>Screenshots</span><strong>{{ row.screenshotUrls?.length || 0 }}</strong></div>
+          </section>
 
-                <ng-container matColumnDef="reportingTo">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Reporting To </th>
-                    <td mat-cell *matCellDef="let element">
-                        <span *ngIf="element.reportingTo">{{element.reportingTo?.firstName}} {{element.reportingTo?.lastName}}</span>
-                        <span *ngIf="!element.reportingTo" class="text-gray-400 text-sm">Unassigned</span>
-                    </td>
-                </ng-container>
-
-                <ng-container matColumnDef="description">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Description </th>
-                    <td mat-cell *matCellDef="let element" class="max-w-xs truncate ..." matTooltip="{{element.description}}"
-                        matTooltipPosition="above" matTooltipClass="mat-tooltip">
-                        {{element.description}}
-                    </td>
-                </ng-container>
-
-                <ng-container matColumnDef="route">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Route </th>
-                    <td mat-cell *matCellDef="let element"> {{element.route}} </td>
-                </ng-container>
-
-                <ng-container matColumnDef="status">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Status </th>
-                    <td mat-cell *matCellDef="let element">
-                        <select class="text-sm border border-gray-300 rounded px-2 py-1 bg-white"
-                            [ngModel]="element.status" (ngModelChange)="changeStatus(element, $event)">
-                            <option *ngFor="let status of statusOptions" [value]="status">{{status | titlecase}}</option>
-                        </select>
-                    </td>
-                </ng-container>
-
-                <ng-container matColumnDef="screenshots">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-center text-dark text-[15px] font-medium border-none before:hidden">
-                        Screenshots </th>
-                    <td mat-cell *matCellDef="let element">
-                        <div class="flex justify-center items-center gap-2">
-                            <button *ngFor="let url of element.screenshotUrls; let i = index"
-                                (click)="openScreenshot(url)"
-                                class="w-7 h-7 rounded-full border border-gray-300 hover:border-gray-500 flex justify-center items-center"
-                                matTooltip="View Screenshot {{i + 1}}" matTooltipPosition="above" matTooltipClass="mat-tooltip">
-                                <ng-icon name="heroEye" class="text-black"></ng-icon>
-                            </button>
-                            <span *ngIf="!element.screenshotUrls?.length" class="text-gray-400 text-sm">-</span>
-                        </div>
-                    </td>
-                </ng-container>
-
-                <ng-container matColumnDef="consoleErrors">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-center text-dark text-[15px] font-medium border-none before:hidden">
-                        Console Errors </th>
-                    <td mat-cell *matCellDef="let element" class="text-center"> {{element.consoleLog?.length || 0}} </td>
-                </ng-container>
-
-                <ng-container matColumnDef="networkErrors">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-center text-dark text-[15px] font-medium border-none before:hidden">
-                        Network Errors </th>
-                    <td mat-cell *matCellDef="let element" class="text-center"> {{element.networkErrors?.length || 0}} </td>
-                </ng-container>
-
-                <ng-container matColumnDef="createdAt">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-start text-dark text-[15px] font-medium border-none before:hidden">
-                        Reported On </th>
-                    <td mat-cell *matCellDef="let element"> {{element.createdAt | date:'dd/MM/yyyy'}} </td>
-                </ng-container>
-
-                <ng-container matColumnDef="actions">
-                    <th *matHeaderCellDef
-                        class="bg-gray-100 px-[20px] py-[16px] text-center text-dark text-[15px] font-medium border-none before:hidden">
-                        Actions </th>
-                    <td mat-cell *matCellDef="let element" class="text-center">
-                        <button *ngIf="element.status !== 'resolved'" type="button" (click)="markAsResolved(element)"
-                            class="text-xs text-emerald-600 underline hover:text-emerald-700">Mark as Resolved</button>
-                        <span *ngIf="element.status === 'resolved'" class="text-xs text-gray-400">Resolved</span>
-                    </td>
-                </ng-container>
-
-                <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-                <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-            </table>
-        </section>
-        <mat-paginator *ngIf="!isEmpty" [pageSizeOptions]="[10, 25, 50]" [pageSize]="10"
-            showFirstLastButtons></mat-paginator>
-    </div>
-    <div *ngIf="isEmpty" class="w-full flex justify-center items-center">
-        <div class="p-3">
-            <img src="assets/images/empty.png" alt="">
-            <p class="m-2 text-center text-gray-500">No Data</p>
+          <section class="diagnostic-block">
+            <h4>Browser</h4>
+            <p>{{ row.userAgent || 'No browser information captured.' }}</p>
+          </section>
+          <section class="diagnostic-block">
+            <h4>Console log</h4>
+            <pre>{{ row.consoleLog?.length ? (row.consoleLog | json) : 'No console errors captured.' }}</pre>
+          </section>
+          <section class="diagnostic-block">
+            <h4>Network errors</h4>
+            <pre>{{ row.networkErrors?.length ? (row.networkErrors | json) : 'No network errors captured.' }}</pre>
+          </section>
+          <section class="diagnostic-block">
+            <h4>Action trail</h4>
+            <pre>{{ row.actionTrail?.length ? (row.actionTrail | json) : 'No action trail captured.' }}</pre>
+          </section>
         </div>
-    </div>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
 </div>

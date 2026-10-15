@@ -2,35 +2,3 @@
   display: block;
   height: 100%;
 }
-
-.payables-tab {
-  height: 44px;
-  border-bottom: 2px solid transparent;
-  color: rgb(107 114 128);
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.25rem;
-  transition: color 120ms ease, border-color 120ms ease;
-}
-
-.payables-tab:hover {
-  color: rgb(55 65 81);
-}
-
-.payables-tab-active {
-  border-bottom-color: rgb(37 99 235);
-  color: rgb(37 99 235);
-}
-
-:host-context(html.dark) .payables-tab {
-  color: rgb(156 163 175);
-}
-
-:host-context(html.dark) .payables-tab:hover {
-  color: rgb(229 231 235);
-}
-
-:host-context(html.dark) .payables-tab-active {
-  border-bottom-color: rgb(96 165 250);
-  color: rgb(147 197 253);
-}
