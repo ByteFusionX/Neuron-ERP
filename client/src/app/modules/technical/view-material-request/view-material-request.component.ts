@@ -138,7 +138,7 @@ export class ViewMaterialRequestComponent implements OnInit {
   }
 
   onBack(): void {
-    this.router.navigate(['/technical/mr-approval-requests']);
+    this.router.navigate(['/technical/project-page'], { queryParams: { view: 'materials' } });
   }
 
   hasPendingItems(): boolean {

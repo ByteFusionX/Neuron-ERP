@@ -10,6 +10,7 @@ import { emailQueue } from "../common/queues/email.queue";
 import purchaseRequestModel from "../models/purchaseRequest.model";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
+import { buildGridFilterMatch, buildGridSort, GridFieldMap } from "../common/utils/grid-query";
 import { getCustomerCommercialGuard } from "../common/customer-commercial-guards";
 
 export const getProjectAndAMCJobs = async (req: Request, res: Response, next: NextFunction) => {
@@ -321,9 +322,17 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
    }
 };
 
+const PROJECT_GRID_FIELDS: GridFieldMap = {
+   jobId: { path: 'jobId.jobId' },
+   customer: { path: 'customer.companyName' },
+   assignedTo: { path: 'assignedTo.fullName' },
+   assignedBy: { path: 'assignedBy.fullName' },
+   priority: { path: 'priority' },
+};
+
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
    try {
-      const { companyName, jobId, assignedTo, assignedBy, priority, row, page, projectType, status } = req.body;
+      const { companyName, jobId, assignedTo, assignedBy, priority, row, page, projectType, status, search, filters, sortKey, sortDir } = req.body;
 
       const tokenData = req.user;
       const employee = await getEmployeeData(tokenData);
@@ -447,6 +456,21 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
          matchConditions.priority = priority;
       }
 
+      if (typeof search === 'string' && search.trim()) {
+         const searchRegex = { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+         matchConditions["$and"] = [
+            ...(matchConditions["$and"] || []),
+            {
+               "$or": [
+                  { "customer.companyName": searchRegex },
+                  { "jobId.jobId": searchRegex },
+                  { "assignedTo.fullName": searchRegex },
+                  { "assignedBy.fullName": searchRegex }
+               ]
+            }
+         ];
+      }
+
       if (projectType) {
          matchConditions.projectType = projectType;
       }
@@ -463,13 +487,13 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
          pipeline.push({ $match: accessFilter });
       }
 
-      pipeline.push({
-         $sort: { updatedAt: -1 }
-      });
+      const gridMatch = buildGridFilterMatch(filters, PROJECT_GRID_FIELDS);
+      if (gridMatch) pipeline.push({ $match: gridMatch });
 
       const countPipeline = [...pipeline];
-      countPipeline.pop();
       countPipeline.push({ $count: "total" });
+
+      pipeline.push({ $sort: buildGridSort(sortKey, sortDir, PROJECT_GRID_FIELDS, { updatedAt: -1 }) });
 
       const totalResult = await technicalModel.aggregate(countPipeline);
       const total = totalResult.length > 0 ? totalResult[0].total : 0;
@@ -2706,12 +2730,21 @@ export const getMaterialRequestByJobId = async (req: Request, res: Response, nex
    }
 }
 
+const MATERIAL_GRID_FIELDS: GridFieldMap = {
+   jobId: { path: 'jobId.jobId' },
+   customer: { path: 'customer.companyName' },
+   materialRequest: { path: 'itemCount', type: 'number' },
+   materialRequestAttachments: { path: 'fileCount', type: 'number' },
+   updatedAt: { path: 'updatedAt', type: 'date' },
+};
+
 export const getPendingMaterialRequestProjects = async (req: Request, res: Response, next: NextFunction) => {
    try {
-      const { page = 1, row = 10, search, jobId, customerName } = req.body;
+      const { page = 1, row = 10, search, filters, sortKey, sortDir, viewId = 'pending' } = req.body;
       const pageNumber = Number(page) || 1;
       const pageSize = Number(row) || 10;
       const skip = (pageNumber - 1) * pageSize;
+      const requestView = ['all', 'pending', 'approved'].includes(viewId) ? viewId : 'pending';
 
       const pipeline: any[] = [
          {
@@ -2773,36 +2806,97 @@ export const getPendingMaterialRequestProjects = async (req: Request, res: Respo
                      },
                      else: false
                   }
+               },
+               hasApprovedItems: {
+                  $cond: {
+                     if: { $isArray: '$materialRequest' },
+                     then: {
+                        $anyElementTrue: {
+                           $map: {
+                              input: '$materialRequest',
+                              as: 'item',
+                              in: { $eq: [{ $ifNull: ['$$item.status', 'pending'] }, 'approved'] }
+                           }
+                        }
+                     },
+                     else: false
+                  }
+               },
+               hasApprovedFiles: {
+                  $cond: {
+                     if: { $isArray: '$materialRequestAttachements' },
+                     then: {
+                        $anyElementTrue: {
+                           $map: {
+                              input: '$materialRequestAttachements',
+                              as: 'file',
+                              in: { $eq: [{ $ifNull: ['$$file.status', 'pending'] }, 'approved'] }
+                           }
+                        }
+                     },
+                     else: false
+                  }
+               },
+               hasMaterialRequests: {
+                  $or: [
+                     { $gt: [{ $size: { $ifNull: ['$materialRequest', []] } }, 0] },
+                     { $gt: [{ $size: { $ifNull: ['$materialRequestAttachements', []] } }, 0] }
+                  ]
                }
             }
-         },
-         {
+         }
+      ];
+
+      if (requestView === 'pending') {
+         pipeline.push({
             $match: {
                $or: [
                   { hasPendingItems: true },
                   { hasPendingFiles: true }
                ]
             }
+         });
+      } else if (requestView === 'approved') {
+         pipeline.push({
+            $match: {
+               $and: [
+                  { hasMaterialRequests: true },
+                  { hasPendingItems: false },
+                  { hasPendingFiles: false },
+                  {
+                     $or: [
+                        { hasApprovedItems: true },
+                        { hasApprovedFiles: true }
+                     ]
+                  }
+               ]
+            }
+         });
+      } else {
+         pipeline.push({
+            $match: { hasMaterialRequests: true }
+         });
+      }
+
+      if (typeof search === 'string' && search.trim()) {
+         const searchRegex = { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+         pipeline.push({ $match: { $or: [{ 'jobId.jobId': searchRegex }, { 'customer.companyName': searchRegex }] } });
+      }
+
+      pipeline.push({
+         $addFields: {
+            itemCount: { $size: { $ifNull: ['$materialRequest', []] } },
+            fileCount: { $size: { $ifNull: ['$materialRequestAttachements', []] } }
          }
-      ];
+      });
 
-      if (jobId) {
-         pipeline.push({
-            $match: {
-               'jobId.jobId': { $regex: jobId, $options: 'i' }
-            }
-         });
-      }
+      const gridMatch = buildGridFilterMatch(filters, MATERIAL_GRID_FIELDS);
+      if (gridMatch) pipeline.push({ $match: gridMatch });
 
-      if (customerName) {
-         pipeline.push({
-            $match: {
-               'customer.companyName': { $regex: customerName, $options: 'i' }
-            }
-         });
-      }
+      const countPipeline = [...pipeline, { $count: 'total' }];
 
       pipeline.push(
+         { $sort: buildGridSort(sortKey, sortDir, MATERIAL_GRID_FIELDS, { updatedAt: -1 }) },
          {
             $project: {
                _id: 1,
@@ -2816,7 +2910,10 @@ export const getPendingMaterialRequestProjects = async (req: Request, res: Respo
                },
                materialRequest: 1,
                materialRequestAttachements: 1,
-               projectType: 1
+               projectType: 1,
+               status: 1,
+               priority: 1,
+               updatedAt: 1
             }
          },
          { $skip: skip },
@@ -2824,11 +2921,7 @@ export const getPendingMaterialRequestProjects = async (req: Request, res: Respo
       );
 
       const projects = await technicalModel.aggregate(pipeline);
-      
-      const countPipeline = [...pipeline];
-      countPipeline.pop();
-      countPipeline.pop();
-      countPipeline.push({ $count: 'total' });
+
       const totalResult = await technicalModel.aggregate(countPipeline);
       const total = totalResult.length > 0 ? totalResult[0].total : 0;
 

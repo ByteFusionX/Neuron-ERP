@@ -132,7 +132,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
       error: (error) => {
         console.error('Error fetching project details:', error);
         this.notificationService.error('Failed to fetch project details');
-        this.router.navigate(['/technical/project']);
+        this.router.navigate(['/technical/project-page'], { queryParams: { view: 'pendingProjects' } });
       }
     });
   }
@@ -353,7 +353,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     if (this.hasUnsavedChanges()) {
       this.showUnsavedChangesDialog();
     } else {
-      this.router.navigate(['/technical/project']);
+      this.router.navigate(['/technical/project-page'], { queryParams: { view: 'pendingProjects' } });
     }
   }
 
@@ -415,7 +415,7 @@ export class AddProjectComponent implements OnInit, CanDeactivate<AddProjectComp
     dialogRef.afterClosed().subscribe((result: boolean) => {
       if (result) {
         this.hasUnsavedChanges.set(false);
-        this.router.navigate(['/technical/project']);
+        this.router.navigate(['/technical/project-page'], { queryParams: { view: 'pendingProjects' } });
       }
       this.isNavigatingAway = false;
     });

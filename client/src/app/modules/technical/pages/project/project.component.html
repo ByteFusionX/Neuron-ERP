@@ -1,0 +1,38 @@
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <div *ngIf="loadError" role="alert"
+    class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+    <span>{{ loadError }}</span>
+    <button type="button" class="font-medium underline hover:no-underline" (click)="reload()">Try again</button>
+  </div>
+
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Technical"
+    subtitle="Open jobs, pending projects, AMC and material requests in one place"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="total"
+    [data]="rows"
+    [columns]="columns"
+    [loading]="isLoading"
+    [pageSize]="row"
+    searchPlaceholder="Search job ID, customer or engineer"
+    [emptyMessage]="emptyMessage"
+    [createLabel]="createLabel"
+    [rowActions]="rowActions"
+    [views]="views"
+    [detailTabs]="detailTabs"
+    [detailTitle]="detailTitle"
+    [detailSubtitle]="detailSubtitle"
+    (create)="addProject()"
+    (viewChange)="onViewChange($event)"
+    (queryChange)="onQueryChange($event)"
+    (rowAction)="onRowAction($event)">
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <app-detail-overview *ngIf="tab === 'overview'" [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+    </ng-template>
+  </app-data-grid>
+</div>
