@@ -1,42 +1,33 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal, OnInit, OnDestroy, ViewChild } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatDialog } from '@angular/material/dialog';
-import { Router, RouterModule, ActivatedRoute } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { ReasonPromptModalComponent } from 'src/app/shared/components/reason-prompt-modal/reason-prompt-modal.component';
-import { NgSelectModule } from '@ng-select/ng-select';
-import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { PaginationService } from 'src/app/core/services/pagination.service';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
-import { TableComponent } from 'src/app/shared/components/table/table.component';
-import { TableColumn, TableFilter } from 'src/app/shared/components/table/table.model';
+import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid.component';
+import { DataGridBreadcrumb, DataGridCellEditEvent, DataGridColumn, DataGridFilter, DataGridQuery } from 'src/app/shared/components/data-grid/data-grid.model';
 import { InvoiceService } from 'src/app/core/services/invoice.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { Invoice, InvoiceFilterParams } from 'src/app/shared/interfaces/invoice.interface';
 import { Subscription } from 'rxjs';
 import { ToastrService } from 'ngx-toastr';
 import * as XLSX from 'xlsx';
+import { CreateInvoiceComponent } from '../create-invoice/create-invoice.component';
 
 @Component({
   selector: 'app-invoice-register',
   standalone: true,
   imports: [
     CommonModule,
-    TableComponent,
-    ButtonComponent,
-    IconsModule,
-    MatMenuModule,
-    RouterModule,
-    FormsModule,
-    NgSelectModule
+    DataGridComponent,
+    CreateInvoiceComponent
   ],
   templateUrl: './invoice-register.component.html',
   styleUrl: './invoice-register.component.css',
   providers: [PaginationService]
 })
 export class InvoiceRegisterComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent) tableComponent!: TableComponent;
+  @ViewChild('grid') grid!: DataGridComponent<Invoice>;
 
   private invoiceService = inject(InvoiceService);
   private router = inject(Router);
@@ -54,10 +45,11 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
   groupedData = signal<{ customerName: string, invoices: Invoice[] }[]>([]);
   salespersonReportData = signal<Invoice[]>([]);
   canCreateInvoice = signal<boolean>(false);
+  createInvoiceOpen = signal<boolean>(false);
 
   // Register Columns
-  registerColumns: TableColumn[] = [];
-  defaultColumns: string[] = [];
+  registerColumns: DataGridColumn<Invoice>[] = [];
+  breadcrumbs: DataGridBreadcrumb[] = [{ label: 'Home', link: '/' }, { label: 'Finance' }, { label: 'Payable' }];
 
   // Report Filters
   reportFromDate = signal<string>('');
@@ -66,6 +58,22 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
 
   // Salespeople Options (Mocked for now or fetched if API exists)
   salespeople = signal<{ id: string, name: string }[]>([]);
+
+  private readonly invoiceStatusOptions = [
+    'Pending to submit',
+    'PI Submitted',
+    'Partial invoicing',
+    'Submitted',
+    'Hold',
+    'Rejected by customer'
+  ];
+
+  private readonly paymentStatusOptions = [
+    'Paid',
+    'Partially paid',
+    'Advance received',
+    'Pending'
+  ];
 
   constructor() {
     this.setupRegisterColumns();
@@ -95,39 +103,31 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
         label: 'Invoice No',
         type: 'text',
         sortable: true,
-        filterable: true,
-        filterType: 'text'
+        locked: true
       },
       {
         key: 'date',
         label: 'Invoice Date',
         type: 'date',
-        pipeParams: 'dd/MM/yyyy',
-        sortable: true,
-        filterable: true,
-        filterType: 'date'
+        sortable: true
       },
       {
         key: 'customer.companyName',
         label: 'Customer Name',
         type: 'text',
-        filterable: true,
-        filterType: 'text'
+        valueGetter: (item) => item.customer?.companyName || '-'
       },
       {
         key: 'jobId.jobId',
         label: 'Job ID',
         type: 'text',
-        filterable: true,
-        filterType: 'text'
+        valueGetter: (item) => item.jobId?.jobId || '-'
       },
       {
         key: 'salesperson',
         label: 'Salesperson Name',
         type: 'text',
-        filterable: true,
-        filterType: 'text',
-        cellRenderer: (item: Invoice) => {
+        valueGetter: (item: Invoice) => {
           const sp = item.salesperson as any;
           if (!sp) return '-';
           return [sp.firstName, sp.lastName].filter(Boolean).join(' ') || '-';
@@ -136,70 +136,32 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
       {
         key: 'amount',
         label: 'Invoice Amount',
-        type: 'text',
-        cellRenderer: (item: any) => {
-          const currency = item?.currency || 'QAR';
-          const amount = item?.amount ?? 0;
-          try {
-            return new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency,
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            }).format(amount);
-          } catch {
-            return `${currency} ${amount}`;
-          }
-        },
+        type: 'currency',
+        currencyCode: 'QAR',
+        valueGetter: (item: any) => item?.amount ?? 0,
         sortable: true,
-        filterable: false
+        align: 'right'
       },
       {
         key: 'status',
         label: 'Status',
-        type: 'statusDropdown',
-        statusOptions: [
-          'Pending to submit',
-          'PI Submitted',
-          'Partial invoicing',
-          'Submitted',
-          'Hold',
-          'Rejected by customer'
-        ],
-        filterable: true,
-        filterType: 'select',
-        filterOptions: [
-          { label: 'Pending to submit', value: 'Pending to submit' },
-          { label: 'PI Submitted', value: 'PI Submitted' },
-          { label: 'Partial invoicing', value: 'Partial invoicing' },
-          { label: 'Submitted', value: 'Submitted' },
-          { label: 'Hold', value: 'Hold' },
-          { label: 'Rejected by customer', value: 'Rejected by customer' }
-        ]
+        type: 'badge',
+        editable: true,
+        editor: 'select',
+        editorOptions: this.invoiceStatusOptions.map(status => ({ label: status, value: status })),
+        filterOptions: this.invoiceStatusOptions.map(status => ({ label: status, value: status }))
       },
       {
         key: 'paymentStatus',
         label: 'Payment Status',
-        type: 'statusDropdown',
-        statusOptions: [
-          'Paid',
-          'Partially paid',
-          'Advance received',
-          'Pending'
-        ],
-        filterable: true,
-        filterType: 'select',
-        filterOptions: [
-          { label: 'Paid', value: 'Paid' },
-          { label: 'Partially paid', value: 'Partially paid' },
-          { label: 'Advance received', value: 'Advance received' },
-          { label: 'Pending', value: 'Pending' }
-        ]
+        type: 'badge',
+        editable: true,
+        editor: 'select',
+        editorOptions: this.paymentStatusOptions.map(status => ({ label: status, value: status })),
+        filterOptions: this.paymentStatusOptions.map(status => ({ label: status, value: status }))
       },
 
     ];
-
-    this.defaultColumns = ['invoiceNo', 'date', 'customer.companyName', 'jobId.jobId', 'amount', 'salesperson', 'status', 'paymentStatus'];
   }
 
   loadData(filters?: Partial<InvoiceFilterParams>): void {
@@ -296,47 +258,53 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
     }
   }
 
-  onFilterChange(filters: TableFilter[]) {
-    // Map TableFilters to InvoiceFilterParams
-    const params: any = {};
-    filters.forEach(f => {
-      if (f.type === 'date' && f.column === 'date') {
-        params.fromDate = f.value[0];
-        params.toDate = f.value[1];
-      } else {
-        params[f.column] = f.value;
-      }
+  onQueryChange(query: DataGridQuery): void {
+    this.paginationService.updatePaginationState({
+      page: query.page,
+      row: query.pageSize,
+      total: this.paginationService.paginationState().total
     });
+
+    const params: Partial<InvoiceFilterParams> = {};
+    if (query.search) params.search = query.search;
+    query.filters.forEach(filter => this.applyGridFilter(params, filter));
     this.loadData(params);
   }
 
-  onPaginationChange(event: { page: number, row: number }) {
-    this.paginationService.updatePaginationState({
-      page: event.page,
-      row: event.row,
-      total: this.paginationService.paginationState().total
-    });
+  openCreateInvoice(): void {
+    this.createInvoiceOpen.set(true);
+  }
+
+  onCreateInvoiceSaved(): void {
+    this.createInvoiceOpen.set(false);
     this.loadData();
   }
 
-  onSearch(value: string): void {
-    this.paginationService.updatePaginationState({
-      page: 1,
-      row: this.paginationService.paginationState().row,
-      total: this.paginationService.paginationState().total
-    });
-    this.loadData({ search: value });
+  private applyGridFilter(params: Partial<InvoiceFilterParams>, filter: DataGridFilter): void {
+    if (filter.key === 'date') {
+      if (filter.op === 'before') params.toDate = filter.value;
+      else if (filter.op === 'after' || filter.op === 'on') params.fromDate = filter.value;
+      return;
+    }
+
+    const apiKey = filter.key === 'customer.companyName'
+      ? 'customer'
+      : filter.key === 'jobId.jobId'
+        ? 'jobId'
+        : filter.key;
+    (params as any)[apiKey] = filter.value;
   }
 
   onRowClick(row: Invoice) {
     this.router.navigate(['/finance/payables/invoice-register/view', row._id]);
   }
 
-  onStatusChange(event: { item: Invoice; column: string; oldValue: string; newValue: string }) {
-    const invoice = event.item;
+  onStatusChange(event: DataGridCellEditEvent<Invoice>) {
+    const invoice = event.row;
     const update: any = {};
-    if (event.column === 'status') {
+    if (event.column.key === 'status') {
       if (invoice.status === 'Cancelled' || invoice.status === 'Reissued') {
+        (invoice as any)[event.column.key] = event.oldValue;
         this.notificationService.warning('Status cannot be changed for cancelled or reissued invoices');
         return;
       }
@@ -354,6 +322,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
 
         dialogRef.afterClosed().subscribe((reason: string | null) => {
           if (!reason) {
+            (invoice as any)[event.column.key] = event.oldValue;
             return;
           }
           this.invoiceService.rejectInvoiceByCustomer(invoice._id, { reason }).subscribe({
@@ -362,6 +331,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
               this.loadData();
             },
             error: (error) => {
+              (invoice as any)[event.column.key] = event.oldValue;
               this.notificationService.error(error?.error?.message || 'Failed to reject invoice');
             }
           });
@@ -370,7 +340,7 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
       }
 
       update.status = event.newValue;
-    } else if (event.column === 'paymentStatus') {
+    } else if (event.column.key === 'paymentStatus') {
       update.paymentStatus = event.newValue;
     }
 
@@ -384,8 +354,24 @@ export class InvoiceRegisterComponent implements OnInit, OnDestroy {
         this.loadData();
       },
       error: () => {
+        (invoice as any)[event.column.key] = event.oldValue;
         this.notificationService.error('Failed to update invoice');
       }
+    });
+  }
+
+  onExportRequest(): void {
+    const total = this.paginationService.paginationState().total;
+    if (!total) {
+      this.notificationService.warning('No invoices to export');
+      return;
+    }
+
+    this.invoiceService.getInvoices({ page: 1, limit: total }).subscribe({
+      next: (res) => {
+        if (res.data.invoices?.length) void this.grid.exportToExcel(res.data.invoices);
+      },
+      error: () => this.notificationService.error('Failed to export invoices')
     });
   }
 

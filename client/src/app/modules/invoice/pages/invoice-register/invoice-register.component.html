@@ -1,49 +1,38 @@
-<div class="p-6 bg-slate-50 min-h-screen">
+<div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
 
-    <!-- Shared Action Buttons Template -->
-    <ng-template #actionButtons>
-        <div class="flex items-center gap-3">
-            <!-- View Mode Switcher via Dropdown -->
-            <button [matMenuTriggerFor]="reportMenu"
-                class="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 flex items-center gap-2 text-sm font-medium transition-colors">
-                <ng-icon name="heroDocumentChartBar" class="text-slate-500"></ng-icon>
-                Invoice Report
-                <ng-icon name="heroChevronDown" class="text-slate-400 text-xs"></ng-icon>
-            </button>
-            <mat-menu #reportMenu="matMenu">
-                <button mat-menu-item>
-                    <ng-icon name="heroUserGroup" class="mr-2 text-slate-500"></ng-icon>
-                    Customer-wise Report
-                </button>
-                <button mat-menu-item>
-                    <ng-icon name="heroUser" class="mr-2 text-slate-500"></ng-icon>
-                    Salesperson-wise Report
-                </button>
-            </mat-menu>
+    <app-data-grid #grid
+        class="flex-1 min-h-0"
+        [fillHeight]="true"
+        title="Payable"
+        subtitle="Invoice register and payment status"
+        [breadcrumbs]="breadcrumbs"
+        rowKey="_id"
+        [serverSide]="true"
+        [totalCount]="paginationService.paginationState().total"
+        [data]="tableData()"
+        [columns]="registerColumns"
+        [loading]="isLoading()"
+        [pageSize]="paginationService.paginationState().row"
+        [selectable]="false"
+        [showDetailPanel]="false"
+        searchPlaceholder="Search invoices"
+        emptyMessage="No invoices found"
+        [createLabel]="canCreateInvoice() ? 'Create Invoice' : ''"
+        storageKey="finance-payables-invoice-register"
+        exportable
+        exportFileName="invoice-register.xlsx"
+        (queryChange)="onQueryChange($event)"
+        (cellEdit)="onStatusChange($event)"
+        (rowOpen)="onRowClick($event)"
+        (exportRequest)="onExportRequest()"
+        (create)="openCreateInvoice()">
+    </app-data-grid>
 
-            <!-- Create Invoice Button -->
-            <ng-container *ngIf="canCreateInvoice()">
-                <app-btn theme="primary" routerLink="/finance/payables/invoice-register/create">
-                    <ng-icon name="heroPlus" class="mr-1"></ng-icon>
-                    Create Invoice
-                </app-btn>
-            </ng-container>
-        </div>
-    </ng-template>
-    <data-table [data]="tableData()" [columns]="registerColumns" [defaultColumns]="defaultColumns"
-        [isLoading]="isLoading()" [totalItems]="paginationService.paginationState().total"
-        [isEmpty]="tableData().length === 0" [tableId]="'invoice-register-table'" [title]="'Invoice Register'"
-        (filterChange)="onFilterChange($event)" (paginationChange)="onPaginationChange($event)"
-        (statusChange)="onStatusChange($event)" (rowClick)="onRowClick($event)">
-        <ng-template #sideColumn>
-            <div class="flex items-center gap-3">
-                <!-- <data-search 
-                        placeholder="Search invoices..."
-                        (searchSubmitted)="onSearch($event)"
-                    ></data-search> -->
-                <ng-container *ngTemplateOutlet="actionButtons"></ng-container>
-            </div>
-        </ng-template>
-    </data-table>
+    <app-create-invoice
+        class="contents"
+        [open]="createInvoiceOpen()"
+        (saved)="onCreateInvoiceSaved()"
+        (closed)="createInvoiceOpen.set(false)">
+    </app-create-invoice>
 
 </div>

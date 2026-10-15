@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, EventEmitter, inject, Input, OnChanges, OnInit, Output, signal, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -10,12 +10,13 @@ import { JobService } from 'src/app/core/services/job/job.service';
 import { DeliveryNoteService } from 'src/app/core/services/delivery-note/delivery-note.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { FormFieldComponent } from 'src/app/shared/components/forms/form-field/form-field.component';
-import { ButtonComponent } from 'src/app/shared/components/button/button.component';
 import { SelectDropdownComponent } from 'src/app/shared/components/forms/select-dropdown/select-dropdown.component';
 import { Invoice } from 'src/app/shared/interfaces/invoice.interface';
 import { getJob } from 'src/app/shared/interfaces/job.interface';
 import { DeliveryNote } from 'src/app/shared/interfaces/delivery-note.interface';
 import { convertNumberToWords } from 'src/app/shared/utils/number.utils';
+import { SmartFormModule } from 'src/app/shared/components/smart-form';
+import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 
 @Component({
   selector: 'app-create-invoice',
@@ -24,14 +25,19 @@ import { convertNumberToWords } from 'src/app/shared/utils/number.utils';
     CommonModule,
     ReactiveFormsModule,
     RouterModule,
+    SmartFormModule,
     SelectDropdownComponent,
     FormFieldComponent,
-    ButtonComponent
+    ActionButtonComponent
   ],
   templateUrl: './create-invoice.component.html',
   styleUrl: './create-invoice.component.css'
 })
-export class CreateInvoiceComponent implements OnInit {
+export class CreateInvoiceComponent implements OnInit, OnChanges {
+  @Input() open = false;
+  @Output() saved = new EventEmitter<void>();
+  @Output() closed = new EventEmitter<void>();
+
   private fb = inject(FormBuilder);
   private router = inject(Router);
   private invoiceService = inject(InvoiceService);
@@ -75,8 +81,15 @@ export class CreateInvoiceComponent implements OnInit {
   itemInvoicedTotals: Record<string, number> = {};
   reissueInvoiceNo: string | null = null;
   currency = signal<string>('QAR');
+  private initialized = false;
+  private routeMode = false;
 
   ngOnInit(): void {
+    this.routeMode = (this.route.snapshot.routeConfig?.path || '').includes('invoice-register/');
+    if (this.routeMode) {
+      this.open = true;
+    }
+
     this.employeeService.employeeData$.subscribe(emp => {
       if (emp && emp.category && emp.category.privileges) {
         if (!emp.category.privileges.invoice?.createInvoice) {
@@ -104,9 +117,73 @@ export class CreateInvoiceComponent implements OnInit {
       }
       this.loadInvoiceForEdit(id);
     } else {
-      this.generateInvoiceNumber();
-      this.loadDeliveryNotes();
+      this.initializeCreateForm();
     }
+    this.initialized = true;
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.initialized || this.routeMode || !changes['open'] || !this.open) return;
+    this.initializeCreateForm();
+  }
+
+  get drawerTitle(): string {
+    return this.isReissueMode() ? 'Reissue Invoice' : (this.isEditMode() ? 'Edit Invoice' : 'Create Invoice');
+  }
+
+  get drawerSubtitle(): string {
+    if (this.isReissueMode()) return 'Create a replacement invoice from the cancelled record';
+    if (this.isEditMode()) return 'Update invoice details and delivery note quantities';
+    return 'Create an invoice from delivered job items';
+  }
+
+  cancel(): void {
+    if (this.routeMode) {
+      this.router.navigate(['/finance/payables']);
+      return;
+    }
+    this.closed.emit();
+  }
+
+  onDrawerClosed(discarded: boolean): void {
+    if (discarded && !this.routeMode) {
+      this.resetCreateForm();
+    }
+    this.cancel();
+  }
+
+  private initializeCreateForm(): void {
+    this.isSubmitted.set(false);
+    this.isEditMode.set(false);
+    this.isReissueMode.set(false);
+    this.editInvoiceId.set(null);
+    this.editInvoiceCustomerId.set(null);
+    this.resetCreateForm();
+    this.generateInvoiceNumber();
+    this.loadDeliveryNotes();
+  }
+
+  private resetCreateForm(): void {
+    this.invoiceForm.reset({
+      date: new Date().toISOString().split('T')[0],
+      invoiceNo: '',
+      jobId: null,
+      dnNos: [],
+      itemSource: 'delivery-note',
+      customerName: '',
+      customerLpo: '',
+      paymentTerms: '',
+      amountWords: '',
+      amountFigures: 0
+    });
+    this.itemsFormArray.clear();
+    this.deliveryNotes.set([]);
+    this.pendingDeliveryItems = [];
+    this.dnInvoiceSummary = {};
+    this.itemInvoicedTotals = {};
+    this.customerData = null;
+    this.currency.set('QAR');
+    this.invoiceForm.markAsPristine();
   }
 
   loadInvoiceForEdit(id: string) {
@@ -659,7 +736,13 @@ export class CreateInvoiceComponent implements OnInit {
     request$.subscribe({
       next: () => {
         this.notificationService.success(`Invoice ${this.isEditMode() ? 'updated' : 'created'} successfully`);
-        this.router.navigate(['/finance/payables']);
+        if (this.routeMode) {
+          this.router.navigate(['/finance/payables']);
+        } else {
+          this.resetCreateForm();
+          this.saved.emit();
+          this.closed.emit();
+        }
       },
       error: (err) => {
         console.error(err);
