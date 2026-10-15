@@ -184,7 +184,12 @@ export const newEvent = async (req: any, res: Response, next: NextFunction) => {
 export const fechEvents = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const collectionId = req.params.collectionId;
-        const events = await Event.find({ collectionId: collectionId })
+        const stage = String(req.query.stage || '');
+        const filter: any = { collectionId: collectionId };
+        // Enquiry and presale hang events off the same enquiry id; events with no stage are older enquiry events.
+        if (stage === 'Presale') filter.stage = 'Presale';
+        else if (stage === 'Enquiry') filter.stage = { $ne: 'Presale' };
+        const events = await Event.find(filter)
         .populate('employee')
         .populate('createdBy')
         .sort({ date: 1 })

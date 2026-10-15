@@ -4,10 +4,11 @@ import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { ToastrService } from 'ngx-toastr';
 import { ReportBugComponent } from '../report-bug/report-bug.component';
 import { BugReportScreenshotService } from 'src/app/core/diagnostics/bug-report-screenshot.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { combineLatest, Observable, map } from 'rxjs';
+import { combineLatest, Observable, map, distinctUntilChanged } from 'rxjs';
 import { getEmployee } from '../../interfaces/employee.interface';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { TextNotification } from '../../interfaces/notification.interface';
@@ -21,12 +22,16 @@ import { ThemeService } from 'src/app/core/services/theme.service';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { CommandPaletteService } from 'src/app/core/services/command-palette.service';
 import { Crumb, buildBreadcrumbs } from '../../constants/nav-menu';
+import { CdkConnectedOverlay, CdkOverlayOrigin, ConnectedPosition } from '@angular/cdk/overlay';
+import { AnnouncementService } from 'src/app/core/services/announcement/announcement.service';
+import { NotificationComponent } from '../notification/notification.component';
+import { AnnouncementPopoverComponent } from 'src/app/modules/announcements/announcement-popover/announcement-popover.component';
 
 @Component({
     selector: 'app-nav-bar',
     templateUrl: './nav-bar.component.html',
     styleUrls: ['./nav-bar.component.css'],
-    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent,MatTooltipModule,CountBadgeComponent]
+    imports: [CommonModule,IconsModule, MatMenuModule, MatButtonModule,RouterModule,ButtonComponent,MatTooltipModule,CountBadgeComponent,CdkOverlayOrigin,CdkConnectedOverlay,AnnouncementPopoverComponent,NotificationComponent]
 })
 export class NavBarComponent {
   breadcrumbs: Crumb[] = [];
@@ -38,10 +43,15 @@ export class NavBarComponent {
   canSeeRecycle = false;
   canSeeBugs = false;
   isSuperAdmin: boolean = false;
+  canSeeAnnouncements = false;
+  announcementsOpen = false;
+  notificationsOpen = false;
+  readonly announcementsPositions: ConnectedPosition[] = [
+    { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 8 },
+    { originX: 'center', originY: 'bottom', overlayX: 'center', overlayY: 'top', offsetY: 8 },
+  ];
   employee!: { id: string, employeeId: string };
   employeeData$!: Observable<getEmployee | undefined>
-  @Output() toggleDrawer = new EventEmitter<void>();
-  @Output() toggleAnnouncementDrawer = new EventEmitter<void>();
   @ViewChild(MatMenuTrigger) menuTrigger?: MatMenuTrigger;
 
   constructor(
@@ -50,10 +60,12 @@ export class NavBarComponent {
     private _notificationService: NotificationService,
     private msalService: MsalService,
     private dialog: MatDialog,
+    private toastr: ToastrService,
     private bugReportScreenshotService: BugReportScreenshotService,
     public layout: LayoutService,
     public themeService: ThemeService,
-    public palette: CommandPaletteService
+    public palette: CommandPaletteService,
+    public announcementService: AnnouncementService
   ) {
     // An open profile menu holds a scroll-blocking overlay that keeps the palette's list from scrolling (Ctrl+K).
     effect(() => {
@@ -70,6 +82,10 @@ export class NavBarComponent {
     this.announcementNotificationCount$ = this.textNotificationCount$.pipe(
       map((notifications) => notifications.unviewed.filter((n) => n.type === 'Announcement').length)
     );
+    // A new Announcement notification means the unread count moved; re-read it from the server
+    this.announcementNotificationCount$.pipe(distinctUntilChanged()).subscribe(() => {
+      if (this.canSeeAnnouncements) this.announcementService.refreshCounts();
+    });
     this.textNotificationBadgeCount$ = combineLatest([
       this.textNotificationCount$,
       this._notificationService.markedUnreadIds$,
@@ -94,6 +110,10 @@ export class NavBarComponent {
         const pm = emp.category.privileges.portalManagement;
         this.canSeeRecycle = this.isSuperAdmin || !!pm?.recycle;
         this.canSeeBugs = this.isSuperAdmin || !!pm?.bugReports;
+        const viewAnnouncements = emp.category.privileges.announcement?.viewReport;
+        const canSee = !!viewAnnouncements && viewAnnouncements !== 'none';
+        if (canSee && !this.canSeeAnnouncements) this.announcementService.refreshCounts();
+        this.canSeeAnnouncements = canSee;
       }else{
         this._employeeService.getEmployeeData()
       }
@@ -131,23 +151,53 @@ export class NavBarComponent {
   }
 
   onBellClick() {
-    this.toggleDrawer.emit();
+    this.notificationsOpen = !this.notificationsOpen;
+  }
+
+  onNotificationsOutsideClick(event: MouseEvent) {
+    const target = event.target as HTMLElement | null;
+    // A click on the bell itself is handled by onBellClick
+    if (target?.closest('[aria-label="Notifications"]')) return;
+    this.notificationsOpen = false;
   }
 
   onAnnouncementsClick() {
-    this.toggleAnnouncementDrawer.emit();
+    this.announcementsOpen = !this.announcementsOpen;
+  }
+
+  onAnnouncementsOutsideClick(event: MouseEvent) {
+    // A click on the megaphone itself is handled by onAnnouncementsClick
+    if ((event.target as HTMLElement | null)?.closest('[aria-label="Announcements"]')) return;
+    this.announcementsOpen = false;
   }
 
   setTheme(theme: 'light' | 'dark') {
     this.themeService.setTheme(theme);
   }
 
-  onReportBug() {
+  private reportBugBusy = false;
+
+  async onReportBug() {
+    if (this.reportBugBusy) return;
+    this.reportBugBusy = true;
     this.bugReportScreenshotService.clear();
-    this.dialog.open(ReportBugComponent, {
+    const wait = this.toastr.info(
+      'Preparing the bug report. This takes a few seconds, please wait for the form to open.',
+      'Please wait',
+      { disableTimeOut: true, tapToDismiss: false, closeButton: false },
+    );
+    try {
+      // Capture before the dialog exists so the screenshot shows the page, not the form.
+      await this.bugReportScreenshotService.captureScreenshot();
+    } catch {
+      this.toastr.warning('Automatic screenshot failed. You can add one manually in the form.');
+    }
+    const ref = this.dialog.open(ReportBugComponent, {
       disableClose: true,
       maxHeight: '90vh',
       width: '600px',
     });
+    ref.afterOpened().subscribe(() => this.toastr.clear(wait.toastId));
+    this.reportBugBusy = false;
   }
 }

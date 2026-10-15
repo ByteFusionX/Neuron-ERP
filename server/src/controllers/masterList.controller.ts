@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import MasterListItemModel, { LIST_MODULE, MASTER_LISTS, MasterListName } from '../models/masterListItem.model';
 import { getEmployeeData } from "../common/utils/util";
 import Product from '../models/products.model';
+import Supplier from '../models/supplier.model';
 
 /** Products store units and brands as text, so these lists need a usage check and a rename cascade. */
 const PRODUCT_TEXT_FIELD: Record<string, string> = { unit: 'unitOfMeasure', brand: 'brand' };
@@ -9,6 +10,16 @@ const productsUsing = (list: string, label: string) => {
     const field = PRODUCT_TEXT_FIELD[list];
     return field ? Product.countDocuments({ isDeleted: { $ne: true }, [field]: new RegExp(`^${escapeRegex(label)}$`, 'i') }) : Promise.resolve(0);
 };
+
+/** Suppliers keep their type as text and their category as a reference to the list item. */
+const suppliersUsing = (list: string, item: { _id: any; label: string }) => {
+    if (list === 'supplierType') return Supplier.countDocuments({ isDeleted: { $ne: true }, supplierType: new RegExp(`^${escapeRegex(item.label)}$`, 'i') });
+    if (list === 'supplierCategory') return Supplier.countDocuments({ isDeleted: { $ne: true }, category: item._id });
+    return Promise.resolve(0);
+};
+
+/** Notes and terms are paragraphs, not short option names. */
+const TEXT_LISTS = ['customerNote', 'termsAndConditions', 'placeOfDelivery', 'shippingTerms', 'purchaseTermsNotes'];
 
 const validList = (list: string) => (MASTER_LISTS as readonly string[]).includes(list);
 
@@ -43,7 +54,8 @@ export const createMasterListItem = async (req: Request, res: Response) => {
         const label = String(req.body.label ?? '').trim();
         if (!label) return res.status(400).json({ success: false, message: "Name is required" });
         // Units and availability can be added from any form, so keep junk and pasted text out of the shared list.
-        if (label.length > 40) return res.status(400).json({ success: false, message: "Name must be 40 characters or fewer" });
+        const maxLabel = TEXT_LISTS.includes(list) ? 1000 : 40;
+        if (label.length > maxLabel) return res.status(400).json({ success: false, message: `Name must be ${maxLabel} characters or fewer` });
         const value = parseValue(req.body.value);
         if (value === undefined) return res.status(400).json({ success: false, message: "Value must be a non-negative number" });
         if (await labelTaken(list, label)) return res.status(409).json({ success: false, message: "That name already exists in this list" });
@@ -85,6 +97,9 @@ export const updateMasterListItem = async (req: Request, res: Response) => {
         if (renamedFrom && field) {
             await Product.updateMany({ isDeleted: { $ne: true }, [field]: new RegExp(`^${escapeRegex(renamedFrom)}$`, 'i') }, { $set: { [field]: item.label } });
         }
+        if (renamedFrom && list === 'supplierType') {
+            await Supplier.updateMany({ isDeleted: { $ne: true }, supplierType: new RegExp(`^${escapeRegex(renamedFrom)}$`, 'i') }, { $set: { supplierType: item.label } });
+        }
         return res.status(200).json({ success: true, data: item });
     } catch (error: any) {
         if (error?.code === 11000) return res.status(409).json({ success: false, message: "That name already exists in this list" });
@@ -102,6 +117,8 @@ export const deleteMasterListItem = async (req: Request, res: Response) => {
         if (existing.isSystem) return res.status(400).json({ success: false, message: "Default items can't be deleted. Hide it instead." });
         const inUse = await productsUsing(list, existing.label);
         if (inUse) return res.status(409).json({ success: false, message: `Used by ${inUse} product${inUse === 1 ? '' : 's'}. Hide it instead of deleting.` });
+        const suppliersInUse = await suppliersUsing(list, existing);
+        if (suppliersInUse) return res.status(409).json({ success: false, message: `Used by ${suppliersInUse} supplier${suppliersInUse === 1 ? '' : 's'}. Hide it instead of deleting.` });
         const editor = await getEmployeeData(req.user);
         existing.isDeleted = true;
         existing.isActive = false;

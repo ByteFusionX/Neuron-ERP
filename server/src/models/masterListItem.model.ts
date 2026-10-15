@@ -1,6 +1,6 @@
 import { model, Schema } from "mongoose";
 
-export const MASTER_LISTS = ['unit', 'availability', 'customerNote', 'termsAndConditions', 'placeOfDelivery', 'shippingTerms', 'paymentTerms', 'source', 'creditStatus', 'currency', 'brand'] as const;
+export const MASTER_LISTS = ['unit', 'availability', 'customerNote', 'termsAndConditions', 'placeOfDelivery', 'shippingTerms', 'purchaseTermsNotes', 'paymentTerms', 'source', 'creditStatus', 'currency', 'brand', 'supplierType', 'supplierCategory'] as const;
 export type MasterListName = typeof MASTER_LISTS[number];
 
 export const MASTER_MODULES = ['product', 'customer', 'purchase', 'sales', 'general'] as const;
@@ -14,11 +14,14 @@ export const LIST_MODULE: Record<MasterListName, MasterModule> = {
     termsAndConditions: 'general',
     placeOfDelivery: 'purchase',
     shippingTerms: 'purchase',
+    purchaseTermsNotes: 'purchase',
     paymentTerms: 'customer',
     source: 'customer',
     creditStatus: 'customer',
     currency: 'customer',
     brand: 'product',
+    supplierType: 'purchase',
+    supplierCategory: 'purchase',
 };
 
 export interface MasterListItem {

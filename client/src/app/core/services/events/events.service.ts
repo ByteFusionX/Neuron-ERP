@@ -55,8 +55,9 @@ export class EventsService {
     )
   }
 
-  fetchEvents(collectionId: string): Observable<any> {
-    return this.http.get<any>(`${this.api}/events/fetch/${collectionId}`)
+  /** `stage` keeps enquiry and presale events apart, since both hang off the same enquiry id. */
+  fetchEvents(collectionId: string, stage?: 'Enquiry' | 'Presale'): Observable<any> {
+    return this.http.get<any>(`${this.api}/events/fetch/${collectionId}`, { params: stage ? { stage } : {} })
   }
   eventStatus(eventId: string, status: string): Observable<any> {
     return this.http.patch(`${this.api}/events/status`, { eventId, status })

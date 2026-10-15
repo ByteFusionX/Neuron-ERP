@@ -83,7 +83,7 @@ export class LoginPageComponent implements OnDestroy {
             localStorage.setItem('employeeToken', res.token)
             this.notificationService.authSocketIo(res.token)
             this.notificationService.initializeNotifications()
-            this.router.navigate(['/home']);
+            this.router.navigateByUrl(res.employeeData.preferences?.defaultLandingPage || '/home');
           } else if (res.employeeNotFoundError) {
             this.isSaving = false;
             this.employeeNotFoundError = true;
@@ -124,7 +124,7 @@ export class LoginPageComponent implements OnDestroy {
           localStorage.setItem('employeeToken', res.token)
           this.notificationService.authSocketIo(res.token)
           this.notificationService.initializeNotifications()
-          this.router.navigate(['/home']);
+          this.router.navigateByUrl(res.employeeData.preferences?.defaultLandingPage || '/home');
         } else {
           this.toastr.error('No matching employee account was found for this Microsoft login.');
         }

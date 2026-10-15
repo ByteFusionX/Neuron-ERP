@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import Product from "../models/products.model";
 import Supplier from "../models/supplier.model";
 import Employee from "../models/employee.model";
-import StockEntry from "../models/stockEntry.model";
+import StockMovement from "../models/stockMovement.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
 
 const MAX_LIMIT = 50;
@@ -31,6 +31,7 @@ const productFilter = (query: any) => {
     filter.$or = [
       { partNo: regex },
       { itemCode: regex },
+      { nickName: regex },
       { productName: regex },
       { productDescription: regex },
       { brand: regex },
@@ -43,6 +44,7 @@ const productFilter = (query: any) => {
 const productProjection = {
   partNo: 1,
   itemCode: 1,
+  nickName: 1,
   productName: 1,
   productDescription: 1,
   productCategory: 1,
@@ -153,21 +155,24 @@ export const getProductContext = async (req: Request, res: Response, next: NextF
       .lean();
     if (!product) return res.status(404).json({ success: false, message: "Product not found" });
 
-    const lastStockEntry = await StockEntry.findOne({ partNo: id, isDeleted: { $ne: true } }, {
-      dateOfPurchase: 1,
-      supplierName: 1,
-      supplierLpoNo: 1,
-      quantity: 1,
-      uom: 1,
-      unitCost: 1,
-      sellingPrice: 1,
-      targetWarehouse: 1,
-      isQuarantined: 1,
+    // Last purchase info is the latest stock Receipt in the ledger.
+    const lastReceipt: any = await StockMovement.findOne({
+      product: id, movementType: 'Receipt', stockStatus: { $ne: 'Quarantine' }, reversalOf: { $exists: false }, isDeleted: { $ne: true },
     })
-      .sort({ dateOfPurchase: -1, createdDate: -1 })
-      .populate("supplierName", "supplierId supplierName")
-      .populate("targetWarehouse", "warehouseName name")
+      .sort({ movementDate: -1, createdDate: -1 })
+      .populate("supplier", "supplierId supplierName")
+      .populate("warehouse", "wareHouseName")
       .lean();
+    const lastStockEntry = lastReceipt ? {
+      dateOfPurchase: lastReceipt.movementDate,
+      supplierName: lastReceipt.supplier,
+      supplierLpoNo: lastReceipt.lpoNo,
+      quantity: lastReceipt.quantityIn,
+      uom: (product as any).unitOfMeasure,
+      unitCost: lastReceipt.unitCost,
+      targetWarehouse: lastReceipt.warehouse,
+      isQuarantined: false,
+    } : null;
 
     return res.status(200).json({
       success: true,

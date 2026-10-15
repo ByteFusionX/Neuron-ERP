@@ -108,7 +108,14 @@ import {
   heroMegaphone,
   heroMoon,
   heroSun,
-  heroHashtag
+  heroHashtag,
+  heroSparkles,
+  heroBookmark,
+  heroArrowTopRightOnSquare,
+  heroLink,
+  heroInbox,
+  heroEnvelopeOpen,
+  heroArrowRight
 } from '@ng-icons/heroicons/outline';
 
 import {
@@ -238,7 +245,14 @@ import {
       heroMegaphone,
       heroMoon,
       heroSun,
-      heroHashtag
+      heroHashtag,
+      heroSparkles,
+      heroBookmark,
+      heroArrowTopRightOnSquare,
+      heroLink,
+      heroInbox,
+      heroEnvelopeOpen,
+      heroArrowRight
     }),
   ],
   exports: [NgIconsModule]

@@ -127,6 +127,8 @@ export interface DataGridView<T = any> {
   count?: number;
   /** Hide the count badge — for server-paged views whose total is unknown while another view is active. */
   hideCount?: boolean;
+  /** Never show the "View" filter pill when this view is active. */
+  hidePill?: boolean;
   sort?: DataGridSortState;
   custom?: boolean;
   /** Built-in view a custom view was saved from; its predicate still applies. */

@@ -29,10 +29,10 @@ const ALL: ItemSheetColumn[] = [
   { key: 'remarks', label: 'Remarks', width: 28, aliases: ['remark', 'notes'] },
 ];
 
-/** Columns for a mode: an RFQ asks for identifiers and quantity; quote lines carry cost and price too. */
+/** Columns for a mode: an RFQ sheet is one format for create and edit (identifiers, quantity, price, availability); quote lines carry cost and selling price too. */
 export function itemSheetColumns(mode: string, rfqPriced: boolean): ItemSheetColumn[] {
   const keys: ItemSheetColumn['key'][] = ['item', 'itemCode', 'partNo', 'detail', 'quantity', 'uom'];
-  if (mode === 'rfq' && rfqPriced) keys.push('unitCost', 'offeredQty', 'availability', 'alternative', 'paymentTerms', 'deliveryTerms', 'remarks');
+  if (mode === 'rfq') keys.push('unitCost', 'availability');
   else if (mode === 'quote') keys.push('unitCost', 'unitSellingPrice', 'availability');
   else if (mode === 'purchase') keys.push('unitCost', 'availability');
   return ALL.filter((c) => keys.includes(c.key));
@@ -63,27 +63,34 @@ async function saveWorkbook(wb: ExcelJS.Workbook, fileName: string): Promise<voi
   saveAs(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_TYPE }), fileName);
 }
 
-function newSheet(columns: ItemSheetColumn[], fillColumns: string[] = []): { wb: ExcelJS.Workbook; ws: ExcelJS.Worksheet } {
+/** A detail above the item table (e.g. "Prices by"): label in column A, value in column B. */
+export interface ItemSheetMeta {
+  label: string;
+  value: string;
+}
+
+const normText = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
+
+function newSheet(columns: ItemSheetColumn[], meta: ItemSheetMeta[] = []): { wb: ExcelJS.Workbook; ws: ExcelJS.Worksheet } {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Items');
-  ws.columns = [
-    ...columns.map((c) => ({ header: c.label, key: c.key, width: c.width })),
-    ...fillColumns.map((label, i) => ({ header: label, key: `fill${i}`, width: Math.max(16, label.length + 4) })),
-  ];
-  const head = ws.getRow(1);
+  ws.columns = columns.map((c) => ({ key: c.key, width: c.width }));
+  meta.forEach((m) => {
+    const row = ws.addRow([m.label, m.value]);
+    row.getCell(1).font = { bold: true };
+    row.getCell(2).alignment = { wrapText: true, vertical: 'top' };
+  });
+  if (meta.length) ws.addRow([]);
+  const head = ws.addRow(columns.map((c) => c.label));
   head.font = { bold: true };
   head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE9FE' } };
-  // Blank columns the other party fills in are tinted so they stand out from our own data.
-  fillColumns.forEach((_, i) => {
-    head.getCell(columns.length + 1 + i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
-  });
-  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  ws.views = [{ state: 'frozen', ySplit: head.number }];
   return { wb, ws };
 }
 
-/** Writes the entered items (blank lines skipped) to an .xlsx download. Returns the row count. */
-export async function exportItemsSheet(items: ItemEntryItemValue[], columns: ItemSheetColumn[], fileName: string, fillColumns: string[] = []): Promise<number> {
-  const { wb, ws } = newSheet(columns, fillColumns);
+/** Writes the details and the entered items (blank lines skipped) to an .xlsx download. Returns the row count. */
+export async function exportItemsSheet(items: ItemEntryItemValue[], columns: ItemSheetColumn[], fileName: string, meta: ItemSheetMeta[] = []): Promise<number> {
+  const { wb, ws } = newSheet(columns, meta);
   let rows = 0;
   items.forEach((item) => (item.itemDetails || []).forEach((d) => {
     if (!(d.detail || '').toString().trim() && d.quantity == null) return;
@@ -95,8 +102,8 @@ export async function exportItemsSheet(items: ItemEntryItemValue[], columns: Ite
 }
 
 /** An empty sheet with just the headers, so users know the expected format. */
-export function downloadItemsTemplate(columns: ItemSheetColumn[], fileName: string, fillColumns: string[] = []): Promise<void> {
-  const { wb } = newSheet(columns, fillColumns);
+export function downloadItemsTemplate(columns: ItemSheetColumn[], fileName: string, meta: ItemSheetMeta[] = []): Promise<void> {
+  const { wb } = newSheet(columns, meta);
   return saveWorkbook(wb, fileName);
 }
 
@@ -105,23 +112,39 @@ export interface ItemSheetImport {
   imported: number;
   /** Human-readable reasons rows were skipped, with their sheet row number. */
   skipped: string[];
+  /** Details found above the table, keyed by lower-cased label. */
+  meta: Record<string, string>;
 }
 
-/** Reads the first sheet. Headers are matched by name, so column order and extra columns do not matter. */
+/** Reads the first sheet. The header row is found by its names (so details may sit above it); column order and extra columns do not matter. */
 export async function readItemsSheet(file: File, columns: ItemSheetColumn[]): Promise<ItemSheetImport> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
   const ws = wb.worksheets[0];
   if (!ws) throw new Error('The file has no sheet.');
 
-  const norm = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
+  const norm = normText;
   const at = new Map<ItemSheetColumn['key'], number>();
-  ws.getRow(1).eachCell((cell, col) => {
-    const name = norm(cellText(cell.value));
-    const match = columns.find((c) => norm(c.label) === name || c.aliases?.some((a) => norm(a) === name));
-    if (match && !at.has(match.key)) at.set(match.key, col);
-  });
-  if (!at.has('detail') || !at.has('quantity')) throw new Error('The sheet needs "Description" and "Qty" columns. Download the template for the expected format.');
+  let headerRow = 0;
+  for (let r = 1; r <= Math.min(ws.rowCount, 40) && !headerRow; r++) {
+    const found = new Map<ItemSheetColumn['key'], number>();
+    ws.getRow(r).eachCell((cell, col) => {
+      const name = norm(cellText(cell.value));
+      const match = columns.find((c) => norm(c.label) === name || c.aliases?.some((a) => norm(a) === name));
+      if (match && !found.has(match.key)) found.set(match.key, col);
+    });
+    if (found.has('detail') && found.has('quantity')) {
+      headerRow = r;
+      found.forEach((col, key) => at.set(key, col));
+    }
+  }
+  if (!headerRow) throw new Error('The sheet needs "Description" and "Qty" columns. Export the lines first to get the expected format.');
+
+  const meta: Record<string, string> = {};
+  for (let r = 1; r < headerRow; r++) {
+    const label = norm(cellText(ws.getRow(r).getCell(1).value));
+    if (label) meta[label] = cellText(ws.getRow(r).getCell(2).value);
+  }
 
   const text = (row: ExcelJS.Row, key: ItemSheetColumn['key']) => (at.has(key) ? cellText(row.getCell(at.get(key)!).value) : '');
   const num = (row: ExcelJS.Row, key: ItemSheetColumn['key']) => (at.has(key) ? cellNumber(row.getCell(at.get(key)!).value) : null);
@@ -132,7 +155,7 @@ export async function readItemsSheet(file: File, columns: ItemSheetColumn[]): Pr
   let lastItem = '';
 
   ws.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
+    if (rowNumber <= headerRow) return;
     const detail = text(row, 'detail');
     const qty = num(row, 'quantity');
     const item = text(row, 'item');
@@ -165,5 +188,5 @@ export async function readItemsSheet(file: File, columns: ItemSheetColumn[]): Pr
     imported++;
   });
 
-  return { items: [...groups.values()], imported, skipped };
+  return { items: [...groups.values()], imported, skipped, meta };
 }

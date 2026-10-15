@@ -16,7 +16,7 @@ import cusRouter from './routes/customer.router';
 import equiRouter from './routes/enquiry.router';
 import celebRouter from './routes/celebrationCheck.router';
 import startCronJob from './services/cron.service';
-import { migrateWorkflowsToGlobalLayout } from './services/workflowMigration.service';
+import { migrateWorkflowsToGlobalLayout, migrateJobDraftsToNew } from './services/workflowMigration.service';
 import quoteRouter from './routes/quotation.router';
 import fileRouter from './routes/file.router';
 import PassportMiddleware from './common/middlewares/jwt.middleware';
@@ -57,7 +57,7 @@ import claimRouter from './routes/claim.router';
 import productRouter from './routes/product.router';
 import productCategoryRouter from './routes/productCategory.router';
 import warehouseRouter from './routes/warehouse.router';
-import stockEntryRouter from './routes/stockEntry.router';
+import stockRouter from './routes/stock.router';
 import grnRouter from './routes/grn.router';
 import deliveryNoteRouter from './routes/deliveryNote.router';
 import invoiceRouter from './routes/invoice.router';
@@ -155,7 +155,7 @@ app.use("/purchase-orders", purchaseOrderRouter);
 app.use('/product', productRouter);
 app.use('/productCategory', productCategoryRouter);
 app.use('/warehouse', warehouseRouter);
-app.use('/stock-entry', stockEntryRouter);
+app.use('/stock', stockRouter);
 app.use('/grn', grnRouter);
 app.use('/delivery-note', deliveryNoteRouter);
 app.use('/invoice', invoiceRouter);
@@ -183,6 +183,7 @@ connectToDatabase()
     });
 
     migrateWorkflowsToGlobalLayout();
+    migrateJobDraftsToNew();
     startCronJob();
     socketConnection(io)
     emailWorker.start();

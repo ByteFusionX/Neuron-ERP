@@ -2,6 +2,7 @@ import { Schema, model } from "mongoose";
 
 interface events {
     from: string,
+    stage?: string,
     collectionId: any,
     event: string,
     date: Date,
@@ -24,6 +25,11 @@ const eventSchema = new Schema<events>({
         type: String,
         required: true,
         enum: ['Employee', 'Customer', 'Quotation', 'Enquiry', 'Department', 'InternalDepartment', 'Category', 'Job', 'Rfq'],
+    },
+    // Which stage of the sales flow raised it. Enquiry and presale share the enquiry id, so this keeps their events apart.
+    stage: {
+        type: String,
+        enum: ['Enquiry', 'Presale', 'Quotation']
     },
     collectionId: {
         type: Schema.Types.ObjectId,

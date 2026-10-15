@@ -10,6 +10,10 @@ export interface MenuItem {
   privilegeValue?: string;
   hasDropdown?: boolean;
   notificationKey?: string;
+  /** Several notification counts summed into one badge, for a single entry that replaced a dropdown. */
+  notificationKeys?: string[];
+  /** Boolean privilege flags that also grant access, even when `privilegeValue` itself is not met. */
+  anyOfFlags?: string[];
   children?: SubMenuItem[];
   inventorySubKey?: 'products' | 'stockEntries';
 }
@@ -190,19 +194,19 @@ export const MENU_CATEGORIES: MenuCategory[] = [
             notificationKey: 'purchaseCount',
           },
           {
-            id: 'purchaseRfqs',
-            label: 'RFQ',
-            route: '/purchase/rfq',
-            privilegeKey: 'purchase',
-            privilegeValue: 'none',
-          },
-          {
             id: 'purchaseOrders',
             label: 'PO',
             route: '/purchase/po',
             privilegeKey: 'purchaseOrder',
             privilegeValue: 'none',
             notificationKey: 'lpoApprovalCount',
+          },
+          {
+            id: 'purchaseRfqs',
+            label: 'RFQ',
+            route: '/purchase/rfq',
+            privilegeKey: 'purchase',
+            privilegeValue: 'none',
           },
           {
             id: 'generalPurchase',
@@ -256,33 +260,13 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         children: [
           {
             id: 'stockOverview',
-            label: 'Overview',
+            label: 'Stock Overview',
             route: '/stock/overview',
           },
-          {
-            id: 'inventoryPlanning',
-            label: 'Planning',
-            route: '/stock/planning',
-          },
-          // Reservations demoted from main nav: it's transactional detail
-          // that Planning already aggregates, and deal approval now
-          // creates reservations automatically. Route stays live at
-          // /stock/reservations; re-add here if it needs to be a
-          // first-class page again.
           {
             id: 'stockLedger',
             label: 'Stock Ledger',
             route: '/stock/ledger',
-          },
-          {
-            id: 'stockEntriesList',
-            label: 'Stock Entries',
-            route: '/stock/stock-entries',
-          },
-          {
-            id: 'stockOnHold',
-            label: 'Stock Holds',
-            route: '/stock/stock-holds',
           },
         ],
       },
@@ -350,43 +334,11 @@ export const MENU_CATEGORIES: MenuCategory[] = [
         id: 'technical',
         label: 'Technical',
         icon: 'heroWrenchScrewdriver',
-        hasDropdown: true,
+        route: '/technical/project-page',
         privilegeKey: 'technical',
         privilegeValue: 'none',
-        notificationKey: 'technicalCount',
-        children: [
-          {
-            id: 'pendingJobs',
-            label: 'Open To Work',
-            route: '/technical/open-to-work-project',
-            privilegeKey: 'technical',
-            privilegeValue: 'canViewOpenToWorkAndAssign',
-            notificationKey: 'technicalCount',
-          },
-          {
-            id: 'projects',
-            label: 'Pending Projects',
-            route: '/technical/project',
-            privilegeKey: 'technical',
-            privilegeValue: 'none',
-            notificationKey: 'technicalProjectCount',
-          },
-          {
-            id: 'amc',
-            label: 'Pending AMC',
-            route: '/technical/amc',
-            privilegeKey: 'technical',
-            privilegeValue: 'none',
-          },
-          {
-            id: 'mrApprovalRequests',
-            label: 'MR Approval Requests',
-            route: '/technical/mr-approval-requests',
-            privilegeKey: 'technical',
-            privilegeValue: 'canApproveMRRequests',
-            notificationKey: 'technicalApprovalCount',
-          },
-        ],
+        anyOfFlags: ['canViewOpenToWorkAndAssign', 'canTransferToEngineer', 'canApproveMRRequests'],
+        notificationKeys: ['technicalCount', 'technicalProjectCount', 'technicalApprovalCount'],
       },
     ],
   },
@@ -408,12 +360,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     label: 'Invoices',
     group: 'Finance',
     items: [
-      {
-        id: 'receivables',
-        label: 'Receivables',
-        icon: 'heroBanknotes',
-        route: '/finance/receivables',
-      },
       {
         id: 'payables',
         label: 'Payable',
@@ -541,6 +487,14 @@ export function hasMenuAccess(privileges: Privileges | undefined, item: MenuItem
 
   const privilegeObj = privileges[item.privilegeKey as keyof Privileges];
   if (!privilegeObj) return false;
+
+  if (
+    'anyOfFlags' in item &&
+    typeof privilegeObj === 'object' &&
+    item.anyOfFlags?.some((flag) => (privilegeObj as any)[flag] === true)
+  ) {
+    return true;
+  }
 
   // Handle when privilegeObj is just a boolean
   if (typeof privilegeObj === 'boolean') {

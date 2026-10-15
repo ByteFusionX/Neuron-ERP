@@ -1,11 +1,11 @@
 import { Component, EventEmitter, Input, Output, forwardRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR, ReactiveFormsModule } from '@angular/forms';
-import { NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
+import { NgSelectComponent, NgFooterTemplateDirective } from '@ng-select/ng-select';
 
 @Component({
   selector: 'app-select-dropdown',
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgSelectComponent, NgOptionComponent, NgFooterTemplateDirective],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgSelectComponent, NgFooterTemplateDirective],
   templateUrl: './select-dropdown.component.html',
   styleUrl: './select-dropdown.component.css',
   providers: [
@@ -31,6 +31,8 @@ export class SelectDropdownComponent {
   @Input() defaultClass = true;
   @Input() footerLabel = '';
   @Input() invalidBorderClass = 'border-orange-500';
+  /** Lists longer than this render only the rows in view (ng-select's virtual scroll) as the panel scrolls. */
+  @Input() virtualScrollFrom = 50;
 
   @Input() value: any = '';
   disabled = false;

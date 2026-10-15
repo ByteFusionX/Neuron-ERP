@@ -7,7 +7,6 @@ import Enquiry from "../models/enquiry.model";
 import Quotation from "../models/quotation.model";
 import Job from "../models/job.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
-import Rfq, { RfqType } from "../models/rfq.model";
 import Employee from "../models/employee.model";
 
 /**
@@ -26,7 +25,7 @@ import Employee from "../models/employee.model";
 
 export type SearchModule =
   | "supplier" | "product" | "customer" | "enquiry" | "quotation"
-  | "job" | "purchaseOrder" | "salesRfq" | "employee";
+  | "job" | "purchaseOrder" | "employee";
 
 export interface SearchHit {
   module: SearchModule;
@@ -50,7 +49,6 @@ const isEmail = (q: string) => /^[^\s@]+@[^\s@]+$/.test(q) || (q.includes("@") &
 /** Document-number prefixes that pin a query to one module. Checked case-insensitively. */
 const PREFIXES: { re: RegExp; module: SearchModule }[] = [
   { re: /^enq/i, module: "enquiry" },
-  { re: /^(rfq|srfq)/i, module: "salesRfq" },
   { re: /^(lpo|po)[-/\d]/i, module: "purchaseOrder" },
   { re: /^(qt|quo|qtn)/i, module: "quotation" },
   { re: /^job/i, module: "job" },
@@ -102,19 +100,19 @@ const searchers: Record<SearchModule, (q: string, mode: Mode) => Promise<SearchH
   },
 
   async product(q, mode) {
-    const match = matchOn(mode, q, ["itemCode", "partNo", "productName", "productDescription", "brand", "barcode"]);
+    const match = matchOn(mode, q, ["itemCode", "partNo", "nickName", "productName", "productDescription", "brand", "barcode"]);
     if (!match) return [];
     const rows = await Product.find({ isDeleted: { $ne: true }, approvalStatus: { $ne: "Draft" }, ...match })
-      .select("itemCode partNo productName productDescription brand unitOfMeasure approvalStatus productCategory estimatedCost defaultSellingPrice defaultVendor type")
+      .select("itemCode partNo nickName productName productDescription brand unitOfMeasure approvalStatus productCategory estimatedCost defaultSellingPrice defaultVendor type")
       .populate("productCategory", "categoryName")
       .limit(PER_MODULE).lean();
     return rows.map((p: any) => ({
       module: "product", id: String(p._id),
       title: p.productName || p.productDescription || p.partNo,
       ref: p.itemCode,
-      subtitle: [p.partNo, p.brand, p.productCategory?.categoryName].filter(Boolean).join(" · "),
+      subtitle: [p.partNo, p.nickName, p.brand, p.productCategory?.categoryName].filter(Boolean).join(" · "),
       status: p.approvalStatus === "Approved" ? undefined : p.approvalStatus,
-      score: scoreOf(q, [p.itemCode, p.partNo, p.productName, p.productDescription, p.brand]),
+      score: scoreOf(q, [p.itemCode, p.partNo, p.nickName, p.productName, p.productDescription, p.brand]),
       data: { product: p },
     }));
   },
@@ -209,23 +207,6 @@ const searchers: Record<SearchModule, (q: string, mode: Mode) => Promise<SearchH
     }));
   },
 
-  async salesRfq(q, mode) {
-    const match = matchOn(mode, q, ["rfqNo"]);
-    if (!match) return [];
-    const rows = await Rfq.find({ rfqType: RfqType.Sales, isDeleted: { $ne: true }, ...match })
-      .select("rfqNo status suppliers.supplierName enquiryId")
-      .populate("enquiryId", "enquiryId title")
-      .sort({ createdAt: -1 }).limit(PER_MODULE).lean();
-    return rows.map((r: any) => ({
-      module: "salesRfq", id: String(r._id),
-      title: (r.suppliers || []).map((s: any) => s.supplierName).join(", ") || r.rfqNo, ref: r.rfqNo,
-      subtitle: r.enquiryId ? `${r.enquiryId.enquiryId} · ${r.enquiryId.title || ""}` : "",
-      status: r.status,
-      score: scoreOf(q, [r.rfqNo]),
-      data: { enquiryNo: r.enquiryId?.enquiryId, enquiryRef: r.enquiryId?._id ? String(r.enquiryId._id) : null },
-    }));
-  },
-
   async employee(q, mode) {
     const match = matchOn(mode, q, ["employeeId", "firstName", "lastName", "email"], ["email"]);
     if (!match) return [];
@@ -288,14 +269,12 @@ export const getRelated = async (req: Request, res: Response, next: NextFunction
     let data: Record<string, any> = {};
     switch (module) {
       case "supplier": {
-        const [supplier, defaultProducts, pos, rfqs] = await Promise.all([
+        const [supplier, defaultProducts, pos] = await Promise.all([
           Supplier.findById(id).select("supplierId supplierName status contactDetails products.productName creditDays").lean(),
           Product.find({ defaultVendor: id, isDeleted: { $ne: true }, approvalStatus: { $ne: "Draft" } })
             .select("itemCode partNo productName productDescription brand unitOfMeasure productCategory estimatedCost defaultSellingPrice defaultVendor type approvalStatus")
             .populate("productCategory", "categoryName").limit(50).lean(),
           PurchaseOrder.find({ supplierId: id }).select("poNo subject poStatus poDate items.partNo").sort({ poDate: -1 }).limit(10).lean(),
-          Rfq.find({ rfqType: RfqType.Sales, isDeleted: { $ne: true }, "suppliers.supplierId": id, status: { $nin: ["Closed", "Cancelled"] } })
-            .select("rfqNo status deadline enquiryId").populate("enquiryId", "enquiryId title").sort({ createdAt: -1 }).limit(10).lean(),
         ]);
         if (!supplier) return res.status(404).json({ success: false, message: "Supplier not found" });
 
@@ -316,15 +295,12 @@ export const getRelated = async (req: Request, res: Response, next: NextFunction
             ...purchased.map((p: any) => ({ ...p, link: "Purchased before" })),
           ],
           purchaseOrders: pos.map(({ items, ...po }: any) => ({ ...po, lineCount: (items || []).length })),
-          openRfqs: rfqs,
         };
         break;
       }
       case "product": {
-        const [product, rfqs, quotes, pos] = await Promise.all([
+        const [product, quotes, pos] = await Promise.all([
           Product.findById(id).select("itemCode partNo productName productDescription defaultVendor").populate("defaultVendor", "supplierId supplierName status contactDetails.email").lean(),
-          Rfq.find({ rfqType: RfqType.Sales, isDeleted: { $ne: true }, "requestedLines.partNo": id, status: { $nin: ["Closed", "Cancelled"] } })
-            .select("rfqNo status suppliers.supplierName enquiryId").populate("enquiryId", "enquiryId title").sort({ createdAt: -1 }).limit(10).lean(),
           Quotation.find({ isDeleted: { $ne: true }, "optionalItems.items.itemDetails.productId": id })
             .select("quoteId subject status client date").populate("client", "companyName").sort({ date: -1 }).limit(10).lean(),
           PurchaseOrder.find({ "items.partNo": id }).select("poNo poStatus poDate supplierId").populate("supplierId", "supplierName status contactDetails.email").sort({ poDate: -1 }).limit(10).lean(),
@@ -339,7 +315,7 @@ export const getRelated = async (req: Request, res: Response, next: NextFunction
           if (s?._id && !suppliers.has(String(s._id))) suppliers.set(String(s._id), { ...s, link: `Last PO ${po.poNo}` });
         });
 
-        data = { product, suppliers: Array.from(suppliers.values()), openRfqs: rfqs, quotations: quotes, purchaseOrders: pos };
+        data = { product, suppliers: Array.from(suppliers.values()), quotations: quotes, purchaseOrders: pos };
         break;
       }
       case "customer": {
@@ -363,13 +339,12 @@ export const getRelated = async (req: Request, res: Response, next: NextFunction
         break;
       }
       case "enquiry": {
-        const [enquiry, rfqs, quotes] = await Promise.all([
+        const [enquiry, quotes] = await Promise.all([
           Enquiry.findById(id).select("enquiryId title status client contact salesPerson").populate("client", "companyName").populate("salesPerson", "firstName lastName").lean(),
-          Rfq.find({ rfqType: RfqType.Sales, enquiryId: id, isDeleted: { $ne: true } }).select("rfqNo status suppliers.supplierName deadline").sort({ createdAt: -1 }).lean(),
           Quotation.find({ enqId: id, isDeleted: { $ne: true } }).select("quoteId subject status date").sort({ date: -1 }).lean(),
         ]);
         if (!enquiry) return res.status(404).json({ success: false, message: "Enquiry not found" });
-        data = { enquiry, rfqs, quotations: quotes };
+        data = { enquiry, quotations: quotes };
         break;
       }
       case "quotation": {

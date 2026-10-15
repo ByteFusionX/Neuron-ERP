@@ -3,6 +3,14 @@ import { Observable, map } from 'rxjs';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { ItemSuggestion, ItemSuggestionQuery, ItemSuggestionSource } from './item-entry.model';
 
+/** In stock reads "Ex-Stock"; otherwise the product's lead time is rounded up to the matching availability band. */
+const productAvailability = (p: any): string | undefined => {
+  if (p.type === 'Stock' && (p.availableQuantity ?? 0) > 0) return 'Ex-Stock';
+  const days = Number(p.leadTimeDays);
+  if (!days || days < 0) return undefined;
+  return days <= 21 ? '2-3 Weeks' : days <= 42 ? '4-6 Weeks' : '6-8 Weeks';
+};
+
 /** Maps a catalogue product (as the product endpoints return it) to an item-editor suggestion. */
 export const toCatalogueSuggestion = (p: any): ItemSuggestion => ({
   _id: p._id,
@@ -25,6 +33,7 @@ export const toCatalogueSuggestion = (p: any): ItemSuggestion => ({
   lastStockEntry: p.lastStockEntry || null,
   salesHistory: p.salesHistory || undefined,
   productType: p.type || '',
+  availability: productAvailability(p),
 });
 
 /**
@@ -42,9 +51,9 @@ export class CatalogueSuggestionSource implements ItemSuggestionSource {
 
   constructor(private _quotationService: QuotationService) {}
 
-  search({ search, category, scopeIds }: ItemSuggestionQuery): Observable<ItemSuggestion[]> {
+  search({ search, category, scopeIds, skip, limit }: ItemSuggestionQuery): Observable<ItemSuggestion[]> {
     return this._quotationService
-      .getProductSuggestions({ search, departments: scopeIds, includePending: this.includePending, ...(category ? { category } : {}) })
+      .getProductSuggestions({ search, departments: scopeIds, includePending: this.includePending, lean: true, skip, limit, ...(category ? { category } : {}) })
       .pipe(map((res: any) => (res?.data || []).map(toCatalogueSuggestion)));
   }
 }

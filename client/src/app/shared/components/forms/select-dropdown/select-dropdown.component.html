@@ -16,10 +16,11 @@
       (change)="onSelectionChange($event)"
       [disabled]="disabled"
       [clearable]="clearable"
+      [items]="options"
+      [bindLabel]="optionLabel"
+      [bindValue]="optionValue"
+      [virtualScroll]="options.length > virtualScrollFrom"
     >
-      <ng-option *ngFor="let option of options" [value]="getOptionValue(option)" class="capitalize">
-        {{ getOptionLabel(option) }}
-      </ng-option>
       <ng-template ng-footer-tmp>
         <ng-container *ngIf="footerLabel">
           <button type="button" class="w-full text-violet-700 py-2 font-medium" (click)="onFooterClick($event)">

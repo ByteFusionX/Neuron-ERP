@@ -31,13 +31,11 @@ import { CreateGrnComponent } from './modules/grn/pages/create-grn/create-grn.co
 import { ViewGrnComponent } from './modules/grn/pages/view-grn/view-grn.component';
 import { GrnListComponent } from './modules/grn/pages/grn-list/grn-list.component';
 import { GrnStockHoldsComponent } from './modules/grn/pages/stock-holds/stock-holds.component';
-import { MrApprovalRequestsComponent } from './modules/technical/mr-approval-requests/mr-approval-requests.component';
 import { ViewMaterialRequestComponent } from './modules/technical/view-material-request/view-material-request.component';
-import { ProjectsComponent } from './modules/technical/projects/projects.component';
 import { AddProjectComponent } from './modules/technical/projects/add-project/add-project.component';
-import { OpenToWorkProjectComponent } from './modules/technical/open-to-work/open-to-work-project.component';
 import { ActivityPlanComponent } from './modules/technical/projects/add-project/activity-plan/activity-plan.component';
 import { MaterialRequestModalComponent } from './modules/technical/projects/add-project/material-request-modal/material-request-modal.component';
+import { TechnicalProjectComponent } from './modules/technical/pages/project/project.component';
 import { TasksComponent } from './modules/technical/projects/add-project/tasks/tasks.component';
 import { IssuesListComponent } from './modules/technical/projects/add-project/issues/list/issues-list.component';
 import { ProjectUpdatesComponent } from './modules/technical/projects/add-project/project-updates/project-updates.component';
@@ -46,13 +44,8 @@ import { ClaimsComponent } from './modules/claims/claims.component';
 import { BillingSummaryComponent } from './modules/technical/projects/add-project/billing-summary/billing-summary.component';
 import { RequestForApprovalsComponent } from './modules/claims/request-for-approvals/request-for-approvals.component';
 import { AllProductsComponent } from './modules/products/all-products.component';
-import { StockEntriesComponent } from './modules/stocks/pages/stock-entries/stock-entries.component';
 import { StockOverviewComponent } from './modules/stocks/pages/stock-overview/stock-overview.component';
-import { StockHoldsComponent } from './modules/stocks/pages/stock-holds/stock-holds.component';
-import { InventoryPlanningComponent } from './modules/stocks/pages/inventory-planning/inventory-planning.component';
-import { StockReservationsComponent } from './modules/stocks/pages/stock-reservations/stock-reservations.component';
 import { StockLedgerComponent } from './modules/stocks/pages/stock-ledger/stock-ledger.component';
-import { CreateStockComponent } from './modules/stocks/modals/create-stock/create-stock.component';
 import { DnRegisterComponent } from './modules/dispatch/pages/dn-register/dn-register.component';
 import { CreateDnComponent } from './modules/dispatch/pages/create-dn/create-dn.component';
 import { PendingDeliveryComponent } from './modules/dispatch/pages/pending-delivery/pending-delivery.component';
@@ -209,8 +202,14 @@ export const routes: Routes = [
           { path: '', pathMatch: 'full', redirectTo: 'product' },
           { path: 'product', loadComponent: () => import('./modules/settings/pages/master-data/product-data.component').then((c) => c.ProductDataComponent) },
           { path: 'customer', loadComponent: () => import('./modules/settings/pages/master-data/customer-data.component').then((c) => c.CustomerDataComponent) },
+          { path: 'supplier', loadComponent: () => import('./modules/settings/pages/master-data/supplier-data.component').then((c) => c.SupplierDataComponent) },
           { path: 'notes-terms', loadComponent: () => import('./modules/settings/pages/master-data/notes-terms-data.component').then((c) => c.NotesTermsDataComponent) },
         ],
+      },
+      {
+        path: 'documentation',
+        data: { section: 'documentation' },
+        loadComponent: () => import('./modules/settings/pages/document/document-settings.component').then((c) => c.DocumentSettingsComponent),
       },
       {
         path: 'roles-privileges',
@@ -361,8 +360,10 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     loadComponent: () => import('./modules/technical/technical.component').then((c) => c.TechnicalComponent),
     children: [
-      { path: 'project', component: ProjectsComponent },
-      { path: 'amc', component: ProjectsComponent },
+      { path: 'project', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=pendingProjects') },
+      { path: 'project-page', component: TechnicalProjectComponent },
+      { path: 'materials', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=materials') },
+      { path: 'amc', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=pendingAmc') },
       { path: 'project/add', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/edit/:id', component: AddProjectComponent, canDeactivate: [(component: AddProjectComponent) => component.canDeactivate()] },
       { path: 'project/activity-plan/:id', component: ActivityPlanComponent },
@@ -373,9 +374,10 @@ export const routes: Routes = [
       { path: 'project/issues/:id', component: IssuesListComponent },
       { path: 'project/claims/:id', component: ClaimsComponent },
       { path: 'project/billing-summary/:id', component: BillingSummaryComponent },
-      { path: 'open-to-work-project', component: OpenToWorkProjectComponent },
-      { path: 'mr-approval-requests', component: MrApprovalRequestsComponent },
-      { path: 'mr-approval-requests/view/:id', component: ViewMaterialRequestComponent }
+      { path: 'open-to-work-project', pathMatch: 'full', redirectTo: () => inject(Router).parseUrl('/technical/project-page?view=openToWork') },
+      { path: 'mr-approval-requests', redirectTo: 'materials', pathMatch: 'full' },
+      { path: 'mr-approval-requests/view/:id', redirectTo: 'materials/view/:id' },
+      { path: 'materials/view/:id', component: ViewMaterialRequestComponent }
     ]
   },
   {
@@ -408,13 +410,10 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'overview' },
       { path: 'overview', component: StockOverviewComponent },
-      { path: 'overview/report', loadComponent: () => import('./modules/stocks/pages/stock-overview-report/stock-overview-report.component').then((c) => c.StockOverviewReportComponent) },
-      { path: 'planning', component: InventoryPlanningComponent },
-      { path: 'reservations', component: StockReservationsComponent },
       { path: 'ledger', component: StockLedgerComponent },
-      { path: 'stock-entries', component: StockEntriesComponent },
-      { path: 'stock-holds', component: StockHoldsComponent },
-      { path: 'create', component: CreateStockComponent }
+      // the old Stock Entries / Create Stock screens are gone: adjustments open as a drawer on Stock
+      { path: 'stock-entries', redirectTo: 'overview' },
+      { path: 'create', redirectTo: 'overview' }
     ]
   },
   {

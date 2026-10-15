@@ -50,22 +50,10 @@
     </aside>
 
     <div class="flex-1 min-w-0 h-screen overflow-y-auto flex flex-col dark:bg-gray-900">
-        <mat-drawer-container class="example-container" [hasBackdrop]="false">
-            <mat-drawer #drawer mode="over" position="end"
-                class="w-[600px] h-full bg-red-400 z-50">
-                <app-notification *ngIf="activePanel === 'notification'"
-                    (closeSidenav)="closeSidenav()"></app-notification>
-                <app-announcements *ngIf="activePanel === 'announcement'"
-                    (closeSidenav)="closeSidenav()"></app-announcements>
-            </mat-drawer>
-            <mat-drawer-content>
-                <app-nav-bar (toggleDrawer)="openPanel('notification')"
-                    (toggleAnnouncementDrawer)="openPanel('announcement')"></app-nav-bar>
-                <div class="h-[calc(100vh-var(--navbar-h))] border-l border-gray-100 dark:border-erp-border-dark" (click)="closeSidenav()">
-                    <router-outlet></router-outlet>
-                </div>
-            </mat-drawer-content>
-        </mat-drawer-container>
+        <app-nav-bar></app-nav-bar>
+        <div class="h-[calc(100vh-var(--navbar-h))] border-l border-gray-100 dark:border-erp-border-dark">
+            <router-outlet></router-outlet>
+        </div>
     </div>
 
 </div>

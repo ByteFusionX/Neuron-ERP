@@ -48,6 +48,13 @@ import { SF_STYLES, SfOption } from './sf.model';
           </svg>
         </li>
         <li *ngIf="!filtered.length && !creatable" class="px-3 py-2 text-[13px] text-gray-500 dark:text-gray-500">{{ !options.length && emptyText ? emptyText : 'No matches' }}</li>
+        <li *ngIf="footerLabel" class="sticky bottom-0 border-t border-gray-100 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
+          <button type="button" class="flex w-full items-center gap-1.5 px-3 py-2 text-left text-[13px] font-medium text-violet-700 hover:bg-gray-50 dark:text-violet-300 dark:hover:bg-gray-800"
+            (mousedown)="$event.preventDefault(); open = false; query = ''; footerAction.emit()">
+            <span aria-hidden="true">+</span>
+            <span class="truncate">{{ footerLabel }}</span>
+          </button>
+        </li>
         <li *ngIf="creatable" class="sticky bottom-0 border-t border-gray-100 bg-white dark:border-erp-border-dark dark:bg-erp-surface-dark">
           <button type="button" [disabled]="!canCreate" class="flex w-full items-center gap-1.5 px-3 py-2 text-left text-[13px] font-medium text-violet-700 hover:bg-gray-50 disabled:cursor-default disabled:text-gray-400 disabled:hover:bg-transparent dark:text-violet-300 dark:hover:bg-gray-800 dark:disabled:text-gray-500"
             (mousedown)="$event.preventDefault(); createFromQuery()">
@@ -71,6 +78,10 @@ export class SfComboboxComponent extends SfControl {
   /** Adds an "Add …" row to the dropdown; the host creates the option and sets the value. */
   @Input({ transform: booleanAttribute }) creatable = false;
   @Output() createOption = new EventEmitter<string>();
+
+  /** Adds a pinned button at the bottom of the dropdown (e.g. "Add category"); the host handles the click. */
+  @Input() footerLabel = '';
+  @Output() footerAction = new EventEmitter<void>();
 
   @ViewChild('wrapper') private wrapper!: ElementRef<HTMLElement>;
 

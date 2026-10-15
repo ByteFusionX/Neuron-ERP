@@ -5,6 +5,11 @@ import { CommonModule } from '@angular/common';
 const OPEN_STACK: SfDrawerComponent[] = [];
 const ALL_DRAWERS: SfDrawerComponent[] = [];
 
+/** z-index of the topmost open drawer's panel, so modals and dialogs opened from it can sit above it. */
+export function topDrawerZ(): number {
+  return OPEN_STACK.length ? 61 + (OPEN_STACK.length - 1) * 10 : 61;
+}
+
 /**
  * Slide-over panel for create/edit forms. Project the form as content, header extras into [sfDrawerHeader],
  * bottom summaries into [sfDrawerBottom], and buttons into [sfDrawerFooter]. When `dirty`, closing asks to discard first.

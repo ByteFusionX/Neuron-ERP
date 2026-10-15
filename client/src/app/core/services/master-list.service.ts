@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, catchError, map, of } from 'rxjs';
 import { environment } from 'src/environments/environment';
 
-export type MasterListName = 'unit' | 'availability' | 'customerNote' | 'termsAndConditions' | 'placeOfDelivery' | 'shippingTerms' | 'paymentTerms' | 'source' | 'creditStatus' | 'currency' | 'brand';
+export type MasterListName = 'unit' | 'availability' | 'customerNote' | 'termsAndConditions' | 'placeOfDelivery' | 'shippingTerms' | 'purchaseTermsNotes' | 'paymentTerms' | 'source' | 'creditStatus' | 'currency' | 'brand' | 'supplierType' | 'supplierCategory';
 
 export interface MasterListItem {
   _id: string;

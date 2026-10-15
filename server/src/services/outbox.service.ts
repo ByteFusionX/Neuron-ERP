@@ -25,7 +25,12 @@ export const scheduleJob = async (handler: string, payload: any, sendAt: Date, d
     }
 };
 
-const backoffMs = (attempts: number) => Math.min(60, 2 ** attempts) * 60 * 1000;
+/** Drops a still-pending scheduled job (e.g. its announcement was deleted or pulled back to draft). */
+export const cancelScheduledJob = async (dedupeKey: string) => {
+    await NotificationOutbox.deleteOne({ dedupeKey, status: 'pending' });
+};
+
+const backoffMs =(attempts: number) => Math.min(60, 2 ** attempts) * 60 * 1000;
 
 const recordFailure = async (row: any, error: any) => {
     const attempts = (row.attempts || 0) + 1;

@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import type { Observable } from 'rxjs';
 import type { ItemSuggestion } from 'src/app/shared/components/item-entry/item-entry.model';
 
 /** An item list open on screen that the command palette can add catalogue products to. */
@@ -9,6 +10,10 @@ export interface ItemEntryTarget {
   addProducts(products: ItemSuggestion[]): number;
   /** False while the list cannot take lines (its drawer closed, hidden, locked). */
   canAdd(): boolean;
+  /** The supplier the list is currently being built for (Supplier RFQ: the selected tab), so the palette can suggest its products. */
+  supplier?(): { supplierId: string; supplierName: string } | null;
+  /** The item name/category the user has typed on the list, so the palette can suggest catalogue products under it. */
+  itemHint?(): { name: string; search(): Observable<ItemSuggestion[]> } | null;
 }
 
 /**

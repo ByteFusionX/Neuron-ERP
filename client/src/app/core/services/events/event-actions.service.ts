@@ -22,6 +22,8 @@ export interface CreateEventOptions {
   context: string;
   /** Backend `from` discriminator. */
   from: string;
+  /** Enquiry or presale, when the record is an enquiry; keeps their events separate. */
+  stage?: 'Enquiry' | 'Presale';
   contactDetails?: ContactDetail[];
 }
 
@@ -73,6 +75,7 @@ export class EventActionsService {
         const formData = new FormData();
         formData.append('eventData', JSON.stringify({
           from: opts.from,
+          stage: opts.stage,
           collectionId: opts.collectionId,
           event: event.title,
           date: event.date,

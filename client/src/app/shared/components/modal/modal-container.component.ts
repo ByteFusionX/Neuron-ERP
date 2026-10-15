@@ -1,3 +1,4 @@
+import { topDrawerZ } from '../smart-form/sf-drawer.component';
 import {
   AfterViewInit, ChangeDetectorRef, Component, ElementRef, EventEmitter, Injector, Input, OnDestroy, OnInit, Output,
   Type, ViewChild, ViewContainerRef, inject,
@@ -57,11 +58,11 @@ export class ModalContainerComponent implements OnInit, AfterViewInit, OnDestroy
   };
 
   get backdropZ(): number {
-    return this.layer === 'confirm' ? 70 : 65;
+    return topDrawerZ() + (this.layer === 'confirm' ? 9 : 4);
   }
 
   get panelZ(): number {
-    return this.layer === 'confirm' ? 71 : 66;
+    return topDrawerZ() + (this.layer === 'confirm' ? 10 : 5);
   }
 
   ngOnInit(): void {

@@ -16,8 +16,6 @@
           @if (v.kind === 'detail') {
             <span class="shrink-0 max-w-[40%] truncate rounded-md bg-violet-50 dark:bg-violet-950/40 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300"
               [title]="v.hit.title">{{ v.hit.title }}</span>
-          } @else if (v.kind === 'pickEnquiry') {
-            <span class="shrink-0 rounded-md bg-violet-50 dark:bg-violet-950/40 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300">New RFQ</span>
           }
         }
         <input #queryInput type="text" role="combobox" aria-expanded="true" aria-controls="palette-listbox"
@@ -40,8 +38,9 @@
         <kbd class="text-[11px] text-gray-400 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5">Esc</kbd>
       </div>
 
-      <ul id="palette-listbox" role="listbox" class="max-h-[60vh] overflow-y-auto p-2">
-        @for (row of rows(); track row.id; let i = $index) {
+      <ul id="palette-listbox" role="listbox" class="max-h-[60vh] overflow-y-auto p-2"
+        appLoadMore [loadMoreDisabled]="!hasMoreRows()" (loadMore)="showMore()">
+        @for (row of shownRows(); track row.id; let i = $index) {
           @if (startsGroup(i)) {
             <li role="presentation" class="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">{{ row.group }}</li>
           }
@@ -86,6 +85,9 @@
             @else { No results for "{{ query() }}" }
           </li>
         }
+        @if (hasMoreRows()) {
+          <li role="presentation" class="px-3 py-2 text-center text-[11px] text-gray-400">Scroll for more…</li>
+        }
       </ul>
 
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 border-t border-erp-border dark:border-erp-border-dark text-[11px] text-gray-400">
@@ -93,7 +95,6 @@
         <span>Enter open</span>
         <span>Tab tick</span>
         @if (view().kind === 'detail') { <span>Space tick</span><span>Backspace back</span> }
-        @if (view().kind === 'pickEnquiry') { <span>Backspace back</span> }
         <span>Esc {{ view().kind === 'list' ? 'close' : 'back' }}</span>
       </div>
     </div>

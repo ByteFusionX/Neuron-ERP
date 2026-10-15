@@ -8,7 +8,7 @@ export interface PaginationState {
 
 @Injectable()
 export class PaginationService {
-  private _paginationState: WritableSignal<PaginationState> = signal({ page: 1, row: 10, total:50 });
+  private _paginationState: WritableSignal<PaginationState> = signal({ page: 1, row: 15, total:50 });
   readonly paginationState = this._paginationState.asReadonly();
 
   constructor() { }

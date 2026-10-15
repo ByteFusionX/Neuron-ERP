@@ -508,6 +508,12 @@ export class SideBarComponent
       });
       return total;
     }
+    if (item.notificationKeys?.length) {
+      return item.notificationKeys.reduce(
+        (total, key) => total + (this.notificationCounts[key as keyof NotificationCounts] || 0),
+        0,
+      );
+    }
     if (!item.notificationKey) return 0;
     return (
       this.notificationCounts[item.notificationKey as keyof NotificationCounts] ||

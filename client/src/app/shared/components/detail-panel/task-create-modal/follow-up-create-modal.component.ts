@@ -32,13 +32,17 @@ export type FollowUpModalResult =
   imports: [CommonModule, SmartFormModule, DetailPanelIconComponent, FormModalShellComponent],
   template: `
     <app-form-modal-shell
-      icon="clock" tone="emerald" [title]="isComplete ? 'Log follow-up' : (data?.dueDate ? 'Reschedule follow-up' : 'Schedule follow-up')"
+      icon="clock" tone="emerald" [title]="data?.dueDate && !isComplete ? 'Reschedule follow-up' : 'Add follow-up'"
       [context]="data?.context" [contextLabel]="data?.dueDate && !isComplete ? 'Rescheduling for' : 'Adding to'"
       [contextEmptyText]="isComplete ? 'Record what happened.' : 'Plan the next call, visit or update.'"
       formId="follow-up-create-form" [invalid]="form.invalid && submitted"
       [submitLabel]="isComplete ? 'Mark done' : 'Schedule'" savingLabel="Saving..." [saving]="saving" submitShortcutVerb="save"
       (closed)="close()">
       <form id="follow-up-create-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <div *ngIf="!data?.dueDate" class="mb-4 inline-flex rounded-lg border border-gray-200 p-0.5 text-xs dark:border-gray-700">
+          <button type="button" (click)="setMode('complete')" [class]="modeClass(true)">Already done</button>
+          <button type="button" (click)="setMode('schedule')" [class]="modeClass(false)">Schedule for later</button>
+        </div>
         <ng-container *ngIf="isComplete; else scheduleFields">
           <div *ngIf="data?.plannedFor" class="mb-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300">
             <app-dp-icon name="info" size="w-4 h-4" class="mt-0.5 shrink-0"></app-dp-icon>
@@ -93,8 +97,25 @@ export class FollowUpCreateModalComponent {
   submitted = false;
   saving = false;
 
+  mode: 'schedule' | 'complete' = this.data?.mode ?? 'complete';
+
   get isComplete(): boolean {
-    return this.data?.mode === 'complete';
+    return this.mode === 'complete';
+  }
+
+  modeClass(complete: boolean): string {
+    const on = this.isComplete === complete;
+    return 'rounded-md px-3 py-1.5 font-medium transition ' + (on ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800');
+  }
+
+  setMode(mode: 'schedule' | 'complete'): void {
+    this.mode = mode;
+    const o = this.form.controls.outcome;
+    o.setValidators(mode === 'complete' ? [Validators.required, Validators.maxLength(200)] : []);
+    o.updateValueAndValidity();
+    this.submitted = false;
+    // Done-on defaults to today; a scheduled date can't be in the past.
+    if (mode === 'schedule' && this.form.controls.date.value! < this.today) this.form.controls.date.setValue(this.today);
   }
 
   /** `date` is "done on" when completing and the due date when scheduling. */
@@ -106,10 +127,7 @@ export class FollowUpCreateModalComponent {
   });
 
   constructor() {
-    if (this.isComplete) {
-      this.form.controls.outcome.addValidators([Validators.required, Validators.maxLength(200)]);
-      this.form.controls.outcome.updateValueAndValidity();
-    }
+    this.setMode(this.mode);
   }
 
   close(): void {

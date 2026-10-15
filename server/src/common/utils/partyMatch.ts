@@ -91,46 +91,63 @@ export const findCustomerDuplicates = async (p: CustomerProbe): Promise<PartyMat
     return [...out.values()].sort(byLevel);
 };
 
-export interface SupplierProbe { supplierName?: string; email?: string; phone?: unknown; iban?: string; excludeId?: string }
+export interface SupplierProbe { supplierName?: string; emails?: unknown[]; phones?: unknown[]; ibans?: unknown[]; excludeId?: string }
 
-/** Suppliers that look like the one being entered. Same name or IBAN → block; email, phone, near-name → warn. */
+const uniqueKeys = (values: unknown[] | undefined, keyOf: (v: unknown) => string) =>
+    [...new Set((values ?? []).map(keyOf).filter(Boolean))];
+
+/**
+ * Suppliers that look like the one being entered. Same name or IBAN → block; near-name, or an email or phone
+ * (company or any contact) found on another supplier → warn. A company and its own contact may share an email or phone.
+ */
 export const findSupplierDuplicates = async (p: SupplierProbe): Promise<PartyMatch[]> => {
     const name = String(p.supplierName ?? '').trim();
     const key = nameKeyOf(name), core = nameCoreOf(name);
-    const email = emailKeyOf(p.email), phone = phoneKeyOf(p.phone), iban = ibanKeyOf(p.iban);
+    const emails = uniqueKeys(p.emails, emailKeyOf), phones = uniqueKeys(p.phones, phoneKeyOf), ibans = uniqueKeys(p.ibans, ibanKeyOf);
     const or: any[] = [];
     if (name) or.push({ supplierName: new RegExp(`^${escapeRegex(name)}$`, 'i') });
     if (key) or.push({ nameKey: key });
     if (core) or.push({ nameCore: core });
-    if (iban) or.push({ ibanKey: iban });
-    if (email) or.push({ emailKey: email });
-    if (phone) or.push({ phoneKey: phone });
+    // `ibanKey` is the single-account key older records carry until they are re-saved.
+    if (ibans.length) or.push({ ibanKeys: { $in: ibans } }, { ibanKey: { $in: ibans } });
+    // `emailKey`/`phoneKey` are the single-contact keys older records carry until they are re-saved.
+    if (emails.length) or.push({ emailKeys: { $in: emails } }, { emailKey: { $in: emails } });
+    if (phones.length) or.push({ phoneKeys: { $in: phones } }, { phoneKey: { $in: phones } });
     if (!or.length) return [];
 
     const filter: any = { isDeleted: { $ne: true }, $or: or };
     if (p.excludeId) filter._id = { $ne: p.excludeId };
     const docs: any[] = await Supplier.find(filter)
-        .select('supplierName supplierId nameKey nameCore ibanKey emailKey phoneKey').limit(20).lean();
+        .select('supplierName supplierId nameKey nameCore ibanKey ibanKeys emailKey phoneKey emailKeys phoneKeys').limit(20).lean();
 
     const out = new Map<string, PartyMatch>();
     for (const d of docs) {
         const exact = name && String(d.supplierName ?? '').trim().toLowerCase() === name.toLowerCase();
         if (exact || (key && d.nameKey === key)) collect(out, d, d.supplierId, 'block', 'name', 'supplier');
-        if (iban && d.ibanKey === iban) collect(out, d, d.supplierId, 'block', 'iban', 'supplier');
+        const theirIbans: string[] = [...(d.ibanKeys ?? []), d.ibanKey].filter(Boolean);
+        if (ibans.some((i) => theirIbans.includes(i))) collect(out, d, d.supplierId, 'block', 'iban', 'supplier');
         if (core && d.nameCore === core) collect(out, d, d.supplierId, 'warn', 'name', 'supplier');
-        if (email && d.emailKey === email) collect(out, d, d.supplierId, 'warn', 'email', 'supplier');
-        if (phone && d.phoneKey === phone) collect(out, d, d.supplierId, 'warn', 'phone', 'supplier');
+        const theirEmails: string[] = [...(d.emailKeys ?? []), d.emailKey].filter(Boolean);
+        const theirPhones: string[] = [...(d.phoneKeys ?? []), d.phoneKey].filter(Boolean);
+        if (emails.some((e) => theirEmails.includes(e))) collect(out, d, d.supplierId, 'warn', 'email', 'supplier');
+        if (phones.some((ph) => theirPhones.includes(ph))) collect(out, d, d.supplierId, 'warn', 'phone', 'supplier');
     }
     return [...out.values()].sort(byLevel);
 };
 
 /** Keys stored on a supplier so later checks can match on them. Spread into every create and update. */
-export const supplierKeys = (s: { supplierName?: string; contactDetails?: any; bankDetails?: any }) => ({
+export const supplierKeys = (s: { supplierName?: string; companyEmail?: string; companyPhone?: string; contacts?: any[]; bankAccounts?: any[] }) => ({
     nameKey: nameKeyOf(s.supplierName),
     nameCore: nameCoreOf(s.supplierName),
-    emailKey: emailKeyOf(s.contactDetails?.email),
-    phoneKey: phoneKeyOf(s.contactDetails?.phoneNumber),
-    ibanKey: ibanKeyOf(s.bankDetails?.iban),
+    emailKeys: uniqueKeys([s.companyEmail, ...(s.contacts ?? []).map((c) => c?.email)], emailKeyOf),
+    phoneKeys: uniqueKeys([s.companyPhone, ...(s.contacts ?? []).map((c) => c?.phoneNumber)], phoneKeyOf),
+    ibanKeys: uniqueKeys((s.bankAccounts ?? []).map((b) => b?.iban), ibanKeyOf),
+});
+
+/** Every email and phone a supplier is reachable on: the company's own plus each salesperson's. */
+export const supplierContactPoints = (s: { companyEmail?: string; companyPhone?: string; contacts?: any[] }) => ({
+    emails: [s.companyEmail, ...(s.contacts ?? []).map((c) => c?.email)],
+    phones: [s.companyPhone, ...(s.contacts ?? []).map((c) => c?.phoneNumber)],
 });
 
 export const customerNameKeys = (companyName?: string) => ({ nameKey: nameKeyOf(companyName), nameCore: nameCoreOf(companyName) });

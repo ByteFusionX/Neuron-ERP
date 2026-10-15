@@ -6,7 +6,7 @@ import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/er
 
 export type SearchModule =
   | 'supplier' | 'product' | 'customer' | 'enquiry' | 'quotation'
-  | 'job' | 'purchaseOrder' | 'salesRfq' | 'employee';
+  | 'job' | 'purchaseOrder' | 'employee';
 
 /** One record found by the command palette's search. */
 export interface SearchHit {

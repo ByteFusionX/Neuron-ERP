@@ -73,10 +73,13 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   @Input() detailTabs: DataGridDetailTab[] = [];
   @Input() detailTitle: (row: T) => string = (row) => String(row[this.rowKey] ?? '');
   @Input() detailSubtitle?: (row: T) => string;
+  /** Optional width for the slide-in detail panel, e.g. `min(1400px, 96vw)`. */
+  @Input() detailPanelWidth = '';
   /** Asked before the detail panel closes (Esc, close button); return false to keep it open. */
   @Input() detailCloseGuard?: () => boolean | Promise<boolean>;
   /** Breadcrumb label in the detail panel's top bar; defaults to the grid title. */
   @Input() detailBreadcrumb = '';
+  private lastRouteViewParam: string | null = null;
   @Input() pageSizeOptions = [5, 15, 30, 50];
   @Input() pageSize = 15;
   @Input() maxHeight = '600px';
@@ -183,7 +186,12 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
     private route: ActivatedRoute,
   ) {
     this.routeSub = this.route.queryParamMap.subscribe((params) => {
-      this.pendingRouteViewId = params.get(this.viewUrlParam);
+      const next = params.get(this.viewUrlParam);
+      // Hosts rewrite page/filter params on every query change, which re-emits the URL. Only a *changed* view param is a
+      // navigation to a view; an unchanged one is just an echo and must not bounce the user back to the previous tab.
+      if (next === this.lastRouteViewParam) return;
+      this.lastRouteViewParam = next;
+      this.pendingRouteViewId = next;
       this.applyRouteViewIfAvailable();
     });
   }
@@ -420,12 +428,18 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
 
   private updateViewUrl(viewId: string): void {
     if (!this.syncViewWithUrl || this.applyingRouteView) return;
-    const current = this.route.snapshot.queryParamMap.get(this.viewUrlParam);
-    if (current === viewId) return;
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { [this.viewUrlParam]: viewId },
-      queryParamsHandling: 'merge',
+    // Deferred so it runs after the host's own page/filter navigation for the same click; two merged navigations issued
+    // in one tick both start from the old URL and the later one drops the other's params.
+    setTimeout(() => {
+      const current = this.route.snapshot.queryParamMap.get(this.viewUrlParam);
+      if (current === viewId) return;
+      this.lastRouteViewParam = viewId;
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { [this.viewUrlParam]: viewId },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
     });
   }
 
@@ -599,7 +613,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   get scopedView(): DataGridView<T> | undefined {
     if (!this.showViewPill) return undefined;
     const v = this.activeView;
-    return v && this.views.length && v.id !== this.views[0].id ? v : undefined;
+    return v && !v.hidePill && this.views.length && v.id !== this.views[0].id ? v : undefined;
   }
 
   clearView(): void {

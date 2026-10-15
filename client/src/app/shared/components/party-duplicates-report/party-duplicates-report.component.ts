@@ -1,10 +1,8 @@
 import { Component, inject, OnInit } from '@angular/core';
-import { Observable } from 'rxjs';
 import { FormModalShellComponent, MODAL_DATA, ModalRef } from 'src/app/shared/components/modal';
 import { CustomerService, PartyDuplicateGroup } from 'src/app/core/services/customer/customer.service';
-import { SupplierService } from 'src/app/core/services/supplier.service';
 
-export type PartyKind = 'customer' | 'supplier';
+export type PartyKind = 'customer';
 
 const SECTIONS: Record<PartyKind, { key: string; title: string }[]> = {
   customer: [
@@ -14,23 +12,16 @@ const SECTIONS: Record<PartyKind, { key: string; title: string }[]> = {
     { key: 'sameEmail', title: 'Same email' },
     { key: 'samePhone', title: 'Same phone' },
   ],
-  supplier: [
-    { key: 'sameName', title: 'Same supplier name' },
-    { key: 'sameIban', title: 'Same IBAN' },
-    { key: 'similarName', title: 'Similar supplier name' },
-    { key: 'sameEmail', title: 'Same email' },
-    { key: 'samePhone', title: 'Same phone' },
-  ],
 };
 
-/** Read-only list of customers or suppliers that may have been entered twice. Opened with `data: 'customer' | 'supplier'`. */
+/** Read-only list of customers that may have been entered twice. Opened with `data: 'customer'`. */
 @Component({
   selector: 'app-party-duplicates-report',
   standalone: true,
   imports: [FormModalShellComponent],
   template: `
     <app-form-modal-shell
-      icon="files" tone="amber" [title]="kind === 'customer' ? 'Possible duplicate customers' : 'Possible duplicate suppliers'"
+      icon="files" tone="amber" title="Possible duplicate customers"
       contextEmptyText="Records that share a name, tax ID, bank account, email or phone."
       formId="party-dup-report-form" submitLabel="Close" submitShortcutVerb="close" (closed)="close()">
       <form id="party-dup-report-form" (ngSubmit)="close()" class="space-y-4 text-sm">
@@ -56,7 +47,6 @@ export class PartyDuplicatesReportComponent implements OnInit {
   private ref = inject<ModalRef<any>>(ModalRef);
   kind: PartyKind = inject<PartyKind | null>(MODAL_DATA as any) ?? 'customer';
   private customers = inject(CustomerService);
-  private suppliers = inject(SupplierService);
 
   report: Record<string, PartyDuplicateGroup[]> | null = null;
   loading = true;
@@ -65,15 +55,14 @@ export class PartyDuplicatesReportComponent implements OnInit {
   get sections() { return SECTIONS[this.kind]; }
 
   ngOnInit(): void {
-    const request$: Observable<any> = this.kind === 'customer' ? this.customers.getDuplicatesReport() : this.suppliers.getDuplicatesReport();
-    request$.subscribe({
+    this.customers.getDuplicatesReport().subscribe({
       next: (r: any) => { this.report = r; this.loading = false; },
       error: () => { this.error = 'Failed to load the report'; this.loading = false; },
     });
   }
 
   line(r: { [k: string]: any }): string {
-    return [r['companyName'] ?? r['supplierName'], r['clientRef'] ?? r['supplierId'], r['trn'], r['customerEmailId']].filter(Boolean).join(' · ');
+    return [r['companyName'], r['clientRef'], r['trn'], r['customerEmailId']].filter(Boolean).join(' · ');
   }
 
   close(): void { this.ref.close(); }

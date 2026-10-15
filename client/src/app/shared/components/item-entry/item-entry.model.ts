@@ -45,6 +45,8 @@ export interface ItemSuggestion {
       unitSellingPrice?: number;
     }[];
   };
+  /** Availability label derived from the product (in stock, else its lead time); prefills an RFQ line's availability. */
+  availability?: string;
   /** 'Non-Stock' rows have no stock position to show. */
   productType?: string;
 }
@@ -56,6 +58,10 @@ export interface ItemSuggestionQuery {
   category?: string;
   /** Department/segment ids the host wants results narrowed to. */
   scopeIds: string[];
+  /** Rows already received, for fetching the next page. */
+  skip?: number;
+  /** Page size; the source's default when omitted. */
+  limit?: number;
 }
 
 /**

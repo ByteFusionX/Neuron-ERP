@@ -49,7 +49,7 @@
         <ng-content select="[dgToolbarExtra]"></ng-content>
       </div>
 
-      <div *ngIf="selectedKeys.size === 0" class="flex flex-wrap items-center justify-end gap-2 min-w-0">
+      <div *ngIf="selectedKeys.size === 0" class="flex flex-1 flex-wrap items-center justify-end gap-2 min-w-0">
       <!-- Search -->
       <div class="w-56 max-w-full">
         <app-sf-input type="search" clearable [placeholder]="searchPlaceholder" [attr.aria-label]="'Search ' + title"
@@ -366,7 +366,7 @@
                   <ng-container [ngSwitch]="c.type">
                     <span *ngSwitchCase="'badge'">
                       <span *ngIf="rawValue(row, c) != null && rawValue(row, c) !== ''; else noBadgeValue"
-                        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium whitespace-nowrap"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
                         [ngClass]="badgeClass(c, rawValue(row, c))">
                         <span class="h-1.5 w-1.5 rounded-full bg-current opacity-70"></span>
                         {{ badgeText(c, rawValue(row, c)) }}
@@ -394,7 +394,7 @@
                       class="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-orange-500"></span>
                   </button>
                 </span>
-                <button *ngIf="visibleRowActions(row).length" type="button" (click)="openActionMenu(row, $event)" aria-label="Row actions"
+                <button type="button" (click)="openActionMenu(row, $event)" aria-label="Row actions"
                   class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   [ngClass]="{ '!bg-gray-100 dark:!bg-gray-800 !text-gray-800 dark:!text-gray-200': isMenuOpen(row) }">
                   <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -483,6 +483,7 @@
 
   <!-- ============ DETAIL PANEL ============ -->
   <app-detail-panel *ngIf="activeRow && showDetailPanel"
+    [style.--dp-width]="detailPanelWidth || null"
     [breadcrumb]="detailBreadcrumb ? [detailBreadcrumb] : (title ? [title] : [])"
     [title]="detailTitle(activeRow)"
     [subtitle]="detailSubtitle ? detailSubtitle(activeRow) : ''"

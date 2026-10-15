@@ -1,8 +1,13 @@
 import { Component, ElementRef, EventEmitter, HostListener, Inject, Input, OnChanges, OnDestroy, OnInit, Optional, Output, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
+import { CommandPaletteService } from '../../../core/services/command-palette.service';
 import { CommonModule } from '@angular/common';
 import { AbstractControl, FormArray, FormBuilder, FormControl, FormGroup, FormsModule, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { AlertService } from 'src/app/core/services/alert.service';
-import { Subject, Subscription, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
+import { Subject, Subscription, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
+import { LoadMoreOnScrollDirective } from '../../directives/load-more-on-scroll.directive';
+
+/** Catalogue palette page size: rows fetched first, and per scroll to the end. */
+const PALETTE_PAGE = 10;
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { NgIcon } from '@ng-icons/core';
 import { MasterListService } from 'src/app/core/services/master-list.service';
@@ -22,10 +27,12 @@ import {
   ItemSuggestion,
   ItemSuggestionSource,
 } from './item-entry.model';
-import { downloadItemsTemplate, exportItemsSheet, itemSheetColumns, readItemsSheet } from './item-entry-excel';
+import { ItemSheetMeta, downloadItemsTemplate, exportItemsSheet, itemSheetColumns, readItemsSheet } from './item-entry-excel';
 import { ActiveItemEntryService } from 'src/app/core/services/active-item-entry.service';
+import { ModalService } from 'src/app/shared/components/modal';
+import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
 
-type LineFilter = 'missingPrice' |'notInCatalogue' | 'errors';
+type LineFilter = 'missingPrice' | 'notInCatalogue' | 'notAwarded' | 'errors';
 
 /**
  * Reusable "enter items" editor: options → items → detail lines, with cost/margin/price derivation,
@@ -44,7 +51,7 @@ type LineFilter = 'missingPrice' |'notInCatalogue' | 'errors';
   selector: 'app-item-entry',
   standalone: true,
   templateUrl: './item-entry.component.html',
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ParseBoldTextPipe, ParseBracketsTextPipe],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgIcon, DragDropModule, SmartFormModule, ActionButtonComponent, ParseBoldTextPipe, ParseBracketsTextPipe, LoadMoreOnScrollDirective],
   styles: [SF_STYLES + `
     :host { display: block; }
     /* The numeric strip is dense on purpose: seven fields per line have to fit without a horizontal scrollbar. */
@@ -92,6 +99,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Input() mode: 'quote' | 'deal' | 'purchase' | 'rfq' = 'quote';
   /** RFQ mode: show the supplier's unit price (stored in `unitCost`) and availability on each line. */
   @Input() rfqPriced = false;
+  /** RFQ mode: show the unit price and availability columns while the RFQ is being raised (the lines are still added, not filled in). */
+  @Input() rfqAskPrice = false;
+  get rfqQuoted(): boolean {
+    return this.rfqPriced || this.rfqAskPrice;
+  }
   /** Rendered under each line; context `{ $implicit: lineGroup, i, j, k }`. For host-specific status (stock, suppliers asked). */
   @Input() lineExtraTemplate: TemplateRef<any> | null = null;
   /** Rendered in the bulk bar while lines are selected; context `{ $implicit: selectedLineGroups }`. */
@@ -120,6 +132,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Leave null to use the Availability master-data list; pass a list to override it. */
   @Input() availabilityOptions: SfOption[] | null = null;
+  /** Fixed options appended after the master list (the RFQ's "Unavailable" drives its own logic, so it is not a managed option). */
+  @Input() extraAvailabilityOptions: SfOption[] = [];
   /** What the template binds: the master list, plus any saved value no longer on it. */
   resolvedAvailabilityOptions: SfOption[] = DEFAULT_AVAILABILITY_OPTIONS;
   /** Units of measure from the master list, plus any saved or suggested value not on it. */
@@ -132,6 +146,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   @Input() suggestionScopeIds: string[] | null = null;
 
   /** Purchase mode: linked part numbers for the part-no picker. */
+  /** Purchase mode: the cost is not typed here (it comes from the awarded supplier RFQ), so the field is read-only. */
+  @Input() readonlyCost = false;
+  /** Purchase: says whether a line (its raw value) has an awarded supplier; adds a "Not awarded" filter and count. */
+  @Input() lineAwarded: ((line: any) => boolean) | null = null;
   /** Purchase mode: a per-line "Compare" button; emits `compareClicked`. */
   @Input() showCompareButton = false;
   /** Purchase mode: the Compare button's text for a line (e.g. a quote count). Null: "Compare". */
@@ -187,10 +205,15 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   paletteRows: ItemSuggestion[] = [];
   paletteIndex = 0;
   paletteLoading = false;
+  /** The term the rows belong to, and whether the server may hold more under it. */
+  paletteQuery = '';
+  paletteMore = false;
+  paletteFetching = false;
   /** Lines added in this palette session, shown as feedback since the palette stays open. */
   paletteAdded = 0;
   /** The item card the user last worked in; Ctrl+K opens the palette for it. */
   private lastItem: { i: number; j: number } | null = null;
+  private lastLine: { i: number; j: number; k: number } | null = null;
   private paletteSearch$ = new Subject<string>();
   /** Focuses the palette's search box as soon as it renders. */
   @ViewChild('paletteInput') set paletteInput(ref: ElementRef<HTMLInputElement> | undefined) {
@@ -208,6 +231,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     private _supplierService: SupplierService,
     private _masterList: MasterListService,
     private _activeItemEntry: ActiveItemEntryService,
+    private _modal: ModalService,
+    private _palette: CommandPaletteService,
     @Optional() @Inject(ITEM_SUGGESTION_SOURCE) private _providedSource: ItemSuggestionSource | null,
   ) {}
 
@@ -225,6 +250,22 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       this.unregisterTarget = this._activeItemEntry.register({
         get label() { return self.paletteTargetLabel || ''; },
         canAdd: () => !!this.paletteTargetLabel && !this.itemsHidden,
+        supplier: () => {
+          const meta = this.optionalItems.at(this.selectedOption)?.get('meta')?.value;
+          return meta?.supplierId ? { supplierId: String(meta.supplierId), supplierName: meta.supplierName || '' } : null;
+        },
+        itemHint: () => {
+          // The last item in the open option that has a name typed: that is the one being worked on.
+          const items = this.itemsAt(this.selectedOption);
+          for (let j = (items?.length ?? 0) - 1; j >= 0; j--) {
+            const name = (items.at(j).get('itemName')?.value || '').toString().trim();
+            if (name.length >= 2 && this.source) {
+              const source = this.source;
+              return { name, search: () => source.search({ search: '', category: name, scopeIds: this.scopeIds }) };
+            }
+          }
+          return null;
+        },
         addProducts: (products) => this.addCatalogueProducts(products),
       });
     }
@@ -263,10 +304,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
           debounceTime(200),
           distinctUntilChanged(),
           // The palette searches the whole catalogue, not just the item's category: it is for finding.
-          switchMap((term) => term.length >= 2 ? this.fetchSuggestions('palette', term, '') : of({ key: 'palette', rows: [] as ItemSuggestion[] })),
+          tap((term) => (this.paletteQuery = term)),
+          switchMap((term) => term.length >= 2 ? this.fetchSuggestions('palette', term, '', { skip: 0, limit: PALETTE_PAGE }) : of({ key: 'palette', rows: [] as ItemSuggestion[] })),
         )
         .subscribe(({ rows }) => {
           this.paletteRows = rows;
+          this.paletteMore = rows.length >= PALETTE_PAGE;
           this.paletteIndex = 0;
           this.paletteLoading = false;
         }),
@@ -304,6 +347,21 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.resolveUnits();
   }
 
+  /** Same quick-add dialog the product form uses for its master lists. */
+  openAddMasterOption(list: 'unit' | 'availability', control: AbstractControl | null): void {
+    const title = list === 'unit' ? 'Unit of Measure' : 'Availability';
+    const create: QuickAddDialogData['create'] = (name) => this._masterList.createItem(list, { label: name, value: null });
+    this.subs.add(this._modal.open<any, QuickAddDialogData>(QuickAddDialogComponent, { width: '480px', data: { title, create } })
+      .afterClosed().subscribe((res) => {
+        const name = res?.data?.label;
+        if (!name) return;
+        if (list === 'unit') { this.masterUnits = [...this.masterUnits, { label: name, value: name }]; this.resolveUnits(); }
+        else this.resolvedAvailabilityOptions = this.withSavedAvailability([...this.resolvedAvailabilityOptions, { label: name, value: name }]);
+        control?.setValue(name);
+        control?.markAsDirty();
+      }));
+  }
+
   /** Anyone can add a list option from the dropdown; hiding and deleting stay in Settings. */
   addMasterOption(list: 'unit' | 'availability', label: string, control: AbstractControl | null): void {
     this.subs.add(this._masterList.createItem(list, { label, value: null }).subscribe({
@@ -328,8 +386,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private withSavedAvailability(options: SfOption[]): SfOption[] {
-    const missing = [...this.savedAvailability].filter((v) => !options.some((o) => o.value === v));
-    return [...missing.map((v) => ({ label: v, value: v })), ...options];
+    const all = [...options, ...this.extraAvailabilityOptions.filter((e) => !options.some((o) => o.value === e.value))];
+    const missing = [...this.savedAvailability].filter((v) => !all.some((o) => o.value === v));
+    return [...missing.map((v) => ({ label: v, value: v })), ...all];
   }
 
   /**
@@ -354,6 +413,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   get isDeal(): boolean { return this.mode === 'deal'; }
   get isPurchase(): boolean { return this.mode === 'purchase'; }
+  /** Purchase mode only: lay lines out like a quotation (editable item code and part no, a read-only Margin column). Rules stay purchase rules. */
+  @Input() quoteLayout = false;
+  /** The compact purchase strip: no margin column, item code shown read-only. */
+  get dropsMargin(): boolean { return this.isPurchase && !this.quoteLayout; }
   get isRfq(): boolean { return this.mode === 'rfq'; }
   /** Flat single-list modes: no options and no optional items. */
   get isFlat(): boolean { return this.isPurchase || this.isRfq; }
@@ -430,11 +493,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     return this.suggestionSource ?? this._providedSource;
   }
 
-  private fetchSuggestions(key: string, term: string, category: string) {
+  private fetchSuggestions(key: string, term: string, category: string, page?: { skip: number; limit: number }) {
     const source = this.source;
     if (!source) return of({ key, rows: [] as ItemSuggestion[] });
     return source
-      .search({ search: term, category, scopeIds: this.scopeIds })
+      .search({ search: term, category, scopeIds: this.scopeIds, ...page })
       .pipe(switchMap((rows) => [{ key, rows: rows || [] }]));
   }
 
@@ -818,8 +881,10 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Set false when the host shows its own Import/Export buttons (e.g. a drawer footer) and calls pickExcelFile / exportExcel / downloadExcelTemplate. */
   @Input() excelToolbar = true;
-  /** Blank "supplier to fill" columns appended to the export and template, e.g. Payment Terms. Ignored on import. */
-  @Input() excelFillColumns: string[] = [];
+  /** Details written above the table on export (e.g. the RFQ's terms); the same labels found on import come back through `excelMetaImported`. */
+  @Input() excelMeta: () => ItemSheetMeta[] = () => [];
+  /** Details read from above the table of an imported sheet, keyed by lower-cased label. */
+  @Output() excelMetaImported = new EventEmitter<Record<string, string>>();
 
   pickExcelFile(): void {
     this.excelFile?.nativeElement.click();
@@ -830,16 +895,16 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private get excelColumns() {
-    return itemSheetColumns(this.mode, this.rfqPriced);
+    return itemSheetColumns(this.mode, this.rfqQuoted);
   }
 
   downloadExcelTemplate(): void {
-    void downloadItemsTemplate(this.excelColumns, `${this.excelFileName}-template.xlsx`, this.excelFillColumns);
+    void downloadItemsTemplate(this.excelColumns, `${this.excelFileName}-template.xlsx`, this.excelMeta());
   }
 
   async exportExcel(): Promise<void> {
     const option = this.optionalItems.getRawValue()[this.selectedOption];
-    const rows = await exportItemsSheet(option?.items || [], this.excelColumns, `${this.excelFileName}.xlsx`, this.excelFillColumns);
+    const rows = await exportItemsSheet(option?.items || [], this.excelColumns, `${this.excelFileName}.xlsx`, this.excelMeta());
     if (!rows) this.alerts.info('Nothing to export', 'Add at least one line first.');
   }
 
@@ -859,6 +924,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         // The supplier's answers go onto the lines already here, matched by part no, item code or description.
         const { matched, unmatched } = this.fillPricedLines(result.items);
         this.optionalItems.markAsDirty();
+        this.excelMetaImported.emit(result.meta);
         const note = unmatched.length ? ` ${unmatched.length} row(s) matched no line: ${unmatched.slice(0, 3).join('; ')}${unmatched.length > 3 ? '…' : ''}` : '';
         if (unmatched.length || !matched) this.alerts.warning('Excel imported', `${matched} line${matched === 1 ? '' : 's'} filled.${note}`);
         else this.alerts.success('Excel imported', `${matched} line${matched === 1 ? '' : 's'} filled.`);
@@ -866,6 +932,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       }
       this.addItems(result.items);
       this.optionalItems.markAsDirty();
+      this.excelMetaImported.emit(result.meta);
       const extra = result.skipped.length ? ` ${result.skipped.length} skipped: ${result.skipped.slice(0, 3).join('; ')}${result.skipped.length > 3 ? '…' : ''}` : '';
       const message = `${result.imported} line${result.imported === 1 ? '' : 's'} added.${extra}`;
       if (result.skipped.length) this.alerts.warning('Excel imported', message);
@@ -899,10 +966,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       matched++;
       const patch: Record<string, unknown> = {};
       if (row.unitCost != null) patch['unitCost'] = row.unitCost;
-      if (row.offeredQty != null) patch['offeredQty'] = row.offeredQty;
-      (['availability', 'alternative', 'paymentTerms', 'deliveryTerms', 'remarks'] as const).forEach((k) => {
-        if (row[k]) patch[k] = row[k];
-      });
+      if (row.availability) patch['availability'] = row.availability;
       if (patch['availability']) this.keepAvailability(String(patch['availability']));
       line.patchValue(patch);
     }));
@@ -973,6 +1037,27 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.queueSearch(`${i}-${j}-${k}`, term, category);
   }
 
+  /**
+   * Typing an item code or part no directly: on Enter/blur the catalogue is asked for it, and an exact
+   * match fills the whole line. Several exact matches open the description dropdown to choose from.
+   */
+  lookupByCode(i: number, j: number, k: number, field: 'itemCode' | 'partNo'): void {
+    const detail = this.detailsAt(i, j)?.at(k) as FormGroup | undefined;
+    const code = (detail?.get(field)?.value || '').toString().trim();
+    if (!detail || !this.source || code.length < 2 || detail.get('productId')?.value) return;
+    const wanted = code.toLowerCase();
+    this.subs.add(this.source.search({ search: code, category: '', scopeIds: this.scopeIds, skip: 0, limit: 10 }).subscribe((rows) => {
+      const exact = (rows || []).filter((s) => (s[field] || '').toLowerCase() === wanted);
+      if (exact.length === 1) { this.applySuggestion(i, j, k, exact[0]); return; }
+      if (exact.length > 1) {
+        const key = `${i}-${j}-${k}`;
+        this.suggestions[key] = exact;
+        this.highlightedIndex = 0;
+        this.activeSuggestionKey = key;
+      }
+    }));
+  }
+
   private queueSearch(key: string, term: string, category: string): void {
     if (term.length < 2 || !this.source) {
       this.suggestions[key] = [];
@@ -988,7 +1073,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Whether the open dropdown for `key` offers a trailing "+ Create product" row. */
   createRowAvailable(key: string, k: number | null): boolean {
-    return k !== null && this.allowCreateProduct && this.activeSuggestionKey === key;
+    // An RFQ already has "Add product" in its drawer footer.
+    return k !== null && this.allowCreateProduct && !this.isRfq && this.activeSuggestionKey === key;
   }
 
   /** Arrow Up/Down moves the highlight, Enter applies the highlighted row (or opens create), Escape closes. */
@@ -1039,8 +1125,13 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       this.fillIfEmpty(detail, 'partNo', s.partNo);
       this.keepUnit(s.uom);
       this.fillIfEmpty(detail, 'uom', s.uom);
-      // An RFQ line is priced by the supplier, so catalogue costs and vendors are not copied onto it.
-      if (this.isRfq) { this.closeSuggestions(); return; }
+      // An RFQ line is priced by the supplier, so catalogue costs and vendors are not copied onto it;
+      // only the product's availability is offered as a starting point for the availability column.
+      if (this.isRfq) {
+        if (this.rfqQuoted && s.availability) { this.keepAvailability(s.availability); this.fillIfEmpty(detail, 'availability', s.availability); }
+        this.closeSuggestions();
+        return;
+      }
       this.fillIfEmpty(detail, 'supplierId', s.supplierId);
       // Pricing stays event-emitting so the margin/selling-price derivation reruns.
       if (s.unitCost != null && detail.get('unitCost')?.value == null) detail.get('unitCost')?.setValue(s.unitCost);
@@ -1063,6 +1154,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   stockSummary(s: ItemSuggestion): string | null {
     if (s.productType && s.productType !== 'Stock') return null;
     if (s.stockOnHand == null) return null;
+    // An RFQ exists because the item isn't in stock, so a "Not in stock" line only adds noise.
+    if (this.mode === 'rfq' && (s.stockAvailable ?? s.stockOnHand) <= 0) return null;
     const parts = [`${s.stockStatus || ((s.stockAvailable ?? 0) > 0 ? 'In stock' : 'Not in stock')}`, `${s.stockAvailable ?? s.stockOnHand} available`, `${s.stockOnHand} on hand`];
     if (s.stockReserved) parts.push(`${s.stockReserved} reserved`);
     if (s.stockQuarantined) parts.push(`${s.stockQuarantined} quarantined`);
@@ -1112,17 +1205,14 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.lastItem = { i, j };
   }
 
-  @HostListener('document:keydown', ['$event'])
-  onDocumentKeydown(event: KeyboardEvent): void {
-    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return;
-    // Ctrl+Shift+K always opens the global command palette; so does Ctrl+K while this list is not
-    // the palette target (its drawer is closed — drawers stay mounted).
-    if (event.shiftKey || !this.paletteTargetLabel) return;
-    if (this.isDeal || this.itemsHidden || !this.source || this.palette) return;
-    const target = this.lastItem && this.itemsAt(this.lastItem.i)?.at(this.lastItem.j)
-      ? this.lastItem : { i: this.selectedOption, j: this.itemsAt(this.selectedOption).length - 1 };
-    event.preventDefault();
-    this.openPalette(target.i, target.j);
+  /** Remembers the line being edited, so the palette can start from its description. */
+  trackLine(i: number, j: number, k: number): void {
+    this.lastLine = { i, j, k };
+  }
+
+  /** Product search lives in the global command palette; it adds to the open list. */
+  openGlobalPalette(): void {
+    this._palette.open();
   }
 
   openPalette(i: number, j: number): void {
@@ -1135,6 +1225,12 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.paletteLoading = false;
     // Resets distinctUntilChanged, so re-searching the previous session's term still fires.
     this.paletteSearch$.next('');
+    // Start from what the user already typed: the focused line's description, else the item's name.
+    const line = this.lastLine && this.lastLine.i === i && this.lastLine.j === j
+      ? this.detailsAt(i, j)?.at(this.lastLine.k) as FormGroup | undefined : undefined;
+    const seed = ((line?.get('detail')?.value || '').toString().trim()
+      || ((this.itemsAt(i).at(j) as FormGroup)?.get('itemName')?.value || '').toString().trim());
+    if (seed.length >= 2) this.onPaletteInput(seed);
   }
 
   closePalette(): void {
@@ -1152,7 +1248,28 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   get paletteCreateAvailable(): boolean {
-    return this.allowCreateProduct && !this.paletteLoading && this.paletteTerm.trim().length >= 2;
+    // An RFQ already has "Add product" in its drawer footer.
+    return this.allowCreateProduct && !this.isRfq && !this.paletteLoading && this.paletteTerm.trim().length >= 2;
+  }
+
+  /** Fetches the next page of the palette's search when its list is scrolled to the end. */
+  loadMorePalette(): void {
+    const term = this.paletteQuery;
+    if (!this.paletteMore || this.paletteFetching || term.length < 2) return;
+    this.paletteFetching = true;
+    this.fetchSuggestions('palette', term, '', { skip: this.paletteRows.length, limit: PALETTE_PAGE }).subscribe({
+      next: ({ rows }) => {
+        this.paletteFetching = false;
+        // The user may have searched again while the page was on its way.
+        if (term !== this.paletteQuery) return;
+        this.paletteRows = [...this.paletteRows, ...rows];
+        this.paletteMore = rows.length >= PALETTE_PAGE;
+      },
+      error: () => {
+        this.paletteFetching = false;
+        this.paletteMore = false;
+      },
+    });
   }
 
   onPaletteInput(term: string): void {
@@ -1168,6 +1285,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
+        // Past the last loaded row, fetch the next page rather than wrapping to the top.
+        if (this.paletteMore && this.paletteIndex >= this.paletteRows.length - 1) {
+          this.loadMorePalette();
+          break;
+        }
         if (total) this.paletteIndex = (this.paletteIndex + 1) % total;
         break;
       case 'ArrowUp':
@@ -1437,10 +1559,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   lineSearch = '';
   lineFilter: LineFilter | null = null;
-  counts: Record<LineFilter, number> = { missingPrice: 0, notInCatalogue: 0, errors: 0 };
+  counts: Record<LineFilter, number> = { missingPrice: 0, notInCatalogue: 0, notAwarded: 0, errors: 0 };
   readonly filterChips: { key: LineFilter; label: string; hint: string }[] = [
     { key: 'missingPrice', label: 'Missing price', hint: 'Lines with no selling price yet' },
     { key: 'notInCatalogue', label: 'Not in products', hint: 'Lines typed by hand that are not linked to a product in the catalogue' },
+    { key: 'notAwarded', label: 'Not awarded', hint: 'Lines no supplier has been awarded yet. Award them through the RFQ button' },
     { key: 'errors', label: 'Errors', hint: 'Filled-in lines that fail validation. Blank lines are not counted until you start typing in them' },
   ];
   /** The item "Jump to" just scrolled to, highlighted briefly. */
@@ -1451,7 +1574,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   visibleChips(): { key: LineFilter; label: string; hint: string }[] {
-    return this.isRfq && !this.rfqPriced ? this.filterChips.filter((c) => c.key !== 'missingPrice') : this.filterChips;
+    return this.filterChips.filter((c) =>
+      (c.key !== 'missingPrice' || !(this.isRfq && !this.rfqPriced)) && (c.key !== 'notAwarded' || !!this.lineAwarded));
   }
 
   toggleFilter(key: LineFilter): void {
@@ -1468,10 +1592,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     const v = (line as FormGroup).getRawValue();
     const detail = (v.detail || '').toString().trim();
     const filled = !!detail || v.quantity != null || v.unitCost != null;
-    if (!filled) return { missingPrice: false, notInCatalogue: false, errors: false };
+    if (!filled) return { missingPrice: false, notInCatalogue: false, notAwarded: false, errors: false };
     return {
       missingPrice: this.isRfq ? this.rfqPriced && v.unitCost == null : !(Number(v.unitSellingPrice) > 0),
       notInCatalogue: !v.productId && !!detail,
+      notAwarded: !!this.lineAwarded && !this.lineAwarded(v),
       errors: line.invalid,
     };
   }
@@ -1509,6 +1634,24 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.jumpTo(String(this.itemsAt(i).length - 1));
   }
 
+  /**
+   * Called by a host after a failed save: opens the first option holding an invalid line, clears any
+   * filter hiding it, expands collapsed items with problems and scrolls to the first one.
+   */
+  revealInvalid(): void {
+    for (let i = 0; i < this.optionalItems.length; i++) {
+      const items = this.itemsAt(i);
+      const bad = (items?.controls || []).map((item, j) => ({ item, j }))
+        .filter(({ item }) => item.invalid);
+      if (!bad.length) continue;
+      if (i !== this.selectedOption) this.selectOption(i);
+      if (this.filterActive) this.clearFilters();
+      bad.forEach(({ item }) => this.collapsed.delete(item));
+      this.jumpTo(String(bad[0].j));
+      return;
+    }
+  }
+
   jumpTo(value: string): void {
     const j = Number(value);
     const i = this.selectedOption;
@@ -1522,7 +1665,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   /** Filter counts for the selected option, and pruning of selected lines that no longer exist. */
   private recompute(): void {
-    const counts: Record<LineFilter, number> = { missingPrice: 0, notInCatalogue: 0, errors: 0 };
+    const counts: Record<LineFilter, number> = { missingPrice: 0, notInCatalogue: 0, notAwarded: 0, errors: 0 };
     const live = new Set<AbstractControl>();
     this.optionalItems.controls.forEach((_, i) => (this.itemsAt(i)?.controls || []).forEach((__, j) =>
       (this.detailsAt(i, j)?.controls || []).forEach((line) => {
@@ -1537,7 +1680,11 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
 
   // --- bulk selection ------------------------------------------------------------
 
-  get bulkEnabled(): boolean { return this.mode === 'quote' || this.isRfq; }
+  /** Purchase mode: lines can be ticked to ask a supplier for a price on them (the host adds the action through `bulkExtraTemplate`). */
+  @Input() bulkSelect = false;
+  get bulkEnabled(): boolean { return this.mode === 'quote' || this.isRfq || (this.isPurchase && this.bulkSelect); }
+  /** The supplier box in the bulk bar also picks who to ask when creating an RFQ; Apply sets it as the lines' supplier too. */
+  get bulkSupplierAsksRfq(): boolean { return this.isPurchase && this.bulkSelect; }
 
   private selected = new Set<AbstractControl>();
   private anchor: { i: number; j: number; k: number } | null = null;
@@ -1549,6 +1696,21 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   bulkSupplierControl = new FormControl<string | null>(null);
 
   get selectedCount(): number { return this.selected.size; }
+
+  /** Where each selected line sits in the editor, in order, for a host that works on saved lines by position. */
+  selectedPositions(): { i: number; j: number; k: number }[] {
+    const out: { i: number; j: number; k: number }[] = [];
+    this.optionalItems.controls.forEach((_, i) => this.itemsAt(i).controls.forEach((__, j) =>
+      (this.detailsAt(i, j)?.controls || []).forEach((line, k) => this.selected.has(line) && out.push({ i, j, k }))));
+    return out;
+  }
+
+  /** The supplier chosen in the bulk bar, then cleared. */
+  takeBulkSupplier(): string | null {
+    const id = this.bulkSupplierControl.value;
+    this.bulkSupplierControl.reset(null);
+    return id;
+  }
 
   /** The selected line groups, for a host's own bulk actions. */
   selectedLines(): FormGroup[] {
@@ -1612,8 +1774,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       ['uom', this.bulkUomControl.value, false],
       ['profit', this.marginEnabled ? this.bulkMarginControl.value : null, true],
       // An RFQ's price is the supplier's unit price, kept in `unitCost`.
-      [this.isRfq ? 'unitCost' : 'unitSellingPrice', !this.isRfq || this.rfqPriced ? this.bulkPriceControl.value : null, true],
-      ['availability', !this.isRfq || this.rfqPriced ? this.bulkAvailabilityControl.value : null, false],
+      [this.isRfq ? 'unitCost' : 'unitSellingPrice', !this.isRfq || this.rfqQuoted ? this.bulkPriceControl.value : null, true],
+      ['availability', !this.isRfq || this.rfqQuoted ? this.bulkAvailabilityControl.value : null, false],
       ['supplierId', this.isRfq ? null : this.bulkSupplierControl.value, false],
     ];
     const active = fields.filter(([, v]) => filled(v));
@@ -1624,7 +1786,9 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       this.alerts.warning('Margin out of range', this.isDeal ? 'Margin must be below 100%.' : 'Margin must be between 0% and 99.99%.');
       return;
     }
-    this.forSelected((line) => active.forEach(([name, v, numeric]) => {
+    // An awarded line keeps its awarded price and quantity, so the bar leaves it alone.
+    const locked = new Set(this.selectedPositions().filter((p) => this.isLineLocked(p.i, p.j, p.k)).map((p) => this.detailsAt(p.i, p.j)!.at(p.k)));
+    this.forSelected((line) => !locked.has(line) && active.forEach(([name, v, numeric]) => {
       const c = line.get(name);
       c?.setValue(numeric ? Number(v) : v);
       c?.markAsDirty();
@@ -1649,7 +1813,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       for (let j = items.length - 1; j >= 0; j--) {
         const details = this.detailsAt(i, j);
         if (!details) continue;
-        const ks = details.controls.map((l, k) => (picked.has(l) ? k : -1)).filter((k) => k >= 0);
+        const ks = details.controls.map((l, k) => (picked.has(l) && !this.isLineLocked(i, j, k) ? k : -1)).filter((k) => k >= 0);
         if (!ks.length) continue;
         count += ks.length;
         if (ks.length === details.length && items.length > 1) {

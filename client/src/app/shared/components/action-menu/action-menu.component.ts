@@ -1,5 +1,6 @@
 import { Component, ElementRef, EventEmitter, HostListener, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { IconsModule } from 'src/app/lib/icons/icons.module';
 
 export interface ActionMenuItem {
   id: string;
@@ -7,6 +8,8 @@ export interface ActionMenuItem {
   /** Greyed out and not clickable; `hint` is shown as its tooltip. */
   disabled?: boolean;
   hint?: string;
+  /** Optional icon shown before the label. */
+  icon?: string;
   /** Draws a rule above this item, to group related actions. */
   separator?: boolean;
 }
@@ -15,17 +18,24 @@ export interface ActionMenuItem {
 @Component({
   selector: 'app-action-menu',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconsModule],
   template: `
     <div class="relative">
-      <button type="button" class="am-trigger" aria-haspopup="menu" [attr.aria-expanded]="open" (click)="open = !open">
-        {{ label }}
-        <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3" /></svg>
+      <button type="button" class="am-trigger" [class.am-icon-only]="icon" aria-haspopup="menu" [attr.aria-expanded]="open"
+        [attr.aria-label]="icon ? label : null" [attr.title]="icon ? label : null" (click)="open = !open">
+        <ng-icon *ngIf="icon; else textTrigger" [name]="icon" class="text-base"></ng-icon>
+        <ng-template #textTrigger>
+          {{ label }}
+          <svg class="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3" /></svg>
+        </ng-template>
       </button>
       <div *ngIf="open" role="menu" class="am-panel">
         <ng-container *ngFor="let i of items; trackBy: trackById">
           <div *ngIf="i.separator" class="am-sep"></div>
-          <button type="button" role="menuitem" class="am-item" [disabled]="i.disabled" [attr.title]="i.hint || null" (click)="pick(i)">{{ i.label }}</button>
+          <button type="button" role="menuitem" class="am-item" [disabled]="i.disabled" [attr.title]="i.hint || null" (click)="pick(i)">
+            <ng-icon *ngIf="i.icon" [name]="i.icon" class="text-sm shrink-0"></ng-icon>
+            {{ i.label }}
+          </button>
         </ng-container>
       </div>
     </div>
@@ -35,9 +45,10 @@ export interface ActionMenuItem {
     .am-trigger { display: inline-flex; align-items: center; gap: 0.375rem; height: 2rem; padding: 0 0.75rem; font-size: 0.75rem; font-weight: 500;
       border-radius: 0.5rem; border: 1px solid #d1d5db; color: #374151; background: transparent; }
     .am-trigger:hover { background: #f9fafb; }
+    .am-trigger.am-icon-only { width: 2rem; padding: 0; justify-content: center; border: 0; outline: none; box-shadow: none; }
     .am-panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 40; min-width: 13rem; padding: 0.25rem; border-radius: 0.5rem;
       border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
-    .am-item { display: block; width: 100%; padding: 0.4rem 0.625rem; text-align: left; font-size: 0.75rem; color: #374151; border-radius: 0.375rem; }
+    .am-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.4rem 0.625rem; text-align: left; font-size: 0.75rem; color: #374151; border-radius: 0.375rem; }
     .am-item:hover:not(:disabled) { background: #f3f4f6; }
     .am-item:disabled { opacity: 0.45; cursor: default; }
     .am-sep { height: 1px; margin: 0.25rem 0; background: #f3f4f6; }
@@ -51,6 +62,8 @@ export interface ActionMenuItem {
 })
 export class ActionMenuComponent {
   @Input() label = 'More';
+  /** Icon name; when set the trigger is an icon-only button (label becomes its tooltip / aria-label). */
+  @Input() icon = '';
   @Input() items: ActionMenuItem[] = [];
   @Output() selected = new EventEmitter<string>();
   open = false;

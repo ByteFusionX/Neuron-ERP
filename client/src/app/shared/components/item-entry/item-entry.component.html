@@ -104,13 +104,13 @@
 
           <app-sf-number class="w-20" [formControl]="bulkQtyControl" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
           <app-sf-combobox class="w-28" [formControl]="bulkUomControl" [options]="resolvedUomOptions" placeholder="UoM"></app-sf-combobox>
-          <app-sf-number *ngIf="!isRfq || rfqPriced" class="w-24" [formControl]="bulkPriceControl" placeholder="Price" [stepper]="false" [min]="0"></app-sf-number>
+          <app-sf-number *ngIf="(!isRfq || rfqQuoted) && !bulkSupplierAsksRfq" class="w-24" [formControl]="bulkPriceControl" placeholder="Price" [stepper]="false" [min]="0"></app-sf-number>
           <app-sf-number *ngIf="marginEnabled" class="w-24" [formControl]="bulkMarginControl" placeholder="Margin" suffix="%" [stepper]="false"></app-sf-number>
-          <app-sf-combobox *ngIf="!isRfq || rfqPriced" class="w-40" [formControl]="bulkAvailabilityControl" [options]="resolvedAvailabilityOptions" placeholder="Availability"></app-sf-combobox>
-          <app-sf-combobox *ngIf="!isRfq" class="w-44" [formControl]="bulkSupplierControl" [options]="resolvedSupplierOptions" placeholder="Supplier"></app-sf-combobox>
+          <app-sf-combobox *ngIf="(!isRfq || rfqQuoted) && !bulkSupplierAsksRfq" class="w-40" [formControl]="bulkAvailabilityControl" [options]="resolvedAvailabilityOptions" placeholder="Availability"></app-sf-combobox>
+          <app-sf-combobox *ngIf="!isRfq" class="w-44" [formControl]="bulkSupplierControl" [options]="resolvedSupplierOptions" [placeholder]="bulkSupplierAsksRfq ? 'Supplier to ask' : 'Supplier'"></app-sf-combobox>
           <!-- The fields above only fill in once applied, so say so on the button. -->
           <app-action-button variant="primary" title="Nothing changes on the selected lines until you apply" (click)="bulkApply()">Apply to {{ selectedCount }} {{ selectedCount === 1 ? 'line' : 'lines' }}</app-action-button>
-          <ng-container *ngIf="bulkExtraTemplate" [ngTemplateOutlet]="bulkExtraTemplate" [ngTemplateOutletContext]="{ $implicit: selectedLines() }"></ng-container>
+          <ng-container *ngIf="bulkExtraTemplate" [ngTemplateOutlet]="bulkExtraTemplate" [ngTemplateOutletContext]="{ $implicit: selectedLines(), positions: selectedPositions(), entry: this }"></ng-container>
 
           <div class="ml-auto flex items-center gap-1">
             <button type="button" (click)="bulkDelete()"
@@ -200,13 +200,13 @@
           <span class="shrink-0" [ngClass]="isDeal ? 'w-5' : 'w-3.5'"></span>
           <div class="flex min-w-0 flex-1 gap-2">
             <span *ngIf="compact" class="ie-labels w-[24%] shrink-0">Description</span>
-            <div *ngIf="!isRfq" class="ie-strip ie-labels min-w-0 flex-1" [class.ie-strip-purchase]="isPurchase">
-              <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span><span>Unit cost</span><span *ngIf="!isPurchase">Margin</span>
+            <div *ngIf="!isRfq" class="ie-strip ie-labels min-w-0 flex-1" [class.ie-strip-purchase]="dropsMargin">
+              <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span><span>Unit cost</span><span *ngIf="!dropsMargin">Margin</span>
               <span>Unit price</span><span>Supplier</span><span>Availability</span><span>Total cost</span><span>Total price</span>
             </div>
-            <div *ngIf="isRfq" class="ie-strip ie-strip-rfq ie-labels min-w-0 flex-1" [class.ie-strip-rfq-priced]="rfqPriced">
+            <div *ngIf="isRfq" class="ie-strip ie-strip-rfq ie-labels min-w-0 flex-1" [class.ie-strip-rfq-priced]="rfqQuoted">
               <span>Item code</span><span>Part no</span><span>Qty</span><span>UoM</span>
-              <ng-container *ngIf="rfqPriced"><span>Supplier price</span><span>Availability</span><span>Total</span></ng-container>
+              <ng-container *ngIf="rfqQuoted"><span>Supplier price</span><span>Availability</span><span>Total</span></ng-container>
             </div>
           </div>
           <span *ngIf="!isDeal" class="w-6 shrink-0"></span>
@@ -215,7 +215,7 @@
         <!-- Detail lines -->
         <div class="divide-y divide-gray-100 dark:divide-erp-border-dark" cdkDropList [cdkDropListDisabled]="isDeal"
           (cdkDropListDropped)="dropDetail($event, i, j)">
-          <div *ngFor="let detail of detailsAt(i, j)?.controls; let k = index" cdkDrag [cdkDragDisabled]="isDeal || filterActive || isLineLocked(i, j, k)" [formGroup]="$any(detail)" [id]="itemDomId(i, j) + '-l' + k"
+          <div *ngFor="let detail of detailsAt(i, j)?.controls; let k = index" cdkDrag [cdkDragDisabled]="isDeal || filterActive || isLineLocked(i, j, k)" [formGroup]="$any(detail)" [id]="itemDomId(i, j) + '-l' + k" (focusin)="trackLine(i, j, k)"
             [class.hidden]="!lineVisible(i, j, k)"
             class="flex items-start gap-2 px-3 dark:bg-erp-surface-dark"
             [ngClass]="[compact ? 'py-1.5' : 'py-2.5', isSelected(i, j, k) ? 'bg-violet-50/70 dark:!bg-violet-950/30' : 'bg-white']">
@@ -272,34 +272,26 @@
                 </div>
               </div>
 
-              <div *ngIf="isRfq" class="ie-strip ie-strip-rfq" [class.ie-strip-rfq-priced]="rfqPriced" [class.min-w-0]="compact" [class.flex-1]="compact">
-                <app-sf-input formControlName="itemCode" placeholder="Item code"></app-sf-input>
-                <app-sf-input formControlName="partNo" placeholder="Part no"></app-sf-input>
+              <div *ngIf="isRfq" class="ie-strip ie-strip-rfq" [class.ie-strip-rfq-priced]="rfqQuoted" [class.min-w-0]="compact" [class.flex-1]="compact">
+                <app-sf-input formControlName="itemCode" placeholder="Item code" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
+                <app-sf-input formControlName="partNo" placeholder="Part no" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
                 <app-sf-number formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
-                <app-sf-combobox formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" creatable (createOption)="addMasterOption('unit', $event, detail.get('uom'))"></app-sf-combobox>
-                <ng-container *ngIf="rfqPriced">
+                <app-sf-combobox formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', detail.get('uom'))"></app-sf-combobox>
+                <ng-container *ngIf="rfqQuoted">
                   <app-sf-number formControlName="unitCost" placeholder="Unit price" [stepper]="false" [min]="0" [decimals]="2"></app-sf-number>
-                  <app-sf-combobox formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability"></app-sf-combobox>
+                  <app-sf-combobox formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
                   <span class="ie-total" title="Total (qty × supplier price)">{{ lineCost(i, j, k) | number: '1.2-2' }}</span>
                 </ng-container>
               </div>
-              <!-- what the supplier said about this line: terms and remarks -->
-              <div *ngIf="isRfq && rfqPriced" class="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-                <app-sf-input formControlName="paymentTerms" placeholder="Payment terms"></app-sf-input>
-                <app-sf-input formControlName="deliveryTerms" placeholder="Delivery terms"></app-sf-input>
-                <app-sf-input formControlName="remarks" placeholder="Remarks"></app-sf-input>
-                <app-sf-number formControlName="offeredQty" placeholder="Offered qty (if different)" [stepper]="false" [min]="0"></app-sf-number>
-                <app-sf-input class="sm:col-span-2" formControlName="alternative" placeholder="Alternative product offered (brand / model / part no)"></app-sf-input>
-              </div>
 
-              <div *ngIf="!isRfq" class="ie-strip" [class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="isPurchase">
+              <div *ngIf="!isRfq" class="ie-strip" [class.min-w-0]="compact" [class.flex-1]="compact" [class.opacity-60]="isDeal && !detail.get('dealSelected')?.value" [class.ie-strip-purchase]="dropsMargin">
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('itemCode')?.value || '—' }}</span>
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('partNo')?.value || '—' }}</span>
-                <app-sf-input *ngIf="!isDeal && !isPurchase" formControlName="itemCode" placeholder="Item code"></app-sf-input>
-                <app-sf-input *ngIf="!isDeal && !isPurchase" formControlName="partNo" placeholder="Part no"></app-sf-input>
-                <span *ngIf="isPurchase" class="ie-cell">{{ detail.get('itemCode')?.value || '—' }}</span>
-                <div *ngIf="isPurchase" class="flex min-w-0 gap-1">
-                  <app-sf-input class="min-w-0 flex-1" formControlName="partNo" placeholder="Part no"></app-sf-input>
+                <app-sf-input *ngIf="!isDeal && !dropsMargin" formControlName="itemCode" placeholder="Item code" (focusout)="lookupByCode(i, j, k, 'itemCode')" (keydown.enter)="lookupByCode(i, j, k, 'itemCode')"></app-sf-input>
+                <app-sf-input *ngIf="!isDeal && !dropsMargin" formControlName="partNo" placeholder="Part no" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
+                <span *ngIf="dropsMargin" class="ie-cell">{{ detail.get('itemCode')?.value || '—' }}</span>
+                <div *ngIf="dropsMargin" class="flex min-w-0 gap-1">
+                  <app-sf-input class="min-w-0 flex-1" formControlName="partNo" placeholder="Part no" (focusout)="lookupByCode(i, j, k, 'partNo')" (keydown.enter)="lookupByCode(i, j, k, 'partNo')"></app-sf-input>
                   <button *ngIf="allowCreateProduct && !isLineLocked(i, j, k)" type="button" title="Create part number" aria-label="Create part number"
                     class="grid h-9 w-7 shrink-0 place-content-center rounded-lg text-gray-400 hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-950/40"
                     (click)="requestCreateProduct(i, j, k)">
@@ -308,8 +300,9 @@
                 </div>
                 <app-sf-number formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
-                <app-sf-combobox *ngIf="!isDeal" formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" creatable (createOption)="addMasterOption('unit', $event, detail.get('uom'))"></app-sf-combobox>
-                <app-sf-number formControlName="unitCost" placeholder="Cost" [stepper]="false" [min]="0"></app-sf-number>
+                <app-sf-combobox *ngIf="!isDeal" formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', detail.get('uom'))"></app-sf-combobox>
+                <app-sf-number formControlName="unitCost" [placeholder]="isPurchase && readonlyCost ? 'From RFQ' : 'Cost'" [stepper]="false" [min]="0" [readonly]="isPurchase && readonlyCost"></app-sf-number>
+                <span *ngIf="isPurchase && quoteLayout" class="ie-cell justify-end tabular-nums" title="Margin on the deal price (read-only)">{{ lineMargin(i, j, k) !== null ? (lineMargin(i, j, k) | number: '1.1-1') + '%' : '—' }}</span>
                 <div *ngIf="!isPurchase" class="relative min-w-0" [ngClass]="lineMarginRing(i, j, k)">
                   <app-sf-number formControlName="profit" placeholder="Margin" suffix="%" [stepper]="false"></app-sf-number>
                   <button *ngIf="isCustomMargin(i, j, k)" type="button" (click)="resetMargin(i, j, k)"
@@ -324,7 +317,7 @@
                   <p *ngIf="isDeal && detail.get('supplierId')?.hasError('supplierRequired') && detail.get('supplierId')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
                 </div>
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('availability')?.value || '—' }}</span>
-                <app-sf-combobox *ngIf="!isDeal" formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability"></app-sf-combobox>
+                <app-sf-combobox *ngIf="!isDeal" formControlName="availability" [options]="resolvedAvailabilityOptions" placeholder="Availability" footerLabel="Add availability" (footerAction)="openAddMasterOption('availability', detail.get('availability'))"></app-sf-combobox>
                 <span class="ie-total" title="Total cost (qty × unit cost)">{{ lineCost(i, j, k) | number: '1.2-2' }}</span>
                 <span class="ie-total" title="Total selling price (qty × unit price)">{{ lineTotal(i, j, k) | number: '1.2-2' }}</span>
               </div>
@@ -335,8 +328,9 @@
 
             <div *ngIf="!isDeal" class="flex shrink-0 flex-col items-end gap-1 pt-1.5">
               <button *ngIf="isPurchase && showCompareButton" type="button" (click)="compareClicked.emit({ i: i, j: j, k: k })"
-                class="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/40">
-                {{ compareLabelFor(i, j, k) }}
+                [title]="compareLabelFor(i, j, k)" [attr.aria-label]="compareLabelFor(i, j, k)"
+                class="grid h-6 w-6 place-content-center rounded text-violet-600 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/40">
+                <ng-icon name="heroScale" class="h-3.5 w-3.5"></ng-icon>
               </button>
               <button *ngIf="!isLineLocked(i, j, k)" type="button" aria-label="Remove line" [disabled]="(detailsAt(i, j)?.length ?? 0) <= 1" (click)="removeDetail(i, j, k)"
                 class="grid h-6 w-6 place-content-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:hover:bg-red-950/40">
@@ -354,7 +348,7 @@
           <app-action-button variant="ghost" (click)="addDetail(i, j)">
             <ng-icon name="heroPlus" class="h-3.5 w-3.5"></ng-icon> Add line
           </app-action-button>
-          <app-action-button *ngIf="!isItemLocked(i, j)" class="ml-auto" variant="ghost" (click)="openPalette(i, j)">
+          <app-action-button *ngIf="!isItemLocked(i, j)" class="ml-auto" variant="ghost" (click)="trackItem(i, j); openGlobalPalette()">
             <ng-icon name="heroMagnifyingGlass" class="h-3.5 w-3.5"></ng-icon> Search catalogue
             <kbd class="ml-1 rounded border border-gray-200 px-1 text-[10px] font-medium text-gray-400 dark:border-erp-border-dark">Ctrl K</kbd>
           </app-action-button>
@@ -428,7 +422,8 @@
       <span *ngIf="paletteAdded" class="ml-2 rounded bg-emerald-100 px-1.5 py-px font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ paletteAdded }} added</span>
     </p>
 
-    <div id="ie-palette-list" role="listbox" class="min-h-0 flex-1 overflow-y-auto py-1">
+    <div id="ie-palette-list" role="listbox" class="min-h-0 flex-1 overflow-y-auto py-1"
+      appLoadMore [loadMoreDisabled]="!paletteMore || paletteFetching" (loadMore)="loadMorePalette()">
       <button *ngFor="let s of paletteRows; let idx = index" type="button" role="option" [attr.aria-selected]="paletteIndex === idx"
         class="flex w-full items-start gap-3 px-4 py-2 text-left"
         [ngClass]="paletteIndex === idx ? 'bg-violet-50 dark:bg-violet-950/60' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
@@ -457,6 +452,7 @@
         </div>
       </button>
 
+      <p *ngIf="paletteFetching" class="px-4 py-2 text-center text-[11px] text-gray-400">Loading more…</p>
       <p *ngIf="paletteTerm.trim().length < 2" class="px-4 py-6 text-center text-xs text-gray-500">Type at least 2 characters to search the catalogue.</p>
       <p *ngIf="paletteTerm.trim().length >= 2 && !paletteLoading && !paletteRows.length" class="px-4 py-4 text-center text-xs text-gray-500">
         No products match “{{ paletteTerm.trim() }}”.

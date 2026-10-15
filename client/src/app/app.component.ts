@@ -9,12 +9,9 @@ import { Subject } from 'rxjs';
 import { NotificationService } from './core/services/notification.service';
 import { PushNotificationService } from './core/services/push-notification.service';
 import { EmployeeService } from './core/services/employee/employee.service';
-import { MatDrawer, MatDrawerContainer, MatDrawerContent } from '@angular/material/sidenav';
 import { LoadingBarModule } from '@ngx-loading-bar/core';
 import { NgIf } from '@angular/common';
 import { SideBarComponent } from './shared/components/side-bar/side-bar.component';
-import { NotificationComponent } from './shared/components/notification/notification.component';
-import { AnnouncementsComponent } from './modules/announcements/announcements.component';
 import { NavBarComponent } from './shared/components/nav-bar/nav-bar.component';
 import { Idle, DEFAULT_INTERRUPTSOURCES } from '@ng-idle/core';
 import { ToastrService } from 'ngx-toastr';
@@ -33,13 +30,12 @@ import { AlertHostComponent } from './shared/components/alert-host/alert-host.co
     selector: 'app-root',
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.css'],
-    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, MatDrawerContainer, MatDrawer, NotificationComponent, AnnouncementsComponent, MatDrawerContent, NavBarComponent, CommandPaletteComponent, AlertHostComponent]
+    imports: [LoadingBarModule, NgIf, RouterOutlet, SideBarComponent, NavBarComponent, CommandPaletteComponent, AlertHostComponent]
 })
 export class AppComponent implements OnDestroy, OnInit {
   showFiller = false;
   title = 'client';
   birthdaysViewed!: boolean;
-  activePanel: 'notification' | 'announcement' = 'notification';
   loginRouter: boolean = false;
   dialogRef: MatDialogRef<CelebrationDialogComponent> | undefined;
   employeeToken: string | null = null;
@@ -48,8 +44,6 @@ export class AppComponent implements OnDestroy, OnInit {
   private celebrationCheckStarted = false;
   private destroy$ = new Subject<void>();
   private subscriptions: Subscription = new Subscription()
-
-  @ViewChild('drawer') drawer!: MatDrawer;
 
   constructor(
     private route: ActivatedRoute,
@@ -159,8 +153,6 @@ export class AppComponent implements OnDestroy, OnInit {
     if (key !== 'b' && key !== 'k') return;
     if (this.isLoginRoute()) return;
     if (key === 'k') {
-      // An open item list (quote, RFQ, purchase) keeps Ctrl+K for its own product search; Ctrl+Shift+K always opens this one.
-      if (!event.shiftKey && this.activeItemEntry.current()) return;
       event.preventDefault();
       this.palette.toggle();
       return;
@@ -247,21 +239,6 @@ export class AppComponent implements OnDestroy, OnInit {
       data: data,
       width: '400px',
     });
-  }
-
-  closeSidenav() {
-    if (this.drawer) {
-      this.drawer.close();
-    }
-  }
-
-  openPanel(panel: 'notification' | 'announcement') {
-    if (this.drawer && this.drawer.opened && this.activePanel === panel) {
-      this.drawer.close();
-      return;
-    }
-    this.activePanel = panel;
-    this.drawer?.open();
   }
 
   ngOnDestroy() {
