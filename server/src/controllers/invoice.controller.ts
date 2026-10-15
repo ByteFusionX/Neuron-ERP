@@ -4,7 +4,7 @@ import { InvoiceAudit } from '../models/invoiceAudit.model';
 import DeliveryNote from '../models/deliveryNote.model';
 import mongoose from 'mongoose';
 import { getEmployeeData } from '../common/utils/util';
-import { getNextSequence } from '../models/counter.model';
+import { getNextSequence, peekNextSequence } from '../models/counter.model';
 import { applyDnItemRejections, RejectDnItemInput } from './deliveryNote.controller';
 import { createCreditNote } from './creditNote.controller';
 import { createNotificationWithPrivileges } from './notification.controller';
@@ -103,7 +103,7 @@ export const getInvoices = async (req: Request, res: Response) => {
 
 export const createInvoice = async (req: Request, res: Response) => {
     try {
-        const { invoiceNo, date, customer, jobId, salesperson, amount, status, items, paymentTerms, parentInvoiceId, paymentStatus } = req.body;
+        const { date, customer, jobId, salesperson, amount, status, items, paymentTerms, parentInvoiceId, paymentStatus } = req.body;
         const customerGuard = await getCustomerCommercialGuard(customer, Number(amount) || 0);
         if (customerGuard.blocked || customerGuard.warnings.length) {
             return res.status(409).json({
@@ -123,18 +123,15 @@ export const createInvoice = async (req: Request, res: Response) => {
         const normalizedPaymentStatus = paymentStatus || legacyPaymentStatusMap[status];
         const normalizedStatus = legacyPaymentStatusMap[status] ? undefined : status;
 
-        // Verify if Invoice Number already exists
-        const existingInvoice = await Invoice.findOne({ invoiceNo, isDeleted: false });
-        if (existingInvoice) {
-            return res.status(400).json({ success: false, message: 'Invoice Number already exists' });
-        }
-
         const token = req.user;
         const employee = await getEmployeeData(token);
 
         if (!employee) {
             return res.status(401).json({ success: false, message: 'Unauthorized' });
         }
+
+        const nextNumber = await getNextSequence('invoiceNo', seedInvoiceNumber);
+        const invoiceNo = `INV-${nextNumber.toString().padStart(4, '0')}`;
 
         const newInvoice = new Invoice({
             invoiceNo,
@@ -357,7 +354,7 @@ const seedInvoiceNumber = async (): Promise<number> => {
 
 export const generateInvoiceNumber = async (req: Request, res: Response) => {
     try {
-        const nextNumber = await getNextSequence('invoiceNo', seedInvoiceNumber);
+        const nextNumber = await peekNextSequence('invoiceNo', seedInvoiceNumber);
         const invoiceNo = `INV-${nextNumber.toString().padStart(4, '0')}`;
         res.status(200).json({ success: true, invoiceNo });
     } catch (error) {

@@ -37,4 +37,17 @@ export const getNextSequence = async (key: string, computeSeed?: () => Promise<n
     return counter.seq;
 };
 
+// Non-consuming peek at the next sequence number for `key` — does NOT increment the
+// counter, so it is safe to call from preview/display endpoints without burning a
+// number that may never be used. If the counter doesn't exist yet, falls back to
+// `computeSeed` (same seeding logic as getNextSequence) to predict the first value.
+export const peekNextSequence = async (key: string, computeSeed?: () => Promise<number>): Promise<number> => {
+    const existing = await Counter.findById(key);
+    if (existing) {
+        return existing.seq + 1;
+    }
+    const seed = computeSeed ? await computeSeed() : 0;
+    return seed + 1;
+};
+
 export default Counter;
