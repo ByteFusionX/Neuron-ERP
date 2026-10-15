@@ -1,11 +1,12 @@
 <div class="h-full flex flex-col p-6 gap-5 bg-gray-50 dark:bg-erp-surface-dark-alt">
   <app-data-grid
+    #grid
     class="flex-1 min-h-0"
     [fillHeight]="true"
-    title="Overview"
-    subtitle="Live available stock by item and warehouse."
+    title="Stock Overview"
+    subtitle="What is on hand, reserved and available for each item."
     [breadcrumbs]="breadcrumbs"
-    rowKey="itemCode"
+    rowKey="productId"
     [serverSide]="true"
     [totalCount]="totalItems()"
     [data]="tableData()"
@@ -13,13 +14,36 @@
     [loading]="isLoading()"
     [pageSize]="row"
     searchPlaceholder="Search item, part no, description..."
-    emptyMessage="No stock rows found"
+    emptyMessage="No stock found yet. Receive a GRN or adjust stock to start."
+    createLabel="Adjust Stock"
+    [rowActions]="rowActions"
     [views]="views"
-    (viewChange)="onViewChange($event)"
+    storageKey="stock-overview"
     exportable
-    exportFileName="stock-overview.xlsx"
-    (queryChange)="onQueryChange($event)">
+    exportFileName="stock.xlsx"
+    [detailTabs]="detailTabs"
+    [detailTitle]="detailTitle"
+    [detailSubtitle]="detailSubtitle"
+    (queryChange)="onQueryChange($event)"
+    (viewChange)="onViewChange($event)"
+    (rowOpen)="onRowOpen($event)"
+    (rowAction)="onRowAction($event)"
+    (create)="openAdjust()">
 
-    <app-view-toggle dgToolbarExtra label="Stock" active="list" listLink="/stock/overview" reportLink="/stock/overview/report"></app-view-toggle>
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <ng-container *ngSwitchCase="'overview'">
+          <app-detail-overview [grid]="grid" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+        </ng-container>
+        <ng-container *ngSwitchCase="'warehouses'">
+          <app-detail-table title="Stock by warehouse" [columns]="warehouseColumns" [rows]="row.warehouses" showTotals></app-detail-table>
+        </ng-container>
+        <ng-container *ngSwitchCase="'reservations'">
+          <app-detail-table title="Reserved for" [columns]="reservationColumns" [rows]="reservationRows()" showTotals></app-detail-table>
+        </ng-container>
+      </ng-container>
+    </ng-template>
   </app-data-grid>
 </div>
+
+<app-stock-adjust-drawer [open]="adjustOpen" [productId]="adjustProductId" (saved)="loadStock()" (closed)="closeAdjust()"></app-stock-adjust-drawer>

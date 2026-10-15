@@ -294,11 +294,11 @@ export class GrnStockHoldsComponent implements OnInit {
       title: 'Logistics',
       columns: '2',
       fields: [
-        { type: 'field', label: 'Return Method', value: this.logisticsLabel(row.logisticsType), pill: true, tone: 'info' },
+        { type: 'field', label: 'Return Method', value: this.logisticsLabel(row.logisticsType), tone: 'info' },
         { type: 'field', label: 'Dispatch Date', value: this.formatDate(row.dispatchDate) },
         { type: 'field', label: 'Courier', value: row.courierName || 'N/A' },
         { type: 'field', label: 'Tracking Ref', value: row.trackingRef || 'N/A', numeric: true },
-        { type: 'field', label: 'Quarantine Stock', value: row.stockEntryId ? 'Created' : 'Not required', pill: true, tone: row.stockEntryId ? 'warn' : 'neutral' },
+        { type: 'field', label: 'Quarantine Stock', value: row.stockEntryId ? 'Created' : 'Not required', tone: row.stockEntryId ? 'warn' : 'neutral' },
       ],
     }];
   }
@@ -384,7 +384,7 @@ export class GrnStockHoldsComponent implements OnInit {
         { type: 'field', label: 'Supplier', value: row?.purchaseOrderId?.supplierId?.supplierName || 'N/A' },
         { type: 'field', label: 'Warehouse', value: row?.warehouse?.wareHouseName || 'N/A' },
         { type: 'field', label: 'Item', value: row.itemDescription || 'N/A' },
-        { type: 'field', label: 'Rejected Qty', value: row.rejectedQty || 0, numeric: true, pill: true, tone: 'warn' },
+        { type: 'field', label: 'Rejected Qty', value: row.rejectedQty || 0, numeric: true, tone: 'warn' },
         { type: 'field', label: 'Reason', value: row.rejectionReason || 'N/A' },
       ],
     }];

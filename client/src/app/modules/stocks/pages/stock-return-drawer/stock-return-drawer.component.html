@@ -1,0 +1,41 @@
+<app-sf-drawer [title]="title" [subtitle]="subtitle" width="620px" [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed($event)">
+
+    <form id="stock-return-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <app-sf-section title="Items to return" columns="1"
+            [description]="isCustomer ? 'Enter how many of each item the customer is sending back.' : 'Enter how many of each accepted item you are sending back.'">
+            <p *ngIf="loading" class="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+            <p *ngIf="!loading && !lines.length" class="text-sm text-gray-500 dark:text-gray-400">Nothing is left to return on this document.</p>
+
+            <div *ngFor="let line of lines; let i = index"
+                class="flex items-center gap-4 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-erp-border-dark dark:bg-erp-surface-dark">
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{{ line.partNo }}</p>
+                    <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ line.description }}</p>
+                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Up to {{ line.maxQuantity }} {{ line.uom }}</p>
+                </div>
+                <app-sf-field class="w-32 shrink-0" [control]="quantities.at(i)" [messages]="{ max: 'More than can be returned', min: 'Cannot be negative' }">
+                    <app-sf-number [formControl]="quantities.at(i)" [min]="0" [max]="line.maxQuantity" placeholder="0"></app-sf-number>
+                </app-sf-field>
+            </div>
+        </app-sf-section>
+
+        <app-sf-section title="Details" columns="1">
+            <app-sf-field label="Reason" [control]="form.controls.reason">
+                <app-sf-select formControlName="reason" [options]="reasonOptions" placeholder="Select reason"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field *ngIf="isCustomer" label="Condition of returned goods" [control]="form.controls.condition">
+                <app-sf-select formControlName="condition" [options]="conditionOptions"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field label="Remarks" optional [control]="form.controls.remarks">
+                <app-sf-textarea formControlName="remarks" [rows]="3" placeholder="Anything the team should know"></app-sf-textarea>
+            </app-sf-field>
+        </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
+        <app-action-button variant="primary" type="submit" form="stock-return-form" [disabled]="saving || loading || !lines.length">
+            {{ saving ? 'Saving…' : 'Record return' }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

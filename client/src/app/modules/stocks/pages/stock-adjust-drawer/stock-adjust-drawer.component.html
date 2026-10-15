@@ -1,0 +1,44 @@
+<app-sf-drawer title="Adjust Stock" subtitle="Correct the quantity in a warehouse. Every adjustment is recorded in the ledger with its reason."
+    width="560px" [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed($event)">
+
+    <form id="stock-adjust-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <app-sf-section title="Stock" columns="1">
+            <app-sf-field label="Product" [control]="form.controls.product">
+                <app-sf-combobox formControlName="product" [options]="productOptions" placeholder="Search part no or description"></app-sf-combobox>
+            </app-sf-field>
+            <p *ngIf="current" class="text-xs text-gray-500 dark:text-gray-400">
+                On hand <strong>{{ current.onHand }}</strong> · Reserved <strong>{{ current.reserved }}</strong> · Available <strong>{{ current.available }}</strong>
+            </p>
+            <app-sf-field label="Warehouse" [control]="form.controls.warehouse">
+                <app-sf-select formControlName="warehouse" [options]="warehouseOptions" placeholder="Select warehouse"></app-sf-select>
+            </app-sf-field>
+        </app-sf-section>
+
+        <app-sf-section title="Adjustment" columns="2">
+            <app-sf-field full label="Action" [control]="form.controls.direction">
+                <app-sf-radio-group formControlName="direction" [options]="directionOptions" variant="segmented"></app-sf-radio-group>
+            </app-sf-field>
+            <app-sf-field label="Quantity" [control]="form.controls.quantity" [messages]="{ min: 'Enter a quantity of 1 or more' }">
+                <app-sf-number formControlName="quantity" [min]="1"></app-sf-number>
+            </app-sf-field>
+            <app-sf-field label="Reason" [control]="form.controls.reason">
+                <app-sf-select formControlName="reason" [options]="reasonOptions" placeholder="Select reason"></app-sf-select>
+            </app-sf-field>
+            <app-sf-field *ngIf="form.controls.direction.value === 'add'" label="Unit cost" optional
+                hint="Leave blank to use the cost of the last receipt." [control]="form.controls.unitCost">
+                <app-sf-number formControlName="unitCost" [min]="0" [decimals]="2"></app-sf-number>
+            </app-sf-field>
+            <app-sf-field full label="Remarks" [optional]="!isOther" [control]="form.controls.remarks"
+                [messages]="{ required: 'Remarks are required when the reason is Other' }">
+                <app-sf-textarea formControlName="remarks" [rows]="3" placeholder="What happened?"></app-sf-textarea>
+            </app-sf-field>
+        </app-sf-section>
+    </form>
+
+    <ng-container sfDrawerFooter>
+        <app-action-button variant="secondary" (click)="onDrawerClosed(false)">Cancel</app-action-button>
+        <app-action-button variant="primary" type="submit" form="stock-adjust-form" [disabled]="saving">
+            {{ saving ? 'Saving…' : 'Post adjustment' }}
+        </app-action-button>
+    </ng-container>
+</app-sf-drawer>

@@ -15,7 +15,7 @@ interface StockReservation {
     sourceRef?: Types.ObjectId;
     quantity: number;
     reservedFrom: Date;
-    expiresAt: Date;
+    expiresAt?: Date;
     status: StockReservationStatus;
     releaseReason?: string;
     releasedAt?: Date;
@@ -72,9 +72,9 @@ const stockReservationSchema = new Schema<StockReservation>({
         type: Date,
         default: Date.now,
     },
+    // Unset for a job's reservation: it stays until the job takes the stock, is lost or is revoked.
     expiresAt: {
         type: Date,
-        required: true,
     },
     status: {
         type: String,

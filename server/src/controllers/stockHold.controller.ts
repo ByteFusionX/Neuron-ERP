@@ -3,7 +3,8 @@ import mongoose from "mongoose";
 import { Server } from "socket.io";
 import GRN from "../models/grn.model";
 import Product from "../models/products.model";
-import StockEntry from "../models/stockEntry.model";
+import { balanceOf, post as postStock } from "../services/stock.service";
+import StockMovement from "../models/stockMovement.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
 import { StockHold } from "../models/stockHold.model";
 import { CreditNote } from "../models/creditNote.model";
@@ -58,11 +59,10 @@ const resolveUnitCost = (po: any, product: any, grnItem: any): number => {
 };
 
 /**
- * Creates a quarantined StockEntry representing rejected-and-awaiting-return
- * GRN stock. Rejected GRN qty never entered stock (see grn.controller createGRN,
- * which only stocks acceptedQty), so this is a fresh quarantine record.
+ * Puts the rejected quantity of a GRN line into the quarantine bucket of the GRN's warehouse. Rejected
+ * GRN qty never entered stock (createGRN only receives acceptedQty), so this is a fresh quarantine row.
  */
-const createQuarantineStockEntry = async (grn: any, grnItem: any, qty: number, userId: string) => {
+const postQuarantine = async (grn: any, grnItem: any, qty: number, userId: string) => {
   let product: any = null;
   if (grnItem.partNo) {
     const partNoStr = typeof grnItem.partNo === 'string' ? grnItem.partNo : (grnItem.partNo?.partNo || '');
@@ -77,32 +77,22 @@ const createQuarantineStockEntry = async (grn: any, grnItem: any, qty: number, u
   const po = grn.purchaseOrderId as any;
   const unitCost = resolveUnitCost(po, product, grnItem);
 
-  const stockEntry = await StockEntry.create({
-    grn: grn._id,
-    partNo: product._id,
-    itemCode: product.itemCode || undefined,
-    dateOfPurchase: new Date(),
-    jobId: grn.jobId,
-    supplierName: po?.supplierId?._id || po?.supplierId,
-    supplierLpoNo: po?.poNo,
-    productDescription: grnItem.itemDescription,
-    productSegment: product.productSegment,
-    productCategory: product.productCategory,
-    targetWarehouse: grn.warehouse,
+  return postStock({
+    product: product._id,
+    warehouse: grn.warehouse,
+    type: 'Quarantine',
+    direction: 'in',
     quantity: qty,
-    uom: grnItem.uom,
+    bucket: 'Quarantine',
     unitCost,
-    totalCost: unitCost * qty,
-    isQuarantined: true,
-    quarantineReason: 'SupplierReturnPending',
-    quarantinedAt: new Date(),
+    referenceType: 'GRN Rejection',
+    referenceId: grn._id,
+    referenceNo: grn.grnNo,
+    reason: 'SupplierReturnPending',
+    supplier: po?.supplierId?._id || po?.supplierId,
+    lpoNo: po?.poNo,
     createdBy: userId,
-    createdDate: new Date(),
-    updatedDate: new Date(),
-    isDeleted: false
   });
-
-  return stockEntry;
 };
 
 export const createStockHold = async (req: Request, res: Response) => {
@@ -191,9 +181,10 @@ export const createStockHold = async (req: Request, res: Response) => {
     let stockEntryId: any = undefined;
     let unitCost = 0;
     if (logisticsType !== 'NoPhysicalReturn') {
-      const stockEntry = await createQuarantineStockEntry(grn, grnItem, requestedQty, employee._id);
-      stockEntryId = stockEntry._id;
-      unitCost = stockEntry.unitCost || 0;
+      // stockEntryId now points at the quarantine row in the stock ledger.
+      const quarantineRow = await postQuarantine(grn, grnItem, requestedQty, employee._id);
+      stockEntryId = quarantineRow._id;
+      unitCost = quarantineRow.unitCost || 0;
     } else {
       let product: any = null;
       if (grnItem.partNo) {
@@ -409,14 +400,28 @@ export const resolveStockHold = async (req: Request, res: Response) => {
     if (['Replacement', 'AlternateSupplierSourcing', 'CreditOnly', 'Disposed'].includes(resolutionType) && hold.stockEntryId) {
       // Physical resolution: replacement goods will be received against a new/linked GRN separately,
       // or rejected stock leaves the warehouse (returned to supplier/disposed). Either way, the
-      // quarantined qty is consumed here rather than restored to sellable stock. Only "add back to
-      // stock entries" (a manual release) restores sellable stock — a separate action.
-      const stockEntry = await StockEntry.findById(hold.stockEntryId);
-      if (stockEntry) {
-        stockEntry.quantity = Math.max(0, (stockEntry.quantity || 0) - resolveQty);
-        (stockEntry as any).quarantineReleasedAt = new Date();
-        (stockEntry as any).quarantineReleasedBy = employee._id;
-        await stockEntry.save();
+      // quarantined qty is taken out of quarantine here rather than restored to sellable stock.
+      const quarantineRow: any = await StockMovement.findById(hold.stockEntryId).lean();
+      if (quarantineRow) {
+        const inQuarantine = await balanceOf(quarantineRow.product, quarantineRow.warehouse, 'Quarantine');
+        const take = Math.min(resolveQty, inQuarantine);
+        if (take > 0) {
+          await postStock({
+            product: quarantineRow.product,
+            warehouse: quarantineRow.warehouse,
+            type: 'Return',
+            direction: 'out',
+            quantity: take,
+            bucket: 'Quarantine',
+            unitCost: quarantineRow.unitCost,
+            referenceType: 'StockHold',
+            referenceId: hold._id,
+            referenceNo: hold.holdNo,
+            reason: resolutionType,
+            remarks: note,
+            createdBy: employee._id,
+          });
+        }
       }
     }
 

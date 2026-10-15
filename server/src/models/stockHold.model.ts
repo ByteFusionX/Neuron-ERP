@@ -28,8 +28,8 @@ const stockHoldSchema = new Schema({
         }],
         default: []
     },
-    // Only set for holds with a physical quarantine (logisticsType !== 'NoPhysicalReturn')
-    stockEntryId: { type: Schema.Types.ObjectId, ref: 'StockEntry' },
+    // The quarantine row in the stock ledger. Only set for holds with a physical quarantine (logisticsType !== 'NoPhysicalReturn')
+    stockEntryId: { type: Schema.Types.ObjectId, ref: 'StockMovement' },
     grnId: { type: Schema.Types.ObjectId, ref: 'GRN' },
     itemId: { type: String },
     partNo: { type: String },
