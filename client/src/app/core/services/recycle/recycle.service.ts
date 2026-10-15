@@ -17,8 +17,8 @@ export class RecycleService {
   api: string = environment.api
   constructor(private http: HttpClient) { }
 
-  fetchTrash(): Observable<Trash> {
-    return this.http.get<Trash>(`${this.api}/trash`)
+  fetchTrash(): Observable<Trash[]> {
+    return this.http.get<Trash[]>(`${this.api}/trash`)
   }
 
   restoreTrash(data: { from: string, dataId: string }): Observable<any> {
@@ -27,6 +27,7 @@ export class RecycleService {
 }
 
 export interface Trash {
+  _id: string,
   deletedFrom: string,
   deletedData: any,
   deletedBy: getEmployee,
