@@ -70,6 +70,9 @@
     <app-action-button *ngIf="canViewInventoryDeduction()" variant="secondary" routerLink="/dispatch/inventory-deduction-report">Inventory deduction</app-action-button>
   </div>
 
+  <app-stock-return-drawer kind="customer" [open]="returnOpen" [sourceId]="returnDnId"
+    (saved)="loadData()" (closed)="returnOpen = false"></app-stock-return-drawer>
+
   <app-create-dn [drawerMode]="true" [open]="formOpen" [editId]="formEditId"
     (saved)="onCreateSaved()" (closed)="closeCreateDrawer()"></app-create-dn>
 </div>

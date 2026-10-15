@@ -1,13 +1,13 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import DeliveryNote from '../models/deliveryNote.model';
-import StockEntry from '../models/stockEntry.model';
+import StockMovement from '../models/stockMovement.model';
 import Product from '../models/products.model';
 import Job from '../models/job.model';
 import Quotation from '../models/quotation.model';
 import PurchaseRequest from '../models/purchaseRequest.model';
 import PurchaseOrder from '../models/purchaseOrder.model';
-import InventoryDeduction from '../models/inventoryDeduction.model';
+import { StockError, findDeliveryShortages, postDelivery, post as postStock, reverseByReference } from '../services/stock.service';
 import { getNextSequence } from '../models/counter.model';
 import GRN from '../models/grn.model';
 import { Invoice } from '../models/invoice.model';
@@ -17,113 +17,51 @@ import { getEmployeeData } from '../common/utils/util';
 import { Server } from 'socket.io';
 
 /**
- * Deduct inventory (StockEntry) for each inventory item in a posted DN.
- * Creates InventoryDeduction records for audit trail.
+ * The stock lines a delivery note takes out of the warehouse: its inventory items with a positive
+ * delivery quantity, resolved to catalogue products. Throws when an inventory item is not a catalogue product.
  */
-const deductInventoryForDn = async (dn: any, userId?: string): Promise<void> => {
-    if (!dn || !dn.items || !Array.isArray(dn.items)) return;
-
-    for (const item of dn.items) {
+const buildDeliveryLines = async (items: any[] | undefined): Promise<{ product: any; quantity: number; partNo: string }[]> => {
+    const lines: { product: any; quantity: number; partNo: string }[] = [];
+    for (const item of items || []) {
         if (!item.isInventoryItem) continue;
-
-        const qty = item.currentDeliveryQty || 0;
-        if (qty <= 0) continue;
-
-        // Look up Product by partNo string
-        const product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } });
-        if (!product) {
-            console.warn(`deductInventoryForDn: Product not found for partNo "${item.partNo}", skipping.`);
-            continue;
-        }
-
-        // Find a StockEntry for this product – prefer one matching the same jobId, FIFO (oldest first)
-        let stockEntry = await StockEntry.findOne({
-            partNo: product._id,
-            jobId: dn.jobId,
-            quantity: { $gt: 0 },
-            isDeleted: { $ne: true },
-            isQuarantined: { $ne: true }
-        }).sort({ createdDate: 1 });
-
-        // Fallback: any stock entry for this product with available quantity
-        if (!stockEntry) {
-            stockEntry = await StockEntry.findOne({
-                partNo: product._id,
-                quantity: { $gt: 0 },
-                isDeleted: { $ne: true },
-                isQuarantined: { $ne: true }
-            }).sort({ createdDate: 1 });
-        }
-
-        if (!stockEntry) {
-            console.warn(`deductInventoryForDn: No StockEntry with available qty for product "${item.partNo}", skipping.`);
-            continue;
-        }
-
-        const stockBefore = stockEntry.quantity;
-        const deductQty = Math.min(qty, stockBefore); // Never deduct more than available
-        const stockAfter = stockBefore - deductQty;
-        const hasShortfall = deductQty < qty;
-
-        if (hasShortfall) {
-            console.warn(`deductInventoryForDn: Stock shortfall for product "${item.partNo}" on DN "${dn.dnNo}" — requested ${qty}, only ${deductQty} available.`);
-        }
-
-        // Reduce stock entry quantity and keep total cost in step with the remaining qty
-        stockEntry.quantity = stockAfter;
-        stockEntry.totalCost = stockAfter * (stockEntry.unitCost || 0);
-        stockEntry.updatedDate = new Date();
-        await stockEntry.save();
-
-        // Create deduction record
-        await InventoryDeduction.create({
-            dnId: dn._id,
-            dnNo: dn.dnNo,
-            dnDate: dn.dnDate,
-            jobId: dn.jobId,
-            customerName: dn.clientName || '',
-            stockEntryId: stockEntry._id,
-            productId: product._id,
-            partNo: item.partNo,
-            description: item.description || '',
-            uom: stockEntry.uom || '',
-            quantityDeducted: deductQty,
-            requestedQty: qty,
-            hasShortfall,
-            stockBefore,
-            stockAfter,
-            deductedBy: userId ? new mongoose.Types.ObjectId(userId) : undefined,
-            deductedDate: new Date(),
-            isReversed: false,
-        });
+        const quantity = Number(item.currentDeliveryQty) || 0;
+        if (quantity <= 0) continue;
+        const product = await Product.findOne({ partNo: item.partNo, isDeleted: { $ne: true } }).select('_id partNo');
+        if (!product) throw new StockError(`"${item.description || item.partNo}" is marked as a stock item but "${item.partNo}" is not in the product catalogue`, 400);
+        lines.push({ product: product._id, quantity, partNo: item.partNo });
     }
+    return lines;
 };
 
-/**
- * Reverse all inventory deductions for a DN (used when cancelling).
- * Restores StockEntry quantities and marks deduction records as reversed.
- */
-const reverseInventoryDeductions = async (dnId: string): Promise<void> => {
-    const deductions = await InventoryDeduction.find({
-        dnId: new mongoose.Types.ObjectId(dnId),
-        isReversed: false,
+/** Refuses a delivery the warehouse cannot cover, before the delivery note is saved. */
+const assertDeliverable = async (items: any[] | undefined, jobId?: any): Promise<void> => {
+    const lines = await buildDeliveryLines(items);
+    const shortages = await findDeliveryShortages(lines, jobId);
+    if (!shortages.length) return;
+    const partNoOf = new Map(lines.map((l) => [String(l.product), l.partNo]));
+    throw new StockError(
+        `Not enough stock to deliver: ${shortages.map((s) => `${partNoOf.get(s.product) || s.product} (need ${s.requested}, free ${s.available})`).join('; ')}`,
+        409,
+        shortages
+    );
+};
+
+/** Takes a posted delivery note's items out of stock (one Delivery row per warehouse used) and consumes the job's reservation. */
+const deductInventoryForDn = async (dn: any, userId?: string): Promise<void> => {
+    const lines = await buildDeliveryLines(dn?.items);
+    await postDelivery({
+        lines,
+        jobId: dn.jobId,
+        referenceType: 'DeliveryNote',
+        referenceId: dn._id,
+        referenceNo: dn.dnNo,
+        createdBy: userId,
     });
+};
 
-    for (const deduction of deductions) {
-        // Restore stock entry quantity and keep total cost in step with the restored qty
-        const stockEntry = await StockEntry.findById(deduction.stockEntryId);
-        if (stockEntry) {
-            stockEntry.quantity += deduction.quantityDeducted;
-            stockEntry.totalCost = stockEntry.quantity * (stockEntry.unitCost || 0);
-            stockEntry.updatedDate = new Date();
-            await stockEntry.save();
-        }
-
-        // Mark deduction as reversed
-        deduction.isReversed = true;
-        deduction.reversedDate = new Date();
-        await deduction.save();
-    }
+/** Cancelling a posted delivery note puts its stock back by posting the opposite of every Delivery row. */
+const reverseInventoryDeductions = async (dn: any, userId?: string): Promise<void> => {
+    await reverseByReference('DeliveryNote', dn._id, userId, `Delivery note ${dn.dnNo} cancelled`);
 };
 
 const seedDnSequence = async (): Promise<number> => {
@@ -290,6 +228,11 @@ export const createDn = async (req: Request, res: Response) => {
             finalStatus = await calculateDnStatus(jobId, items);
         }
 
+        // Stock is checked before anything is saved, so a short delivery leaves no half-posted note behind.
+        if (finalStatus !== 'Draft') {
+            await assertDeliverable(items, jobId);
+        }
+
         const newDn = new DeliveryNote({
             ...req.body,
             status: finalStatus,
@@ -304,7 +247,12 @@ export const createDn = async (req: Request, res: Response) => {
 
         // Deduct from inventory if DN is posted (not Draft)
         if (finalStatus !== 'Draft') {
-            await deductInventoryForDn(savedDn, employee?._id);
+            try {
+                await deductInventoryForDn(savedDn, employee?._id);
+            } catch (stockError) {
+                await DeliveryNote.deleteOne({ _id: savedDn._id });
+                throw stockError;
+            }
         }
 
         if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
@@ -313,6 +261,7 @@ export const createDn = async (req: Request, res: Response) => {
 
         res.status(201).json({ success: true, data: savedDn });
     } catch (error) {
+        if (error instanceof StockError) return res.status(error.status).json({ success: false, message: error.message, details: error.details });
         console.error("Create DN Error:", error);
         res.status(500).json({ message: 'Error creating Delivery Note', error });
     }
@@ -504,6 +453,10 @@ export const updateDn = async (req: Request, res: Response) => {
 
         const previousStatus = dn.status; // Capture before update
 
+        if (previousStatus === 'Draft' && finalStatus !== 'Draft') {
+            await assertDeliverable(items ?? dn.items, dn.jobId);
+        }
+
         Object.assign(dn, {
             ...req.body,
             status: finalStatus,
@@ -515,7 +468,12 @@ export const updateDn = async (req: Request, res: Response) => {
         // Deduct from inventory if transitioning from Draft to non-Draft
         if (previousStatus === 'Draft' && finalStatus !== 'Draft') {
             const employee = await getEmployeeData((req as any).user);
-            await deductInventoryForDn(updatedDn, employee?._id);
+            try {
+                await deductInventoryForDn(updatedDn, employee?._id);
+            } catch (stockError) {
+                await DeliveryNote.updateOne({ _id: updatedDn._id }, { $set: { status: 'Draft' } });
+                throw stockError;
+            }
         }
 
         if (dn.jobId && mongoose.Types.ObjectId.isValid(dn.jobId.toString())) {
@@ -524,6 +482,7 @@ export const updateDn = async (req: Request, res: Response) => {
 
         return res.status(200).json({ success: true, data: updatedDn });
     } catch (error) {
+        if (error instanceof StockError) return res.status(error.status).json({ success: false, message: error.message, details: error.details });
         console.error("Update DN Error:", error);
         res.status(500).json({ message: 'Error updating Delivery Note', error });
     }
@@ -557,17 +516,27 @@ export const cancelDn = async (req: Request, res: Response) => {
 
         const wasDraft = dn.status === 'Draft';
 
+        if (!wasDraft) {
+            const hasRejections = (dn.items as any[]).some((item: any) => (item.rejectedQty || 0) > 0);
+            const hasReturns = await StockMovement.exists({ referenceType: { $in: ['DN Return', 'DnRejection'] }, referenceId: dn._id, isDeleted: { $ne: true } });
+            if (hasRejections || hasReturns) {
+                return res.status(400).json({ message: 'Cannot cancel: items on this Delivery Note were rejected or returned by the customer' });
+            }
+        }
+
         dn.status = 'Cancelled';
         dn.updatedDate = new Date();
         await dn.save();
 
         // Reverse inventory deductions if the DN was not a draft (i.e. stock was deducted)
         if (!wasDraft) {
-            await reverseInventoryDeductions(id);
+            const employee = await getEmployeeData((req as any).user);
+            await reverseInventoryDeductions(dn, employee?._id);
         }
 
         return res.status(200).json({ message: 'Delivery Note cancelled successfully', dn });
     } catch (error) {
+        if (error instanceof StockError) return res.status(error.status).json({ success: false, message: error.message, details: error.details });
         console.error("Cancel DN Error:", error);
         res.status(500).json({ message: 'Error cancelling DN', error });
     }
@@ -610,9 +579,8 @@ export const completeDnPod = async (req: Request, res: Response) => {
 };
 
 /**
- * Restore a rejected quantity into a quarantined StockEntry (pending QC release),
- * rather than straight back into available/sellable stock. Reuses the cost/warehouse
- * context of the original inventory deduction for this DN+part, when available.
+ * A rejected quantity comes back into quarantine (pending QC), not into sellable stock. It returns to the
+ * warehouse(s) the note delivered it from, at the cost of that delivery.
  */
 const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: number, reason: string, userId?: string): Promise<string | null> => {
     if (!item.isInventoryItem || rejectedQty <= 0) return null;
@@ -622,72 +590,33 @@ const restoreRejectedItemToQuarantine = async (dn: any, item: any, rejectedQty: 
         return `Item "${item.description || item.partNo}": Product not found for part number "${item.partNo}" — rejection recorded, but stock was not restored to quarantine`;
     }
 
-    const deduction = await InventoryDeduction.findOne({
-        dnId: dn._id,
-        partNo: item.partNo,
-        isReversed: false
-    }).sort({ deductedDate: -1 });
-
-    let unitCost = 0;
-    let targetWarehouse: any = undefined;
-    let supplierName: any = undefined;
-    let supplierLpoNo: string | undefined;
-    let sourceGrnId: any = undefined;
-
-    if (deduction) {
-        const sourceStockEntry = await StockEntry.findById(deduction.stockEntryId);
-        if (sourceStockEntry) {
-            unitCost = sourceStockEntry.unitCost || 0;
-            targetWarehouse = sourceStockEntry.targetWarehouse;
-            supplierName = sourceStockEntry.supplierName;
-            supplierLpoNo = sourceStockEntry.supplierLpoNo;
-            if (sourceStockEntry.grn) {
-                sourceGrnId = sourceStockEntry.grn;
-            }
-        }
+    const delivered: any[] = await StockMovement.find({
+        referenceType: 'DeliveryNote', referenceId: dn._id, product: product._id, movementType: 'Delivery', reversalOf: { $exists: false }, isDeleted: { $ne: true },
+    }).sort({ quantityOut: -1 }).lean();
+    if (!delivered.length) {
+        return `Item "${item.description || item.partNo}": no stock delivery found for this note — rejection recorded, but stock was not restored to quarantine`;
     }
 
-    if (!targetWarehouse || !supplierName) {
-        return `Item "${item.description || item.partNo}": Could not determine original warehouse/supplier context — rejection recorded, but stock was not restored to quarantine`;
+    let remaining = rejectedQty;
+    for (const row of delivered) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, row.quantityOut);
+        await postStock({
+            product: product._id,
+            warehouse: row.warehouse,
+            type: 'Return',
+            direction: 'in',
+            quantity: take,
+            bucket: 'Quarantine',
+            unitCost: row.unitCost,
+            referenceType: 'DnRejection',
+            referenceId: dn._id,
+            referenceNo: dn.dnNo,
+            reason,
+            createdBy: userId,
+        });
+        remaining -= take;
     }
-
-    // Fall back to resolving the originating GRN by jobId + part when the
-    // inventory-deduction trail doesn't directly point at one.
-    if (!sourceGrnId && dn.jobId) {
-        const jobGrns = await GRN.find({ jobId: dn.jobId, isDeleted: { $ne: true } }).sort({ createdAt: -1 });
-        const matchingGrn = jobGrns.find((grnDoc: any) =>
-            (grnDoc.items || []).some((it: any) => it.partNo && item.partNo && it.partNo === item.partNo)
-        ) || jobGrns[0];
-        if (matchingGrn) {
-            sourceGrnId = matchingGrn._id;
-        }
-    }
-
-    await StockEntry.create({
-        grn: sourceGrnId || undefined,
-        partNo: product._id,
-        dateOfPurchase: new Date(),
-        jobId: dn.jobId,
-        supplierName,
-        supplierLpoNo,
-        productDescription: item.description || product.productDescription || '',
-        productSegment: product.productSegment,
-        productCategory: product.productCategory,
-        targetWarehouse,
-        quantity: rejectedQty,
-        uom: item.uom,
-        unitCost,
-        totalCost: unitCost * rejectedQty,
-        dn: dn._id,
-        isQuarantined: true,
-        quarantineReason: reason,
-        quarantinedAt: new Date(),
-        createdBy: userId && mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : undefined,
-        createdDate: new Date(),
-        updatedDate: new Date(),
-        isDeleted: false
-    });
-
     return null;
 };
 
@@ -809,83 +738,60 @@ export const getInventoryDeductionReport = async (req: Request, res: Response) =
         row = row || 10;
         const skipNum: number = (page - 1) * row;
 
-        // Build match filters on the InventoryDeduction collection
-        const matchFilters: any = {};
-
+        // One line per Delivery row posted for a delivery note; a cancel shows as Reversed.
+        const matchFilters: any = { referenceType: 'DeliveryNote', movementType: 'Delivery', reversalOf: { $exists: false }, isDeleted: { $ne: true } };
         if (fromDate && toDate) {
-            matchFilters.dnDate = { $gte: new Date(fromDate), $lte: new Date(toDate) };
-        }
-        if (customerName) {
-            matchFilters.customerName = { $regex: customerName, $options: 'i' };
-        }
-        if (jobId) {
-            matchFilters.jobId = new mongoose.Types.ObjectId(jobId);
+            matchFilters.movementDate = { $gte: new Date(fromDate), $lte: new Date(toDate) };
         }
         if (dnNumber) {
-            matchFilters.dnNo = { $regex: dnNumber, $options: 'i' };
-        }
-        if (partNo) {
-            matchFilters.partNo = { $regex: partNo, $options: 'i' };
-        }
-        if (status && Array.isArray(status) && status.length > 0) {
-            const hasDeducted = status.includes('Deducted');
-            const hasReversed = status.includes('Reversed');
-            if (hasDeducted && !hasReversed) {
-                matchFilters.isReversed = { $ne: true };
-            } else if (hasReversed && !hasDeducted) {
-                matchFilters.isReversed = true;
-            }
-            // If both are selected, no filter needed (show all)
+            matchFilters.referenceNo = { $regex: dnNumber, $options: 'i' };
         }
 
         const pipeline: any[] = [
             { $match: matchFilters },
-            {
-                $lookup: {
-                    from: 'jobs',
-                    localField: 'jobId',
-                    foreignField: '_id',
-                    as: 'job'
-                }
-            },
+            { $lookup: { from: 'deliverynotes', localField: 'referenceId', foreignField: '_id', as: 'dn' } },
+            { $unwind: { path: '$dn', preserveNullAndEmptyArrays: true } },
+            { $lookup: { from: 'products', localField: 'product', foreignField: '_id', as: 'prod' } },
+            { $unwind: { path: '$prod', preserveNullAndEmptyArrays: true } },
+            { $lookup: { from: 'jobs', localField: 'dn.jobId', foreignField: '_id', as: 'job' } },
             { $unwind: { path: '$job', preserveNullAndEmptyArrays: true } },
-            { $sort: { deductedDate: -1 } }
+            { $lookup: { from: 'stockmovements', localField: '_id', foreignField: 'reversalOf', as: 'reversals' } },
+            { $addFields: { isReversed: { $gt: [{ $size: '$reversals' }, 0] } } },
         ];
+        const afterLookup: any = {};
+        if (customerName) afterLookup['dn.clientName'] = { $regex: customerName, $options: 'i' };
+        if (jobId) afterLookup['dn.jobId'] = new mongoose.Types.ObjectId(jobId);
+        if (partNo) afterLookup['prod.partNo'] = { $regex: partNo, $options: 'i' };
+        if (status && Array.isArray(status) && status.length === 1) {
+            afterLookup.isReversed = status[0] === 'Reversed';
+        }
+        if (Object.keys(afterLookup).length) pipeline.push({ $match: afterLookup });
+        pipeline.push({ $sort: { movementDate: -1 } });
 
-        // Count total
-        const countResult = await InventoryDeduction.aggregate([...pipeline, { $count: 'total' }]);
+        const countResult = await StockMovement.aggregate([...pipeline, { $count: 'total' }]);
         const total = countResult.length > 0 ? countResult[0].total : 0;
 
-        // Fetch paginated data
-        const deductions = await InventoryDeduction.aggregate([
+        const deductions = await StockMovement.aggregate([
             ...pipeline,
             { $skip: skipNum },
             { $limit: row },
             {
                 $project: {
                     _id: 1,
-                    dnId: 1,
-                    dnNumber: '$dnNo',
-                    date: '$dnDate',
+                    dnId: '$referenceId',
+                    dnNumber: '$referenceNo',
+                    date: '$dn.dnDate',
                     jobId: '$job.jobId',
-                    jobMongoId: '$jobId',
-                    customerName: 1,
-                    partNo: 1,
-                    description: 1,
-                    uom: 1,
-                    quantityDeducted: 1,
-                    requestedQty: 1,
-                    hasShortfall: 1,
-                    stockBefore: 1,
-                    stockAfter: 1,
-                    deductedDate: 1,
-                    status: {
-                        $cond: {
-                            if: '$isReversed',
-                            then: 'Reversed',
-                            else: 'Deducted'
-                        }
-                    }
+                    jobMongoId: '$dn.jobId',
+                    customerName: '$dn.clientName',
+                    partNo: '$prod.partNo',
+                    description: '$prod.productDescription',
+                    uom: '$prod.unitOfMeasure',
+                    quantityDeducted: '$quantityOut',
+                    requestedQty: '$quantityOut',
+                    hasShortfall: { $literal: false },
+                    deductedDate: '$movementDate',
+                    status: { $cond: { if: '$isReversed', then: 'Reversed', else: 'Deducted' } }
                 }
             }
         ]);

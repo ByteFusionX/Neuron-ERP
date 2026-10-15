@@ -13,6 +13,7 @@ import { DetailTableComponent } from 'src/app/shared/components/detail-panel/det
 import { IconsModule } from 'src/app/lib/icons/icons.module';
 import { ViewPurchaseRequestDetailsModalComponent, ViewPurchaseRequestDetailsModalData } from '../view-purchase-request-details-modal/view-purchase-request-details-modal.component';
 import { ViewLpoDetailsModalComponent, ViewLpoDetailsModalData } from '../view-lpo-details-modal/view-lpo-details-modal.component';
+import { StockReturnDrawerComponent } from 'src/app/modules/stocks/pages/stock-return-drawer/stock-return-drawer.component';
 
 @Component({
   selector: 'app-grn-list',
@@ -25,6 +26,7 @@ import { ViewLpoDetailsModalComponent, ViewLpoDetailsModalData } from '../view-l
     DetailOverviewComponent,
     DetailTableComponent,
     ActionButtonComponent,
+    StockReturnDrawerComponent,
   ],
   templateUrl: './grn-list.component.html',
   styleUrl: './grn-list.component.css',
@@ -39,6 +41,9 @@ export class GrnListComponent implements OnInit {
   private datePipe = inject(DatePipe);
 
   rows: any[] = [];
+  /** Supplier return: accepted goods going back against a GRN. */
+  returnOpen = false;
+  returnGrnId = '';
   total = 0;
   isLoading = false;
   page = 1;
@@ -107,6 +112,7 @@ export class GrnListComponent implements OnInit {
         panel: true,
         hidden: (r) => !r?.purchaseOrderId,
       },
+      { id: 'supplierReturn', label: 'Return to supplier' },
     ];
   }
 
@@ -162,6 +168,10 @@ export class GrnListComponent implements OnInit {
       case 'lpo':
         this.viewLpoDetails(event.row);
         break;
+      case 'supplierReturn':
+        this.returnGrnId = event.row._id;
+        this.returnOpen = true;
+        break;
     }
   }
 
@@ -208,7 +218,7 @@ export class GrnListComponent implements OnInit {
         fields: [
           { type: 'field', label: 'Ordered Qty', value: this.totalOrderedQty(row), numeric: true },
           { type: 'field', label: 'Received Qty', value: this.totalReceivedQty(row), numeric: true },
-          { type: 'field', label: 'Accepted Qty', value: this.totalAcceptedQty(row), numeric: true, pill: true, tone: 'good' },
+          { type: 'field', label: 'Accepted Qty', value: this.totalAcceptedQty(row), numeric: true, tone: 'good' },
           { type: 'field', label: 'Rejected Qty', value: this.totalRejectedQty(row), numeric: true, pill: this.totalRejectedQty(row) > 0, tone: this.totalRejectedQty(row) > 0 ? 'warn' : 'neutral' },
         ],
       },

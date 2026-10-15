@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import GRN from "../models/grn.model";
 import PurchaseOrder from "../models/purchaseOrder.model";
-import StockEntry from "../models/stockEntry.model";
+import { post as postStock } from "../services/stock.service";
 import Product from "../models/products.model";
 import PurchaseRequest from "../models/purchaseRequest.model";
 import mongoose from "mongoose";
@@ -180,12 +180,6 @@ export const createGRN = async (req: Request, res: Response) => {
 
     const warnings: string[] = [];
     const populatedPurchaseOrder = populatedGrn.purchaseOrderId as any;
-    const purchaseId = populatedPurchaseOrder?.purchaseId?._id || populatedPurchaseOrder?.purchaseId;
-    
-    let purchaseRequest: any = null;
-    if (purchaseId && mongoose.Types.ObjectId.isValid(purchaseId)) {
-      purchaseRequest = await PurchaseRequest.findById(purchaseId);
-    }
 
     for (let i = 0; i < items.length; i++) {
       const grnItem = items[i];
@@ -237,79 +231,24 @@ export const createGRN = async (req: Request, res: Response) => {
       }
 
       const unitCost = Number(matchingLpoItem.unitCost) || 0;
-      const totalCost = unitCost * acceptedQty;
-      
-      let sellingPrice: number | undefined = undefined;
-      if (purchaseRequest?.items && Array.isArray(purchaseRequest.items)) {
-        for (const prItem of purchaseRequest.items) {
-          if (prItem.itemDetails && Array.isArray(prItem.itemDetails)) {
-            const matchingDetail = prItem.itemDetails.find((detail: any) => {
-              const partNoMatch = detail.partNo && product._id && 
-                detail.partNo.toString() === product._id.toString();
-              const descriptionMatch = detail.detail && grnItem.itemDescription && 
-                detail.detail.trim().toLowerCase() === grnItem.itemDescription.trim().toLowerCase();
-              return partNoMatch || descriptionMatch;
-            });
-            
-            if (matchingDetail && matchingDetail.unitSellingPrice) {
-              sellingPrice = Number(matchingDetail.unitSellingPrice);
-              break;
-            }
-          }
-        }
-      }
 
-      const jobId = populatedPurchaseOrder?.purchaseId?.jobId?._id || populatedPurchaseOrder?.purchaseId?.jobId || 
-                    populatedPurchaseOrder?.jobId?._id || populatedPurchaseOrder?.jobId || undefined;
-
-      const existingStockEntry = await StockEntry.findOne({
-        grn: grn._id,
-        partNo: product._id,
-        isDeleted: { $ne: true }
-      });
-
-      if (existingStockEntry) {
-        warnings.push(`Item "${grnItem.itemDescription}" (index ${i + 1}) skipped: Stock entry for GRN "${grnNo}" and this part already exists`);
-        continue;
-      }
-
-      const stockEntryData: any = {
-        grn: grn._id,
-        partNo: product._id,
-        itemCode: product.itemCode || undefined,
-        dateOfPurchase: supplierInvoiceDate ? new Date(supplierInvoiceDate) : new Date(grnDate),
-        supplierName: populatedPurchaseOrder?.supplierId?._id || populatedPurchaseOrder?.supplierId,
-        supplierLpoNo: populatedPurchaseOrder?.poNo || undefined,
-        productDescription: grnItem.itemDescription,
-        productSegment: product.productSegment,
-        productCategory: product.productCategory,
-        targetWarehouse: warehouse,
+      // Accepted quantity goes into stock as a Receipt in the GRN's warehouse. The cost is the LPO unit cost.
+      await postStock({
+        product: product._id,
+        warehouse,
+        type: 'Receipt',
+        direction: 'in',
         quantity: acceptedQty,
-        unitCost: unitCost,
-        totalCost: totalCost,
+        unitCost,
+        referenceType: 'GRN',
+        referenceId: grn._id,
+        referenceNo: grnNo,
+        supplier: populatedPurchaseOrder?.supplierId?._id || populatedPurchaseOrder?.supplierId,
+        lpoNo: populatedPurchaseOrder?.poNo || undefined,
+        remarks: grnItem.remarks,
+        movementDate: supplierInvoiceDate ? new Date(supplierInvoiceDate) : new Date(grnDate),
         createdBy: employee._id,
-        createdDate: new Date(),
-        updatedDate: new Date(),
-        isDeleted: false
-      };
-
-      if (jobId && mongoose.Types.ObjectId.isValid(jobId)) {
-        stockEntryData.jobId = jobId;
-      }
-
-      if (grnItem.uom) {
-        stockEntryData.uom = grnItem.uom;
-      }
-
-      if (sellingPrice !== undefined) {
-        stockEntryData.sellingPrice = sellingPrice;
-      }
-
-      if (grnItem.remarks) {
-        stockEntryData.remarks = grnItem.remarks;
-      }
-
-      await StockEntry.create(stockEntryData);
+      });
     }
 
     const allGRNs = await GRN.find({ 

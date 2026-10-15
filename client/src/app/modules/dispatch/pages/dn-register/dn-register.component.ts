@@ -16,6 +16,7 @@ import { DataGridComponent } from 'src/app/shared/components/data-grid/data-grid
 import { DataGridBreadcrumb, DataGridColumn, DataGridQuery, DataGridRowAction, DataGridRowActionEvent, DataGridView } from 'src/app/shared/components/data-grid/data-grid.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { CreateDnComponent } from '../create-dn/create-dn.component';
+import { StockReturnDrawerComponent } from 'src/app/modules/stocks/pages/stock-return-drawer/stock-return-drawer.component';
 
 interface FilterParams {
   [key: string]: any;
@@ -40,6 +41,7 @@ interface FilterParams {
     DataGridComponent,
     ActionButtonComponent,
     CreateDnComponent,
+    StockReturnDrawerComponent,
     IconsModule,
     MatMenuModule
   ],
@@ -185,7 +187,8 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
   setupRowActions(): void {
     this.rowActions = [
       { id: 'viewDn', label: 'Open full DN', icon: 'eye', quick: true, panel: true },
-      { id: 'editDraft', label: 'Edit draft', icon: 'pencil', quick: true, hidden: row => row.status !== DnStatus.DRAFT }
+      { id: 'editDraft', label: 'Edit draft', icon: 'pencil', quick: true, hidden: row => row.status !== DnStatus.DRAFT },
+      { id: 'customerReturn', label: 'Customer return', hidden: row => [DnStatus.DRAFT, DnStatus.CANCELLED, DnStatus.REJECTED].includes(row.status) }
     ];
   }
 
@@ -291,6 +294,10 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
       case 'editDraft':
         this.openCreateDrawer(row._id || null);
         break;
+      case 'customerReturn':
+        this.returnDnId = row._id || '';
+        this.returnOpen = true;
+        break;
     }
   }
 
@@ -304,6 +311,10 @@ export class DnRegisterComponent implements OnInit, OnDestroy {
 
   dnTitle = (row: DeliveryNote): string => row.dnNo || 'Delivery Note';
   dnSubtitle = (row: DeliveryNote): string => row.clientName || '';
+
+  /** Customer return: goods coming back against a posted delivery note. */
+  returnOpen = false;
+  returnDnId = '';
 
   openCreateDrawer(editId: string | null = null): void {
     this.formEditId = editId;

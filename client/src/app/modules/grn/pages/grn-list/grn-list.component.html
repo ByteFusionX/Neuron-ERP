@@ -100,4 +100,7 @@
       </ng-container>
     </ng-template>
   </app-data-grid>
+
+  <app-stock-return-drawer kind="supplier" [open]="returnOpen" [sourceId]="returnGrnId"
+    (saved)="getGRNs()" (closed)="returnOpen = false"></app-stock-return-drawer>
 </div>
