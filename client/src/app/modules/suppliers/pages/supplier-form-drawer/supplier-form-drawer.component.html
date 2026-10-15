@@ -1,4 +1,4 @@
-<app-sf-drawer [title]="title" [subtitle]="subtitle" width="760px"
+<app-sf-drawer #drawer [title]="title" [subtitle]="subtitle" width="760px"
     [open]="open" [dirty]="supplierForm.dirty" (closed)="onDrawerClosed($event)">
 
     <!-- Stepper -->
@@ -7,7 +7,7 @@
 
     <form id="supplier-form" [formGroup]="supplierForm" (ngSubmit)="submit()" novalidate>
 
-        <!-- Step 1 — supplier, address & contact ---------------------------------------- -->
+        <!-- Step 1 — supplier details & addresses ----------------------------------------- -->
         <app-sf-section *ngIf="step === 1" title="Supplier" columns="2">
             <app-sf-field label="Supplier Id">
                 <app-sf-input formControlName="supplierId" [readonly]="true"></app-sf-input>
@@ -15,16 +15,27 @@
             <app-sf-field label="Supplier Name" [control]="supplierForm.controls.supplierName">
                 <app-sf-input formControlName="supplierName" placeholder="Supplier name"></app-sf-input>
             </app-sf-field>
+            <app-sf-field label="Company Email" [control]="supplierForm.controls.companyEmail">
+                <app-sf-input formControlName="companyEmail" type="email" placeholder="e.g. info@company.com"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Company Phone" [control]="supplierForm.controls.companyPhone">
+                <app-sf-input formControlName="companyPhone" placeholder="Main office number"></app-sf-input>
+            </app-sf-field>
+            <app-sf-field label="Website" [control]="supplierForm.controls.website">
+                <app-sf-input formControlName="website" placeholder="www.company.com"></app-sf-input>
+            </app-sf-field>
             <div *ngIf="duplicateMatches.length" class="col-span-2 rounded-md border px-3 py-2 text-sm" role="alert"
                 [ngClass]="hasBlock ? 'border-red-300 bg-red-50 text-red-800' : 'border-amber-300 bg-amber-50 text-amber-800'">
                 <p class="font-medium">{{ hasBlock ? 'This supplier already exists' : 'Similar suppliers found' }}</p>
                 <p *ngFor="let m of duplicateMatches">{{ m.reason }}</p>
             </div>
             <app-sf-field label="Category" [control]="supplierForm.controls.category">
-                <app-sf-select formControlName="category" [options]="categoryOptions" placeholder="Select category"></app-sf-select>
+                <app-sf-combobox formControlName="category" [options]="categoryOptions" placeholder="Select category"
+                    footerLabel="Add category" (footerAction)="createMasterListItem('supplierCategory')"></app-sf-combobox>
             </app-sf-field>
             <app-sf-field label="Supplier Type" [control]="supplierForm.controls.supplierType">
-                <app-sf-select formControlName="supplierType" [options]="supplierTypeOptions" placeholder="Select type"></app-sf-select>
+                <app-sf-combobox formControlName="supplierType" [options]="supplierTypeOptions" placeholder="Select type"
+                    footerLabel="Add supplier type" (footerAction)="createMasterListItem('supplierType')"></app-sf-combobox>
             </app-sf-field>
             <app-sf-field label="Credit Days" [control]="supplierForm.controls.creditDays">
                 <app-sf-number formControlName="creditDays"></app-sf-number>
@@ -34,9 +45,16 @@
             </app-sf-field>
         </app-sf-section>
 
-        <div *ngIf="step === 1" formGroupName="address">
-            <app-sf-section title="Address" columns="2">
-                <app-sf-field full label="Location" [control]="supplierForm.controls.address.controls.location">
+        <app-sf-section *ngIf="step === 1" title="Addresses" description="Mark one as primary; it is the main address." columns="1">
+            <app-collapsible-card *ngFor="let address of addresses.controls; let i = index" [formGroup]="address"
+                [title]="address.value.isPrimary ? 'Primary address' : 'Address ' + (i + 1)" [summary]="addressSummary(address)"
+                [collapsed]="collapsedCards.has(address)" [primary]="address.value.isPrimary"
+                [canRemove]="addresses.length > 1"
+                (toggle)="toggleCard(address)" (setPrimary)="setPrimaryAddress(address)" (remove)="removeAddress(i)">
+                <app-sf-field label="Label">
+                    <app-sf-input formControlName="label" placeholder="e.g. Head office, Warehouse"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Location" [control]="$any(address.get('location'))">
                     <app-sf-input formControlName="location" placeholder="Location"></app-sf-input>
                 </app-sf-field>
                 <app-sf-field label="City">
@@ -54,25 +72,33 @@
                 <app-sf-field label="PO Box">
                     <app-sf-input formControlName="poBox"></app-sf-input>
                 </app-sf-field>
-            </app-sf-section>
-        </div>
+            </app-collapsible-card>
+        </app-sf-section>
 
-        <div *ngIf="step === 1" formGroupName="contactDetails">
-            <app-sf-section title="Contact" columns="2">
-                <app-sf-field label="Contact Name" [control]="supplierForm.controls.contactDetails.controls.name">
+        <!-- Step 2 — contacts ------------------------------------------------------------------ -->
+        <app-sf-section *ngIf="step === 2" title="Contacts" description="Salespeople at this company. Mark one as primary; it is the default contact. Their email and phone can be the same as the company's." columns="1">
+            <app-collapsible-card *ngFor="let contact of contacts.controls; let i = index" [formGroup]="contact"
+                [title]="contact.value.isPrimary ? 'Primary contact' : 'Contact ' + (i + 1)" [summary]="contactSummary(contact)"
+                [collapsed]="collapsedCards.has(contact)" [primary]="contact.value.isPrimary"
+                [canRemove]="contacts.length > 1"
+                (toggle)="toggleCard(contact)" (setPrimary)="setPrimaryContact(contact)" (remove)="removeContact(i)">
+                <app-sf-field label="Contact Name" [control]="$any(contact.get('name'))">
                     <app-sf-input formControlName="name"></app-sf-input>
                 </app-sf-field>
-                <app-sf-field label="Email" [control]="supplierForm.controls.contactDetails.controls.email">
+                <app-sf-field label="Designation">
+                    <app-sf-input formControlName="designation" placeholder="e.g. Sales Manager"></app-sf-input>
+                </app-sf-field>
+                <app-sf-field label="Email" [control]="$any(contact.get('email'))">
                     <app-sf-input formControlName="email" type="email"></app-sf-input>
                 </app-sf-field>
-                <app-sf-field label="Phone" [control]="supplierForm.controls.contactDetails.controls.phoneNumber">
+                <app-sf-field label="Phone" [control]="$any(contact.get('phoneNumber'))">
                     <app-sf-input formControlName="phoneNumber"></app-sf-input>
                 </app-sf-field>
-            </app-sf-section>
-        </div>
+            </app-collapsible-card>
+        </app-sf-section>
 
-        <!-- Step 2 — documents ----------------------------------------------------------------- -->
-        <app-sf-section *ngIf="step === 2" title="Documents">
+        <!-- Step 3 — documents ----------------------------------------------------------------- -->
+        <app-sf-section *ngIf="step === 3" title="Documents">
             <div class="col-span-full space-y-3">
                 <ul *ngIf="existingDocuments.length" class="divide-y divide-gray-100 dark:divide-erp-border-dark rounded-lg border border-gray-200 dark:border-erp-border-dark">
                     <li *ngFor="let doc of existingDocuments; let i = index" class="flex items-center justify-between px-3 py-2 text-[13px]">
@@ -87,34 +113,49 @@
             </div>
         </app-sf-section>
 
-        <app-sf-section *ngIf="step === 3 && canBanking" title="Banking (finance only)">
-            <ng-container formGroupName="bankDetails">
+        <!-- Step 4 — banking (super admin only; every field optional) -------------------------------------------- -->
+        <app-sf-section *ngIf="step === 4 && canBanking" title="Bank Accounts" description="Mark one as primary; it is the default account for payments." columns="1">
+            <app-collapsible-card *ngFor="let bank of bankAccounts.controls; let i = index" [formGroup]="bank"
+                [title]="bank.value.isPrimary ? 'Primary account' : 'Account ' + (i + 1)" [summary]="bankSummary(bank)"
+                [collapsed]="collapsedCards.has(bank)" [primary]="bank.value.isPrimary"
+                [canRemove]="bankAccounts.length > 1"
+                (toggle)="toggleCard(bank)" (setPrimary)="setPrimaryBankAccount(bank)" (remove)="removeBankAccount(i)">
                 <app-sf-field label="Bank Name"><app-sf-input formControlName="bankName"></app-sf-input></app-sf-field>
                 <app-sf-field label="Branch"><app-sf-input formControlName="branch"></app-sf-input></app-sf-field>
                 <app-sf-field label="Account Name"><app-sf-input formControlName="accountName"></app-sf-input></app-sf-field>
                 <app-sf-field label="Account Number"><app-sf-input formControlName="accountNumber"></app-sf-input></app-sf-field>
-                <app-sf-field label="IBAN" [control]="supplierForm.get('bankDetails.iban')"><app-sf-input formControlName="iban"></app-sf-input></app-sf-field>
-                <app-sf-field label="Swift Code" [control]="supplierForm.get('bankDetails.swiftCode')"><app-sf-input formControlName="swiftCode"></app-sf-input></app-sf-field>
+                <app-sf-field label="IBAN" [control]="$any(bank.get('iban'))"><app-sf-input formControlName="iban"></app-sf-input></app-sf-field>
+                <app-sf-field label="Swift Code" [control]="$any(bank.get('swiftCode'))"><app-sf-input formControlName="swiftCode"></app-sf-input></app-sf-field>
                 <app-sf-field label="Currency"><app-sf-input formControlName="currency"></app-sf-input></app-sf-field>
                 <app-sf-field label="Bank Country"><app-sf-input formControlName="bankCountry"></app-sf-input></app-sf-field>
-                <app-sf-field full label="Bank Address"><app-sf-input formControlName="bankAddress"></app-sf-input></app-sf-field>
-                <app-sf-field full label="Banking Documents">
-                    <app-sf-file [(ngModel)]="newBankDocuments" [ngModelOptions]="{ standalone: true }"
-                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" [maxSizeMb]="10"></app-sf-file>
-                </app-sf-field>
-            </ng-container>
+                <app-sf-field class="sm:col-span-2" label="Bank Address"><app-sf-input formControlName="bankAddress"></app-sf-input></app-sf-field>
+            </app-collapsible-card>
+            <app-sf-field label="Banking Documents">
+                <app-sf-file [(ngModel)]="newBankDocuments" [ngModelOptions]="{ standalone: true }"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" [maxSizeMb]="10"></app-sf-file>
+            </app-sf-field>
         </app-sf-section>
     </form>
 
     <ng-container sfDrawerFooter>
-        <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="mr-auto text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+        <div class="mr-auto flex items-center gap-2">
+            <app-action-button *ngIf="step === 1" variant="tool" (click)="addAddress()">+ Add Address</app-action-button>
+            <app-action-button *ngIf="step === 2" variant="tool" (click)="addContact()">+ Add Contact</app-action-button>
+            <app-action-button *ngIf="step === 4" variant="tool" (click)="addBankAccount()">+ Add Bank Account</app-action-button>
+            <span *ngIf="!isStepValid($any(step)) && isStepTouched($any(step))" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+        </div>
 
-        <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 1" variant="secondary" (click)="drawer.requestClose()">Cancel</app-action-button>
         <app-action-button *ngIf="step > 1" variant="secondary" (click)="previousStep()">Back</app-action-button>
 
         <!-- Editing already has the data, so saving is offered on every step too. -->
         <app-action-button *ngIf="isEdit && step < lastStep" variant="tool" [disabled]="saving" (click)="submit()">
             {{ saving ? 'Saving…' : 'Save Changes' }}
+        </app-action-button>
+
+        <!-- Banking is optional, so a new supplier can be created from the last required step. -->
+        <app-action-button *ngIf="!isEdit && step === 3 && lastStep > 3" variant="tool" [disabled]="saving" (click)="submit()">
+            {{ saving ? 'Saving…' : 'Create Supplier' }}
         </app-action-button>
 
         <app-action-button *ngIf="step < lastStep" variant="primary" (click)="nextStep()">

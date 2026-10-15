@@ -1,25 +1,30 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, inject } from '@angular/core';
 import { NgClass, NgFor, NgIf } from '@angular/common';
-import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ToastrService } from 'ngx-toastr';
 import { Subscription, debounceTime, distinctUntilChanged, of, switchMap, catchError } from 'rxjs';
 
 import { SupplierService } from 'src/app/core/services/supplier.service';
 import { PartyMatch } from 'src/app/core/services/customer/customer.service';
-import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
-import { getDepartment } from 'src/app/shared/interfaces/department.interface';
+import { MasterListName, MasterListService } from 'src/app/core/services/master-list.service';
 import { Supplier } from 'src/app/shared/interfaces/suppliers.interface';
 import { ibanValidator, integerValidator, notBlankValidator, swiftValidator, phoneValidator, strictEmailValidator } from 'src/app/shared/validators/form-field.validators';
 import { SfOption, SmartFormModule } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
-import { canAccessBanking } from '../../supplier-banking-access';
+import { ModalService } from 'src/app/shared/components/modal/modal.service';
+import { MasterListItemDialog, MasterListItemDialogData, MasterListItemResult } from 'src/app/modules/settings/pages/master-data/master-list-item-dialog.component';
+import { canEditBanking } from '../../supplier-banking-access';
+import { CollapsibleCardComponent } from 'src/app/shared/components/collapsible-card/collapsible-card.component';
 import { SupplierFormStepperComponent } from '../../components/form-stepper/form-stepper.component';
+
+type StepNumber = 1 | 2 | 3 | 4;
 
 /**
  * The supplier create/edit form in a slide-over, modeled on `customer-form-drawer.component.ts`'s
- * 3-step stepper pattern: Details (supplier/address/contact), Documents and — for the finance team only — Banking.
+ * stepper pattern: Details (supplier + one or more addresses), Contacts (one or more, one primary),
+ * Documents and — for super admins only — Banking (super admin only, all optional).
  * Products are not entered here; they are added in the product catalogue.
  * The host binds `open`, `mode` and (for edit) `supplier`, and reacts to `saved` / `closed`.
  */
@@ -27,7 +32,7 @@ import { SupplierFormStepperComponent } from '../../components/form-stepper/form
   selector: 'app-supplier-form-drawer',
   standalone: true,
   templateUrl: './supplier-form-drawer.component.html',
-  imports: [NgIf, NgFor, NgClass, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, SupplierFormStepperComponent],
+  imports: [NgIf, NgFor, NgClass, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, CollapsibleCardComponent, SupplierFormStepperComponent],
 })
 export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -38,14 +43,12 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   @Output() saved = new EventEmitter<any>();
   @Output() closed = new EventEmitter<void>();
 
-  step: 1 | 2 | 3 = 1;
+  step: StepNumber = 1;
   canBanking = false;
 
-  get steps(): { n: 1 | 2 | 3; label: string }[] {
-    const steps: { n: 1 | 2 | 3; label: string }[] = [{ n: 1, label: 'Details' }, { n: 2, label: 'Documents' }];
-    if (this.canBanking) steps.push({ n: 3, label: 'Banking' });
-    return steps;
-  }
+  /** Kept as a stable array: a getter returning fresh objects re-rendered the stepper on every change
+   *  detection pass, which destroyed the button between mousedown and mouseup so clicks never landed. */
+  steps: { n: StepNumber; label: string }[] = this.buildSteps();
 
   get lastStep(): number { return this.steps.length; }
 
@@ -57,33 +60,27 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   newDocuments: File[] = [];
   /** Bank documents. The server's create/update endpoints only accept a single `documents` file
    *  array (see SupplierService.createSupplierWithFiles/updateSupplierWithFiles) — there is no
-   *  separate field for banking attachments. The old full-page form collected these into
-   *  `bankDocumentFiles` but never actually sent them, so they were silently dropped. Fixed here by
-   *  merging them into the same `documents` array sent to the server, rather than losing them again. */
+   *  separate field for banking attachments. They are merged into the same `documents` array sent to the server. */
   newBankDocuments: File[] = [];
 
-  supplierTypeOptions: SfOption[] = [
-    { label: 'OEM', value: 'OEM' },
-    { label: 'Distributor', value: 'Distributor' },
-    { label: 'Super Stockiest', value: 'Super Stockiest' },
-    { label: 'Reseller', value: 'Reseller' },
-  ];
+  /** Both lists come from Supplier Data in settings; a saved value stays selectable even if removed. */
+  supplierTypeOptions: SfOption[] = [];
   categoryOptions: SfOption[] = [];
 
   private fb = inject(FormBuilder);
   private toaster = inject(ToastrService);
   private confirm = inject(ConfirmDialogService);
+  private modal = inject(ModalService);
   private supplierService = inject(SupplierService);
-  private profileService = inject(ProfileService);
+  private masterList = inject(MasterListService);
   private employeeService = inject(EmployeeService);
   private subscriptions = new Subscription();
-  private optionsLoaded = false;
   private duplicateWatched = false;
   /** Suppliers that already use this name, IBAN, email or phone; refreshed as the user types. */
   duplicateMatches: PartyMatch[] = [];
   get hasBlock(): boolean { return this.duplicateMatches.some((m) => m.level === 'block'); }
 
-  /** Checks the name, contact and IBAN against the server as the user types, instead of waiting for submit. */
+  /** Checks the name, primary contact and IBAN against the server as the user types, instead of waiting for submit. */
   private watchDuplicates(): void {
     if (this.duplicateWatched) return;
     this.duplicateWatched = true;
@@ -92,13 +89,15 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
         debounceTime(400),
         switchMap(() => {
           const v = this.supplierForm.getRawValue();
+          // The company's own email/phone and every salesperson's are checked; they may repeat within this supplier.
+          const clean = (list: any[]) => [...new Set(list.map((x) => (x ?? '').trim()).filter(Boolean))];
           const probe = {
             supplierName: (v.supplierName ?? '').trim(),
-            email: (v.contactDetails?.email ?? '').trim(),
-            phone: (v.contactDetails?.phoneNumber ?? '').trim(),
-            iban: (v.bankDetails?.iban ?? '').trim(),
+            email: clean([v.companyEmail, ...(v.contacts as any[]).map((c) => c.email)]),
+            phone: clean([v.companyPhone, ...(v.contacts as any[]).map((c) => c.phoneNumber)]),
+            iban: clean((v.bankAccounts as any[]).map((b) => b.iban)),
           };
-          if (!probe.supplierName && !probe.email && !probe.phone && !probe.iban) return of({ matches: [] as PartyMatch[] });
+          if (!probe.supplierName && !probe.email.length && !probe.phone.length && !probe.iban.length) return of({ matches: [] as PartyMatch[] });
           return this.supplierService.checkDuplicate(probe, this.isEdit ? this.supplier?._id : undefined)
             .pipe(catchError(() => of({ matches: [] as PartyMatch[] })));
         }),
@@ -110,35 +109,21 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   supplierForm = this.fb.group({
     supplierId: [{ value: 'NT-SP-', disabled: true }],
     supplierName: ['', [Validators.required, notBlankValidator(), Validators.maxLength(150)]],
-    address: this.fb.group({
-      streetNo: [''],
-      zoneNo: [''],
-      buildingNo: [''],
-      poBox: [''],
-      city: [''],
-      location: ['', [Validators.required, notBlankValidator()]],
-    }),
+    companyEmail: ['', [strictEmailValidator()]],
+    companyPhone: ['', [phoneValidator()]],
+    website: ['', [Validators.pattern(/^(https?:\/\/)?[^\s.\/]+(\.[^\s.\/]+)+(\/\S*)?$/i)]],
     supplierType: [null as string | null, Validators.required],
     category: [null as string | null, Validators.required],
-    contactDetails: this.fb.group({
-      name: ['', [Validators.required, notBlankValidator()]],
-      email: ['', [Validators.required, strictEmailValidator()]],
-      phoneNumber: ['', [Validators.required, phoneValidator()]],
-    }),
-    bankDetails: this.fb.group({
-      bankName: [''],
-      branch: [''],
-      accountName: [''],
-      accountNumber: [''],
-      iban: ['', [ibanValidator()]],
-      swiftCode: ['', [swiftValidator()]],
-      currency: [''],
-      bankCountry: [''],
-      bankAddress: [''],
-    }),
+    addresses: this.fb.array([this.newAddress(true)]),
+    contacts: this.fb.array([this.newContact(true)]),
+    bankAccounts: this.fb.array([this.newBankAccount(true)]),
     creditDays: [30, [Validators.required, Validators.min(0), Validators.max(999), integerValidator()]],
     creditValue: [0, [Validators.required, Validators.min(0)]],
   });
+
+  get addresses(): FormArray<FormGroup> { return this.supplierForm.controls.addresses as FormArray<FormGroup>; }
+  get bankAccounts(): FormArray<FormGroup> { return this.supplierForm.controls.bankAccounts as FormArray<FormGroup>; }
+  get contacts(): FormArray<FormGroup> { return this.supplierForm.controls.contacts as FormArray<FormGroup>; }
 
   get isEdit(): boolean { return this.mode === 'edit'; }
 
@@ -148,33 +133,105 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     return this.isEdit && this.supplier ? `${this.supplier.supplierId}` : 'Add a new supplier record';
   }
 
-  private readonly stepControls: Record<1 | 2 | 3, string[]> = {
-    1: ['supplierName', 'category', 'supplierType', 'creditDays', 'creditValue', 'address', 'contactDetails'],
-    2: [],
+  private readonly stepControls: Record<StepNumber, string[]> = {
+    1: ['supplierName', 'companyEmail', 'companyPhone', 'website', 'category', 'supplierType', 'creditDays', 'creditValue', 'addresses'],
+    2: ['contacts'],
     3: [],
+    4: ['bankAccounts'],
   };
 
+  private buildSteps(): { n: StepNumber; label: string }[] {
+    const steps: { n: StepNumber; label: string }[] = [{ n: 1, label: 'Details' }, { n: 2, label: 'Contacts' }, { n: 3, label: 'Documents' }];
+    if (this.canBanking) steps.push({ n: 4, label: 'Banking' });
+    return steps;
+  }
+
+  private newAddress(primary = false): FormGroup {
+    return this.fb.group({
+      label: [''],
+      isPrimary: [primary],
+      location: ['', [Validators.required, notBlankValidator()]],
+      city: [''],
+      streetNo: [''],
+      buildingNo: [''],
+      zoneNo: [''],
+      poBox: [''],
+    });
+  }
+
+  private newBankAccount(primary = false): FormGroup {
+    return this.fb.group({
+      isPrimary: [primary],
+      bankName: [''],
+      branch: [''],
+      accountName: [''],
+      accountNumber: [''],
+      iban: ['', [ibanValidator()]],
+      swiftCode: ['', [swiftValidator()]],
+      currency: [''],
+      bankCountry: [''],
+      bankAddress: [''],
+    });
+  }
+
+  private newContact(primary = false): FormGroup {
+    return this.fb.group({
+      name: ['', [Validators.required, notBlankValidator()]],
+      designation: [''],
+      email: ['', [Validators.required, strictEmailValidator()]],
+      phoneNumber: ['', [Validators.required, phoneValidator()]],
+      isPrimary: [primary],
+    });
+  }
+
   /** A step is complete when every control it owns is valid. */
-  isStepValid(step: 1 | 2 | 3): boolean {
+  isStepValid(step: StepNumber): boolean {
     return this.stepControls[step].every((name) => this.supplierForm.get(name)?.valid);
   }
 
   /** True once the user has interacted with (or tried to submit) a control of this step. */
-  isStepTouched(step: 1 | 2 | 3): boolean {
+  isStepTouched(step: StepNumber): boolean {
     return this.stepControls[step].some((name) => this.supplierForm.get(name)?.touched);
   }
 
-  private markStepTouched(step: 1 | 2 | 3): void {
+  private markStepTouched(step: StepNumber): void {
     this.stepControls[step].forEach((name) => this.supplierForm.get(name)?.markAllAsTouched());
+    // Re-open collapsed address / bank cards that hold errors so the user can see them.
+    [...this.addresses.controls, ...this.contacts.controls, ...this.bankAccounts.controls].forEach((g) => {
+      if (g.invalid) this.collapsedCards.delete(g);
+    });
   }
 
-  goToStep(step: 1 | 2 | 3): void {
+  /** Address and bank-account cards the user has folded away. */
+  collapsedCards = new Set<AbstractControl>();
+
+  toggleCard(group: AbstractControl): void {
+    if (!this.collapsedCards.delete(group)) this.collapsedCards.add(group);
+  }
+
+  addressSummary(g: AbstractControl): string {
+    const v = g.value;
+    return [v.label, v.location, v.city].filter(Boolean).join(' · ');
+  }
+
+  contactSummary(g: AbstractControl): string {
+    const v = g.value;
+    return [v.name, v.designation, v.email].filter(Boolean).join(' · ');
+  }
+
+  bankSummary(g: AbstractControl): string {
+    const v = g.value;
+    return [v.bankName, v.iban || v.accountNumber].filter(Boolean).join(' · ');
+  }
+
+  goToStep(step: StepNumber): void {
     // Forward moves must pass every step in between; going back is always allowed.
     if (step > this.step) {
       for (let s = this.step; s < step; s++) {
-        if (!this.isStepValid(s as 1 | 2 | 3)) {
-          this.markStepTouched(s as 1 | 2 | 3);
-          this.step = s as 1 | 2 | 3;
+        if (!this.isStepValid(s as StepNumber)) {
+          this.markStepTouched(s as StepNumber);
+          this.step = s as StepNumber;
+          this.toaster.warning('Fill the required fields before moving on');
           return;
         }
       }
@@ -183,15 +240,18 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   }
 
   nextStep(): void {
-    this.goToStep((this.step + 1) as 1 | 2 | 3);
+    this.goToStep((this.step + 1) as StepNumber);
   }
 
   previousStep(): void {
-    this.step = (this.step - 1) as 1 | 2 | 3;
+    this.step = (this.step - 1) as StepNumber;
   }
 
   constructor() {
-    this.subscriptions.add(this.employeeService.employeeData$.subscribe((e) => (this.canBanking = canAccessBanking(e))));
+    this.subscriptions.add(this.employeeService.employeeData$.subscribe((e) => {
+      this.canBanking = canEditBanking(e);
+      this.steps = this.buildSteps();
+    }));
     this.subscriptions.add(
       this.supplierForm.controls.category.valueChanges.subscribe((categoryId) => this.onCategoryChange(categoryId))
     );
@@ -201,7 +261,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     const opened = changes['open'] && this.open;
     if (!this.open || !(opened || changes['supplier'])) return;
 
-    this.ensureOptions();
+    this.loadOptions();
     this.watchDuplicates();
     this.duplicateMatches = [];
     if (this.isEdit) {
@@ -215,14 +275,41 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     this.subscriptions.unsubscribe();
   }
 
-  private ensureOptions(): void {
-    if (this.optionsLoaded) return;
-    this.optionsLoaded = true;
+  /** Reloaded on every open so items added in Supplier Data show up without a page refresh. */
+  private loadOptions(): void {
+    const s = this.isEdit ? this.supplier : null;
+    const currentCategory = (s?.category as any)?._id ?? null;
     this.subscriptions.add(
-      this.profileService.getDepartments().subscribe((departments: getDepartment[]) => {
-        this.categoryOptions = departments.map((d) => ({ label: d.departmentName, value: d._id }));
+      this.masterList.getItems('supplierCategory').subscribe((res) => {
+        this.categoryOptions = (res.data ?? [])
+          .filter((i) => i.isActive || i._id === currentCategory)
+          .map((i) => ({ label: i.label, value: i._id }));
       })
     );
+    this.subscriptions.add(
+      this.masterList.getOptions('supplierType', { current: s?.supplierType, fallback: ['OEM', 'Distributor', 'Super Stockiest', 'Reseller'] }).subscribe((opts) => (this.supplierTypeOptions = opts))
+    );
+  }
+
+  /** Adds an item to a master list from the form itself, then selects it. */
+  createMasterListItem(list: Extract<MasterListName, 'supplierCategory' | 'supplierType'>): void {
+    const title = list === 'supplierCategory' ? 'Category' : 'Supplier type';
+    const ref = this.modal.open<MasterListItemResult, MasterListItemDialogData>(MasterListItemDialog, { width: '480px', data: { title } });
+    ref.afterClosed().subscribe((result) => {
+      if (!result) return;
+      this.masterList.createItem(list, result).subscribe({
+        next: (res) => {
+          if (list === 'supplierCategory') {
+            this.categoryOptions = [...this.categoryOptions, { label: res.data.label, value: res.data._id }];
+            this.supplierForm.controls.category.setValue(res.data._id);
+          } else {
+            this.supplierTypeOptions = [...this.supplierTypeOptions, { label: res.data.label, value: res.data.label }];
+            this.supplierForm.controls.supplierType.setValue(res.data.label);
+          }
+        },
+        error: (e) => this.toaster.error(e?.error?.message || 'Could not add item'),
+      });
+    });
   }
 
   /** Live-preview the next supplier id as the category changes, mirroring the old full-page form. */
@@ -259,31 +346,55 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
       category: (s.category as any)?._id || (s.category as any) || null,
       creditDays: s.creditDays ?? 30,
       creditValue: s.creditValue ?? 0,
-      address: {
-        streetNo: s.address?.streetNo || '',
-        zoneNo: s.address?.zoneNo || '',
-        buildingNo: s.address?.buildingNo || '',
-        poBox: s.address?.poBox || '',
-        city: s.address?.city || '',
-        location: s.address?.location || '',
-      },
-      contactDetails: {
-        name: s.contactDetails?.name || '',
-        email: s.contactDetails?.email || '',
-        phoneNumber: s.contactDetails?.phoneNumber || '',
-      },
-      bankDetails: {
-        bankName: s.bankDetails?.bankName || '',
-        branch: s.bankDetails?.branch || '',
-        accountName: s.bankDetails?.accountName || '',
-        accountNumber: s.bankDetails?.accountNumber || '',
-        iban: s.bankDetails?.iban || '',
-        swiftCode: s.bankDetails?.swiftCode || '',
-        currency: s.bankDetails?.currency || '',
-        bankCountry: s.bankDetails?.bankCountry || '',
-        bankAddress: s.bankDetails?.bankAddress || '',
-      },
+      companyEmail: s.companyEmail || '',
+      companyPhone: s.companyPhone || '',
+      website: s.website || '',
     });
+
+    // Suppliers saved before multiple addresses/contacts existed carry only the single legacy record.
+    const addresses = s.addresses?.length ? s.addresses : s.address ? [s.address] : [];
+    if (addresses.length) {
+      this.addresses.clear();
+      addresses.forEach((a) => {
+        const group = this.newAddress();
+        group.patchValue({
+          label: a.label || '', location: a.location || '', city: a.city || '', streetNo: a.streetNo || '',
+          buildingNo: a.buildingNo || '', zoneNo: a.zoneNo || '', poBox: a.poBox || '', isPrimary: !!a.isPrimary,
+        });
+        this.addresses.push(group);
+      });
+      if (!this.addresses.controls.some((g) => g.value.isPrimary)) this.addresses.at(0).patchValue({ isPrimary: true });
+    }
+
+    // Suppliers saved before multiple accounts existed carry only the single `bankDetails` record.
+    const banks = s.bankAccounts?.length ? s.bankAccounts : s.bankDetails ? [{ ...s.bankDetails, isPrimary: true }] : [];
+    if (banks.length) {
+      this.bankAccounts.clear();
+      banks.forEach((b) => {
+        const group = this.newBankAccount();
+        group.patchValue({
+          bankName: b.bankName || '', branch: b.branch || '', accountName: b.accountName || '', accountNumber: b.accountNumber || '',
+          iban: b.iban || '', swiftCode: b.swiftCode || '', currency: b.currency || '', bankCountry: b.bankCountry || '',
+          bankAddress: b.bankAddress || '', isPrimary: !!b.isPrimary,
+        });
+        this.bankAccounts.push(group);
+      });
+      if (!this.bankAccounts.controls.some((g) => g.value.isPrimary)) this.bankAccounts.at(0).patchValue({ isPrimary: true });
+    }
+
+    const contacts = s.contacts?.length ? s.contacts : s.contactDetails ? [{ ...s.contactDetails, isPrimary: true }] : [];
+    if (contacts.length) {
+      this.contacts.clear();
+      contacts.forEach((c) => {
+        const group = this.newContact();
+        group.patchValue({
+          name: c.name || '', designation: c.designation || '', email: c.email || '',
+          phoneNumber: c.phoneNumber || '', isPrimary: !!c.isPrimary,
+        });
+        this.contacts.push(group);
+      });
+      if (!this.contacts.controls.some((g) => g.value.isPrimary)) this.contacts.at(0).patchValue({ isPrimary: true });
+    }
 
     this.existingDocuments = (s.documents || []).map((d) => ({ fileName: d.fileName, originalname: d.fileName }));
     this.newDocuments = [];
@@ -299,13 +410,94 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     this.existingDocuments = [];
     this.newDocuments = [];
     this.newBankDocuments = [];
+    this.addresses.clear();
+    this.addresses.push(this.newAddress(true));
+    this.bankAccounts.clear();
+    this.bankAccounts.push(this.newBankAccount(true));
+    this.contacts.clear();
+    this.contacts.push(this.newContact(true));
     this.supplierForm.reset({
-      supplierId: 'NT-SP-', supplierName: '', supplierType: null, category: null,
-      address: { streetNo: '', zoneNo: '', buildingNo: '', poBox: '', city: '', location: '' },
-      contactDetails: { name: '', email: '', phoneNumber: '' },
-      bankDetails: { bankName: '', branch: '', accountName: '', accountNumber: '', iban: '', swiftCode: '', currency: '', bankCountry: '', bankAddress: '' },
+      supplierId: 'NT-SP-', supplierName: '', companyEmail: '', companyPhone: '', website: '', supplierType: null, category: null,
       creditDays: 30, creditValue: 0,
     });
+    this.contacts.at(0).patchValue({ isPrimary: true });
+  }
+
+  // --- addresses & contacts ----------------------------------------------------------------
+
+  addAddress(): void {
+    this.addresses.push(this.newAddress());
+  }
+
+  async removeAddress(index: number): Promise<void> {
+    if (this.addresses.length <= 1) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Remove address?',
+      message: 'Are you sure you want to remove this address?',
+      consequence: 'Any details entered for it will be lost.',
+      confirmLabel: 'Remove',
+    });
+    if (!confirmed) return;
+    const wasPrimary = !!this.addresses.at(index).value.isPrimary;
+    this.addresses.removeAt(index);
+    if (wasPrimary) this.addresses.at(0).patchValue({ isPrimary: true });
+    this.supplierForm.markAsDirty();
+  }
+
+  setPrimaryAddress(target: FormGroup): void {
+    this.addresses.controls.forEach((g) => g.patchValue({ isPrimary: g === target }));
+    this.supplierForm.markAsDirty();
+  }
+
+  addBankAccount(): void {
+    this.bankAccounts.push(this.newBankAccount());
+  }
+
+  async removeBankAccount(index: number): Promise<void> {
+    if (this.bankAccounts.length <= 1) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Remove bank account?',
+      message: 'Are you sure you want to remove this bank account?',
+      consequence: 'Any details entered for it will be lost.',
+      confirmLabel: 'Remove',
+    });
+    if (!confirmed) return;
+    const wasPrimary = !!this.bankAccounts.at(index).value.isPrimary;
+    this.bankAccounts.removeAt(index);
+    if (wasPrimary) this.bankAccounts.at(0).patchValue({ isPrimary: true });
+    this.supplierForm.markAsDirty();
+  }
+
+  setPrimaryBankAccount(target: FormGroup): void {
+    this.bankAccounts.controls.forEach((g) => g.patchValue({ isPrimary: g === target }));
+    this.supplierForm.markAsDirty();
+  }
+
+  addContact(): void {
+    this.contacts.push(this.newContact());
+  }
+
+  async removeContact(index: number): Promise<void> {
+    if (this.contacts.length <= 1) return;
+    const { confirmed } = await this.confirm.open({
+      tone: 'reject',
+      title: 'Remove contact?',
+      message: 'Are you sure you want to remove this contact?',
+      consequence: 'Any details entered for them will be lost.',
+      confirmLabel: 'Remove',
+    });
+    if (!confirmed) return;
+    const wasPrimary = !!this.contacts.at(index).value.isPrimary;
+    this.contacts.removeAt(index);
+    if (wasPrimary) this.contacts.at(0).patchValue({ isPrimary: true });
+    this.supplierForm.markAsDirty();
+  }
+
+  setPrimaryContact(target: FormGroup): void {
+    this.contacts.controls.forEach((g) => g.patchValue({ isPrimary: g === target }));
+    this.supplierForm.markAsDirty();
   }
 
   removeExistingDocument(index: number): void {
@@ -321,10 +513,11 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     this.onDrawerClosed(false);
   }
 
-  /** True when every bank field is blank, i.e. the user opened the section but never filled it. */
-  private get bankDetailsEmpty(): boolean {
-    const bank = this.supplierForm.getRawValue().bankDetails as Record<string, string | null>;
-    return Object.values(bank).every((v) => !(v ?? '').toString().trim());
+  /** Accounts the user actually filled in; a blank one is just an unused row. */
+  private get filledBankAccounts(): Record<string, any>[] {
+    return (this.supplierForm.getRawValue().bankAccounts as Record<string, any>[])
+      .map((b) => this.trimValues(b))
+      .filter((b) => Object.entries(b).some(([k, v]) => k !== 'isPrimary' && !!(v ?? '').toString().trim()));
   }
 
   private trimValues<T>(group: T): T {
@@ -338,12 +531,15 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     const employeeId = this.employeeService.employeeToken()?.id;
     return {
       supplierName: v.supplierName?.trim(),
-      address: this.trimValues(v.address),
+      companyEmail: (v.companyEmail ?? '').trim(),
+      companyPhone: (v.companyPhone ?? '').trim(),
+      website: (v.website ?? '').trim(),
+      addresses: (v.addresses as any[]).map((a) => this.trimValues(a)),
       supplierType: v.supplierType,
       category: v.category,
-      contactDetails: this.trimValues(v.contactDetails),
+      contacts: (v.contacts as any[]).map((c) => this.trimValues(c)),
       // Non-finance editors never see the banking step: omit the field so the server keeps what is stored.
-      bankDetails: !this.canBanking ? undefined : this.bankDetailsEmpty ? (this.isEdit ? null : undefined) : this.trimValues(v.bankDetails),
+      bankAccounts: !this.canBanking ? undefined : this.filledBankAccounts.length ? this.filledBankAccounts : (this.isEdit ? null : undefined),
       creditDays: v.creditDays,
       creditValue: v.creditValue,
       ...(this.isEdit ? {} : { createdBy: employeeId }),
@@ -354,7 +550,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   async submit(confirmDuplicates = false): Promise<void> {
     if (this.supplierForm.invalid) {
       this.supplierForm.markAllAsTouched();
-      this.step = 1;
+      this.step = ([1, 2, 4] as StepNumber[]).find((s) => !this.isStepValid(s)) ?? 1;
       this.toaster.error('Please fill all required fields correctly');
       return;
     }
@@ -370,11 +566,9 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     if (!confirmDuplicates && this.isEdit) {
       const { confirmed } = await this.confirm.open({
         tone: 'note',
-        title: this.isEdit ? 'Save changes' : 'Create supplier',
-        confirmLabel: this.isEdit ? 'Save' : 'Create',
-        message: this.isEdit
-          ? `Save changes to "${this.supplierForm.value.supplierName?.trim()}"?`
-          : `Create supplier "${this.supplierForm.value.supplierName?.trim()}"?`,
+        title: 'Save changes',
+        confirmLabel: 'Save',
+        message: `Save changes to "${this.supplierForm.value.supplierName?.trim()}"?`,
       });
       if (!confirmed) return;
     }

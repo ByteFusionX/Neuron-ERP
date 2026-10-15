@@ -2,6 +2,8 @@
 
 // Address interface
 export interface Address {
+    label?: string;
+    isPrimary?: boolean;
     streetNo: string;
     buildingNo: string;
     zoneNo: string;
@@ -15,10 +17,13 @@ export interface ContactDetails {
     name: string;
     email: string;
     phoneNumber: string;
+    designation?: string;
+    isPrimary?: boolean;
 }
 
 // Bank Details interface
 export interface BankDetails {
+    isPrimary?: boolean;
     bankName: string;
     branch: string;
     accountName: string;
@@ -69,14 +74,20 @@ export interface Supplier {
     _id?: string;
     supplierId: string;
     supplierName: string;
+    companyEmail?: string;
+    companyPhone?: string;
+    website?: string;
     address: Address;
+    addresses?: Address[];
     supplierType: string;
     category: {
       _id: string;
-      departmentName: string;
+      label: string;
     };
     contactDetails: ContactDetails;
+    contacts?: ContactDetails[];
     bankDetails?: BankDetails;
+    bankAccounts?: BankDetails[];
     documents: Document[];
     status: SupplierStatus;
     products: Product[];

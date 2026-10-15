@@ -37,10 +37,6 @@
         (rowAction)="onRowAction($event)"
         (create)="onCreateSupplier()">
 
-        <div dgToolbarExtra class="flex items-center gap-2">
-            <button type="button" (click)="openDuplicatesReport()" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-erp-border-dark dark:bg-erp-surface-dark dark:text-gray-200">Duplicates</button>
-        </div>
-
         <app-view-toggle dgToolbarExtra label="Supplier" active="list" listLink="/suppliers" reportLink="/suppliers/report" [reportQueryParams]="reportQueryParams"></app-view-toggle>
 
         <ng-template #detailAsideTemplate let-row>
@@ -52,7 +48,7 @@
         <ng-template #detailMetaTemplate let-row>
             <div class="sp-meta">
                 <p class="sp-meta-label">Category</p>
-                <p class="sp-meta-value">{{ row.category?.departmentName }}</p>
+                <p class="sp-meta-value">{{ row.category?.label }}</p>
             </div>
             <div class="sp-meta">
                 <p class="sp-meta-label">Type</p>

@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Supplier, SupplierCreateRequest, SupplierResponse, SupplierListResponse, CreateSupplierDto, PendingSupplier } from 'src/app/shared/interfaces/suppliers.interface';
 import { environment } from 'src/environments/environment';
-import { PartyDuplicateGroup, PartyMatch } from 'src/app/core/services/customer/customer.service';
+import { PartyMatch } from 'src/app/core/services/customer/customer.service';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
 
 // Every method below is called from components that already show their own
@@ -70,14 +70,13 @@ export class SupplierService {
         }, { context: context() });
     }
 
-    checkDuplicate(p: { supplierName?: string; email?: string; phone?: string; iban?: string }, excludeId?: string): Observable<{ matches: PartyMatch[] }> {
+    checkDuplicate(p: { supplierName?: string; email?: string[]; phone?: string[]; iban?: string[] }, excludeId?: string): Observable<{ matches: PartyMatch[] }> {
         const q = new URLSearchParams();
-        Object.entries({ ...p, excludeId }).forEach(([k, v]) => { if (v) q.set(k, v); });
+        Object.entries({ ...p, excludeId }).forEach(([k, v]) => {
+            if (Array.isArray(v)) v.forEach((x) => q.append(k, x));
+            else if (v) q.set(k, v);
+        });
         return this.http.get<{ matches: PartyMatch[] }>(`${this.api}/supplier/check-duplicate?${q}`, { context: context() });
-    }
-
-    getDuplicatesReport(): Observable<Record<'sameName' | 'sameIban' | 'similarName' | 'sameEmail' | 'samePhone', PartyDuplicateGroup[]>> {
-        return this.http.get<any>(`${this.api}/supplier/duplicates-report`, { context: context() });
     }
 
     createSupplierWithFiles(supplierData: CreateSupplierDto, files: File[]): Observable<any> {

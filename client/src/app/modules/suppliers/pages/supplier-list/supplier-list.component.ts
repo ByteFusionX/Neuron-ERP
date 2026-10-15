@@ -1,5 +1,3 @@
-import { ModalService } from 'src/app/shared/components/modal';
-import { PartyDuplicatesReportComponent } from 'src/app/shared/components/party-duplicates-report/party-duplicates-report.component';
 import { canAccessBanking } from '../../supplier-banking-access';
 import { Component, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { DatePipe, DecimalPipe, NgClass, NgIf, NgSwitch, NgSwitchCase } from '@angular/common';
@@ -117,11 +115,6 @@ export class SupplierListComponent implements OnInit, OnDestroy {
   toDate: string | null = null;
 
   private confirm = inject(ConfirmDialogService);
-  private modal = inject(ModalService);
-
-  openDuplicatesReport(): void {
-    this.modal.open<any, string>(PartyDuplicatesReportComponent, { width: '720px', data: 'supplier' });
-  }
 
   private fileService = inject(FileService);
   private subscriptions = new Subscription();
@@ -180,13 +173,13 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     this.columns = [
       { key: 'supplierId', label: 'Supplier ID', sortable: true },
       { key: 'supplierName', label: 'Supplier Name', sortable: true },
-      { key: 'category', label: 'Category', valueGetter: (r) => r.category?.departmentName },
+      { key: 'category', label: 'Category', valueGetter: (r) => r.category?.label },
       { key: 'supplierType', label: 'Type' },
       { key: 'location', label: 'Location', valueGetter: (r) => r.address?.location },
       { key: 'creditDays', label: 'Credit Days', type: 'number', align: 'right' },
       { key: 'creditValue', label: 'Credit Limit', type: 'number', align: 'right', valueGetter: (r) => this.numberFormat.transform(r.creditValue) },
       {
-        key: 'status', label: 'Status', type: 'badge', badgeClasses: this.statusBadgeClasses, valueGetter: this.displayStatus,
+        key: 'status', label: 'Status', visible: false, type: 'badge', badgeClasses: this.statusBadgeClasses, valueGetter: this.displayStatus,
         editorOptions: [SupplierStatus.APPROVED, 'Blocked'].map((s) => ({ label: s, value: s })),
       },
       { key: 'createdDate', label: 'Created Date', type: 'date', sortable: true },
@@ -407,46 +400,62 @@ export class SupplierListComponent implements OnInit, OnDestroy {
         fields: [
           { type: 'field', label: 'Supplier Id', value: row.supplierId, numeric: true },
           { type: 'field', label: 'Status', value: this.displayStatus(row), pill: true, tone: row.isBlocked ? 'bad' : 'good' },
-          { type: 'field', label: 'Category', value: row.category?.departmentName },
+          { type: 'field', label: 'Category', value: row.category?.label },
           { type: 'field', label: 'Supplier Type', value: row.supplierType },
           { type: 'field', label: 'Credit Days', value: row.creditDays, numeric: true },
           { type: 'field', label: 'Credit Limit', value: this.numberFormat.transform(row.creditValue), numeric: true },
+          { type: 'field', label: 'Company Email', value: row.companyEmail },
+          { type: 'field', label: 'Company Phone', value: row.companyPhone },
+          { type: 'field', label: 'Website', value: row.website },
           { type: 'field', label: 'Created Date', value: this.datePipe.transform(row.createdDate as any, 'dd MMM yyyy') },
         ],
       },
-      {
-        title: 'Address',
+      ...this.addressesOf(row).map((a, i, all): DetailOverviewSection => ({
+        title: all.length > 1 ? `Address ${i + 1}${a.label ? ` · ${a.label}` : ''}${a.isPrimary ? ' · Primary' : ''}` : 'Address',
         columns: '2',
         fields: [
-          { type: 'field', label: 'Location', value: row.address?.location },
-          { type: 'field', label: 'City', value: row.address?.city },
-          { type: 'field', label: 'Street No', value: row.address?.streetNo },
-          { type: 'field', label: 'Building No', value: row.address?.buildingNo },
-          { type: 'field', label: 'Zone No', value: row.address?.zoneNo },
-          { type: 'field', label: 'PO Box', value: row.address?.poBox },
+          { type: 'field', label: 'Location', value: a.location },
+          { type: 'field', label: 'City', value: a.city },
+          { type: 'field', label: 'Street No', value: a.streetNo },
+          { type: 'field', label: 'Building No', value: a.buildingNo },
+          { type: 'field', label: 'Zone No', value: a.zoneNo },
+          { type: 'field', label: 'PO Box', value: a.poBox },
         ],
-      },
-      {
-        title: 'Contact',
+      })),
+      ...this.contactsOf(row).map((c, i, all): DetailOverviewSection => ({
+        title: all.length > 1 ? `Contact ${i + 1}${c.isPrimary ? ' · Primary' : ''}` : 'Contact',
         columns: '2',
         fields: [
-          { type: 'field', label: 'Name', value: row.contactDetails?.name },
-          { type: 'field', label: 'Email', value: row.contactDetails?.email },
-          { type: 'field', label: 'Phone', value: row.contactDetails?.phoneNumber },
+          { type: 'field', label: 'Name', value: c.name },
+          { type: 'field', label: 'Designation', value: c.designation },
+          { type: 'field', label: 'Email', value: c.email },
+          { type: 'field', label: 'Phone', value: c.phoneNumber },
         ],
-      },
+      })),
     ];
   }
 
+  /** Suppliers saved before multiple addresses/contacts existed only carry the single legacy record. */
+  private addressesOf(row: Supplier) {
+    return row.addresses?.length ? row.addresses : row.address ? [row.address] : [];
+  }
+
+  private contactsOf(row: Supplier) {
+    return row.contacts?.length ? row.contacts : row.contactDetails ? [row.contactDetails] : [];
+  }
+
   bankingSections(row: Supplier): DetailOverviewSection[] {
-    const raw = row.bankDetails;
-    const bank = raw && Object.values(raw).some((v) => !!`${v ?? ''}`.trim()) ? raw : undefined;
-    return [
-      {
-        title: 'Bank Details',
+    const stored = row.bankAccounts?.length ? row.bankAccounts : row.bankDetails ? [row.bankDetails] : [];
+    const banks = stored.filter((raw) => Object.entries(raw).some(([k, v]) => k !== 'isPrimary' && !!`${v ?? ''}`.trim()));
+    if (!banks.length) {
+      return [{ title: 'Bank Details', columns: '2', visible: false, emptyMessage: 'No banking information on file for this supplier.', fields: [] }];
+    }
+    return banks.map((bank, i): DetailOverviewSection => {
+      return {
+        title: banks.length > 1 ? `Bank Account ${i + 1}${bank.isPrimary ? ' · Primary' : ''}` : 'Bank Details',
         columns: '2',
-        visible: !!bank,
-        emptyMessage: 'No banking information on file for this supplier.',
+        visible: true,
+        emptyMessage: '',
         fields: [
           { type: 'field', label: 'Bank Name', value: bank?.bankName },
           { type: 'field', label: 'Branch', value: bank?.branch },
@@ -458,8 +467,8 @@ export class SupplierListComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'Bank Country', value: bank?.bankCountry },
           { type: 'field', label: 'Bank Address', value: bank?.bankAddress },
         ],
-      },
-    ];
+      };
+    });
   }
 
   documentRows(row: Supplier): DetailDocument[] {

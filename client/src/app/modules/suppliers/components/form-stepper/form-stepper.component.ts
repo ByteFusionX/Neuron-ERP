@@ -14,7 +14,7 @@ export interface SupplierFormStepperStep {
   imports: [NgFor, NgIf, NgClass, NgIcon],
   template: `
     <ol class="mb-5 flex items-center gap-2">
-      <li *ngFor="let s of steps" class="flex flex-1 items-center gap-2">
+      <li *ngFor="let s of steps; trackBy: trackByStep" class="flex flex-1 items-center gap-2">
         <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
           [ngClass]="s.n === current ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
           (click)="stepClick.emit(s.n)">
@@ -40,4 +40,6 @@ export class SupplierFormStepperComponent {
   @Input({ required: true }) current = 1;
   @Input({ required: true }) isStepValid!: (n: any) => boolean;
   @Output() stepClick = new EventEmitter<number>();
+
+  trackByStep = (_: number, s: SupplierFormStepperStep) => s.n;
 }

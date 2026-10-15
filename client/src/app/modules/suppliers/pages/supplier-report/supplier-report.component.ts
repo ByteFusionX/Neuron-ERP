@@ -5,9 +5,8 @@ import { Subscription } from 'rxjs';
 
 import { ExcelExportService, ExcelSheet } from 'src/app/core/services/export/excel-export.service';
 import { SupplierReportRow, SupplierReportSummaryResponse, SupplierService } from 'src/app/core/services/supplier.service';
-import { ProfileService } from 'src/app/core/services/profile/profile.service';
+import { MasterListService } from 'src/app/core/services/master-list.service';
 import { buildBreadcrumbs } from 'src/app/shared/constants/nav-menu';
-import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { SupplierListResponse } from 'src/app/shared/interfaces/suppliers.interface';
 import { NumberFormatterPipe } from 'src/app/shared/pipes/numFormatter.pipe';
 
@@ -49,10 +48,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
   filters: ReportFilterValues = { category: null, supplierType: null, fromDate: null, toDate: null };
   filterFields: ReportFilterField[] = [
     { key: 'category', label: 'Category', type: 'select', options: [], placeholder: 'All categories' },
-    { key: 'supplierType', label: 'Supplier Type', type: 'select', options: [
-      { label: 'OEM', value: 'OEM' }, { label: 'Distributor', value: 'Distributor' },
-      { label: 'Super Stockiest', value: 'Super Stockiest' }, { label: 'Reseller', value: 'Reseller' },
-    ], placeholder: 'All types' },
+    { key: 'supplierType', label: 'Supplier Type', type: 'select', options: [], placeholder: 'All types' },
     { key: 'fromDate', label: 'From', type: 'date' },
     { key: 'toDate', label: 'To', type: 'date' },
   ];
@@ -70,7 +66,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
 
   constructor(
     private _supplierService: SupplierService,
-    private _profileService: ProfileService,
+    private _masterList: MasterListService,
     private _router: Router,
     private _route: ActivatedRoute,
     private excelExport: ExcelExportService,
@@ -94,10 +90,15 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
 
   private loadFilterOptions(): void {
     this.subscriptions.add(
-      this._profileService.getDepartments().subscribe((departments: getDepartment[]) => {
+      this._masterList.getItems('supplierCategory').subscribe((res) => {
         this.filterFields = this.filterFields.map((f) =>
-          f.key === 'category' ? { ...f, options: departments.map((d) => ({ label: d.departmentName, value: d._id })) } : f
+          f.key === 'category' ? { ...f, options: (res.data ?? []).filter((i) => i.isActive).map((i) => ({ label: i.label, value: i._id })) } : f
         );
+      })
+    );
+    this.subscriptions.add(
+      this._masterList.getOptions('supplierType').subscribe((options) => {
+        this.filterFields = this.filterFields.map((f) => (f.key === 'supplierType' ? { ...f, options } : f));
       })
     );
   }
@@ -227,7 +228,7 @@ export class SupplierReportComponent implements OnInit, OnDestroy {
           { header: 'Credit Limit', key: 'creditValue', width: 16 },
         ],
         rows: suppliers.map((s) => ({
-          supplierId: s.supplierId, supplierName: s.supplierName, category: s.category?.departmentName,
+          supplierId: s.supplierId, supplierName: s.supplierName, category: s.category?.label,
           supplierType: s.supplierType, status: s.status, creditDays: s.creditDays, creditValue: Math.round(s.creditValue),
         })),
       },

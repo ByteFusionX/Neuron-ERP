@@ -1,12 +1,12 @@
 import { NextFunction, Request, Response } from 'express';
 import Supplier, { supplierStatus } from '../models/supplier.model';
-import Department from '../models/department.model';
+import MasterListItemModel from '../models/masterListItem.model';
 import { Types } from 'mongoose';
 import Product from '../models/products.model';
 import { deleteFileFromAws, uploadFileToAws } from '../common/aws-connect';
 import { PipelineStage } from 'mongoose';
 import { getEmployeeData, buildPrivilegeAccessFilter, escapeRegex } from '../common/utils/util';
-import { duplicateGroups, findSupplierDuplicates, supplierKeys } from '../common/utils/partyMatch';
+import { findSupplierDuplicates, supplierContactPoints, supplierKeys } from '../common/utils/partyMatch';
 import { Server } from 'socket.io';
 import { createNotificationWithPrivileges } from './notification.controller';
 import { getNextSequence } from '../models/counter.model';
@@ -23,7 +23,7 @@ const SUPPLIER_SORT_FIELDS: Record<string, string> = {
    creditDays: 'creditDays',
    creditValue: 'creditValue',
    createdDate: 'createdDate',
-   category: 'categoryInfo.departmentName',
+   category: 'categoryInfo.label',
    location: 'address.location',
 };
 
@@ -34,7 +34,7 @@ const SUPPLIER_FILTER_FIELDS: Record<string, { path: string; type: 'text' | 'num
    supplierType: { path: 'supplierType', type: 'text' },
    status: { path: 'status', type: 'text' },
    location: { path: 'address.location', type: 'text' },
-   categoryName: { path: 'categoryInfo.departmentName', type: 'text', post: true },
+   categoryName: { path: 'categoryInfo.label', type: 'text', post: true },
    creditDays: { path: 'creditDays', type: 'number' },
    creditValue: { path: 'creditValue', type: 'number' },
 };
@@ -189,7 +189,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
       const categoryStages: PipelineStage[] = [
          {
             $lookup: {
-               from: 'departments',
+               from: MasterListItemModel.collection.name,
                localField: 'category',
                foreignField: '_id',
                as: 'categoryDetails'
@@ -321,10 +321,16 @@ export const getSuppliers = async (req: Request, res: Response) => {
                supplierId: 1,
                supplierName: 1,
                address: 1,
+               addresses: 1,
                supplierType: 1,
                category: "$categoryInfo",
                contactDetails: 1,
+               contacts: 1,
+               companyEmail: 1,
+               companyPhone: 1,
+               website: 1,
                bankDetails: 1,
+               bankAccounts: 1,
                documents: 1,
                status: 1,
                isBlocked: 1,
@@ -433,8 +439,8 @@ export const getSupplierReportSummary = async (req: Request, res: Response) => {
                totals: [{ $group: { _id: null, ...counters } }],
                byCategory: [
                   { $group: { _id: '$category', ...counters } },
-                  { $lookup: { from: 'departments', localField: '_id', foreignField: '_id', as: 'dept' } },
-                  { $addFields: { name: { $arrayElemAt: ['$dept.departmentName', 0] } } },
+                  { $lookup: { from: MasterListItemModel.collection.name, localField: '_id', foreignField: '_id', as: 'dept' } },
+                  { $addFields: { name: { $arrayElemAt: ['$dept.label', 0] } } },
                   { $project: { dept: 0 } },
                ],
                byType: [{ $group: { _id: '$supplierType', ...counters } }],
@@ -462,37 +468,15 @@ export const getSupplierReportSummary = async (req: Request, res: Response) => {
    }
 };
 
-/** Suppliers that may be entered twice: same name, similar name, same IBAN, same email, same phone. */
-export const getSupplierDuplicatesReport = async (_req: Request, res: Response, next: NextFunction) => {
-   try {
-      const fields = ['_id', 'supplierName', 'supplierId', 'status'];
-      const [sameName, similarName, sameIban, sameEmail, samePhone] = await Promise.all([
-         duplicateGroups(Supplier, 'nameKey', fields),
-         duplicateGroups(Supplier, 'nameCore', fields),
-         duplicateGroups(Supplier, 'ibanKey', fields),
-         duplicateGroups(Supplier, 'emailKey', fields),
-         duplicateGroups(Supplier, 'phoneKey', fields),
-      ]);
-      const exact = new Set(sameName.map((g) => g.records.map((r: any) => String(r._id)).sort().join()));
-      return res.status(200).json({
-         sameName, sameIban, sameEmail, samePhone,
-         similarName: similarName.filter((g) => !exact.has(g.records.map((r: any) => String(r._id)).sort().join())),
-      });
-   } catch (error) {
-      console.error(error);
-      next(error);
-   }
-};
-
 /** Live check for the supplier form: `?supplierName=&email=&phone=&iban=&excludeId=`. */
 export const checkSupplierDuplicate = async (req: Request, res: Response, next: NextFunction) => {
    try {
       const q = req.query;
       const matches = await findSupplierDuplicates({
          supplierName: String(q.supplierName ?? ''),
-         email: String(q.email ?? ''),
-         phone: String(q.phone ?? ''),
-         iban: String(q.iban ?? ''),
+         emails: [].concat(q.email as any ?? []).map(String),
+         phones: [].concat(q.phone as any ?? []).map(String),
+         ibans: [].concat(q.iban as any ?? []).map(String),
          excludeId: q.excludeId ? String(q.excludeId) : undefined,
       });
       return res.status(200).json({ matches });
@@ -502,30 +486,96 @@ export const checkSupplierDuplicate = async (req: Request, res: Response, next: 
    }
 };
 
+type SupplierContactInput = { name?: string; email?: string; phoneNumber?: string; designation?: string; isPrimary?: boolean };
+
+/** Cleans the contact list and returns it with its primary contact, which also fills the legacy `contactDetails`. */
+const normalizeSupplierContacts = (rawContacts: unknown, legacy?: SupplierContactInput) => {
+   const source: SupplierContactInput[] = Array.isArray(rawContacts) && rawContacts.length ? rawContacts : legacy ? [legacy] : [];
+   const contacts = source.map((c) => ({
+      name: String(c?.name ?? '').trim(),
+      email: String(c?.email ?? '').trim(),
+      phoneNumber: String(c?.phoneNumber ?? '').trim(),
+      designation: String(c?.designation ?? '').trim(),
+      isPrimary: !!c?.isPrimary,
+   }));
+   if (!contacts.length || contacts.some((c) => !c.name || !c.email || !c.phoneNumber)) return null;
+   const primaryIndex = Math.max(0, contacts.findIndex((c) => c.isPrimary));
+   contacts.forEach((c, i) => { c.isPrimary = i === primaryIndex; });
+   const { name, email, phoneNumber } = contacts[primaryIndex];
+   return { contacts, contactDetails: { name, email, phoneNumber } };
+};
+
+/** Cleans the address list; the first address also fills the legacy `address`. */
+const normalizeSupplierAddresses = (rawAddresses: unknown, legacy?: Record<string, any>) => {
+   const source: Record<string, any>[] = Array.isArray(rawAddresses) && rawAddresses.length ? rawAddresses : legacy ? [legacy] : [];
+   const fields = ['label', 'streetNo', 'buildingNo', 'zoneNo', 'poBox', 'city', 'location'];
+   const addresses = source.map((a): Record<string, any> => ({ ...Object.fromEntries(fields.map((f) => [f, String(a?.[f] ?? "").trim()])), isPrimary: !!a?.isPrimary }));
+   if (!addresses.length || addresses.some((a) => !a.location)) return null;
+   const primaryIndex = Math.max(0, addresses.findIndex((a) => a.isPrimary));
+   addresses.forEach((a, i) => { a.isPrimary = i === primaryIndex; });
+   return { addresses, address: addresses[primaryIndex] };
+};
+
+/**
+ * Cleans the bank account list; the primary account also fills the legacy `bankDetails`.
+ * `undefined` = not supplied (leave as is), `null` = every account removed.
+ */
+const normalizeBankAccounts = (rawAccounts: unknown, legacy?: Record<string, any> | null) => {
+   if (rawAccounts === undefined && legacy === undefined) return undefined;
+   const source: Record<string, any>[] = Array.isArray(rawAccounts) ? rawAccounts : legacy ? [legacy] : [];
+   const fields = ['bankName', 'branch', 'accountName', 'accountNumber', 'iban', 'swiftCode', 'currency', 'bankCountry', 'bankAddress'];
+   const bankAccounts = source
+      .map((b): Record<string, any> => ({ ...Object.fromEntries(fields.map((f) => [f, String(b?.[f] ?? '').trim()])), isPrimary: !!b?.isPrimary }))
+      .filter((b) => fields.some((f) => (b as any)[f]));
+   if (!bankAccounts.length) return null;
+   const primaryIndex = Math.max(0, bankAccounts.findIndex((b) => b.isPrimary));
+   bankAccounts.forEach((b, i) => { b.isPrimary = i === primaryIndex; });
+   return { bankAccounts, bankDetails: bankAccounts[primaryIndex] };
+};
+
+/** Accounts already stored on a supplier, falling back to the single legacy record. */
+const storedBankAccounts = (s: any): any[] =>
+   s.bankAccounts?.length ? s.bankAccounts : s.bankDetails ? [s.bankDetails] : [];
+
 export const createSupplier = async (req: Request, res: Response) => {
    try {
       const tokenData = req.user;
       const employee = await getEmployeeData(tokenData);
       const {
          supplierName,
-         address,
+         address: legacyAddress,
+         addresses: rawAddresses,
          supplierType,
          category,
-         contactDetails,
-         bankDetails,
+         contactDetails: legacyContact,
+         contacts: rawContacts,
+         companyEmail: rawCompanyEmail,
+         companyPhone: rawCompanyPhone,
+         website: rawWebsite,
+         bankDetails: legacyBank,
+         bankAccounts: rawBankAccounts,
          products,
          creditDays,
          creditValue,
          confirmDuplicates,
       } = JSON.parse(req.body.supplier);
 
+      const contactSet = normalizeSupplierContacts(rawContacts, legacyContact);
+      const addressSet = normalizeSupplierAddresses(rawAddresses, legacyAddress);
+      const bankSet = normalizeBankAccounts(rawBankAccounts, legacyBank);
+
       // Validate required fields
-      if (!supplierName || !supplierType || !category || !contactDetails) {
+      if (!supplierName || !supplierType || !category || !contactSet || !addressSet) {
          return res.status(400).json({
             success: false,
             message: 'Please provide all required fields',
          });
       }
+      const { contactDetails, contacts } = contactSet;
+      const companyEmail = String(rawCompanyEmail ?? '').trim();
+      const companyPhone = String(rawCompanyPhone ?? '').trim();
+      const website = String(rawWebsite ?? '').trim();
+      const { address, addresses } = addressSet;
 
       // The creator is always the authenticated employee, never a client-supplied id.
       const creatorId = employee?._id;
@@ -541,7 +591,7 @@ export const createSupplier = async (req: Request, res: Response) => {
       }
 
       const duplicates = await findSupplierDuplicates({
-         supplierName, email: contactDetails?.email, phone: contactDetails?.phoneNumber, iban: bankDetails?.iban,
+         supplierName, ...supplierContactPoints({ companyEmail, companyPhone, contacts }), ibans: bankSet?.bankAccounts.map((b) => b.iban),
       });
       const hard = duplicates.find((m) => m.level === 'block');
       if (hard) {
@@ -570,18 +620,23 @@ export const createSupplier = async (req: Request, res: Response) => {
 
 
       // Derive the department code (e.g. ICT/ELV) from the selected category for the supplier id
-      const department = await Department.findById(category);
-      const supplierId = await generateSupplierId(department?.departmentName || 'GEN');
+      const categoryItem = await MasterListItemModel.findOne({ _id: category, list: 'supplierCategory' });
+      const supplierId = await generateSupplierId(categoryItem?.label || 'GEN');
 
       // Create new supplier object
       const newSupplier = new Supplier({
          supplierName: supplierName.trim(),
-         ...supplierKeys({ supplierName, contactDetails, bankDetails }),
-         address: address,
+         ...supplierKeys({ supplierName, companyEmail, companyPhone, contacts, bankAccounts: bankSet?.bankAccounts }),
+         companyEmail,
+         companyPhone,
+         website,
+         address,
+         addresses,
          supplierType,
          category,
-         contactDetails: contactDetails,
-         bankDetails: bankDetails,
+         contactDetails,
+         contacts,
+         ...(bankSet ? { bankAccounts: bankSet.bankAccounts, bankDetails: bankSet.bankDetails } : {}),
          documents: documents,
          products: products ?? [],
          creditDays,
@@ -797,7 +852,7 @@ export const updateSupplierStatus = async (req: any, res: Response) => {
          })
          .populate({
             path: 'category',
-            select: 'departmentName',
+            select: 'label',
          });
 
       // Determine success message based on status
@@ -887,25 +942,39 @@ export const updateSupplier = async (req: Request, res: Response) => {
       const { id } = req.params;
       const {
          supplierName,
-         address,
+         address: legacyAddress,
+         addresses: rawAddresses,
          supplierType,
          category,
-         contactDetails,
-         bankDetails,
+         contactDetails: legacyContact,
+         contacts: rawContacts,
+         companyEmail: rawCompanyEmail,
+         companyPhone: rawCompanyPhone,
+         website: rawWebsite,
+         bankDetails: legacyBank,
+         bankAccounts: rawBankAccounts,
          products,
          creditDays,
          creditValue,
          confirmDuplicates,
       } = JSON.parse(req.body.supplier);
 
+      const contactSet = normalizeSupplierContacts(rawContacts, legacyContact);
+      const addressSet = normalizeSupplierAddresses(rawAddresses, legacyAddress);
+      const bankSet = normalizeBankAccounts(rawBankAccounts, legacyBank);
+
       // Validate required fields
-      console.log(req.body);
-      if (!id || !supplierName || !supplierType || !category || !contactDetails) {
+      if (!id || !supplierName || !supplierType || !category || !contactSet || !addressSet) {
          return res.status(400).json({
             success: false,
             message: 'Please provide all required fields',
          });
       }
+      const { contactDetails, contacts } = contactSet;
+      const companyEmail = String(rawCompanyEmail ?? '').trim();
+      const companyPhone = String(rawCompanyPhone ?? '').trim();
+      const website = String(rawWebsite ?? '').trim();
+      const { address, addresses } = addressSet;
 
       // Find the existing supplier to get current documents and status
       const existingSupplier = await Supplier.findById(id);
@@ -921,7 +990,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
       }
 
       const duplicates = await findSupplierDuplicates({
-         supplierName, email: contactDetails?.email, phone: contactDetails?.phoneNumber, iban: bankDetails?.iban,
+         supplierName, ...supplierContactPoints({ companyEmail, companyPhone, contacts }), ibans: bankSet?.bankAccounts.map((b) => b.iban),
          excludeId: String(existingSupplier._id),
       });
       const hard = duplicates.find((m) => m.level === 'block');
@@ -968,11 +1037,11 @@ export const updateSupplier = async (req: Request, res: Response) => {
       // supplier id while keeping its original sequence number intact.
       let supplierId = existingSupplier.supplierId;
       if (supplierId && String(existingSupplier.category) !== String(category)) {
-         const department = await Department.findById(category);
+         const department = await MasterListItemModel.findOne({ _id: category, list: 'supplierCategory' });
          if (department) {
             const parts = supplierId.split('-');
             if (parts.length === 4) {
-               parts[2] = deriveDepartmentCode(department.departmentName);
+               parts[2] = deriveDepartmentCode(department.label);
                supplierId = parts.join('-');
             }
          }
@@ -983,14 +1052,19 @@ export const updateSupplier = async (req: Request, res: Response) => {
          id,
          {
             supplierName: supplierName.trim(),
-            ...supplierKeys({ supplierName, contactDetails, bankDetails: bankDetails ?? existingSupplier.bankDetails }),
-            address: address,
+            ...supplierKeys({ supplierName, companyEmail, companyPhone, contacts, bankAccounts: bankSet === undefined ? storedBankAccounts(existingSupplier) : bankSet?.bankAccounts }),
+            companyEmail,
+            companyPhone,
+            website,
+            address,
+            addresses,
             supplierType,
             category,
-            contactDetails: contactDetails,
+            contactDetails,
+            contacts,
             // null clears banking details the user removed; omitted (undefined) leaves them untouched,
             // which is what a non-finance editor sends since they never see the banking step.
-            ...(bankDetails === undefined ? {} : { bankDetails: bankDetails || null }),
+            ...(bankSet === undefined ? {} : { bankAccounts: bankSet?.bankAccounts ?? [], bankDetails: bankSet?.bankDetails ?? null }),
             documents, // Always update documents (either new ones or existing ones)
             // Products live in the product catalogue now; the legacy embedded list is left untouched.
             ...(products === undefined ? {} : { products }),
@@ -1075,7 +1149,7 @@ export const getSupplierById = async (req: Request, res: Response) => {
          })
          .populate({
             path: 'category',
-            select: 'departmentName _id',
+            select: 'label _id',
          });
 
       if (!supplier) {
@@ -1128,7 +1202,7 @@ export const previewSupplierId = async (req: Request, res: Response) => {
          });
       }
 
-      const department = await Department.findById(category);
+      const department = await MasterListItemModel.findOne({ _id: category, list: 'supplierCategory' });
       if (!department) {
          return res.status(404).json({
             success: false,
@@ -1136,7 +1210,7 @@ export const previewSupplierId = async (req: Request, res: Response) => {
          });
       }
 
-      const deptCode = deriveDepartmentCode(department.departmentName);
+      const deptCode = deriveDepartmentCode(department.label);
       const latestSupplier = await Supplier.findOne({
          supplierId: { $regex: `^NT-SP-${deptCode}-\\d{3}$` }
       }).sort({ supplierId: -1 });
