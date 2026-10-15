@@ -5,8 +5,8 @@ import { ToastrService } from 'ngx-toastr';
 import { MatDialog } from '@angular/material/dialog';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
-import { ActionConfirmationDialogComponent } from 'src/app/shared/components/action-confirmation-dialog/action-confirmation-dialog.component';
-import { IconsModule } from 'src/app/lib/icons/icons.module';
+import { ConfirmDialogService } from 'src/app/shared/components/confirm-dialog';
+import { buildApprovalTimeline } from 'src/app/shared/utils/approval-timeline.util';
 import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 import { PdfPreviewComponent } from 'src/app/shared/components/pdf-preview/pdf-preview.component';
 import { ApproveDealComponent } from 'src/app/modules/deal-sheet/pages/approve-deal/approve-deal.component';
@@ -14,27 +14,30 @@ import { PurchaseViewModalComponent } from 'src/app/shared/components/purchase-v
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
-import { DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailMetricsComponent } from 'src/app/shared/components/detail-panel/detail-metrics.component';
+import { DetailTimelineComponent } from 'src/app/shared/components/detail-panel/detail-timeline.component';
+import { DetailMetric, DetailOverviewSection, DetailTableColumn, DetailTimelineEntry } from 'src/app/shared/components/detail-panel/detail-panel.model';
+import { DetailViewBadge, DetailViewBreadcrumb, DetailViewShellComponent, DetailViewStat, DetailViewTab } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
 
 @Component({
   selector: 'app-view-lpo',
   standalone: true,
   imports: [
     CommonModule,
-    IconsModule,
     ActionButtonComponent,
-    DetailTableComponent
+    DetailTableComponent,
+    DetailMetricsComponent,
+    DetailTimelineComponent,
+    DetailViewShellComponent
   ],
-  templateUrl: './view-lpo.component.html',
-  styleUrl: './view-lpo.component.css'
+  templateUrl: './view-lpo.component.html'
 })
 export class ViewLpoComponent implements OnInit {
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'description', label: 'Description', wrap: true },
-    { key: 'partNo', label: 'Part No.' },
-    { key: 'quantity', label: 'Qty', type: 'number' },
-    { key: 'unitCost', label: 'Unit Cost', type: 'currency' },
-    { key: 'totalCost', label: 'Total', type: 'currency', total: true },
+    { key: 'description', label: 'Item', type: 'stack', subKey: 'partNo' },
+    { key: 'quantity', label: 'Qty', type: 'number', align: 'right' },
+    { key: 'unitCost', label: 'Unit cost', type: 'currency' },
+    { key: 'totalCost', label: 'Total', type: 'currency', total: true, emphasis: true },
   ];
   private purchaseOrderService = inject(PurchaseOrderService);
   private purchaseService = inject(PurchaseService);
@@ -42,8 +45,96 @@ export class ViewLpoComponent implements OnInit {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private dialog = inject(MatDialog);
+  private confirmDialog = inject(ConfirmDialogService);
   private quotationService = inject(QuotationService);
   private employeeService = inject(EmployeeService);
+
+
+  // view model for the shared detail-view shell
+  tab = 'items';
+  readonly tabs: DetailViewTab[] = [
+    { id: 'items', label: 'Items' },
+    { id: 'summary', label: 'Summary' },
+    { id: 'history', label: 'Approval history' },
+  ];
+
+  private static readonly STATUS_TONES: Record<string, 'good' | 'warn' | 'bad' | 'neutral'> = {
+    'Approved': 'good', 'Closed': 'good', 'Pending for Approval': 'warn', 'Rejected': 'bad', 'Draft': 'neutral',
+  };
+
+  get breadcrumbs(): DetailViewBreadcrumb[] {
+    return [
+      { label: 'Purchase', link: ['/purchase/pr'] },
+      { label: 'PO', link: ['/purchase/po'] },
+      { label: this.lpo?.poNo || 'LPO' },
+    ];
+  }
+
+  get badges(): DetailViewBadge[] {
+    const status = this.lpo?.poStatus;
+    return status ? [{ label: status, tone: ViewLpoComponent.STATUS_TONES[status] ?? 'neutral' }] : [];
+  }
+
+  get subtitle(): string {
+    return [this.supplier?.supplierName, this.lpo?.subject].filter(Boolean).join(' · ');
+  }
+
+  get stats(): DetailViewStat[] {
+    if (!this.lpo) return [];
+    return [
+      { label: 'Total after discount', value: this.formatCurrency(this.getTotalAfterDiscount()) },
+      { label: 'Subtotal', value: this.formatCurrency(this.getSubTotal()) },
+      { label: 'Discount', value: this.formatCurrency(this.lpo.discount || 0) },
+      { label: 'Items', value: String(this.items().length) },
+    ];
+  }
+
+  get summaryMetrics(): DetailMetric[] {
+    return [
+      { label: 'Subtotal', value: this.formatCurrency(this.getSubTotal()) },
+      { label: 'Discount', value: this.formatCurrency(this.lpo?.discount || 0) },
+      { label: 'Total after discount', value: this.formatCurrency(this.getTotalAfterDiscount()) },
+    ];
+  }
+
+  get historyEntries(): DetailTimelineEntry[] {
+    return buildApprovalTimeline(this.lpo?.approvalStatus);
+  }
+
+  get sidebarSections(): DetailOverviewSection[] {
+    const l = this.lpo;
+    if (!l) return [];
+    return [
+      {
+        title: 'Order',
+        fields: [
+          { type: 'field', label: 'PO no', value: l.poNo, numeric: true },
+          { type: 'field', label: 'PO date', value: this.formatDate(l.poDate) },
+          { type: 'field', label: 'PR no', value: this.purchase?.purchaseNo || '-', numeric: true },
+          { type: 'field', label: 'Job no', value: this.purchase?.jobId?.jobId || l.jobId?.jobId || '-', numeric: true },
+          { type: 'field', label: 'Quote ref', value: this.purchase?.jobId?.quoteId?.quoteId || l.quoteId?.quoteId || '-' },
+        ],
+      },
+      {
+        title: 'Supplier',
+        fields: [
+          { type: 'field', label: 'Supplier', value: this.supplier?.supplierName || '-' },
+          { type: 'field', label: 'Contact', value: this.supplier?.contactDetails?.name || '-' },
+          { type: 'field', label: 'Phone', value: this.supplier?.contactDetails?.phoneNumber || '-' },
+          { type: 'field', label: 'Email', value: this.supplier?.contactDetails?.email || '-' },
+        ],
+      },
+      {
+        title: 'Delivery & payment',
+        fields: [
+          { type: 'field', label: 'Delivery terms', value: l.etaTerms || '-' },
+          { type: 'field', label: 'Payment terms', value: l.paymentTerms || '-' },
+          { type: 'field', label: 'Place of delivery', value: l.placeOfDelivery || '-' },
+          { type: 'field', label: 'Shipping terms', value: l.shippingTerms || '-' },
+        ],
+      },
+    ];
+  }
 
   lpoId!: string;
   lpo: any = null;
@@ -298,76 +389,68 @@ export class ViewLpoComponent implements OnInit {
     this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
   }
 
-  onApprove(): void {
+  async onApprove(): Promise<void> {
     if (!this.canApproveOrReject()) return;
 
-    const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
-      data: {
-        title: 'Approve LPO',
-        description: 'Are you sure you want to approve this LPO? You may optionally provide a comment.',
-        icon: 'heroCheckCircle',
-        iconColor: 'green',
-        confirmButtonText: 'Approve',
-        requireComment: false,
-        showComment: true,
-        commentLabel: 'Approval Comment',
-        commentPlaceholder: 'Enter your approval comment here...'
-      }
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'approve',
+      title: 'Approve LPO',
+      message: this.approvalSteps.filter((a) => a.status === 'pending').length > 1 && !this.isSuperAdmin
+        ? 'Your approval moves this LPO on to the next approval stage.'
+        : 'This LPO will be approved and released to the supplier.',
+      details: [
+        { label: 'PO no', value: this.lpo?.poNo || '-' },
+        { label: 'Supplier', value: this.supplier?.supplierName || '-' },
+        { label: 'Total', value: this.formatCurrency(this.getTotalAfterDiscount()) },
+      ],
+      confirmLabel: 'Approve',
+      reason: 'optional',
+      reasonLabel: 'Approval comment',
     });
+    if (!confirmed) return;
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result?.isConfirmed) {
-        this.isApproving = true;
-        this.purchaseOrderService.approvePurchaseOrder(this.lpoId, result.comment).subscribe({
-          next: () => {
-            this.notificationService.success('LPO approved successfully');
-            this.router.navigate(['/purchase/po'], { queryParams: { view: 'approved' } });
-          },
-          error: (error) => {
-            this.notificationService.error(error.error?.message || 'Failed to approve LPO');
-            this.isApproving = false;
-          }
-        });
+    this.isApproving = true;
+    this.purchaseOrderService.approvePurchaseOrder(this.lpoId, reason ?? '').subscribe({
+      next: () => {
+        this.notificationService.success('LPO approved successfully');
+        this.router.navigate(['/purchase/po'], { queryParams: { view: 'approved' } });
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to approve LPO');
+        this.isApproving = false;
       }
     });
   }
 
-  onReject(): void {
+  async onReject(): Promise<void> {
     if (!this.canApproveOrReject()) return;
 
-    const dialogRef = this.dialog.open(ActionConfirmationDialogComponent, {
-      data: {
-        title: 'Reject LPO',
-        description: 'Are you sure you want to reject this LPO? Please provide a reason for rejection.',
-        icon: 'heroXCircle',
-        iconColor: 'red',
-        confirmButtonText: 'Reject',
-        requireComment: false,
-        showComment: true,
-        commentLabel: 'Rejection Reason',
-        commentPlaceholder: 'Enter your rejection reason here...'
-      }
+    const { confirmed, reason } = await this.confirmDialog.open({
+      tone: 'reject',
+      title: 'Reject LPO',
+      message: 'This LPO will be sent back to the person who raised it.',
+      details: [{ label: 'PO no', value: this.lpo?.poNo || '-' }, { label: 'Supplier', value: this.supplier?.supplierName || '-' }],
+      confirmLabel: 'Reject',
+      reason: true,
+      reasonLabel: 'Rejection reason',
     });
+    if (!confirmed) return;
 
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result?.isConfirmed) {
-        this.isRejecting = true;
-        this.purchaseOrderService.rejectPurchaseOrder(this.lpoId, result.comment).subscribe({
-          next: () => {
-            this.notificationService.success('LPO rejected successfully');
-            this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
-          },
-          error: (error) => {
-            this.notificationService.error(error.error?.message || 'Failed to reject LPO');
-            this.isRejecting = false;
-          }
-        });
+    this.isRejecting = true;
+    this.purchaseOrderService.rejectPurchaseOrder(this.lpoId, reason ?? '').subscribe({
+      next: () => {
+        this.notificationService.success('LPO rejected successfully');
+        this.router.navigate(['/purchase/po'], { queryParams: { view: 'pending' } });
+      },
+      error: (error) => {
+        this.notificationService.error(error.error?.message || 'Failed to reject LPO');
+        this.isRejecting = false;
       }
     });
   }
 
   canApproveOrReject(): boolean {
-    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs() && !this.isOwnLpo() && this.isMyTurn();
+    return this.lpo?.poStatus === 'Pending for Approval' && this.canApprovePOs() && (this.isSuperAdmin || !this.isOwnLpo()) && this.isMyTurn();
   }
 
   get approvalSteps(): any[] {
@@ -416,7 +499,7 @@ export class ViewLpoComponent implements OnInit {
 
   itemRows(): Record<string, any>[] {
     return this.items().map((item: any) => ({
-      description: item.detail || '-', partNo: this.formatPartNumber(item.partNo),
+      description: item.detail || '-', partNo: (v => v === '-' ? '' : v)(this.formatPartNumber(item.partNo)),
       quantity: item.quantity || 0, unitCost: item.unitCost || 0, totalCost: item.totalCost || 0,
     }));
   }

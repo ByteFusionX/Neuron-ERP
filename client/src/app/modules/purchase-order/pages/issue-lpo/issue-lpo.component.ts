@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, EventEmitter, inject, Input, OnDestroy, OnInit, Output, signal } from '@angular/core';
 import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
@@ -9,6 +9,7 @@ import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { PurchaseService } from 'src/app/core/services/purchase/purchase.service';
 import { PurchaseOrderService } from 'src/app/core/services/purchaseOrder/purchaseOrder.service';
 import { SupplierService } from 'src/app/core/services/supplier.service';
+import { SfDrawerComponent } from 'src/app/shared/components/smart-form/sf-drawer.component';
 import { SmartFormModule, SfOption } from 'src/app/shared/components/smart-form';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
 import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
@@ -20,12 +21,27 @@ import { PurchaseData } from 'src/app/shared/interfaces/purchase.interface';
     FormsModule,
     ReactiveFormsModule,
     SmartFormModule,
-    ActionButtonComponent
+    ActionButtonComponent,
+    SfDrawerComponent
   ],
-  templateUrl: './issue-lpo.component.html',
-  styleUrl: './issue-lpo.component.css'
+  templateUrl: './issue-lpo.component.html'
 })
 export class IssueLpoComponent implements OnInit, OnDestroy {
+
+  /** Drawer mode: the host passes these instead of the route params. */
+  @Input() purchaseIdInput: string | null = null;
+  @Input() lpoIdInput: string | null = null;
+  @Input() reissueInput = false;
+  @Input() supplierIdInput: string | null = null;
+  /** Item keys (detail|partNo) to preselect, when the caller already picked which items go on this LPO. */
+  @Input() itemKeysInput: string[] | null = null;
+  @Output() closed = new EventEmitter<void>();
+  @Output() saved = new EventEmitter<void>();
+  drawerShown = false;
+
+  joinAddress(address: any): string {
+    return [address?.buildingNo, address?.location, address?.streetNo, address?.zoneNo].filter(Boolean).join(', ') || '-';
+  }
 
   private purchaseService = inject(PurchaseService);
   private supplierService = inject(SupplierService);
@@ -77,17 +93,18 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     this.loadTermsAndConditions();
     this.loadPlacesOfDelivery();
     this.loadShippingTerms();
-    this.purchaseId = <string>this.route.snapshot.paramMap.get('id');
-    this.lpoId = this.route.snapshot.paramMap.get('lpoId');
-    const preselectedSupplierId = this.route.snapshot.queryParamMap.get('supplierId');
+    this.purchaseId = this.purchaseIdInput || <string>this.route.snapshot.paramMap.get('id');
+    this.lpoId = this.lpoIdInput || this.route.snapshot.paramMap.get('lpoId');
+    const preselectedSupplierId = this.supplierIdInput || this.route.snapshot.queryParamMap.get('supplierId');
 
-    // Detect mode from URL
-    const url = this.router.url;
-    this.isReissueMode = url.includes('/reissue/');
-    
+    // Detect mode from the host input or the URL
+    this.isReissueMode = this.purchaseIdInput ? this.reissueInput : this.router.url.includes('/reissue/');
+
+    setTimeout(() => (this.drawerShown = true));
+
     if (!this.purchaseId) {
       this.notificationService.error('Invalid Purchase ID');
-      this.router.navigate(['/purchase/approves']);
+      this.closeDrawer();
       return;
     }
 
@@ -114,7 +131,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
           this.notificationService.error('Failed to load purchase details');
           console.error('Error loading purchase:', error);
           this.isLoading = false;
-          this.router.navigate(['/purchase/approves']);
+          this.closeDrawer();
         }
       })
     )
@@ -367,7 +384,10 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
           if (response.success) {
             const items = response.data;
             this.items.set(items);
-            const selectableItems = items.filter((item: any) => !item.isIssued);
+            const wanted = this.itemKeysInput?.length ? new Set(this.itemKeysInput) : null;
+            const partKey = (p: any) => (typeof p === 'string' ? p : p?.partNo || '');
+            const selectableItems = items.filter((item: any) => !item.isIssued
+              && (!wanted || wanted.has(`${item.detail}|${partKey(item.partNo)}`)));
             const selectableItemIds = new Set<string>(selectableItems.map((item: any) => item._id as string));
             this.selectedItems.set(selectableItemIds);
             
@@ -574,7 +594,9 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
     this.isSubmitted.set(true);
     
     if (this.poForm.invalid) {
+      this.poForm.markAllAsTouched();
       this.notificationService.error('Please fill in all required fields');
+      setTimeout(() => document.querySelector('.sf-invalid, .ng-invalid.ng-touched, [aria-invalid="true"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
       return;
     }
 
@@ -681,7 +703,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
             this.isCreatingPO.set(false);
             if (response.success) {
               this.notificationService.success('Purchase Order created successfully!');
-              this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
+              this.closeDrawer(true);
             } else {
               this.notificationService.error('Failed to create Purchase Order');
             }
@@ -708,7 +730,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
             if (lpo.poStatus === 'Approved') {
               this.notificationService.error('Cannot re-issue an approved LPO');
               this.isLoading = false;
-              this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
+              this.closeDrawer();
               return;
             }
             
@@ -853,7 +875,7 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
           this.isCreatingPO.set(false);
           if (response) {
             this.notificationService.success('Purchase Order re-issued successfully!');
-            this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
+            this.closeDrawer(true);
           } else {
             this.notificationService.error('Failed to re-issue Purchase Order');
           }
@@ -877,7 +899,22 @@ export class IssueLpoComponent implements OnInit, OnDestroy {
   }
 
   onDiscardClicks() {
-    this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
+    this.closeDrawer();
+  }
+
+  /** Slides the drawer out, then tells the host (or goes back to Initiate LPO in route mode). */
+  closeDrawer(didSave = false): void {
+    this.drawerShown = false;
+    setTimeout(() => {
+      if (this.purchaseIdInput) {
+        if (didSave) this.saved.emit();
+        this.closed.emit();
+      } else if (this.purchaseId) {
+        this.router.navigate(['/purchase/initiate-lpo', this.purchaseId]);
+      } else {
+        this.router.navigate(['/purchase/approves']);
+      }
+    }, 250);
   }
 
   ngOnDestroy(): void {

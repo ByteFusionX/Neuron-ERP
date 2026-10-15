@@ -99,6 +99,11 @@ export class PurchaseOrderService {
     return this.http.patch<any>(`${this.baseUrl}/${id}/reject`, { comment }, { context: context() });
   }
 
+  /** Super Admin restarts a pending PO's approval route; `stepRoleIds` are the stages that get another chance. */
+  resetPurchaseOrderWorkflow(id: string, stepRoleIds: string[]): Observable<{ success: true; message: string }> {
+    return this.http.post<{ success: true; message: string }>(`${this.baseUrl}/${id}/reset-workflow`, { stepRoleIds }, { context: context() });
+  }
+
   revokePurchaseOrder(id: string): Observable<any> {
     return this.http.delete<any>(`${this.baseUrl}/${id}/revoke`, { context: context() });
   }

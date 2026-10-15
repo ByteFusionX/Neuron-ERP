@@ -1,63 +1,56 @@
-<div class="lpo-view-page">
-  <div class="lpo-view-shell">
-    <header class="lpo-view-header">
-      <div>
-        <p class="lpo-view-kicker">Purchase order</p>
-        <h1 class="lpo-view-title">{{ lpo?.poNo || 'LPO details' }}</h1>
-        <p class="lpo-view-subtitle">{{ supplier?.supplierName || 'Supplier' }} · {{ lpo?.poStatus || 'Status unavailable' }}</p>
+<div class="flex h-full flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <app-detail-view-shell
+    class="min-h-0 flex-1"
+    [loading]="isLoading()"
+    [empty]="!isLoading() && !lpo"
+    emptyTitle="Purchase order not found"
+    emptyMessage="It may have been deleted, or you may not have access to it."
+    [emptyLink]="['/purchase/po']"
+    emptyLinkLabel="Back to purchase orders"
+    [breadcrumbs]="breadcrumbs"
+    avatarText="PO"
+    [title]="lpo?.poNo || 'LPO details'"
+    [badges]="badges"
+    [subtitle]="subtitle"
+    [stats]="stats"
+    [tabs]="tabs"
+    [activeTab]="tab"
+    (activeTabChange)="tab = $event"
+    [sections]="sidebarSections"
+  >
+    <ng-container footerLeft>
+      <app-action-button variant="outline" *ngIf="purchase?.purchaseNo" (click)="onViewPurchase()">PR {{ purchase.purchaseNo }}</app-action-button>
+      <app-action-button variant="outline" *ngIf="purchase?.jobId?.quoteId?.quoteId || lpo?.quoteId?.quoteId" (click)="onViewQuote()">Quote {{ purchase?.jobId?.quoteId?.quoteId || lpo?.quoteId?.quoteId }}</app-action-button>
+      <app-action-button variant="outline" *ngIf="purchase?.jobId?.jobId || lpo?.jobId?.jobId" (click)="onViewDealSheet()">Deal sheet</app-action-button>
+    </ng-container>
+
+    <ng-container footerRight>
+      <ng-container *ngIf="canApproveOrReject()">
+        <app-action-button [disabled]="isApproving || isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting…' : 'Reject' }}</app-action-button>
+        <app-action-button variant="primary" [disabled]="isApproving || isRejecting" (click)="onApprove()">{{ isApproving ? 'Approving…' : 'Approve' }}</app-action-button>
+      </ng-container>
+      <app-action-button variant="outline" (click)="onBack()">Back</app-action-button>
+    </ng-container>
+
+    <div tabBody [ngSwitch]="tab">
+      <div *ngSwitchCase="'items'" class="space-y-6">
+        <p *ngIf="lpo?.poStatus === 'Pending for Approval' && canApprovePOs() && (isSuperAdmin || !isOwnLpo()) && !isMyTurn()" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          Waiting for the current approval stage — it is not your turn to decide yet.
+        </p>
+        <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows()" [currency]="currency()" numbered showTotals spread emptyMessage="No items"></app-detail-table>
       </div>
-      <app-action-button variant="secondary" (click)="onBack()">Back</app-action-button>
-    </header>
 
-    <div *ngIf="isLoading()" class="flex h-64 items-center justify-center text-sm text-gray-500">Loading purchase order...</div>
-
-    <main *ngIf="!isLoading() && lpo" class="lpo-view-body">
-      <section class="lpo-detail-banner">
-        <div class="lpo-meta"><span>Supplier</span><strong>{{ supplier?.supplierName || '-' }}</strong></div>
-        <div class="lpo-meta"><span>PO date</span><strong>{{ formatDate(lpo.poDate) }}</strong></div>
-        <div class="lpo-meta"><span>Delivery terms</span><strong>{{ lpo.etaTerms || '-' }}</strong></div>
-        <div class="lpo-meta"><span>Payment terms</span><strong>{{ lpo.paymentTerms || '-' }}</strong></div>
-        <div class="lpo-meta"><span>Place of delivery</span><strong>{{ lpo.placeOfDelivery || '-' }}</strong></div>
-        <div class="lpo-meta"><span>Shipping terms</span><strong>{{ lpo.shippingTerms || '-' }}</strong></div>
-        <div class="lpo-meta"><span>Contact</span><strong>{{ supplier?.contactDetails?.name || '-' }}</strong><small>{{ supplier?.contactDetails?.phoneNumber || supplier?.contactDetails?.email || '' }}</small></div>
-        <div class="lpo-meta"><span>Subject</span><strong>{{ lpo.subject || '-' }}</strong></div>
-        <div class="lpo-meta">
-          <span>Quote ref</span>
-          <button *ngIf="purchase?.jobId?.quoteId?.quoteId || lpo?.quoteId?.quoteId" type="button" class="lpo-link" (click)="onViewQuote()">{{ purchase?.jobId?.quoteId?.quoteId || lpo?.quoteId?.quoteId }}</button>
-          <strong *ngIf="!(purchase?.jobId?.quoteId?.quoteId || lpo?.quoteId?.quoteId)">-</strong>
+      <div *ngSwitchCase="'summary'" class="space-y-6">
+        <app-detail-metrics [items]="summaryMetrics"></app-detail-metrics>
+        <div *ngIf="lpo?.termsAndCondition">
+          <p class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Terms and conditions</p>
+          <p class="whitespace-pre-line text-sm text-gray-800 dark:text-gray-200">{{ lpo.termsAndCondition }}</p>
         </div>
-        <div class="lpo-meta"><span>PR no</span><button *ngIf="purchase?.purchaseNo" type="button" class="lpo-link" (click)="onViewPurchase()">{{ purchase.purchaseNo }}</button><strong *ngIf="!purchase?.purchaseNo">-</strong></div>
-        <div class="lpo-meta"><span>Job no</span><button *ngIf="purchase?.jobId?.jobId || lpo?.jobId?.jobId" type="button" class="lpo-link" (click)="onViewDealSheet()">{{ purchase?.jobId?.jobId || lpo?.jobId?.jobId }}</button><strong *ngIf="!(purchase?.jobId?.jobId || lpo?.jobId?.jobId)">-</strong></div>
-        <div class="lpo-meta"><span>Total</span><strong>{{ formatCurrency(getTotalAfterDiscount()) }}</strong></div>
-      </section>
+      </div>
 
-      <section *ngIf="approvalSteps.length" class="lpo-workflow">
-        <p class="lpo-section-title">Approval workflow</p>
-        <div class="flex flex-wrap gap-2">
-          <div *ngFor="let step of approvalSteps" class="lpo-step" [attr.data-status]="step.status">
-            <strong>Step {{ step.step }} · {{ stepLabel(step) }}</strong>
-            <span>{{ step.status }}<ng-container *ngIf="stepActor(step)"> · {{ stepActor(step) }}</ng-container></span>
-            <small *ngIf="step.comment">{{ step.comment }}</small>
-          </div>
-        </div>
-        <p *ngIf="lpo.poStatus === 'Pending for Approval' && canApprovePOs() && !isOwnLpo() && !isMyTurn()" class="mt-2 text-xs text-gray-500">Waiting for the current approval step.</p>
-      </section>
-
-      <app-detail-table title="Line items" [columns]="itemColumns" [rows]="itemRows()" [currency]="currency()" numbered showTotals></app-detail-table>
-
-      <section class="lpo-bottom-grid">
-        <div><p class="lpo-section-title">Terms and conditions</p><p class="lpo-terms">{{ lpo.termsAndCondition || '-' }}</p></div>
-        <div class="lpo-totals">
-          <div><span>Subtotal</span><strong>{{ formatCurrency(getSubTotal()) }}</strong></div>
-          <div><span>Discount</span><strong>{{ formatCurrency(lpo.discount || 0) }}</strong></div>
-          <div class="lpo-total"><span>Total after discount</span><strong>{{ formatCurrency(getTotalAfterDiscount()) }}</strong></div>
-        </div>
-      </section>
-
-      <footer *ngIf="canApproveOrReject()" class="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-erp-border-dark">
-        <app-action-button variant="outline" [disabled]="isApproving || isRejecting" (click)="onReject()">{{ isRejecting ? 'Rejecting...' : 'Reject' }}</app-action-button>
-        <app-action-button variant="primary" [disabled]="isApproving || isRejecting" (click)="onApprove()">{{ isApproving ? 'Approving...' : 'Approve' }}</app-action-button>
-      </footer>
-    </main>
-  </div>
+      <div *ngSwitchCase="'history'">
+        <app-detail-timeline [entries]="historyEntries" emptyMessage="No approval steps recorded for this LPO."></app-detail-timeline>
+      </div>
+    </div>
+  </app-detail-view-shell>
 </div>

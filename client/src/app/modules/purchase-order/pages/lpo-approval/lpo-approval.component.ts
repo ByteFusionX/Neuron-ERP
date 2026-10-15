@@ -18,6 +18,11 @@ import { DetailOverviewComponent } from 'src/app/shared/components/detail-panel/
 import { DetailTableComponent } from 'src/app/shared/components/detail-panel/detail-table.component';
 import { DetailOverviewSection, DetailTableColumn } from 'src/app/shared/components/detail-panel/detail-panel.model';
 import { ActionButtonComponent } from 'src/app/shared/components/action-button/action-button.component';
+import { ModalService } from 'src/app/shared/components/modal';
+import { ResetWorkflowComponent, ResetWorkflowModalData } from 'src/app/modules/presales/pages/reset-workflow/reset-workflow.component';
+import { WorkflowService } from 'src/app/core/services/workflow.service';
+import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { WorkflowFeature } from 'src/app/shared/interfaces/workflow.interface';
 
 const ALL_STATUSES = ['Pending for Approval', 'Approved', 'Closed', 'Rejected'];
 const PENDING_STATUSES = ['Pending for Approval'];
@@ -61,6 +66,11 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private datePipe = inject(DatePipe);
+  private modal = inject(ModalService);
+  private workflowService = inject(WorkflowService);
+  private employeeService = inject(EmployeeService);
+  private poWorkflowSteps: { id: string; label: string }[] = [];
+  isSuperAdmin = false;
   private subscriptions = new Subscription();
 
   rows: any[] = [];
@@ -79,7 +89,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     { id: 'pending', label: 'Pending' },
     { id: 'approved', label: 'Approved' },
     { id: 'partiallyReceived', label: 'Partially Received' },
-    { id: 'closed', label: 'Closed' },
+    { id: 'closed', label: 'Completed' },
     { id: 'rejected', label: 'Rejected' },
   ];
   columns: DataGridColumn<any>[] = [];
@@ -106,6 +116,18 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
     this.buildRowActions();
     this.updateUrlForLegacyRoutes();
     this.loadData();
+    this.subscriptions.add(
+      this.employeeService.employeeData$.subscribe((employee: any) => {
+        this.isSuperAdmin = /^superadmin$/i.test(employee?.category?.role ?? '');
+      })
+    );
+    this.subscriptions.add(
+      this.workflowService.getWorkflows({ feature: WorkflowFeature.PO_APPROVAL }).subscribe((response) => {
+        const steps = (response?.data?.[0]?.steps ?? []).filter((st: any) => st.enabled !== false && !/^superadmin$/i.test(st.role?.role ?? ''));
+        this.poWorkflowSteps = [...steps].sort((a: any, b: any) => b.order - a.order)
+          .map((st: any) => ({ id: String(st.role?._id ?? st.role), label: st.role?.categoryName ?? '—' }));
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -128,7 +150,6 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
       { key: 'createdBy', label: 'Prepared By', valueGetter: (row) => this.personName(row.createdBy) },
       { key: 'customer', label: 'Customer', sortable: true, valueGetter: (row) => row.purchaseId?.customerId?.companyName || '-' },
       { key: 'receiptStatus', label: 'Receipt', type: 'badge', align: 'center', badgeClasses: RECEIPT_BADGE_CLASSES },
-      { key: 'billingStatus', label: 'Billing', type: 'badge', align: 'center', badgeClasses: BILLING_BADGE_CLASSES },
       { key: 'poStatus', label: 'Status', type: 'badge', align: 'center', badgeClasses: STATUS_BADGE_CLASSES, badgeLabel: statusLabel },
     ];
   }
@@ -136,6 +157,7 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
   private buildRowActions(): void {
     this.rowActions = [
       { id: 'openFullLpo', label: 'Open full PO', icon: 'eye', quick: true, panel: true },
+      { id: 'resetWorkflow', label: 'Reset Workflow', icon: 'refresh', quick: true, hidden: (r) => r.poStatus !== 'Pending for Approval' || !this.isSuperAdmin },
     ];
   }
 
@@ -249,6 +271,20 @@ export class LpoApprovalComponent implements OnInit, OnDestroy {
 
   onRowAction(event: DataGridRowActionEvent<any>): void {
     if (event.action.id === 'openFullLpo') this.openFullLpo(event.row);
+    if (event.action.id === 'resetWorkflow') this.resetWorkflow(event.row);
+  }
+
+  resetWorkflow(row: any): void {
+    const data: ResetWorkflowModalData = {
+      jobId: row._id,
+      context: row.poNo,
+      contextLabel: 'Purchase order',
+      description: 'Tick the approval stages that get another chance on this purchase order. Unticked stages are skipped for this PO only.',
+      stages: this.poWorkflowSteps,
+      restart: (ids) => this.purchaseOrderService.resetPurchaseOrderWorkflow(row._id, ids),
+    };
+    this.modal.open<boolean>(ResetWorkflowComponent, { width: '520px', data })
+      .afterClosed().subscribe((reset) => { if (reset) this.loadData(); });
   }
 
   openFullLpo(row: any, event?: Event): void {

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import PurchaseOrder from "../models/purchaseOrder.model";
 import GRN from "../models/grn.model";
 import purchaseRequest from "../models/purchaseRequest.model"
@@ -14,9 +14,10 @@ import { checkAndUpdateJobCompletionStatus } from "./job.controller";
 import { Server } from "socket.io";
 import { createNotificationWithPrivileges } from "./notification.controller";
 import Employee from "../models/employee.model";
-import { getWorkflowSteps, updateApprovalStatus } from "../services/workflow.service";
+import { getWorkflowSteps, updateApprovalStatus, rebuildPendingRoute } from "../services/workflow.service";
 
-// LPO approval runs on the same "purchaseApproval" workflow as the purchase request; the amount is the LPO total after discount.
+// LPO approval runs on its own "poApproval" workflow (Settings > Workflow > PO Approval); the amount is the LPO total after discount.
+const PO_WORKFLOW = 'poApproval';
 const lpoApprovalContext = (po: any) => {
   const subTotal = (po?.items || []).reduce((sum: number, item: any) => sum + (Number(item.totalCost) || 0), 0);
   return { amount: subTotal - (Number(po?.discount) || 0) };
@@ -131,6 +132,15 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
+    // An LPO is only raised against a fully approved PR; a step still waiting (or escalated) blocks it.
+    const prStillPending = (existingPurchaseRequest.approvalStatus || []).some((approval: any) => approval.status === 'pending');
+    if (existingPurchaseRequest.status !== 'Approved' || prStillPending) {
+      return res.status(409).json({
+        success: false,
+        message: "This purchase request is not fully approved yet, so an LPO cannot be raised",
+      });
+    }
+
     const supplier = await Supplier.findById(supplierId);
     if (!supplier) {
       return res.status(404).json({
@@ -240,47 +250,26 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       purchaseOrderData.stockHoldId = stockHoldId;
     }
 
-    const rfqId = await resolvePoRfqId(purchaseId, quoteId);
+    const rfqId = await resolvePoRfqId(purchaseId, quoteId, supplierId);
     if (rfqId) purchaseOrderData.rfqId = rfqId;
 
-    // Route the LPO through the purchase approval workflow. With no workflow configured it falls back to the
-    // single-step approval; with no matching steps (limits / requester is Admin) there is nothing to approve.
-    let workflowSteps: any[] | null = null;
+    // The issued LPO goes to the PO Approval workflow. With no matching steps (limits / requester is Admin) there is nothing to approve.
+    let workflowSteps: any[];
     try {
-      workflowSteps = await getWorkflowSteps('purchaseApproval', employee._id.toString(), lpoApprovalContext(purchaseOrderData));
+      workflowSteps = await getWorkflowSteps(PO_WORKFLOW, employee._id.toString(), lpoApprovalContext(purchaseOrderData));
     } catch (workflowError) {
       console.error('Error initializing LPO workflow steps:', workflowError);
+      return res.status(500).json({ success: false, message: "Could not start the PO approval workflow. Check Settings > Workflow > PO Approval." });
     }
-    if (workflowSteps) {
-      purchaseOrderData.approvalStatus = workflowSteps;
-      if (workflowSteps.length === 0) purchaseOrderData.poStatus = 'Approved';
-    }
+    purchaseOrderData.approvalStatus = workflowSteps;
+    if (workflowSteps.length === 0) purchaseOrderData.poStatus = 'Approved';
 
     const purchaseOrder = new PurchaseOrder(purchaseOrderData);
     await purchaseOrder.save();
 
     const socket = req.app.get('io') as Server;
     if (purchaseOrder.poStatus === 'Pending for Approval') {
-      if (purchaseOrder.approvalStatus?.length) {
-        await notifyLpoApprovers(purchaseOrder, employee._id, socket);
-      } else {
-        await createNotificationWithPrivileges(
-          {
-            type: 'LpoApprovalRequest',
-            referenceModel: 'PurchaseOrder',
-            title: 'LPO sent for approval',
-            message: `LPO ${purchaseOrder.poNo} has been sent for approval`,
-            sentBy: employee._id?.toString(),
-            referenceId: purchaseOrder._id,
-            additionalData: { purchaseId: purchaseId.toString() }
-          },
-          {
-            privilegeKey: 'purchaseOrder',
-            checkFunction: (p) => p.purchaseOrder?.canApprovePOs === true
-          },
-          socket
-        );
-      }
+      await notifyLpoApprovers(purchaseOrder, employee._id, socket);
     }
 
     return res.status(201).json({
@@ -1237,7 +1226,7 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
       const existing = await PurchaseOrder.findById(id);
       if (existing?.createdBy) {
         try {
-          const steps = await getWorkflowSteps('purchaseApproval', existing.createdBy.toString(), lpoApprovalContext(existing));
+          const steps = await getWorkflowSteps(PO_WORKFLOW, existing.createdBy.toString(), lpoApprovalContext(existing));
           setFields.approvalStatus = steps;
           if (steps.length === 0) setFields.poStatus = 'Approved';
         } catch (workflowError) {
@@ -1266,26 +1255,6 @@ export const updatePurchaseOrderStatus = async (req: Request, res: Response) => 
     if (updatedPurchaseOrder.poStatus === 'Pending for Approval' && updatedPurchaseOrder.approvalStatus?.length) {
       const employee = await getEmployeeData(req.user);
       await notifyLpoApprovers(updatedPurchaseOrder, employee?._id, req.app.get('io') as Server);
-    } else if (poStatus === 'Pending for Approval' && updatedPurchaseOrder.poStatus === 'Pending for Approval') {
-      const tokenData = req.user;
-      const employee = await getEmployeeData(tokenData);
-      const socket = req.app.get('io') as Server;
-      await createNotificationWithPrivileges(
-        {
-          type: 'LpoApprovalRequest',
-          referenceModel: 'PurchaseOrder',
-          title: 'LPO sent for approval',
-          message: `LPO ${updatedPurchaseOrder.poNo} has been sent for approval`,
-          sentBy: employee?._id?.toString(),
-          referenceId: updatedPurchaseOrder._id,
-          additionalData: { purchaseId: updatedPurchaseOrder.purchaseId?.toString() }
-        },
-        {
-          privilegeKey: 'purchaseOrder',
-          checkFunction: (p) => p.purchaseOrder?.canApprovePOs === true
-        },
-        socket
-      );
     }
 
     return res.status(200).json({
@@ -1318,7 +1287,7 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
     }
 
     const privileges = employee.category?.privileges;
-    if (!privileges?.purchaseOrder?.canApprovePOs) {
+    if (!/^superadmin$/i.test(employee.category?.role ?? "") && !privileges?.purchaseOrder?.canApprovePOs) {
       return res.status(403).json({
         success: false,
         message: "You do not have permission to approve purchase orders",
@@ -1347,7 +1316,7 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
-    if (purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
+    if (!/^superadmin$/i.test(employee.category?.role ?? "") && purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
       return res.status(403).json({
         success: false,
         message: "You cannot approve an LPO that you created",
@@ -1360,7 +1329,7 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
       date: new Date()
     };
 
-    // Workflow-routed LPOs advance one stage at a time; older ones (no steps) keep the single approval.
+    // The PO Approval workflow advances the LPO one stage at a time. LPOs raised before it existed have no steps: only Super Admin can decide those.
     let nextStatus = 'Approved';
     let nextSteps: any[] | undefined;
     if (purchaseOrder.approvalStatus?.length) {
@@ -1370,6 +1339,8 @@ export const approvePurchaseOrder = async (req: Request, res: Response) => {
         return res.status(403).json({ success: false, message: plainError(workflowError) });
       }
       if (nextSteps.some((approval: any) => approval.status === 'pending')) nextStatus = 'Pending for Approval';
+    } else if (!/^superadmin$/i.test(employee.category?.role ?? '')) {
+      return res.status(403).json({ success: false, message: "This LPO has no approval route; only Super Admin can approve it" });
     }
 
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
@@ -1446,7 +1417,7 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
     }
 
     const privileges = employee.category?.privileges;
-    if (!privileges?.purchaseOrder?.canApprovePOs) {
+    if (!/^superadmin$/i.test(employee.category?.role ?? "") && !privileges?.purchaseOrder?.canApprovePOs) {
       return res.status(403).json({
         success: false,
         message: "You do not have permission to reject purchase orders",
@@ -1475,7 +1446,7 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       });
     }
 
-    if (purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
+    if (!/^superadmin$/i.test(employee.category?.role ?? "") && purchaseOrder.createdBy?.toString() === employee._id?.toString()) {
       return res.status(403).json({
         success: false,
         message: "You cannot reject an LPO that you created",
@@ -1495,6 +1466,8 @@ export const rejectPurchaseOrder = async (req: Request, res: Response) => {
       } catch (workflowError) {
         return res.status(403).json({ success: false, message: plainError(workflowError) });
       }
+    } else if (!/^superadmin$/i.test(employee.category?.role ?? '')) {
+      return res.status(403).json({ success: false, message: "This LPO has no approval route; only Super Admin can reject it" });
     }
 
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
@@ -1956,10 +1929,14 @@ export const getItemsForPurchaseRequest = async (req: Request, res: Response) =>
  * The RFQ a PO's supplier price traces back to: the procurement RFQ of its PR when there is one,
  * otherwise the sales RFQ that seeded the quotation. Lets reports compare quoted vs final cost.
  */
-const resolvePoRfqId = async (purchaseId: any, quoteId: any) => {
+const resolvePoRfqId = async (purchaseId: any, quoteId: any, supplierId?: any) => {
   try {
     if (purchaseId && mongoose.Types.ObjectId.isValid(purchaseId)) {
-      const procurement = await Rfq.findOne({ purchaseRequestId: purchaseId, rfqType: { $ne: RfqType.Sales }, isDeleted: false }, { _id: 1 }).lean();
+      // A request can have one RFQ per supplier; the PO traces back to its own supplier's.
+      const live = { purchaseRequestId: purchaseId, rfqType: { $ne: RfqType.Sales }, isDeleted: false, status: { $ne: 'Cancelled' } };
+      const procurement = (supplierId && mongoose.Types.ObjectId.isValid(supplierId)
+        ? await Rfq.findOne({ ...live, 'suppliers.supplierId': supplierId }, { _id: 1 }).lean()
+        : null) || await Rfq.findOne(live, { _id: 1 }).lean();
       if (procurement) return procurement._id;
     }
     if (quoteId && mongoose.Types.ObjectId.isValid(quoteId)) {
@@ -1970,4 +1947,31 @@ const resolvePoRfqId = async (purchaseId: any, quoteId: any) => {
     console.error('Failed to resolve RFQ for PO:', error);
   }
   return undefined;
+};
+
+
+/** Super Admin gives a pending LPO a fresh approval route. Unticked stages are skipped for this LPO only. */
+export const resetPurchaseOrderWorkflow = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const me = await getEmployeeData(req.user);
+    if (!/^superadmin$/i.test((me?.category as any)?.role || "")) {
+      return res.status(403).json({ success: false, message: "Only a Super Admin can reset the PO approval workflow" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid Purchase Order ID" });
+    }
+    const purchaseOrder = await PurchaseOrder.findById(req.params.id);
+    if (!purchaseOrder) {
+      return res.status(404).json({ success: false, message: "Purchase order not found" });
+    }
+    if (purchaseOrder.poStatus !== "Pending for Approval") {
+      return res.status(400).json({ success: false, message: `Only a pending LPO can be reset (this one is ${purchaseOrder.poStatus})` });
+    }
+    const chosen: string[] | null = Array.isArray(req.body.stepRoleIds) ? req.body.stepRoleIds.map(String) : null;
+    const route = await rebuildPendingRoute(PO_WORKFLOW, String(purchaseOrder.createdBy), lpoApprovalContext(purchaseOrder), (purchaseOrder.toObject() as any).approvalStatus, chosen);
+    await PurchaseOrder.updateOne({ _id: purchaseOrder._id }, { $set: { approvalStatus: route, updatedAt: new Date() } });
+    return res.status(200).json({ success: true, message: "PO approval workflow reset" });
+  } catch (error) {
+    next(error);
+  }
 };
