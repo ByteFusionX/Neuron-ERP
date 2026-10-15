@@ -9,7 +9,8 @@ const HANDLER = 'announcement';
 /** Notifies everyone in the announcement's audience who may view announcements (the author is left out). */
 export const sendAnnouncementNotification = async (announcementId: string) => {
     const announcement: any = await announcementModel.findById(announcementId).lean();
-    if (!announcement) return;
+    // Deleted, or pulled back to draft after being scheduled
+    if (!announcement || announcement.status === 'draft') return;
 
     const audience: string[] = announcement.category?.length ? announcement.category : ['all'];
     const authorId = announcement.createdBy?.toString();

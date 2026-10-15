@@ -1,78 +1,70 @@
-<div class="  border border-white border-b-gray-300 p-3 px-6 flex justify-between">
-  <h3 class="text-md font-medium">Create Announcement</h3>
-  <button class="bg-gray-200 rounded-lg p-1 text-center flex items-center justify-center" (click)="onClose()">
-    <ng-icon name="heroXMark" class="text-md p-0 m-0"></ng-icon>
-  </button>
-</div>
+<app-sf-drawer #drawer [title]="title" [subtitle]="isEdit ? 'Changes are visible to readers straight away.' : 'Share news, policy updates or events with your team.'" width="720px"
+  [open]="open" [dirty]="form.dirty" (closed)="onDrawerClosed()">
 
-<form class="w-full max-w-lg" (submit)="onSubmit()" [formGroup]="formData">
-  <div class="flex flex-col p-6 mx-auto max-w-lg  text-gray-900 bg-white rounded-lg  shadow px-9">
+  <form id="announcement-form" [formGroup]="form" (ngSubmit)="save('published')" class="space-y-5" novalidate>
+    <app-sf-section title="Content">
+      <app-sf-field label="Title" required [control]="f.title" [hint]="(value.title?.length || 0) + '/' + titleMax">
+        <app-sf-input formControlName="title" [maxlength]="titleMax" placeholder="e.g. Office closed on National Day"></app-sf-input>
+      </app-sf-field>
+      <app-sf-field label="Message" required [control]="f.description" [hint]="(value.description?.length || 0) + '/' + messageMax">
+        <app-sf-textarea formControlName="description" [rows]="6" [maxlength]="messageMax" placeholder="What do people need to know? Line breaks are kept."></app-sf-textarea>
+      </app-sf-field>
+    </app-sf-section>
 
-    <div class="flex flex-wrap -mx-3 mb-2">
-      <div class="w-full md:w-full px-3 mb-3 md:mb-0">
-        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-first-name">
-          Title
-        </label>
-        <input appNoLeadingSpace formControlName="title"  [class.border-orange-500]="f.title.invalid&&submit"
-          class="appearance-none block w-full bg-gray-200 text-gray-700 border rounded py-3 px-4 mb-4 leading-tight focus:outline-none focus:bg-white"
-          id="grid-first-name" type="text" placeholder="Title">
-      </div>
-      <div class="w-full md:w-full px-3">
-        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="description">
-          Description
-        </label>
-        <textarea appNoLeadingSpace formControlName="description"  [class.border-orange-500]="f.description.invalid&&submit"
-          class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-2 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-          id="description" type="text" placeholder="Description"></textarea>
-      </div>
-      
-    </div>
-    <div class="flex flex-wrap -mx-3 mb-2">
-      <div class="w-full px-3">
-        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-password">
-          Categories
-        </label>
-        <ng-select id="category" 
-                   class="filter" 
-                   placeholder="Select category"
-                   appendTo="body" 
-                   [formControlName]="'category'"
-                   [multiple]="true"
-                   bindLabel="categoryName"
-                   (change)="onCategoryChange($event)">
-          <ng-option [value]="'all'">For all users</ng-option>
-          <ng-option *ngFor="let category of categories"
-                     [value]="category._id">{{category.categoryName}}</ng-option>
-        </ng-select>
-      </div>
-      <div class="text-gray-700 text-sm mt-[1px] ml-3" >
-        Default category is for all users,make sure that you have selected the categories properly.
-      </div>
-    </div>
-    <div class="flex flex-wrap -mx-3 mb-2">
-      <div class="w-full px-3">
-        <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="grid-password">
-          Date
-        </label>
-        <input datePastDirective formControlName="date"  [class.border-orange-500]="f.date.invalid&&submit"
-          class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-2 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"
-          id="grid-password" type="date">
-        <div class="text-red-700 mt-[-5px]" *ngIf="formData.get('date')?.hasError('pastDate')">
-          Date must be in the future.
-        </div>
-      </div>
-    </div>
-  </div>
+    <app-sf-section title="Classification">
+      <app-sf-field label="Type">
+        <app-sf-radio-group formControlName="type" variant="segmented" [options]="typeOptions"></app-sf-radio-group>
+      </app-sf-field>
+      <app-sf-field label="Priority" [hint]="value.priority === 'urgent' ? 'Urgent announcements show a red banner. Use them sparingly.' : ''">
+        <app-sf-radio-group formControlName="priority" variant="segmented" [options]="priorityOptions"></app-sf-radio-group>
+      </app-sf-field>
+    </app-sf-section>
 
+    <app-sf-section title="Audience">
+      <app-sf-field label="Who should see it">
+        <app-sf-radio-group formControlName="audienceMode" variant="segmented" [options]="audienceModeOptions"></app-sf-radio-group>
+      </app-sf-field>
+      <app-sf-field *ngIf="value.audienceMode === 'specific'" label="Categories" required [control]="f.category"
+        [messages]="{ required: 'Pick at least one category' }">
+        <app-sf-combobox formControlName="category" [multiple]="true" [options]="audienceOptions" placeholder="Select categories"></app-sf-combobox>
+      </app-sf-field>
+    </app-sf-section>
 
-  <div class="  border border-white border-t-gray-300 p-3 px-6 flex justify-end gap-2">
-    <button (click)="onClose()" type="button"
-      class="bg-gray-300 hover:bg-gray-400 text-black font-medium py-2 px-4 rounded text-sm">
-      Cancel
-    </button>
-    <button type="submit" class="bg-violet-700 hover:bg-violet-600 text-white font-medium py-2 px-4 rounded text-sm  flex justify-center items-center gap-2 disabled:bg-violet-400 disabled:cursor-not-allowed">
-      <ng-icon *ngIf="isSaving" class="spin" name="heroArrowPath"></ng-icon>
-      Create
-    </button>
-  </div>
-</form>
+    <app-sf-section title="Schedule & link">
+      <p *ngIf="isLive; else publishChoice" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+        <ng-icon name="heroCheckCircle" class="text-sm text-emerald-600"></ng-icon>
+        Published {{ publishedOn | date: 'MMM d, y · h:mm a' }}. Saving won't notify people again.
+      </p>
+      <ng-template #publishChoice>
+        <app-sf-field label="Publish">
+          <app-sf-radio-group formControlName="publishMode" variant="segmented" [options]="publishOptions"></app-sf-radio-group>
+        </app-sf-field>
+      </ng-template>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-sf-field *ngIf="!isLive && value.publishMode === 'schedule'" label="Goes live on" required [control]="f.publishAt"
+          [messages]="{ past: 'Pick a time in the future', required: 'Pick when it should go live' }">
+          <app-sf-date formControlName="publishAt" type="datetime-local" [min]="minDateTime"></app-sf-date>
+        </app-sf-field>
+        <app-sf-field label="Expiry date" optional hint="Hidden from readers after this date.">
+          <app-sf-date formControlName="expiresAt" type="date" displayFormat="dd/MM/yyyy"></app-sf-date>
+          <p *ngIf="form.hasError('expiryBeforePublish') && value.expiresAt" class="mt-1 text-xs text-red-600">The expiry date must be after it goes live</p>
+        </app-sf-field>
+      </div>
+      <app-sf-field label="Link" optional [control]="f.link" [messages]="{ pattern: 'Enter a full link starting with http:// or https://' }">
+        <app-sf-input formControlName="link" placeholder="https://..."></app-sf-input>
+      </app-sf-field>
+    </app-sf-section>
+
+    <app-sf-section title="Options">
+      <app-sf-switch formControlName="pinned" label="Pin to the top" description="Stays above newer announcements until unpinned."></app-sf-switch>
+      <app-sf-switch formControlName="requireAck" label="Ask people to acknowledge it" description="Readers get an &quot;I've read this&quot; button and you can see how many confirmed."></app-sf-switch>
+    </app-sf-section>
+  </form>
+
+  <ng-container sfDrawerFooter>
+    <app-action-button variant="secondary" (click)="drawer.requestClose()">Cancel</app-action-button>
+    <app-action-button variant="primary" type="submit" form="announcement-form" [disabled]="!!saving">
+      {{ saving === 'published' ? 'Saving…' : submitLabel }}
+    </app-action-button>
+  </ng-container>
+</app-sf-drawer>

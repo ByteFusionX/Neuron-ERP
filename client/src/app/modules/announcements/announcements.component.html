@@ -1,79 +1,76 @@
-<div class="w-full min-w-96">
-  <!-- Header Section -->
-  <div class="flex items-center justify-between p-4 border-b">
-    <div class="flex items-center">
-      <ng-icon name="heroMegaphone" class="text-lg"></ng-icon>
-      <span class="ml-2 text-sm font-semibold">Announcements</span>
-    </div>
-    <div class="flex items-center gap-3">
-      <button *ngIf="createAnnouncement" type="button"
-        class="bg-violet-700 hover:bg-violet-600 text-white font-medium px-2.5 py-1 rounded-full text-xs"
-        (click)="openDialog()">
-        + New
-      </button>
-      <ng-icon *ngIf="closeSidenav.observed" name="heroXMark" class="cursor-pointer text-lg hover:text-red-500" (click)="onClose()"></ng-icon>
-    </div>
+<div class="h-full flex flex-col p-6 bg-gray-50 dark:bg-erp-surface-dark-alt">
+  <div *ngIf="loadError" role="alert"
+    class="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+    <span>Could not load announcements. Check your connection and try again.</span>
+    <button type="button" class="font-medium underline hover:no-underline" (click)="retry()">Try again</button>
   </div>
+  <app-data-grid #grid
+    class="flex-1 min-h-0"
+    [fillHeight]="true"
+    title="Announcements"
+    subtitle="Company news, policies and updates"
+    [breadcrumbs]="breadcrumbs"
+    rowKey="_id"
+    [serverSide]="true"
+    [totalCount]="total"
+    [data]="data"
+    [columns]="columns"
+    [loading]="isLoading"
+    [pageSize]="pageSize"
+    [selectable]="false"
+    searchPlaceholder="Search announcements"
+    emptyMessage="No announcements found"
+    [createLabel]="canCreate ? 'New announcement' : ''"
+    [rowActions]="rowActions"
+    [rowAccent]="rowAccent"
+    [views]="views"
+    storageKey="announcement-list"
+    [detailTabs]="detailTabs"
+    [detailTitle]="title"
+    [detailSubtitle]="subtitle"
+    (queryChange)="onQueryChange($event)"
+    (rowOpen)="onRowOpen($event)"
+    (rowAction)="onRowAction($event)"
+    (create)="openCreate()">
 
-  <app-skelton-loading *ngIf="isLoading"></app-skelton-loading>
+    <button dgToolbarExtra type="button" (click)="markAllRead()" [disabled]="!announcements.unread()"
+      class="rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-800">
+      Mark all read
+    </button>
 
-  <!-- Announcement item template, reused by recent + list -->
-  <ng-template #announcementRow let-item="item" let-isRecent="isRecent">
-    <div class="relative flex flex-col bg-white hover:bg-gray-50 transition duration-200 border-b px-4 py-2.5"
-      [class.bg-orange-50]="!item.viewedBy.includes(userId)"
-      [class.opacity-50]="isMuted(item)"
-      [class.grayscale]="isMuted(item)"
-      #announcementItem [attr.data-id]="item._id">
-      <div *ngIf="item.celeb" class="confetti-container">
-        <app-confetti-component></app-confetti-component>
-      </div>
+    <ng-template #detailAsideTemplate let-row>
+      <app-status-pill [status]="row.priority || 'normal'" [toneMap]="priorityTone"
+        [label]="priorityLabel(row.priority || 'normal')"></app-status-pill>
+    </ng-template>
 
-      <div class="flex justify-between items-center gap-2">
-        <div class="flex items-center gap-2 flex-wrap">
-          <span *ngIf="isRecent" class="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600 whitespace-nowrap flex items-center gap-1">
-            <ng-icon name="heroBellAlert" class="text-xs"></ng-icon>
-            Recent
-          </span>
-          <h3 class="text-sm font-semibold text-violet-700">{{ item.title }}</h3>
+    <ng-template #detailMetaTemplate let-row>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Posted by</p><p class="enquiry-meta-value">{{ row.authorName || '—' }}</p></div>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Type</p><p class="enquiry-meta-value">{{ typeLabel(row) }}</p></div>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Published</p><p class="enquiry-meta-value">{{ (row.publishAt || row.date) | date: 'dd MMM yyyy' }}</p></div>
+      <div class="enquiry-meta"><p class="enquiry-meta-label">Audience</p><p class="enquiry-meta-value">{{ audience(row) }}</p></div>
+    </ng-template>
+
+    <ng-template #detailFooterLeftTemplate let-row>
+      <a *ngIf="row.link" [href]="row.link" target="_blank" rel="noopener noreferrer"
+        class="text-sm font-medium text-violet-700 hover:underline dark:text-violet-300">Open link</a>
+    </ng-template>
+
+    <ng-template #detailFooterTemplate let-row>
+      <app-action-button *ngIf="row.requireAck && !row.isAcknowledged && row.state === 'active'" variant="primary"
+        [disabled]="isAcknowledging" (click)="acknowledge(row)">I've read this</app-action-button>
+      <span *ngIf="row.requireAck && row.isAcknowledged" class="text-xs font-medium text-emerald-700 dark:text-emerald-400">Acknowledged</span>
+    </ng-template>
+
+    <ng-template #detailTemplate let-row let-tab="tab">
+      <ng-container [ngSwitch]="tab">
+        <div *ngSwitchCase="'message'" class="relative">
+          <div *ngIf="isCelebrationRow(row)" class="confetti-container"><app-confetti-component></app-confetti-component></div>
+          <p class="whitespace-pre-line break-words text-sm leading-relaxed text-gray-800 dark:text-gray-200">{{ row.description }}</p>
         </div>
-        <div class="flex items-center gap-2" *ngIf="deleteOrEditAnnouncement">
-          <ng-icon name="heroPencilSquare" class="text-sm cursor-pointer text-gray-500 hover:text-gray-800" (click)="editAnnouncement(item)"></ng-icon>
-          <ng-icon name="heroTrash" class="text-sm cursor-pointer text-red-400 hover:text-red-600" (click)="deleteAnnouncement(item)"></ng-icon>
-        </div>
-      </div>
+        <app-detail-overview *ngSwitchCase="'overview'" [grid]="grid!" [row]="row" [sections]="overviewSections(row)"></app-detail-overview>
+      </ng-container>
+    </ng-template>
+  </app-data-grid>
 
-      <p class="text-xs text-gray-600 mt-1 break-words whitespace-normal leading-relaxed">{{ item.description }}</p>
-
-      <div class="flex items-center justify-between mt-2">
-        <span class="text-xs text-gray-400 flex items-center gap-1">
-          <ng-icon name="heroCalendarDays" class="text-xs"></ng-icon>
-          Posted {{ item.createdDate | date: 'MMM d, y' }}
-        </span>
-        <span class="text-xs text-gray-500 flex items-center gap-1">
-          <ng-icon name="heroCalendarDays" class="text-xs"></ng-icon>
-          {{ item.date | date: 'MMM d, y' }}
-        </span>
-      </div>
-    </div>
-  </ng-template>
-
-  <!-- Announcements Content -->
-  <div>
-    <h2 class="text-sm font-semibold text-gray-700 px-4 py-2 border-b" *ngIf="!isEmpty">All Announcements</h2>
-
-    <div *ngIf="recentData">
-      <ng-container *ngTemplateOutlet="announcementRow; context: { item: recentData, isRecent: true }"></ng-container>
-    </div>
-
-    <div *ngFor="let item of announcementData; trackBy: trackByIdFn">
-      <ng-container *ngTemplateOutlet="announcementRow; context: { item: item, isRecent: false }"></ng-container>
-    </div>
-
-    <div *ngIf="isEmpty" class="w-full flex justify-center items-center">
-      <div class="p-3">
-        <img src="assets/images/empty.png" alt="">
-        <p class="m-2 text-center text-sm text-gray-500">No announcements.</p>
-      </div>
-    </div>
-  </div>
+  <app-add-announcement class="contents" [open]="formOpen" [announcement]="editTarget" (saved)="onFormSaved()" (closed)="onFormClosed()"></app-add-announcement>
 </div>
