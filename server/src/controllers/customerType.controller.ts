@@ -4,6 +4,10 @@ import { newTrash } from '../controllers/trash.controller'
 import  CustomerType  from '../models/customerType.model'
 import Customer from '../models/customer.model'
 
+const normalizeLabel = (value: string): string => value.trim().replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ')
+    .toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .replace(/\b(It|Elv|Av)\b/g, (word) => word.toUpperCase());
+
 export const getCustomerTypes = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const customerTypes = await CustomerType.aggregate([
@@ -16,7 +20,7 @@ export const getCustomerTypes = async (req: Request, res: Response, next: NextFu
         ])
 
         if (customerTypes.length > 0) {
-            return res.status(200).json(customerTypes);
+            return res.status(200).json(customerTypes.map((item: any) => ({ ...item, customerTypeName: normalizeLabel(item.customerTypeName) })));
         }
         return res.status(204).json()
     } catch (error) {
@@ -42,10 +46,10 @@ export const getCustomerTypeUsage = async (req: Request, res: Response, next: Ne
 
 export const createCustomerType = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const customerTypeData = req.body
+        const customerTypeData = { ...req.body, customerTypeName: normalizeLabel(req.body.customerTypeName) }
         const customerType = new CustomerType(customerTypeData)
 
-        const duplicateCheck = await CustomerType.findOne({ customerTypeName:customerTypeData.customerTypeName, isDeleted : false })
+        const duplicateCheck = await CustomerType.findOne({ customerTypeName: customerTypeData.customerTypeName, isDeleted: false }).collation({ locale: 'en', strength: 2 })
 
         if(duplicateCheck){
             return res.status(409).json( {message :"Duplicate customer type found"})
@@ -66,9 +70,9 @@ next(error)
 
 export const updateCustomerType = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const data = req.body
+        const data = { ...req.body, customerTypeName: normalizeLabel(req.body.customerTypeName) }
 
-        const duplicateCheck = await CustomerType.findOne({ customerTypeName:data.customerTypeName, isDeleted : false, _id: { $ne: data._id } })
+        const duplicateCheck = await CustomerType.findOne({ customerTypeName: data.customerTypeName, isDeleted: false, _id: { $ne: data._id } }).collation({ locale: 'en', strength: 2 })
 
         if(duplicateCheck){
             return res.status(409).json( {message :"Duplicate customer type found"})

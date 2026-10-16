@@ -74,7 +74,12 @@ export const getDepartments = async (req: Request, res: Response, next: NextFunc
         ])
 
         if (departments.length > 0) {
-            return res.status(200).json(departments);
+            return res.status(200).json(departments.map((item: any) => ({
+                ...item,
+                departmentName: String(item.departmentName || '').trim().replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ')
+                    .toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+                    .replace(/\b(It|Ict|Elv|Av)\b/g, (word) => word.toUpperCase()),
+            })));
         }
         return res.status(204).json()
     } catch (error) {
@@ -161,7 +166,12 @@ export const getCustomerDepartments = async (req: Request, res: Response, next: 
         ])
 
         if (departments.length > 0) {
-            return res.status(200).json(departments);
+            return res.status(200).json(departments.map((item: any) => ({
+                ...item,
+                departmentName: String(item.departmentName || '').trim().replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ')
+                    .toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+                    .replace(/\b(It|Ict|Elv|Av)\b/g, (word) => word.toUpperCase()),
+            })));
         }
         return res.status(204).json()
     } catch (error) {
@@ -172,7 +182,10 @@ export const getCustomerDepartments = async (req: Request, res: Response, next: 
 
 export const createCustomerDepartment = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const departmentData = req.body;
+        const departmentName = String(req.body.departmentName || '').trim().replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ')
+            .toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+            .replace(/\b(It|Ict|Elv|Av)\b/g, (word) => word.toUpperCase());
+        const departmentData = { ...req.body, departmentName };
 
         const existingDeleted = await Department.findOne({
             departmentName: departmentData.departmentName,
@@ -213,7 +226,10 @@ export const createCustomerDepartment = async (req: Request, res: Response, next
 
 export const updateCustomerDepartment = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const data = req.body
+        const departmentName = String(req.body.departmentName || '').trim().replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ')
+            .toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+            .replace(/\b(It|Elv|Av)\b/g, (word) => word.toUpperCase());
+        const data = { ...req.body, departmentName }
         let department = await Department.findOneAndUpdate(
             {
                 _id: data._id,
