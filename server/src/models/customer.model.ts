@@ -31,11 +31,6 @@ interface AddressDetail {
   postalCode?: string;
 }
 
-interface ShippingSite {
-  siteName: string;
-  address?: AddressDetail;
-}
-
 interface StatusHistoryEntry {
   status: CustomerStatus;
   reason?: string;
@@ -59,7 +54,6 @@ export interface Customer extends Document {
   companyAddressStructured?: AddressDetail;
   shippingAddress?: string;
   shippingAddressStructured?: AddressDetail;
-  shippingSites?: ShippingSite[];
   sameAsBilling: boolean;
   customerEmailId: string;
   contactNo: number;
@@ -109,11 +103,6 @@ const addressDetailSchema = new Schema({
   postalCode: { type: String },
 }, { _id: false });
 
-const shippingSiteSchema = new Schema({
-  siteName: { type: String, required: true },
-  address: { type: addressDetailSchema },
-});
-
 const statusHistorySchema = new Schema({
   status: { type: String, enum: CUSTOMER_STATUSES, required: true },
   reason: { type: String },
@@ -137,7 +126,6 @@ const customerSchema = new Schema<Customer>({
   companyAddressStructured: { type: addressDetailSchema },
   shippingAddress: { type: String },
   shippingAddressStructured: { type: addressDetailSchema },
-  shippingSites: [{ type: shippingSiteSchema }],
   sameAsBilling: { type: Boolean, default: true },
   customerEmailId: { type: String, required: true },
   contactNo: { type: Number, required: true },

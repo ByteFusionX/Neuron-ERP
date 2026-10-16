@@ -32,12 +32,6 @@ export interface AddressDetail {
     postalCode?: string;
 }
 
-export interface ShippingSite {
-    _id?: string;
-    siteName: string;
-    address?: AddressDetail;
-}
-
 export interface CustomerStatusHistoryEntry {
     status: CustomerStatus;
     reason?: string;
@@ -61,7 +55,6 @@ export interface getCustomer {
     companyAddressStructured?: AddressDetail;
     shippingAddress?: string;
     shippingAddressStructured?: AddressDetail;
-    shippingSites?: ShippingSite[];
     sameAsBilling: boolean;
     trn?: string;
     customerEmailId: string;

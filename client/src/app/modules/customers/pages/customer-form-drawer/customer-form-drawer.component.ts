@@ -44,7 +44,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   /** The customer being edited, as the by-client-ref API returns it (populated department and type). */
   @Input() customer: getCustomer | null = null;
   /** Fires after the server accepted the create or edit. */
-  @Output() saved = new EventEmitter<void>();
+  @Output() saved = new EventEmitter<getCustomer>();
   @Output() closed = new EventEmitter<void>();
 
   step: 1 | 2 | 3 = 1;
@@ -97,6 +97,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   private subscriptions = new Subscription();
   private optionsLoaded = false;
   private companyNameWatched = false;
+  private attemptedSteps = new Set<1 | 2 | 3>();
 
   customerForm = this.fb.group({
     department: [null as string | null],
@@ -116,16 +117,11 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     creditStatus: [null as string | null],
     currency: [null as string | null],
     source: [null as string | null],
-    shippingSites: this.fb.array([] as FormGroup[]),
     contactDetails: this.fb.array([this.newContact(true)]),
   });
 
   get contactDetails(): FormArray<FormGroup> {
     return this.customerForm.controls.contactDetails as FormArray<FormGroup>;
-  }
-
-  get shippingSites(): FormArray<FormGroup> {
-    return this.customerForm.controls.shippingSites as FormArray<FormGroup>;
   }
 
   get isEdit(): boolean { return this.mode === 'edit'; }
@@ -209,17 +205,17 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     );
     this.subscriptions.add(
       this.profileService.getDepartments(true).subscribe((res: getDepartment[]) => {
-        this.departmentOptions = res.map((d) => ({ label: d.departmentName, value: d._id }));
+        this.departmentOptions = res.map((d) => ({ label: this.normalizeOptionLabel(d.departmentName), value: d._id }));
       })
     );
     this.subscriptions.add(
       this.profileService.getCustomerDepartments(true).subscribe((res: getDepartment[]) => {
-        this.customerDepartmentOptions = res.map((d) => ({ label: d.departmentName, value: d._id }));
+        this.customerDepartmentOptions = res.map((d) => ({ label: this.normalizeOptionLabel(d.departmentName), value: d._id }));
       })
     );
     this.subscriptions.add(
       this.profileService.getCustomerTypes(true).subscribe((res: getCustomerType[]) => {
-        this.customerTypeOptions = res.map((t) => ({ label: t.customerTypeName, value: t._id }));
+        this.customerTypeOptions = res.map((t) => ({ label: this.normalizeOptionLabel(t.customerTypeName), value: t._id }));
       })
     );
   }
@@ -275,7 +271,7 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
   // --- form state ------------------------------------------------------------
 
   private readonly stepControls: Record<1 | 2 | 3, string[]> = {
-    1: ['departments', 'companyName', 'companyAddress', 'shippingAddress', 'customerType', 'customerEmailId', 'contactNo', 'trn', 'shippingSites'],
+    1: ['departments', 'companyName', 'companyAddress', 'shippingAddress', 'customerType', 'customerEmailId', 'contactNo', 'trn'],
     2: ['contactDetails'],
     3: ['paymentTerms', 'creditLimit', 'creditStatus', 'currency', 'source'],
   };
@@ -285,9 +281,9 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     return this.stepControls[step].every((name) => this.customerForm.get(name)?.valid);
   }
 
-  /** True once the user has interacted with (or tried to submit) a control of this step. */
-  isStepTouched(step: 1 | 2 | 3): boolean {
-    return this.stepControls[step].some((name) => this.customerForm.get(name)?.touched);
+  /** Validation summaries appear only after the user tries to leave or submit a step. */
+  isStepSubmitted(step: 1 | 2 | 3): boolean {
+    return this.attemptedSteps.has(step);
   }
 
   private markStepTouched(step: 1 | 2 | 3): void {
@@ -299,8 +295,10 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     if (step > this.step) {
       for (let s = this.step; s < step; s++) {
         if (!this.isStepValid(s as 1 | 2 | 3)) {
+          this.attemptedSteps.add(s as 1 | 2 | 3);
           this.markStepTouched(s as 1 | 2 | 3);
           this.step = s as 1 | 2 | 3;
+          this.focusFirstInvalidControl();
           return;
         }
       }
@@ -322,10 +320,10 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.contactDetails.clear();
     this.contactDetails.push(this.newContact());
     this.contactDetails.at(0).patchValue({ isPrimary: true });
-    this.shippingSites.clear();
     this.duplicateField = null;
     this.attachments = [];
     this.pendingFilesCtrl.setValue([], { emitEvent: false });
+    this.attemptedSteps.clear();
     this.customerForm.reset({
       department: null, departments: [], companyName: '', companyAddress: '', sameAsBilling: true, shippingAddress: '', customerType: null, customerEmailId: '', contactNo: '', trn: '',
       paymentTerms: null, creditLimit: null, creditStatus: null, currency: null, source: null,
@@ -361,12 +359,6 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
       currency: c.currency ?? null,
       source: c.source ?? null,
     });
-    this.shippingSites.clear();
-    (c.shippingSites ?? []).forEach((s) => {
-      const g = this.newSite();
-      g.patchValue({ siteName: s.siteName, address: s.address ?? {} });
-      this.shippingSites.push(g);
-    });
     this.customerForm.controls.companyAddressStructured.patchValue(c.companyAddressStructured ?? {});
     this.customerForm.controls.shippingAddressStructured.patchValue(c.shippingAddressStructured ?? {});
     const shipping = this.customerForm.controls.shippingAddress;
@@ -378,42 +370,9 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     this.customerForm.markAsUntouched();
   }
 
-  isDepartmentSelected(departmentId: string): boolean {
-    return (this.customerForm.controls.departments.value ?? []).includes(departmentId);
-  }
-
-  toggleDepartment(departmentId: string, checked: boolean): void {
-    const current = this.customerForm.controls.departments.value ?? [];
-    const next = checked
-      ? Array.from(new Set([...current, departmentId]))
-      : current.filter((id) => id !== departmentId);
-    this.customerForm.controls.departments.setValue(next);
-    this.customerForm.controls.departments.markAsTouched();
-    this.customerForm.controls.departments.markAsDirty();
-    this.syncPrimaryDepartment();
-  }
-
-  primaryDepartmentLabel(): string {
-    const primaryId = this.customerForm.controls.department.value;
-    return this.departmentOptions.find((option) => option.value === primaryId)?.label ?? 'Not selected';
-  }
-
   private syncPrimaryDepartment(): void {
     const departments = this.customerForm.controls.departments.value ?? [];
     this.customerForm.controls.department.setValue(departments[0] ?? null);
-  }
-
-  private newSite(): FormGroup {
-    return this.fb.group({ siteName: ['', Validators.required], address: this.newAddress() }) as unknown as FormGroup;
-  }
-
-  addSite(): void {
-    this.shippingSites.push(this.newSite());
-  }
-
-  removeSite(index: number): void {
-    this.shippingSites.removeAt(index);
-    this.customerForm.markAsDirty();
   }
 
   addContact(): void {
@@ -440,13 +399,13 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
 
   createCustomerDepartment(): void {
     this.dialog.open(CreateDepartmentDialog, { data: { forCustomer: true } }).afterClosed().subscribe((data) => {
-      if (data) this.customerDepartmentOptions = [...this.customerDepartmentOptions, { label: data.departmentName, value: data._id }];
+      if (data) this.customerDepartmentOptions = [...this.customerDepartmentOptions, { label: this.normalizeOptionLabel(data.departmentName), value: data._id }];
     });
   }
 
   createCustomerType(): void {
     this.dialog.open(CreateCustomerTypeDialog, { data: {} }).afterClosed().subscribe((data) => {
-      if (data) this.customerTypeOptions = [...this.customerTypeOptions, { label: data.customerTypeName, value: data._id }];
+      if (data) this.customerTypeOptions = [...this.customerTypeOptions, { label: this.normalizeOptionLabel(data.customerTypeName), value: data._id }];
     });
   }
 
@@ -528,7 +487,9 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
     if (this.customerForm.invalid) {
       this.customerForm.markAllAsTouched();
       this.step = !this.isStepValid(1) ? 1 : !this.isStepValid(2) ? 2 : 3;
-      this.toaster.warning('Check the fields properly!', 'Warning !');
+      this.attemptedSteps.add(this.step);
+      this.toaster.warning(this.firstInvalidMessage(), 'Complete required information');
+      this.focusFirstInvalidControl();
       return;
     }
 
@@ -594,12 +555,37 @@ export class CustomerFormDrawerComponent implements OnChanges, OnDestroy {
         const edit = this.isEdit;
         const customerId = edit ? this.customer?._id : res._id;
         if (customerId) this.uploadAttachmentsFor(customerId, edit ? this.attachments : []);
+        this.saved.emit(res as getCustomer);
         this.reset();
         this.closed.emit();
-        this.saved.emit();
         this.toaster.success(edit ? 'Customer updated.' : 'Customer added!', edit ? 'Updated' : 'Success');
       },
       error: () => (this.saving = false),
     });
+  }
+
+  private firstInvalidMessage(): string {
+    const labels: Record<string, string> = {
+      departments: 'Departments', companyName: 'Company Name', companyAddress: 'Billing Address',
+      customerType: 'Customer Type', customerEmailId: 'Customer Email', contactNo: 'Contact Number',
+      contactDetails: 'Contact Details',
+    };
+    const name = this.stepControls[this.step].find((controlName) => this.customerForm.get(controlName)?.invalid);
+    return name ? `Complete the ${labels[name] ?? name} field.` : 'Complete the highlighted required fields.';
+  }
+
+  private focusFirstInvalidControl(): void {
+    setTimeout(() => {
+      const form = document.getElementById('customer-form');
+      const invalid = form?.querySelector<HTMLElement>('.ng-invalid:not(form), [aria-invalid="true"]');
+      invalid?.focus();
+      invalid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  private normalizeOptionLabel(value: string): string {
+    return String(value || '').trim().replace(/\s*&\s*/g, ' & ').replace(/\s+/g, ' ')
+      .toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+      .replace(/\b(It|Ict|Elv|Av)\b/g, (word) => word.toUpperCase());
   }
 }

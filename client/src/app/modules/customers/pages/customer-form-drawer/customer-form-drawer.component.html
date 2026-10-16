@@ -18,27 +18,12 @@
                 <p class="font-medium">{{ hasBlock ? 'This customer already exists' : 'Similar customers found' }}</p>
                 <p *ngFor="let m of duplicateMatches">{{ m.reason }}</p>
             </div>
-            <app-sf-field label="Billing Address" [control]="customerForm.controls.companyAddress">
-                <app-sf-input formControlName="companyAddress" placeholder="Billing address"></app-sf-input>
+            <app-sf-field label="Billing Address Summary" hint="Generated from the detailed address when provided" [control]="customerForm.controls.companyAddress">
+                <app-sf-input formControlName="companyAddress" placeholder="Enter a summary or complete the address fields below"></app-sf-input>
             </app-sf-field>
             <app-sf-field full label="Departments" [control]="customerForm.controls.departments">
-                <div class="grid gap-2 sm:grid-cols-2">
-                    <label *ngFor="let department of departmentOptions"
-                        class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:bg-blue-50/60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-500/70 dark:hover:bg-blue-950/30"
-                        [class.border-blue-500]="isDepartmentSelected(department.value)"
-                        [class.bg-blue-50]="isDepartmentSelected(department.value)"
-                        [class.dark:border-blue-400]="isDepartmentSelected(department.value)"
-                        [class.dark:bg-blue-950]="isDepartmentSelected(department.value)">
-                        <input type="checkbox"
-                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            [checked]="isDepartmentSelected(department.value)"
-                            (change)="toggleDepartment(department.value, $any($event.target).checked)" />
-                        <span>{{ department.label }}</span>
-                    </label>
-                </div>
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Select every company department this customer belongs to. Primary: {{ primaryDepartmentLabel() }}.
-                </p>
+                <app-sf-combobox formControlName="departments" [options]="departmentOptions" multiple
+                    placeholder="Select department(s)"></app-sf-combobox>
             </app-sf-field>
             <app-customer-address-fields class="contents" [group]="customerForm.controls.companyAddressStructured"></app-customer-address-fields>
             <app-sf-field full label="Shipping Address" [control]="customerForm.controls.shippingAddress">
@@ -47,22 +32,6 @@
             </app-sf-field>
             <app-customer-address-fields *ngIf="!customerForm.controls.sameAsBilling.value" class="contents"
                 [group]="customerForm.controls.shippingAddressStructured"></app-customer-address-fields>
-            <div full class="col-span-full">
-                <div class="mb-2 flex items-center justify-between">
-                    <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Additional ship-to sites</span>
-                    <app-action-button variant="tool" (click)="addSite()">+ Add site</app-action-button>
-                </div>
-                <div *ngFor="let site of shippingSites.controls; let i = index" [formGroup]="site"
-                    class="mb-3 grid grid-cols-1 gap-4 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                    <div class="flex items-end gap-2">
-                        <app-sf-field class="flex-1" label="Site Name" [control]="$any(site.get('siteName'))">
-                            <app-sf-input formControlName="siteName" placeholder="e.g. Warehouse, Project site"></app-sf-input>
-                        </app-sf-field>
-                        <app-action-button variant="secondary" (click)="removeSite(i)">Remove</app-action-button>
-                    </div>
-                    <app-customer-address-fields [group]="$any(site.get('address'))"></app-customer-address-fields>
-                </div>
-            </div>
             <app-sf-field label="Customer Type" [control]="customerForm.controls.customerType">
                 <app-sf-combobox formControlName="customerType" [options]="customerTypeOptions" placeholder="Select customer type"></app-sf-combobox>
             </app-sf-field>
@@ -136,7 +105,7 @@
             <app-action-button *ngIf="step === 3" variant="tool" (click)="createMasterListItem('creditStatus', 'creditStatusOptions')">+ Credit Status</app-action-button>
             <app-action-button *ngIf="step === 3" variant="tool" (click)="createMasterListItem('currency', 'currencyOptions')">+ Currency</app-action-button>
             <app-action-button *ngIf="step === 3" variant="tool" (click)="createMasterListItem('source', 'sourceOptions')">+ Source</app-action-button>
-            <span *ngIf="!isStepValid(step) && isStepTouched(step)" class="text-xs text-red-600 dark:text-red-400">Fix the highlighted fields</span>
+            <span *ngIf="!isStepValid(step) && isStepSubmitted(step)" class="text-xs text-red-600 dark:text-red-400">Complete the highlighted required fields</span>
         </div>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="drawer.requestClose()">Cancel</app-action-button>

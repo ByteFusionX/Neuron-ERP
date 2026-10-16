@@ -23,10 +23,21 @@ const normalizeDomain = (email?: string): string | undefined => {
     return normalized?.includes('@') ? normalized.split('@')[1] : undefined;
 };
 
+const cleanText = (value?: string): string | undefined =>
+    typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value;
+
 const normalizeContactDetails = (contactDetails?: any[]): any[] => {
     if (!Array.isArray(contactDetails) || contactDetails.length === 0) return contactDetails ?? [];
     const primaryIndex = contactDetails.findIndex((c) => c.isPrimary);
-    return contactDetails.map((c, i) => ({ ...c, isPrimary: i === (primaryIndex === -1 ? 0 : primaryIndex) }));
+    return contactDetails.map((c, i) => ({
+        ...c,
+        firstName: cleanText(c.firstName),
+        lastName: cleanText(c.lastName),
+        email: normalizeEmail(c.email),
+        contactNo: cleanText(String(c.contactNo ?? '')),
+        designation: cleanText(c.designation),
+        isPrimary: i === (primaryIndex === -1 ? 0 : primaryIndex),
+    }));
 };
 
 const toObjectIdString = (value: any): string | undefined => {
@@ -389,7 +400,6 @@ export const getFilteredCustomers = async (req: Request, res: Response, next: Ne
                     createdDate: { $first: "$createdDate" },
                     status: { $first: "$status" },
                     attachments: { $first: "$attachments" },
-                    shippingSites: { $first: "$shippingSites" },
                     paymentTerms: { $first: "$paymentTerms" },
                     creditLimit: { $first: "$creditLimit" },
                     creditStatus: { $first: "$creditStatus" },
@@ -523,7 +533,6 @@ export const getCustomerByCustomerId = async (req: Request, res: Response, next:
                         updatedBy: { $first: "$updatedBy" },
                         updatedDate: { $first: "$updatedDate" },
                         attachments: { $first: "$attachments" },
-                        shippingSites: { $first: "$shippingSites" },
                         paymentTerms: { $first: "$paymentTerms" },
                         creditLimit: { $first: "$creditLimit" },
                         creditStatus: { $first: "$creditStatus" },
@@ -745,7 +754,11 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
         const customerData = req.body
         const userToken = req.user;
 
-        customerData.companyName = customerData.companyName.trim();
+        delete customerData.shippingSites;
+
+        customerData.companyName = cleanText(customerData.companyName);
+        customerData.customerEmailId = normalizeEmail(customerData.customerEmailId);
+        customerData.contactNo = cleanText(String(customerData.contactNo ?? ''));
         const normalizedEmail = normalizeEmail(customerData.customerEmailId);
         const normalizedPhone = normalizePhone(customerData.contactNo);
         const normalizedTrn = normalizeTrn(customerData.trn);
@@ -789,7 +802,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
         if (saveCustomer) {
             return res.status(200).json(saveCustomer)
         }
-        
+
         return res.status(502).json()
     } catch (error) {
         console.log(error)
@@ -799,7 +812,7 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
 
 export const editCustomer = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { id, confirmDuplicates, department, departments, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, shippingSites, sameAsBilling, customerType, trn, paymentTerms, creditLimit, creditStatus, taxExempt, currency, source } = req.body;
+        const { id, confirmDuplicates, department, departments, contactDetails, companyName, customerEmailId, contactNo, companyAddress, companyAddressStructured, shippingAddress, shippingAddressStructured, sameAsBilling, customerType, trn, paymentTerms, creditLimit, creditStatus, taxExempt, currency, source } = req.body;
         const companyNameTrimmed = companyName.trim();
         const normalizedEmail = normalizeEmail(customerEmailId);
         const normalizedPhone = normalizePhone(contactNo);
@@ -818,16 +831,15 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
                 department: normalizedDepartments.department,
                 departments: normalizedDepartments.departments,
                 contactDetails: normalizeContactDetails(contactDetails),
-                companyName: companyName,
+                companyName: cleanText(companyName),
                 ...customerNameKeys(companyNameTrimmed),
-                customerEmailId: customerEmailId,
+                customerEmailId: normalizedEmail,
                 companyAddress: formatAddress(companyAddressStructured) || companyAddress,
                 companyAddressStructured: companyAddressStructured,
                 shippingAddress: sameAsBilling ? undefined : (formatAddress(shippingAddressStructured) || shippingAddress),
                 shippingAddressStructured: sameAsBilling ? undefined : shippingAddressStructured,
-                shippingSites: shippingSites ?? [],
                 sameAsBilling: sameAsBilling,
-                contactNo: contactNo,
+                contactNo: cleanText(String(contactNo ?? '')),
                 customerType: customerType,
                 trn: trn,
                 normalizedEmail: normalizedEmail,
@@ -842,7 +854,8 @@ export const editCustomer = async (req: Request, res: Response, next: NextFuncti
                 source: source,
                 updatedBy: editor._id,
                 updatedDate: new Date(),
-            }
+            },
+            $unset: { shippingSites: 1 },
         })
         return res.status(200).json(updatedCustomer)
     } catch (error) {
@@ -948,7 +961,7 @@ export const updateCustomerAttachments = async (req: any, res: Response, next: N
         const role = employee?.category?.role;
         const isOwner = customer.createdBy?.toString() === employee?._id?.toString();
         const isShared = (customer.sharedWith || []).some((id) => id.toString() === employee?._id?.toString());
-        if (role !== 'admin' && role !== 'superAdmin' && !isOwner && !isShared) {
+        if (role !== 'admin' && !/^superadmin$/i.test(String(role ?? '')) && !isOwner && !isShared) {
             return res.status(403).json({ success: false, message: 'Forbidden' });
         }
 
@@ -997,7 +1010,7 @@ export const removeCustomerAttachment = async (req: any, res: Response, next: Ne
         const role = employee?.category?.role;
         const isOwner = customer.createdBy?.toString() === employee?._id?.toString();
         const isShared = (customer.sharedWith || []).some((id) => id.toString() === employee?._id?.toString());
-        if (role !== 'admin' && role !== 'superAdmin' && !isOwner && !isShared) {
+        if (role !== 'admin' && !/^superadmin$/i.test(String(role ?? '')) && !isOwner && !isShared) {
             return res.status(403).json({ success: false, message: 'Forbidden' });
         }
 

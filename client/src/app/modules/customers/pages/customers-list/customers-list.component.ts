@@ -378,18 +378,6 @@ export class CustomersListComponent implements OnInit, OnDestroy {
           { type: 'field', label: 'Tax', value: c.taxExempt ? 'Tax exempt' : 'VAT applies', noHover: true },
         ],
       },
-      ...((c.shippingSites?.length)
-        ? [{
-            title: 'Ship-to Sites',
-            columns: '2' as const,
-            fields: c.shippingSites.map((s) => ({
-              type: 'field' as const,
-              label: s.siteName,
-              value: [s.address?.line1, s.address?.city, s.address?.country].filter(Boolean).join(', ') || '—',
-              noHover: true,
-            })),
-          }]
-        : []),
     ];
   }
 
