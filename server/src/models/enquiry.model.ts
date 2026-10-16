@@ -366,7 +366,8 @@ const enquirySchema = new Schema<Enquiry>({
     },
     requirement: {
         type: String,
-        trim: true
+        trim: true,
+        required: true
     },
     followUpOutcome: {
         type: String,

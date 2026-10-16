@@ -87,6 +87,10 @@ export const createEnquiry = async (req: any, res: Response, next: NextFunction)
 
         const enquiryData = <Enquiry>incoming
         enquiryData.title = String(enquiryData.title).trim()
+        enquiryData.requirement = String(enquiryData.requirement || '').trim()
+        if (!enquiryData.requirement) {
+            return res.status(400).json({ success: false, message: 'Requirement is required' });
+        }
         const createdByUser = await getEmployeeData(req.user);
         await applyRequestedEnquiryOwner(enquiryData, createdByUser);
         const customerGuard = await getCustomerCommercialGuard((enquiryData as any).client);
@@ -439,7 +443,7 @@ export const convertToQuote = async (req: any, res: Response, next: NextFunction
         if (!CONVERTIBLE_TO_QUOTE_STATUSES.includes(String(enquiry.status || '').toLowerCase())) {
             return res.status(400).json({ success: false, message: 'Only new, in progress or estimated enquiries can be converted to a quote' });
         }
-        if (!enquiry.client || !enquiry.contact || !String(enquiry.title || '').trim()) {
+        if (!enquiry.client || !enquiry.contact || !String(enquiry.title || '').trim() || !String(enquiry.requirement || '').trim()) {
             return res.status(400).json({ success: false, message: 'Customer, contact and requirement summary are required before quotation' });
         }
 
@@ -504,7 +508,7 @@ export const assignPresale = async (req: any, res: Response, next: NextFunction)
             const stageBlock = await assignmentStageBlock(enquiry.preSale?.assignApproval, assigner);
             if (stageBlock) return res.status(stageBlock.code).json({ success: false, message: stageBlock.message });
         }
-        if (presale.presalePerson && (assigner?.category as any)?.role !== 'superAdmin'
+        if (presale.presalePerson && !/^superadmin$/i.test(String((assigner?.category as any)?.role ?? ''))
             && String(presale.presalePerson) !== String(assigner?._id)) {
             const team = await getReportedEmployeesWithDepartments(assigner?._id);
             if (!team.some((id: any) => String(id) === String(presale.presalePerson))) {
@@ -636,7 +640,7 @@ export const updateEnquiryAttachments = async (req: any, res: Response) => {
         const employee = req.employee;
         const role = employee?.category?.role;
         const isOwner = enquiry.salesPerson?.toString() === employee?._id?.toString();
-        if (role !== 'superAdmin' && !isOwner) {
+        if (!/^superadmin$/i.test(String(role ?? '')) && !isOwner) {
             return res.status(403).json({ success: false, message: 'Forbidden' });
         }
 
@@ -691,7 +695,7 @@ export const removeEnquiryAttachment = async (req: any, res: Response) => {
         const employee = req.employee;
         const role = employee?.category?.role;
         const isOwner = enquiry.salesPerson?.toString() === employee?._id?.toString();
-        if (role !== "superAdmin" && !isOwner) {
+        if (!/^superadmin$/i.test(String(role ?? '')) && !isOwner) {
             return res.status(403).json({ success: false, message: "Forbidden" });
         }
 
@@ -1163,7 +1167,7 @@ const presaleTabMatch = (tab: keyof typeof PRESALE_TAB_STATUSES) => {
  */
 const presaleViewScope = async (req: any): Promise<{ access: 'all' | 'assigned'; userId: string; scopeIds: any[] }> => {
     const employee = req.employee;
-    const isSuperAdmin = employee?.category?.role === 'superAdmin';
+    const isSuperAdmin = /^superadmin$/i.test(String(employee?.category?.role ?? ''));
     const own = employee?.category?.privileges?.assignedJob?.viewReport;
     const extra = employee?.extraPrivileges?.assignedJob?.viewReport;
     const userId = String(employee?._id);
@@ -1174,7 +1178,7 @@ const presaleViewScope = async (req: any): Promise<{ access: 'all' | 'assigned';
 
 const canAssignPresale = (req: any): boolean => {
     const employee = req.employee;
-    return employee?.category?.role === 'superAdmin'
+    return /^superadmin$/i.test(String(employee?.category?.role ?? ''))
         || employee?.category?.privileges?.assignedJob?.assign === true
         || employee?.extraPrivileges?.assignedJob?.assign === true;
 };
@@ -1625,7 +1629,7 @@ const hasAssignFlag = (employee: any): boolean => {
 // Assigners (managers) and the super admin can step in as well.
 const holderBlock = async (req: any, enquiryId: any): Promise<{ code: number; message: string } | null> => {
     const employee = req.employee || await getEmployeeData(req.user);
-    if ((employee?.category as any)?.role === 'superAdmin' || hasAssignFlag(employee)) return null;
+    if (/^superadmin$/i.test(String((employee?.category as any)?.role ?? '')) || hasAssignFlag(employee)) return null;
     const current: any = await enquiryModel.findById(enquiryId).select('reAssigned preSale.presalePerson').lean();
     const holderId = String(current?.reAssigned || current?.preSale?.presalePerson || '');
     if (!holderId || holderId !== String(employee?._id)) {
@@ -2007,7 +2011,7 @@ export const giveFeedback = async (req: any, res: Response, next: NextFunction) 
         if (blocked) return res.status(blocked.code).json({ message: blocked.message });
         // Only the person who was asked for feedback can answer it (super admin excepted).
         const caller = req.employee || await getEmployeeData(req.user);
-        if ((caller?.category as any)?.role !== 'superAdmin') {
+        if (!/^superadmin$/i.test(String((caller?.category as any)?.role ?? ''))) {
             const asked: any = await enquiryModel.findOne({ _id: enquiryId, 'preSale.feedback._id': feedbackId })
                 .select('preSale.feedback').lean();
             const entry = asked?.preSale?.feedback?.find((f: any) => String(f._id) === String(feedbackId));
@@ -2652,7 +2656,7 @@ export const deleteEnquiry = async (req: Request, res: Response, next: NextFunct
         }
         // Only a lost enquiry can be deleted, and only by an admin or superAdmin.
         const role = (req as any).employee?.category?.role;
-        if (role !== 'admin' && role !== 'superAdmin') {
+        if (role !== 'admin' && !/^superadmin$/i.test(String(role ?? ''))) {
             return res.status(403).json({ message: 'Only an admin can delete an enquiry' });
         }
         if (String(enquiry.status || '').toLowerCase() !== 'lost') {
@@ -2685,7 +2689,7 @@ export const reAssignJob = async (req: Request, res: Response, next: NextFunctio
         const reAssigner = await getEmployeeData(req.user);
         // Only the super admin can hand a job to someone outside their own team; everyone else is limited to
         // themselves and their reporting subtree / headed department (the same scope the assign picker shows).
-        if ((reAssigner?.category as any)?.role !== 'superAdmin' && String(employeeId) !== String(reAssigner?._id)) {
+        if (!/^superadmin$/i.test(String((reAssigner?.category as any)?.role ?? '')) && String(employeeId) !== String(reAssigner?._id)) {
             const team = await getReportedEmployeesWithDepartments(reAssigner?._id);
             if (!team.some((id: any) => String(id) === String(employeeId))) {
                 return res.status(403).json({ message: 'You can only assign this job to someone in your team' });

@@ -6,6 +6,7 @@ import { ToastrService } from 'ngx-toastr';
 import { Observable, Subscription, filter, firstValueFrom, shareReplay, switchMap, take } from 'rxjs';
 import { EnquiryService } from 'src/app/core/services/enquiry/enquiry.service';
 import { EmployeeService } from 'src/app/core/services/employee/employee.service';
+import { CustomerFormDrawerComponent } from 'src/app/modules/customers/pages/customer-form-drawer/customer-form-drawer.component';
 import { CustomerService } from 'src/app/core/services/customer/customer.service';
 import { ProfileService } from 'src/app/core/services/profile/profile.service';
 import { ContactDetail, getCustomer } from 'src/app/shared/interfaces/customer.interface';
@@ -25,7 +26,7 @@ import { dateRangeValidator, isoDateFromToday, notBlankValidator, notPastDateVal
   selector: 'app-enquiry-form-drawer',
   standalone: true,
   templateUrl: './enquiry-form-drawer.component.html',
-  imports: [NgIf, NgFor, NgClass, DatePipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent],
+  imports: [NgIf, NgFor, NgClass, DatePipe, FormsModule, ReactiveFormsModule, SmartFormModule, ActionButtonComponent, CustomerFormDrawerComponent],
 })
 export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   @Input() open = false;
@@ -74,6 +75,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   private employeeService = inject(EmployeeService);
   private customerService = inject(CustomerService);
   private profileService = inject(ProfileService);
+  customerDrawerOpen = false;
+  private employee$!: Observable<any>;
   private customers$!: Observable<getCustomer[]>;
   private salesPersonId = '';
   private optionsLoaded = false;
@@ -91,7 +94,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     enquiryCategory: [null as string | null],
     accountingManager: [null as string | null],
     priority: ['Normal' as string | null],
-    requirement: [''],
+    requirement: ['', [Validators.required, notBlankValidator]],
     followUpOutcome: [''],
     date: [this.todayIso(), [Validators.required, dateRangeValidator(isoDateFromToday(-this.maxBackdateDays), isoDateFromToday(0))]],
     nextFollowUpDate: [this.tomorrowIso(), [Validators.required, notPastDateValidator]],
@@ -101,6 +104,11 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   constructor() {
     this.subscriptions.add(
       this.enquiryForm.controls.client.valueChanges.subscribe((clientId) => this.onClientChange(clientId))
+    );
+    this.subscriptions.add(
+      this.customerService.customerCreated$.subscribe((customer) => {
+        if (this.customerDrawerOpen) this.onCustomerSaved(customer);
+      })
     );
   }
 
@@ -160,6 +168,7 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
   goToStep(step: 1 | 2): void {
     if (step > this.step && !this.isStepValid(this.step)) {
       this.markStepTouched(this.step);
+      this.showFirstInvalidField(this.step);
       return;
     }
     this.step = step;
@@ -191,19 +200,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
         this.salesPersonId = e!._id as string;
       })
     );
-    this.customers$ = employee$.pipe(
-      switchMap((e) => this.customerService.getAllCustomers(e!._id as string)),
-      shareReplay(1),
-    );
-    this.subscriptions.add(
-      this.customers$.subscribe((customers) => {
-        this.customerOptions = customers.map((c) => ({ label: c.companyName, value: c._id }))
-          .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
-        // A restored draft may already name a client whose contacts are not listed yet.
-        const clientId = this.enquiryForm.controls.client.value;
-        if (clientId) this.loadContacts(clientId);
-      })
-    );
+    this.employee$ = employee$;
+    this.loadCustomers();
     this.subscriptions.add(
       this.profileService.getDepartments(true).subscribe((departments) => {
         this.allDepartmentOptions = departments.map((d) => ({ label: d.departmentName, value: d._id }));
@@ -216,6 +214,26 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
           label: `${employee.firstName} ${employee.lastName}`.trim(),
           value: employee._id,
         })).filter((option): option is SfOption => !!option.value);
+      })
+    );
+  }
+
+  private loadCustomers(selectedCustomerId?: string): void {
+    this.customers$ = this.employee$.pipe(
+      switchMap((e) => this.customerService.getAllCustomers(e!._id as string)),
+      shareReplay(1),
+    );
+    this.subscriptions.add(
+      this.customers$.subscribe((customers) => {
+        this.customerOptions = customers.map((c) => ({ label: c.companyName, value: c._id }))
+          .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+        if (selectedCustomerId && this.customerOptions.some((option) => option.value === selectedCustomerId)) {
+          this.enquiryForm.controls.client.setValue(selectedCustomerId);
+          this.enquiryForm.controls.client.markAsDirty();
+        }
+        // A restored draft may already name a client whose contacts are not listed yet.
+        const clientId = this.enquiryForm.controls.client.value;
+        if (clientId && clientId !== selectedCustomerId) this.loadContacts(clientId);
       })
     );
   }
@@ -269,11 +287,28 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     this.drawer?.requestClose();
   }
 
-  /** Leaves for the customer form. The draft is saved first, and saving the customer returns here with the form reopened. */
+  /** Opens the customer form in a drawer stacked over this one, so the enquiry stays as it is. */
   createCustomer(): void {
-    if (this.enquiryForm.dirty) this.draft?.save();
-    this.closed.emit();
-    this.router.navigate(['/customers'], { queryParams: { create: 1, returnTo: 'enquiry' } });
+    this.customerDrawerOpen = true;
+  }
+
+  onCustomerSaved(customer: getCustomer): void {
+    if (!customer?._id) return;
+    const customerOption = { label: customer.companyName, value: customer._id };
+    this.customerOptions = [
+      ...this.customerOptions.filter((option) => option.value !== customer._id),
+      customerOption,
+    ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    this.enquiryForm.controls.client.setValue(customer._id);
+    this.enquiryForm.controls.client.markAsDirty();
+    this.contactOptions = (customer.contactDetails || []).map((contact: ContactDetail) => ({
+      label: `${contact.firstName} ${contact.lastName}`.trim(),
+      value: contact._id,
+    }));
+    const primaryContact = (customer.contactDetails || []).find((contact: any) => contact.isPrimary)
+      ?? customer.contactDetails?.[0];
+    this.enquiryForm.controls.contact.setValue(primaryContact?._id ?? null);
+    this.narrowDepartments(customer._id, customer);
   }
 
   private reset(): void {
@@ -346,12 +381,20 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     return formData;
   }
 
+  get enquiryOwnerName(): string {
+    const selectedId = this.enquiryForm.controls.accountingManager.value;
+    return selectedId
+      ? this.accountingManagerOptions.find((option) => option.value === selectedId)?.label ?? this.salesPersonName
+      : this.salesPersonName;
+  }
+
   private isReady(): boolean {
     if (this.enquiryForm.invalid || !this.salesPersonId) {
       this.enquiryForm.markAllAsTouched();
       const firstIncomplete = ([1, 2] as const).find((s) => !this.isStepValid(s));
       if (firstIncomplete) this.step = firstIncomplete;
-      this.toaster.warning('Check the fields properly!', 'Warning !');
+      this.toaster.warning(this.firstInvalidMessage(), 'Complete required information');
+      this.showFirstInvalidField(this.step);
       return false;
     }
     return true;
@@ -383,7 +426,8 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
     if (this.saving || !this.enquiry) return;
     if (this.enquiryForm.invalid) {
       this.enquiryForm.markAllAsTouched();
-      this.toaster.warning('Check the fields properly!', 'Warning !');
+      this.toaster.warning(this.firstInvalidMessage(), 'Complete required information');
+      this.showFirstInvalidField(this.step);
       return;
     }
     const v = this.enquiryForm.getRawValue();
@@ -405,6 +449,25 @@ export class EnquiryFormDrawerComponent implements OnChanges, OnDestroy {
         error: () => (this.saving = false),
       })
     );
+  }
+
+  private firstInvalidMessage(): string {
+    const labels: Record<string, string> = {
+      client: 'Customer', contact: 'Contact', department: 'Department', title: 'Enquiry Title',
+      date: 'Enquiry Date', nextFollowUpDate: 'Next Follow-up Date', requirement: 'Requirement',
+    };
+    const name = this.stepControls[this.step].find((controlName) => this.enquiryForm.get(controlName)?.invalid);
+    return name ? `Complete the ${labels[name] ?? name} field.` : 'Complete the highlighted required fields.';
+  }
+
+  private showFirstInvalidField(step: 1 | 2): void {
+    const controlName = this.stepControls[step].find((name) => this.enquiryForm.get(name)?.invalid);
+    if (!controlName) return;
+    setTimeout(() => {
+      const element = document.querySelector<HTMLElement>(`#enquiry-form [formControlName="${controlName}"]`);
+      element?.focus();
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
   async submit(): Promise<void> {

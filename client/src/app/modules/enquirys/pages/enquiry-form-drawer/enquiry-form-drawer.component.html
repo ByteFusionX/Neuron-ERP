@@ -36,17 +36,17 @@
         <!-- Step 1 — customer & details ------------------------------------------- -->
         <ng-container *ngIf="step === 1">
             <app-sf-section title="Customer" columns="2">
-                <app-sf-field label="Client" [control]="enquiryForm.controls.client">
+                <app-sf-field label="Customer" [control]="enquiryForm.controls.client">
                     <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
                 </app-sf-field>
-                <app-sf-field label="Point of Contact" [hint]="enquiryForm.controls.client.value ? '' : 'Select client first'" [control]="enquiryForm.controls.contact">
-                    <app-sf-combobox formControlName="contact" [options]="contactOptions" emptyText="Select a client first" placeholder="Select contact"></app-sf-combobox>
+                <app-sf-field label="Contact" [hint]="enquiryForm.controls.client.value ? '' : 'Select customer first'" [control]="enquiryForm.controls.contact">
+                    <app-sf-combobox formControlName="contact" [options]="contactOptions" emptyText="Select a customer first" placeholder="Select contact"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Department" [control]="enquiryForm.controls.department">
                     <app-sf-combobox formControlName="department" [options]="departmentOptions" placeholder="Select department"></app-sf-combobox>
                 </app-sf-field>
-                <app-sf-field label="Sales Person">
-                    <app-sf-input [ngModelOptions]="{ standalone: true }" [ngModel]="salesPersonName" [readonly]="true"></app-sf-input>
+                <app-sf-field label="Enquiry Owner">
+                    <app-sf-input [ngModelOptions]="{ standalone: true }" [ngModel]="enquiryOwnerName" [readonly]="true"></app-sf-input>
                 </app-sf-field>
             </app-sf-section>
 
@@ -60,7 +60,7 @@
                 <app-sf-field label="Source" hint="Optional" [control]="enquiryForm.controls.source">
                     <app-sf-select formControlName="source" [options]="sourceOptions" placeholder="Select source"></app-sf-select>
                 </app-sf-field>
-                <app-sf-field *ngIf="!isEdit" label="Create on behalf of" hint="Optional — the enquiry is owned by this person instead of you" [control]="enquiryForm.controls.accountingManager">
+                <app-sf-field *ngIf="!isEdit" label="Assign Enquiry Owner" hint="Optional — leave blank to assign it to yourself" [control]="enquiryForm.controls.accountingManager">
                     <app-sf-combobox formControlName="accountingManager" clearable [options]="accountingManagerOptions"
                         placeholder="Myself"></app-sf-combobox>
                 </app-sf-field>
@@ -73,7 +73,7 @@
             </app-sf-section>
 
             <app-sf-section *ngIf="isEdit" title="Notes">
-                <app-sf-field full label="Requirement" hint="Optional" [control]="enquiryForm.controls.requirement">
+                <app-sf-field full label="Requirement" [control]="enquiryForm.controls.requirement">
                     <app-sf-textarea formControlName="requirement" [rows]="6" placeholder="Requirement, scope or important notes"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
@@ -82,7 +82,7 @@
         <!-- Step 2 — requirement / notes & files ------------------------------------------- -->
         <ng-container *ngIf="step === 2">
             <app-sf-section title="Notes">
-                <app-sf-field full label="Requirement" hint="Optional" [control]="enquiryForm.controls.requirement">
+                <app-sf-field full label="Requirement" [control]="enquiryForm.controls.requirement">
                     <app-sf-textarea formControlName="requirement" [rows]="6" placeholder="Requirement, scope or important notes"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
@@ -96,7 +96,7 @@
     </form>
 
     <ng-container sfDrawerFooter>
-        <!-- Leaves for the customer form; the draft is saved first so this form comes back filled in. -->
+        <!-- Opens the customer form in a drawer on top of this one. -->
         <app-action-button *ngIf="step === 1 && !isEdit" class="mr-auto" variant="tool" [disabled]="saving" (click)="createCustomer()">+ Create Customer</app-action-button>
 
         <app-action-button *ngIf="step === 1" variant="secondary" (click)="cancel()">Cancel</app-action-button>
@@ -111,3 +111,6 @@
         </app-action-button>
     </ng-container>
 </app-sf-drawer>
+
+<app-customer-form-drawer [open]="customerDrawerOpen" mode="create" [customer]="null"
+    (saved)="onCustomerSaved($event)" (closed)="customerDrawerOpen = false"></app-customer-form-drawer>

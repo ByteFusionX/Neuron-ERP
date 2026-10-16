@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, Subject, tap } from 'rxjs';
 import { FilterCustomer, getCustomer, getCustomerByID, getFilteredCustomer } from 'src/app/shared/interfaces/customer.interface';
 import { getCreators, getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { environment } from 'src/environments/environment';
@@ -26,11 +26,18 @@ export interface PartyDuplicateGroup { key: string; count: number; records: { _i
 })
 export class CustomerService {
 
+  private readonly customerCreatedSubject = new Subject<getCustomer>();
+  readonly customerCreated$ = this.customerCreatedSubject.asObservable();
+
   constructor(private http: HttpClient) { }
   readonly apiUrl = environment.api
 
   createCustomer(data: getCustomer): Observable<getCustomer> {
-    return this.http.post<getCustomer>(`${this.apiUrl}/customer`, data)
+    return this.http.post<getCustomer>(`${this.apiUrl}/customer`, data).pipe(
+      tap((customer) => {
+        if (customer?._id) this.customerCreatedSubject.next(customer);
+      })
+    )
   }
 
   checkCompanyExists(companyName: string, excludeId?: string): Observable<{ companyExist: boolean }> {
