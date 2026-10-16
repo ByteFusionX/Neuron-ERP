@@ -331,8 +331,8 @@ export class QuotationService {
             { text: serialNumber++, style: 'tableText', alignment: 'center' },
             {
               stack: [
-                ...(itemImage ? [{ image: itemImage, width: 70, height: 55, fit: [70, 55], alignment: 'center', margin: [0, 0, 0, 4] }] : []),
                 { text: result, style: 'tableText' },
+                ...(itemImage ? [{ image: itemImage, width: 70, height: 55, fit: [70, 55], alignment: 'center', margin: [0, 4, 0, 0] }] : []),
               ],
             },
             { text: detail.quantity, style: 'tableText', alignment: 'center' },
