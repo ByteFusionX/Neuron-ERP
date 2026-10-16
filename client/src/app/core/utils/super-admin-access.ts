@@ -2,7 +2,7 @@ import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 
 export const isSuperAdminRole = (role?: string | null): boolean => /^superadmin$/i.test(role ?? '');
 
-const FLAG_KEY = /^(can|create|edit|delete|block|share|transfer|assign|reject|estimate|reassign|feedback|revision|lpo|statusUpdate|allocate|approve|recycle|bugReports|update|upload|issue|initiate|manage|export|import)/;
+const FLAG_KEY = /^(view|can|create|edit|delete|block|share|transfer|assign|reject|estimate|reassign|feedback|revision|lpo|statusUpdate|allocate|approve|recycle|bugReports|update|upload|issue|initiate|manage|export|import)/;
 
 // Anything the stored privileges don't define still resolves to full access, so new modules never lock a super admin out.
 function fullAccess(source: any): any {

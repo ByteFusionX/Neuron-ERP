@@ -56,6 +56,7 @@ export class SideBarComponent
   showTabs: boolean = false;
   isSettingsRoute: boolean = false;
   privileges!: Privileges | undefined;
+  isSuperAdmin: boolean = false;
   mySubscription: Subscription = new Subscription();
   expandedMenus: { [key: string]: boolean } = {};
   collapsedGroups: { [key: string]: boolean } = {};
@@ -246,6 +247,7 @@ export class SideBarComponent
 
   checkPermission() {
     this._employeeService.employeeData$.subscribe((data) => {
+      this.isSuperAdmin = /^superadmin$/i.test(data?.category.role ?? '');
       this.privileges = data?.category.privileges;
       this.loadPersistedExpandedMenus();
     });
@@ -316,12 +318,14 @@ export class SideBarComponent
   }
 
   hasAccess(item: MenuItem | SubMenuItem): boolean {
+    if (this.isSuperAdmin) return true;
     return hasMenuAccess(this.privileges, item);
   }
 
   // Items with no privilege key (group dashboards, Finance) are open to everyone, which would
   // surface empty groups. Inside a group they only count when the user has a gated item there.
   categoryHasAccess(category: MenuCategory): boolean {
+    if (this.isSuperAdmin) return true;
     if (!groupAllowed(this.privileges, category)) return false;
     if (!category.items.some((item) => this.hasAccess(item))) return false;
     if (!category.group) return true;
