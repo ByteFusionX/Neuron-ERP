@@ -8,7 +8,7 @@ import { getDepartment } from 'src/app/shared/interfaces/department.interface';
 import { getEmployee } from 'src/app/shared/interfaces/employee.interface';
 import { StatusChangeModalComponent, StatusChangeResult } from 'src/app/shared/components/status-change-modal/status-change-modal.component';
 import { canSelectQuoteStatus, quoteStatusModalData } from '../status-update-modal/quote-status-modal.config';
-import { getQuotation, Quotatation, QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
+import { getQuotation, Quotatation, QuoteStatus, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
 import { FollowUpCreateModalComponent, FollowUpModalResult } from 'src/app/shared/components/detail-panel/task-create-modal/follow-up-create-modal.component';
 import { FollowUpPanelComponent } from 'src/app/shared/components/detail-panel/follow-up-panel/follow-up-panel.component';
 import { FollowUpViewModel, followUpCellClass, followUpViewer } from 'src/app/shared/utils/follow-up.util';
@@ -121,7 +121,7 @@ export class QuotationListComponent implements AfterViewInit {
   ];
 
   readonly itemColumns: DetailTableColumn[] = [
-    { key: 'item', label: 'Item' },
+    { key: 'item', label: 'Item', type: 'html', wrap: true, clamp: true, tooltipKey: 'itemTooltip', width: '22rem' },
     { key: 'qty', label: 'Qty', type: 'number' },
     { key: 'price', label: 'Price', type: 'currency' },
     { key: 'amount', label: 'Amount', type: 'currency', total: true },
@@ -132,7 +132,7 @@ export class QuotationListComponent implements AfterViewInit {
     (row.optionalItems ?? []).forEach((opt) => {
       (opt.items ?? []).forEach((item) => {
         (item.itemDetails ?? []).forEach((d) => {
-          rows.push({ item: d.detail, qty: d.quantity, price: d.unitSellingPrice, amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0) });
+          rows.push({ item: d.detail, itemTooltip: d.detail, qty: d.quantity, price: d.unitSellingPrice, amount: (d.quantity ?? 0) * (d.unitSellingPrice ?? 0) });
         });
       });
     });
@@ -351,9 +351,10 @@ export class QuotationListComponent implements AfterViewInit {
       // Status and Deal Status come right after the customer so they stay on screen at ~1400px.
       {
         key: 'status', label: 'Status', type: 'badge', editable: true, editor: 'select', width: '190px',
-        editorOptions: this.selectableQuoteStatuses.map((s) => ({ label: s, value: s })),
-        filterOptions: this.quoteStatuses.map((s) => ({ label: s, value: s })),
+        editorOptions: this.selectableQuoteStatuses.map((s) => ({ label: quoteStatusLabel(s), value: s })),
+        filterOptions: this.quoteStatuses.map((s) => ({ label: quoteStatusLabel(s), value: s })),
         badgeClasses: this.statusBadgeClasses,
+        badgeLabel: quoteStatusLabel,
       },
       {
         key: 'dealStatus', label: 'Deal Status', type: 'badge',
@@ -666,6 +667,7 @@ export class QuotationListComponent implements AfterViewInit {
           next: (res: QuoteStatus) => {
             row.status = res;
             if (wasWon) { row.lpoFiles = [] as any; delete (row as any).dealData; }
+            this.getQuotations();
           },
           error: (e) => this.toaster.error(e?.error?.message || 'Failed to update status.'),
         });
@@ -1260,13 +1262,13 @@ export class QuotationListComponent implements AfterViewInit {
         columns: '2',
         fields: [
           { type: 'field', label: 'Quote Id', value: row.quoteId, numeric: true },
-          { type: 'dg', key: 'status' },
+          { type: 'field', label: 'Status', value: row.status || '—', noHover: true },
           { type: 'field', label: 'Customer', value: row.client?.companyName },
           { type: 'dg', key: 'salesPerson' },
           ...(row.createdByUser ? [{ type: 'field' as const, label: 'Created By User', value: this.fullName(row.createdByUser), noHover: true }] : []),
           { type: 'field', label: 'Department', value: this.departmentNames(row) },
           { type: 'field', label: 'Date', value: this.datePipe.transform(row.date, 'dd MMM yyyy') },
-          { type: 'dg', key: 'closingDate' },
+          { type: 'field', label: 'Closing Date', value: row.closingDate ? this.datePipe.transform(row.closingDate, 'dd MMM yyyy') : '—', noHover: true },
           { type: 'field', label: 'Valid Until', value: row.validityDate ? this.datePipe.transform(row.validityDate, 'dd MMM yyyy') : '—', noHover: true },
           { type: 'field', label: 'Payment Terms', value: row.paymentTerms || '—', noHover: true },
           { type: 'field', label: 'Delivery Terms', value: row.deliveryTerms || '—', noHover: true },
@@ -1277,10 +1279,7 @@ export class QuotationListComponent implements AfterViewInit {
       {
         title: 'Overview',
         fields: [
-          {
-            type: 'field', label: 'Subject', value: row.subject, editable: true, editor: 'textarea',
-            onSave: (newValue) => this.updateQuotationSubject(row, newValue),
-          },
+          { type: 'field', label: 'Subject', value: row.subject, noHover: true },
           { type: 'field', label: 'Amount', value: this.formatAmount(row), numeric: true, noHover: true },
           { type: 'field', label: 'Lost Reason', value: row.lostReason || '—', noHover: true, visible: row.status === 'Lost' },
           { type: 'field', label: 'Customer PO', value: row.customerAcceptance?.customerPoNumber || '—', noHover: true, visible: !!row.customerAcceptance },

@@ -54,7 +54,7 @@ import {
   DetailViewShellComponent,
   DetailViewStat,
 } from 'src/app/shared/components/detail-view-shell/detail-view-shell.component';
-import { getQuotatation, QuoteStatus } from 'src/app/shared/interfaces/quotation.interface';
+import { getQuotatation, QuoteStatus, quoteStatusLabel } from 'src/app/shared/interfaces/quotation.interface';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ParseBoldTextPipe } from '../../../../shared/pipes/boldParse.pipe';
 import { ParseBracketsTextPipe } from '../../../../shared/pipes/highlightParse.pipe';
@@ -182,8 +182,10 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   docList: DetailDocument[] = [];
   private docFiles = new Map<string, any>();
   readonly itemCols: DetailTableColumn[] = [
-    { key: 'detail', label: 'Item Details', type: 'html', wrap: true },
+    { key: 'detail', label: 'Item Details', type: 'html', wrap: true, clamp: true, tooltipKey: 'detailText' },
+    { key: 'image', label: 'Image', type: 'image', imagePreview: true, align: 'center', width: '5rem' },
     { key: 'quantity', label: 'Qty', type: 'number' },
+    { key: 'uom', label: 'UOM', align: 'center' },
     { key: 'unitCost', label: 'Unit Cost', align: 'right' },
     { key: 'totalCost', label: 'Total Cost', align: 'right', total: true, totalKey: 'totalCostRaw', totalFormat: '1.2-2' },
     { key: 'profit', label: 'Profit', align: 'right' },
@@ -370,9 +372,6 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     }
     if (this.hasOptionalItems) items.push({ id: 'optional', label: 'Optional decisions' });
     if (this.isQuoteOpen) items.push({ id: 'followUp', label: 'Follow up' });
-    if (this.canHoldStock) {
-      items.push({ id: 'hold', label: this.heldLines.length ? 'Change stock hold' : 'Hold stock', disabled: this.stockHoldBusy });
-    }
     if (this.isNoteOwner) items.push({ id: 'note', label: 'View note' });
     items.push({ id: 'preview', label: this.isPreviewing ? 'Preparing…' : 'Preview PDF', disabled: this.isPreviewing, separator: true });
     if (this.canStampPdf) {
@@ -474,9 +473,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
             q.status = (res as any) || result.status;
             if (wasWon) { q.lpoFiles = [] as any; delete (q as any).dealData; delete (q as any).customerAcceptance; }
             this.toast.success('Status updated.');
-            this.reloadHistory();
-            this.rebuild();
-            this.loadStockHold();
+            this.reload$.next();
           },
           error: (e) => this.toast.error(e?.error?.message || 'Failed to update status.'),
         });
@@ -693,7 +690,8 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     this.quotationService
       .generatePDF(quoteData, includeStamp)
       .then((pdf) => {
-        pdf.download(quoteData.quoteId as string);
+        const fileName = `${String(quoteData.quoteId || 'quotation').replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`;
+        pdf.download(fileName);
       })
       .catch((error) => {
         console.error('Error generating PDF:', error);
@@ -1241,7 +1239,10 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
     if (!id) { return; }
     this._eventsService.fetchEvents(id).subscribe((events: Events[]) => {
       this.events = events || [];
-      if (this.quoteData) { this.buildDocuments(this.quoteData); }
+      if (this.quoteData) {
+        this.quoteData.events = this.events;
+        this.buildDocuments(this.quoteData);
+      }
     });
   }
 
@@ -1312,7 +1313,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
 
     this.badges = [];
     if (q.status) {
-      this.badges.push({ label: q.status, tone: QUOTE_STATUS_TONE[q.status] ?? 'info' });
+      this.badges.push({ label: quoteStatusLabel(q.status), tone: QUOTE_STATUS_TONE[q.status] ?? 'info' });
     }
     const dealStatus = q.dealData?.status;
     if (dealStatus) {
@@ -1496,8 +1497,12 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
       });
       item.itemDetails.forEach((d, k) => {
         rows.push({
+          image: d.image?.fileName ? this.quotationService.itemImageUrl(d.image.fileName) : '',
+          imageAlt: d.image?.originalname || 'Item image',
           detail: this.boldPipe.transform(this.bracketsPipe.transform(d.detail) as string),
+          detailText: d.detail,
           quantity: d.quantity,
+          uom: d.uom || '—',
           unitCost: num(d.unitCost),
           totalCost: num(d.quantity * d.unitCost),
           totalCostRaw: d.quantity * d.unitCost,
