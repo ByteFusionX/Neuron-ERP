@@ -1138,7 +1138,7 @@ export class QuotationListComponent implements AfterViewInit {
   checkPermission() {
     this._employeeService.employeeData$.subscribe((data) => {
       this.createQuotation = data?.category.privileges.quotation.create;
-      this.isSuperAdmin = data?.category.role === 'superAdmin';
+      this.isSuperAdmin = /^superadmin$/i.test(String(data?.category.role ?? ''));
       if (data?._id && !this.views.some((view) => view.id === 'mine')) {
         this.views = [
           this.views[0],

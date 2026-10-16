@@ -7,7 +7,7 @@ const catRouter = Router()
 // Stops a non-admin from widening or deleting the role they hold themselves (privilege escalation).
 const notOwnRole = (getId: (req: any) => string | undefined) => (req: any, res: Response, next: NextFunction) => {
     const role = req.employee?.category?.role;
-    if (role === "admin" || role === "superAdmin") return next();
+    if (role === "admin" || /^superadmin$/i.test(String(role ?? ''))) return next();
     const own = req.employee?.category?._id?.toString();
     if (own && own === getId(req)?.toString()) {
         return res.status(403).json({ message: "You cannot change your own role" });

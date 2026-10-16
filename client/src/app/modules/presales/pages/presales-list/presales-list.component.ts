@@ -150,13 +150,13 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     });
     this._employeeService.employeeData$.subscribe((data) => {
       this.viewAssignedFor = data?.category.privileges.assignedJob.viewReport == 'all';
-      const superAdmin = data?.category?.role === 'superAdmin';
+      const superAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
       this.canAssign = superAdmin || data?.category.privileges.assignedJob?.assign === true;
       this.canReject = superAdmin || data?.category.privileges.assignedJob?.reject !== false;
       this.canEstimate = superAdmin || data?.category.privileges.assignedJob?.estimate !== false;
       this.access = data?.category.privileges.assignedJob.viewReport;
       this.userId = data?._id;
-      this.isSuperAdmin = data?.category?.role === 'superAdmin';
+      this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
       // Assigners land on the All Jobs queue unless a ?tab= deep link says otherwise.
       if (this.canAssign && !this.hasTabParam && this.activeTab === 'assigned') {
         this.activeTab = 'all';

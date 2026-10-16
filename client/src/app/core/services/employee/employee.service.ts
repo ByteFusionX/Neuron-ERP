@@ -1,10 +1,11 @@
 import { HttpClient, HttpContext, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, catchError, combineLatest, filter, Observable, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, catchError, combineLatest, filter, map, Observable, switchMap, tap } from 'rxjs';
 import { ApprovalLimit, CreateEmployee, FilterEmployee, GetCategory, Responsibility, getEmployee, getEmployeeByID, MyProfile, Target, UpdateMyProfile } from 'src/app/shared/interfaces/employee.interface';
 import { login } from 'src/app/shared/interfaces/login';
 import { environment } from 'src/environments/environment';
 import { jwtDecode } from "jwt-decode";
+import { withSuperAdminAccess } from 'src/app/core/utils/super-admin-access';
 import { SKIP_ERROR_TOAST } from 'src/app/core/interceptors/error-interceptor/error.interceptor';
 
 // Methods below flagged with context() are called only from components that already
@@ -186,7 +187,7 @@ export class EmployeeService {
   }
 
   getEmployee() {
-    return this.http.get<getEmployee>(`${this.api}/employee/get`)
+    return this.http.get<getEmployee>(`${this.api}/employee/get`).pipe(map(withSuperAdminAccess))
   }
 
   isEmployeePresent(): Observable<{ exists: boolean }> {

@@ -164,7 +164,7 @@ export class SupplierListComponent implements OnInit, OnDestroy {
     this._employeeService.employeeData$.subscribe((employee) => {
       this.canCreate = true;
       this.canApproveSupplier = !!employee?.category?.privileges?.supplier?.canApproveSupplier;
-      this.isSuperAdmin = employee?.category?.role === 'superAdmin';
+      this.isSuperAdmin = /^superadmin$/i.test(String(employee?.category?.role ?? ''));
       this.detailTabs = this.allDetailTabs.filter((t) => t.id !== 'banking' || canAccessBanking(employee));
     });
   }

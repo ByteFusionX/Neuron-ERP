@@ -1100,7 +1100,7 @@ export const getApprovedDealSheet = async (req: Request, res: Response, next: Ne
         let searchFilter = {};
 
         let reportedToUserIds = await getAllReportedEmployees(userId);
-        if (role == "superAdmin") {
+        if (/^superadmin$/i.test(String(role ?? ''))) {
                 matchFilters = {
                     isDeleted: { $ne: true },
                     dealData: { $exists: true },

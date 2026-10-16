@@ -608,7 +608,7 @@ export const getFilteredEmployees = async (
 
 const canViewCompensation = (actor: any): boolean =>
   !!actor &&
-  (actor.category?.role === "superAdmin" ||
+  (/^superadmin$/i.test(String(actor.category?.role ?? '')) ||
     actor.category?.privileges?.employee?.viewCompensation === true);
 
 // Records a promotion/transfer only when designation, department or manager actually changed.

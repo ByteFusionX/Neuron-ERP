@@ -106,7 +106,7 @@ export class NavBarComponent {
       if(emp){
         const { recycle, bugReports, ...settingsFlags } = emp.category.privileges.portalManagement ?? {};
         this.showPortalMangement = Object.values(settingsFlags).some(value => value === true);
-        this.isSuperAdmin = emp.category.role === 'superAdmin';
+        this.isSuperAdmin = /^superadmin$/i.test(emp.category.role ?? '');
         const pm = emp.category.privileges.portalManagement;
         this.canSeeRecycle = this.isSuperAdmin || !!pm?.recycle;
         this.canSeeBugs = this.isSuperAdmin || !!pm?.bugReports;

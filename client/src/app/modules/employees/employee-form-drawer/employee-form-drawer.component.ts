@@ -98,7 +98,7 @@ export class EmployeeFormDrawerComponent implements OnChanges, OnDestroy {
       this.employeeService.employeeData$.subscribe((me) => {
         this.actorId = me?._id;
         this.userRole = me?.category?.role ?? 'user';
-        this.canViewCompensation = this.userRole === 'superAdmin' || !!me?.category?.privileges?.employee?.viewCompensation;
+        this.canViewCompensation = /^superadmin$/i.test(String(this.userRole ?? '')) || !!me?.category?.privileges?.employee?.viewCompensation;
         this.applyCategoryFilter();
       })
     );

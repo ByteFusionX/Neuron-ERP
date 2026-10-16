@@ -243,7 +243,7 @@ export class QuotationViewComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((employee) => {
-        this.isSuperAdmin = employee?.category.role == 'superAdmin';
+        this.isSuperAdmin = /^superadmin$/i.test(String(employee?.category.role ?? ''));
         this.syncTabs();
         this.isNoteOwner = !!employee && !!this.quoteData && employee._id === this.quoteData.createdBy?._id;
       }),

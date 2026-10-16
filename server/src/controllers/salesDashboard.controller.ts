@@ -65,7 +65,7 @@ const reportAccess = (employee: any, module: string): string => {
 
 const scopeFor = async (employee: any, module: string, reports: () => Promise<Types.ObjectId[]>): Promise<Scope> => {
     const role = employee.category?.role;
-    if (role === 'superAdmin' || role === 'admin') return 'all';
+    if (/^superadmin$/i.test(String(role ?? '')) || role === 'admin') return 'all';
     const access = reportAccess(employee, module);
     switch (access) {
         case 'none': return [];

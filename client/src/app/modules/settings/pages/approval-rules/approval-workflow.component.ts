@@ -575,7 +575,7 @@ export class ApprovalWorkflowComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this._employeeService.employeeData$.pipe(filter((e) => !!e), take(1)).subscribe((employee) => {
         this.privileges = employee?.category?.privileges;
-        this.categorySection = employee?.category.role == 'superAdmin';
+        this.categorySection = /^superadmin$/i.test(String(employee?.category.role ?? ''));
 
         if (departmentPrivileges(this.privileges).view || this.categorySection) {
           this.loadWorkflows();

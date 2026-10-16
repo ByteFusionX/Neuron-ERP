@@ -20,7 +20,7 @@ export function settingsEditAccess(flag: SettingsEditFlag): Signal<boolean> {
       map((e) => {
         if (!e) return false;
         const p: Privileges | undefined = e.category?.privileges;
-        return e.category?.role === 'superAdmin' || !!p?.portalManagement?.[flag];
+        return /^superadmin$/i.test(String(e.category?.role ?? '')) || !!p?.portalManagement?.[flag];
       }),
     ),
     { initialValue: false },

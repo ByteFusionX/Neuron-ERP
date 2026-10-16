@@ -18,7 +18,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
         switchMap((cached) => cached ? of(cached) : employeeService.getEmployee()),
         map((data) => {
             employeeService.employeeSubject.next(data);
-            isSuperAdmin = data.category.role == 'superAdmin'
+            isSuperAdmin = /^superadmin$/i.test(data.category.role ?? '')
             privileges = data?.category.privileges;
             
             if (data.isBlocked) {
@@ -28,6 +28,7 @@ export const RoleGuard: CanActivateFn = (route: ActivatedRouteSnapshot, state: R
                 return false;
             }
             
+            if (isSuperAdmin) return true;
             return checkPermission()
         }),
         // API unreachable: the interceptor already shows the connection toast. Stay where we are instead of

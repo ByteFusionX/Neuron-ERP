@@ -5,10 +5,10 @@
  */
 export function canAccessBanking(employee: any): boolean {
   const category = employee?.category;
-  return category?.role === 'superAdmin' || category?.privileges?.groups?.finance?.enabled === true;
+  return /^superadmin$/i.test(String(category?.role ?? '')) || category?.privileges?.groups?.finance?.enabled === true;
 }
 
 /** The create/edit drawer's banking step is editable by super admins only. */
 export function canEditBanking(employee: any): boolean {
-  return employee?.category?.role === 'superAdmin';
+  return /^superadmin$/i.test(String(employee?.category?.role ?? ''));
 }

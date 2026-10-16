@@ -33,7 +33,7 @@ export class SettingsNavService {
     this.employeeService.employeeData$.pipe(filter((e) => !!e)).subscribe((employee) => {
       const access: SettingsAccess = {
         privileges: employee?.category?.privileges,
-        isSuperAdmin: employee?.category?.role === 'superAdmin',
+        isSuperAdmin: /^superadmin$/i.test(String(employee?.category?.role ?? '')),
       };
       this.visibleSections = SETTINGS_SECTIONS.filter((s) => s.canView(access));
       this.loading = false;

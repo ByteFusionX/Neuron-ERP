@@ -274,9 +274,9 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
           this.setColumnOptions('customer', customers.map((customer) => ({ label: customer.companyName, value: customer._id })));
         }));
         this.currentEmployeeId = employee?._id;
-        this.isAdmin = ['admin', 'superAdmin'].includes(employee?.category.role as string);
+        this.isAdmin = /^(admin|superadmin)$/i.test(employee?.category.role ?? '');
         // Only superAdmin passes blindly; admin and every other role follow their privilege flags.
-        const isSuperAdmin = employee?.category.role === 'superAdmin';
+        const isSuperAdmin = /^superadmin$/i.test(String(employee?.category.role ?? ''));
         this.isSuperAdmin = isSuperAdmin;
         this.editDenied = !isSuperAdmin && employee?.category.privileges?.enquiry?.edit === false;
         this.reassignDenied = !isSuperAdmin && employee?.category.privileges?.enquiry?.reassign === false;
@@ -284,7 +284,7 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         // Estimations are for people who work the enquiry: create, edit or send to presale.
         this.canSeeEstimationsPrivilege = isSuperAdmin || enquiryPrivileges?.create === true || enquiryPrivileges?.edit !== false || enquiryPrivileges?.reassign !== false;
         this.buildRowActions();
-        if (employee?.category.role == 'superAdmin') {
+        if (/^superadmin$/i.test(String(employee?.category.role ?? ''))) {
           this.isDeleteOption = true;
         }
       }),
@@ -526,7 +526,6 @@ export class EnquiryListComponent implements OnInit, AfterViewInit, OnDestroy {
         if (!res.success) return;
         row.status = res.status;
         this.dataSource._updateChangeSubscription();
-        this.toaster.success('Enquiry converted to quote');
         this.quoteSource = row;
         this.quoteFormOpen = true;
       },

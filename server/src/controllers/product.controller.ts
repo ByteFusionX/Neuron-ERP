@@ -135,7 +135,7 @@ const buildAdvancedFilters = (raw: unknown): any[] => {
     return conds;
 };
 
-const isAdminRole =(employee: any): boolean => ['admin', 'superAdmin'].includes(employee?.category?.role);
+const isAdminRole =(employee: any): boolean => ['admin'].includes(employee?.category?.role) || /^superadmin$/i.test(String(employee?.category?.role ?? ''));
 
 export const getDepartmentCode = (departmentName?: string): string => {
     const words = (departmentName || '').trim().split(/\s+/).filter(Boolean);

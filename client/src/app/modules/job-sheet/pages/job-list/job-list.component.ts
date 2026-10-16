@@ -177,7 +177,7 @@ export class JobListComponent {
   private checkPrivileges(): void {
     this.subscriptions.add(
       this._employeeService.employeeData$.subscribe((data) => {
-        this.isSuperAdmin = data?.category?.role === 'superAdmin';
+        this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
         this.canAllocateJobs = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.allocateJobs || false;
         this.canTransferProcurementPerson = this.isSuperAdmin || data?.category?.privileges?.jobSheet?.transferProcurementPerson || false;
       })

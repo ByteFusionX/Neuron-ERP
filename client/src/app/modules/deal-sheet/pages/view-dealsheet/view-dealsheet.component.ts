@@ -215,7 +215,7 @@ export class ViewDealsheetComponent implements OnInit {
       if (data?._id) {
         this.userId = data?._id;
         this.roleId = (data?.category as any)?._id;
-        this.isSuperAdmin = data?.category?.role === 'superAdmin';
+        this.isSuperAdmin = /^superadmin$/i.test(String(data?.category?.role ?? ''));
         this.markQuotationSeenIfCreator();
       }
     });

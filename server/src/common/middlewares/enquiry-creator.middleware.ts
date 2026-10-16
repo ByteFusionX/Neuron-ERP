@@ -7,7 +7,7 @@ const EDITABLE_STATUSES = ["new", "in progress", "work in progress", "lost", "re
 
 export const isEnquiryEditableStatus = (status: any) => EDITABLE_STATUSES.includes(String(status || "").toLowerCase());
 
-const isAdminRole = (employee: any) => employee?.category?.role === "superAdmin";
+const isAdminRole = (employee: any) => /^superadmin$/i.test(String(employee?.category?.role ?? ''));
 
 /**
  * Only the person who created the enquiry (its owner or the user who raised it for them) may work it; not even

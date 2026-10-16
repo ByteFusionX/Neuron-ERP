@@ -77,7 +77,7 @@ export class ViewEmployeeComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.employeeService.employeeData$.subscribe((employee) => {
         this.currentEmployeeId = employee?._id;
-        this.isSuperAdmin = employee?.category?.role === 'superAdmin';
+        this.isSuperAdmin = /^superadmin$/i.test(String(employee?.category?.role ?? ''));
         this.canDeleteEmployee = this.isSuperAdmin || !!employee?.category?.privileges?.employee?.delete;
         this.canBlockEmployee = this.isSuperAdmin || !!employee?.category?.privileges?.employee?.block;
         if (!this.employeeData && employee) this.load();

@@ -236,7 +236,7 @@ export class DealSheetListComponent implements OnInit, OnDestroy {
 
     this._employeeService.employeeData$.subscribe((employee) => {
       this.userId = employee?._id;
-      this.isSuperAdmin = employee?.category.role === 'superAdmin';
+      this.isSuperAdmin = /^superadmin$/i.test(String(employee?.category.role ?? ''));
       this.roleId = (employee?.category as any)?._id;
     });
   }
