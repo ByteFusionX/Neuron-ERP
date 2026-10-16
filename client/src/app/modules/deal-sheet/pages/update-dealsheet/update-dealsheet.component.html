@@ -28,7 +28,7 @@
                         <app-sf-combobox [ngModelOptions]="{ standalone: true }" [ngModel]="bulkSupplier" (ngModelChange)="bulkSupplier = $event"
                             [options]="supplierOptions" placeholder="Supplier for selected lines"></app-sf-combobox>
                     </div>
-                    <app-action-button variant="tool" [disabled]="!bulkSupplier" (click)="applyBulkSupplier()">Apply to {{ selectedCount }} line{{ selectedCount === 1 ? '' : 's' }}</app-action-button>
+                    <app-action-button type="button" variant="tool" [disabled]="!bulkSupplier" (click)="applyBulkSupplier()">Apply to {{ selectedCount }} line{{ selectedCount === 1 ? '' : 's' }}</app-action-button>
                 </div>
             </div>
         </div>
@@ -84,7 +84,7 @@
                 </div>
 
                 <div class="mt-3 flex flex-wrap gap-2">
-                    <app-action-button *ngFor="let t of costTypes" variant="tool" (click)="addCost(t)">+ {{ t }}</app-action-button>
+                    <app-action-button *ngFor="let t of costTypes" type="button" variant="tool" (click)="addCost(t)">+ {{ t }}</app-action-button>
                 </div>
             </section>
 
@@ -125,11 +125,11 @@
 
     <ng-container sfDrawerFooter>
         <div *ngIf="step === 1" class="mr-auto">
-            <app-action-button variant="secondary" (click)="fetchLatestQuote()">Fetch latest quote items</app-action-button>
+            <app-action-button type="button" variant="secondary" (click)="fetchLatestQuote()">Fetch latest quote items</app-action-button>
         </div>
-        <app-action-button variant="secondary" (click)="onDrawerClosed()">Cancel</app-action-button>
-        <app-action-button *ngIf="step === 2" variant="secondary" (click)="back()">Back</app-action-button>
-        <app-action-button *ngIf="step === 1" variant="primary" (click)="next()">Next: {{ steps[1].label }}</app-action-button>
+        <app-action-button type="button" variant="secondary" (click)="onDrawerClosed()">Cancel</app-action-button>
+        <app-action-button *ngIf="step === 2" type="button" variant="secondary" (click)="back()">Back</app-action-button>
+        <app-action-button *ngIf="step === 1" type="button" variant="primary" (click)="next()">Next: {{ steps[1].label }}</app-action-button>
         <app-action-button *ngIf="step === 2" variant="primary" type="submit" form="dealsheet-form" [disabled]="!!termIssues.length">Update</app-action-button>
     </ng-container>
 </app-sf-drawer>
