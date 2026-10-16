@@ -1,4 +1,5 @@
 import { NextFunction, Response, Request } from "express";
+import crypto from 'crypto';
 import Quotation, { quoteStatus } from '../models/quotation.model';
 import { canTransitionQuoteStatus, isKnownQuoteStatus, quoteStatusRequiresReason } from '../common/quote-status-transitions';
 import Job, { allocateStatus } from '../models/job.model';
@@ -31,6 +32,44 @@ import { getCustomerCommercialGuard, estimateQuoteValue, normalizeTaxForCustomer
 import Workflow from '../models/workflow.model';
 import { getWorkflowSteps, updateApprovalStatus } from '../services/workflow.service';
 import { notify } from '../services/notify.service';
+
+export const uploadQuoteItemImage = async (req: any, res: Response, next: NextFunction) => {
+    let localFileName = '';
+    try {
+        const file = req.file;
+        if (!file) return res.status(400).json({ success: false, message: 'Select an image to upload.' });
+        localFileName = file.filename;
+        if (!String(file.mimetype || '').startsWith('image/')) {
+            await removeFile(file.filename);
+            return res.status(400).json({ success: false, message: 'Only image files are allowed.' });
+        }
+        if (Number(file.size || 0) > 5 * 1024 * 1024) {
+            await removeFile(file.filename);
+            return res.status(400).json({ success: false, message: 'Item images must be 5 MB or smaller.' });
+        }
+        const safeNamePart = (value: unknown, fallback: string) => String(value || fallback)
+            .trim()
+            .replace(/[^a-zA-Z0-9_-]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 80) || fallback;
+        const extension = String(file.originalname || '').match(/\.[a-zA-Z0-9]+$/)?.[0]?.toLowerCase()
+            || ({ 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' } as Record<string, string>)[file.mimetype]
+            || '.img';
+        const quoteReference = safeNamePart(req.body?.quoteReference, 'draft-quote');
+        const partNumber = safeNamePart(req.body?.partNumber, 'unassigned-item');
+        const storedFileName = `quote-${quoteReference}_item-${partNumber}_${Date.now()}-${crypto.randomUUID().slice(0, 8)}${extension}`;
+        await uploadFileToAws(storedFileName, file.path, file.mimetype);
+        localFileName = '';
+        return res.status(201).json({
+            fileName: storedFileName,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+        });
+    } catch (error) {
+        if (localFileName) await removeFile(localFileName);
+        next(error);
+    }
+};
 
 /**
  * Marks the source enquiry as Quoted the first time a quotation leaves Draft.
@@ -3631,13 +3670,20 @@ export const normalizeQuoteDepartments = (quoteData: any) => {
     return quoteData;
 }
 
-const EDIT_HISTORY_IGNORED_FIELDS = new Set(['_id', '__v', 'editHistory', 'createdBy', 'quoteId', 'updatedAt', 'createdAt']);
+const EDIT_HISTORY_IGNORED_FIELDS = new Set(['_id', '__v', 'editHistory', 'createdBy', 'quoteId', 'updatedAt', 'createdAt', 'saveNote']);
+const EDIT_HISTORY_DATE_FIELDS = new Set(['date', 'closingDate', 'validityDate']);
 const EDIT_HISTORY_MAX_VALUE_LENGTH = 300;
 
 const stringifyForHistory = (value: any): string => {
     if (value === undefined || value === null) return '';
     const str = typeof value === 'string' ? value : JSON.stringify(value);
     return str.length > EDIT_HISTORY_MAX_VALUE_LENGTH ? `${str.slice(0, EDIT_HISTORY_MAX_VALUE_LENGTH)}…` : str;
+}
+
+const normalizedHistoryValue = (field: string, value: any): any => {
+    if (!EDIT_HISTORY_DATE_FIELDS.has(field) || value === undefined || value === null || value === '') return value;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
 }
 
 const HISTORY_ID_PATTERN = /^[a-f\d]{24}$/i;
@@ -3707,6 +3753,11 @@ const normalizeOptionalItems = (options: any): any[] => {
                 availability: str(d?.availability),
                 supplierId: str(d?.supplierId?._id ?? d?.supplierId),
                 uom: str(d?.uom),
+                image: d?.image ? {
+                    fileName: str(d.image.fileName),
+                    originalname: str(d.image.originalname),
+                    mimetype: str(d.image.mimetype),
+                } : null,
             })),
         })),
     }));
@@ -3723,7 +3774,7 @@ export const buildFieldChanges =(existingDoc: any, updatedData: any): { field: s
         const newValue = updatedData[field];
         const same = field === 'optionalItems'
             ? JSON.stringify(normalizeOptionalItems(oldValue)) === JSON.stringify(normalizeOptionalItems(newValue))
-            : JSON.stringify(oldValue) === JSON.stringify(newValue);
+            : JSON.stringify(normalizedHistoryValue(field, oldValue)) === JSON.stringify(normalizedHistoryValue(field, newValue));
         if (same) continue;
 
         changes.push({

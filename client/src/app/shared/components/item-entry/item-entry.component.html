@@ -324,6 +324,25 @@
                 <span class="ie-total" title="Total selling price (qty × unit price)">{{ lineTotal(i, j, k) | number: '1.2-2' }}</span>
               </div>
 
+              <div *ngIf="isQuote" class="mt-2 flex min-h-12 items-center gap-2">
+                <ng-container *ngIf="detail.get('image')?.value as image; else addLineImage">
+                  <img [src]="imageUrl(image)" [alt]="image.originalname || 'Item image'" class="h-12 w-12 rounded-lg border border-gray-200 bg-white object-contain dark:border-erp-border-dark" />
+                  <div class="min-w-0">
+                    <p class="max-w-48 truncate text-[11px] text-gray-500 dark:text-gray-400">{{ image.originalname }}</p>
+                    <button type="button" class="text-[11px] font-medium text-red-600 hover:underline dark:text-red-400" (click)="removeImage(i, j, k)">Remove image</button>
+                  </div>
+                </ng-container>
+                <ng-template #addLineImage>
+                  <label class="inline-flex cursor-pointer items-center rounded-lg border border-dashed border-gray-300 px-2.5 py-1.5 text-[11px] font-medium text-gray-600 hover:border-violet-400 hover:text-violet-700 dark:border-erp-border-dark dark:text-gray-400"
+                    [class.pointer-events-none]="imageUploads[imageKey(i, j, k)]" [class.opacity-50]="imageUploads[imageKey(i, j, k)]">
+                    {{ imageUploads[imageKey(i, j, k)] ? 'Uploading image…' : '+ Add item image' }}
+                    <input type="file" class="hidden" accept="image/png,image/jpeg,image/webp" [disabled]="imageUploads[imageKey(i, j, k)]" (change)="uploadImage($event, i, j, k)" />
+                  </label>
+                </ng-template>
+                <span class="text-[10px] text-gray-400">PNG, JPG or WebP · max 5 MB</span>
+                <span *ngIf="imageErrors[imageKey(i, j, k)]" class="text-[11px] text-red-600 dark:text-red-400">{{ imageErrors[imageKey(i, j, k)] }}</span>
+              </div>
+
               <ng-container *ngIf="lineExtraTemplate" [ngTemplateOutlet]="lineExtraTemplate"
                 [ngTemplateOutletContext]="{ $implicit: detail, i: i, j: j, k: k }"></ng-container>
             </div>

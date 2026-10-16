@@ -30,6 +30,7 @@ import {
     scheduleQuoteFollowUp,
     completeQuoteFollowUp,
     cancelQuoteFollowUp,
+    uploadQuoteItemImage,
 } from "../controllers/quotation.controller";
 import { requireAnyPrivilege, requirePrivilege, requireUnlessDenied } from "../common/middlewares/privilege.middleware";
 import { getQuoteStockHold, holdQuoteStock, releaseQuoteStockHold } from "../controllers/quoteStockHold.controller";
@@ -55,6 +56,7 @@ quoteRouter.post('/deal/approved/get', requirePrivilege("dealSheet"), getApprove
 quoteRouter.use(requirePrivilege("quotation"));
 
 quoteRouter.post('/', requirePrivilege("quotation", "create"), saveQuotation)
+quoteRouter.post('/item-image', requirePrivilege("quotation", "create"), upload.single('image'), uploadQuoteItemImage)
 quoteRouter.post('/lpo', requireUnlessDenied("quotation", "lpo"), upload.array('files'), uploadLpo)
 quoteRouter.patch('/status/:quoteId', requireUnlessDenied("quotation", "statusUpdate"), updateQuoteStatus)
 quoteRouter.patch('/update/:quoteId', requireUnlessDenied("quotation", "edit"), updateQuotation)

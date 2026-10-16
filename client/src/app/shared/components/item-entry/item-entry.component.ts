@@ -31,6 +31,7 @@ import { ItemSheetMeta, downloadItemsTemplate, exportItemsSheet, itemSheetColumn
 import { ActiveItemEntryService } from 'src/app/core/services/active-item-entry.service';
 import { ModalService } from 'src/app/shared/components/modal';
 import { QuickAddDialogComponent, QuickAddDialogData } from 'src/app/modules/products/modals/quick-add-dialog/quick-add-dialog.component';
+import { QuotationService } from 'src/app/core/services/quotation/quotation.service';
 
 type LineFilter = 'missingPrice' | 'notInCatalogue' | 'notAwarded' | 'errors';
 
@@ -97,6 +98,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
    * line with a `lineKey`. With `rfqPriced` the supplier's unit price and availability are entered too.
    */
   @Input() mode: 'quote' | 'deal' | 'purchase' | 'rfq' = 'quote';
+  @Input() quoteReference = '';
   /** RFQ mode: show the supplier's unit price (stored in `unitCost`) and availability on each line. */
   @Input() rfqPriced = false;
   /** RFQ mode: show the unit price and availability columns while the RFQ is being raised (the lines are still added, not filled in). */
@@ -224,6 +226,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   private subs = new Subscription();
   /** Guards the cost/margin/price derivation from re-entering itself. */
   private deriving = false;
+  imageUploads: Record<string, boolean> = {};
+  imageErrors: Record<string, string> = {};
 
   constructor(
     private _fb: FormBuilder,
@@ -233,6 +237,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     private _activeItemEntry: ActiveItemEntryService,
     private _modal: ModalService,
     private _palette: CommandPaletteService,
+    private _quotationService: QuotationService,
     @Optional() @Inject(ITEM_SUGGESTION_SOURCE) private _providedSource: ItemSuggestionSource | null,
   ) {}
 
@@ -424,6 +429,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   private unregisterTarget?: () => void;
 
   get isDeal(): boolean { return this.mode === 'deal'; }
+  get isQuote(): boolean { return this.mode === 'quote'; }
   get isPurchase(): boolean { return this.mode === 'purchase'; }
   /** Purchase mode only: lay lines out like a quotation (editable item code and part no, a read-only Margin column). Rules stay purchase rules. */
   @Input() quoteLayout = false;
@@ -553,6 +559,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       // null, not '': the server casts this to an ObjectId and an empty string fails the cast.
       supplierId: [null as string | null, deal ? [this.whenTicked(this.supplierRequired)] : []],
       uom: [''],
+      image: [null],
     });
     if (purchase) (group as FormGroup).addControl('lineKey', this._fb.control(null as string | null));
     if (deal) {
@@ -807,6 +814,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       ...(this.isRfq ? { paymentTerms: d.paymentTerms ?? '', deliveryTerms: d.deliveryTerms ?? '', remarks: d.remarks ?? '', offeredQty: d.offeredQty ?? null, alternative: d.alternative ?? '' } : {}),
       supplierId: (typeof d.supplierId === 'object' ? d.supplierId?._id : d.supplierId) || null,
       uom: this.canonicalUnit(d.uom),
+      image: d.image ?? null,
       ...(this.isPurchase ? { lineKey: d.lineKey ?? null } : {}),
       // An RFQ line keeps the key it was created with unless the record already has one.
       ...(this.isRfq && d.lineKey ? { lineKey: d.lineKey } : {}),
@@ -814,6 +822,49 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.deriving = false;
     if (this.isDeal && d.dealSelected) group.get('dealSelected')?.setValue(true);
     group.updateValueAndValidity();
+  }
+
+  imageKey(i: number, j: number, k: number): string {
+    return `${i}-${j}-${k}`;
+  }
+
+  imageUrl(image: { fileName?: string } | null | undefined): string {
+    return image?.fileName ? this._quotationService.itemImageUrl(image.fileName) : '';
+  }
+
+  uploadImage(event: Event, i: number, j: number, k: number): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const key = this.imageKey(i, j, k);
+    this.imageErrors[key] = '';
+    if (!file.type.startsWith('image/')) {
+      this.imageErrors[key] = 'Choose an image file.';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      this.imageErrors[key] = 'Maximum size is 5 MB.';
+      return;
+    }
+    this.imageUploads[key] = true;
+    const detail = this.detailsAt(i, j)?.at(k);
+    const partNumber = detail?.get('partNo')?.value || detail?.get('itemCode')?.value || '';
+    this._quotationService.uploadItemImage(file, this.quoteReference, partNumber).subscribe({
+      next: (image) => {
+        detail?.get('image')?.setValue(image);
+        this.imageUploads[key] = false;
+      },
+      error: (error) => {
+        this.imageUploads[key] = false;
+        this.imageErrors[key] = error?.error?.message || 'Image upload failed.';
+      },
+    });
+  }
+
+  removeImage(i: number, j: number, k: number): void {
+    this.detailsAt(i, j)?.at(k).get('image')?.setValue(null);
+    this.imageErrors[this.imageKey(i, j, k)] = '';
   }
 
   /** Appends items copied from elsewhere (previous jobs, a template) into the selected option. */

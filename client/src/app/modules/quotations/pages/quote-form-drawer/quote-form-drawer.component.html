@@ -106,6 +106,7 @@
              subscriptions, and re-creating it over an existing FormArray would leave them unwired. -->
         <div [hidden]="step !== 2">
             <app-item-entry #itemEntry [paletteTargetLabel]="open ? 'Quotation' : null" [externalAddButtons]="true" [optionalItems]="optionalItems"
+                [quoteReference]="quote?.quoteId || sourceEnquiry?.enquiryId || 'draft-quote'"
                 [seedOptionalItems]="seedOptionalItems" [suggestionScopeIds]="[]" [currency]="quoteForm.controls.currency.value || 'QAR'"
                 [previousJobItemsCount]="previousJobItemsCount"
                 (totals)="onItemTotals($event)" (previousJobsClicked)="openPreviousJobsModal()"

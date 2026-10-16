@@ -18,6 +18,11 @@ interface QuoteItemDetail {
     uom?: string;
     itemCode?: string;
     partNo?: string;
+    image?: {
+        fileName: string;
+        originalname: string;
+        mimetype?: string;
+    };
 }
 
 interface QuoteItem {
@@ -268,7 +273,12 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     partNo: {
         type: String,
         required: false,
-    }
+    },
+    image: {
+        fileName: { type: String, required: true },
+        originalname: { type: String, required: true },
+        mimetype: { type: String, required: false },
+    },
 });
 
 const quoteItem = new Schema<QuoteItem>({

@@ -111,6 +111,11 @@ export interface ItemEntryLineValue {
   alternative?: string;
   supplierId?: string | { _id?: string } | null;
   uom?: string;
+  image?: {
+    fileName: string;
+    originalname: string;
+    mimetype?: string;
+  } | null;
   /** Purchase mode only: the host's handle for mapping an edited line back to its saved record. */
   lineKey?: string | null;
   /** Deal mode only: seeds the line already ticked into the deal (editing an existing deal sheet). */

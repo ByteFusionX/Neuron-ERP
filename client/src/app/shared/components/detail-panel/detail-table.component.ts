@@ -1,4 +1,4 @@
-import { Component, Inject, Input, LOCALE_ID, booleanAttribute } from '@angular/core';
+import { Component, HostListener, Inject, Input, LOCALE_ID, booleanAttribute } from '@angular/core';
 import { CommonModule, formatNumber } from '@angular/common';
 import { DetailFootRow, DetailSummaryRow, DetailTableColumn } from './detail-panel.model';
 import { DetailBadgeComponent } from './detail-badge.component';
@@ -90,7 +90,19 @@ interface DetailTableLine {
                   <ng-container *ngSwitchCase="'number'">{{ line.row[c.key] | number }}</ng-container>
                   <ng-container *ngSwitchCase="'date'">{{ line.row[c.key] | date: 'dd MMM yyyy' }}</ng-container>
                   <app-detail-badge *ngSwitchCase="'badge'" [label]="line.row[c.key]" [tone]="badgeTone(c, line.row)"></app-detail-badge>
-                  <div *ngSwitchCase="'html'" [innerHTML]="line.row[c.key]"></div>
+                  <div *ngSwitchCase="'html'" [innerHTML]="line.row[c.key]" [class.dt-clamp]="c.clamp"
+                    [attr.title]="c.tooltipKey ? line.row[c.tooltipKey] : null"></div>
+                  <ng-container *ngSwitchCase="'image'">
+                    <button *ngIf="line.row[c.key] && c.imagePreview" type="button" (click)="openImage(line.row[c.key], line.row[c.key + 'Alt'])"
+                      class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 text-gray-600 transition-colors hover:border-violet-400 hover:bg-violet-50 hover:text-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500/40 dark:border-erp-border-dark dark:text-gray-300 dark:hover:bg-violet-500/10"
+                      title="View item image" aria-label="View item image">
+                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12s3.5-6 9.75-6 9.75 6 9.75 6-3.5 6-9.75 6-9.75-6-9.75-6Z" />
+                        <circle cx="12" cy="12" r="2.75" />
+                      </svg>
+                    </button>
+                    <span *ngIf="!line.row[c.key]" class="text-gray-400">—</span>
+                  </ng-container>
                   <ng-container *ngSwitchCase="'stack'">
                     <div class="font-medium text-gray-900 dark:text-white">{{ line.row[c.key] ?? '—' }}</div>
                     <div *ngIf="c.subKey && line.row[c.subKey]" [class.dt-clamp]="c.clamp"
@@ -161,6 +173,14 @@ interface DetailTableLine {
         </div>
       </div>
     </div>
+
+    <div *ngIf="previewImageUrl" class="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 p-6" (click)="closeImage()" role="dialog" aria-modal="true" aria-label="Item image preview">
+      <div class="relative max-h-full max-w-5xl rounded-xl bg-white p-3 shadow-2xl dark:bg-erp-surface-dark" (click)="$event.stopPropagation()">
+        <button type="button" (click)="closeImage()" class="absolute right-2 top-2 z-10 rounded-full bg-black/70 px-2.5 py-1 text-lg leading-none text-white hover:bg-black" aria-label="Close image preview">&times;</button>
+        <img [src]="previewImageUrl" [alt]="previewImageAlt" class="max-h-[82vh] max-w-[88vw] rounded-lg object-contain" />
+        <p *ngIf="previewImageAlt" class="mt-2 max-w-[88vw] truncate px-1 text-center text-xs text-gray-500 dark:text-gray-400">{{ previewImageAlt }}</p>
+      </div>
+    </div>
   `,
   styles: [
     ':host{display:block}',
@@ -168,9 +188,26 @@ interface DetailTableLine {
   ],
 })
 export class DetailTableComponent {
+  previewImageUrl = '';
+  previewImageAlt = '';
   /** Roomier type for pages where the table is the main content. */
   @Input({ transform: booleanAttribute }) large = false;
   constructor(@Inject(LOCALE_ID) private locale: string) {}
+
+  openImage(url: string, alt?: string): void {
+    this.previewImageUrl = url;
+    this.previewImageAlt = alt || 'Item image';
+  }
+
+  closeImage(): void {
+    this.previewImageUrl = '';
+    this.previewImageAlt = '';
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closeImage();
+  }
 
   @Input() title = '';
   private _columns: DetailTableColumn[] = [];

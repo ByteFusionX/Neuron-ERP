@@ -34,6 +34,18 @@ export class QuotationService {
     return this.http.post<Quotatation>(`${this.api}/quotation`, quotationDetails)
   }
 
+  uploadItemImage(file: File, quoteReference?: string, partNumber?: string): Observable<{ fileName: string; originalname: string; mimetype?: string }> {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (quoteReference) formData.append('quoteReference', quoteReference);
+    if (partNumber) formData.append('partNumber', partNumber);
+    return this.http.post<{ fileName: string; originalname: string; mimetype?: string }>(`${this.api}/quotation/item-image`, formData);
+  }
+
+  itemImageUrl(fileName: string): string {
+    return `${this.api}/file/${encodeURIComponent(fileName)}`;
+  }
+
   updateQuotation(quotationDetails: Quotatation, quoteId: string | undefined): Observable<Quotatation> {
     return this.http.patch<Quotatation>(`${this.api}/quotation/update/${quoteId}`, quotationDetails)
   }
@@ -166,29 +178,24 @@ export class QuotationService {
   }
 
 
-  getBase64ImageFromURL(url: string) {
-    return new Promise((resolve, reject) => {
-      var img = new Image();
-      img.setAttribute("crossOrigin", "anonymous");
-
-      img.onload = () => {
-        var canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        var ctx = canvas.getContext("2d");
-        ctx!.drawImage(img, 0, 0);
-
-        var dataURL = canvas.toDataURL("image/png");
-
-        resolve(dataURL);
-      };
-
-      img.onerror = error => {
-        reject(error);
-      };
-
-      img.src = url;
+  async getBase64ImageFromURL(url: string): Promise<string> {
+    const blob = await firstValueFrom(this.http.get(url, { responseType: 'blob' }));
+    if (blob.type === 'image/webp') {
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Unable to prepare WebP image for PDF output.');
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      return canvas.toDataURL('image/png');
+    }
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
     });
   }
 
@@ -211,6 +218,8 @@ export class QuotationService {
       includeStampByDefault: template?.includeStampByDefault !== false,
     };
     const shouldIncludeStamp = includeStamp ?? templateSettings.includeStampByDefault;
+    const wrapPdfText = (value: unknown): string =>
+      String(value ?? '').replace(/([\/@._-])/g, '$1\u200B');
     pdfMake.vfs = pdfFonts.vfs;
     
     (pdfMake as any).fonts = {
@@ -235,7 +244,7 @@ export class QuotationService {
     }
 
 
-    const tables = optionalItems.map((items, index) => {
+    const tables = await Promise.all(optionalItems.map(async (items, index) => {
       // Define a standalone option header as a paragraph
       let optionHeader
       if (optionalItems.length > 1) {
@@ -262,7 +271,7 @@ export class QuotationService {
       let serialNumber = 1;
       let hasExcludedOptionalItems = false;
 
-      items.items.forEach(item => {
+      for (const item of items.items) {
         const isExcludedOptional = !!item.isOptional && !item.includeInTotal;
         if (isExcludedOptional) {
           hasExcludedOptionalItems = true;
@@ -277,7 +286,7 @@ export class QuotationService {
           '', '', '', '', '', ''
         ]);
 
-        item.itemDetails.forEach(detail => {
+        for (const detail of item.itemDetails) {
           const unitPrice = detail.unitSellingPrice;
           const totalPrice = unitPrice * detail.quantity;
           if (!isExcludedOptional) {
@@ -309,17 +318,31 @@ export class QuotationService {
             }
           }
 
+          let itemImage: string | null = null;
+          if (detail.image?.fileName) {
+            try {
+              itemImage = await this.getBase64ImageFromURL(this.itemImageUrl(detail.image.fileName));
+            } catch {
+              itemImage = null;
+            }
+          }
+
           tableBody.push([
             { text: serialNumber++, style: 'tableText', alignment: 'center' },
-            { text: result, style: 'tableText' },
+            {
+              stack: [
+                ...(itemImage ? [{ image: itemImage, width: 70, height: 55, fit: [70, 55], alignment: 'center', margin: [0, 0, 0, 4] }] : []),
+                { text: result, style: 'tableText' },
+              ],
+            },
             { text: detail.quantity, style: 'tableText', alignment: 'center' },
-            { text: 'Ea', style: 'tableText', alignment: 'center' },
+            { text: detail.uom || 'Ea', style: 'tableText', alignment: 'center' },
             { text: this.formatNumber(unitPrice), style: 'tableText', alignment: 'center' },
             { text: this.formatNumber(totalPrice), style: 'tableText', alignment: 'center' },
             { text: detail.availability, style: 'tableText', alignment: 'center' },
           ]);
-        });
-      });
+        }
+      }
 
       const totalAmount = [
         { text: 'Sub Total', style: 'tableFooter', colSpan: 5 }, '', '', '', '',
@@ -398,7 +421,7 @@ export class QuotationService {
           style: 'optionalNote'
         }] : [])
       ];
-    });
+    }));
 
 
     const documentDefinition: any = {
@@ -474,17 +497,15 @@ export class QuotationService {
           color: '#444',
           margin: [0, 10, 0, 15],
           table: {
-            widths: [78.66, '*', 43.24, '*', 73.60, 'auto'],
+            widths: [63, 109, 35, 100, 61, 72],
             body: [
-              [{ style: 'tableHead', text: 'Company:', alignment: 'left' }, { style: 'tableHead', text: quoteData.client.companyName, alignment: 'left', colSpan: 4 }, {}, {}, {}, { text: ['Total Pages : 0', { pageReference: 'lastPage' }], alignment: 'left', style: 'pageNumber' }],
+              [{ style: 'tableHead', text: 'Company:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(quoteData.client.companyName), alignment: 'left', colSpan: 4 }, {}, {}, {}, { text: ['Total Pages : 0', { pageReference: 'lastPage' }], alignment: 'left', style: 'pageNumber' }],
               [{ style: 'tableHead', text: 'Attention:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.attention.courtesyTitle + ' ' + quoteData.attention.firstName + ' ' + quoteData.attention.lastName}`, alignment: 'left', colSpan: 3, bold: true }, {}, {}, { style: 'tableHead', text: 'Date:', alignment: 'left' }, { style: 'tableHead', text: quoteData.date ? new Date(quoteData.date).toLocaleDateString('en-GB') : '', alignment: 'left' }],
-              [{ rowSpan: 2, style: 'vCentertableHead', text: 'Address:', alignment: 'left' }, { rowSpan: 2, style: 'vCentertableHead', text: quoteData.client.companyAddress, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'stableHead', text: 'Client Ref:', alignment: 'left' }, { style: 'stableHead', text: quoteData.client.clientRef || '-', alignment: 'left' }],
+              [{ rowSpan: 2, style: 'vCentertableHead', text: 'Address:', alignment: 'left' }, { rowSpan: 2, style: 'vCentertableHead', text: wrapPdfText(quoteData.client.companyAddress), alignment: 'left', colSpan: 3 }, {}, {}, { style: 'stableHead', text: 'Client Ref:', alignment: 'left' }, { style: 'stableHead', text: wrapPdfText(quoteData.client.clientRef || '-'), alignment: 'left' }],
               ['', '', '', '', { style: 'stableHead', text: 'Closing Date:', alignment: 'left' }, { style: 'stableHead', text: quoteData.closingDate ? new Date(quoteData.closingDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Client Tel:', alignment: 'left' }, { style: 'tableHead', text: `+974 ${quoteData.attention.phoneNo}`, alignment: 'left' }, { style: 'tableHead', text: 'FAX:', alignment: 'center' }, { style: 'tableHead', text: '+974', alignment: 'left' }, { style: 'tableHead', text: 'Salesperson:', alignment: 'left' }, { style: 'tableHead', text: `${quoteData.createdBy.firstName + ' ' + quoteData.createdBy.lastName}`, alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Subject:', alignment: 'left' }, { style: 'tableHead', text: quoteData.subject, alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Quote Ref:', alignment: 'left' }, { style: 'quoteId', text: quoteData.quoteId, alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Payment Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.paymentTerms || '-', alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'tableHead', text: quoteData.validityDate ? new Date(quoteData.validityDate).toLocaleDateString('en-GB') : '', alignment: 'left' }],
-              [{ style: 'tableHead', text: 'Delivery Terms:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryTerms || '-', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
-              [{ style: 'tableHead', text: 'Delivery Location:', alignment: 'left' }, { style: 'tableHead', text: quoteData.deliveryLocation || '-', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
+              [{ style: 'tableHead', text: 'Client Tel:', alignment: 'left' }, { style: 'tableHead', text: quoteData.attention.phoneNo ? `+974 ${quoteData.attention.phoneNo}` : '-', alignment: 'left' }, { style: 'tableHead', text: 'Email:', alignment: 'center' }, { style: 'stableHead', text: wrapPdfText(quoteData.attention.email || '-'), alignment: 'left' }, { style: 'tableHead', text: 'Salesperson:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(`${quoteData.createdBy.firstName + ' ' + quoteData.createdBy.lastName}`), alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Subject:', alignment: 'left' }, { style: 'tableHead', text: wrapPdfText(quoteData.subject), alignment: 'left', colSpan: 3 }, {}, {}, { style: 'tableHead', text: 'Quote Ref:', alignment: 'left' }, { style: 'quoteId', text: wrapPdfText(quoteData.quoteId), alignment: 'left' }],
+              [{ style: 'tableHead', text: 'Valid Until:', alignment: 'left' }, { style: 'tableHead', text: quoteData.validityDate ? new Date(quoteData.validityDate).toLocaleDateString('en-GB') : '', alignment: 'left', colSpan: 5 }, {}, {}, {}, {}],
             ]
           }
         },
@@ -496,18 +517,6 @@ export class QuotationService {
           ]
           : []),
         ...tables,
-        ...(templateSettings.showCommercialTerms && (quoteData.paymentTerms || quoteData.deliveryTerms || quoteData.deliveryLocation || quoteData.validityDate) ? [
-          { text: 'COMMERCIAL TERMS', style: 'subHeading' },
-          {
-            ul: [
-              ...(quoteData.paymentTerms ? [`Payment Terms: ${quoteData.paymentTerms}`] : []),
-              ...(quoteData.deliveryTerms ? [`Delivery Terms: ${quoteData.deliveryTerms}`] : []),
-              ...(quoteData.deliveryLocation ? [`Delivery Location: ${quoteData.deliveryLocation}`] : []),
-              ...(quoteData.validityDate ? [`Valid Until: ${new Date(quoteData.validityDate).toLocaleDateString('en-GB')}`] : []),
-            ],
-            style: 'text'
-          }
-        ] : []),
         ...(templateSettings.showTerms ? [
           { text: 'TERMS & CONDITIONS', style: 'subHeading' },
           { text: quoteData.termsAndCondition, style: 'text' },

@@ -75,12 +75,16 @@ export interface DetailTableColumn {
   key: string;
   label: string;
   /** 'stack' renders `key` as a bold title with `subKey` as a muted second line. */
-  type?: 'text' | 'number' | 'currency' | 'date' | 'badge' | 'html' | 'stack';
+  type?: 'text' | 'number' | 'currency' | 'date' | 'badge' | 'html' | 'stack' | 'image';
+  /** type 'image' only: shows a View action that opens a larger modal preview. */
+  imagePreview?: boolean;
   align?: 'left' | 'right' | 'center';
   /** type 'stack' only: row field holding the muted second line (description, brand, model). */
   subKey?: string;
-  /** type 'stack' only: clamps the second line to two lines. Defaults to false. */
+  /** Clamps supported text/HTML content to two lines. For type 'stack', applies to the second line. */
   clamp?: boolean;
+  /** Row field containing the full plain-text value shown as a native tooltip. */
+  tooltipKey?: string;
   /** Let long cell text wrap instead of staying on one line. */
   wrap?: boolean;
   /** Sum this column in the footer row. */

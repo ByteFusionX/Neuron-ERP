@@ -37,6 +37,11 @@ export interface QuoteItemDetail {
     unitSellingPrice: number;
     email: string;
     uom?: string;
+    image?: {
+        fileName: string;
+        originalname: string;
+        mimetype?: string;
+    };
 }
 
 export interface File {
@@ -291,6 +296,12 @@ export enum QuoteStatus {
     Lost = 'Lost',
     Expired = 'Expired',
 }
+
+export const quoteStatusLabel = (status: QuoteStatus | string): string => ({
+    [QuoteStatus.ReadyForSubmission]: 'Ready For Submission',
+    [QuoteStatus.UnderReview]: 'Under Review',
+    [QuoteStatus.UnderNegotiation]: 'Under Negotiation',
+}[status] || status);
 
 export interface dealData {
     dealId: string;
