@@ -18,7 +18,7 @@ import { CommonModule } from '@angular/common';
         type="button"
         (click)="open.emit()"
         [attr.title]="title || 'View revision history'"
-        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ring-1 ring-inset transition-colors"
+        class="inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ring-1 ring-inset transition-colors"
         [ngClass]="classes + ' hover:bg-violet-100 dark:hover:bg-violet-500/20'"
       >
         <ng-container *ngTemplateOutlet="body"></ng-container>

@@ -238,8 +238,38 @@ export class RevisionHistoryComponent implements OnChanges, OnDestroy {
   private changedFields(before: QuoteRevisionSnapshot, after: QuoteRevisionSnapshot): string[] {
     const keys = Object.keys(FIELD_LABELS) as (keyof QuoteRevisionSnapshot)[];
     return keys
-      .filter((k) => JSON.stringify(before?.[k] ?? null) !== JSON.stringify(after?.[k] ?? null))
+      .filter((k) => k === 'optionalItems'
+        ? this.itemsChanged(before, after)
+        : JSON.stringify(before?.[k] ?? null) !== JSON.stringify(after?.[k] ?? null))
       .map((k) => FIELD_LABELS[k]);
+  }
+
+  private itemsChanged(before: QuoteRevisionSnapshot, after: QuoteRevisionSnapshot): boolean {
+    const numberOrNull = (value: unknown) => value === '' || value == null ? null : Number(value);
+    const supplierId = (value: unknown) => typeof value === 'object' && value !== null
+      ? String((value as { _id?: unknown })._id || '')
+      : String(value || '');
+    const normalize = (snapshot: QuoteRevisionSnapshot) => (snapshot?.optionalItems || []).map((option) => ({
+      totalDiscount: Number(option?.totalDiscount) || 0,
+      items: (option?.items || []).map((item) => ({
+        itemName: item?.itemName || '',
+        isOptional: !!item?.isOptional,
+        includeInTotal: !!item?.includeInTotal,
+        itemDetails: (item?.itemDetails || []).map((detail) => ({
+          itemCode: detail?.itemCode || '',
+          partNo: detail?.partNo || '',
+          detail: detail?.detail || '',
+          quantity: numberOrNull(detail?.quantity),
+          unitCost: numberOrNull(detail?.unitCost),
+          profit: numberOrNull(detail?.profit),
+          unitSellingPrice: numberOrNull(detail?.unitSellingPrice),
+          availability: detail?.availability || '',
+          supplierId: supplierId(detail?.supplierId),
+          uom: detail?.uom || '',
+        })),
+      })),
+    }));
+    return JSON.stringify(normalize(before)) !== JSON.stringify(normalize(after));
   }
 
   /** Lines matched on name + detail; a matched line whose quantity moved is a "qty" change. */
