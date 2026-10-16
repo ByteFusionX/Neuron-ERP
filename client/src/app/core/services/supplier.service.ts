@@ -107,8 +107,10 @@ export class SupplierService {
         return this.http.patch(`${this.api}/supplier/update/${id}`, formData, { context: context() });
     }
 
-    supplierList(): Observable<any> {
-        return this.http.get(`${this.api}/supplier/suppliers-list`);
+    supplierList(includePending = false): Observable<any> {
+        return this.http.get(`${this.api}/supplier/suppliers-list`, {
+            params: includePending ? { includePending: 'true' } : {}
+        });
     }
 
     blockSupplier(id: string, reason?: string): Observable<{ isBlocked: boolean }> {

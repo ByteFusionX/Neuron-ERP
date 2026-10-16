@@ -74,6 +74,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
   customerOptions: SfOption[] = [];
   contactOptions: SfOption[] = [];
+  customersLoading = false;
+  contactsLoading = false;
   departmentOptions: SfOption[] = [];
   currencyOptions: SfOption[] = [
     { label: 'QAR', value: 'QAR' },
@@ -207,8 +209,10 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       switchMap((e) => this.customerService.getAllCustomers(e!._id as string)),
       shareReplay(1),
     );
+    this.customersLoading = true;
     this.subscriptions.add(
       this.customers$.subscribe((customers) => {
+        this.customersLoading = false;
         // The server blocks new quotes for these customers, so they can't be picked (an existing quote keeps its own customer).
         const keep = this.quoteForm.controls['client'].value;
         this.customerOptions = customers.map((c) => {
@@ -260,6 +264,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   private onClientChange(clientId: string | null): void {
     if (!this.seeding) this.quoteForm.controls['attention'].reset(null);
     this.contactOptions = [];
+    this.contactsLoading = !!clientId;
     if (!clientId || !this.optionsLoaded) return;
     this.loadContacts(clientId);
   }
@@ -267,6 +272,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   private loadContacts(clientId: string): void {
     this.subscriptions.add(
       this.customers$.pipe(take(1)).subscribe((customers) => {
+        this.contactsLoading = false;
         const customer = customers.find((c) => c._id === clientId);
         if (!customer) return;
         this.contactOptions = (customer.contactDetails || []).map((c: ContactDetail) => ({
@@ -300,6 +306,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
   private seedFromEnquiry(enquiry: getEnquiry): void {
     this.sourceEnquiry = enquiry;
+    const client = enquiry.client as any;
+    const contact = enquiry.contact as any;
     this.seeding = true;
     this.quoteForm.patchValue({
       client: (enquiry.client as any)?._id ?? null,
@@ -308,6 +316,8 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       currency: enquiry.preSale?.estimations?.currency ?? 'QAR',
       enqId: enquiry._id ?? null,
     });
+    if (client?._id) this.customerOptions = [{ label: client.companyName || 'Selected customer', value: client._id }];
+    if (contact?._id) this.contactOptions = [{ label: `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Selected contact', value: contact._id }];
     this.setDepartments([
       (enquiry.department as unknown as getDepartment)?._id ?? (enquiry.department as unknown as string),
     ]);
@@ -342,6 +352,10 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
       deliveryTerms: q.deliveryTerms ?? '',
       deliveryLocation: q.deliveryLocation ?? '',
     });
+    const client = q.client as any;
+    const attention = q.attention as any;
+    if (client?._id) this.customerOptions = [{ label: client.companyName || 'Selected customer', value: client._id }];
+    if (attention?._id) this.contactOptions = [{ label: `${attention.firstName || ''} ${attention.lastName || ''}`.trim() || 'Selected contact', value: attention._id }];
     this.setDepartments(departments);
     this.seeding = false;
     // A fresh array each time, so item-entry sees the change even when the same quote is reopened.
@@ -458,6 +472,11 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
   onProductCreated(_product: any): void {}
 
+  onSupplierCreated(_supplier: any): void {
+    this.createSupplierOpen = false;
+    this.itemEntry?.refreshSuppliers();
+  }
+
   onItemTotals(totals: ItemEntryTotals): void {
     this.itemTotals = totals;
   }
@@ -565,13 +584,15 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
     }
 
     const edit = this.isEdit;
+    if (!edit) {
+      this.saveQuotation();
+      return;
+    }
     const description = edit
       ? this.revisesOnChange
         ? 'This quotation is past the draft stage. If the items, notes, terms or currency changed, the current version is kept as a revision. Say what changed.'
         : 'Say what you changed. It is recorded in the quotation history.'
-      : this.sourceEnquiry
-        ? 'This creates the quotation from the converted enquiry. The note is saved in its history.'
-        : 'This creates the quotation. The note is saved in its history.';
+      : '';
     this.confirmDialog
       .open({
         tone: 'approve',
@@ -586,9 +607,7 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
 
         this.saving = true;
         const comment = result.reason ?? '';
-        const request$ = edit
-          ? this.quoteService.updateQuotation(this.buildPayload(undefined, comment), this.quote._id)
-          : this.quoteService.saveQuotation(this.buildPayload(QuoteStatus.WorkInProgress, comment));
+        const request$ = this.quoteService.updateQuotation(this.buildPayload(undefined, comment), this.quote._id);
         request$.subscribe({
           next: () => {
             this.saving = false;
@@ -598,6 +617,18 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
           error: () => (this.saving = false),
         });
       });
+  }
+
+  private saveQuotation(): void {
+    this.saving = true;
+    this.quoteService.saveQuotation(this.buildPayload(QuoteStatus.WorkInProgress)).subscribe({
+      next: () => {
+        this.saving = false;
+        this.finish();
+        this.toaster.success('Quotation created.', 'Created');
+      },
+      error: () => (this.saving = false),
+    });
   }
 
   /** Clears the form, closes the drawer and tells the host the data changed. */

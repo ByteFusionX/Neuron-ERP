@@ -1274,10 +1274,13 @@ export const blockSupplier = async (req: Request, res: Response, next: NextFunct
 
 export const getSupplierList = async (req: Request, res: Response, next: NextFunction) => {
    try {
+      const statuses = req.query.includePending === 'true'
+         ? [supplierStatus.approved, supplierStatus.pending]
+         : [supplierStatus.approved];
       const suppliers = await Supplier.find(
          {
             isDeleted: false,
-            status: 'Approved',
+            status: { $in: statuses },
             isBlocked: { $ne: true }
          },
          {

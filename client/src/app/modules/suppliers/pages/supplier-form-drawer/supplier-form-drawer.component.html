@@ -37,6 +37,7 @@
                 <app-sf-combobox formControlName="supplierType" [options]="supplierTypeOptions" placeholder="Select type"
                     footerLabel="Add supplier type" (footerAction)="createMasterListItem('supplierType')"></app-sf-combobox>
             </app-sf-field>
+            <p *ngIf="masterDataFeedback" class="col-span-2 text-xs font-medium text-emerald-700 dark:text-emerald-400" role="status">{{ masterDataFeedback }}</p>
             <app-sf-field label="Credit Days" [control]="supplierForm.controls.creditDays">
                 <app-sf-number formControlName="creditDays"></app-sf-number>
             </app-sf-field>

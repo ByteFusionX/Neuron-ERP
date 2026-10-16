@@ -75,7 +75,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
     productCategory: ['', Validators.required],
     warehouse: [''],
     brand: ['', [Validators.required, notBlank]],
-    unitOfMeasure: [''],
+    unitOfMeasure: ['', Validators.required],
     isActive: [true],
   });
 
@@ -107,7 +107,12 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   private loadMasterOptions(): void {
     const p = this.isEdit ? this.product : null;
     this.subscriptions.add(
-      this.masterList.getOptions('unit', { current: p?.unitOfMeasure }).subscribe((o) => (this.unitOptions = o))
+      this.masterList.getOptions('unit', { current: p?.unitOfMeasure, fallback: ['Each'] }).subscribe((o) => {
+        this.unitOptions = o;
+        if (!this.isEdit && !this.productForm.controls.unitOfMeasure.value && o.length === 1) {
+          this.productForm.controls.unitOfMeasure.setValue(String(o[0].value));
+        }
+      })
     );
     this.subscriptions.add(
       this.masterList.getOptions('brand', { current: p?.brand }).subscribe((o) => (this.brandOptions = o))
@@ -168,6 +173,9 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
         this.categoryOptions = (categories ?? []).map((c: any) => ({ label: c.categoryName, value: c._id }));
         if (selectedId) this.productForm.patchValue({ productCategory: selectedId });
         else this.matchPrefillCategory();
+        if (!this.isEdit && !this.productForm.controls.productCategory.value && this.categoryOptions.length === 1) {
+          this.productForm.controls.productCategory.setValue(String(this.categoryOptions[0].value));
+        }
       },
       error: () => this.toastr.error('Failed to load product categories'),
     });
@@ -323,6 +331,7 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
   submit(): void {
     if (this.productForm.invalid) {
       this.productForm.markAllAsTouched();
+      this.toastr.error(`Complete: ${this.invalidFieldLabels.join(', ')}`, 'Product details incomplete');
       return;
     }
 
@@ -367,5 +376,13 @@ export class ProductFormDrawerComponent implements OnChanges, OnDestroy {
         this.toastr.error(error.error?.message || (this.isEdit ? 'Failed to update product' : 'Failed to create product'));
       },
     });
+  }
+
+  get invalidFieldLabels(): string[] {
+    const labels: Record<string, string> = {
+      partNo: 'Part No', productName: 'Product Name', productDescription: 'Description', type: 'Type',
+      productSegment: 'Department', productCategory: 'Category', brand: 'Brand', unitOfMeasure: 'Unit of Measure',
+    };
+    return Object.entries(labels).filter(([key]) => this.productForm.get(key)?.invalid).map(([, label]) => label);
   }
 }

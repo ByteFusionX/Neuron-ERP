@@ -3,6 +3,12 @@
 
     <form id="product-form" [formGroup]="productForm" (ngSubmit)="submit()" novalidate>
 
+        @if (invalidFieldLabels.length && productForm.touched) {
+            <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300" role="alert">
+                Complete the following fields: {{ invalidFieldLabels.join(', ') }}.
+            </div>
+        }
+
         <app-sf-section title="Identification" columns="2">
             <app-sf-field full label="Generic item" [control]="productForm.controls.isGeneric">
                 <app-sf-checkbox formControlName="isGeneric" label="Service or generic item (no brand or part no)"></app-sf-checkbox>

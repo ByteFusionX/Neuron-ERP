@@ -411,7 +411,8 @@
     <!-- Pagination -->
     <div class="shrink-0 flex flex-col gap-3 px-5 py-3 border-t border-gray-100 dark:border-erp-border-dark sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-500">
-        <span class="tabular-nums">Showing <span class="font-medium text-gray-800 dark:text-gray-200">{{ rangeStart }}–{{ rangeEnd }}</span> of <span class="font-medium text-gray-800 dark:text-gray-200">{{ serverSide ? totalCount : filteredData.length }}</span></span>
+        <span *ngIf="loading" class="tabular-nums">Loading records…</span>
+        <span *ngIf="!loading" class="tabular-nums">Showing <span class="font-medium text-gray-800 dark:text-gray-200">{{ rangeStart }}–{{ rangeEnd }}</span> of <span class="font-medium text-gray-800 dark:text-gray-200">{{ serverSide ? totalCount : filteredData.length }}</span></span>
         <label class="flex items-center gap-2">
           <span>Rows</span>
           <select class="h-8 border border-gray-100 dark:border-erp-border-dark rounded-lg px-2 text-xs text-gray-700 dark:text-gray-300 bg-white dark:bg-erp-surface-dark focus:outline-none focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-900"

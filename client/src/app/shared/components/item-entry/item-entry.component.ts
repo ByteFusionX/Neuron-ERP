@@ -277,7 +277,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.loadUnits();
 
     if (this.supplierOptions) this.resolvedSupplierOptions = this.supplierOptions;
-    else this.subs.add(this._supplierService.supplierList().subscribe({
+    else this.subs.add(this._supplierService.supplierList(true).subscribe({
       next: (res) => (this.resolvedSupplierOptions = (res?.data || []).map((s: any) => ({ label: s.supplierName, value: s._id }))),
     }));
 
@@ -325,6 +325,16 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
     this.subs.add(this._masterList.getOptions('unit').subscribe((opts) => {
       this.masterUnits = opts;
       this.resolveUnits();
+    }));
+  }
+
+  refreshSuppliers(): void {
+    if (this.supplierOptions) return;
+    this.subs.add(this._supplierService.supplierList(true).subscribe({
+      next: (res) => (this.resolvedSupplierOptions = (res?.data || []).map((supplier: any) => ({
+        label: supplier.supplierName,
+        value: supplier._id,
+      }))),
     }));
   }
 
@@ -405,6 +415,8 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.codeLookupTimers.forEach((timer) => clearTimeout(timer));
+    this.codeLookupTimers.clear();
     this.subs.unsubscribe();
     this.unregisterTarget?.();
   }
@@ -1056,6 +1068,19 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
         this.activeSuggestionKey = key;
       }
     }));
+  }
+
+  private codeLookupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /** Exact codes link automatically after typing pauses; Enter and blur still run immediately. */
+  queueCodeLookup(i: number, j: number, k: number, field: 'itemCode' | 'partNo'): void {
+    const key = `${i}-${j}-${k}-${field}`;
+    const existing = this.codeLookupTimers.get(key);
+    if (existing) clearTimeout(existing);
+    this.codeLookupTimers.set(key, setTimeout(() => {
+      this.codeLookupTimers.delete(key);
+      this.lookupByCode(i, j, k, field);
+    }, 350));
   }
 
   private queueSearch(key: string, term: string, category: string): void {

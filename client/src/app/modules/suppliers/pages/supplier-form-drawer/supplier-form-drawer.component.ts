@@ -66,6 +66,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
   /** Both lists come from Supplier Data in settings; a saved value stays selectable even if removed. */
   supplierTypeOptions: SfOption[] = [];
   categoryOptions: SfOption[] = [];
+  masterDataFeedback = '';
 
   private fb = inject(FormBuilder);
   private toaster = inject(ToastrService);
@@ -231,7 +232,7 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
         if (!this.isStepValid(s as StepNumber)) {
           this.markStepTouched(s as StepNumber);
           this.step = s as StepNumber;
-          this.toaster.warning('Fill the required fields before moving on');
+          this.toaster.warning(`Complete ${this.steps.find((item) => item.n === this.step)?.label || 'this step'}: ${this.invalidFieldLabels(this.step).join(', ')}`);
           return;
         }
       }
@@ -302,10 +303,13 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
           if (list === 'supplierCategory') {
             this.categoryOptions = [...this.categoryOptions, { label: res.data.label, value: res.data._id }];
             this.supplierForm.controls.category.setValue(res.data._id);
+            this.masterDataFeedback = `Category "${res.data.label}" created and selected.`;
           } else {
             this.supplierTypeOptions = [...this.supplierTypeOptions, { label: res.data.label, value: res.data.label }];
             this.supplierForm.controls.supplierType.setValue(res.data.label);
+            this.masterDataFeedback = `Supplier type "${res.data.label}" created and selected.`;
           }
+          this.toaster.success(this.masterDataFeedback);
         },
         error: (e) => this.toaster.error(e?.error?.message || 'Could not add item'),
       });
@@ -551,7 +555,8 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
     if (this.supplierForm.invalid) {
       this.supplierForm.markAllAsTouched();
       this.step = ([1, 2, 4] as StepNumber[]).find((s) => !this.isStepValid(s)) ?? 1;
-      this.toaster.error('Please fill all required fields correctly');
+      this.markStepTouched(this.step);
+      this.toaster.error(`Complete ${this.steps.find((s) => s.n === this.step)?.label || 'this step'}: ${this.invalidFieldLabels(this.step).join(', ')}`);
       return;
     }
 
@@ -593,6 +598,20 @@ export class SupplierFormDrawerComponent implements OnChanges, OnDestroy {
         error: (error) => { this.saving = false; void this.onSaveError(error, 'Failed to create supplier'); },
       });
     }
+  }
+
+  invalidFieldLabels(step: StepNumber): string[] {
+    const labels: Record<string, string> = {
+      supplierName: 'Supplier Name', companyEmail: 'Company Email', companyPhone: 'Company Phone', website: 'Website',
+      category: 'Category', supplierType: 'Supplier Type', creditDays: 'Credit Days', creditValue: 'Credit Limit',
+    };
+    if (step === 1) {
+      const fields = Object.entries(labels).filter(([key]) => this.supplierForm.get(key)?.invalid).map(([, label]) => label);
+      this.addresses.controls.forEach((address, index) => { if (address.invalid) fields.push(`Address ${index + 1}`); });
+      return fields;
+    }
+    if (step === 2) return this.contacts.controls.flatMap((contact, index) => contact.invalid ? [`Contact ${index + 1}`] : []);
+    return this.bankAccounts.controls.flatMap((bank, index) => bank.invalid ? [`Bank account ${index + 1}`] : []);
   }
 
   /** A duplicate warning asks the user whether to save anyway; every other error is shown as a toast. */

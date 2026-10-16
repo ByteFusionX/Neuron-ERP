@@ -64,10 +64,10 @@
         <ng-container *ngIf="step === 1">
             <app-sf-section title="Customer" columns="2">
                 <app-sf-field label="Customer" [control]="quoteForm.controls.client">
-                    <app-sf-combobox formControlName="client" [options]="customerOptions" placeholder="Select customer"></app-sf-combobox>
+                    <app-sf-combobox formControlName="client" [options]="customerOptions" [placeholder]="customersLoading ? 'Loading customers…' : 'Select customer'"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field label="Attention" [hint]="quoteForm.controls.client.value ? '' : 'Select customer first'" [control]="quoteForm.controls.attention">
-                    <app-sf-combobox formControlName="attention" [options]="contactOptions" placeholder="Select contact"></app-sf-combobox>
+                    <app-sf-combobox formControlName="attention" [options]="contactOptions" [placeholder]="contactsLoading ? 'Loading contacts…' : 'Select contact'"></app-sf-combobox>
                 </app-sf-field>
                 <app-sf-field full label="Department(s)" [control]="quoteForm.controls.departments">
                     <app-sf-combobox formControlName="departments" [options]="departmentOptions" multiple
@@ -185,6 +185,6 @@
     </ng-container>
 </app-sf-drawer>
 
-<app-supplier-form-drawer [open]="createSupplierOpen" mode="create" (closed)="createSupplierOpen = false"></app-supplier-form-drawer>
+<app-supplier-form-drawer [open]="createSupplierOpen" mode="create" (saved)="onSupplierCreated($event)" (closed)="createSupplierOpen = false"></app-supplier-form-drawer>
 
 <app-product-form-drawer [open]="createProductOpen" mode="create" [prefill]="createProductPrefill" (saved)="onProductCreated($event)" (closed)="createProductOpen = false"></app-product-form-drawer>
