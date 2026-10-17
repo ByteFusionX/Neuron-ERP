@@ -44,6 +44,8 @@ export interface DataGridRowAction<T = any> {
   hidden?: (row: T) => boolean;
   /** Also show as an icon button on row hover, so common actions skip the menu */
   quick?: boolean;
+  /** Include this action in the overflow menu. Defaults to true. */
+  menu?: boolean;
   /** app-dp-icon name used by the quick button */
   icon?: string;
   /** Show as an icon button in the detail panel's top bar for the open record. Defaults to `quick`. */

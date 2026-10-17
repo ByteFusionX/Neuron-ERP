@@ -198,11 +198,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
 
   countFor(key: keyof PresaleTabCounts | 'all' | 'none'): number | undefined {
     if (key === 'none') return undefined;
-    if (key === 'all') {
-      const { new: n, assignedTab, completedTab, resolve, cancelledTab } = this.tabCounts;
-      if (n === undefined && assignedTab === undefined && completedTab === undefined && resolve === undefined && cancelledTab === undefined) return undefined;
-      return (n ?? 0) + (assignedTab ?? 0) + (completedTab ?? 0) + (resolve ?? 0) + (cancelledTab ?? 0);
-    }
+    if (key === 'all') return this.tabCounts.all;
     return this.tabCounts[key];
   }
 
@@ -293,6 +289,8 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       'Assigned To Presales': 'Assigned',
       'in presales': 'Assigned',
       'Sent to Presales': 'New',
+      'Sent by Presale Engineer': 'Completed',
+      'Sended by Presale Engineer': 'Completed',
       'Rejected by Presale Engineer': 'Rejected',
       'Rejected by Presale Manager': 'Rejected',
       'Work In Progress': 'Completed',
@@ -320,6 +318,8 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     'Rejected by Presale Engineer': 'bg-red-50 text-red-700 ring-red-200',
     'Rejected by Presale Manager': 'bg-red-50 text-red-700 ring-red-200',
     'Sent to Presales': 'bg-blue-50 text-blue-700 ring-blue-200',
+    'Sent by Presale Engineer': 'bg-green-50 text-green-700 ring-green-200',
+    'Sended by Presale Engineer': 'bg-green-50 text-green-700 ring-green-200',
     'Work In Progress': 'bg-green-50 text-green-700 ring-green-200',
     'new': 'bg-blue-50 text-blue-700 ring-blue-200',
     'assigned': 'bg-yellow-50 text-yellow-700 ring-yellow-200',
@@ -410,14 +410,14 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
         hidden: (r) => stageIn(r, 'assigned', 'completed', 'all') || !r.preSale?.feedback?.length,
       },
       {
-        id: 'uploadEstimation', label: 'Upload Estimation', icon: 'upload', quick: true,
+        id: 'uploadEstimation', label: 'Upload Estimation', icon: 'upload', quick: true, menu: false,
         hidden: (r) => this.rowStage(r) !== 'assigned' || !!r.preSale?.estimations || !this.canEstimate,
       },
       {
         id: 'viewEstimation', label: 'View Estimation', icon: 'files', quick: true,
         hidden: (r) => stageIn(r, 'assigned', 'completed', 'all') || !r.preSale?.estimations,
       },
-      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true, hidden: (r) => this.rowStage(r) !== 'assigned' || !this.canReject },
+      { id: 'reject', label: 'Reject Job', icon: 'close', variant: 'danger', quick: true, menu: false, hidden: (r) => this.rowStage(r) !== 'assigned' || !this.canReject },
       {
         id: 'send', label: 'Send to Enquiry', icon: 'send', quick: true,
         hidden: (r) => this.rowStage(r) !== 'assigned' || !r.preSale?.estimations || this.hasPendingFeedbackRequest(r) || !this.canEstimate,
@@ -598,7 +598,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
           { type: 'field', label: 'Description', value: row.title },
           { type: 'field', label: 'Assigned By', value: `${row.salesPerson?.[0]?.firstName ?? ''} ${row.salesPerson?.[0]?.lastName ?? ''}`.trim() },
           { type: 'field', label: 'Department', value: row.department?.[0]?.departmentName },
-          { type: 'field', label: 'Status', value: row.status, pill: true, visible: this.viewAssignedFor },
+          { type: 'field', label: 'Status', value: this.statusLabel(this.displayStatus(row)), pill: true, visible: this.viewAssignedFor },
           { type: 'field', label: 'Assigned To', value: row.reAssigned?.[0] ? `${row.reAssigned[0].firstName} ${row.reAssigned[0].lastName}` : '—', visible: this.viewAssignedFor },
           { type: 'field', label: 'Cancel Reason', value: row.preSale?.cancelReason || row.lostReason || '—', visible: row.preSale?.status === 'cancelled' },
         ],
@@ -677,7 +677,17 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
   progressStages(row: any): ApprovalJourneyStage[] {
     const steps = this.ladderOf(row);
     if (!steps.length) {
-      return [{ key: 'empty', variant: 'empty', icon: 'help_outline', title: 'No presale workflow configured', subtitle: 'An admin can set one up in Settings → Workflow.' }];
+      const assignee = this.assigneeName(row);
+      const status = this.statusLabel(this.displayStatus(row));
+      return [{
+        key: 'direct-assignment',
+        variant: row.preSale?.status === 'new' ? 'stage' : 'current',
+        initials: row.preSale?.status === 'new' ? 'PS' : this.initials(assignee),
+        title: row.preSale?.status === 'new' ? 'Waiting for assignment' : status,
+        subtitle: row.preSale?.status === 'new'
+          ? 'This job uses direct assignment because no escalation workflow is configured.'
+          : `${assignee === '—' ? 'Presale' : assignee} is handling this job through the direct assignment flow.`,
+      }];
     }
 
     const { index: currentIndex, dueAt, queue } = this.resolveAssignment(row, steps);
@@ -771,7 +781,16 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
       subject = new BehaviorSubject<DetailTimelineEntry[]>([]);
       this.historyCache.set(row._id, subject);
       this._auditLog.getHistory('enquiry', row._id).subscribe({
-        next: (entries) => subject!.next(toTimelineEntries((entries || []).filter((e) => this.presaleAuditActions.has(e.action)))),
+        next: (entries) => {
+          const timeline = toTimelineEntries((entries || []).filter((e) => this.presaleAuditActions.has(e.action)));
+          if (timeline.length) { subject!.next(timeline); return; }
+          const fallback: DetailTimelineEntry[] = (row.assignmentHistory ?? []).map((entry: any) => ({
+            text: entry.action === 'self-assigned' ? 'Self-assigned' : `${entry.action === 'reassigned' ? 'Reassigned' : 'Assigned'}${entry.employeeName ? ` to ${entry.employeeName}` : ''}`,
+            meta: [entry.assignedByName, entry.date ? new Date(entry.date).toLocaleString() : ''].filter(Boolean).join(' · '),
+          }));
+          if (row.preSale?.createdDate) fallback.push({ text: 'Sent to presales', meta: new Date(row.preSale.createdDate).toLocaleString() });
+          subject!.next(fallback);
+        },
         error: () => this.historyCache.delete(row._id),
       });
     }
@@ -1152,7 +1171,7 @@ export class PresalesListComponent implements OnInit, AfterViewInit, OnDestroy {
     const { confirmed } = await this.confirm.open({
       tone: 'approve',
       title: 'Send job back?',
-      message: 'This action is irreversible and sends the assigned task back to the salesperson. You can also verify by other employees. Please ensure all files are selected before proceeding.',
+      message: 'This action is irreversible and sends the completed estimation back to the salesperson for review.',
       confirmLabel: 'Send',
       cancelLabel: 'Cancel',
     });

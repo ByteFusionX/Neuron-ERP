@@ -55,7 +55,7 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
   /** Stages the user has unticked; everything is shown until they say otherwise. */
   hiddenStages = new Set<string>();
 
-  private readonly stageColors: Record<string, string> = { new: '#f59e0b', assigned: '#3b82f6', completed: '#10b981', rejected: '#ef4444' };
+  private readonly stageColors: Record<string, string> = { new: '#f59e0b', assigned: '#3b82f6', completed: '#10b981', rejected: '#ef4444', cancelled: '#6b7280' };
 
   filters: ReportFilterValues = { department: null, presale: null, fromDate: null, toDate: null };
   filterFields: ReportFilterField[] = [
@@ -85,6 +85,7 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
     { key: 'assigned', label: 'Assigned', type: 'number', sortable: true, align: 'right', width: '100px', aggregate: 'sum' },
     { key: 'completed', label: 'Completed', type: 'number', sortable: true, align: 'right', width: '110px', aggregate: 'sum' },
     { key: 'rejected', label: 'Rejected', type: 'number', sortable: true, align: 'right', width: '100px', aggregate: 'sum' },
+    { key: 'cancelled', label: 'Cancelled', type: 'number', sortable: true, align: 'right', width: '105px', aggregate: 'sum' },
   ];
 
   constructor(
@@ -125,7 +126,22 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
   }
 
   private setOptions(key: string, options: { label: string; value: string }[]): void {
-    this.filterFields = this.filterFields.map((f) => (f.key === key ? { ...f, options } : f));
+    const normalized = options.map((option) => ({ ...option, label: this.departmentLabel(option.label) }));
+    this.filterFields = this.filterFields.map((f) => (f.key === key ? { ...f, options: normalized } : f));
+  }
+
+  private departmentLabel(value: string): string {
+    return value.replace(/\s*&\s*/g, ' & ');
+  }
+
+  private syncDepartmentOptions(): void {
+    const reportDepartments = (this.report?.breakdown.department ?? [])
+      .filter((row) => row.id && row.id !== 'none')
+      .map((row) => ({ label: row.name, value: row.id }));
+    const current = this.filterFields.find((field) => field.key === 'department')?.options ?? [];
+    const merged = new Map(current.map((option) => [option.value, option]));
+    reportDepartments.forEach((option) => merged.set(option.value, { ...option, label: this.departmentLabel(option.label) }));
+    this.setOptions('department', [...merged.values()]);
   }
 
   private fetch(): void {
@@ -142,7 +158,11 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
       this._enquiryService.getPresaleReport(body).subscribe({
         next: (res) => {
           if (seq !== this.fetchSeq) return;
-          this.report = res; this.loading = false; this.buildCharts(); this.fetchPrevious(body, seq);
+          this.report = res;
+          this.syncDepartmentOptions();
+          const firstWithItems = this.attentionTabs.find((tab) => this.attentionCount(tab.key) > 0);
+          if (firstWithItems && this.attentionCount(this.attentionKey) === 0) this.attentionKey = firstWithItems.key;
+          this.loading = false; this.buildCharts(); this.fetchPrevious(body, seq);
         },
         error: () => { if (seq !== this.fetchSeq) return; this.report = null; this.loading = false; this.failed = true; },
       })
@@ -254,7 +274,7 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
   // --- Breakdown / attention ----------------------------------------------------------------
 
   get breakdownRows(): PresaleReportRow[] {
-    return this.report?.breakdown?.[this.breakdownKey] || [];
+    return (this.report?.breakdown?.[this.breakdownKey] || []).map((row) => this.breakdownKey === 'department' ? { ...row, name: this.departmentLabel(row.name) } : row);
   }
 
   get attentionItems() {
@@ -282,13 +302,13 @@ export class PresaleReportComponent implements OnInit, OnDestroy {
     const pct = (n: number) => `${n.toFixed(1)}%`;
     const cols = [
       { header: 'Name', key: 'name', width: 32 }, { header: 'Jobs', key: 'count', width: 10 }, { header: 'New', key: 'new', width: 10 },
-      { header: 'Assigned', key: 'assigned', width: 10 }, { header: 'Completed', key: 'completed', width: 12 }, { header: 'Rejected', key: 'rejected', width: 10 },
+      { header: 'Assigned', key: 'assigned', width: 10 }, { header: 'Completed', key: 'completed', width: 12 }, { header: 'Rejected', key: 'rejected', width: 10 }, { header: 'Cancelled', key: 'cancelled', width: 10 },
     ];
     const sheets: ExcelSheet[] = [
       {
         name: 'Summary',
         columns: [{ header: 'Metric', key: 'metric', width: 30 }, { header: 'Value', key: 'value', width: 18 }],
-        rows: ([['Total jobs', r.kpi.count], ['New', r.kpi.new], ['Assigned', r.kpi.assigned], ['Completed', r.kpi.completed], ['Rejected', r.kpi.rejected],
+        rows: ([['Total jobs', r.kpi.count], ['New', r.kpi.new], ['Assigned', r.kpi.assigned], ['Completed', r.kpi.completed], ['Rejected', r.kpi.rejected], ['Cancelled', r.kpi.cancelled],
           ['Completion rate', pct(r.kpi.completionRate)], ['Rejection rate', pct(r.kpi.rejectionRate)],
           ['Average days waiting to be assigned', r.avgWaitDays == null ? 'n/a' : r.avgWaitDays.toFixed(1)]] as [string, unknown][]).map(([metric, value]) => ({ metric, value })),
       },

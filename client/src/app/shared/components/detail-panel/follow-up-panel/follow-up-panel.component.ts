@@ -32,10 +32,6 @@ import { FollowUpViewModel } from '../../../utils/follow-up.util';
             class="shrink-0 text-xs font-medium text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">Cancel</button>
         </div>
       </div>
-      <div *ngIf="!view.open && !closed"
-        class="rounded-lg border border-dashed border-amber-300 bg-amber-50/60 px-3.5 py-3 text-[13px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
-        No follow-up is scheduled for this {{ subject }}.
-      </div>
       <div *ngFor="let f of view.history" class="rounded-lg border border-gray-200 bg-white p-3.5 dark:border-erp-border-dark dark:bg-erp-surface-dark">
         <div class="flex items-start gap-2.5">
           <span class="grid h-7 w-7 shrink-0 place-content-center rounded-md"
@@ -52,7 +48,7 @@ import { FollowUpViewModel } from '../../../utils/follow-up.util';
       <div *ngIf="!view.history.length && !view.open"
         class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-erp-border-dark">
         <app-dp-icon name="clock" size="w-6 h-6" class="text-gray-400"></app-dp-icon>
-        <p class="text-[13px] text-gray-500 dark:text-gray-400">No follow-ups yet.</p>
+        <p class="text-[13px] text-gray-500 dark:text-gray-400">{{ closed ? 'No follow-ups were recorded.' : 'No follow-up is scheduled for this ' + subject + '.' }}</p>
       </div>
     </div>
   `,

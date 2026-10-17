@@ -427,6 +427,7 @@ const enquirySchema = new Schema<Enquiry>({
             'Assigned To Presales',
             'Rejected by Presale Engineer',
             'Rejected by Presale Manager',
+            'Sent by Presale Engineer',
             'Sended by Presale Engineer',
             // current values - used by new code paths going forward
             'new',

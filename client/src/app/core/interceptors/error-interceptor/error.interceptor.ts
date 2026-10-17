@@ -24,7 +24,7 @@ export class ErrorInterceptor implements HttpInterceptor {
         } else {
           switch (error.status) {
             case 0:
-              this.toast.warning('Failed to connect to the server, Please check your internet connection and try again.')
+              this.toast.warning('The server could not be reached. Your session may have ended; refresh and sign in again if the problem continues.')
               break;
             case 401:
               this.toast.warning('Access Denied, Please sign in again.')

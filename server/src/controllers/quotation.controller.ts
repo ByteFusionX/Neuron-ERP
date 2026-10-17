@@ -285,6 +285,16 @@ export const saveQuotation = async (req: Request, res: Response, next: NextFunct
         await applyRequestedQuoteOwner(quoteData, createdBy);
         normalizeQuoteDepartments(quoteData)
         normalizeQuoteValidity(quoteData)
+        const stripEmptyItemImages = (value: any): void => {
+            if (Array.isArray(value)) {
+                value.forEach(stripEmptyItemImages);
+                return;
+            }
+            if (!value || typeof value !== 'object') return;
+            if ('image' in value && (!value.image?.fileName || !value.image?.originalname)) delete value.image;
+            Object.values(value).forEach(stripEmptyItemImages);
+        };
+        stripEmptyItemImages(quoteData.optionalItems);
 
         let quoteId: string | undefined = await generateQuoteId(quoteData.department, quoteData.createdBy, quoteData.date);
         if (!quoteId && quoteData.status === quoteStatus.Draft) {

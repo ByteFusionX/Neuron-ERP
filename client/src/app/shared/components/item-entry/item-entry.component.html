@@ -302,7 +302,10 @@
                 </div>
                 <app-sf-number formControlName="quantity" placeholder="Qty" [stepper]="false" [min]="0"></app-sf-number>
                 <span *ngIf="isDeal" class="ie-cell">{{ detail.get('uom')?.value || '—' }}</span>
-                <app-sf-combobox *ngIf="!isDeal" formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', detail.get('uom'))"></app-sf-combobox>
+                <div *ngIf="!isDeal" class="min-w-0">
+                  <app-sf-combobox formControlName="uom" [options]="resolvedUomOptions" placeholder="UoM *" footerLabel="Add unit" (footerAction)="openAddMasterOption('unit', detail.get('uom'))"></app-sf-combobox>
+                  <p *ngIf="detail.get('uom')?.hasError('required') && detail.get('uom')?.touched" class="mt-1 text-xs text-red-600 dark:text-red-400">Required</p>
+                </div>
                 <app-sf-number formControlName="unitCost" [placeholder]="isPurchase && readonlyCost ? 'From RFQ' : 'Cost'" [stepper]="false" [min]="0" [readonly]="isPurchase && readonlyCost"></app-sf-number>
                 <span *ngIf="isPurchase && quoteLayout" class="ie-cell justify-end tabular-nums" title="Margin on the deal price (read-only)">{{ lineMargin(i, j, k) !== null ? (lineMargin(i, j, k) | number: '1.1-1') + '%' : '—' }}</span>
                 <div *ngIf="!isPurchase" class="relative min-w-0" [ngClass]="lineMarginRing(i, j, k)">

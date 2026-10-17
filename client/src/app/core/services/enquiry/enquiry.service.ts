@@ -222,12 +222,12 @@ export class EnquiryService {
 
 }
 
-export interface PresaleTabCounts { new: number; assignedTab: number; rejected: number; resolve: number; completedTab: number; cancelledTab: number; fuOverdue: number; fuToday: number; fuUpcoming: number; }
+export interface PresaleTabCounts { all: number; new: number; assignedTab: number; rejected: number; resolve: number; completedTab: number; cancelledTab: number; fuOverdue: number; fuToday: number; fuUpcoming: number; }
 
-export interface PresaleReportRow { id: string; name: string; count: number; new: number; assigned: number; completed: number; rejected: number; }
+export interface PresaleReportRow { id: string; name: string; count: number; new: number; assigned: number; completed: number; rejected: number; cancelled: number; }
 export interface PresaleReportItem { id: string; enquiryId: string; title: string; customer: string; salesPerson: string; presale: string; status: string; days: number; }
 export interface PresaleReport {
-  kpi: { count: number; new: number; assigned: number; completed: number; rejected: number; completionRate: number; rejectionRate: number };
+  kpi: { count: number; new: number; assigned: number; completed: number; rejected: number; cancelled: number; completionRate: number; rejectionRate: number };
   breakdown: { presale: PresaleReportRow[]; department: PresaleReportRow[] };
   avgWaitDays: number | null;
   funnel: { key: string; label: string; count: number; pct: number }[];

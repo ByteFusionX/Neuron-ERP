@@ -31,7 +31,7 @@ export class QuotationService {
   constructor(private http: HttpClient, private systemSettings: SystemSettingService) { }
 
   saveQuotation(quotationDetails: Quotatation): Observable<Quotatation> {
-    return this.http.post<Quotatation>(`${this.api}/quotation`, quotationDetails)
+    return this.http.post<Quotatation>(`${this.api}/quotation`, quotationDetails, { context: context() })
   }
 
   uploadItemImage(file: File, quoteReference?: string, partNumber?: string): Observable<{ fileName: string; originalname: string; mimetype?: string }> {

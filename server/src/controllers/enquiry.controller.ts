@@ -867,7 +867,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
 
         // 'Sended by Presale Engineer' rows are hidden here so paging and counts stay correct.
         // Quoted enquiries only appear under the Completed view.
-        const hiddenStatuses = ['Quoted', 'quoted', 'Sended by Presale Engineer'];
+        const hiddenStatuses = ['Quoted', 'quoted', 'Sent by Presale Engineer', 'Sended by Presale Engineer'];
         // Presales view: every enquiry currently with presales, including a rejection the manager hasn't resolved.
         const presalesMatch = {
             $or: [
@@ -880,7 +880,7 @@ export const getEnquiries = async (req: Request, res: Response, next: NextFuncti
             : lostView ? { status: { $in: ['Lost', 'lost'] } }
             : presalesView ? presalesMatch
             // Picking a status in the filter is explicit, so Quoted must be reachable from any tab.
-            : { status: { $nin: status ? ['Sended by Presale Engineer'] : hiddenStatuses } };
+            : { status: { $nin: status ? ['Sent by Presale Engineer', 'Sended by Presale Engineer'] : hiddenStatuses } };
 
         const enquiryTotal: { total: number }[] = await enquiryModel.aggregate([
             { $match: listFilters },
@@ -1220,7 +1220,8 @@ export const presaleTabCounts = async (req: Request, res: Response, next: NextFu
             });
             return [`fu${view[0].toUpperCase()}${view.slice(1)}`, count] as const;
         }));
-        return res.status(200).json({ ...Object.fromEntries(entries), ...Object.fromEntries(followUpEntries) });
+        const all = await enquiryModel.countDocuments({ ...scope, $and: [...scope.$and, ...allOwn] });
+        return res.status(200).json({ all, ...Object.fromEntries(entries), ...Object.fromEntries(followUpEntries) });
     } catch (error) {
         next(error);
     }
@@ -1233,6 +1234,8 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
         const { access, scopeIds } = await presaleViewScope(req);
         const match: any = {
             isDeleted: { $ne: true },
+            ...NOT_WITH_SALES,
+            status: { $nin: ['Quoted', 'quoted'] },
             $and: [{ $or: [{ 'preSale.presalePerson': { $exists: true, $ne: null } }, { reAssigned: { $exists: true, $ne: null } }, { status: { $in: ['Sent to Presales', 'in presales', 'revision'] } }] }],
         };
         if (department) match.department = new ObjectId(department);
@@ -1254,7 +1257,8 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
 
         const DAY = 24 * 60 * 60 * 1000;
         const now = Date.now();
-        const tabOf = (status: string, presaleStatus?: string): 'new' | 'assigned' | 'completed' | 'rejected' | null => {
+        const tabOf = (status: string, presaleStatus?: string): 'new' | 'assigned' | 'completed' | 'rejected' | 'cancelled' | null => {
+            if (NEW_PRESALE_TAB_STATUSES.cancelledTab.includes(presaleStatus) || ['Lost', 'lost'].includes(status)) return 'cancelled';
             if (PRESALE_TAB_STATUSES.new.includes(status) || NEW_PRESALE_TAB_STATUSES.new.includes(presaleStatus)
                 || (status === 'revision' && presaleStatus === 'returned')) return 'new';
             if (PRESALE_TAB_STATUSES.assignedTab.includes(status) || NEW_PRESALE_TAB_STATUSES.assignedTab.includes(presaleStatus)
@@ -1263,7 +1267,7 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
             if (PRESALE_TAB_STATUSES.rejected.includes(status) || NEW_PRESALE_TAB_STATUSES.rejected.includes(presaleStatus)) return 'rejected';
             return null;
         };
-        const blank = () => ({ count: 0, new: 0, assigned: 0, completed: 0, rejected: 0 });
+        const blank = () => ({ count: 0, new: 0, assigned: 0, completed: 0, rejected: 0, cancelled: 0 });
         const kpi = blank();
         const byEngineer = new Map<string, any>();
         const byDepartment = new Map<string, any>();
@@ -1284,15 +1288,16 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
             const tab = tabOf(e.status, e.preSale?.status);
             if (!tab) return;
             kpi.count++; kpi[tab]++;
-            const holder = e.reAssigned || e.preSale?.presalePerson;
+            const holder = e.reAssigned?._id ? e.reAssigned : e.preSale?.presalePerson;
             bump(byEngineer, holder?._id ? String(holder._id) : 'none', fullName(holder) || 'Unassigned', tab);
             bump(byDepartment, e.department?._id ? String(e.department._id) : 'none', e.department?.departmentName || '—', tab);
             const bucket = trendMap.get(monthKey(e.date));
             if (bucket) { bucket.received++; if (tab === 'completed') bucket.completed++; }
             (e.preSale?.rejectionHistory || []).forEach((h: any) => {
                 const reason = String(h?.rejectionReason || '').trim() || 'No reason recorded';
-                const r = reasonMap.get(reason) || { reason, count: 0 };
-                r.count++; reasonMap.set(reason, r);
+                const key = reason.toLocaleLowerCase();
+                const r = reasonMap.get(key) || { reason, count: 0 };
+                r.count++; reasonMap.set(key, r);
             });
             if (tab === 'new' || tab === 'assigned' || tab === 'rejected') {
                 const since = new Date(e.reAssignedDate || e.preSale?.createdDate || e.date).getTime();
@@ -1311,8 +1316,8 @@ export const getPresaleReport = async (req: Request, res: Response, next: NextFu
             kpi: { ...kpi, completionRate: kpi.count ? (kpi.completed / kpi.count) * 100 : 0, rejectionRate: kpi.count ? (kpi.rejected / kpi.count) * 100 : 0 },
             breakdown: { presale: sortRows(byEngineer), department: sortRows(byDepartment) },
             avgWaitDays: attention.new.length ? waitTotal / attention.new.length : null,
-            funnel: (['new', 'assigned', 'completed', 'rejected'] as const).map((key) => ({
-                key, label: { new: 'New', assigned: 'Assigned', completed: 'Completed', rejected: 'Rejected' }[key], count: kpi[key], pct: kpi.count ? (kpi[key] / kpi.count) * 100 : 0,
+            funnel: (['new', 'assigned', 'completed', 'rejected', 'cancelled'] as const).map((key) => ({
+                key, label: { new: 'New', assigned: 'Assigned', completed: 'Completed', rejected: 'Rejected', cancelled: 'Cancelled' }[key], count: kpi[key], pct: kpi.count ? (kpi[key] / kpi.count) * 100 : 0,
             })),
             trend: [...trendMap.values()],
             rejectionReasons: [...reasonMap.values()].sort((a, b) => b.count - a.count).slice(0, 10),
@@ -3019,7 +3024,7 @@ const enquiryStage = (e: any): string => {
     if (status === 'Ready for Quotation' || status === 'estimated') return 'estimated';
     if (status === 'New' || status === 'In Review' || status === 'new' || status === 'in progress') return 'new';
     if (status.startsWith('Rejected by Presale') || status === 'rejected') return 'rejected';
-    if (status.startsWith('Assigned To Presale') || status === 'Sended by Presale Engineer' || status === 'in presales' || status === 'revision') return 'presales';
+    if (status.startsWith('Assigned To Presale') || ['Sent by Presale Engineer', 'Sended by Presale Engineer', 'in presales', 'revision'].includes(status)) return 'presales';
     // Back with the sales person: an estimation exists if presales ever worked on it.
     if (status === 'Work In Progress') return e.preSale?.presalePerson ? 'estimated' : 'new';
     return 'other';

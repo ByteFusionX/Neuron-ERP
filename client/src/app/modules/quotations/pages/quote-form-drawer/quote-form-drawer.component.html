@@ -132,7 +132,7 @@
                     <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="customerNoteOptions"
                         [placeholder]="customerNoteOptions.length ? 'Choose a template…' : 'No saved notes yet'" (ngModelChange)="applyNoteTemplate('customerNote', $event)"></app-sf-select>
                 </app-sf-field>
-                <app-sf-field label="Customer Note" [control]="quoteForm.controls.customerNote">
+                <app-sf-field label="Customer Note" required [control]="quoteForm.controls.customerNote">
                     <app-sf-textarea formControlName="customerNote" [rows]="5" bullets placeholder="Note shown on the quotation"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>
@@ -142,7 +142,7 @@
                     <app-sf-select [ngModelOptions]="{ standalone: true }" [ngModel]="null" [options]="termsOptions"
                         [placeholder]="termsOptions.length ? 'Choose a template…' : 'No saved terms yet'" (ngModelChange)="applyNoteTemplate('termsAndCondition', $event)"></app-sf-select>
                 </app-sf-field>
-                <app-sf-field label="Terms and Conditions" [control]="quoteForm.controls.termsAndCondition">
+                <app-sf-field label="Terms and Conditions" required [control]="quoteForm.controls.termsAndCondition">
                     <app-sf-textarea formControlName="termsAndCondition" [rows]="7" bullets placeholder="Terms shown on the quotation"></app-sf-textarea>
                 </app-sf-field>
             </app-sf-section>

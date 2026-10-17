@@ -209,6 +209,12 @@ export enum quoteStatus {
     Expired = 'Expired',
 }
 
+const quoteItemImageSchema = new Schema({
+    fileName: { type: String, required: true },
+    originalname: { type: String, required: true },
+    mimetype: { type: String, required: false },
+}, { _id: false });
+
 const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
     // Durable link back to the inventory catalogue. itemCode/partNo below remain plain-string
     // snapshots on purpose: a saved quote must not change if the product is later renamed.
@@ -275,9 +281,9 @@ const quoteItemDetailsSchema = new Schema<QuoteItemDetail>({
         required: false,
     },
     image: {
-        fileName: { type: String, required: true },
-        originalname: { type: String, required: true },
-        mimetype: { type: String, required: false },
+        type: quoteItemImageSchema,
+        required: false,
+        default: undefined,
     },
 });
 

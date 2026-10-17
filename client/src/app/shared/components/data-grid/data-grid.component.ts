@@ -1093,7 +1093,7 @@ export class DataGridComponent<T extends Record<string, any> = any> implements O
   }
 
   visibleRowActions(row: T): DataGridRowAction<T>[] {
-    return this.rowActions.filter((a) => !a.hidden?.(row));
+    return this.rowActions.filter((a) => a.menu !== false && !a.hidden?.(row));
   }
 
   get quickActionSlots(): DataGridRowAction<T>[] {

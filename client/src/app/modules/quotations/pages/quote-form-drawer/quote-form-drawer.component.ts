@@ -25,6 +25,7 @@ import { PreviousJobsModalComponent } from 'src/app/shared/components/previous-j
 import { CatalogueSuggestionSource, CreateProductRequest, ITEM_SUGGESTION_SOURCE, ItemEntryComponent, ItemEntryTotals } from 'src/app/shared/components/item-entry';
 import { SupplierFormDrawerComponent } from 'src/app/modules/suppliers/pages/supplier-form-drawer/supplier-form-drawer.component';
 import { ProductFormDrawerComponent } from 'src/app/modules/products/pages/product-form-drawer/product-form-drawer.component';
+import { normalizeApiError } from 'src/app/core/errors/api-error';
 
 /** Statuses before the quote has gone to the customer. Mirrors the server, which only revises past these. */
 const UNSENT_STATUSES: string[] = [QuoteStatus.Draft, QuoteStatus.WorkInProgress, QuoteStatus.ReadyForSubmission];
@@ -368,6 +369,18 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
   onDraftRestored(value: Record<string, any>): void {
     const items = value['optionalItems'];
     if (Array.isArray(items) && items.length) this.seedOptionalItems = JSON.parse(JSON.stringify(items));
+    const scalarValue = { ...value };
+    delete scalarValue['optionalItems'];
+    // Re-apply scalar controls after item-entry rebuilds its FormArray. Some CVAs (notably
+    // dates and selects) finish initializing on that rebuild and otherwise lose restored values.
+    queueMicrotask(() => {
+      this.seeding = true;
+      this.quoteForm.patchValue(scalarValue, { emitEvent: false });
+      const departments = Array.isArray(value['departments']) ? value['departments'] : [];
+      this.setDepartments(departments);
+      this.seeding = false;
+      this.quoteForm.markAsDirty();
+    });
   }
 
   /** A new quotation starts from the first saved templates, so the required notes are not blank. */
@@ -556,6 +569,9 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
           delete detail.unitPrice;
           // An unset supplier must be absent, not '' — the server casts it to an ObjectId.
           if (!detail.supplierId) delete detail.supplierId;
+          // Presale estimates may carry an empty image shell. Mongoose treats that shell as
+          // an embedded image and then requires fileName/originalname, so omit it entirely.
+          if (!detail.image?.fileName || !detail.image?.originalname) delete detail.image;
         });
       });
     });
@@ -627,7 +643,14 @@ export class QuoteFormDrawerComponent implements OnChanges, OnDestroy {
         this.finish();
         this.toaster.success('Quotation created.', 'Created');
       },
-      error: () => (this.saving = false),
+      error: (error) => {
+        this.saving = false;
+        const apiError = normalizeApiError(error);
+        const fieldMessage = Object.entries(apiError.fieldErrors)
+          .flatMap(([field, messages]) => messages.map((message) => `${field}: ${message}`))
+          .join('\n');
+        this.toaster.error(fieldMessage || apiError.message, 'Unable to create quotation');
+      },
     });
   }
 

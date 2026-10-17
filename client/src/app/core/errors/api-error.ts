@@ -10,7 +10,7 @@ export interface ApiError {
 }
 
 const FALLBACK_MESSAGES: Record<number, string> = {
-  0: 'Failed to connect to the server. Please check your internet connection and try again.',
+  0: 'The server could not be reached. Your session may have ended; refresh and sign in again if the problem continues.',
   400: 'The request could not be processed. Please check the details and try again.',
   401: 'Access denied. Please sign in again.',
   403: 'You do not have permission to perform this action.',

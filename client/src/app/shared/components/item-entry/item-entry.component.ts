@@ -558,7 +558,7 @@ export class ItemEntryComponent implements OnInit, OnChanges, OnDestroy {
       availability: ['', deal || purchase ? [] : Validators.required],
       // null, not '': the server casts this to an ObjectId and an empty string fails the cast.
       supplierId: [null as string | null, deal ? [this.whenTicked(this.supplierRequired)] : []],
-      uom: [''],
+      uom: ['', deal || purchase ? [] : Validators.required],
       image: [null],
     });
     if (purchase) (group as FormGroup).addControl('lineKey', this._fb.control(null as string | null));

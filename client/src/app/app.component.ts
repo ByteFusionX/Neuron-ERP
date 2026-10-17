@@ -108,7 +108,9 @@ export class AppComponent implements OnDestroy, OnInit {
       this._notificationService.authSocketIo(employeeToken)
       this._notificationService.getEmployeeTextNotifications()
       this._notificationService.initializeNotifications()
-      this.pushNotificationService.registerAndSubscribe().catch(err => console.error('Push subscription failed:', err));
+      if (Notification.permission === 'granted') {
+        this.pushNotificationService.registerAndSubscribe().catch(() => this.pushNotificationService.subscribedSubject.next(false));
+      }
       if (!this.isLoginRoute()) {
         this.isUserThere();
       }
