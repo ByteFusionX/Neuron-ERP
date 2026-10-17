@@ -82,7 +82,7 @@ const corsOriginCheck = (origin: string | undefined, callback: (err: Error | nul
     callback(new Error('Not allowed by CORS'));
   }
 };
-
+ 
 export const io = new Server(server, {
   cors: {
     origin: corsOriginCheck,
