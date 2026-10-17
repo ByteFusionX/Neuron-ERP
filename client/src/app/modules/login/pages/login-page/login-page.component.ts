@@ -137,7 +137,7 @@ export class LoginPageComponent implements OnInit, OnDestroy {
       next: (response: login) => {
         this.isMicrosoftLoginLoading = false;
         if (!response.employeeData || !response.token) {
-          this.toastr.error('No matching employee account was found for this Microsoft login.');
+          this.toastr.error(this.loginFailureMessage(response.reason));
           return;
         }
 
@@ -148,6 +148,16 @@ export class LoginPageComponent implements OnInit, OnDestroy {
       },
       error: (error) => this.handleMicrosoftLoginError(error),
     });
+  }
+
+  private loginFailureMessage(reason: login['reason']): string {
+    switch (reason) {
+      case 'noEmail': return 'Your Microsoft account has no email address. Contact your administrator.';
+      case 'ambiguousEmail': return 'More than one employee uses this email. Contact your administrator to link your account.';
+      case 'blocked': return 'This employee account is blocked or deleted. Contact your administrator.';
+      case 'linkedElsewhere': return 'This employee is already linked to a different Microsoft account. Contact your administrator.';
+      default: return 'No matching employee account was found for this Microsoft login.';
+    }
   }
 
   private handleMicrosoftLoginError(error: unknown): void {

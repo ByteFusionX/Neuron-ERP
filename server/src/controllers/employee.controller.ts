@@ -949,47 +949,63 @@ export const loginWithMicrosoft = async (
     // strategy, so req.user is the verified Microsoft access token claims.
     const azureToken = req.user as any;
     const oid = typeof azureToken.oid === "string" ? azureToken.oid.trim() : "";
+    const tenantId = process.env.MICROSOFT_TENANT_ID;
 
     if (!oid) {
       return res.status(401).json({ message: "Microsoft token does not contain a user object ID" });
     }
 
-    let employee = await Employee.findOne({
-      microsoftId: oid,
-      isDeleted: { $ne: true },
-      isBlocked: { $ne: true },
-    }).select("+password");
+    if (tenantId && azureToken.tid !== tenantId) {
+      console.warn(`Microsoft login rejected: tenant ${azureToken.tid} (oid ${oid})`);
+      return res.status(401).json({ message: "Microsoft token is from a different tenant" });
+    }
+
+    const activeFilter = { isDeleted: { $ne: true }, isBlocked: { $ne: true } };
+    let employee = await Employee.findOne({ microsoftId: oid, ...activeFilter }).select("+password");
 
     if (!employee) {
-      const tokenEmail = azureToken.email || azureToken.upn || azureToken.preferred_username;
+      // upn / preferred_username are set by Entra; the optional email claim is not guaranteed verified.
+      const tokenEmail = azureToken.upn || azureToken.preferred_username || azureToken.email;
       const email = typeof tokenEmail === "string" ? tokenEmail.trim() : "";
 
       if (!email) {
-        return res.status(401).json({ message: "Microsoft token does not contain an email address" });
+        console.warn(`Microsoft login failed: no email claim (oid ${oid})`);
+        return res.send({ employeeNotFoundError: true, reason: "noEmail" });
       }
 
       const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const emailFilter = {
         email: { $regex: `^\\s*${escapedEmail}\\s*$`, $options: "i" },
-        isDeleted: { $ne: true },
-        isBlocked: { $ne: true },
+        ...activeFilter,
       };
 
-      // Auto-link microsoftId to the employee account
+      const matches = await Employee.find(emailFilter).select("_id").limit(2).lean();
+
+      if (matches.length > 1) {
+        console.warn(`Microsoft login failed: ambiguous email ${email} (oid ${oid})`);
+        return res.send({ employeeNotFoundError: true, reason: "ambiguousEmail" });
+      }
+
+      if (matches.length === 0) {
+        const inactive = await Employee.exists({
+          email: emailFilter.email,
+          $or: [{ isDeleted: true }, { isBlocked: true }],
+        });
+        console.warn(`Microsoft login failed: ${inactive ? "blocked/deleted" : "no employee for"} ${email} (oid ${oid})`);
+        return res.send({ employeeNotFoundError: true, reason: inactive ? "blocked" : "notFound" });
+      }
+
+      // Auto-link only when exactly one employee owns this email and has no other Microsoft account.
       employee = await Employee.findOneAndUpdate(
-        emailFilter,
+        { _id: matches[0]._id, microsoftId: { $in: [null, ""] } },
         { $set: { microsoftId: oid } },
         { new: true },
       ).select("+password");
 
-      // Passthrough fallback: if update didn't return, allow login if email matches
       if (!employee) {
-        employee = await Employee.findOne(emailFilter).select("+password");
+        console.warn(`Microsoft login failed: ${email} already linked to a different Microsoft account (oid ${oid})`);
+        return res.send({ employeeNotFoundError: true, reason: "linkedElsewhere" });
       }
-    }
-
-    if (!employee) {
-      return res.send({ employeeNotFoundError: true });
     }
 
     const payload = { id: employee._id, employeeId: employee.employeeId };
