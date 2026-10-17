@@ -10,7 +10,9 @@ RUN npm install -g @angular/cli
 
 COPY . .
 
-RUN ng build --configuration=production
+# Accept build environment argument (defaults to production)
+ARG BUILD_ENV=production
+RUN ng build --configuration=$BUILD_ENV
 
 FROM nginx:latest
 

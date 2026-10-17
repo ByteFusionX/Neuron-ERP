@@ -1,0 +1,25 @@
+services:
+  staging-frontend:
+    restart: always
+    container_name: staging-frontend-1
+    build:
+      context: ../client
+      dockerfile: Dockerfile
+      args:
+        - BUILD_ENV=staging
+    ports:
+      - 4201:80
+
+  staging-api:
+    restart: always
+    container_name: staging-api-1
+    extra_hosts:
+      - "mongoservice:172.17.0.1"
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+      target: production
+    env_file:
+      - ../server/.env
+    ports:
+      - 3001:3000
